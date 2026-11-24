@@ -402,7 +402,7 @@ Remaining Stripe qualification and maintenance.
   W100 (#1332) changed one choice: a card reader has one holding device at a time, and a scan
   or confirmed dropdown choice moves it to the waiter's device. The owner kept W100's defaults
   ([till decisions](till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07)).
-  The [waiting SumUp checkout](../superpowers/plans/2026-11-21-cancel-waiting-card-payment.md)
+  The waiting SumUp checkout
   can be stopped from Pay. The original payment confirms whether the guest was charged.
   A796 (#1921) carries the phone's last-chosen reader and receipt printer, folded away; the folded
   row has a scan button, and background NFC pick-up updates the open form. Tap-to-Pay and the

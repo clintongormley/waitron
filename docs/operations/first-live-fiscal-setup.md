@@ -319,6 +319,3 @@ answer the retention question. Production additionally needs the accepted readin
 receipt. Supply login secrets through their private prompts or supported environment variables,
 never command arguments. `WAITRON_INITIAL_VENUE_INPUT` cannot supply Live activation authority.
 The [provisioning reference](../../packages/provisioning/README.md) describes the options.
-
-The [15 October procedure](first-live-fiscal-setup-2026-10-15.md) records the superseded
-custodian protocol and its historical qualification; it is not a setup route on this candidate.

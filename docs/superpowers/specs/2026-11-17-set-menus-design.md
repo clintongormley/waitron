@@ -73,7 +73,7 @@ are charged as usual.
   including a bar whose stools are set up as tables in a table-service zone
   (**owner**, 17 November: "these set menus are only for tables/bars with seating").
   Whether a standing guest can have an ordinary dish is the waiter's call (owner, 17 November).
-  The [ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) covers takeaway and delivery.
+  The [ordering plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-18-a1515-set-menu-ordering.md) covers takeaway and delivery.
 - A selling schedule of the set menu's own. A set menu sells when the full menu it sits in sells,
   under that menu's existing periods (**owner**, 12 November: "with set menus, having a selling
   times section doesn't make sense - that can already be handled with periods and menus").
@@ -366,7 +366,7 @@ table's bill, since what a bill may hold follows the table's zone, not the till'
 Takeaway orders can hold a set menu even when they start at the counter (watcher, 18 November
 at 20:40, applying the owner's takeaway decision). Takeaway and delivery use the takeaway class
 for the set menu, supplements and paid extras. The
-[ordering plan](../plans/2026-11-18-a1515-set-menu-ordering.md) defines which bills can hold a set menu.
+[ordering plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-18-a1515-set-menu-ordering.md) defines which bills can hold a set menu.
 
 ### 6. Courses for drinks, bread and coffee
 

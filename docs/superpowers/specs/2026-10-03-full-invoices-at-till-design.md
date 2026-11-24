@@ -6,7 +6,7 @@ The references below to the boot series setting describe the earlier implementat
 
 
 > **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
-> plan](../plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
+> plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
 > and retries, so the consent paths below, and any note calling that removal still open, are
 > history. A448 and the legal research are unchanged.
 

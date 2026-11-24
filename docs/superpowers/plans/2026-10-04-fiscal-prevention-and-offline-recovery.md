@@ -686,7 +686,7 @@ built, kept or dropped, and why, is in
 [After a recovery](../../../apps/server/src/guide/en/backup-recovery.md#after-recovery) section,
 not `docs/operations/fiscal-recovery.md`. The missing-history half of the test below is
 `apps/server/src/restore-missing-history.e2e.test.ts`; it stands in for the start's internet time
-check until [A1420 PR 3b1 and 3b2](2026-11-13-a1420-restore-series-check.md) land.
+check until [A1420 PR 3b1 and 3b2](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-13-a1420-restore-series-check.md) land.
 
 **16 November 2026:** both have landed and the test no longer stands in for it; it confirms the
 time through the waiting app.

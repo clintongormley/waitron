@@ -28,7 +28,7 @@ is the online storage the box copies its whole database to once the venue sets o
 - **Staff download their own data themselves** (O5). Anyone else's data, and every customer's,
   needs a new permission that only admins hold, `personal_data.export` (§5.3). It is the name the
   roles design proposes for this one privilege
-  ([A1002 design](2026-10-22-a1002-custom-roles-design.md), its permission table), so the two
+  ([A1002 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-22-a1002-custom-roles-design.md), its permission table), so the two
   pieces of work do not invent two.
 - **The privacy notice lives on the venue's own web page** (O3 (a)); a page hosted by Waitron Cloud
   is a separate backlog entry, not part of this plan.

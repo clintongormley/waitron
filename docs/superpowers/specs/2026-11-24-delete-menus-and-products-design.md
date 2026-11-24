@@ -15,7 +15,7 @@ undone". Printers, devices, stations, courses, tables, zones and departments alr
 
 This replaces, for products and variants, A435's Archive and its read-only Archived filter (and
 A463's Show archived switch), and for menus Part 2 of the
-[menus list usage and archive design](2026-11-23-menus-list-usage-and-archive.md): Archive, the
+[menus list usage and archive design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-11-23-menus-list-usage-and-archive.md): Archive, the
 Archived filter, the read-only view, and copying an archived menu.
 
 ## Decision

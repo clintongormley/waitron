@@ -3337,7 +3337,7 @@ its shell continued the rebase. The lost changes were then exposed by the counte
 failures and carried over explicitly. Neither failed experiment is successful validation.
 
 The backlog retains open A679 work. Its former checkpoint narrative is preserved byte-for-byte
-in [a historical snapshot](a679-development-checkpoints.md); the current decision entry points
+in [a historical snapshot](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/operations/a679-development-checkpoints.md); the current decision entry points
 to the approved hour design. The provisioning reference now states the existing 21-character
 base bound. A relative-link check resolves 935 local destinations across the changed prose
 paths; it does not check anchors or the meaning of those pages. Final installed reviews,

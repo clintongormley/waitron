@@ -777,7 +777,7 @@ that), which formats and what size limit, where the files are stored and served 
 takes images only), how a till caches them for a restart without the box, `font-display: swap` so
 no screen waits for a file, registering each font for the whole page (a page-level `@font-face`
 or `document.fonts.add`) so the theme editor's preview can draw it — an `@font-face` inside a
-component's shadow stylesheet does nothing in Chromium 156 (A841 design, section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
+component's shadow stylesheet does nothing in Chromium 156 ([A841 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-19-a841-theme-editor-design.md), section 5a) — and re-running A841's 130% layout cases and hyphenation check in the
 uploaded face. It plugs into A841's seam: the typeface list (`TYPEFACES` in
 `packages/ui-core/src/theme/text.ts`), `typefaceStack()`, the dashboard's
 `appearance.typeface.<value>` words in English and Spanish, and `@font-face` ahead of
@@ -823,8 +823,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   says otherwise**: receipts outside Catalonia stay free, Spanish by default.
   [Detail](menu.md#a-case-the-content-language-decisions-leave-open-built-with-the-plans-default-unless-the-owner-says-otherwise)
 - **The owner has not yet confirmed the Seasons window's plan defaults** (A721, sent as an FYI,
-  2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the
-  [A721 plan](../superpowers/plans/2026-10-17-a721-seasons-window.md), each in
+  2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the A721 plan, each in
   [Decisions and deliberate limits](service-periods.md#decisions-and-deliberate-limits).
 - **A723's plan defaults sent to the owner as an FYI**
   [Decisions](service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
@@ -1224,6 +1223,18 @@ If the server requires an options list on a recalled dish absent from the live m
 
 ## Decisions and deliberate limits
 
+- **Closing a drawer (A1325, owner, 2026-11-06).** Moved here from the deleted design. "a close is really
+  just a withdrawal": count the cash, remove the extra, put it in the bank, and separate the tips if
+  needed. Each drawer closes on its own, at any point in the day or week, and covers everything since
+  that drawer's last close. A finished close is never changed. A close is expected daily, and a warning
+  goes out if it does not happen; nothing more happens. The person types the count first, then sees the
+  difference, and may recount once; both counts are saved for the manager. Closing needs `cash.drawer`,
+  which all staff hold. A close is purely about cash; an email can carry a summary. The frozen copy of
+  sales and VAT, and its tamper-evident chain, go.
+- **Typing on the till (owner, 2026-11-21).** Moved here from the deleted design. Numbers stay on the till's own pad, which a
+  physical keyboard also drives; text uses the device's keyboard; one layout fix for the whole till
+  keeps the field in view. Drawing a full keyboard of our own, and using the device's keyboard for
+  numbers, were rejected. No text field goes on a number-pad screen. The PIN pad has a Clear key.
 - **A1325. Sales groups drawer closes by the current business-day rules** (watcher, 2026-11-22 05:35).
   A start change can move a finished close to the neighbouring date in Sales. It keeps its recorded time, count and withdrawal.
 
@@ -1281,7 +1292,7 @@ If the server requires an options list on a recalled dish absent from the live m
 
 - **The server still works out each pass dish's age colour, which the till does not read (A773-2
   B4 plan, D68, 2026-11-02, not the owner).** "The server's `band` stays correct for any other
-  reader and is not read by the till." [Plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)
+  reader and is not read by the till."
 
 - **Saving a device on Devices (Edit or Pair) reads the device list twice while the live connection
   is up (watcher, 2026-11-17, lane B, not the owner; the owner may overrule).** "Follow
@@ -2341,12 +2352,10 @@ The remaining physical printer, reader and inbox checks are in the existing
 [real-box session](printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer),
 with no new prerequisite for A840/A842/A848. The following records the decisions;
 the [current payment-flow plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-10-a739-current-payment-flow.md)
-and [memory-only slip plan](../superpowers/plans/2026-11-10-a739-memory-only-card-slips.md)
-remain historical implementation references.
+remains a historical implementation reference.
 
 **2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
-Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-and [implementation plan](../superpowers/plans/2026-10-27-a739-approved-payment-flow.md).
+Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md).
 Plan and build are approved; the driver executes inline after E/A948 #2122 lands, preserving F1
 in every environment. (19 November 2026: None was removed by ADVISER-NO-NONE; closing the window now
 prints the receipt unless an original was emailed or sent to an A4 printer.) Dismissed Receipt / Full invoice / None means None, without pending work,
@@ -2364,8 +2373,7 @@ no-rebuild/native-control/pending-choice/F1-off proposals are superseded.**
 **2026-11-19 pointer (the owner's answers of 19 November).** "Cash/manual card have no Waitron
 slip" above and "No cash slips" below no longer hold: a payment slip, for any method, prints once,
 only when the payer asks through **Print payment slip**, and is never reprinted from the till; a
-lost one is reprinted from the dashboard's Print Queue. No slip shows a remaining balance. See the
-[receipt layout plan's 19 November rework](../superpowers/plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
+lost one is reprinted from the dashboard's Print Queue. No slip shows a remaining balance.
 
 **2026-10-27 precedence.** The [current amendment](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
 and eight four-case boards (removed from the repository on 2026-11-02) supersede conflicting history
@@ -2387,8 +2395,8 @@ card slips and manual-card exclusion, A790/A796 settings and separate A556/A948/
 work; public F1/F3 stays gated. No rebuild before agreement; no new landing gate or build plan.
 All earlier body bytes below remain historical.
 
-2026-10-22 proposed revision, awaiting owner decision: [timing A after settlement versus timing B
-on Finish, with six-case static mockups](../superpowers/specs/2026-10-22-a739-receipt-timing-revision.md).
+2026-10-22 proposed revision, awaiting owner decision: timing A after settlement versus timing B
+on Finish, with six-case static mockups.
 The settling edit owns a new receipt decision; partial-slip choice needs an explicit replacement.
 All implementation and acceptance work remains open. The historical design below is retained.
 
@@ -2483,7 +2491,7 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 **A773-2**, firing and the pass: its [reviewed implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 was cut into PR B (B1–B4 by a [slice plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B4 into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)),
+B4 into B4a and B4b by its task plan),
 PR C ([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) and PR D
 ([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a773-2d-tickets-and-retirement.md)). B3
 ([task plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
@@ -2495,8 +2503,7 @@ till's every-station view on `GET /api/expo/board`) and retired the old pass rea
 cards under a Held heading at the bottom of the station's Waiting and the pass's To fire by default,
 made every kitchen column a choice in Columns, gave the waiter's table screen "at the pass", and
 added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
-0073). What B4 leaves for PR D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
-"Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
+0073). Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts.
 
 **The owner's answers (2026-11-02)** to the nine questions B3 asked (B3's plan, "Owner

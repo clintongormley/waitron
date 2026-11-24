@@ -890,7 +890,7 @@ Traced on `main` at `5558d26e89`; read, not run, except where a command is named
   different releases is refused when their migrations differ — `handover.modules_differ` when the
   receiving image has migrations the copy lacks, `provisioning.database_ahead` the other way
   (`handover-compare.ts:236-275`). A950's "upgrade the spare first"
-  ([A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md), line 557) meets that, not
+  ([A950 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), line 557) meets that, not
   this task. Read, not run.
 
 **The declaration's rendered copy** (design §5.3, built in slice 2 and later; nothing here builds

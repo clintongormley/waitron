@@ -141,7 +141,7 @@ persistent repair open. The later 08:07 instruction authorises this read-only bu
 a fresh plan review, without another approval question. It permits sign-in, Read again
 and Stop; it authorises no certificate, setting, key, filing, fiscal-record or backup change.
 
-Follow the [integrity evidence implementation plan](../plans/2026-10-29-a1089-fiscal-integrity-evidence.md).
+Follow the [integrity evidence implementation plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-29-a1089-fiscal-integrity-evidence.md).
 The proposal above records the earlier scope question; these dated decisions supersede
 its pending-approval wording. Publishing this plan does not implement or qualify the screen.
 Persistent recovery, whole-chain auditing and fiscal decisions remain open.

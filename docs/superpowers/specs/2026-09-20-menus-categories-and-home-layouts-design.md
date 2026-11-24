@@ -18,7 +18,7 @@ whose target has gone. Where the two disagree, the newer design wins.
 Further owner decisions, 2026-09-25, are in §9, §10 and §11; a later section wins over an earlier one where they differ (§11, after the second outside review, wins over all).
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is
-[2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
+[2026-09-25-menus-categories-home-layouts.md](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-09-25-menus-categories-home-layouts.md).
 **2026-09-27:** the owner's decision of 2026-09-26 overturns §11.1's VAT bullet and §11.4's rule
 that VAT and the classification are taken when the invoice is issued, with its per-path table and
 the write-back: a line's VAT rate now comes from the published menu it was sold from. §11.4's
@@ -27,7 +27,7 @@ and §11.4 say what holds; §11.4's is the full one.
 **2026-09-27, later (A68):** the owner narrowed that decision the same day. The published menu
 freezes each item's VAT CLASS only; a line records its class, and the PERCENTAGE comes from a dated
 table in code, looked up for the day the invoice is issued. §11.4's A68 note is the full one.
-**2026-09-27:** the [plan](../plans/2026-09-25-menus-categories-home-layouts.md) is built. Tasks 1–6
+**2026-09-27:** the [plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-09-25-menus-categories-home-layouts.md) is built. Tasks 1–6
 landed as #651, #654, #659, #664, #670 and #677, Task 7a as #683, 7b as #696, 7c as #710, 7 as #719
 and 8 as #722, with the follow-ups #680 (the Prices tab's variants and columns), #702 (M7b2), #705
 (M6c), #713 (M7b3), #720 (M7v) and #726 (A68, which narrowed M7v's VAT rule); Task 9, the till's

@@ -511,7 +511,7 @@ though no money is misfiled.
 
 > 2026-11-21: a spare box that joins now trusts the main box through a code compared on both
 > boxes and the main box's signature, not a typed password; see
-> [the A1558 PR 9 plan](../plans/2026-11-21-a1558-pr9-join-by-code.md).
+> [the A1558 PR 9 plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a1558-pr9-join-by-code.md).
 
 Almost all of this exists. Membership documents with increasing terms (R1), the trust set, the
 read-only gate, and the till following whichever node the newest document names, are unchanged. Three

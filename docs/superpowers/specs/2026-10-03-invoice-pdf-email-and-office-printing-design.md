@@ -22,7 +22,7 @@
 > reservation and retry contracts remain; their separate rewrite is still open.
 
 > **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
-> plan](../plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
+> plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows
 > and retries, so the consent paths below, and any note calling that removal still open, are
 > history. A448 and the legal research are unchanged.
 
@@ -35,7 +35,7 @@
 > omitting the optional current venue address on A4. Its Part A remains unlanded. These product
 > decisions do not settle the legal research below or the independent A448 question.
 
-> **Owner overrides, 2026-10-07:** Build from the [reconciled plan](../plans/2026-10-03-invoice-pdf-email-and-office-printing.md) and the [recorded answers](../../backlog.md). The owner now requires invoice records without stored PDF copies, staff-recorded consent, and original retries after failed or uncertain sends. A later delivery after a completed original is marked «duplicado». These replace the corresponding proposals below; the dated research remains historical. Public F1 issuance stays disabled pending A231’s enablement gates.
+> **Owner overrides, 2026-10-07:** Build from the [reconciled plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-03-invoice-pdf-email-and-office-printing.md) and the [recorded answers](../../backlog.md). The owner now requires invoice records without stored PDF copies, staff-recorded consent, and original retries after failed or uncertain sends. A later delivery after a completed original is marked «duplicado». These replace the corresponding proposals below; the dated research remains historical. Public F1 issuance stays disabled pending A231’s enablement gates.
 
 > **Update, 2026-10-05 (A261 step 2):** The receipt-printing setting described under
 > **What is already there** records the location-wide setting at the time of this design. The

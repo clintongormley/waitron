@@ -2661,8 +2661,7 @@ Chromium stops `history.length` at 50. Measured 2026-10-14 in A506-12's run-it r
 full, a check that compares the count before and after cannot see a push. A506-12 met it when its
 suite ran beside other test files in one browser: a "new history entry" check failed with "expected
 50 to be 51", and its "no history entry" checks would have passed whatever the screen did. The
-2026-10-05 unsaved-changes audit had met it first
-(`docs/superpowers/plans/2026-10-05-unsaved-changes-audit.md`). A test spies on
+2026-10-05 unsaved-changes audit had met it first. A test spies on
 `history.pushState` and `history.replaceState` and reads their calls instead, as `writtenPaths` and
 the retired-address cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts` do.
 Guard: `scripts/no-history-length.test.ts`, weaker than its name. It reads the syntax of each

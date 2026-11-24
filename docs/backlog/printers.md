@@ -573,8 +573,8 @@ Hardware and inbox checks to complete in the owner session.
 
 - **Emailed invoices have no consent step (owner, 2026-10-09).** "We don't need customer consent
   to send them an email; just giving us the email address is sufficient." A231q's tasks C1a and
-  C1b removed consent from the staged choice, the delivery rows and their retries
-  ([plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)). This is a product
+  C1b removed consent from the staged choice, the delivery rows and their retries.
+  This is a product
   decision, not a legal conclusion: A448 stays open.
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
@@ -640,8 +640,7 @@ unavailable and an already saved single-queue printer. These physical checks rem
 
 The discovery caption uses the announced server hostname, with the local suffix removed, when
 available. It falls back to the routing address when no server name was announced; it does not
-construct a friendly computer name from a printer label. See the
-[identity map and plan](../superpowers/plans/2026-10-14-a576-ipp-queue-identity.md).
+construct a friendly computer name from a printer label.
 
 ## Loose ends left by C107 (#974)
 

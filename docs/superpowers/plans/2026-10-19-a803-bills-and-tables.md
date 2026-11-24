@@ -4,7 +4,7 @@
 
 > **2026-10-22 implementation:** independent slice 5 calls payment returns Refund in English, retaining the approved Spanish wording. The table-service guide now covers this refund flow in both languages. Other slices and their gates below remain open.
 
-> **2026-11-21 A594:** the [bill move fix](2026-11-21-a594-move-bill-joined-tables.md) covers the whole-group seating and named Move guests checks in `party-move-bill.test.ts`.
+> **2026-11-21 A594:** the [bill move fix](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a594-move-bill-joined-tables.md) covers the whole-group seating and named Move guests checks in `party-move-bill.test.ts`.
 
 > **For agentic workers:** Use `superpowers:executing-plans` for inline execution, task by task. Do not automatically dispatch per-task agents. Read the approved spec and this amendment-aware plan together. Steps use checkboxes. This document authorizes no implementation during its plan-only firing.
 
@@ -468,7 +468,7 @@ For any retained entry later authorized here, first add its named failing case a
 `pnpm --filter @waitron/server exec vitest run src/FILE.test.ts -t 'CASE'` or the till equivalent, then rerun the whole file after the fix. Replace FILE/CASE in the execution
 receipt with actual names. Do not report those proposed experiments as performed.
 
-**2026-11-21.** The watcher cleared the [A565, A566 and A860 floor reset plan](2026-11-21-a565-a566-a860-floor-reset-waiting.md).
+**2026-11-21.** The watcher cleared the [A565, A566 and A860 floor reset plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a565-a566-a860-floor-reset-waiting.md).
 Its reset and transfer tests cover the two A565 and A566 holds.
 
 ## Self-review against the spec and amendments

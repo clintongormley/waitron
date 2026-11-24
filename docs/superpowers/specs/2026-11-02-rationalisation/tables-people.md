@@ -523,7 +523,7 @@ exists today (a grep for audit or role-change logging in `packages/identity/src/
 | --- | --- | --- |
 | `dashboard.signed_in` (`data`: method), `dashboard.signed_out` | person | `management-session.ts` |
 | `person.created`, `person.updated` | person | `staff.ts`, `profile.ts`, provisioning import |
-| `person.roles_changed` (`data`: added, removed) | person | A1002's membership change, which replaces `staff.ts`'s `setRole` and `setStaffRoleHolders`, a delete-then-insert that keeps no record of who held a role (`staff-roles.ts:180-199`). **2026-11-08:** this proposed kind is superseded by `role.member_added` / `role.member_removed` in [approved A1002 §7](../2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning). |
+| `person.roles_changed` (`data`: added, removed) | person | A1002's membership change, which replaces `staff.ts`'s `setRole` and `setStaffRoleHolders`, a delete-then-insert that keeps no record of who held a role (`staff-roles.ts:180-199`). **2026-11-08:** this proposed kind is superseded by `role.member_added` / `role.member_removed` in [approved A1002 §7](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning). |
 | `person.suspended`, `person.reactivated` | person | `staff.ts` |
 | `person.pin_reset`, `person.password_changed` | person | `staff.ts`, `profile.ts`, `account-action.ts` |
 | `person.email_changed` | person | `account-action.ts` (on confirmation) |

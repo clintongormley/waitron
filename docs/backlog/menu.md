@@ -127,8 +127,7 @@ older build before using the new published document. Status and remaining work:
 
 Both plans are complete (the
 [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§11 wins
-over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and
-[plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md); the
+over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) and its plan; the
 [classification design](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
 and [plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-09-25-sales-classification.md)). Several entries are overtaken by
 the 2026-09-30 folders design; what remains:
@@ -291,9 +290,7 @@ name, never kitchen. The watcher’s 23:28 clearance chooses default-menu-only s
 non-transferring preferences, browser printing and a written key with inline words as an alternative.
 The watcher’s 14 November 00:22 amendment narrows read-only Cloud work to the hosted copy,
 with live forwarding reserved for ordering (A509); slices 1, 2 and 4 stay unchanged.
-These are watcher-cleared plan decisions, not owner approval of the plan. The
-[online](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
-[paper](../superpowers/specs/2026-11-13-a670-printed-template-study.md) studies retain their dated proposals.
+These are watcher-cleared plan decisions, not owner approval of the plan.
 
 ## A case the content-language decisions leave open, built with the plan's default unless the owner says otherwise
 
@@ -420,7 +417,6 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
   §10.6). In Sales, choose a receipt printer to print the category report or a finished drawer
   close. On 22 November 2026, A1325 retired the saved day report and its chain.
-  [Retirement slice](../superpowers/plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md)
 
 - **"Patch live menu" is an emergency tool and stays plain** (owner, 2026-10-27, A1151). It
   corrects only the live version of one menu and puts the patch live at once: no scheduling, no

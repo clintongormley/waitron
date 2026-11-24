@@ -14,11 +14,11 @@
 
 > 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-b3-1-encrypted-disk.md).
 
-> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. B3 host, hardware and trust prerequisites remain.
+> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. B3 host, hardware and trust prerequisites remain.
 
 # B3 — The bootable USB installer
 
-> **A950 pointer, 29 October 2026:** the [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md)
+> **A950 pointer, 29 October 2026:** the [approved A950 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md)
 > now owns application updates, exact image retention and rollback until a clean, running restart.
 > Every venue starts automatic-on with an editable 03:00–05:00 local window. References below to
 > A950 as undesigned, its earlier quiet hour or tag-only retention record the earlier revision.

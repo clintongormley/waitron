@@ -681,7 +681,7 @@ each costs.
    (`packages/identity/src/permissions.ts:80-85`, "What exists today"), so **until A1002 is built
    only administrators can start it at any venue**; this design adds no permission to any role.
    Giving it to another role arrives with **A1002** (custom roles and several roles per person,
-   [A1002 design](2026-10-22-a1002-custom-roles-design.md)): its §2 makes `node.promote` part of
+   [A1002 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-22-a1002-custom-roles-design.md)): its §2 makes `node.promote` part of
    `node.manage`, held by Admin by default, and its §3 makes the grants of the built-in Manager,
    Supervisor and Staff roles, and of custom roles, editable. The owner has accepted both of those
    (A1002 §11), but not yet the whole design. Under its §5, which is not yet approved, role

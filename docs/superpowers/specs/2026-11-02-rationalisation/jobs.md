@@ -366,7 +366,7 @@ which is what wakes R5.
 there is no additional sender service. Enqueue with the activity entry in the role-change
 transaction; `subject_id` names the entry, `person_id` the affected recipient and `requested_by`
 the actor. Read the address at claim; params retain role label, `editorName` (masked in logs) and change
-time. Setup/import baseline memberships log without email. See [A1002 §7](../2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning).
+time. Setup/import baseline memberships log without email. See [A1002 §7](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning).
 
 **Indexes:** `outgoing_mail_key_uq` unique on `dedupe_key`; `outgoing_mail_due_idx` on `(status, next_attempt_at, id)`.
 

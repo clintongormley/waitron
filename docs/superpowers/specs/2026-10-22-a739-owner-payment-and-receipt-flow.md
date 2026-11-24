@@ -2,9 +2,9 @@
 
 **20 November 2026 pointer (#3752).** A card reader payment's slip request is now stored with the payment (`bill_payments.slip_wanted`), so "held in memory" and "a restart or unclear reader answer may miss it" below no longer hold: the slip prints once when the payment is settled, however late, at the device where it began, and a reader that declines while the till waits prints "Payment not taken" (the owner's answers, relayed in lane L `questions.md`, "WATCHER 2026-11-20 10:21"). Any other failed payment with a slip asked for prints "Payment not taken" too, by the watcher's rule under the same heading, except a charge refunded in full, which prints none (the lane's default).
 
-**19 November 2026 pointer (RECEIPT-LAYOUT-3, #3752).** Payment slips are now optional and never reprinted from the till: any method's slip prints once, only when the payer asks, so "Cash never prints payment slips", "Manual card remains excluded", "no cash slips" and every "print a copy" below no longer hold. See the [plan's 19 November rework](../plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
+**19 November 2026 pointer (RECEIPT-LAYOUT-3, #3752).** Payment slips are now optional and never reprinted from the till: any method's slip prints once, only when the payer asks, so "Cash never prints payment slips", "Manual card remains excluded", "no cash slips" and every "print a copy" below no longer hold. See the [plan's 19 November rework](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional).
 
-**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. A requested card slip is held in memory; a restart or unclear reader answer may miss it. Staff recover with “print a copy”, including before full payment, using the reader payment’s stored remaining balance. This supersedes the restart-recovery proposal below; no slip-request table is authorised. The [revised slip plan](../plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 with reader-only balance writes, no copy audit and a build hold until #2736 lands.
+**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. A requested card slip is held in memory; a restart or unclear reader answer may miss it. Staff recover with “print a copy”, including before full payment, using the reader payment’s stored remaining balance. This supersedes the restart-recovery proposal below; no slip-request table is authorised. The [revised slip plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 with reader-only balance writes, no copy audit and a build hold until #2736 lands.
 
 **Authoritative addendum.** The owner approved the revised pay screen at about 02:12 CET,
 after answering dismissal at 02:01 and reader settings at 02:05. These answers take precedence
@@ -71,7 +71,7 @@ A790 keeps its document routing, separate Equipment Invoice setting and dashboar
 A796 keeps the one Equipment Receipt setting, takeover, save and concurrency rules. A582's payment
 help belongs in the rebuilt window. Updated static boards accompany this publication; running UI
 acceptance remains part of implementation.
-The [approved implementation plan](../plans/2026-10-27-a739-approved-payment-flow.md) names the cuts,
+The [approved implementation plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-27-a739-approved-payment-flow.md) names the cuts,
 interfaces, focused TDD checks and dependencies. Publishing this plan does not finish A739.
 
 ## Sources for this addendum

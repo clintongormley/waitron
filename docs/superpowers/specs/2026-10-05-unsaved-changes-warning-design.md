@@ -6,7 +6,7 @@
 
 You should be able to close an editor without losing work by accident. W69 adds one shared warning for edited forms across the dashboard, till, setup wizard and contributed management screens. When you try to leave, **Keep editing** preserves the form and receives initial focus; **Discard changes** explicitly abandons only the drafts that the requested action would leave.
 
-This follows the owner's W69 instructions of 2026-10-04 and 2026-10-05, including protection when leaving any page and the changed-test-check rule. The source baseline is `5597e06923b64acacf9df54ed6e8fb42e7fa411e`. The [audit](../plans/2026-10-05-unsaved-changes-audit.md) records observed owners and proposed treatment; the [plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-unsaved-changes-warning.md) covers the entire item, optionally in two PRs. Source inspection is not runtime verification.
+This follows the owner's W69 instructions of 2026-10-04 and 2026-10-05, including protection when leaving any page and the changed-test-check rule. The source baseline is `5597e06923b64acacf9df54ed6e8fb42e7fa411e`. The [audit](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-05-unsaved-changes-audit.md) records observed owners and proposed treatment; the [plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-05-unsaved-changes-warning.md) covers the entire item, optionally in two PRs. Source inspection is not runtime verification.
 
 ## What counts as unsaved
 

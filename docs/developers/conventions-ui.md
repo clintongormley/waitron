@@ -1774,9 +1774,7 @@ meaning the box passes every guard.
 Use the shared registry for staged modal, page and credential input, including the supervisor's
 keypad PIN. Sign-in screens register nothing (design-system.md, "Protect an edited dialog
 before closing it"), and neither does the staffing grid's block editor, whose change a click outside
-throws away (A761, design-system.md → Forms). The application shells share one confirmation and accepted-history adapter. The
-[dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md) records behavioral
-checks and their limits. Use `beforeClose`
+throws away (A761, design-system.md → Forms). The application shells share one confirmation and accepted-history adapter. Use `beforeClose`
 with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. An explicit Cancel uses `"cancel"` and restores its selected drafts
 without asking. Close, Back, Skip and switching actions use `"navigation"`; Escape and an existing

@@ -3815,8 +3815,7 @@ ID sets and preserve order for submitted positions. Nested image forms retain Fi
 a child save commits that child without committing its parent. Independent receipt, credential
 and inline-row writes commit separately. A failed refresh after a successful write cannot make
 that submitted value dirty again. Read-only views, immediately saved controls, safety
-acknowledgements and the staffing grid's block editor (A761) remain exempt. The [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md)
-records the coverage and limits of the rollout checks.
+acknowledgements and the staffing grid's block editor (A761) remain exempt.
 
 The dirty-only unload listener requests the browser's own warning. Activated desktop Chromium
 checks cover reload, external navigation and closing with a Schedule draft. The

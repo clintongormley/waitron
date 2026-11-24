@@ -10,7 +10,7 @@
 > See [A493](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-12-a493-departments-zones-design.md).
 
 > **2026-10-12, A231q:** the consent step is gone from the product: tasks C1a and C1b of the [A231q
-> plan](2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows and
+> plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md) removed it from staging, delivery rows and
 > retries, so the consent paths below, and any note calling that removal still open, are history.
 > A448 and the legal research are unchanged.
 

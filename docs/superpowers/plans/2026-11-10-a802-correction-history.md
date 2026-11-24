@@ -1,6 +1,6 @@
 # A802 slice 3: read an invoice's correction history and whether it may be corrected
 
-_2026-11-11: slices 4–5 re-planned after the owner's option A (a fix never changes amounts) — see [2026-11-11-a802-slices-4-5.md](2026-11-11-a802-slices-4-5.md)._
+_2026-11-11: slices 4–5 re-planned after the owner's option A (a fix never changes amounts) — see [2026-11-11-a802-slices-4-5.md](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-11-a802-slices-4-5.md)._
 
 **Status: R1–R5 cleared by the watcher 2026-11-10 16:23 with four changes, and the owner's three
 questions answered 16:26–16:28; both are written into the

@@ -983,7 +983,7 @@ a Waitron bug. Acknowledging the alert does not resolve its cause.
 
 ### fiscal-reconcile
 
-**23 November 2026:** [A1308 Fi7](../superpowers/plans/2026-11-08-a1308-fi7-acks-and-cleared-answers.md)
+**23 November 2026:** A1308 Fi7 (#4174)
 removes the duplicate acknowledgement table and its `acks.test.ts` tests. The audit below records
 the suite as it ran in October.
 

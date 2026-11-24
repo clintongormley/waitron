@@ -2,7 +2,7 @@
 
 _2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
 saved day report and its chain described below are historical. See the
-[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+[retirement slice](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
 
 > **For agentic workers:** Use `superpowers:executing-plans` and execute inline, task by task. No required per-task agents. Steps use checkboxes. Land this document separately as documentation before implementation begins.
 

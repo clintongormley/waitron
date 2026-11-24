@@ -7,7 +7,7 @@
 >
 > **A1207, 30 October 2026:** a setup or restore whose minute is taken now waits with one countdown and checks again by itself, instead of the refusal with "carry on from" ([A1207 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-29-a1207-minute-not-in-database.md), Part 1b).
 
-> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. Build only eligible cuts; fiscal and qualification boundaries remain.
+> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. Build only eligible cuts; fiscal and qualification boundaries remain.
 
 # A940 — The software's declaración responsable, inside the app and outside it
 
@@ -31,7 +31,7 @@
 > **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 > **A950 pointer, 29 October 2026:** the current update design is in the
-> [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md). Its rollback closes after
+> [approved A950 design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md). Its rollback closes after
 > a clean, running restart, before normal work resumes; older first-order references below are
 > historical. Ordinary A950 app upgrades choose no new installation name. A release requiring
 > that change remains a separately authorised exceptional operation; A940/A993's own decisions

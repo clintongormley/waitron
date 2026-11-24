@@ -2,7 +2,7 @@
 
 _2026-11-22 (A1325 slice 6). Sales now reads daily figures from recorded transactions. The
 saved day report and its chain described below are historical. See the
-[retirement slice](2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
+[retirement slice](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md)._
 
 _2026-11-16: [The bucket stop-order change](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bucket-pointer-and-stop.md) moves only
 the Cloud snapshot wait after the stream stop; venue-database writers still stop before the stream._
@@ -1868,7 +1868,7 @@ beside `fiscal`, `:1686`); create `packages/module/src/handover.ts`. Test
 
 #### Task 4.2: The Veri*Factu chain summary
 
-**2026-11-23:** [A1308 Fi7](2026-11-08-a1308-fi7-acks-and-cleared-answers.md) replaces
+**2026-11-23:** [A1308 Fi7](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-fi7-acks-and-cleared-answers.md) replaces
 `acksSha256` with `submissionsSha256`, which hashes the stored submission answers.
 
 **Files:** Create `packages/fiscal-verifactu/src/handover-summary.ts`; register it on the

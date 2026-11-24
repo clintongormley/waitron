@@ -177,6 +177,17 @@ Retiring the summary once its last consumer moves away remains open.
 
 ## Decisions and deliberate limits
 
+- **The theme editor (A841, owner, 2026-10-19 and 2026-10-20).** Moved here from the deleted design.
+  Waitron works the colours out from a few choices by default, with Advanced to set them by hand ("A by
+  default, with advanced access to B"). A colour that is hard to read is never refused: "Don't refuse,
+  this is easy to fix. Instead show the warning and offer to fix automatically". One look for the whole
+  business ("And the same look in all devices"). Changing the brand colour keeps colours set by hand.
+  Every custom theme has a light and a dark version. The logo also prints on paper where no department
+  receipt logo applies, and takes Waitron's place on screen with "Powered by Waitron" under both sign-in
+  forms. Uploaded font files are their own later item.
+- **Row menus (owner, 2026-11-23).** Moved here from the deleted design. Rows are a list with normal-weight labels and grey icons, one
+  icon per verb. An action that fits no existing verb comes back to the owner with a proposed icon.
+
 ### Where you can choose columns (C45, #834)
 
 The watcher kept the fixed columns in the plain report tables on 21 November 2026. C45 covered
@@ -561,10 +572,9 @@ and restated on 2026-10-02: "review all permissions and the roles they're assign
 The review covers both permissions and their default holders. Machine permissions use `node.*`,
 not `mirror.*` (owner preference).
 
-The [earlier review](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-records the inventory and discussion. **2026-11-14:** the
+**2026-11-14:** the
 [11 November redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
-supersedes its build split; that permission and role build is no longer open.
+supersedes the earlier review's build split; that permission and role build is no longer open.
 
 ### Roles are something an admin can add and edit; the four built-ins are only defaults
 
@@ -574,7 +584,7 @@ and Manager retain editable privileges. Admin retains every current/future grant
 usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
 the new names answer supersedes that allowance only.
 
-**2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+**2026-11-08:** the approved design of 22 October
 and [reviewed plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 **2026-11-14:** the [roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) supersedes that build split; its access roles grant permissions, while job roles grant none.
 

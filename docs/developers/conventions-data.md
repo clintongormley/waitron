@@ -125,8 +125,7 @@ that may have been recorded (`apps/till/src/api/client.ts`,
 reads first. A malformed path id is outside the rule: it keeps answering as it does today, mostly
 400 `shared.invalid_id` (the watcher's decision on the A394 plan's question 7, 2026-11-20; the
 reason is in `docs/backlog/architecture.md` under "Decisions and deliberate limits"). Nothing guards
-the rule. The routes that broke it on that date, and how each was settled:
-`docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+the rule.
 
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 
@@ -5212,7 +5211,7 @@ every read of the stop fails, the window stays as it was.
 **The `staff` source on the retired schema** (Task 8-0). (2026-11-07, A1422: the two old
 migration files named here were deleted with the frozen history; read one with
 `git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.)
-[Fi4](../superpowers/plans/2026-11-08-a1308-fi4a-history-table.md) replaces the table.
+A1308 Fi4 (#4144) replaces the table.
 In the current proof, a staff member's till is under `proof.staff`. An administrator on a till
 has `proof.device` beside `proof.admin`.
 
@@ -7300,7 +7299,7 @@ and image edits refresh the department's cached pictures. A null `receipt_update
 receipt has been saved. Configuration format 39 carries these columns and rewrites the image key;
 format 38 is refused as outdated. The raster cache stays with the department until its separate removal change.
 
-> 2026-11-15: the watcher retained the department raster cache after the [write-lock timing](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15); the separate removal mentioned above is retired.
+> 2026-11-15: the watcher retained the department raster cache after the write-lock timing ([decision](../backlog/architecture.md#decisions-and-deliberate-limits)); the separate removal mentioned above is retired.
 
 > 2026-11-15, A1308 vb6: the operation description mentioned in the vb5 receipt-storage note above now lives in `departments.operation_description`, outside `receipt_text`; configuration format 41 carries it.
 

@@ -7,8 +7,8 @@ printed layouts and the pop-up, which were looked at on the demo.
 
 It follows the [menu editor](2026-11-24-menu-editor-redesign-design.md) and
 [device home page](2026-11-24-device-home-page-design.md) designs. It replaces the three A670 documents
-([proposal](2026-11-12-a670-guest-menu-design.md), [online](2026-11-13-a670-online-go-live-study.md),
-[print](2026-11-13-a670-printed-template-study.md)) and the 13 November choice of a read-only copy kept
+([proposal](2026-11-12-a670-guest-menu-design.md), [online](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-11-13-a670-online-go-live-study.md),
+[print](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-11-13-a670-printed-template-study.md)) and the 13 November choice of a read-only copy kept
 in Cloud.
 
 ## Why

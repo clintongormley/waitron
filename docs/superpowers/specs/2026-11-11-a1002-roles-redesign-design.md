@@ -5,7 +5,7 @@ help-bubble addition in §10). The owner also reviewed the "my call" defaults li
 before approving. **Amended 2026-11-12 (owner, "Y"):** a role change leaves a person's links
 alone (§4). **Amended 2026-11-14 (owner, "(b) One email (Recommended)"):** a person who has not
 accepted their invitation gets no role-change email; the invitation lists their roles (§8).
-It replaces the [7 November design](2026-10-22-a1002-custom-roles-design.md) wherever the two
+It replaces the [7 November design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-10-22-a1002-custom-roles-design.md) wherever the two
 differ. Where this document is silent, that design's decision stands only if §9 lists it as kept.
 The [cut 2 scope forecast](../plans/2026-11-10-a1002-cut2-scope-refresh.md) (branch
 `docs/a1002-cut2-scope-refresh`, never merged) sized the old design and is superseded with it.

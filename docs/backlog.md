@@ -250,7 +250,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
   [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b
-  removed it ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09 answer. Until 2026-10-12 this entry asked
+  removed it on the owner's 2026-10-09 answer. Until 2026-10-12 this entry asked
   that the consent request say how the invoice will arrive and how consent is withdrawn._
 
 - **The till's email step does not tell the customer how the ticket arrives** (left open by ADVISER-NO-NONE, which
@@ -1204,8 +1204,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   and Cloud [#1343](https://github.com/waitron-io/waitron-cloud/pull/1343).
   Configured test boxes also offer sign-in in fresh Prepare and development Live,
   then file the saved venue after restart. Prepare on configured test boxes also offers
-  [staff email through Cloud](superpowers/plans/2026-11-21-setup-cloud-staff-email.md) and lets
-  you [leave the venue mail server blank](superpowers/plans/2026-11-21-setup-cloud-email-no-server.md).
+  staff email through Cloud and lets you leave the venue mail server blank.
   The administrator form comes before Cloud sign-in in Prepare and when starting empty in
   development Live. The hosted test release and live Google qualification remain open. The address
   picker requires one Spanish business with no tax number or venues. Adding a venue to an
@@ -1524,14 +1523,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   with `git grep -F '<error code>' -- apps/server/src` and run the affected tests.
   Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
   Future order and sale changes follow the [package convention](developers/conventions-data.md#order-and-sale-code-belongs-in-packagesorders-sales).
-  [Receipt helpers](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
-  [Invoice selection](superpowers/plans/2026-11-23-a1308-invoice-selection.md)
-  [Find a bill query](superpowers/plans/2026-11-24-a1308-find-bill-query.md)
-  [Receipt lines and VAT table](superpowers/plans/2026-11-24-a1308-receipt-lines.md)
   [Bill allocation](superpowers/plans/2026-11-24-a1308-bill-allocation.md)
-  [Receipt figures](superpowers/plans/2026-11-24-a1308-receipt-figures.md)
-  [Receipt issuer](superpowers/plans/2026-11-24-a1308-receipt-issuer.md)
-  [Receipt facts and its landing checks](superpowers/plans/2026-11-24-a1308-receipt-facts.md)
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
@@ -1969,7 +1961,7 @@ while it holds decisions still open.
 | [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)                                                                                          | discussion record; not started                                                                                                                                             | _The box: backups, upgrades and recovery_                                 |
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1–2 and A947 local joining/takeover built and run on two real boxes; Cloud work remains                                                                                                                                   | _Replication, failover and the cloud_                                     |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)                                                                                      | decisions; the reader dropdown exists                                                                                                                                      | _Payments and card readers_ (Slice 2)                                     |
-| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the menu_ (_Sales classification and the menus plan — what they left open_) |
+| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)                                                                                      | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the menu_ (_Sales classification and the menus plan — what they left open_) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan                                                                                 | all 18 tasks landed (Task 17 last, #991); what they left open is under The till, devices and table service                                                                 | The till, devices and table service                                       |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md)                                                                                                                             | server built (#721); the till side built by lane B item B15 (#956)                                                                                                         | The till, devices and table service                                       |
 

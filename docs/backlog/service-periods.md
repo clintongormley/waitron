@@ -300,7 +300,7 @@ the season painter continues saving through the season-week route._
 
 - **Staffing's month (A720, 2026-10-15)** has no legend, and its year is plain text, since Staffing
   has no Year view (A759). Its day box shows each area's total and the role, headcount and times
-  of each staffing block, as the [19 November plan](../superpowers/plans/2026-11-19-dash-staffing-day-box.md) describes.
+  of each staffing block.
 
 - **The "VAT class for new products" default is a venue setting (owner, 2026-10-16, A755).** It sits
   on Venue settings' Defaults card beside the default receipt language, and both are saved together
@@ -412,9 +412,7 @@ the season painter continues saving through the season-week route._
 
 Left open by A723 (#1849).
 
-A723's plan made these choices by default and sent them to the owner to overrule if wanted
-([plan](../superpowers/plans/2026-10-18-a723-painters-standard-week.md), "Decisions this plan
-makes"):
+A723's plan made these choices by default and sent them to the owner to overrule if wanted:
 
 Decisions 1 and 3 are superseded by the stored-whole, read-intersection rule above (2026-11-15).
 
@@ -430,9 +428,7 @@ heading): the editor is now titled "<name>: special day, <dates>".
 
 Left open by A762, #1850.
 
-A762's plan made these choices by default and sent them to the owner to overrule if wanted
-([plan](../superpowers/plans/2026-10-18-a762-painter-colour-bands.md), "Decisions this plan
-makes"):
+A762's plan made these choices by default and sent them to the owner to overrule if wanted:
 
 - Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
   rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits

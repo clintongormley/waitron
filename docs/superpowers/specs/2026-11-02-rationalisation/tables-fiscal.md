@@ -7,7 +7,7 @@
 
 > **2026-11-22 (A1325 slice 6).** The saved day report and its chain are retired.
 > Sales reads recorded transactions. See the
-> [retirement slice](../../plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md) for the change.
+> [retirement slice](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a1325-close-a-drawer-6-retire-daily.md) for the change.
 
 
 # Target design: fiscal filing and chain, card payments, adjustments
@@ -103,7 +103,7 @@ slice, so the owner lands it.
 
 **2026-11-23, fiscal 2:** `readChainHead(tx, nodeId)` reads the current identity. The watcher
 cleared removing `esPrimerRegistro` and the optional identity argument because their only
-callers were tests. See the [Fi2 review follow-up](../../plans/2026-11-08-a1308-fi2-chain-head-derived.md).
+callers were tests. See the [Fi2 review follow-up](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-fi2-chain-head-derived.md).
 
 ### 0.2 Can the next invoice number be read from the sales? Yes; the series row stays.
 
@@ -293,7 +293,7 @@ the schema: a promotion whose old box gave up filing stores a version 2 approval
 
 **2026-11-24, as built in Fi9.** The seven allocation columns are empty together for fixture
 identities and set together when activation records an approval. The
-[Fi9 plan](../../plans/2026-11-08-a1308-fi9-identities-absorb-allocations.md#decisions-this-plan-makes)
+[Fi9 plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-fi9-identities-absorb-allocations.md#decisions-this-plan-makes)
 records the 2026-11-09 decision to drop `fiscal_allocations_identity_uq` because the existing
 installation-name unique index covers all environments. Start again still needs the certificate
 exemption added by A1379 part 2. Fi9 removes only the allocation table from that list.
@@ -382,7 +382,7 @@ W41s-10a): a record of ours whose stored copy differs from AEAT's. It becomes ki
 - **Rows:** 3, plus 3 per restore.
 
 > **Superseded, 6 November 2026.** The owner approved
-> [closing a drawer](../2026-11-06-a1325-close-a-drawer-design.md): this table and its chain are replaced by an
+> [closing a drawer](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md): this table and its chain are replaced by an
 > append-only record of drawer entries, and the `daily_closes` half of the business-day lock goes. The text
 > below is what was decided before that.
 
@@ -571,7 +571,7 @@ machine state (section 0).
 ## 3. History
 
 **2026-11-23, Fi4.** A1420 removed the clock-stop readers and the check-to-confirmation link.
-The [combined Fi4 plan](../../plans/2026-11-08-a1308-fi4a-history-table.md) gives the
+The [combined Fi4 plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-fi4a-history-table.md) gives the
 surviving verified step one kind, `clock.confirmed`. The before reading goes in `at` and the
 after reading in `data.confirmedAt`. The source is `admin` or `staff` and the reason is
 `start` or `unusable`. The latest-step read still comes from clock incidents.
@@ -752,7 +752,7 @@ payments and adjustments research, found none.
 
 How `clock_confirmations`' protections land in `verifactu_history`:
 
-**2026-11-23, Fi4.** Follow the [combined Fi4 plan](../../plans/2026-11-08-a1308-fi4a-history-table.md)
+**2026-11-23, Fi4.** Follow the [combined Fi4 plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-fi4a-history-table.md)
 for clock evidence. The history row links to the node and person. A1420 retired the clock-check
 link, its planned trigger, and the record pairing. Fi5 introduces the event key and record link
 for conflict evidence and requires both to be null on a clock row.

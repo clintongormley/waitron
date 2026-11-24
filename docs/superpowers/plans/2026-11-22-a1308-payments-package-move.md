@@ -27,7 +27,7 @@ middleware order and whole-app tests. Generic HTTP helpers and the `Logger` type
   Which order and device operations these packages can call, and which test fixtures can move,
   are still open. The watcher kept the bill-fixture split with the orders-and-sales move on
   21 November at 20:11. [Adjustment routes](../../../apps/server/src/adjustments-api.ts#L24) ·
-  [Bill fixture design](2026-11-21-a1308-orders-sales-first-shared-piece.md)
+  [Bill fixture design](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
 
 ## Size and the smaller option
 
@@ -37,7 +37,7 @@ server. #3952 retired the old pending-card recovery source and whole-payment fix
 pending-card loop test now exercises bill recovery. #2879 retired
 `draft-recall-adjustments.test.ts` when Cancel item took over sent-dish removal. The shared code
 and fixture changes still need sizing.
-[Pa1 inventory](2026-11-08-a1308-pa1-card-follow-ups.md#area-files-for-the-package-move) ·
+[Pa1 inventory](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-08-a1308-pa1-card-follow-ups.md#area-files-for-the-package-move) ·
 [Bill recovery suite](../../../apps/server/src/pending-card-loop.test.ts#L2)
 
 `stripe-account.ts` (93 lines) still uses the server's credential reader and errors.

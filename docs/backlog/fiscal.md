@@ -121,8 +121,7 @@ reporting period.
 
 ## A554. Should any screen show the address an invoice email went to?
 
-An owner question, open
-point 1 of the [A231q plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md). Until
+An owner question. Until
 it is answered none does: the delivery status the till and the dashboard read carries no address,
 and both email forms open empty. Left open by A231q.
 
@@ -1108,6 +1107,8 @@ the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
 
+**When a table's ticket is issued (owner, 2026-11-17 and 2026-11-19).** Moved here from the deleted MEAL-END-TICKET and ADVISER-CLOSE-OF-DAY-TICKET plans. Print the bill issues the ticket, paid or not. Dishes not yet served do not hold it back: "Warn, let staff print". "once a bill is printed (its invoice issued), neither invoice switch may happen". A bill still open when the business day ends is issued then: D1 "Calendar day it ended (Recommended)" for its date, D2 "New: close of business day (Recommended)" for what the record names as having issued it, and D3–D6 "Accept all four (Recommended)": nothing prints at the close, a bill with dishes the kitchen is not making is left open, table bills only, and bills a restored box found open are left for staff to review, never issued automatically. (2026-11-19, while building: D3 went back to the owner, because a bill then recorded as a walkout gets no printed ticket.) The adviser's confirmation is still awaited ([the 19 November sheet](../compliance/2026-11-19-adviser-meeting.md)).
+
 **The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key." (2026-11-24: the node recovery pack this named was removed in A1323 PR 2c; the check itself, `verifyPaperBlockSnapshot`, remains and compares no venue id.)
 
 ### A VAT period counts what belongs to it and was recorded by its last day (owner, 2026-11-16 and 2026-11-19)
@@ -1226,7 +1227,6 @@ printed bill stays refused) are the lane watcher's choices of 2026-11-20 (lane L
 09:58 and 10:11), not the owner's; D4 (a dish held in an unsent group is fired first) is the lane's
 default. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tables keyed to a dish
 line by hand; nothing checks it.
-[Plan](../superpowers/plans/2026-11-20-adviser-split-after-print.md).
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
@@ -1308,7 +1308,6 @@ A663 Part 2: no, except a replacement corrective of a refused simplified invoice
 issued on a later day than the sale (dated notes below). The work built for the bill-close date stays parked on
 `feat/a444-fiscal-operation-day` and `feat/a444-close-day-capture`, branches in lane L's local
 worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
-[Plan](../superpowers/plans/2026-11-12-a444-creation-date-only.md).
 _2026-11-14 (owner's answer B, Q37-FIX): an exception is a replacement corrective (R5 "S") of
 a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
 differs from its own date._
@@ -1464,9 +1463,8 @@ The owner approved the hour-code design on 16 October 2026 at 14:50, replacing p
 allocation and S/P/C/E naming with taxpayer-wide coordination, clock/history checks and one
 recovery-key PDF. The 18 October clarification requires one prefix for each invoice purpose.
 The owner approved the generated PDF and exact retained CLI-launch patch on 19 October.
-The [approved design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
-and [historical decision/checkpoint snapshot](../operations/a679-development-checkpoints.md)
-retain the decisions and their earlier alternatives. No simultaneous-box reservation guarantee
+The [approved design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md) retains the
+decisions and their earlier alternatives. No simultaneous-box reservation guarantee
 or conversion of old fiscal records is part of this change. (2026-10-22: A947 slice 4a replaced
 the hour names with five-symbol UTC-minute names, the recent-setup question with a 30-second
 check against a second clock, and dropped the installation code from the sheet; see the
@@ -1546,8 +1544,8 @@ a line with no operation is not refused for that.
      **Gap found 2026-10-09 (A448):** for a consumer, TRLGDCU art. 63.3 requires the request for consent to «precisar la forma en la que se procederá a recibir la factura electrónica, así como la posibilidad de que el destinatario que haya dado su consentimiento pueda revocarlo y la forma en la que podrá realizarse dicha revocación». The till's question must say both.
      _2026-10-12: for the product this answer is superseded. The owner removed the consent step on
      2026-10-09 ("We don't need customer consent to send them an email; just giving us the email
-     address is sufficient."), and A231q's tasks C1a and C1b removed it
-     ([plan](../superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)). A448 keeps the
+     address is sufficient."), and A231q's tasks C1a and C1b removed it.
+     A448 keeps the
      legal question open._
   3. Keeping: the same as a printed F1 — the invoice's database record. No copy of the PDF file is stored. The reconciled plan drops the proposed delivered-PDF table and keeps delivery metadata only.
   4. An unsigned PDF is a valid original for a business customer before the [business regime](#when-the-business-e-invoicing-regime-starts) applies, carrying the same QR and legend as paper. Receipts, each found word for word in the source fetched 2026-10-07: RD 1619/2012 art. 8.4, «se presumirá acreditada cuando se haya expedido utilizando un sistema o programa informático en conformidad con los requisitos»; DGT binding ruling V2891-18 (08/11/2018), an emailed PDF «con independencia de que no haya sido firmada digitalmente por el emisor de la misma, tendrá la calificación de factura electrónica»; AEAT's Veri*Factu FAQ, the QR on a PDF «no tendrá especialidades respecto de la que corresponde a la emisión en papel».
