@@ -42,7 +42,7 @@ import type {
   RegistroAlta,
   SistemaInformatico,
 } from "@waitron/verifactu";
-import { appendToChain, refuseUnlessServingPrimary } from "./chain.js";
+import { appendToChain, latestRecord, refuseUnlessServingPrimary } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
@@ -224,6 +224,13 @@ export class VerifactuBackend implements FiscalBackend {
 
   recordHeads(tx: Transaction): Promise<Record<string, number>> {
     return chainHeads(tx);
+  }
+
+  latestRecord(
+    tx: Transaction,
+    nodeId: NodeId,
+  ): Promise<{ position: number; saleId: SaleId } | null> {
+    return latestRecord(tx, nodeId);
   }
 
   latestFutureDateRefusal(

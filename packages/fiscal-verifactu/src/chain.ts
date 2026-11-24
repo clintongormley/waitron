@@ -3,7 +3,7 @@ import "./errors.js";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { IssuanceRefusal, recordIncident } from "@waitron/core";
 import { IssuanceRefusedError } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
+import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
 import {
   constraintTarget,
@@ -94,6 +94,7 @@ async function selectHead(tx: Transaction, nodeId: NodeId) {
       id: verifactuRecords.id,
       secuencia: verifactuRecords.secuencia,
       sifId: verifactuRecords.sifId,
+      saleId: verifactuRecords.saleId,
       idEmisorFactura: verifactuRecords.idEmisorFactura,
       numSerieFactura: verifactuRecords.numSerieFactura,
       fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
@@ -121,6 +122,15 @@ export async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<Ch
     ultimoRegistroId: previous?.id ?? null,
     ultimaHuella: previous?.huella ?? null,
   };
+}
+
+/** The position and sale of the record at the node's chain head. */
+export async function latestRecord(
+  tx: Transaction,
+  nodeId: NodeId,
+): Promise<{ position: number; saleId: SaleId } | null> {
+  const head = await selectHead(tx, nodeId);
+  return head === undefined ? null : { position: head.secuencia, saleId: brandSaleId(head.saleId) };
 }
 
 /**
