@@ -40,11 +40,14 @@ and return the other discount as unused (watcher, 24 November at 10:38).
 
 **Search limit.** Keep the mix cap for enumerated count vectors. Reserve a smaller deterministic
 placement-solve budget for finding a complete fallback, and check it on the large fixture below.
-Start with valid saved places and compare whole-menu additions by the saving each actually delivers
-after supplements and discounts (watcher, 24 November at 12:08). Check 600 small bills against
-enumeration and unchanged replay, and compare a sample of 16–20-diner bills against raised limits.
-Keep valid saved places when the count search stops early. Once it finishes, keep a cheaper complete
-bill even if some rounding choices remain unproved (watcher, 24 November at 12:33).
+Compare whole-menu additions by the saving each actually delivers after supplements and discounts
+(watcher, 24 November at 12:08). If the count search stops, compare a fit starting from saved places
+with a fresh fit and keep the saved places when prices tie (watcher, 24 November at 13:06).
+Allow up to a million count vectors for five or fewer pricing choices and up to 60 eligible portions.
+Once the count search finishes, keep a cheaper complete bill even if some rounding choices remain
+unproved (watcher, 24 November at 12:33). Check 600 small bills against enumeration and replay.
+Compare bills for 16–20 diners ordered together and course by course against raised limits, and
+measure regrouping time for 20 diners.
 A proven cheapest price stands even if tie-breaking stops early. On an unchanged repeat,
 keep the saved fallback price and places. Close any saved menu that becomes dearer than its
 remaining dishes à la carte (watcher, 24 November at 10:38). Ineligible or over-limit portions

@@ -183,9 +183,15 @@ places dishes into a number of set menus fixed by the waiter. It has to:
   between set menus for no saving. The function on `main` already prefers the arrangement closest to
   the current one;
 - **never block a sale.** If a bill is too large to search fully, the function still returns a
-  valid answer: it keeps the saved grouping and finds the cheapest place for the new dishes, and the
-  summary says it may not be the cheapest (**my call**; the bound today is `MAX_SET_MENU_MIXES`,
-  `set-menu-search.ts:3`).
+  valid answer, and the summary says it may not be the cheapest (**my call**).
+
+**24 November 2026, piece 2 search limit (watcher, 13:06):** At the search limit, compare a grouping
+that starts from the saved places with one that starts fresh. Keep the cheaper bill, with ties
+going to the saved places. The calculation searches more combinations for up to 60 eligible
+portions and five price choices. All 96 sampled bills for 16–20 diners with five offers and 24
+diners with four offers matched the cheapest prices the longer search proved. Beyond the raised
+limit, a bill can still cost about €10 more than the cheapest. In 24 sampled bills for 21 diners
+with five offers, the largest gaps were €10.08 ordered together and €9.36 ordered course by course.
 
 A set menu with an empty place still costs its full price. So removing a dish (a cancel, a comp, a
 move away) can never make the cheapest answer dearer, and adding a dish can never make it cheaper.

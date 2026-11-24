@@ -538,20 +538,26 @@ it("keeps a free place usable when a saved menu empties at the limit", () => {
   });
 });
 
-it("uses the cheaper menu after supplements at the search limit", () => {
-  const courses = ["starter", "main", "dessert"];
-  const portions = courses.map((course) => dish(course, course, 900));
-  const dishes = Array.from({ length: 16 }, (_, i) =>
-    portions.map((portion) => ({ ...portion, id: portion.id + i })),
-  ).flat();
-  const offers = [
-    offer("a", 1100, portions, { starter: 300, main: 300, dessert: 300 }),
-    ...[1200, 1250, 1300, 1350].map((price, i) => offer("offer-" + i, price, portions)),
-  ];
-  const result = group({ offers, dishes });
-  expect(result).toMatchObject({ exact: false, totalCents: 19200 });
-  expect(group({ offers, dishes, previous: result })).toEqual(result);
-});
+it.each([
+  { diners: 16, exact: true, totalCents: 19200 },
+  { diners: 21, exact: false, totalCents: 25200 },
+])(
+  "chooses among overlapping offers with costly supplements for $diners diners",
+  ({ diners, exact, totalCents }) => {
+    const courses = ["starter", "main", "dessert"];
+    const portions = courses.map((course) => dish(course, course, 900));
+    const dishes = Array.from({ length: diners }, (_, i) =>
+      portions.map((portion) => ({ ...portion, id: portion.id + i })),
+    ).flat();
+    const offers = [
+      offer("a", 1100, portions, { starter: 300, main: 300, dessert: 300 }),
+      ...[1200, 1250, 1300, 1350].map((price, i) => offer("offer-" + i, price, portions)),
+    ];
+    const result = group({ offers, dishes });
+    expect(result).toMatchObject({ exact, totalCents });
+    expect(group({ offers, dishes, previous: result })).toEqual(result);
+  },
+);
 
 it("bounds the work on forty diners with two percentage discounts", () => {
   const input = {
@@ -650,11 +656,7 @@ it("keeps a saved dish when its extra half-cent rounds to the same price", () =>
   expect(result.dishes.find(({ id }) => id === second.id)?.place).toBeNull();
 });
 
-it.each([
-  { diners: 8, seed: 2, totalCents: 13257, allPlacesKept: true },
-  { diners: 9, seed: 3, totalCents: 14836, allPlacesKept: false },
-])("keeps the cheaper complete bill at the limit for $diners diners", (sample) => {
-  let seed = sample.seed;
+function threeCourseTable(diners: number, seed: number, offerCount: number, priceStep: number) {
   const next = (max: number) => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return Math.floor((seed / 2 ** 32) * max);
@@ -667,7 +669,7 @@ it.each([
       courseId,
     })),
   );
-  const dishes = Array.from({ length: sample.diners }, (_, i) =>
+  const dishes = Array.from({ length: diners }, (_, i) =>
     courses.map((courseId, course) => {
       const product = products[course * 4 + next(4)]!;
       return {
@@ -679,9 +681,9 @@ it.each([
       };
     }),
   ).flat();
-  const offers = Array.from({ length: 3 }, (_, i) => ({
+  const offers = Array.from({ length: offerCount }, (_, i) => ({
     id: `offer-${i}`,
-    priceCents: 1500 + 125 * i,
+    priceCents: 1500 + priceStep * i,
     lines: courses.map((courseId) => ({ courseIds: [courseId], count: 1 })),
     dishes: products
       .filter((_, j) => j % 4 === 0 || next(5) > 0)
@@ -691,6 +693,14 @@ it.each([
         surchargeCents: next(5) < 2 ? 50 + next(350) : 0,
       })),
   }));
+  return { offers, dishes };
+}
+
+it.each([
+  { diners: 8, seed: 2, totalCents: 13257, allPlacesKept: true },
+  { diners: 9, seed: 3, totalCents: 14836, allPlacesKept: false },
+])("keeps the cheaper complete bill at the limit for $diners diners", (sample) => {
+  const { offers, dishes } = threeCourseTable(sample.diners, sample.seed, 3, 125);
   const discounts = [
     { id: "a", offerId: "offer-0", kind: "percent", basisPoints: 1000 },
     { id: "b", offerId: "offer-1", kind: "percent", basisPoints: 1500 },
@@ -778,4 +788,23 @@ it("fills a free saved place without using a fixed discount allowance twice", ()
     place: { setMenuId: "A", lineIndex: 2 },
     chargeCents: 0,
   });
+});
+
+it.each([
+  { diners: 16, seed: 7, exact: true, totalCents: 25336 },
+  { diners: 21, seed: 8, exact: false, totalCents: 33183 },
+])("keeps the cheaper bill when $diners diners order course by course", (sample) => {
+  const input = threeCourseTable(sample.diners, sample.seed * 7919, 5, 40);
+  const starters = group({
+    ...input,
+    dishes: input.dishes.filter(({ courseId }) => courseId === "starter"),
+  });
+  const mains = group({
+    ...input,
+    dishes: input.dishes.filter(({ courseId }) => courseId !== "dessert"),
+    previous: starters,
+  });
+  const result = group({ ...input, previous: mains });
+  expect(result).toMatchObject({ exact: sample.exact, totalCents: sample.totalCents });
+  expect(group({ ...input, previous: result })).toEqual(result);
 });

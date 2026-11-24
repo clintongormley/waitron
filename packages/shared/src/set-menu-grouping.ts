@@ -84,6 +84,7 @@ interface Arc {
 }
 
 const SCALE = 10_000;
+const MAX_GROUPING_MIXES = 1_000_000;
 const PLACEMENT_LIMIT = 300;
 const REFINEMENT_WORK_LIMIT = 16_000;
 const REFINEMENTS_PER_MIX = 300;
@@ -136,6 +137,8 @@ function selectCounts(
   budget: number,
   dishes: number,
 ) {
+  // Allow more count vectors on twenty three-course orders without widening the largest bills.
+  const mixLimit = dishes <= 60 && choices.length <= 5 ? MAX_GROUPING_MIXES : MAX_SET_MENU_MIXES;
   const vectors: number[] = [];
   const bases: number[] = [];
   const counts = choices.map(() => 0);
@@ -150,7 +153,7 @@ function selectCounts(
     const option = choices[index];
     if (!option) {
       vectors.push(...counts);
-      return bases.push(base) < MAX_SET_MENU_MIXES;
+      return bases.push(base) < mixLimit;
     }
     const limit = Math.min(left, limits[index]!);
     counts[index] = 0;
@@ -438,9 +441,17 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   function assign(
     menus: readonly Menu[],
     { slots, matches }: ReturnType<typeof menuPlacement>,
-    pins: readonly (Assignment | undefined)[] = [],
-    omitted?: readonly (Assignment | undefined)[],
-    allow?: (arc: Arc) => boolean,
+    {
+      pins = [],
+      omitted,
+      allow,
+      keepSavedPlaces = true,
+    }: {
+      pins?: readonly (Assignment | undefined)[];
+      omitted?: readonly (Assignment | undefined)[];
+      allow?: (arc: Arc) => boolean;
+      keepSavedPlaces?: boolean;
+    } = {},
   ): (Assignment | undefined)[] {
     const capacities = slots.map(({ capacity }) => capacity);
     const pinnedSupplement = menus.map(() => 0);
@@ -456,7 +467,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       uncoveredCost: 0,
       classes: dishes.map(({ id }, i) => {
         if (pins[i] || omitted?.[i] || matches[i]!.length === 0) return { count: 0, arcs: [] };
-        const previous = oldPlace.get(id);
+        const previous = keepSavedPlaces ? oldPlace.get(id) : undefined;
         return {
           count: 1,
           uncoveredCost: aLaCarte[i]! * SCALE * weight + Number(previous != null),
@@ -515,9 +526,9 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   const pins = retainedPlaces(savedFit, savedLayout);
   consider(materialize(savedFit, pins));
 
-  function fallback(): SetMenuGrouping {
-    const menus = [...savedFit];
-    let assigned = pins;
+  function fallback(keepSavedPlaces: boolean): SetMenuGrouping {
+    const menus = keepSavedPlaces ? [...savedFit] : [];
+    let assigned = keepSavedPlaces ? pins : [];
     let current = materialize(menus, assigned, "all");
     const closed = new Set<number>();
     for (const [menu, { option }] of menus.entries()) {
@@ -535,18 +546,16 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       assigned = released;
       current = alternative;
     }
-    const layout = savedLayout;
-    const filled = assign(
-      menus,
-      layout,
-      assigned,
-      undefined,
-      ({ pair }) => !closed.has(layout.slots[pair]!.menu),
-    );
-    const withNewDishes = materialize(menus, filled, "all");
-    if (withNewDishes.totalCents < current.totalCents) {
-      assigned = filled;
-      current = withNewDishes;
+    if (menus.length > 0) {
+      const filled = assign(menus, savedLayout, {
+        pins: assigned,
+        allow: ({ pair }) => !closed.has(savedLayout.slots[pair]!.menu),
+      });
+      const withNewDishes = materialize(menus, filled, "all");
+      if (withNewDishes.totalCents < current.totalCents) {
+        assigned = filled;
+        current = withNewDishes;
+      }
     }
 
     serial = 0;
@@ -564,7 +573,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
         const menu = { id, option };
         const layout = layouts[index]!;
         if (layout.matches.every((matches, i) => assigned[i] || matches.length === 0)) continue;
-        const added = assign([menu], layout, [], assigned);
+        const added = assign([menu], layout, { omitted: assigned, keepSavedPlaces });
         const placed = dishes.map((_, i): Assignment | undefined => {
           const dish = added[i];
           return assigned[i] ?? (dish && [menus.length, dish[1], dish[2]]);
@@ -584,6 +593,13 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     return current;
   }
 
+  function fallbackAtLimit(): SetMenuGrouping {
+    const saved = fallback(true);
+    if (!input.previous) return saved;
+    const fresh = fallback(false);
+    return fresh.totalCents < saved.totalCents ? fresh : saved;
+  }
+
   if (!Number.isSafeInteger(eligibleCost * SCALE * (dishes.length + 1))) return best;
   const mixes = selectCounts(
     choices,
@@ -591,7 +607,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     eligibleCost * SCALE,
     eligibleCount,
   );
-  if (!mixes) return fallback();
+  if (!mixes) return fallbackAtLimit();
 
   const classesByKey = new Map<string, PlacementProblem["classes"][number] & { count: number }>();
   arcs.forEach((matches, i) => {
@@ -626,7 +642,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       return arc.supplement > 0 && (option.allowance > 0 || (option.round && percentCount > 1));
     };
     const fresh = (pins: readonly (Assignment | undefined)[]) =>
-      assign(menus, layout, pins, undefined, (arc) => !special(arc));
+      assign(menus, layout, { pins, allow: (arc) => !special(arc) });
     const first = assign(menus, layout);
     solves++;
     const candidate = materialize(menus, first);
@@ -640,7 +656,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       const saved = retainedPlaces(menus, layout);
       if (saved.some((pin, i) => pin && (pin[0] !== first[i]?.[0] || pin[1] !== first[i]?.[1]))) {
         solves++;
-        consider(materialize(menus, assign(menus, layout, saved)));
+        consider(materialize(menus, assign(menus, layout, { pins: saved })));
       }
     }
     if (candidate.totalCents <= priceFloor || priceFloor > best.totalCents) return true;
@@ -714,20 +730,21 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
         ),
       }));
       const layout = menuPlacement(savedChoices);
-      const savedWithNewDishes = assign(savedChoices, layout, pins, undefined, ({ pair }) =>
-        occupied.has(layout.slots[pair]!.menu),
-      );
+      const savedWithNewDishes = assign(savedChoices, layout, {
+        pins,
+        allow: ({ pair }) => occupied.has(layout.slots[pair]!.menu),
+      });
       consider(materialize(savedChoices, savedWithNewDishes, "all"));
     }
     return { ...best, exact };
   }
-  const anchored = fallback();
+  const limited = fallbackAtLimit();
   const bestKeepsSavedPlaces = pins.every((pin, i) => {
     if (!pin) return true;
     const place = best.dishes[i]!.place;
     return place?.setMenuId === savedFit[pin[0]]!.id && place.lineIndex === pin[1];
   });
-  return (finished || bestKeepsSavedPlaces) && best.totalCents < anchored.totalCents
+  return (finished || bestKeepsSavedPlaces) && best.totalCents < limited.totalCents
     ? best
-    : anchored;
+    : limited;
 }
