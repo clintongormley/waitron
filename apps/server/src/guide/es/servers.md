@@ -64,14 +64,14 @@ comprueba que el servidor de reserva esté conectado a la red del restaurante. *
 Al cambiar, primero se pone al día la copia de este servidor de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
 La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el servidor de reserva durante dos minutos.
 
-## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
+## Imprimir un código QR para cada servidor {#switch-label}
 
-El servidor de un restaurante nuevo ofrece su etiqueta en su página **Configuración completada**, y
+El servidor de un restaurante nuevo ofrece su código QR en su página **Configuración completada**, y
 un servidor de reserva en su propia página: elige **Imprimir código QR** y pégalo en ese
-servidor. Para volver a imprimirla, abre **Sistema → Servidores** en el servidor
-principal, abre el menú de la fila del servidor y elige **Imprimir etiqueta de cambio** y después
+servidor. Para volver a imprimirlo, abre **Sistema → Servidores** en el servidor
+principal, abre el menú de la fila del servidor y elige **Imprimir código QR** y después
 **Imprimir**. Si
-el servidor principal falla, escanea la etiqueta del servidor de reserva con cualquier caja o móvil
+el servidor principal falla, escanea el código QR del servidor de reserva con cualquier caja o móvil
 conectado a la red del local para abrir su [página de cambio](servers.md#emergency).
 
 ## Retirar un servidor de reserva {#remove-a-spare}
@@ -99,7 +99,7 @@ más de unos 20 segundos, por ejemplo durante una actualización, también trae 
 que recargue; si no querías cambiar, no hagas el cambio y recarga la página cuando el servidor
 principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
-`https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva.
+`https://spare.example/handover/emergency`, o escanea el [código QR](servers.md#switch-label) del servidor de reserva.
 
 La página comprueba primero si el servidor principal responde a tu dispositivo. Si responde, la
 página dice **El servidor principal responde**: elige **Volver a la caja** (**Volver** si no

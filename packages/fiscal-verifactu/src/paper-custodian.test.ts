@@ -64,15 +64,15 @@ const event = {
 };
 
 describe("the paper custodian's separate command", () => {
-  it("exports a signed recovery register with public trust, never the signing secret", async () => {
+  it("writes a signed block the snapshot verifier accepts, owner-only and never over an existing file", async () => {
     await fixture(async (dir, run, out, err) => {
       const key = join(dir, "custodian.pem");
       expect(await run(["keygen", "--custodian", "register-custodian", "--key", key])).toBe(0);
       const input = join(dir, "block.json");
-      const output = join(dir, "register.json");
+      const output = join(dir, "signed-block.json");
       await writeFile(input, JSON.stringify(block));
       const args = [
-        "sign-register",
+        "sign-block",
         "--key",
         key,
         "--input",
@@ -82,26 +82,20 @@ describe("the paper custodian's separate command", () => {
         "--reserved-outside",
       ];
       expect(await run(args)).toBe(0);
-      const register = JSON.parse(await readFile(output, "utf8"));
-      expect(Object.keys(register)).toEqual(["fiscal-verifactu"]);
-      expect(register["fiscal-verifactu"].custodian).toEqual(JSON.parse(out[0]!));
-      expect(register["fiscal-verifactu"].block.payload).toEqual(block);
+      const signed = JSON.parse(await readFile(output, "utf8"));
+      expect(signed.payload).toEqual(block);
       expect(
-        verifyPaperBlockSnapshot(
-          register["fiscal-verifactu"].block,
-          register["fiscal-verifactu"].custodian,
-          {
-            taxpayerNif: "B12345678",
-            softwareId: "WT",
-            environment: "preproduction",
-            requiredBases: [{ code: "A", purpose: "standard" }],
-          },
-        ),
+        verifyPaperBlockSnapshot(signed, JSON.parse(out[0]!), {
+          taxpayerNif: "B12345678",
+          softwareId: "WT",
+          environment: "preproduction",
+          requiredBases: [{ code: "A", purpose: "standard" }],
+        }),
       ).toMatchObject({ ok: true });
       expect(await readFile(output, "utf8")).not.toContain("PRIVATE KEY");
       expect((await stat(output)).mode & 0o777).toBe(0o600);
       expect(await run(args)).toBe(1);
-      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(register);
+      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(signed);
       expect(err).toEqual(["Paper custodian command failed (Error)"]);
     });
   });
@@ -232,6 +226,16 @@ describe("the paper custodian's separate command", () => {
     ["keygen", "--custodian", "register-custodian", "--key", ""],
     ["keygen", "--custodian", "register-custodian", "--key", "key.pem", "--private-key=secret"],
     ["sign-block", "--key", "key.pem", "--input", "block.json", "--output", "signed.json"],
+    [
+      "sign-register",
+      "--key",
+      "key.pem",
+      "--input",
+      "block.json",
+      "--output",
+      "register.json",
+      "--reserved-outside",
+    ],
     [
       "sign-consumption",
       "--key",

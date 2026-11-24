@@ -52,7 +52,7 @@ describe("setup-box-label", () => {
     expect(text(el, "print-label")).toBe(finishEs["done.label.print"]);
   });
 
-  it("keeps Print label off until the QR is drawn, then prints the label alone", async () => {
+  it("keeps Print QR code off until the QR is drawn, then prints the QR code alone", async () => {
     let finish!: (qr: string) => void;
     const drawQr = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
     const printFrame = vi.fn<(view: Window) => void>();
