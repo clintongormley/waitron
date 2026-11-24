@@ -812,6 +812,47 @@ describe("one mail sender", () => {
       attempts: sent ? 1 : 0,
     });
   });
+  it("uses Cloud for the next kind when a queued certificate reminder cannot use it", async () => {
+    const grant = {
+      id: randomUUID(),
+      revision: 1,
+      enabled: true,
+      expiresAt: "2026-11-10T00:00:00Z",
+    };
+    await queue("reminder", { kind: "certificate_reminder" });
+    await queue("notice", { kind: "security_change" });
+    const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+    await runMailPass({
+      ...deps,
+      resolveDelivery: async () => ({ mode: "unconfigured" }),
+      noticeRelayAllowed: async (_tx, kind) => kind === "security_change",
+      resolveAccountRelay: async () => grant,
+      sendCloudEmail,
+      owners: [
+        { ...owner, kind: "certificate_reminder" },
+        {
+          ...owner,
+          kind: "security_change",
+          compose: async () => ({
+            subject: "Notice",
+            text: "Message",
+            staffNotice: {
+              class: "security_change",
+              facts: { change: "password_changed", at: time.toISOString() },
+              displayName: "Corner Bistro",
+              locale: "en-GB",
+              timeZone: "Europe/Madrid",
+              expiresAt: "2026-11-09T13:00:00.000Z",
+            },
+          }),
+        },
+      ],
+    });
+    expect(await row("reminder")).toMatchObject({ status: "pending", attempts: 0 });
+    expect(await row("notice")).toMatchObject({ status: "sent", attempts: 1 });
+    expect(sendCloudEmail).toHaveBeenCalledOnce();
+  });
+
   it("keeps other mail off Cloud even when a due account link obtains a grant", async () => {
     const otherMail = [
       { kind: "box_alert", deliveryRule: "notice" },

@@ -40,6 +40,11 @@ delivery is enabled and a grant is available before queueing without SMTP. The s
 preserves the recipient language, Cloud facts and delivery deadline. Saved SMTP takes priority.
 The queue's retry schedule replaces the old batch pause after a Cloud refusal.
 
+**Clock correction and retries (watcher, 2026-11-24 14:57 and 15:02):** The sender holds a
+future-stamped reminder until its queue time after the clock moves back. The email for that period
+can still go when the box reaches that time. A failed urgent or expired day's attempt, including
+a connection failure, is missed. The next day gets its own attempt.
+
 **Base:** `main` after fi9, with slices 3a-ii and 3b landed. Line numbers read at `9c66ef0356`
 (after #2570, which changed `claimReminder` and `reportReminder` to read across the takeover
 history).

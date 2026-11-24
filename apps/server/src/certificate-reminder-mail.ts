@@ -22,6 +22,8 @@ export function certificateReminderMail(deps: {
       const recipient = await readManagerEmailRecipient(tx, mail.personId, deps.venueLanguage);
       if (!recipient || (await deps.seat.reminders.current(tx, deps.nodeId)) !== mail.subjectId)
         return null;
+      const queuedAt = new Date(mail.queuedAt);
+      if (queuedAt > now) return { later: queuedAt };
       return {
         recipient: recipient.email,
         prepared: { language: recipient.language, now, venue: (await readVenue(tx)).name },

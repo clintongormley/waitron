@@ -203,21 +203,27 @@ it.each([
   expect(send).not.toHaveBeenCalled();
 });
 
-it("leaves the reminder pending if Cloud opt-in was withdrawn after queueing", async () => {
-  await queue(true);
-  const resolveAccountRelay = vi.fn(resolveGrant);
-  const sendCloudEmail = vi.fn<NonNullable<MailSenderDeps["sendCloudEmail"]>>(async () => ({
-    status: "sent",
-  }));
-  await pass({
-    resolveDelivery: unconfigured,
-    noticeRelayAllowed: async (_tx, kind) => kind !== "certificate_reminder",
-    resolveAccountRelay,
-    sendCloudEmail,
+it("holds a future-stamped reminder until its queue time after a clock correction", async () => {
+  now = new Date("2026-11-05T10:00:00Z");
+  send.mockResolvedValueOnce({
+    status: "rejected",
+    reason: "email.test_refused",
+    serverRefused: true,
   });
-  expect(resolveAccountRelay).not.toHaveBeenCalled();
-  expect(sendCloudEmail).not.toHaveBeenCalled();
-  expect(await row()).toMatchObject({ status: "pending", attempts: 0 });
+  await queue();
+  await pass();
+  expect(await row()).toMatchObject({ status: "rejected", attempts: 1 });
+
+  now = new Date("2026-06-01T10:00:00Z");
+  await pass();
+  expect(send).toHaveBeenCalledOnce();
+  expect(await row()).toMatchObject({ status: "rejected", attempts: 1 });
+
+  now = new Date("2026-11-05T10:00:00Z");
+  expect(await queue()).toEqual({ processed: false });
+  await pass();
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(await row()).toMatchObject({ status: "sent", attempts: 2 });
 });
 
 it.each(["venue@example.test", { name: "Harbour Kitchen", address: "venue@example.test" }])(
