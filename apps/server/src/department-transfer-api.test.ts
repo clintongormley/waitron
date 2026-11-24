@@ -398,6 +398,42 @@ describe("department transfer till writes", () => {
     expect(after.context).toMatchObject({ departmentId: f.b, serviceMode: "prepay" });
     expect(after.tab!.dining).toBe("takeaway");
   });
+  it.each([
+    ["table", "table_tab"],
+    ["counter", "prepay"],
+  ] as const)(
+    "keeps an unsent eaten-in order eaten in when a takeaway-only department accepts it at a %s",
+    async (orderStart, serviceMode) => {
+      const f = await ready();
+      await withTransaction(suite.db, async (tx) => {
+        await setDepartmentSalePolicyField(tx, f.b, "dining", "takeaway");
+        await setDepartmentSalePolicyField(tx, f.b, "orderStart", orderStart);
+        await tx.update(workingOrders).set({ dining: "eat_in" }).where(eq(workingOrders.id, f.tab));
+        await tx.insert(workingOrderLines).values({
+          workingOrderId: f.tab,
+          lineNo: 1,
+          name: "Croquettes",
+          descriptions: { "es-ES": "Croquettes" },
+          quantity: 1000,
+          unitPriceGross: 600,
+          vatClass: "reduced",
+          takeawayVatClass: "reduced",
+          lineTotal: 600,
+        });
+      });
+      const tableId = orderStart === "table" ? await v.table(randomUUID(), f.bz) : null;
+      const id = await pending(f);
+      const accepted = await post(f.desk.cookie, resolutionPath(id, "accept"), {
+        revision: 0,
+        zoneId: f.bz,
+        tableId,
+      });
+      expect(accepted.status).toBe(200);
+      const after = await state(f.tab);
+      expect(after.context).toMatchObject({ departmentId: f.b, serviceMode });
+      expect(after.tab).toMatchObject({ dining: "eat_in", deliveryTableId: tableId });
+    },
+  );
   it("declines with the receiver's reason while keeping source responsibility", async () => {
     const f = await ready();
     const id = await pending(f);

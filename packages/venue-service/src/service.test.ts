@@ -14,7 +14,6 @@ describe("VENUE_SERVICE", () => {
       "acknowledgeKitchenNotice",
       "addProfileKitchenScreen",
       "allocateBillNumber",
-      "applyDepartmentDining",
       "archivePeriodMenus",
       "assertBusinessDayClockChange",
       "assertBusinessDayScheduleWrite",

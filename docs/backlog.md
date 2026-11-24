@@ -664,7 +664,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   whether such a control should stack its choices instead.
   [Detail](backlog/till.md#segmented-choices-still-break-words-when-whole-words-cannot-fit-left-by-a773-2-b4b)
 
-- **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; two of three pull requests to come).**
+- **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; two of four pull requests to come).**
   A dashed + Custom item tile for the rare thing not on the menu: typed name and price, the
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
   a hidden product per takeaway rate, or on one whose rate nobody chose; a new permission,
@@ -673,8 +673,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the permission, which nothing checks, and the "Custom items" row of the category report. To come: the
   server's order lines (Tasks 4a to 7b) and the till (Tasks 8 to 10c). The watcher cleared Tasks 4a to 7a
   to build. The owner answered Decision 2 on 2026-11-24: a bill keeps its eaten-here or takeaway way when
-  it moves or is handed over. Today an unsent one takes the new department's way, and so its VAT; Task 7c,
-  a small pull request of its own before the server's, makes the owner's rule true.
+  it moves or is handed over. Task 7c, a small pull request of its own before the server's, made that
+  true: an unsent bill no longer takes the new department's way, or its VAT.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
   `docs/superpowers/plans/2026-11-21-counter-custom-item.md`.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)

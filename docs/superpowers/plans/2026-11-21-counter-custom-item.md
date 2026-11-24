@@ -52,7 +52,7 @@ a supervisor's PIN once per request. Reports show these lines under their own "C
 | PR | Tasks | Migration | Notes |
 | --- | --- | --- | --- |
 | **1. Data and reports** | 1, 2, 3 | **core rebuild** | **Landed** 24 November as #4217. First line: "Reset test venues: a custom item column on products (A1564)". The body says the dashboard's permission list gains "Add custom items", which nothing uses until PR 3, and has a line starting "Sale-path read changed:" (`loadClassification` reads one more `products` column). |
-| **1b. A moved bill keeps its way** | 7c | none | Its own small PR, from `main`, landing before PR 2 (mine, after read 3: it changes filing for every bill, not only custom items). First lines say **a bill moved or handed over to another department now keeps its way** (owner, 2026-11-24), so an unsent bill moved into a department set the other way files at its own way's VAT rate, not the new department's, and an eaten-in bill with set menus moved into a takeaway-only department can now be paid (today `set_menu.payment_not_ready`, read). |
+| **1b. A moved bill keeps its way** | 7c | none | Its own small PR, from `main`, landing before PR 2 (mine, after read 3: it changes filing for every bill, not only custom items). First lines say **a bill moved or handed over to another department now keeps its way** (owner, 2026-11-24), so an unsent bill moved into a department set the other way files at its own way's VAT rate, not the new department's, and an unsent eaten-in bill whose guests move to a table of a takeaway-only department can then take a set menu and be paid (before, it became takeaway and payment was refused `set_menu.payment_not_ready`; ran). A bill already holding a set menu kept its way on that move before too: a set-menu line is written as sent (`set-menu-count.ts:86`; ran). |
 | **2. Server** | 4a, 4b, 5, 6a, 6b, 7a, 7b | none | One PR: until 6a, a stored custom line makes its parked order unreadable. The body has a line starting "Sale-path read changed:" (the save's line read and `fireLines`' read of a pay-first sale gain the product's key: 6a, 7a). |
 | **3. Till** | 8, 9a, 9b, 9c, 9d, 10a, 10c | none | A1563 has landed (#3986), so this PR waits on nothing but PR 2. No sale-path read changes. Task 10b was removed (owner, 2026-11-24). |
 
@@ -706,6 +706,7 @@ Only these existing assertions change; every other edit adds cases. The golden h
 | 7c | the same file, 1412, "makes an unsent counter order eaten here takeaway in a department that sells only takeaway" | expects `takeaway` → `eat_in`, renamed "keeps an unsent counter order eaten here …" | the same |
 | 7c | `apps/server/src/move-bill.dining.test.ts:169`, "takes the way of a department fixed one way" | expects `takeaway` → `eat_in`, renamed "keeps its way when it takes a department for the first time" | the function it tested is deleted (read 3's M1); not yet run |
 | 7c | `packages/venue-service/src/dining.test.ts:298`, the `applyDepartmentDining` block, and `service.test.ts:17`'s seat list | deleted, and the name dropped from the list | the function is deleted |
+| 7c | `packages/venue-service/src/department-transfers.test.ts:1448`, "leaves an unsent order's way alone in a region without takeaway VAT" | deleted | the region check lived only in `applyDepartmentDining`; the Spanish case above it now pins the same outcome |
 
 The till's codes test and `access-role-permissions` pass once the new words exist; they change no
 assertion. If another existing assertion must change, the implementer stops and reports.
@@ -793,9 +794,10 @@ and 1000 with the call removed. With the call removed the existing suites in Tas
 cases that flip.
 
 **Read, not run, for the owner's answer:** the callers named in Decision 2; that a line's rate at issue
-comes from its order's way (`readLineVatRates`); that an eaten-in set-menu bill made takeaway by a move is
-refused payment today (`set_menu.payment_not_ready`, `refuseTakeawaySetMenuMoney`,
-`apps/server/src/set-menu-bill.ts:66`), which 7c ends; joining and splitting tables.
+comes from its order's way (`readLineVatRates`); joining and splitting tables. (Run later, for PR 1b's
+review, on a guests move to a table of a takeaway-only department: an unsent eaten-in bill was made
+takeaway, then given a set menu, and refused payment `set_menu.payment_not_ready`, which 7c ends; a bill
+already holding a set menu kept its way and was paid.)
 
 **Read, not run:** every other statement about today's code, including the reader list in Task 2, the
 callers of `makersByLine`, the till's merge and fold keys and the three kitchen checks.

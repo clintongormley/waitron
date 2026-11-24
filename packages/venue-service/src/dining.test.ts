@@ -11,7 +11,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
 import {
-  applyDepartmentDining,
   departmentDining,
   diningStartOf,
   findOrdersWithDiningChoice,
@@ -292,23 +291,5 @@ describe("findOrdersWithDiningChoice", () => {
   it("names none in a region without takeaway VAT", async () => {
     await venueIn("GB", "GB-vat");
     expect(await find([await orderSelling("till_choice")])).toEqual(new Set());
-  });
-});
-
-describe("applyDepartmentDining", () => {
-  it("refuses an order that does not exist", async () => {
-    await venueIn("ES", "ES-common");
-    const department = await withTransaction(db, (tx) => createDepartment(tx, { name: "Deli" }));
-    const workingOrderId = "00000000-0000-4000-8000-000000000002";
-    const error = await captureError(() =>
-      withTransaction(db, (tx) =>
-        applyDepartmentDining(tx, workingOrderId, {
-          departmentId: department.id,
-          serviceMode: "prepay",
-        }),
-      ),
-    );
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe("working_order.not_found");
   });
 });

@@ -3,11 +3,16 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { floorZones, kitchenStations, printJobs, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining, DiningPolicy } from "@waitron/shared";
-import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import {
+  createDepartment,
+  departments,
+  setDepartmentSalePolicyField,
+} from "@waitron/venue-service";
+import {
+  cashPayment,
   inTx,
   provisionBillVenue,
   send,
@@ -24,11 +29,14 @@ import { readKitchenLanguage } from "./kitchen-language.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { takeawayRates } from "./testing/adjustment-venue.js";
 
-// A bill moved within its own department keeps its way of selling; one that takes a department for
-// the first time takes that department's way (A1522, Decision 6).
+// A bill keeps its way of selling wherever it moves (the owner, 2026-11-24).
 let venue: BillVenue;
 let counterZone: string;
+let deli: string;
+let deliTableZone: string;
+let deliCounterZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -39,6 +47,21 @@ useVenueDb({
     counterZone = (
       await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", paidWhen: "prepay" }))
     ).zoneId;
+    await inTx(venue, async (tx) => {
+      deli = (await createDepartment(tx, { name: "Deli", orderStart: "table" })).id;
+      const tables = await seedZone(tx, { name: "Deli tables", departmentId: deli });
+      const counter = await seedZone(tx, { name: "Deli counter", departmentId: deli });
+      deliTableZone = (
+        await offerProducts(tx, { zone: { zoneId: tables.id }, orderStart: "table" })
+      ).zoneId;
+      deliCounterZone = (
+        await offerProducts(tx, {
+          zone: { zoneId: counter.id },
+          orderStart: "counter",
+          paidWhen: "prepay",
+        })
+      ).zoneId;
+    });
   },
 });
 
@@ -165,8 +188,87 @@ describe("a bill moved within its own department keeps its way", () => {
   });
 });
 
+describe("a bill moved into another department keeps its way", () => {
+  const deliSells = (dining: DiningPolicy) =>
+    inTx(venue, (tx) => setDepartmentSalePolicyField(tx, deli, "dining", dining));
+  const deliTable = () =>
+    inTx(venue, (tx) =>
+      createTable(tx, { label: `Deli ${randomUUID().slice(0, 8)}`, zoneId: deliTableZone }),
+    );
+
+  async function counterOrder(dining: Dining): Promise<string> {
+    const id = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
+      zoneId: counterZone,
+      operatorId: venue.operatorId,
+      dining,
+    });
+    return id;
+  }
+
+  function toDeliCounter(seated: { tabId: string; partyId: string }) {
+    return post(`/api/bills/${seated.tabId}/move`, {
+      to: { counter: { zoneId: deliCounterZone } },
+      partyId: seated.partyId,
+      expectedPartyRevision: revisionOf(seated.partyId),
+    });
+  }
+
+  it("keeps an unsent eaten-in counter bill eaten in at a table of a takeaway-only department, and files the dine-in rate", async () => {
+    await takeawayRates(venue, { Octopus: "21.00" });
+    const id = await counterOrder("eat_in");
+    await deliSells("takeaway");
+
+    const moved = await post(`/api/bills/${id}/move`, {
+      to: { tableId: (await deliTable()).id },
+      partyId: null,
+      otherPartyId: null,
+      submissionId: randomUUID(),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+    });
+    expect(moved.status).toBe(200);
+
+    expect(diningOf(id)).toBe("eat_in");
+    expect((await cashPayment(venue, venue.cookie, id, "100.00")).status).toBe(200);
+    const filed = venue.db.all<{ vat_rate: number }>(
+      sql`select sl.vat_rate from sale_lines sl join sales s on s.id = sl.sale_id
+          where s.working_order_id = ${id}`,
+    );
+    expect(filed).toEqual([{ vat_rate: 1000 }]);
+    const records = venue.db.all<{ desglose: string }>(
+      sql`select r.desglose from verifactu_records r join sales s on s.id = r.sale_id
+          where s.working_order_id = ${id}`,
+    );
+    expect(records).toHaveLength(1);
+    const bands = JSON.parse(records[0]!.desglose) as { TipoImpositivo: string }[];
+    expect(bands.map(({ TipoImpositivo }) => TipoImpositivo)).toEqual(["10.00"]);
+  });
+
+  it("keeps an unsent eaten-in table bill eaten in at the counter of a takeaway-only department", async () => {
+    const seated = await seatedWith(venue);
+    setDining(seated.tabId, "eat_in");
+    await deliSells("takeaway");
+
+    expect((await toDeliCounter(seated)).status).toBe(200);
+
+    expect(diningOf(seated.tabId)).toBe("eat_in");
+  });
+
+  it("keeps an unsent takeaway table bill takeaway at the counter of an eaten-in-only department", async () => {
+    const seated = await seatedWith(venue);
+    setDining(seated.tabId, "takeaway");
+    await deliSells("eat_in");
+
+    expect((await toDeliCounter(seated)).status).toBe(200);
+
+    expect(diningOf(seated.tabId)).toBe("takeaway");
+  });
+});
+
 describe("a bill that takes a department for the first time", () => {
-  it("takes the way of a department fixed one way", async () => {
+  it("keeps its way when it takes a department for the first time", async () => {
     const seated = await seatedWith(venue);
     await departmentsSell("takeaway");
     const order = await inTx(venue, (tx) =>
@@ -176,7 +278,7 @@ describe("a bill that takes a department for the first time", () => {
 
     await inTx(venue, (tx) => takeIntoParty(tx, venue.cfg, order.id, seated.partyId, venue.zoneId));
 
-    expect(diningOf(order.id)).toBe("takeaway");
+    expect(diningOf(order.id)).toBe("eat_in");
     const [row] = await inTx(venue, (tx) =>
       tx
         .select({ partyId: workingOrders.partyId })

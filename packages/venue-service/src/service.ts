@@ -96,7 +96,6 @@ import {
   orderZoneIdSql,
 } from "./operations.js";
 import {
-  applyDepartmentDining,
   findOrdersWithDiningChoice,
   resolveOrderDining,
   diningStartOf,
@@ -196,7 +195,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   diningStartOf,
   venueChargesTakeawayVat,
   findOrdersWithDiningChoice,
-  applyDepartmentDining,
   saleReceiptHeader,
   readSaleReceiptHeader,
   readDepartmentReceipt,
