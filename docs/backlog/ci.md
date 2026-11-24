@@ -222,6 +222,7 @@ ever seen. For later packing comparisons, use qualified runs with one coverage m
 runs from before and after A1427.
 Db, provisioning, venue-service and fiscal-verifactu keep the file-count split because their
 measured shards are inside the four-minute target; revisit a package when a job passes about four minutes.
+The till runs the parties and closing cases on separate shards after the parties file took 235 seconds in the [24 November nightly](https://github.com/clintongormley/waitron/actions/runs/45311390022/job/138168403875).
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
@@ -978,8 +979,8 @@ On recurrence, retain the failed step log and use its file list, selected-file
 case/hook events, Playwright API calls, any `[file-progress] stack:` lines and the
 process state to identify a blocked operation or slow cases. The parties file ran
 long; the line-detail and refund-unsaved files started within 13 seconds of the
-deadline. The till shard selects all three for the existing case/hook trace and
-enables `DEBUG=pw:api`; these diagnostics do not establish a cause or repair. Keep the venue-service startup investigation and A419's dashboard stall
+deadline. The till shards trace cases and hooks in both parties files, line-detail and refund-unsaved,
+and enable `DEBUG=pw:api`. These diagnostics do not establish a cause or repair. Keep the venue-service startup investigation and A419's dashboard stall
 separate; no shared cause is established.
 
 ## A1230: dashboard shard 1's blocked operation is unknown
