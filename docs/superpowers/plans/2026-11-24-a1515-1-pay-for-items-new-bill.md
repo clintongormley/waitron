@@ -459,3 +459,5 @@ removed behaviour is deleted, not rewritten; each is listed in the PR's "Changed
   D4 is the same rule for open bills.
 - **Pay for items on a printed bill** runs Reopen to split, then PR 1's pay for items from the
   reopened bill, in one transaction.
+
+_2026-11-24, for the piece that runs the bill's set-menu grouping on the server: PR 1's put-back moves lines with `moveOrderLines` in `movedItemsBack` (`bill-payments.ts`), not through `moveDishes`; Pay for items splits part of a line with `splitLinesWithinOrder` (`pay-for-items.ts`); the preview prices picks in `priceItemPicks` (`pay-for-items.ts`). Each must regroup or price with the grouping too._
