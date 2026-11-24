@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyCommand, AllergyPatch } from "@waitron/module";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { readBillEditState } from "./bill-editing.js";
-import { fireGroup, fireHeldLine } from "./order-groups.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
 import { fireOrderLines, sendLines } from "./working-order-kitchen-service.js";
 import { fireLines } from "./working-order-kitchen-fire.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";

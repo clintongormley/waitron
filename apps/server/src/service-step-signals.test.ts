@@ -28,7 +28,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { createCourse } from "./kitchen.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { insertPartyBill } from "./parties.js";
 import { markServiceStepDone } from "./service-step-done.js";
 import {

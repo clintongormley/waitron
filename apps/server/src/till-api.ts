@@ -173,19 +173,17 @@ import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
-  bumpGroupReady,
-  fireGroup,
-  fireHeldLine,
-  listOrderGroups,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
-  readCurrentOrders,
   reorderHeldGroups,
-  snoozeReminder,
-  submitGroups,
-  unsnoozeReminder,
-} from "./order-groups.js";
-import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
+} from "./order-group-edits.js";
+import { bumpGroupReady } from "./order-group-readiness.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
+import { submitGroups } from "./order-group-submission.js";
+import { snoozeReminder, unsnoozeReminder } from "./order-group-reminders.js";
+import { listOrderGroups, readCurrentOrders } from "./order-group-reads.js";
+import type { GroupLine, SubmitGroupsInput } from "./order-group-submission.js";
+import type { PartyCommandArgs } from "./order-group-records.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, splitDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState, BillEditExpected } from "./order-drafts.js";

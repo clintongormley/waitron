@@ -32,7 +32,7 @@ import {
   assignMenuToVenue,
 } from "@waitron/menu";
 import { readBillEditState } from "./bill-editing.js";
-import { submitGroups } from "./order-groups.js";
+import { submitGroups } from "./order-group-submission.js";
 import {
   reprintOrderTickets,
   enqueueAllergyCorrectionSlips,

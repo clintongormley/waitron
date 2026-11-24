@@ -34,7 +34,7 @@ import { createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { joinTables } from "./testing/table-action-fixture.js";
-import { submitGroups } from "./order-groups.js";
+import { submitGroups } from "./order-group-submission.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readWholePortionLines } from "./order-portions.js";

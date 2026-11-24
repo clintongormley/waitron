@@ -35,7 +35,7 @@ import {
   type RoundLine,
 } from "./testing/adjustment-venue.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { moveLinesToGroup } from "./order-groups.js";
+import { moveLinesToGroup } from "./order-group-edits.js";
 import { partyRevision } from "./parties.js";
 import { serveLine } from "./testing/serve-line.js";
 import { openTillSession } from "./testing/session-device.js";

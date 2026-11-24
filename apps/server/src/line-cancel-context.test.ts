@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { readCancellationContext, requireCancellationContext } from "./line-cancel-context.js";

@@ -37,7 +37,6 @@
   "apps/server/src/menu-api.ts": 2000,
   "apps/server/src/node-entry.ts": 1250,
   "apps/server/src/order-drafts.ts": 1750,
-  "apps/server/src/order-groups.ts": 3000,
   "apps/server/src/orders-list.ts": 1250,
   "apps/server/src/parties.ts": 1250,
   "apps/server/src/payments-api.ts": 2250,

@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { Logger } from "./logger.js";
-import type { PartyCommandArgs } from "./order-groups.js";
+import type { PartyCommandArgs } from "./order-group-records.js";
 import {
   billOwes,
   checkAndBumpParty,

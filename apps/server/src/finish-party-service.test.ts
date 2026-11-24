@@ -33,7 +33,7 @@ import { listStationQueue } from "./working-order-station-queue.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { combineParties } from "./testing/table-action-fixture.js";

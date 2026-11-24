@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeOverdueOrders } from "@waitron/reporting";
 import { createStation } from "./kitchen.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { readBillSignals } from "./table-signals.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {

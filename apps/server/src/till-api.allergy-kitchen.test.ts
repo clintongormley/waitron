@@ -21,7 +21,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { OPERATOR, inTx, seat, setupPartyVenue } from "./testing/party-venue.js";
 import { readBillEditState } from "./bill-editing.js";
-import { submitGroups } from "./order-groups.js";
+import { submitGroups } from "./order-group-submission.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { boardItems } from "./testing/pass-board-probe.js";
 import { noteSessionPerson } from "./testing/tab-person.js";

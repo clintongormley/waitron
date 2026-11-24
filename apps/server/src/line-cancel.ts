@@ -54,7 +54,7 @@ import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { holdPaperFor } from "./order-groups.js";
+import { holdPaperFor } from "./order-group-hold-paper.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";

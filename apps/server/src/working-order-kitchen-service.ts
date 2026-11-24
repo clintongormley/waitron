@@ -23,7 +23,7 @@ import {
 } from "./kitchen-print.js";
 import { requestHeldItems } from "./kitchen-release.js";
 import { requireLiveCourse } from "./kitchen.js";
-import type { Firer } from "./order-groups.js";
+import type { Firer } from "./order-group-records.js";
 import { partyOfOrder, runServiceCommand, checkAndBumpParty } from "./parties.js";
 import {
   assertPartyAllergyAnswered,

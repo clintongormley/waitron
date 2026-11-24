@@ -28,8 +28,9 @@ import type { Dining, ExtraSelection, OptionSelection } from "@waitron/shared";
 import { requireOrderDining } from "./order-dining.js";
 import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { placeGroups } from "./order-groups.js";
-import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
+import { placeGroups } from "./order-group-submission.js";
+import type { GroupLine, SubmittedGroups } from "./order-group-submission.js";
+import type { GroupRelease, PartyCommandArgs } from "./order-group-records.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   checkAndBumpParty,

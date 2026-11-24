@@ -35,16 +35,11 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
-import {
-  copyHeldGroups,
-  copyWaitingGroups,
-  fireGroup,
-  readCurrentOrders,
-  readHeldCounts,
-  readReleaseReminders,
-  snoozeReminder,
-} from "./order-groups.js";
-import * as groupWrites from "./order-groups.js";
+import { copyHeldGroups, copyWaitingGroups } from "./order-group-transfer.js";
+import { fireGroup } from "./order-group-release.js";
+import { snoozeReminder } from "./order-group-reminders.js";
+import { readCurrentOrders, readHeldCounts, readReleaseReminders } from "./order-group-reads.js";
+import * as orderGroupHoldPaper from "./order-group-hold-paper.js";
 import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1732,10 +1727,10 @@ describe("A803 waiting copy: a move that fails", () => {
       const before = await rowsOf([a.partyId], [a.billId]);
       const groupCountBefore = await countOrderGroups();
       const marker = new Error("A803 waiting copy: failure after the copy");
-      const real = groupWrites.printHoldTickets;
+      const real = orderGroupHoldPaper.printHoldTickets;
       let copiedBeforeFailure = false;
       const failing = vi
-        .spyOn(groupWrites, "printHoldTickets")
+        .spyOn(orderGroupHoldPaper, "printHoldTickets")
         .mockImplementation(async (tx, cfg, groupIds) => {
           await real(tx, cfg, groupIds);
           const [row] = await tx

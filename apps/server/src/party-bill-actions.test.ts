@@ -23,7 +23,7 @@ import {
   transferItems,
 } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";

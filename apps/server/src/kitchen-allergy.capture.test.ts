@@ -26,13 +26,9 @@ import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
-import {
-  submitGroups,
-  fireGroup,
-  fireHeldLine,
-  type GroupRelease,
-  type SubmitGroupsInput,
-} from "./order-groups.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
+import { submitGroups, type SubmitGroupsInput } from "./order-group-submission.js";
+import { type GroupRelease } from "./order-group-records.js";
 import { submitDraft, type FreshDraftLineInput } from "./order-drafts.js";
 import { updateOrderLine } from "./working-order-held-write.js";
 import { sendLines } from "./working-order-kitchen-service.js";

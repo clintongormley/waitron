@@ -1,0 +1,221 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/order-groups.ts",
+      "targets": {
+        "apps/server/src/order-group-records.ts": [
+          "GroupRelease",
+          "PartyCommandArgs",
+          "PartyFireArgs",
+          "Firer",
+          "startGroup",
+          "nextFireKind",
+          "startGroupAfter",
+          "removeEmptiedHeldGroups",
+          "requireOperator",
+          "requireHeldGroup",
+          "requireGroup",
+          "lastPosition",
+          "nextGroupNumber",
+          "readGroupNumberLabels",
+          "groupNumberIdentity",
+          "currentRevision",
+          "recordGroupEvent"
+        ],
+        "apps/server/src/order-group-reads.ts": [
+          "OrderGroup",
+          "listOrderGroups",
+          "readGroups",
+          "ReleaseReminder",
+          "releaseReminder",
+          "partyCourseSettings",
+          "groupReminderMinutes",
+          "readReleaseReminders",
+          "readHeldCounts",
+          "CurrentOrderKitchen",
+          "CurrentOrderExtra",
+          "CurrentOrderRow",
+          "CurrentOrderGroup",
+          "CurrentOrders",
+          "onShownBill",
+          "readCurrentOrders"
+        ],
+        "apps/server/src/order-group-reminders.ts": [
+          "MAX_SNOOZE_MINUTES",
+          "snoozeReminder",
+          "unsnoozeReminder",
+          "requireWaitingGroup"
+        ],
+        "apps/server/src/order-group-hold-paper.ts": [
+          "printHoldTickets",
+          "recordHeldPaper",
+          "heldPaperStations",
+          "printedHeldGroups",
+          "HoldPaperItem",
+          "HoldPaper",
+          "holdPaperFor",
+          "HeldChange",
+          "correctHoldTickets",
+          "recordJoiningStations",
+          "heldItemsOf",
+          "correctJoin"
+        ],
+        "apps/server/src/order-group-submission.ts": [
+          "GroupLine",
+          "SubmitGroupsInput",
+          "SubmittedGroups",
+          "submitGroups",
+          "PlaceGroupsInput",
+          "placeGroups"
+        ],
+        "apps/server/src/order-group-release.ts": [
+          "judgeHeldSetMenuDishes",
+          "fireGroup",
+          "fireHeldLine",
+          "releaseHeldWorkOf",
+          "releaseGroup"
+        ],
+        "apps/server/src/order-group-readiness.ts": ["bumpGroupReady", "passStep", "groupLinesOf"],
+        "apps/server/src/order-group-edits.ts": [
+          "reorderHeldGroups",
+          "moveLinesToGroup",
+          "splitHeldLineIntoUnits",
+          "isWholeLine"
+        ],
+        "apps/server/src/order-group-transfer.ts": [
+          "moveGroupsToParty",
+          "copyHeldGroups",
+          "copyWaitingGroups",
+          "waitingDishesOnHoldPaper",
+          "copyGroups",
+          "pointDraftsAtCopies",
+          "activeGroupLines",
+          "groupArrivingDishes",
+          "groupArrived"
+        ]
+      }
+    },
+    {
+      "source": "apps/server/src/order-groups.test.ts",
+      "targets": {
+        "apps/server/src/testing/order-groups.test-support.ts": [
+          "LOCALE",
+          "ALEX",
+          "MIA",
+          "suite",
+          "db",
+          "beforeAll",
+          "inTx",
+          "DISHES",
+          "Dish",
+          "COURSES",
+          "COURSE_OF",
+          "Venue",
+          "setupVenue",
+          "Seated",
+          "seated",
+          "line",
+          "revisionOf",
+          "CommandOptions",
+          "args",
+          "submit",
+          "submitGrouped",
+          "fire",
+          "reorder",
+          "move",
+          "groupsOf",
+          "passBoard",
+          "groupIdOf",
+          "groupCardsOf",
+          "linesOf",
+          "linesIn",
+          "ticketsOf",
+          "firedTicketLineIds",
+          "printed",
+          "eventsOf",
+          "snapshot",
+          "expectRefusedWithNothingWritten",
+          "stillPaying",
+          "SpecExample",
+          "specExample",
+          "billCommand",
+          "billOfNoParty",
+          "onSecondBill",
+          "linesOfBill",
+          "splitToCheck",
+          "ticketLines",
+          "billHead",
+          "billRevisionOf",
+          "keptLines",
+          "linesOfBillWithProduct",
+          "saveWhole",
+          "changeLine",
+          "groupRow",
+          "ready",
+          "groupTickets",
+          "specExampleOnTwoBills"
+        ],
+        "apps/server/src/order-group-submission.test.ts": [
+          "describe:per-group submission destinations",
+          "describe:country starter courses in service"
+        ],
+        "apps/server/src/order-group-release.test.ts": [
+          "describe:the spec's example (§3, §12 item 3)",
+          "describe:fire all now",
+          "describe:later additions (§12 item 4)",
+          "describe:firing",
+          "describe:two orders of events",
+          "describe:the fired groups' lines",
+          "describe:sending lines on their own",
+          "describe:a device as the firer",
+          "describe:waiter group and recalled-line release",
+          "describe:kitchen tickets for a party's groups (Task 5)",
+          "describe:Fire now on one held dish"
+        ],
+        "apps/server/src/order-group-edits.test.ts": [
+          "pendingRefund",
+          "refundStates",
+          "describe:editing held groups",
+          "describe:retries (D8): each writes nothing the second time",
+          "describe:an id reused for a different request (D8) is submission.id_reused",
+          "describe:stale screens (D19)",
+          "describe:during a card payment",
+          "describe:while a card refund waits on the bill",
+          "describe:extras lines follow their dish",
+          "describe:malformed commands are refused, writing nothing",
+          "describe:a held line on a paid bill",
+          "describe:edits inside groups (D19)",
+          "describe:splitting a held line into units",
+          "describe:A773 request kind of an edit's and an inserted group",
+          "describe:A884 deleted lists"
+        ],
+        "apps/server/src/order-group-transfer.test.ts": [
+          "describe:permanent group numbers on kitchen work",
+          "describe:a line leaving its party",
+          "describe:merging two bills (D2)",
+          "describe:a group split across bills of its party",
+          "dishTickets",
+          "sortedByBill",
+          "ticketsOfBill",
+          "timesPrinted",
+          "describe:the bill a group's first event names",
+          "describe:credit (D5)"
+        ],
+        "apps/server/src/order-group-reads.test.ts": [
+          "describe:a group's summary",
+          "commandsOf",
+          "describe:the pass by group (D1)",
+          "describe:a paper-only station (Review Focus 6, server half)",
+          "describe:the kitchen and the pass read a party's groups"
+        ],
+        "apps/server/src/order-group-readiness.test.ts": [
+          "closeParty",
+          "describe:A773 no dispatch state — group readiness",
+          "describe:pass retries (D8, D19)"
+        ],
+        "apps/server/src/order-group-hold-paper.test.ts": ["describe:advance HOLD tickets (Task 6)"]
+      }
+    }
+  ]
+}

@@ -60,7 +60,9 @@ import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/ve
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { fireGroup, recordHeldPaper, reorderHeldGroups } from "./order-groups.js";
+import { reorderHeldGroups } from "./order-group-edits.js";
+import { fireGroup } from "./order-group-release.js";
+import { recordHeldPaper } from "./order-group-hold-paper.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueAllergyCorrectionSlips,

@@ -36,7 +36,7 @@ import { readFormerNumbers } from "./former-numbers.js";
 import { type KitchenPhase, kitchenPhase } from "./kitchen-phase.js";
 import { kitchenWork, firedQuantity, stationOrdersWithPrintProblem } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readGroupNumberLabels } from "./order-groups.js";
+import { readGroupNumberLabels } from "./order-group-records.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { type RestOfOrderItem, readRestOfOrder } from "./rest-of-order.js";
 import { type StationQueueMove, readStationQueueMoves } from "./station-queue-moves.js";

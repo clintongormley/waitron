@@ -28,7 +28,7 @@ import {
 import { carveOffLines } from "./working-order-transfer.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 

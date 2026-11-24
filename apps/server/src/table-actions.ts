@@ -37,9 +37,9 @@ import {
   copyWaitingGroups,
   groupArrivingDishes,
   moveGroupsToParty,
-  printHoldTickets,
-  type Firer,
-} from "./order-groups.js";
+} from "./order-group-transfer.js";
+import { printHoldTickets } from "./order-group-hold-paper.js";
+import { type Firer } from "./order-group-records.js";
 import {
   checkAndBumpParty,
   ensureFamilyBill,

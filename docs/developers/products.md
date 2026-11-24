@@ -57,7 +57,7 @@ without creating another keeps the existing behavior.
 You can name a product `Gin (Double)` even when `Gin` has a `Double` variant: the saved-name
 checks permit both, and their displayed labels match. A held-group summary combines quantities
 with matching display labels while retaining the individual line ids (`listOrderGroups`,
-`apps/server/src/order-groups.ts`). Choose different saved names if you need distinct labels.
+`apps/server/src/order-group-reads.ts`). Choose different saved names if you need distinct labels.
 
 Product and single-variant saves scan the active names in the same parent scope and compare
 `foldName` results. A whole-family save compares the submitted variant names directly.
@@ -269,7 +269,7 @@ Where each one surfaces:
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name — followed by ` x<n>` when counted, or by its amount in the screen language's decimal mark and its recorded unit abbreviation when measured | `readMadeHereItems`, `apps/server/src/made-here.ts`, which sends each extra as data; written by `dishLine` and `extraLine`, `apps/till/src/widgets/dish-format.ts`; shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/stored-order-lines.ts` |
-| Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
+| Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-group-reads.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's informational chip for a held dish that cannot be added anew ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site, kitchen or staff; the settled ticket instead shows the server's receipt preview | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |

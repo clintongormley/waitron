@@ -26,7 +26,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { VENUE_SERVICE } from "./modules.js";

@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import { createStation } from "./kitchen.js";
-import { groupArrivingDishes } from "./order-groups.js";
+import { groupArrivingDishes } from "./order-group-transfer.js";
 import { readPassCardRows } from "./pass-board.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { readStepFacts } from "./service-step-signals.js";

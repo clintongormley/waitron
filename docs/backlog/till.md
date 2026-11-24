@@ -1254,7 +1254,7 @@ If the server requires an options list on a recalled dish absent from the live m
   already grouped row. That split and the one used for repricing feed the receipt and sale lines.
   [Order creation](../../apps/server/src/working-order-open.ts) and
   [held order edits](../../apps/server/src/working-order-held-write.ts),
-  [table rounds](../../apps/server/src/order-groups.ts),
+  [table rounds](../../apps/server/src/order-group-submission.ts),
   [Move dishes](../../apps/server/src/bill-actions.ts),
   [raise tests](../../apps/server/src/order-portions.filing.test.ts).
   - The till can serve or undo part of one row when its unit has zero decimal places and more than

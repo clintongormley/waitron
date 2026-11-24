@@ -37,7 +37,7 @@ import {
 } from "./line-cancel.js";
 import type { OriginConfig } from "./trading-context.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
-import { releaseHeldWorkOf } from "./order-groups.js";
+import { releaseHeldWorkOf } from "./order-group-release.js";
 import { invalid } from "./bill-allocation.js";
 import { refuseBillHoldingMoney } from "./bill-payments.js";
 import type { OrderAttendance } from "./working-order-context.js";

@@ -13,7 +13,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk, type CancelItemCommand } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";

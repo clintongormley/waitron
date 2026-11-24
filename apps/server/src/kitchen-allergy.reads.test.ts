@@ -14,7 +14,7 @@ import {
 } from "@waitron/menu";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
-import { submitGroups, type SubmitGroupsInput } from "./order-groups.js";
+import { submitGroups, type SubmitGroupsInput } from "./order-group-submission.js";
 import { listStationQueue, listStationQueues } from "./working-order-station-queue.js";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";

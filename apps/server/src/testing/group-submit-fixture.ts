@@ -10,10 +10,10 @@ import {
   placeGroups as place,
   submitGroups as submit,
   type GroupLine,
-  type GroupRelease,
   type PlaceGroupsInput,
   type SubmitGroupsInput,
-} from "../order-groups.js";
+} from "../order-group-submission.js";
+import { type GroupRelease } from "../order-group-records.js";
 import { applyPartyAllergyPatch, assertPartyAllergyAnswered } from "../party-allergy.js";
 import { insertTabRound, priceTabRound } from "../working-order-open.js";
 import type { BillEditExpected } from "../order-drafts.js";

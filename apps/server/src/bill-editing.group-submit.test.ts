@@ -7,7 +7,7 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { placeGroups, submitGroups, type SubmitGroupsInput } from "./order-groups.js";
+import { placeGroups, submitGroups, type SubmitGroupsInput } from "./order-group-submission.js";
 import { readDrafts, saveDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState } from "./order-drafts.js";
 import { seatTable } from "./parties.js";

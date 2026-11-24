@@ -35,7 +35,7 @@ import { fireLines, routingOnce, unsentDishLines } from "./working-order-kitchen
 import { routingCells, setRoutingCell } from "@waitron/venue-service";
 import { setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR, seatWithNoAllergies as seat, setupPartyVenue } from "./testing/party-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";

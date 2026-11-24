@@ -140,6 +140,34 @@ describe("move-ts-declarations", () => {
     );
   });
 
+  it("keeps an inline object type when adding export wraps its members", async () => {
+    write(".prettierrc.json", '{"printWidth":100,"trailingComma":"all"}');
+    const body = "{\n  return group.displayNumber;\n}";
+    write(
+      "original.ts",
+      `function groupNumberIdentity(group: { displayNumber: number; numberPartyId: string | null }): number ${body}\n\nexport const number = groupNumberIdentity({ displayNumber: 7, numberPartyId: null });\n`,
+    );
+
+    await move("original.ts", { "numbers.ts": ["groupNumberIdentity"] }, ["number"]);
+
+    expect(read("numbers.ts")).toBe(
+      `export function groupNumberIdentity(group: {\n  displayNumber: number;\n  numberPartyId: string | null;\n}): number ${body}\n`,
+    );
+  });
+
+  it("refuses a signature change outside the trailing type-literal delimiter exception", async () => {
+    write(".prettierrc.json", '{"printWidth":100,"trailingComma":"all"}');
+    const source =
+      'type CourseCaptionCopies = { [K in "starters course" | "mains course" | "dessert course"]: string };\n\nexport const captions: CourseCaptionCopies | undefined = undefined;\n';
+    write("original.ts", source);
+
+    await expect(
+      move("original.ts", { "captions.ts": ["CourseCaptionCopies"] }, ["captions"]),
+    ).rejects.toThrow(/CourseCaptionCopies changed signature or comments/);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("captions.ts")).toThrow(/ENOENT/);
+  });
+
   it("drops an intermediate import when two declarations move to the same destination", async () => {
     write(
       "original.ts",

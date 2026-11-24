@@ -19,7 +19,7 @@ import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
 import { passReleaseRefusal } from "./pass-release.js";
 import { bumpBillReady } from "./working-order-kitchen-service.js";
-import { bumpGroupReady } from "./order-groups.js";
+import { bumpGroupReady } from "./order-group-readiness.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 

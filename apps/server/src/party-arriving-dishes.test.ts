@@ -23,12 +23,10 @@ import { createPrinter } from "@waitron/printing";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
-import {
-  bumpGroupReady,
-  fireGroup,
-  groupArrivingDishes,
-  readCurrentOrders,
-} from "./order-groups.js";
+import { groupArrivingDishes } from "./order-group-transfer.js";
+import { bumpGroupReady } from "./order-group-readiness.js";
+import { fireGroup } from "./order-group-release.js";
+import { readCurrentOrders } from "./order-group-reads.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";

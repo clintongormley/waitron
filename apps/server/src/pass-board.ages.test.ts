@@ -21,7 +21,7 @@ import { combineParties } from "./testing/table-action-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";

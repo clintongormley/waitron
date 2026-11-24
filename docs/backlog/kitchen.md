@@ -138,7 +138,7 @@ on its station's screen and is not sent again: its station gets only a MOVED sli
 them. A dish whose course group has fired cannot move to another course group, and no dish can move
 into a fired one (`group.not_held`). Checked by "a moved dish keeps its kitchen state and is not sent
 again" in `apps/server/src/move-merge.test.ts`, and by "refuses to move a line OUT of a fired group"
-and "fire the mains, then move a Steak into them" in `apps/server/src/order-groups.test.ts`.
+and "fire the mains, then move a Steak into them" in `apps/server/src/order-group-release.test.ts`.
 
 ### A switched-off course uses Fire now (owner, 2026-10-17; C80)
 

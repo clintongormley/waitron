@@ -32,7 +32,7 @@ import {
   holdPaperFor,
   printedHeldGroups,
   recordHeldPaper,
-} from "./order-groups.js";
+} from "./order-group-hold-paper.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";

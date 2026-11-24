@@ -805,8 +805,9 @@ name; no line records when it was added, so the order's opening day stands for i
 parked order (`placeOrder`) refuses it `menu_period.ended` unless `lateSend` confirms, with
 `workingOrderLineIds` naming the stored lines. Paying a saved counter bill (`fireDishesAtPayment`,
 `apps/server/src/till-sale.ts`), moving a bill to a table (`adoptZone`, `apps/server/src/move-bill.ts`),
-finishing or collecting a party (`releaseHeldWorkOf`) and splitting a table or moving a bill onto
-one (`groupArrivingDishes`, both `apps/server/src/order-groups.ts`) never ask: they mark the dish
+finishing or collecting a party (`releaseHeldWorkOf`, `apps/server/src/order-group-release.ts`)
+and splitting a table or moving a bill onto one (`groupArrivingDishes`,
+`apps/server/src/order-group-transfer.ts`) never ask: they mark the dish
 with no confirmer (`late_confirmed_by` null, `recordLateSendMarks`), and `readLateSendMarks`
 reports it as not agreed, so its ticket and station card read "After <period>" without "agreed". A dish parked on an earlier
 business day is judged by today's periods alone: placed before today's period selling its menu has
