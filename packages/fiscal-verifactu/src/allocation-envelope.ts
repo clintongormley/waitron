@@ -13,6 +13,7 @@ import {
   isMinuteIdentity,
 } from "./hour-identity.js";
 import type { AllocationOperationEvidence } from "./allocation-operation.js";
+import { admitsAllocationAction } from "./identity-change-authority.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import {
   encodeEmergencyIdentity,
@@ -286,7 +287,13 @@ export async function withHourAdmission<T>(
   if (
     operator === undefined ||
     binding.module !== "fiscal-verifactu" ||
-    !["setup", "restore", "promote", "conflict-switch"].includes(binding.action)
+    !admitsAllocationAction(authority, binding.action, [
+      "setup",
+      "restore",
+      "promote",
+      "conflict-switch",
+      "identity-change",
+    ])
   )
     return refuse("reauthentication_required");
   if (
@@ -301,7 +308,11 @@ export async function withHourAdmission<T>(
   if (!allocationShape(input.allocation)) return refuse("malformed_allocation");
   if (!approvalShape(input.approval)) return refuse("malformed_approval");
   const selectedFacts = structuredClone(facts);
-  if (selectedFacts.oldMachineRelinquished === true && binding.action !== "promote")
+  if (
+    selectedFacts.oldMachineRelinquished === true &&
+    binding.action !== "promote" &&
+    binding.action !== "identity-change"
+  )
     return refuse("event_mismatch");
   const token = Object.freeze({});
   hourAdmissions.set(token, {

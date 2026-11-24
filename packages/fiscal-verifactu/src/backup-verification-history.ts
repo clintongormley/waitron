@@ -129,7 +129,7 @@ const APPROVAL = [
   "confirmedAt",
 ];
 function approval(value: unknown): value is RecordValue {
-  // Only a relinquished promotion writes version 2, and always in exactly this shape.
+  // Only a relinquished promotion and an identity change write version 2, always in this shape.
   const v2 =
     exact(value, [...APPROVAL, "oldMachineRelinquished"]) &&
     value.version === 2 &&

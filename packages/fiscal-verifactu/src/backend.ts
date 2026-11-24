@@ -21,11 +21,14 @@ import type {
   FiledFigures,
   FiledReceipt,
   FiledInvoiceEvidence,
+  IdentityChangeNote,
+  IdentityChangeOutcome,
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
   ReceiptQrText,
   SaleForFiscalRecord,
+  SecondClock,
   TrustedClock,
   VatBreakdownLine,
 } from "@waitron/fiscal";
@@ -65,6 +68,7 @@ import {
 } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
 import { refuseProducerChange } from "./producer-change.js";
+import { openIdentityChange } from "./identity-change.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
  * "which module produced this" tag. */
@@ -798,6 +802,23 @@ export class VerifactuBackend implements FiscalBackend {
 
   checkFilingIdentity(tx: Transaction, nodeId: NodeId): Promise<void> {
     return refuseProducerChange(tx, nodeId, this.identity, this.deploymentEnvironment);
+  }
+
+  /** Opens its own transactions: see `openIdentityChange`. */
+  openIdentityChange(
+    nodeId: NodeId,
+    note: IdentityChangeNote,
+    secondClock: SecondClock,
+    mayOpen: (tx: Transaction) => Promise<boolean>,
+  ): Promise<IdentityChangeOutcome> {
+    return openIdentityChange(
+      this.db,
+      { identity: this.identity, environment: this.deploymentEnvironment },
+      nodeId,
+      note,
+      secondClock,
+      mayOpen,
+    );
   }
 
   /**

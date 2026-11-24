@@ -31,6 +31,35 @@ export type HourClockObservation =
       uncertaintyMs?: null;
     };
 
+/** The box's own clock, read once. */
+export function boxClockSample(
+  wall: () => number = Date.now,
+  monotonic: () => number = () => performance.now(),
+): Extract<HourClockObservation, { result: "usable" }> {
+  const instantMs = wall();
+  const measured = monotonic();
+  return {
+    source: "box",
+    result: "usable",
+    instantMs,
+    uncertaintyMs: 0,
+    wallStartedMs: instantMs,
+    wallFinishedMs: instantMs,
+    monotonicStartedMs: measured,
+    monotonicFinishedMs: measured,
+  };
+}
+
+/** Whether the box's wall clock moved against its steady clock between two readings, as a step
+ * does. */
+export function wallClockStepped(
+  earlier: { wallMs: number; monotonicMs: number },
+  later: { wallMs: number; monotonicMs: number },
+): boolean {
+  const elapsed = later.monotonicMs - earlier.monotonicMs;
+  return Math.abs(later.wallMs - earlier.wallMs - elapsed) > STEP_MS;
+}
+
 export interface HourClockDecision {
   readonly usable: readonly { source: HourClockSource; lowerMs: number; upperMs: number }[];
   readonly unavailable: readonly Extract<HourClockObservation, { result: "unavailable" }>[];

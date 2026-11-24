@@ -393,6 +393,6 @@ all of `--version`, `--place` and `--date`.
 ## When the producer or the system code changes
 
 A release that changes the producer, or the two-character code that names the system, says so in
-the first line of its pull request. No such release is cut while A993 is parked: until then a
+the first line of its pull request. No such release is cut until A993's third pull request lands: until then a
 production box refuses to start under another producer's tax number (`sif.producer_changed`), and
 nothing opens the new installation such a change needs.

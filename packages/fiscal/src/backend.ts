@@ -285,6 +285,24 @@ export interface FutureDateRefusal {
   issuedOn: string;
 }
 
+/** The release and producer an upgrade named for opening a new installation, and the producer
+ * the open chain's head was filed under. */
+export interface IdentityChangeNote {
+  release: string;
+  producerTaxId: string;
+  fromProducerTaxId: string;
+}
+
+/** What vouches for the box's clock when a new installation opens: the box's internet time
+ * service, or a start whose time was confirmed and still stands. */
+export type SecondClock =
+  | { kind: "time-service"; read: () => Promise<boolean> }
+  | { kind: "confirmed-start"; standing: () => boolean };
+
+/** What `openIdentityChange` did: opened a new installation, found none to open, or found the
+ * note does not name this release, this producer, or the producer the open chain was filed under. */
+export type IdentityChangeOutcome = "opened" | "nothing-to-open" | "not-named";
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -498,6 +516,19 @@ export interface FiscalBackend {
    * under. Reads only. Optional: a backend that names no producer omits it.
    */
   checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>;
+
+  /**
+   * When this node's open chain was filed under the producer `note` moves from, opens a new
+   * installation, with new series, for the producer this backend files under. Takes no caller
+   * transaction: it reads `secondClock` outside the write lock, then asks `mayOpen` first inside
+   * the transaction that opens. Optional: a backend that names no producer omits it.
+   */
+  openIdentityChange?(
+    nodeId: NodeId,
+    note: IdentityChangeNote,
+    secondClock: SecondClock,
+    mayOpen: (tx: Transaction) => Promise<boolean>,
+  ): Promise<IdentityChangeOutcome>;
 
   /** How many records this node has not yet had confirmed. */
   pendingCount(nodeId: NodeId): Promise<number>;
