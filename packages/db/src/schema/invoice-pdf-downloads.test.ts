@@ -16,7 +16,7 @@ const PERSON = "cccccccc-0000-4000-8000-000000000002";
 describe("invoice PDF download record", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  it("refuses an unknown sale, keeps a known one's row, and refuses any change to it", async () => {
+  it("requires a known sale and person and keeps the download row immutable", async () => {
     const db = suite.db;
     await seedVenue(db, {
       name: "Fixture",

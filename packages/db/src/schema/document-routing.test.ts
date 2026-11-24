@@ -131,7 +131,7 @@ describe("document routing schema", () => {
     ]);
   });
 
-  it("page copy audit refuses changes and preserves the referenced work", async () => {
+  it("page copy audit requires a known person and preserves the referenced work", async () => {
     await seedVenue(suite.db, {
       name: "Oak Room",
       invoiceLocales: ["es"],

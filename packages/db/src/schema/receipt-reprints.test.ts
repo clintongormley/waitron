@@ -17,7 +17,7 @@ const PERSON = "cccccccc-0000-4000-8000-000000000001";
 describe("receipt reprint record", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  it("refuses an unknown sale and a second record of the same job", async () => {
+  it("requires a known sale and person and refuses a second record of the same job", async () => {
     const db = suite.db;
     await seedVenue(db, {
       name: "Fixture",
