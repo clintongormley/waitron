@@ -58,6 +58,7 @@ export function mountGiveBackApi(
       "invoice_correction.refund_pending": 409,
       "tender.refund_in_progress": 409,
       "tender.refund_exceeds_payment": 409,
+      "tender.refund_exceeds_cancelled": 409,
       "tender.refund_of_advance": 409,
       "tender.refund_unavailable": 409,
       "tender.refund_needs_correction": 409,
