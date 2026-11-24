@@ -1,0 +1,17 @@
+# Finish the remaining person ID foreign keys
+
+After a fresh setup, the database should refuse to record a drawer open, invoice correction, PDF download, receipt reprint or handover against a person who is absent from the venue. Add only the eight marked keys below, under [design U11](../specs/2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas). Lane H lands this under [slice rule 6](2026-11-08-a1308-slice-rules.md#6-who-lands). The PR opens with the venue reset requirement and says earlier backups cannot be restored.
+
+| Schema file under `packages/db/src/schema/` | Columns that gain a key |
+| --- | --- |
+| `invoice-pdf-downloads.ts` | `person_id` |
+| `receipt-reprints.ts` | `person_id` |
+| `invoice-corrections.ts` | `requested_by`, `authorized_by`, `ended_by` |
+| `handover/activations.ts` | `person_id` |
+| `drawer-opens.ts` | `person_id`, `authorized_by` |
+
+The old comments at `eed41cc3c0^` trace four tables directly to the former identity set. At `de6a10330c` invoice corrections follow bill refunds, which follow bill payments for the same reason. Core already owns `persons`, and the replacement `refunds` table has three restrictive person keys. A baseline loaded into SQLite at `bc261063ad` showed no person keys on the five marked tables and three on `refunds`. Restricting deletion also preserves the audit rows named in the old PDF and reprint comments. The separately justified fiscal certificate exception and the fiscal migration stay out of this change.
+
+1. Extend the existing `invoice-pdf-downloads.test.ts`, `receipt-reprints.test.ts`, `invoice-corrections.test.ts`, `handover/migrations.test.ts` and `drawer-opens.test.ts` schema suites. Seed real people for successful writes with `seedPerson` and keep the original assertions. In each missing-person case leave the other columns valid and assert the SQLite foreign-key refusal. Exercise `ended_by` through a permitted transition and keep the recorded-person and null paths, including automatic filing and an unassisted drawer open. Observe the new cases fail before changing the schema.
+2. Declare named keys to `persons.id` with `onDelete("restrict")`, following `refunds.ts`. Keep each column's current nullability and leave existing triggers and write paths alone. Pin the eight keys and their delete action in `scripts/schema-constraints.test.ts` and extend the handover declaration expectation. Run `pnpm --filter @waitron/server migration-baseline rebuild --set core` and remove the completed bullet in `docs/backlog/architecture.md`.
+3. Rerun the five schema suites and the schema constraints, append-only, behavioural-trigger and starting-migration guards. Compare the base and candidate protection lists and require exactly these eight additions in each venue snapshot. Follow direct writers with focused tests for drawer, reprint, PDF download, correction and controlled/emergency handover in Server and handover, including the boot repair path. Cover direct-write fixtures in DB, Core, Server, Handover and Fiscal VeriFactu, using existing people or seeding their IDs and keeping the assertions. The shared fiscal takeover fixture and the direct backup-verification fixture may need setup changes. Run `write-path.e2e.test.ts` and `inmutabilidad.test.ts` unedited, plus Server's `till-api.sell-published.test.ts` and Till's `till-app-menu-refresh.test.ts`. Expect about 50 handwritten schema lines and 120–220 test and fixture lines, plus generated core migration files.
