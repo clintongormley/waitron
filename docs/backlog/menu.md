@@ -863,6 +863,8 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 ### A1515. Set menus
 
+_2026-11-24: The owner reworked set menus: [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes; the bill groups them into set menus at the cheapest price on every change; a set menu no longer changes a dish's course; paying for items moves them to a bill of their own. Its six pieces replace the counts, the no-place question and the per-set-menu course described below. Plans to follow._
+
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes are ordered,
 the waiter adds set menus by type, and each dish is placed in a set menu on the bill that lists
