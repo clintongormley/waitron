@@ -50,8 +50,6 @@ Left open by A429 slice 3.
   VoiceOver and TalkBack check.
 - A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
   (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
-- The old floor card says "1 listos" in Spanish (`till-floor-screen.ts`, the count followed by
-  `floor.ready`); the map's pin and notice say "1 listo".
 
 ## A474 — today's floor changes on the till: follow-ups
 
@@ -1083,7 +1081,7 @@ the remaining till unit and tab edges joined on 2026-11-12. A470 and A1107 (the 
   title stays English in a synthetic Spanish probe; legacy unit maps cover English and Spanish only.
   [Detail](till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
-  unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
+  unmeasured screen-reader activation and the "Owes €0.00" wording. Left open by A429 slice 3.
   [Detail](till.md#a470--the-tills-floor-map-follow-ups)
 - **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
   List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and

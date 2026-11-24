@@ -117,6 +117,7 @@ import {
   MAP_PRECEDENCE,
   mapKinds,
   mapLook,
+  readyText,
   reminderClock,
   topTabKind,
   type MapKind,
@@ -3166,9 +3167,7 @@ export class TillFloorScreen extends LitElement {
       if (signalOf(table.signals, "ready") !== undefined) return null;
       return {
         kind: "ready",
-        mark: html`<span class="badge ready" data-ready
-          >${table.readyToServe} ${t("floor.ready")}</span
-        >`,
+        mark: html`<span class="badge ready" data-ready>${readyText(table.readyToServe)}</span>`,
       };
     }
     if (table.pendingToServe > 0) {
