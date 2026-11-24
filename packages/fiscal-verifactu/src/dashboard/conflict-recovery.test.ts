@@ -287,6 +287,20 @@ it("a key refused twice shows the wrong-key line both times", async () => {
   await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(line));
 });
 
+it("Stop forgets the refused key's name, so the field expects no key", async () => {
+  const { screen } = await mount(async () => {
+    throw { code: "promotion.break_glass_invalid", params: { keyName: REFUSED_NAME }, status: 401 };
+  });
+  await key(screen, "first-key");
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(keyField(screen).keyName).toBe(REFUSED_NAME));
+  await click(screen, "stop");
+  await keyField(screen).updateComplete;
+  expect(keyField(screen).keyName).toBeUndefined();
+  expect(keyField(screen).wrongKey).toBe(false);
+  expect(keyInput(screen).shadowRoot!.textContent).not.toContain(REFUSED_NAME);
+});
+
 for (const [locale, label] of [
   ["en", "Master key"],
   ["es", "Clave maestra"],

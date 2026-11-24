@@ -177,14 +177,10 @@ export class ConflictRecovery extends LitElement {
   private keyField(): WtMasterKeyInput | null {
     return this.shadowRoot?.querySelector("wt-master-key-input") ?? null;
   }
-  /** A new `keyName` makes the field clear itself (and its `wrongKey`) as it takes it, so the
-   * refusal is set only after the field has taken the name. */
-  private async refuseKey(generation: number, keyName: string | undefined): Promise<void> {
+  private refuseKey(keyName: string | undefined): void {
     this.keyField()?.clear();
     this.refusedKeyName = keyName;
-    await this.updateComplete;
-    await this.keyField()?.updateComplete;
-    if (generation === this.#generation) this.keyRefused = true;
+    this.keyRefused = true;
   }
   private t(key: ConflictRecoveryString): string {
     return CONFLICT_RECOVERY_STRINGS[this.locale][key];
@@ -197,6 +193,7 @@ export class ConflictRecovery extends LitElement {
     this.keyField()?.clear();
     this.key = "";
     this.keyRefused = false;
+    this.refusedKeyName = undefined;
     this.busy = false;
     this.attempted = false;
     this.refusal = "";
@@ -259,10 +256,7 @@ export class ConflictRecovery extends LitElement {
         this.active = null;
         this.selection = null;
         this.toConfirm = null;
-        await this.refuseKey(
-          generation,
-          typeof params?.keyName === "string" ? params.keyName : undefined,
-        );
+        this.refuseKey(typeof params?.keyName === "string" ? params.keyName : undefined);
       } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
         this.selection = null;
         this.toConfirm = null;

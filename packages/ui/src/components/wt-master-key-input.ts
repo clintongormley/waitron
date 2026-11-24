@@ -100,9 +100,12 @@ export class WtMasterKeyInput extends LitElement {
   @property({ type: Boolean, reflect: true }) disabled = false;
   /**
    * Set by the host when the key it sent was refused as not the expected one. The field clears it
-   * when the person types or chooses a PDF, and on `clear()`. A host binding it (`.wrongKey=${flag}`)
-   * clears its own flag on every `wt-master-key-change` and sets it on each refusal: Lit writes a
-   * binding only when its value changes, so a flag left set would hide the next refusal.
+   * when the person types or chooses a PDF, on `clear()`, and when `keyName` changes unless the host
+   * set it in that same update. A host binding it (`.wrongKey=${flag}`) clears its own flag on every
+   * `wt-master-key-change` and sets it on each refusal: Lit writes a binding only when its value
+   * changes, so a flag left set would hide the next refusal. A new `keyName` empties the field and
+   * sends `wt-master-key-change` only if the field held a key, a PDF or an older refusal; a host that
+   * sets a new name and the flag together calls `clear()` first, or that change clears its flag.
    */
   @property({ type: Boolean }) wrongKey = false;
   /** Set by the host once the person tried to carry on: a partly typed key is then not whole. */
@@ -140,7 +143,13 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (this.hasUpdated && changed.has("keyName")) this.clear();
+    if (!this.hasUpdated || !changed.has("keyName")) return;
+    const held = this.value !== "" || this.#file !== undefined;
+    const refusedNow = changed.has("wrongKey") && this.wrongKey;
+    const tell = held || (this.wrongKey && !refusedNow);
+    this.#empty();
+    if (!refusedNow) this.wrongKey = false;
+    if (tell) this.#notify();
   }
 
   /**
@@ -152,15 +161,19 @@ export class WtMasterKeyInput extends LitElement {
     return this.#pdfRead;
   }
 
-  /** Empties the field and forgets any chosen PDF. */
+  /** Empties the field and forgets any chosen PDF and any refusal. */
   clear(): void {
+    this.#empty();
+    this.wrongKey = false;
+    this.#notify();
+  }
+
+  #empty(): void {
     this.#reading = undefined;
     this.value = "";
     this.#file = undefined;
     this.problem = undefined;
-    this.wrongKey = false;
     this.#scope?.commit({ value: "" });
-    this.#notify();
   }
 
   #notify(masterKey?: string): void {
@@ -222,7 +235,7 @@ export class WtMasterKeyInput extends LitElement {
       this.#notify(key);
     } else this.problem = problem;
     await this.updateComplete;
-    await this.renderRoot.querySelector("wt-input")!.updateComplete;
+    await this.renderRoot.querySelector("wt-input")?.updateComplete;
   }
 
   #line(copy: MasterKeyInputCopy): string {

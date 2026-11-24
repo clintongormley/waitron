@@ -702,3 +702,104 @@ test("a second choice replaces pdfRead with its own read", async () => {
   expect(el.pdfRead).toBe(second);
   expect(message(el)).toBeUndefined();
 });
+
+class NamingHost extends LitElement {
+  @state() keyName?: string;
+  @state() refused = false;
+  events = 0;
+  override render() {
+    return html`<wt-master-key-input
+      .copy=${EN}
+      .keyName=${this.keyName}
+      .wrongKey=${this.refused}
+      @wt-master-key-change=${() => {
+        this.events += 1;
+        this.refused = false;
+      }}
+    ></wt-master-key-input>`;
+  }
+}
+customElements.define("master-key-input-test-naming-host", NamingHost);
+
+async function namingHost() {
+  const shell = (await mount(
+    "<master-key-input-test-naming-host></master-key-input-test-naming-host>",
+  )) as NamingHost;
+  const el = shell.shadowRoot!.querySelector("wt-master-key-input")!;
+  await el.updateComplete;
+  const refuse = async (name: string) => {
+    el.clear();
+    shell.keyName = name;
+    shell.refused = true;
+    await shell.updateComplete;
+    await el.updateComplete;
+    await shell.updateComplete;
+  };
+  return { shell, el, refuse };
+}
+
+test("a host that sets a new key name and the refusal together shows the wrong-key line", async () => {
+  const { shell, el, refuse } = await namingHost();
+  shell.keyName = "2026-01-02 · AAAA";
+  shell.refused = true;
+  await shell.updateComplete;
+  await el.updateComplete;
+  await shell.updateComplete;
+  expect(shell.events).toBe(0);
+  expect(el.wrongKey).toBe(true);
+  await settled(el, EN.wrongKey("2026-01-02 · AAAA"));
+  await type(el, KEY);
+  await shell.updateComplete;
+  await refuse(KEY_NAME);
+  expect(el.wrongKey).toBe(true);
+  await settled(el, EN.wrongKey(KEY_NAME));
+});
+
+test("a new key name alone clears an older refusal and tells the host", async () => {
+  const { shell, el } = await namingHost();
+  shell.keyName = KEY_NAME;
+  shell.refused = true;
+  await shell.updateComplete;
+  await settled(el, EN.wrongKey(KEY_NAME));
+  const before = shell.events;
+  shell.keyName = "2026-01-02 · AAAA";
+  await shell.updateComplete;
+  await el.updateComplete;
+  await shell.updateComplete;
+  expect(shell.events).toBe(before + 1);
+  expect(shell.refused).toBe(false);
+  expect(el.wrongKey).toBe(false);
+  await settled(el, undefined);
+});
+
+test("a new key name on an empty field with no refusal sends no change", async () => {
+  const { shell, el } = await namingHost();
+  shell.keyName = "2026-01-02 · AAAA";
+  await shell.updateComplete;
+  await el.updateComplete;
+  expect(shell.events).toBe(0);
+});
+
+test("a new key name forgets a chosen PDF and tells the host", async () => {
+  const { el, seen } = await field();
+  await choose(el);
+  await el.pdfRead;
+  seen.length = 0;
+  el.keyName = "2026-01-02 · AAAA";
+  await el.updateComplete;
+  expect(native(el).value).toBe("");
+  expect(seen).toStrictEqual([{}]);
+});
+
+test("pdfRead still resolves when the host takes the words away during a read", async () => {
+  let finish!: (value: RecoveryPackReading) => void;
+  const { el } = await field();
+  el.readPack = async () => () => new Promise((resolve) => (finish = resolve));
+  await choose(el);
+  const read = el.pdfRead;
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  el.copy = undefined;
+  await el.updateComplete;
+  finish(reading());
+  await expect(read).resolves.toBeUndefined();
+});
