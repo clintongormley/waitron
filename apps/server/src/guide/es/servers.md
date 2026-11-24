@@ -162,7 +162,7 @@ conserva los datos de ambos servidores.
 
 Cuando el local se haya iniciado, **Este servidor lleva ahora el local** te pide que no restablezcas el
 servidor principal antiguo: puede tener datos que este servidor no tiene. Cuando se vuelva a
-encender, envía aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
+encender, envía aquí sus registros de facturación y sus horas trabajadas por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
 para él en la página Servidores de este servidor, en el panel.
 
 Si el alojamiento de emergencia está disponible para tu local, la pantalla roja también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
@@ -170,25 +170,36 @@ Si el alojamiento de emergencia está disponible para tu local, la pantalla roja
 ## Conservar los datos del servidor averiado {#old-box-returns}
 
 Usa el nuevo servidor principal cuando arranque. Conserva el servidor averiado y sus datos para la
-devolución. Los registros de facturación y sus hechos de pago registrados pueden volver al nuevo
-servidor principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
+devolución. Los registros de facturación con sus hechos de pago registrados, y las horas
+trabajadas, pueden volver al nuevo servidor principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
 cajón. No borres el servidor anterior mientras necesites sus datos.
 
-Enciende el servidor anterior y mantenlo conectado: devuelve sus registros de facturación por sí
-solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servidor principal dice
-**Esperando a que el servidor principal anterior devuelva sus registros de facturación**, y no se puede volver a
+Enciende el servidor anterior y mantenlo conectado: devuelve sus registros de facturación y horas
+trabajadas por sí solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servidor
+principal dice **Esperando a que el servidor principal anterior devuelva sus registros de
+facturación y horas trabajadas**, y no se puede volver a
 traspasar el local ni retirar ese servidor.
+
+Una persona añadida en el servidor anterior después de la copia vuelve deshabilitada, con sus
+horas: [vuelve a habilitar su cuenta](staff.md#account-access) en lugar de añadirla de nuevo. Si ya
+la habías añadido de nuevo, deja deshabilitada la cuenta devuelta: Waitron no permite volver a
+habilitarla mientras otra cuenta tenga el mismo nombre. La exportación del registro de jornada
+lista las horas de las dos cuentas con ese nombre.
+
+Si alguien fichó la entrada o la salida en los dos servidores alrededor del cambio, revisa las
+horas de esa persona ese día y corrígelas ([cómo](staff.md#hours)).
 
 Si el servidor anterior no va a volver nunca con sus datos, elige **No volverá** en el menú de su
 fila.
 
-Mientras se siguen esperando sus registros de facturación, o después de **No volverá**, el menú de
+Mientras se siguen esperando sus registros de facturación y horas trabajadas, o después de **No volverá**, el menú de
 su fila ofrece también **Borrar y retirar**. Su diálogo avisa de que el servidor principal anterior
-no ha devuelto todos sus registros de facturación: antes de borrarse, intenta enviarlos una vez
+no ha devuelto todos sus registros de facturación y horas trabajadas: antes de borrarse, intenta enviarlos una vez
 más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse. Antes de
 confirmar, marca que has descargado sus datos o que lo aceptas.
 
-Cuando haya devuelto sus registros de facturación, **Borrar y retirar** no pide marcar nada. El
+Cuando haya devuelto sus registros de facturación y horas trabajadas, **Borrar y retirar** no pide
+marcar nada. El
 diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no tiene
 e indica la dirección del servidor anterior cuando su fila tiene una: ábrela y
 [descarga esos datos](servers.md#handed-over) antes de confirmar, porque una vez empezado el borrado
@@ -204,7 +215,7 @@ recibe el borrado: elige **Retirar del local** en el nuevo servidor principal y 
 terminal.
 
 Para retirar un servidor principal anterior sin borrarlo, elige **Retirar del local** en el menú de
-su fila. Si no ha devuelto sus registros de facturación, marca que se ha borrado o que no se volverá
+su fila. Si no ha devuelto sus registros de facturación y horas trabajadas, marca que se ha borrado o que no se volverá
 a encender nunca. Si vuelve, bórralo desde un terminal y no elijas nunca **Seguir como servidor
 principal** en él.
 
@@ -256,7 +267,7 @@ Si sigue fallando la comprobación de la copia, consulta [cómo cambiar al servi
 
 Usa la dirección del nuevo servidor. Si la página del servidor anterior ofrece **Progreso**, sigue el
 enlace para continuar el traspaso en el de reserva. Conserva el servidor anterior y sus datos,
-encendido y conectado: devuelve sus registros de facturación al nuevo servidor por sí solo y, hasta
+encendido y conectado: devuelve sus registros de facturación y horas trabajadas al nuevo servidor por sí solo y, hasta
 que lleguen, no se puede volver a traspasar el local ([más información](servers.md#old-box-returns)).
 
 En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese servidor acepte ventas.
@@ -272,7 +283,8 @@ Mientras algo te necesita, la página muestra también una línea que dice qué 
 [traspaso](servers.md#hand-over) no ha terminado, puede ofrecer también **Progreso**: úsalo para terminar
 el traspaso en el servidor de reserva.
 
-Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
+Mantén este servidor encendido mientras devuelve sus registros de facturación y horas trabajadas al
+servidor principal.
 El envío a Hacienda continúa en el principal.
 
 Antes de que el servidor principal borre este servidor, descarga sus datos en **Descargar los datos
@@ -290,14 +302,20 @@ página de la configuración, listo para [volver a unirse como servidor de
 reserva](servers.md#adding-a-spare). El borrado retira sus datos del local, incluidas las líneas de
 venta y las copias de seguridad locales, que esta devolución no incluye; conserva los datos del
 servidor anterior si los necesitas. Si se eligió Borrar y retirar antes
-de que volvieran todos sus registros de facturación, o al servidor principal le faltan registros de
-facturación que tiene este servidor, aparta sus bases de datos en lugar de borrarlas.
+de que volvieran todos sus registros de facturación y horas trabajadas, o al servidor principal le faltan registros de
+facturación u horas trabajadas que tiene este servidor, aparta sus bases de datos en lugar de borrarlas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
 necesitas. La devolución no está confirmada. Cuando hayas descargado los datos de este servidor,
 puedes elegir igualmente **Borrar y retirar** en el servidor principal: este servidor aparta
 entonces sus bases de datos en lugar de borrarlas, incluidos los registros que no pudo devolver.
+
+Si la página indica que el servidor principal no ha podido guardar algunas de las horas trabajadas
+de este servidor, sus registros de facturación ya han llegado. Descarga los datos de este servidor
+antes de que nadie elija **Borrar y retirar** en el servidor principal: tras un cambio de
+emergencia, la pestaña **Horas de trabajo** del archivo las lista. El borrado aparta entonces las
+bases de datos de este servidor en lugar de borrarlas.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora

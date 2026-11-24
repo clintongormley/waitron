@@ -99,6 +99,7 @@ files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`
 scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
 with the owner who closes a period and when (a manager's button, or automatically once it is
 due), then build it. Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
+When closing is built, an old main box's return of working hours (`packages/workforce/src/handover-return.ts`) must also carry its closures, which today's batches do not; until then a returned entry naming a closure the new main box lacks is refused (`attendance.return_entry_invalid`) and stops the return of working hours.
 
 ## A644. Staffing slots stop at minute 1440 on a business day longer than a day
 
