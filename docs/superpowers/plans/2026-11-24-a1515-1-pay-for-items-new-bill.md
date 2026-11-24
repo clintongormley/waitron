@@ -39,8 +39,8 @@ wave with two Codex angles, and the OWNER lands them. PR 3 removes code only and
 | 3. Removal | Nothing new to see: the "items" kind, `bill_payment_lines`, `bill.line_paid` and its guards, `paidLines` and the till's paid marks are gone. | 2 |
 | 4. Printed bills | Reopen to split needs no PIN and works on a part-paid printed bill, its money counting towards the table's bill; Pay for items on a printed bill runs it first. | 3 |
 
-PR 1 is written out task by task below. PR 2–4 are given as scope, decisions and files; each gets
-its task steps on this page, against `main` as PR 1 left it, before its build starts, because each
+PR 1 and PR 2 are written out task by task below. PR 3 and 4 are given as scope, decisions and
+files; each gets its task steps on this page, against `main` as PR 1 left it, before its build starts, because each
 changes code PR 1 writes. The watcher clears each addition.
 
 ## Global Constraints
@@ -407,21 +407,411 @@ refund rule.
 
 ## PR 2 — Till (`feat/a1515-1-pay-items-till`)
 
-- Pay > Items (`apps/till/src/widgets/bill-pay-dialog.ts`, `apps/till/src/state/bill-payment.ts`)
-  sends `POST /api/working-orders/:id/item-payments` instead of an items payment, shows the chosen
-  items' price from the preview route, and offers no `full_with_tip`/`use_pool` choice and no
-  own-receipt question (the new bill prints its own receipt). It sends the `applied` and `tip` the
-  preview showed (D9), and when every dish is chosen it takes a whole-bill payment instead (D7). The list of lines is today's
-  (`payLines`, `bill-payment.ts:412-437`); set-menu lines stay as today until piece 4.
-- After the payment, the till shows the table's bill, and the new, settled bill in the bill
-  switcher (`apps/till/src/screens/table-bill-controls.ts`).
-- While a reader payment is awaited, the table's bill shows a line "Being paid on bill N"; a decline
-  or a Stop leaves it as it was.
-- A bill whose balance has `overpaid > 0` shows "Paid X more than this bill comes to" with **Give
-  back** (opens today's refund dialog, `apps/till/src/widgets/bill-refund-dialog.ts`, for up to X)
-  and **Keep as tip** (when tips are on). Pay is not offered while it is overpaid.
-- The table-service guide (`apps/server/guide/en/table-service.md` and its Spanish twin) says what
-  Pay for items now does. Open and look in both themes and at phone width.
+Branch `feat/a1515-1-pay-items-till`, on top of PR 1 (#4238) until that lands, then rebased onto
+`main`. Every line count and `file:line` below was read on PR 1's tip (`71f8ce8be0`).
+
+**What a person sees when it lands:** Pay > Items > choose > Cash or card makes a bill of its own
+for the chosen items, takes the payment there and shows that bill's receipt window, then the
+table's bill again, with the new bill **Paid ✓** in the bill switcher. Choosing every dish pays the
+whole bill. While a card for those items is awaited, the table's bill says **Being paid on Bill N**;
+a decline or **Cancel payment** leaves the table's bill as it was. A bill left paid more than it
+comes to says so, offers **Give back** and (with tips on) **Keep as tip**, and offers no Pay.
+
+**What stays as it is in PR 2:** the server's old items payment, `paidLines`, the paid marks, the
+dialog's choose step (`#chooseStep`, `bill-pay-dialog.ts:2317-2380`, still reached by its widget
+tests) and `paymentAsk`'s items branch (`state/bill-payment.ts:91-101`): PR 3 deletes them with the
+server's items kind. Set-menu lines are listed as today (`payLines`, `state/bill-payment.ts:412-437`)
+until piece 4.
+
+**File-size room** (caps in `scripts/product-file-size-limits.json` on `origin/main`; tip line
+counts): `till-app.ts` 26,065 of 26,250; `bill-pay-dialog.ts` 2,420 of 2,500; `client.ts` 5,694 of
+5,750; `till-table-order-screen.ts` 7,516 of 7,750; every other product file 1,000. New logic goes
+in two new files; each task says what grows. No cap is raised: a task that would pass one moves code
+into its new file instead.
+
+**Lane B (A1515-3 PR 2) works in the same screen.** PR 2 does not touch
+`apps/till/src/widgets/menu-browser.ts`. In `apps/till/src/screens/till-table-order-screen.ts` it
+touches only: the imports (beside `:241`), two properties beside `billBalance` (`:1495`), the three
+pay gates and the summary in `#footFixed`/`#orderSummary`/`#orderDock` (`:3297-3337`), and one new
+method beside `#chargeable` (`:5188-5191`). None of these draw dishes, counts, add/remove/move
+controls or the "No place" question.
+
+**Decisions** (the outline left these open):
+
+- **PR2-D1. Two new files carry the logic.** `apps/till/src/api/item-payment-types.ts` (the three
+  routes' wire shapes, as `client.ts` already imports its other `*-types.ts` files,
+  `client.ts:46`) and `apps/till/src/state/pay-for-items.ts` (turning a `PayRequest` into the new
+  routes' bodies and their answers back into what the dialog and `till-app.ts` already handle).
+  `till-app.ts` changes at its two API calls, not in its retry machinery: Pay for items rides on
+  the same unanswered-send, resend and reader-Stop handling as every bill payment.
+- **PR2-D2. Picks name lines by id.** The route takes `{ lineId, quantity? }`
+  (`bill-payments-api.ts:188-205`); today's picks name `lineNo` (`state/bill-payment.ts:39`). `PayLine`
+  (`bill-pay-dialog.ts:99-109`) gains `lineId`, filled by `payLines` from `TabLine.id`, and the
+  items `PayChoice` pick carries it.
+- **PR2-D3. Every dish chosen → whole bill, decided in the till.** When every offered line is
+  picked whole, `#choice()` (`bill-pay-dialog.ts:958-979`) answers `{ kind: "whole" }`, so the
+  preview and payment are today's whole-bill ones, receipt-guests question included. The server's
+  `bill.all_items_chosen` stays the backstop; its words already say "Pay the whole bill instead".
+- **PR2-D4. Frozen request.** The items body (picks, the source's `expectedEdits`, and for a table
+  `expectedPartyRevision`/`partyId` from `#billRevisions()`) is fixed when the waiter confirms and
+  stored in the confirmation, because the server's retry fingerprint includes them
+  (`retryPrintOf`, `pay-for-items.ts:292-311`): a resend after no answer must send the same body.
+  `submissionFor`'s key leaves them out, as it leaves out `expectedEdit` (`state/bill-payment.ts:178-181`),
+  and `party.out_of_date` joins `paymentNotRecorded` (`:202-210`): it is raised before anything is
+  recorded (`guardPathParty` in `moveItemsToNewBill`, `pay-for-items.ts:238`), and without it a
+  retry would resend the stale revision for ever.
+- **PR2-D5. What the route does not read is not sent.** The items route reads no `guestCount`,
+  `receiptLanguage`, `ownReceipt`, `externalRef` or which-machine details
+  (`parseItemsPayment`, `bill-payments-api.ts:217-252`, against the whole-bill parser's
+  `:133-186`). So for items the dialog asks neither receipt guests nor own receipt
+  (`#guestsShown`, `#ownReceiptAsked`, `bill-pay-dialog.ts:2132-2150`), and a hand-keyed card's
+  operation number is not sent. Reported to the watcher as a PR 1 gap; not fixed here.
+- **PR2-D6. After the payment.** At a table: the new bill's receipt window opens
+  (`#showPaidTicket`, `till-app.ts:23694`) for the new bill, and closing it returns to the table's
+  bill rather than the next bill owing (`#onBackToTable` picks `#otherBillsToPay()[0]`,
+  `till-app.ts:24296`); `SettlementDocument` (`till-app.ts:544-548`) gains `returnTo`. The reread
+  that close already does (`#rereadAmounts`) brings the new bill into the switcher, which already
+  lists settled bills as **Paid ✓** (`shownBills`, `state/bill-state.ts:83-91`;
+  `paidMark`, `table-bill-controls.ts:21-25`), so `table-bill-controls.ts` needs no change for it.
+  At the Counter: no receipt window (closing it starts a new sale, `till-app.ts:25684-25690`, which
+  would drop the rest of the order); the Pay window says the payment was taken and the order is read
+  again (`#rereadPayingOrder`'s counter branch). The server prints the new bill's receipt either way
+  (`enqueueSaleReceipt`, `apps/server/src/bill-payments.ts:1265`).
+- **PR2-D7. The answer's balance is the new bill's.** `payForItems` answers `{ billId, payment }`
+  with `payment.balance` of the new bill (`pay-for-items.ts:336-438`). The till never stores it as
+  the table's balance (`till-app.ts:23628`) and rereads the table's bill without it. A card the
+  reader did not charge returns the dialog to the form with the decline said (not to the
+  confirmation, as today, `till-app.ts:23642-23660`): the put-back moved the table's bill's
+  revisions, so the old confirmation could only be refused. A card still pending after the wait
+  (`timeout`) starts no pending reread (`#startPendingReread`, `till-app.ts:23690`, watches the
+  table's bill, where the payment is not); the table's bill shows **Being paid on Bill N** instead.
+- **PR2-D8. Give back** reuses the existing `refund-excess` event and handler
+  (`#onRefundExcess`/`#openRefund`, `till-app.ts:22852-22886`): the Pay window opens over the bill
+  and, when one payment can be refunded, its Refund window opens on the excess. With several, staff
+  choose **Refund** beside one.
+- **PR2-D9. No PIN to give back money just taken** (owner, watcher note 2026-11-24 10:42; built in
+  PR 1, `bill-refunds.ts`'s `refundPermission`). Traced: a refund is sent in the operator's own name
+  and the PIN is asked only on `authorization.not_permitted` (`till-app.ts:24090-24100`), so cash and
+  connected cards already ask no PIN when the server needs none. A hand-keyed card does not:
+  `#onRefundContinue` always asks a PIN once the terminal step is confirmed (`till-app.ts:24015`), and
+  the refund window says a manager will approve it (`bill-refund-dialog.ts:431`,
+  `bill_refund.terminal_next`/`bill_refund.terminal`). PR 2 sends a hand-keyed give-back of no more
+  than the bill's `overpaid` without asking, asks a PIN on `authorization.not_permitted` or
+  `bill.manual_refund_pin_required` (the server counts tips given back too, `refundPermission`, `bill-overpaid.ts:40-54`),
+  and keeps today's PIN-first path for every other hand-keyed refund. The refund window drops its
+  PIN sentence for such an amount.
+- **PR2-D10. Keep as tip is one tap, naming the amount** ("Keep €5.00 as tip"), with a fresh
+  submission id each tap: the server records none and refuses a retry once the bill is no longer
+  overpaid (`bill-overpaid.ts:56-65`). After any answer or none, the till reads the bill again.
+- **PR2-D11. An overpaid bill offers no Pay, and no pay-section Full invoice.** The three pay gates
+  (`till-table-order-screen.ts:3299,3306,3308,3317`) also require `overpaid` to be zero; `#chargeable`
+  is left alone because Move a bill uses it too (`:7111`). Full invoice stays in the table ⋮.
+- **PR2-D12. Refusal details reach the words.** `refusalOf` (`state/bill-payment.ts:282-326`) and
+  `PayRefusal` (`widgets/pay-refusal.ts:9-39`) carry `advances` and `dishName`, and `refusalText`
+  passes the refusal to `codeMessage` as params (`pay-refusal.ts:99` passes none today), so
+  `bill.below_advances` names its amount and `set_menu.no_place_on_target` its dish.
+
+**Changed test checks** (behaviour PR 2 changes on purpose; each named in the PR description):
+in `apps/till/src/till-app-bill-payments.test.ts`, "accepted bill payment retires dirty entry before
+the following table read" (`:1141`) and "pays for chosen items, then a contribution, then an equal
+share…" (`:1184`) move their items step to the new routes; "pays for one held Tiramisu on the
+table's own bill…" (`:5926`) and the `describe("till-app: the steak's two choices")` block
+(`:6050-6198`) are deleted: they assert the old items payment's paid-in-place marks and the
+full-with-tip/use-pool choice, which the till no longer offers. In
+`apps/till/src/till-app-current-bill-pay.test.ts` the case at `:200-250` expects the new preview
+route. The implementer greps `kind: "items"` across `apps/till/src/**/*.test.ts` and lists any other
+it changes.
+
+### Task 1 (PR 2): The till's client for the new routes, and the items state
+
+**Files:**
+- Create: `apps/till/src/api/item-payment-types.ts` (~45 lines)
+- Modify: `apps/till/src/api/client.ts` (+~35, to ~5,730: `BillBalance.overpaid` and `beingPaidOn`,
+  `AllocationPreview`'s allocated `total?`, three methods)
+- Create: `apps/till/src/state/pay-for-items.ts` (~140 lines)
+- Modify: `apps/till/src/state/bill-payment.ts` (+~15: `payLines` `lineId`, `PayChoice` pick
+  `lineId`, `paymentNotRecorded`, `refusalOf`), `apps/till/src/widgets/bill-pay-dialog.ts` (+1:
+  `PayLine.lineId`), `apps/till/src/widgets/pay-refusal.ts` (+4)
+- Modify: `apps/till/test/bill-pay-app.ts` (`balanceOf` default `overpaid: "0.00"`, `stubApi` stubs
+  for the three methods)
+- Test: create `apps/till/src/state/pay-for-items.test.ts` and
+  `apps/till/src/api/client.item-payments.test.ts`; extend `apps/till/src/state/bill-payment.test.ts`
+
+**Interfaces:**
+- Consumes (PR 1): `POST /api/working-orders/:id/item-payments/preview` (body
+  `{ picks, method, tendered?, addedTip? }`, answer `{ total, applied, tip, change }`,
+  `bill-payments-api.ts:484-492`, `pay-for-items.ts:457-513`); `POST /api/working-orders/:id/item-payments`
+  (body `PayForItemsRequest`, `pay-for-items.ts:274-288`; answer `{ billId, payment: BillPaymentResult }`;
+  reader Stop keyed by the SOURCE bill's id and the submission id, `bill-payments-api.ts:520-525`
+  and `:542`,
+  so today's `cancelBillReaderPayment(open.billId, …)` reaches it unchanged);
+  `POST /api/working-orders/:id/overpaid/keep-as-tip` (body `{ submissionId }`, answer `BillBalance`,
+  `bill-payments-api.ts:549-570`); `BillBalance.overpaid` and `beingPaidOn`
+  (`apps/server/src/bill-payments.ts:292-301`).
+- Produces in `item-payment-types.ts`:
+  ```ts
+  export interface ItemPick { lineId: string; quantity?: string }
+  export interface ItemPaymentAsk { picks: ItemPick[]; method: "cash" | "card"; tendered?: string; addedTip?: string }
+  export interface ItemPaymentPreview { total: string; applied: string; tip: string; change: string | null }
+  export interface ItemPaymentRequest extends ItemPaymentAsk {
+    submissionId: string; expectedEdits: BillEditExpected[]; expectedPartyRevision?: number;
+    partyId?: string; applied: string; tip: string; entry?: "reader"; readerId?: string;
+    simulationOutcome?: "captured" | "declined" | "attempting";
+  }
+  export interface ItemPaymentResult { billId: string; payment: BillPaymentResult }
+  ```
+- Produces in `client.ts`: `previewItemPayment(billId, ask): Promise<ItemPaymentPreview>`,
+  `payForItems(billId, request, options?): Promise<ItemPaymentResult>`,
+  `keepOverpaidAsTip(billId, submissionId, options?): Promise<BillBalance>`.
+- Produces in `pay-for-items.ts`:
+  ```ts
+  export type ItemsPart = { picks: ItemPick[]; expectedEdits: BillEditExpected[]; expectedPartyRevision?: number; partyId?: string };
+  export function itemsChoiceOf(lines: readonly PayLine[], picks: ReadonlyMap<number, number>, offered: readonly PayLine[]): PayChoice; // PR2-D3
+  export function itemsAsk(asked: PayRequest): ItemPaymentAsk;
+  export function itemsAllocated(preview: ItemPaymentPreview, method: "cash" | "card"): AllocationPreview; // allocated, choice null, charged = applied + tip for a card, total kept
+  export function withItems(confirmation: Confirmation, asked: PayRequest, expectedEdit: BillEditExpected | null, revisions: BillRevisions): Confirmation; // PR2-D4
+  export function itemsRequestOf(request: Confirmation & { submissionId: string; items: ItemsPart }): ItemPaymentRequest; // PR2-D5
+  export function previewPayment(api: TillApi, billId: string, asked: PayRequest, expectedEdit: BillEditExpected | null): Promise<AllocationPreview>;
+  export function takePayment(api: TillApi, billId: string, request: Confirmation & { submissionId: string }, options: ReadOptions): Promise<BillPaymentResult & { paidOn?: string }>;
+  ```
+  `Confirmation` (`state/bill-payment.ts:126`) becomes `Omit<BillPaymentRequest, "submissionId"> & { items?: ItemsPart }`.
+
+- [ ] **Step 1: Write the failing tests.**
+  In `state/pay-for-items.test.ts`:
+  - `"every dish picked whole is the whole bill"`: three lines, all picked at full units → `{ kind: "whole" }`.
+  - `"one of three beers is a part pick by line id"`: a line of 3 with `unitTotal` → picks
+    `[{ lineNo: 1, lineId: "line-1", units: 1 }]`, and `itemsAsk` sends `{ lineId: "line-1", quantity: "1" }`.
+  - `"a card preview is allocated with its charge and the items' own total"`:
+    `{ total: "17.50", applied: "17.50", tip: "2.50", change: null }` → `charged: "20.00"`, `total: "17.50"`.
+  - `"the items request carries only what the route reads"`: a hand-keyed card confirmation with
+    `externalRef`, `guestCount`, `receiptLanguage` and `expectedEdit` → none of them in the body; no
+    `entry`; `expectedEdits` and the party revision from `items`.
+  - `"a reader request names the reader and the practice outcome"`.
+  - `"previewPayment and takePayment send a whole-bill choice down today's routes"` and
+    `"…an items choice down the new ones"`, with `paidOn` the answer's `billId`.
+  In `state/bill-payment.test.ts`: `"payLines names each line's id"`; `"the same items payment
+  confirmed again after a reread keeps its submission id"` (key ignores `items.expectedEdits` and
+  revisions); `"a stale party revision is not recorded"` (`paymentNotRecorded({ code: "party.out_of_date" })`);
+  `"refusalOf keeps advances and dishName"`. In `client.item-payments.test.ts` (a `fetchStub` as
+  `client.test.ts:6416-6470` builds one): each method's path, method, body and signal.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/state/pay-for-items.test.ts
+  src/state/bill-payment.test.ts src/api/client.item-payments.test.ts`. Expected: FAIL, module
+  `./pay-for-items.js` not found.
+- [ ] **Step 3: Implement** as the Interfaces block says; `refusalText`'s last line becomes
+  `codeMessage(refusal.code, undefined, refusal)`, as `bill-refund-dialog.ts` already calls it.
+- [ ] **Step 4: Run** the same command, then `pnpm --filter @waitron/till exec vitest run
+  src/widgets/bill-pay-dialog.test.ts src/i18n/codes.test.ts` and
+  `pnpm --filter @waitron/till typecheck`. Expected: PASS. Read the `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Teach the till's client the new Pay for items routes, and name picked dishes by line id"`.
+
+### Task 2 (PR 2): Pay > Items pays on a bill of its own
+
+**Files:**
+- Modify: `apps/till/src/widgets/bill-pay-dialog.ts` (+~15, to ~2,436): `#choice()` through
+  `itemsChoiceOf`; `#guestsShown`/`#ownReceiptAsked` false for items; the confirmation's scope line
+  shows the preview's `total` (`#scope`, `:1569-1590`), and a line under it, `bill_pay.items_own_bill`
+- Modify: `apps/till/src/till-app.ts` (+~45, to ~26,110): `#onBillPayPreview` (`:23418`),
+  `#onBillPayConfirm` (`:23469`, `:23555`), `#onBillPaid` (`:23619-23692`), `#showPaidTicket`
+  (`:23694`), `SettlementDocument` (`:544-548`), `#onBackToTable` (`:24293-24313`)
+- Modify: `apps/till/src/i18n/strings.ts` (`bill_pay.items_own_bill`, English and Spanish)
+- Test: create `apps/till/src/till-app-pay-for-items.test.ts` (with `test/bill-pay-app.ts`'s
+  `mountApp`-style helpers: `stubApi`, `openTable`, `openDialog`, `press`, `type`); extend
+  `apps/till/src/widgets/bill-pay-dialog.test.ts`; the changed checks listed above
+
+**Interfaces:** consumes Task 1's `previewPayment`, `takePayment`, `withItems`, `itemsChoiceOf`.
+- `#onBillPayPreview`: `api.previewBillPayment(open.billId, paymentAsk(…))` → `previewPayment(api,
+  open.billId, asked, expectedEdit)`.
+- `#onBillPayConfirm`: `confirmationOf(…)` wrapped in `withItems(…, asked, open.expectedEdit,
+  open.surface === "table" ? this.#billRevisions() : {})`; `api.takeBillPayment(…)` →
+  `takePayment(api, open.billId, submission.request, { signal })`.
+- `#onBillPaid`, when `result.paidOn` is set (PR2-D6, D7): no `this.billBalance = result.balance`;
+  not charged → form with the refusal, `asked`/`preview` null, then `#rereadPayingOrder(open)`;
+  invoice at a table → `#showPaidTicket` for `paidOn` with `returnTo: open.billId`; at the Counter →
+  `taken`, the dialog's balance read again (`#rereadBillPaying(open.id, open.billId)`); pending →
+  `taken` with no `#startPendingReread`. Every branch rereads the table's bill without the answer's
+  balance.
+
+- [ ] **Step 1: Write the failing tests** in `till-app-pay-for-items.test.ts`:
+  - `"pays for two dishes in cash on a bill of their own, shows its receipt, then the table's bill"`:
+    €120.00 bill (`bill120`), pick Tarta and Vino, cash 50 → `previewItemPayment("wo-4",
+    { picks: [{ lineId: "line-4" }, { lineId: "line-5" }], method: "cash", tendered: "50" })`;
+    the confirmation shows "Paying for Tarta, Vino: €30.00" from the preview's `total`; `payForItems`
+    gets `applied: "30.00"`, `tip: "0.00"`, `expectedEdits: [<wo-4's edit>]`, the party's
+    revision and id, no `kind`, `guestCount` or `ownReceipt`; `till-settlement-document-dialog`
+    opens for `wo-9` with change €20.00; after `settlement-close` the screen shows `wo-4`, and the
+    switcher lists `wo-9` as Paid ✓ once `getPartyBills` answers it.
+  - `"choosing every dish pays the whole bill"`: all five picked → `previewBillPayment` with
+    `kind: "share", shareOf: 1`; `previewItemPayment` and `payForItems` never called.
+  - `"a declined reader card leaves the table's bill as it was"`: reader card, `payForItems` answers
+    `outcome: "declined"` with the new bill's balance → the form shows `bill_pay.card_declined`,
+    no picks confirmed, `getTabLines("wo-4")` and `getPartyBills` called again, `billBalance` still
+    `wo-4`'s.
+  - `"Cancel payment stops the reader under the table's bill"`: during the reader wait,
+    `bill-pay-stop` → `cancelBillReaderPayment("wo-4", <submissionId>)`.
+  - `"no answer resends the same body under the same submission id"`: first `payForItems` rejects
+    `TypeError("Failed to fetch")`, second answers → both calls' bodies equal, party revision
+    included, even though the party was read again between them.
+  - `"a stale party revision asks again with a fresh id"`: `party.out_of_date` → the next confirm
+    sends a new submission id and the newly read revision.
+  - `"the advances refusal names its amount"`: `{ code: "bill.below_advances", advances: "15.00" }`
+    → the dialog says "…its own receipt (€15.00)…".
+  - `"a card still pending shows the payment in progress and reads the table's bill"`.
+  - `"at the Counter the window stays, says the payment was taken, and reads the order again"`.
+  In `bill-pay-dialog.test.ts`: `"asks no receipt guests and no own receipt for items"`;
+  `"shows the preview's total for the chosen items"` (preview `total: "31.00"` against a client sum
+  of €30.00 → €31.00 shown).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-pay-for-items.test.ts
+  src/widgets/bill-pay-dialog.test.ts`. Expected: FAIL (the items preview still goes to
+  `previewBillPayment`).
+- [ ] **Step 3: Implement** as the Interfaces block says, and change the checks listed under
+  **Changed test checks** (move an items step to the new routes; delete the two named groups).
+- [ ] **Step 4: Run** the Step 2 command, then `pnpm --filter @waitron/till exec vitest run
+  src/till-app-bill-payments.test.ts src/till-app-current-bill-pay.test.ts
+  src/till-app-handheld-pay.test.ts src/till-app-counter-payment-window.test.ts
+  src/till-app-set-menus.test.ts`, then `pnpm --filter @waitron/till typecheck` and from the root
+  `pnpm exec vitest run scripts/product-file-size.test.ts` (after the rebase onto `main`, which
+  carries the guard). Expected: PASS; read each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Pay for chosen items on a bill of their own from the till"`.
+
+### Task 3 (PR 2): The table's bill says it is being paid elsewhere, or paid too much
+
+**Files:**
+- Create: `apps/till/src/screens/bill-money-notice.ts` (~110 lines): `beingPaidNotice(balance)`,
+  `overpaidNotice({ balance, tipsEnabled, busy, onGiveBack, onKeepAsTip })`, `billMoneyNoticeStyles`
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (+~25, to ~7,541; only the lines named
+  under **Lane B** above): properties `tipsEnabled`, `overpaidBusy`; `#takesPayment()`; the notices
+  rendered in `#orderSummary` after `#mealEndOutcome()`; it dispatches `refund-excess`
+  `{ excess: overpaid }` and `keep-as-tip`
+- Modify: `apps/till/src/screens/table-bill-controls.ts` (+~4): `owes()` (`:12-18`) shows
+  "€5.00 over" for a bill whose `outstanding` is below zero (the party bills list gives an overpaid
+  bill a negative `outstanding`, `apps/server/src/parties.ts:774-775`)
+- Modify: `apps/till/src/widgets/bill-pay-dialog.ts` (+~8, to ~2,444): `#balance()` (`:1517-1540`)
+  shows **Paid over the total** instead of a negative **Still to pay**
+- Modify: `apps/till/src/till-app.ts` (+~35, to ~26,145): `.tipsEnabled` and `.overpaidBusy` at both
+  `<till-table-order-screen>` sites (`:24650`, `:24863`); `@keep-as-tip` beside `@refund-excess`
+  (`:25386`); `#onKeepAsTip()` (PR2-D10): `keepOverpaidAsTip(activeTabId, crypto.randomUUID())`
+  under `TABLE_REQUEST_LIMIT_MS`, the answer stored as `billBalance` while the bill is on screen, a
+  refusal through `#onTableRefusal` (`:15418`), then `#rereadAmounts`
+- Modify: `apps/till/src/i18n/strings.ts`: `table.being_paid_on` ("Being paid on {bill}" /
+  "Se está cobrando en la {bill}"), `table.overpaid` ("Paid {amount} more than this bill comes to" /
+  "Se ha pagado {amount} más de lo que suma esta cuenta"), `table.give_back` ("Give back {amount}" /
+  "Devolver {amount}"), `table.keep_as_tip` ("Keep {amount} as tip" / "Dejar {amount} de propina"),
+  `table.bill_overpaid` ("{amount} over" / "{amount} de más"), `bill_pay.overpaid` ("Paid over the
+  total" / "Pagado de más")
+- Test: create `apps/till/src/screens/bill-money-notice.test.ts`; extend
+  `apps/till/src/screens/till-table-order-screen.bill-payments.test.ts`,
+  `till-table-order-screen.bill-payments.a11y.test.ts`, `till-table-order-screen.bill-switcher.test.ts`;
+  add cases to `apps/till/src/till-app-pay-for-items.test.ts`
+
+**Interfaces:** consumes `BillBalance.overpaid`/`beingPaidOn` and `keepOverpaidAsTip` (Task 1),
+`billNumberLabel` (`state/bill-state.ts:111-115`).
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"an open bill being paid elsewhere says which bill"`: `beingPaidOn: { billId: "wo-9", billNumber: 3 }`
+    → "Being paid on Bill 3"; Pay still offered.
+  - `"an overpaid bill says by how much and offers no Pay"`: `overpaid: "5.00"` → the sentence,
+    **Give back €5.00**, **Keep €5.00 as tip**, and no `[data-pay-sheet]`, `[data-pay-rest]` or
+    `till-tender-pay`, at till width and at handheld width (`handheld`, not `wide`).
+  - `"with tips off only Give back is offered"`.
+  - `"Give back asks for the excess to be refunded"`: click → `refund-excess` with
+    `{ excess: "5.00" }`, bubbling and composed.
+  - `"Keep as tip is quiet while it is out"`: `overpaidBusy` → both buttons disabled.
+  - `"the switcher shows an overpaid bill's excess, not a negative amount"`.
+  - `"the Pay window shows what was paid over the total"`.
+  - a11y: the overpaid notice in light and dark themes passes axe.
+  In `till-app-pay-for-items.test.ts`: `"Keep as tip sends a fresh submission id and shows the bill
+  paid"` (answer `status: "settled"` → `getPartyBills` read again, the switcher row Paid ✓);
+  `"a refused Keep as tip says why and reads the bill again"` (`bill.not_overpaid`);
+  `"Give back opens the Refund window on the excess"` (one refundable payment → the refund dialog's
+  `suggested` is "5.00").
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/screens/bill-money-notice.test.ts
+  src/screens/till-table-order-screen.bill-payments.test.ts src/till-app-pay-for-items.test.ts`.
+  Expected: FAIL, module `./bill-money-notice.js` not found.
+- [ ] **Step 3: Implement.** The notice reads `balance` only when it is the bill on screen's
+  (`#balanceShown`, `till-table-order-screen.ts:5385-5388`).
+- [ ] **Step 4: Run** the Step 2 command plus `src/screens/till-table-order-screen.bill-payments.a11y.test.ts
+  src/screens/till-table-order-screen.bill-switcher.test.ts src/screens/till-table-order-screen.test.ts`,
+  `pnpm --filter @waitron/till typecheck`, and from the root `pnpm exec vitest run
+  scripts/no-hardcoded-chrome-views.test.ts scripts/primary-coloured-text.test.ts
+  scripts/style-token-names.test.ts`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Show on the table's bill when it is being paid on another bill, or paid more than it comes to"`.
+
+### Task 4 (PR 2): Giving back money just taken asks for no PIN
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` (+~8, to ~26,153): `#onRefundContinue` (`:24005-24017`) sends
+  a hand-keyed give-back of no more than the Pay window's `balance.overpaid` without asking first;
+  `#sendRefund`'s catch (`:24090-24100`) also asks approvers on `bill.manual_refund_pin_required`;
+  `#renderBillRefunding` (`:13512-13527`) passes `.pinFreeUpTo`
+- Modify: `apps/till/src/widgets/bill-refund-dialog.ts` (+~12): property `pinFreeUpTo: string | null`;
+  for an amount up to it, `bill_refund.approval_next` (`:431`) is left out and the terminal step uses
+  `bill_refund.terminal_next_no_pin` / `bill_refund.terminal_no_pin`
+- Modify: `apps/till/src/i18n/strings.ts` (the two new keys, English and Spanish, the PIN sentence
+  dropped from today's wording)
+- Test: extend `apps/till/src/widgets/bill-refund-dialog.test.ts` and
+  `apps/till/src/till-app-pay-for-items.test.ts`
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"a hand-keyed give-back within the excess is recorded with no PIN"`: overpaid €5.00, payment
+    entered `manual`, give back €5.00, confirm the terminal step → one `refundBillPayment` call with
+    `manualConfirmed: true` and no `override`; no `till-supervisor-override-dialog`.
+  - `"a hand-keyed give-back the server still wants approved asks a PIN"`: first call rejects
+    `bill.manual_refund_pin_required` → approvers read, PIN prompt, second call carries `override`
+    under the same submission id.
+  - `"any other hand-keyed refund asks the PIN first, as today"`: overpaid €0.00 → no call before
+    the PIN (the existing check at `till-app-bill-payments.test.ts:8035` passes unedited).
+  - In `bill-refund-dialog.test.ts`: `"says no PIN is needed for an amount up to pinFreeUpTo"` and
+    `"says a manager approves an amount above it"`, both languages.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-refund-dialog.test.ts
+  src/till-app-pay-for-items.test.ts`. Expected: FAIL on the first case (a PIN prompt opens).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command plus `src/till-app-bill-payments.test.ts
+  src/widgets/bill-refund-dialog.a11y.test.ts src/i18n/refund-wording.test.ts` and
+  `pnpm --filter @waitron/till typecheck`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Give back what a bill was paid over its total with no manager's PIN"`.
+
+### Task 5 (PR 2): Look at it, then say it in the guides
+
+**Files:**
+- Modify: `apps/server/src/guide/en/table-service.md` and `apps/server/src/guide/es/table-service.md`
+  (`{#pay-window}`, en `:944-1000`, es from `:1010`; `{#refund-payment}`, en `:255-270`)
+- Modify: `docs/backlog/menu.md` (A1515's piece 1 line, `:872`)
+
+- [ ] **Step 1: Look.** Start a stack on a Claude slot: `wa-wt demo waitron-feat-a1515-1-pay-items-till`
+  (`wa-wt ls` gives its till address; never slot 0, never the owner's stack). On a seated demo table
+  with three dishes, at till width and at phone width (390 px), in light and dark: Pay > Items >
+  one dish > Cash; the confirmation's price and "own bill" line; the receipt window; the table's
+  bill after it and the switcher. Then a reader card with the simulator's **declined** outcome
+  (the table's bill unchanged). Then make a bill overpaid (a contribution of €20 on a €25 bill,
+  then Pay for items of €10) and look at the sentence, **Give back**, **Keep as tip** and the
+  switcher row. Fix what reads or lays out badly in the task that drew it. Screenshots stay in the
+  working folder and are shown to the owner directly; none is committed. `wa-wt down
+  waitron-feat-a1515-1-pay-items-till` afterwards.
+- [ ] **Step 2: Write the guides from what Step 1 showed**, English then the Spanish twin, same
+  `{#id}`s: in `{#pay-window}`, replace "For items, choose the dishes and adjust the quantity…" with
+  what staff now do: the chosen dishes go to a bill of their own, paid at once, with its own
+  receipt; choosing every dish pays the whole bill; a declined card or **Cancel payment** puts them
+  back; **Being paid on Bill N** while a card for them is out. Add a short paragraph: a bill paid more
+  than it comes to says so; **Give back** returns it (no manager's PIN for that amount) and **Keep as
+  tip** keeps it, after which the bill's receipt prints. Cut, do not reword, any sentence Step 1
+  proved wrong. The paid-mark sentences (en `:263-264`, `:749`, `:763-767`) stay for PR 3, which
+  removes the marks they describe.
+- [ ] **Step 3: Update the backlog**: A1515's piece 1 line says the till now pays for items on a
+  bill of their own (pull request 2 of 4), and pull requests 3 and 4 follow.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts
+  src/guide-box-word.test.ts` and from the root `pnpm exec vitest run scripts/guide-links.test.ts
+  scripts/english-only.test.ts`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Say in the table service guide what Pay for items now does"`,
+  then `/finish-branch` with the full wave; the owner lands it.
+
+**For the watcher (not blocking PR 2's build), where PR 1's answers fall short of the outline:**
+(1) the items route drops a hand-keyed card's operation number and machine, receipt guests and
+receipt language (PR2-D5); (2) the party bills list and the table's **Still to pay** count an
+overpaid bill's excess as a negative amount owed (`parties.ts:774-775`; Task 3 fixes only the
+switcher row); (3) Keep as tip and a refund that issue the bill answer no invoice, so the till
+shows no receipt window for it (the server still prints the receipt); (4) choosing a set-menu dish
+with a supplement without its set menu, which today's items payment takes, is now refused with Move
+dishes' words, "The other bill has no place for …".
 
 ## PR 3 — Removal (`feat/a1515-1-items-kind-removal`)
 
