@@ -122,6 +122,7 @@ function refundPrint(fields: {
   manualConfirmed: boolean;
   cancellationIds?: readonly string[];
   invoiceCorrectionId?: string;
+  pressPrint?: string;
 }): string {
   return fingerprint({
     saleId: fields.saleId,
@@ -136,6 +137,7 @@ function refundPrint(fields: {
     ...(fields.invoiceCorrectionId === undefined
       ? {}
       : { invoiceCorrectionId: fields.invoiceCorrectionId }),
+    ...(fields.pressPrint === undefined ? {} : { pressPrint: fields.pressPrint }),
   });
 }
 
@@ -315,6 +317,9 @@ export async function reserveTenderRefund(
   /** The correction `request.invoiceCorrection` names, as the caller read it in this transaction;
    * set only by server code, never from a request body. */
   correctionRead?: CorrectionRead,
+  /** The whole Give money back press this refund is part of, so a resend of its id with another
+   * press is refused; set only by server code. */
+  pressPrint?: string,
 ): Promise<{
   refund: typeof refunds.$inferSelect;
   replayed: boolean;
@@ -357,6 +362,7 @@ export async function reserveTenderRefund(
     manualConfirmed: request.manualConfirmed === true,
     ...(cancellationIds === undefined ? {} : { cancellationIds }),
     ...(correctionLink === undefined ? {} : { invoiceCorrectionId: correctionLink.id }),
+    ...(pressPrint === undefined ? {} : { pressPrint }),
   });
   await resolveTransactionScope(tx, saleId);
   const [earlier] = await tx

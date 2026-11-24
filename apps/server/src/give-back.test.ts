@@ -73,7 +73,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
-import { personHolding } from "./testing/session-holding.js";
+import { confineTo, personHolding } from "./testing/session-holding.js";
 import { TradingAdmission } from "./trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
@@ -133,6 +133,24 @@ vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
       return real.fileCorrectionAutomatically(...args).finally(() => {
         backend.checkIntegrity = check;
       });
+    },
+  };
+});
+
+/** Armed, the next `closeInvoiceCorrection` is refused, as a stepdown refusing the write. */
+const discardFault = vi.hoisted(() => ({ armed: false }));
+vi.mock("./invoice-corrections.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./invoice-corrections.js")>();
+  return {
+    ...real,
+    closeInvoiceCorrection: (...args: Parameters<typeof real.closeInvoiceCorrection>) => {
+      if (discardFault.armed) {
+        discardFault.armed = false;
+        return Promise.reject(
+          new AppError("venue.time_zone_not_ready", { reason: "stepping down" } as never),
+        );
+      }
+      return real.closeInvoiceCorrection(...args);
     },
   };
 });
@@ -2157,5 +2175,153 @@ describe("POST …/give-back on a card reader", () => {
     expect(effects()).toEqual(after);
     expect(await correctionsOn(saleId)).toEqual([]);
     expect((await refundRowsOf(saleId)).map((row) => row.state)).toEqual(["pending"]);
+  });
+});
+
+describe("POST …/give-back on a card reader: fix round 1", () => {
+  it("answers a resend while the first send is still running with no rest, so nothing goes back twice", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00", way: reader }));
+    const calls = cardCallsNow();
+    const release = venue.card.holdNextRefund();
+    const first = give(saleId, body);
+    await vi.waitFor(() => expect(venue.card.refundCalls.length).toBe(calls.refunds + 1));
+    const resent = await give(saleId, body);
+    expect(resent.status, JSON.stringify(resent.json)).toBe(200);
+    expect(resent.json).toMatchObject({
+      parts: [{ state: "pending" }, { state: "not_started" }],
+      rest: null,
+    });
+    release();
+    expect((await first).json).toMatchObject({
+      parts: [{ state: "completed" }, { state: "completed" }],
+      rest: null,
+    });
+    const rest = (resent.json as { rest: GiveBackRequest | null }).rest;
+    if (rest !== null) await give(saleId, await giveBody(saleId, rest));
+    expect(cardCallsSince(calls).refunds).toEqual(["3.00", "10.00"]);
+    expect((await correctionsOn(saleId)).map((row) => [row.state, row.gross])).toEqual([
+      ["filed", 1000],
+    ]);
+  });
+
+  it("refuses submission.id_reused when another request reuses a reader press's ids, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("extra", "3.00", { way: reader }));
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "extra", state: "completed" }] });
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, {
+        ...body,
+        purpose: "goodwill",
+        amount: "10.00",
+        extra: "3.00",
+        expected: [
+          { kind: "extra", amount: "3.00", way: reader },
+          { kind: "correction", amount: "10.00", way: reader, lineIds: [] },
+        ],
+      }),
+      "submission.id_reused",
+      before,
+    );
+  });
+
+  it("checks the person's rights again for each part: removed after the extra, the leg is refused and the extra stays back", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const refunder = await signedInHolding(["sale.refund", "sale.rectify"], "9753");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00", way: reader }));
+    const answerOf = venue.card.sendRefund.bind(venue.card);
+    const spy = vi.spyOn(venue.card, "sendRefund").mockImplementationOnce(async (query) => {
+      const answered = await answerOf(query);
+      await confineTo(venue.db, refunder.personId, []);
+      return answered;
+    });
+    onTestFinished(() => spy.mockRestore());
+    const answer = await give(saleId, body, refunder.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "extra", state: "completed" },
+        { kind: "correction", state: "not_started" },
+      ],
+      refusal: { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
+    });
+    expect(await correctionsOn(saleId)).toEqual([]);
+    expect((await refundRowsOf(saleId)).map((row) => row.state)).toEqual(["completed"]);
+  });
+
+  it("answers the outcome, the correction under way, when discarding it after a declined leg is refused", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00", way: reader }));
+    venue.card.scriptNextRefund({ made: "completed", answer: "made" });
+    venue.card.scriptNextRefund({ made: "failed", answer: "made" });
+    discardFault.armed = true;
+    onTestFinished(() => {
+      discardFault.armed = false;
+    });
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "extra", state: "completed" },
+        { kind: "correction", state: "pending" },
+      ],
+      refusal: { code: "give_back.refund_failed" },
+      underWay: { state: "open", gross: "10.00" },
+      rest: null,
+    });
+    expect(discardFault.armed).toBe(false);
+  });
+
+  it("gives a cancelled dish's money and then corrects a served dish, stopping with the correction as rest while the first is pending", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }]);
+    const reader = await tenderOf(saleId, "card");
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const ticked = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    const body = await giveBody(saleId, ask("dishes", "24.50", { lineIds: ticked, way: reader }));
+    expect(body.expected).toEqual([
+      { kind: "refund", amount: "18.50", way: reader, cancellationIds: [cancelId] },
+      { kind: "correction", amount: "6.00", way: reader, lineIds: [ticked[1]] },
+    ]);
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+    const calls = cardCallsNow();
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "pending" },
+        { kind: "correction", amount: "6.00", state: "not_started" },
+      ],
+      refusal: null,
+      rest: { purpose: "dishes", lineIds: ticked, amount: "6.00", extra: "0.00", way: reader },
+    });
+    expect(cardCallsSince(calls).refunds).toEqual(["18.50"]);
+    const refundId = (answer.json as { parts: { refundId: string }[] }).parts[0]!.refundId;
+    const retried = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/tender-refunds/${refundId}/retry`,
+      {},
+    );
+    expect(retried.json).toMatchObject({ state: "completed" });
+    const rest = (answer.json as { rest: GiveBackRequest }).rest;
+    const finished = await give(saleId, await giveBody(saleId, rest));
+    expect(finished.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "6.00", state: "completed" }],
+      rest: null,
+    });
+    expect(cardCallsSince(calls).refunds).toEqual(["18.50", "18.50", "6.00"]);
   });
 });

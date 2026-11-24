@@ -451,8 +451,9 @@ The route works out the rights its parts need: `sale.refund` for any plain refun
 cancel's approval (D9) and for every leg, `sale.rectify` to open a correction. For cash and a
 separate terminal it checks an approver's PIN once, ahead of the transaction (`overrideToCheck` with
 `checkedAnyway = true` and `withPinCheckAhead`, `apps/server/src/pin-check-ahead.ts:55-74`), then
-authorizes each right inside with that check (`withCheck`). On a card reader the PIN is typed once
-and checked once per part, since each part goes through `refundSettledTender`. The device checks are
+authorizes each right inside with that check (`withCheck`). On a card reader the PIN is typed and
+checked once, ahead of the first transaction; each part's own transaction then authorizes its rights
+again from the person's roles and session as they are then, reusing that PIN check (no second PIN). The device checks are
 today's, as `withTenderRefundAuthorization` makes them (`apps/server/src/tender-refund-authorization.ts:129-155`):
 still signed in on this device, not a kitchen screen, admitted to the device's profile, the receipt's
 zones, the profile taking that kind of payment. Task 4 moves those lines into one function both
@@ -951,7 +952,8 @@ window, the messages and the guides change together. A1564 (custom item) edits
 - **I3** (the window could not open on a refused receipt): any refusal falls back to `gross`; Task 1.
 - **I4**: `carryNewTenderRefund`, `requireEconomicWrite`, `assertRequestDevice`; dish-only clock test.
 - **I5**: a correction opens in the same transaction as its leg and is discarded if the leg fails;
-  `rest` stated as kept on one till (5.3); Task 5.
+  `rest` stated as kept on one till (5.3); Task 5. Limit: a leg the card company leaves pending and
+  the background recovery later marks failed leaves its correction open, as Correct invoice does.
 - **I6** (D10 broke "what is filed does not change"): one correction, the rest under way (5.2 step 7).
 - **I7**: section 7 and the task files gained the listed tests and the dashboard alerts.
 - **I8**: cases 6 and 10 added; the never-a-wait list completed; the voided row's stand-in noted; the

@@ -34,6 +34,7 @@ export function mountGiveBackApi(
     pool: deps.pool,
   });
   const giveBackDeps: GiveBackWriteDeps = {
+    db: deps.db,
     backend: deps.backend,
     admission: deps.admission,
     clock: deps.clock,
