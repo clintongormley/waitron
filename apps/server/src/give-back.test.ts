@@ -2399,3 +2399,63 @@ describe("POST …/give-back on a card reader: fix round 2", () => {
     });
   });
 });
+
+describe("POST …/give-back: resends checked against the press's own fields", () => {
+  it("refuses submission.id_reused when a resend names a cancel the stored refund is not linked to, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    await cancel(b, "Paella", "1", true);
+    const otherCancel = await cancel(b, "Croquetas", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const body = await giveBody(saleId, ask("dishes", "18.50", { lineIds: paella }));
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "refund", state: "completed" }] });
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, { ...body, fromCancel: [otherCancel] }),
+      "submission.id_reused",
+      before,
+    );
+  });
+
+  it("answers a cash extra-only resend as its first send, writing nothing, and refuses its ids reused for goodwill plus the extra", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    const body = await giveBody(saleId, ask("extra", "3.00"));
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "extra", state: "completed" }] });
+    const after = effects();
+    expect(await give(saleId, body)).toEqual(first);
+    expect(effects()).toEqual(after);
+    expectRefusedUnwritten(
+      await give(saleId, {
+        ...body,
+        purpose: "goodwill",
+        amount: "10.00",
+        extra: "3.00",
+        expected: [
+          { kind: "extra", amount: "3.00", way: "cash" },
+          { kind: "correction", amount: "10.00", way: "cash", lineIds: [] },
+        ],
+      }),
+      "submission.id_reused",
+      after,
+    );
+  });
+
+  it("answers an extra-only resend on a separate terminal as its first send, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }], "3.00");
+    const card = await tenderOf(saleId, "card");
+    const body = {
+      ...(await giveBody(saleId, ask("extra", "3.00", { way: card }))),
+      manualConfirmed: true,
+      override: supervisor(),
+    };
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "extra", state: "completed" }] });
+    const after = effects();
+    expect(await give(saleId, body)).toEqual(first);
+    expect(effects()).toEqual(after);
+  });
+});
