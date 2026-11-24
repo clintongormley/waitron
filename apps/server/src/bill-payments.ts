@@ -590,7 +590,7 @@ async function excessOf(
 
 /** By how much each of these bills holding a payment has received and reserved more than its
  * total; a bill that is not overpaid is left out. */
-export async function billExcesses(
+async function billExcesses(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<Map<string, Decimal>> {

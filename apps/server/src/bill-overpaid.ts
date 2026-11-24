@@ -1,10 +1,16 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { billPayments, recordActivity, tenders, type Transaction } from "@waitron/db";
 import { readPaymentsSettings } from "@waitron/payments";
-import { AppError, centsToDecimal, compareDecimal, decimalToCents } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  compareDecimal,
+  decimalToCents,
+  subtractDecimal,
+  sumDecimals,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import {
-  billExcesses,
   findSubmission,
   issueIfFullyPaid,
   readBillBalance,
@@ -27,15 +33,21 @@ import "./errors.js";
  * The permission a give-back of `amount` from a bill payment needs, its applied money and tip
  * together (owner, 2026-11-24): on a bill Pay for items left holding more than it owes, handing
  * back no more than that excess is money just taken on this bill, so `payment.take`; any other
- * refund `sale.refund`.
+ * refund `sale.refund`. The excess counts applied money only, so applied money given back lowers
+ * it and a tip given back does not: every tip the bill's payments have given back is counted
+ * against it too, or give-backs in turn could hand back more than it.
  */
 export async function refundPermission(
   tx: Transaction,
   workingOrderId: string,
   amount: Decimal,
 ): Promise<"payment.take" | "sale.refund"> {
-  const excess = (await billExcesses(tx, [workingOrderId])).get(workingOrderId);
-  return excess !== undefined && compareDecimal(amount, excess) <= 0
+  const { excess, held } = await readBillExcess(tx, workingOrderId);
+  if (excess === undefined) return "sale.refund";
+  const tipsGivenBack = held.map(({ row, netTip }) =>
+    subtractDecimal(centsToDecimal(row.tip), netTip),
+  );
+  return compareDecimal(sumDecimals([amount, ...tipsGivenBack]), excess) <= 0
     ? "payment.take"
     : "sale.refund";
 }

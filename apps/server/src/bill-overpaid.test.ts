@@ -438,6 +438,39 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "2.00" });
   });
 
+  it("a tip given back with no refund permission uses up the excess for the next give-back", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    const first = await take(billId, "cash", "12.00");
+    const tipped = await take(billId, "cash", "3.00", "2.00");
+    await payForCroquettes(party.partyId, billId);
+    const given = await giveBack(billId, tipped, "3.00", randomUUID(), { tip: "2.00" });
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+
+    const more = await giveBack(billId, first, "2.00");
+
+    expect(more).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(await paymentOf(first)).toEqual({ applied: "12.00", tip: "0.00" });
+  });
+
+  it("what a given-back tip leaves of the excess can still go back with no refund permission", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    const first = await take(billId, "cash", "13.00");
+    const tipped = await take(billId, "cash", "3.00", "2.00");
+    await payForCroquettes(party.partyId, billId);
+    const given = await giveBack(billId, tipped, "3.00", randomUUID(), { tip: "2.00" });
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+
+    const rest = await giveBack(billId, first, "1.00");
+
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "2.00" });
+  });
+
   it("giving back a payment's tip with applied money that together exceed the excess needs the refund permission", async () => {
     const party = await seatedWith(venue, "Croquettes", "Croquettes");
     const billId = party.tabId;
