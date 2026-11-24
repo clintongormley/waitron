@@ -152,7 +152,7 @@ it("lets publication use the retained-copy budget while reserve keeps its shorte
   ) as SavedCloudState;
   const realTimeout = AbortSignal.timeout.bind(AbortSignal);
   const deadline = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
-    if (ms === 8000) return AbortSignal.abort();
+    if (ms === 15_000) return AbortSignal.abort();
     return realTimeout(ms);
   });
   const id = randomUUID();
@@ -168,6 +168,33 @@ it("lets publication use the retained-copy budget while reserve keeps its shorte
     await expect(publishCloudCapture(state, id, metadata)).resolves.toMatchObject(metadata);
     expect(deadline).toHaveBeenCalledWith(50_000);
     await expect(reserveCloudCapture(state, id)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  } finally {
+    deadline.mockRestore();
+    await f.close();
+  }
+});
+it("waits past Cloud's ten-second storage grant for a reservation, then gives up", async () => {
+  let replyAfter = 0;
+  const f = await installationFixture(async (v, s, _req, res) => {
+    await new Promise((r) => setTimeout(r, replyAfter));
+    res.end(JSON.stringify(grant(v, s)));
+  });
+  await f.client.refresh();
+  const state = JSON.parse(
+    await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
+  ) as SavedCloudState;
+  const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const deadline = vi
+    .spyOn(AbortSignal, "timeout")
+    .mockImplementation((ms) => realTimeout(ms / 20));
+  try {
+    replyAfter = 11_500 / 20;
+    const id = randomUUID();
+    await expect(reserveCloudCapture(state, id)).resolves.toMatchObject({ id });
+    replyAfter = 18_000 / 20;
+    await expect(reserveCloudCapture(state, randomUUID())).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
   } finally {
