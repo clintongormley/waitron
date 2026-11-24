@@ -2391,6 +2391,7 @@ export interface PartyBill {
   leftUnpaid?: boolean;
   total: string;
   outstanding: string;
+  overpaid?: string;
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
   /** The bill holds money: a pending payment, or received money not all given back. A close as a

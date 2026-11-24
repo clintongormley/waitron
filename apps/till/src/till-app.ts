@@ -921,6 +921,8 @@ const TABLE_REFUSALS = new Set([
   "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
+  "bill.not_overpaid",
+  "bill.tip_not_allowed_on_excess",
   "working_order.not_open",
   "storage.disk_full",
   "clock.unconfirmed",
@@ -4413,6 +4415,7 @@ export class TillApp extends LitElement {
   #adjustments = 0;
   /** The payments of the bill on screen, while its party's bills say it holds any. */
   @state() private billBalance: BillBalance | null = null;
+  @state() private overpaidBusy = false;
   #billBalanceRead = 0;
   /** The open bill payment dialog, with what the server last answered it. */
   @state() private billPaying: BillPaying | null = null;
@@ -22788,6 +22791,30 @@ export class TillApp extends LitElement {
     await this.#openRefund(excess);
   }
 
+  /** The server records no submission, so each tap sends a new id and a lost answer is never sent
+   * again; the bill is read again whatever the answer. */
+  async #onKeepAsTip(): Promise<void> {
+    const billId = this.activeTabId;
+    if (billId === undefined || this.overpaidBusy) return;
+    const visit = this.#orderVisit;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    this.overpaidBusy = true;
+    this.errorKey = undefined;
+    let kept: BillBalance | undefined;
+    try {
+      kept = await this.api.keepOverpaidAsTip(billId, crypto.randomUUID(), {
+        signal: limit.signal,
+      });
+      if (this.activeTabId === billId) this.billBalance = kept;
+    } catch (error) {
+      if (!this.#hasLeftOrder(billId, visit)) await this.#onTableRefusal(error);
+    } finally {
+      limit.done();
+      this.overpaidBusy = false;
+    }
+    if (!this.#hasLeftOrder(billId, visit)) await this.#rereadAmounts(billId, visit, kept);
+  }
+
   async #openRefund(excess: string): Promise<void> {
     const open = await this.#openBillPaying(
       "contribution",
@@ -24683,6 +24710,8 @@ export class TillApp extends LitElement {
       .receiptLanguages=${this.receiptLanguages}
       .fullInvoices=${this.fullInvoices}
       .billBalance=${this.billBalance}
+      .tipsEnabled=${this.tipsEnabled}
+      .overpaidBusy=${this.overpaidBusy}
       .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
       .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
       .finishRefused=${this.finishRefused}
@@ -24896,6 +24925,8 @@ export class TillApp extends LitElement {
           .receiptLanguages=${this.receiptLanguages}
           .fullInvoices=${this.fullInvoices}
           .billBalance=${this.billBalance}
+          .tipsEnabled=${this.tipsEnabled}
+          .overpaidBusy=${this.overpaidBusy}
           .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
           .billPaymentHeld=${this.activeTabId !== undefined && this.#billPaymentHeld(this.activeTabId)}
           .finishRefused=${this.finishRefused}
@@ -25362,6 +25393,7 @@ export class TillApp extends LitElement {
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
+        @keep-as-tip=${() => void this.#onKeepAsTip()}
         @dining-change=${(event: CustomEvent<{ dining: Dining }>) => void this.#onDiningChange(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}

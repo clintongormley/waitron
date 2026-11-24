@@ -12,9 +12,12 @@ import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 function owes(bill: PartyBill): string {
   if (bill.deferred === true) return t("table.bill_deferred");
   if (bill.leftUnpaid && bill.status !== "settled") return t("departure.left_unpaid");
-  return bill.status === "settled"
-    ? t("table.bill_paid")
-    : formatMoney(decimal(bill.outstanding), currentLocale());
+  if (bill.status === "settled") return t("table.bill_paid");
+  return bill.overpaid === undefined
+    ? formatMoney(decimal(bill.outstanding), currentLocale())
+    : fill(t("table.bill_overpaid"), {
+        amount: formatMoney(decimal(bill.overpaid), currentLocale()),
+      });
 }
 
 /** The ✓ drawn after "Paid"; the word alone is what is read out. */

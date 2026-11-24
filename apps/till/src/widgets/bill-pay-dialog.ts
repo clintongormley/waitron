@@ -80,7 +80,7 @@ import {
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import { portionGroups } from "../state/portion-groups.js";
-import { itemsChoiceOf } from "../state/pay-for-items.js";
+import { itemsChoiceOf, overpaidOf } from "../state/pay-for-items.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -1512,6 +1512,7 @@ export class TillBillPayDialog extends LitElement {
     if (balance === null)
       return html`<p class="muted" data-pay-balance>${t("bill_pay.reading")}</p>`;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
+    const over = overpaidOf(balance);
     return html`<dl class="balance" data-pay-balance aria-label=${t("bill_pay.balance")}>
       <div data-pay-total>
         <dt>${t("bill_pay.total")}</dt>
@@ -1525,10 +1526,17 @@ export class TillBillPayDialog extends LitElement {
         <dt>${t("bill_pay.reserved")}</dt>
         ${amount(balance.reserved)}
       </div>
-      <div data-pay-outstanding>
-        <dt>${t("bill_pay.outstanding")}</dt>
-        ${amount(balance.outstanding)}
-      </div>
+      ${
+        over === null
+          ? html`<div data-pay-outstanding>
+              <dt>${t("bill_pay.outstanding")}</dt>
+              ${amount(balance.outstanding)}
+            </div>`
+          : html`<div data-pay-overpaid>
+              <dt>${t("bill_pay.overpaid")}</dt>
+              ${amount(over)}
+            </div>`
+      }
     </dl>`;
   }
 

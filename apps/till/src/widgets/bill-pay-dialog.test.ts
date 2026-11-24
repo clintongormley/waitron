@@ -308,6 +308,23 @@ describe("till-bill-pay-dialog: the bill's balance", () => {
     expect(text(root(el).querySelector("[data-pay-outstanding]"))).toContain(money("50.00"));
   });
 
+  it("the Pay window shows what was paid over the total", async () => {
+    const el = await mount({
+      balance: balanceOf({
+        total: "10.00",
+        received: "15.00",
+        outstanding: "-5.00",
+        overpaid: "5.00",
+      }),
+    });
+
+    expect(root(el).querySelector("[data-pay-outstanding]")).toBeNull();
+    const over = root(el).querySelector("[data-pay-overpaid]");
+    expect(text(over)).toContain(t("bill_pay.overpaid"));
+    expect(text(over)).toContain(money("5.00"));
+    expect(text(over)).not.toContain("-");
+  });
+
   it("shows the balance again when it is read again", async () => {
     const el = await mount();
     el.balance = balanceOf({ received: "30.00", outstanding: "90.00" });

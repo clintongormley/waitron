@@ -809,3 +809,120 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     });
   });
 });
+
+describe("till-app: a bill paid more than it comes to", () => {
+  const overpaidRow = billOf({
+    total: "10.00",
+    outstanding: "0.00",
+    overpaid: "5.00",
+    hasPayments: true,
+  });
+  const overpaidBalance = balanceOf({
+    total: "10.00",
+    received: "15.00",
+    outstanding: "-5.00",
+    overpaid: "5.00",
+    payments: [paymentOf({ applied: "15.00", tendered: "15.00" })],
+  });
+  const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
+
+  it("Keep as tip sends a fresh submission id and shows the bill paid", async () => {
+    let kept = false;
+    const getPartyBills = vi.fn(async () => [
+      kept
+        ? billOf({ total: "10.00", outstanding: "0.00", status: "settled", hasPayments: true })
+        : overpaidRow,
+    ]);
+    const keepOverpaidAsTip = vi.fn(async () => {
+      kept = true;
+      return balanceOf({
+        status: "settled",
+        total: "10.00",
+        received: "10.00",
+        outstanding: "0.00",
+        tips: "5.00",
+      });
+    });
+    const { el } = await mountApp({
+      getPartyBills,
+      getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
+      keepOverpaidAsTip,
+    });
+    const order = await openTable(el);
+    await flush(el);
+    expect(order.shadowRoot!.querySelector("[data-overpaid]")).not.toBeNull();
+    const reads = getPartyBills.mock.calls.length;
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+    await flush(el, 6);
+
+    expect(keepOverpaidAsTip).toHaveBeenCalledOnce();
+    const [billId, submissionId] = keepOverpaidAsTip.mock.calls[0]! as unknown as [string, string];
+    expect(billId).toBe("wo-4");
+    expect(submissionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
+    const row = order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]');
+    expect(text(row)).toContain(t("table.bill_paid"));
+    expect(row!.querySelector("[data-paid-mark]")).not.toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+  });
+
+  it("each Keep as tip sends its own submission id", async () => {
+    const keepOverpaidAsTip = vi.fn().mockRejectedValue({ code: "bill.not_overpaid", status: 409 });
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([overpaidRow]),
+      getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
+      keepOverpaidAsTip,
+    });
+    const order = await openTable(el);
+    await flush(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+    await flush(el, 6);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+    await flush(el, 6);
+
+    const ids = keepOverpaidAsTip.mock.calls.map((call) => call[1]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  it("a refused Keep as tip says why and reads the bill again", async () => {
+    const getPartyBills = vi.fn().mockResolvedValue([overpaidRow]);
+    const { el } = await mountApp({
+      getPartyBills,
+      getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
+      keepOverpaidAsTip: vi.fn().mockRejectedValue({ code: "bill.not_overpaid", status: 409 }),
+    });
+    const order = await openTable(el);
+    await flush(el);
+    const reads = getPartyBills.mock.calls.length;
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+    await flush(el, 6);
+
+    expect(text(banner(el))).toContain(codeMessage("bill.not_overpaid"));
+    expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
+    expect(order.overpaidBusy).toBe(false);
+  });
+
+  it("Give back opens the Refund window on the excess", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([overpaidRow]),
+      getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
+    });
+    const order = await openTable(el);
+    await flush(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!.click();
+    await flush(el, 6);
+
+    expect(dialog(el)).not.toBeNull();
+    const giving =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-bill-refund-dialog"]>(
+        "till-bill-refund-dialog",
+      )!;
+    expect(giving).not.toBeNull();
+    expect(giving.suggested).toBe("5.00");
+  });
+});

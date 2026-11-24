@@ -1,5 +1,7 @@
+import { compareDecimal, decimal } from "@waitron/shared";
 import type {
   AllocationPreview,
+  BillBalance,
   BillEditExpected,
   BillPaymentResult,
   BillRevisions,
@@ -24,6 +26,12 @@ export type ItemsPart = {
   expectedPartyRevision?: number;
   partyId?: string;
 };
+
+/** What an open or placed bill was paid over its total, or null when nothing is over. */
+export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): string | null {
+  const over = balance?.overpaid;
+  return over === undefined || compareDecimal(decimal(over), decimal("0")) <= 0 ? null : over;
+}
 
 type ItemsChoice = Extract<PayChoice, { kind: "items" }>;
 

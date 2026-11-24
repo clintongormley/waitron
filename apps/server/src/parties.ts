@@ -25,6 +25,7 @@ import type { CoreServices, TableRemoval } from "@waitron/module";
 import {
   AppError,
   centsToDecimal,
+  compareDecimal,
   jobOrigin,
   normalisePartyName,
   rawCentsToDecimal,
@@ -119,9 +120,11 @@ export interface PartyBill {
   total: string;
   /**
    * What is still to pay: the total of an open or placed bill less the money received against it,
-   * and nothing on a settled or abandoned one.
+   * and nothing on a settled or abandoned one, or on one received more than its total.
    */
   outstanding: string;
+  /** What an open or placed bill has received over its total; absent when nothing is over. */
+  overpaid?: string;
   /** A payment is pending or received on the bill, one given back in full included. */
   hasPayments: boolean;
   /** The bill holds money: a pending payment, or received money not all given back. A close as a
@@ -661,6 +664,7 @@ export async function readPartyBills(
       leftUnpaid: bill.leftUnpaid,
       total: bill.total,
       outstanding: bill.outstanding,
+      ...(bill.overpaid === undefined ? {} : { overpaid: bill.overpaid }),
       hasPayments: bill.hasPayments,
       ...(bill.holdsMoney === undefined ? {} : { holdsMoney: bill.holdsMoney }),
       receiptAvailable: sale !== undefined,
@@ -763,6 +767,10 @@ export async function readBillsOfParties(
         partyId: row.partyId!,
       });
     }
+    const outstanding = owing
+      ? outstandingOf(total, received.get(row.workingOrderId))
+      : centsToDecimal(0);
+    const over = compareDecimal(outstanding, centsToDecimal(0)) < 0;
     return {
       workingOrderId: row.workingOrderId,
       partyId: row.partyId!,
@@ -772,9 +780,8 @@ export async function readBillsOfParties(
       status: row.status,
       leftUnpaid: row.leftUnpaid,
       total,
-      outstanding: owing
-        ? outstandingOf(total, received.get(row.workingOrderId))
-        : centsToDecimal(0),
+      outstanding: over ? centsToDecimal(0) : outstanding,
+      ...(over ? { overpaid: outstandingOf(centsToDecimal(0), outstanding) } : {}),
       hasPayments: holding.has(row.workingOrderId),
       ...(holdingMoney.has(row.workingOrderId) ? { holdsMoney: true as const } : {}),
       ...(deferred.has(row.workingOrderId) ? { deferred: true as const } : {}),
