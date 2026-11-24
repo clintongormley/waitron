@@ -30,7 +30,7 @@ If Cloud becomes unavailable, open **Change destination or schedule** and choose
 
 ## Keep your keys {#keys}
 
-The **Backup encryption key** opens encrypted copies. The **Box key** authorises a restore or takeover. Keep the pack that holds the box key, even if your latest pack holds the backup encryption key.
+The **Backup encryption key** opens encrypted copies. The master key, on the first page of your recovery pack, authorises a restore or takeover. Keep the pack that holds the master key each backup needs.
 
 Use **Copy** or **Download key file** to keep the backup encryption key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.
 

@@ -53,7 +53,7 @@ Cuando se ha borrado la configuración, el servidor se reinicia. Después de **R
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
 restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el kit de recuperación
-(para tu bucket), y la clave del servidor de esa copia. Después de
+(para tu bucket), y la clave maestra de esa copia. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor», donde eliges cómo configurar
 este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», elige ahí
@@ -126,7 +126,7 @@ Mantén separados producción y preproducción. Si el manifiesto está dañado o
 copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
 de volver a intentarlo.
 
-Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la **Clave del servidor** de la copia elegida para autorizar la restauración. Conserva también el paquete anterior si contiene esa clave.
+Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida; escríbela en **Clave del servidor**. Conserva también el paquete anterior si contiene esa clave.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -205,7 +205,7 @@ observaciones en otros dispositivos.
 
 La restauración sustituye la base de datos que ya está en este servidor.
 
-Escribe la clave del servidor, marca las dos declaraciones y «Estos datos son
+Escribe la clave maestra en **Clave del servidor**, marca las dos declaraciones y «Estos datos son
 correctos.», y elige **Continuar**. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Si el servidor no puede comprobar su hora
@@ -234,7 +234,7 @@ Si, después de elegir el botón de restaurar, el servidor necesita que vuelvas 
 la página donde lo elegiste muestra la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**, o **Este dispositivo** si la hora del servidor está
 mal. Si esa página se cerró, abre cualquier página del servidor en un móvil, ordenador o caja de la
-red del local e introduce la clave del servidor de la copia elegida para ver
+red del local e introduce la clave maestra de la copia elegida para ver
 el mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
 dice que no pudo crear sus nuevas series de facturas, elige **Reintentar un arranque normal**, o
 **Descartar esta restauración** donde esa página lo ofrece y vuelve a restaurar.
@@ -252,7 +252,7 @@ abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y 
 la primera pantalla de la página; desde ahí elige **Unirse o recuperar**, o en «Configura este
 servidor» **Unirse a un restaurante o recuperarlo** (**Recuperar un restaurante** cuando esa página
 ha encontrado otro servidor Waitron), y empieza de nuevo la restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
-introducir de nuevo la clave del servidor.
+introducir de nuevo la clave maestra.
 
 Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la
 mantengas abierta. El servidor guarda la solicitud y se reinicia. Si se detiene después de guardar la

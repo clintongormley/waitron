@@ -18,7 +18,7 @@ arriba lo indica y muestra cada factura afectada con lo que la AEAT tiene de ell
 de la AEAT, su huella y el nombre de la instalación están en **Detalles técnicos**. Elige **Abrir la
 recuperación del conflicto** y sigue
 [Recupera una identidad de facturación en conflicto](box-status.md#invoice-conflict). Necesitas la
-clave del servidor.
+clave maestra.
 
 ## Estado de los envíos {#progress}
 

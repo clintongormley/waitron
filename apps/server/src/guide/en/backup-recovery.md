@@ -49,7 +49,7 @@ If the setup’s own record is damaged, the page may offer a warned **Start agai
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
 bucket**, as on a new box; restoring needs the backup encryption key (for a backup file) or the recovery kit
-(for your bucket), and that backup's box key. After
+(for your bucket), and that backup's master key. After
 **Start again**, **Reconnect** opens "Set up this box", where you choose how to set up this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
 there to restore.
@@ -115,7 +115,7 @@ date, node and box key. Check those details before continuing. Keep production a
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the selected copy's **Box key** to authorise recovery. Keep the earlier pack too if it holds that key.
+Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made; type it in **Box key**. Keep the earlier pack too if it holds that key.
 
 On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -187,7 +187,7 @@ fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Enter the box key, tick both statements and "These details are correct.", then choose
+Enter the master key in **Box key**, tick both statements and "These details are correct.", then choose
 **Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
@@ -213,7 +213,7 @@ If, after you choose the restore button, the box needs its time confirmed again,
 you chose it shows the box's time and this device's: check that both are right, then choose
 **Confirm the time**, or **This device** if the box's time is wrong. If that page was closed, open
 any of the box's pages on a phone, computer or till on the venue's network and enter the selected
-backup's box key to see the same step. The restore then carries on by
+backup's master key to see the same step. The restore then carries on by
 itself. If the box instead shows a page saying it could not make its new invoice series, choose
 **Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 
@@ -230,7 +230,7 @@ Changing the file, key or environment discards what it checked, and a reload ope
 first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
 restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
 restore again. If the box refuses the
-restore, the page returns to the form and you enter the box key again.
+restore, the page returns to the form and you enter the master key again.
 
 Once you choose the restore button, the page says "Provisioning this box" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start
