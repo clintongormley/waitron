@@ -31,6 +31,7 @@ import { appendToChain, readChainHead } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
   makeReturnedBatches,
+  readOtherBoxesOriginals,
   readReturnedOriginals,
   readReturnedBatch,
   receiveReturnedOriginals,
@@ -394,6 +395,122 @@ it("includes a corrective sale's parent from another node and its payment facts"
   expect(more).toEqual([]);
   expect(batch!.sales.map((row) => row.id).sort()).toEqual([parent.saleId, correctionId].sort());
   expect(batch!.tenders.map((row) => row.id)).toEqual(["parent-payment"]);
+});
+
+it("reads only the named tail of an earlier box's chain, with its delivery state", async () => {
+  const first = await original("Earlier", 1);
+  const second = await appendOriginal(first, "Earlier", 2);
+  const third = await appendOriginal(first, "Earlier", 3);
+  await original("Sender", 4);
+  await suite.db.execute(sql`insert into verifactu_submissions
+    (registro_id, estado, proximo_intento_en, csv, confirmado_en)
+    values (${third.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z',
+      'kept-csv', '2026-07-20T17:21:00.000Z')`);
+  await suite.db.execute(sql`insert into verifactu_submissions (registro_id, estado,
+    proximo_intento_en) values (${first.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z')`);
+
+  const returned = await withTransaction(suite.db, (tx) =>
+    readOtherBoxesOriginals(tx, [{ nodeId: first.nodeId, sifId: first.sifId, after: 1 }]),
+  );
+
+  expect(returned.records.map((row) => row.id)).toEqual([second.recordId, third.recordId]);
+  expect(returned.sales.map((row) => row.id).sort()).toEqual([second.saleId, third.saleId].sort());
+  expect(returned.deliveries).toEqual([
+    expect.objectContaining({ registro_id: third.recordId, estado: "aceptado", csv: "kept-csv" }),
+  ]);
+});
+
+it("reads two earlier boxes' records box by box", async () => {
+  const one = await seedNode(suite.db, "One");
+  const two = await seedNode(suite.db, "Two");
+  const appended = [
+    await appendOriginal(one, "One", 1),
+    await appendOriginal(two, "Two", 2),
+    await appendOriginal(one, "One", 3),
+    await appendOriginal(two, "Two", 4),
+  ];
+
+  const returned = await withTransaction(suite.db, (tx) =>
+    readOtherBoxesOriginals(tx, [
+      { nodeId: two.nodeId, sifId: two.sifId, after: 0 },
+      { nodeId: one.nodeId, sifId: one.sifId, after: 0 },
+    ]),
+  );
+
+  const [first, second] = [one, two].sort((a, b) => (a.nodeId < b.nodeId ? -1 : 1));
+  const inBoxOrder = [first!, second!].flatMap((node) =>
+    appended.filter((record) => record.nodeId === node.nodeId).map((record) => record.recordId),
+  );
+  expect(returned.records.map((row) => row.id)).toEqual(inBoxOrder);
+  expect(returned.records.map((row) => [row.node_id, row.secuencia])).toEqual([
+    [first!.nodeId, 1],
+    [first!.nodeId, 2],
+    [second!.nodeId, 1],
+    [second!.nodeId, 2],
+  ]);
+});
+
+it("reads a whole earlier chain with its corrective's parent sale and payments", async () => {
+  const parent = await original("Parent", 1);
+  const earlier = await seedNode(suite.db, "Earlier");
+  const [parentSale] = await suite.db.select().from(sales).where(eq(sales.id, parent.saleId));
+  const correctionId = saleId("10000000-0000-4000-8000-000000000002");
+  await suite.db.insert(sales).values({
+    ...parentSale!,
+    id: correctionId,
+    nodeId: earlier.nodeId,
+    deviceId: earlier.deviceId,
+    seriesId: earlier.seriesId,
+    correctsSaleId: parent.saleId,
+  });
+  await suite.db.insert(tenders).values({
+    id: "parent-payment",
+    saleId: parent.saleId,
+    method: "cash",
+    amount: 100,
+    tipAmount: 100,
+    settledAt: "2026-07-20T17:20:31.000Z",
+  });
+  await suite.db.insert(saleSettlements).values({
+    id: "parent-settlement",
+    saleId: parent.saleId,
+    settledAt: "2026-07-20T17:20:31.000Z",
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const [identity] = tx.all<{ nif: string; numero_instalacion: string }>(
+      sql`select nif, numero_instalacion from verifactu_identities where id = ${earlier.sifId}`,
+    );
+    const pending = altaFor(earlier, correctionId, 1, 35);
+    pending.input.IDEmisorFactura = identity!.nif;
+    pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+    pending.input.NumSerieFactura = "Earlier/1";
+    pending.input.TipoFactura = "R1";
+    pending.input.TipoRectificativa = "I";
+    pending.input.Destinatarios = {
+      IDDestinatario: [{ NombreRazon: "Customer", NIF: "89890001K" }],
+    };
+    pending.input.FacturasRectificadas = [
+      {
+        IDEmisorFactura: parent.issuerTaxId,
+        NumSerieFactura: "Parent/1",
+        FechaExpedicionFactura: pending.input.FechaExpedicionFactura,
+      },
+    ];
+    await appendToChain(tx, earlier.nodeId, pending);
+  });
+  await checkFixture();
+
+  const returned = await withTransaction(suite.db, (tx) =>
+    readOtherBoxesOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
+  );
+
+  expect(returned.records.map((row) => row.node_id)).toEqual([earlier.nodeId]);
+  expect(returned.sales.map((row) => row.id).sort()).toEqual([parent.saleId, correctionId].sort());
+  expect(returned.tenders.map((row) => row.id)).toEqual(["parent-payment"]);
+  expect(returned.settlements.map((row) => row.id)).toEqual(["parent-settlement"]);
+  expect(returned.devices.map((row) => row.id).sort()).toEqual(
+    [parent.deviceId, earlier.deviceId].sort(),
+  );
 });
 
 async function copyBase() {

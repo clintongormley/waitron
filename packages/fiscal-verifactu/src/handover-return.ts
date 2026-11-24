@@ -12,6 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { checkFiscalChains } from "./handover-chain-check.js";
+import type { ChainRange } from "./handover-unreturned.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS } from "./clock-behind.js";
@@ -51,12 +52,23 @@ function departmentIds(sales: ReturnRow[]) {
   return new Set(sales.map((row) => row.receipt_department_id));
 }
 
+/** The records one box wrote, or the named ranges of other boxes' chains. */
+function selectedRecords(select: string | readonly ChainRange[]) {
+  if (typeof select === "string") return { where: sql`node_id = ${select}`, order: sql`secuencia` };
+  const where = sql`exists (select 1 from json_each(${JSON.stringify(select)}) chosen
+    where node_id = json_extract(chosen.value, '$.nodeId')
+      and sif_id = json_extract(chosen.value, '$.sifId')
+      and secuencia > json_extract(chosen.value, '$.after'))`;
+  return { where, order: sql`node_id, sif_id, secuencia` };
+}
+
 export async function readReturnedOriginals(
   tx: Transaction,
-  sourceNodeId: string,
+  select: string | readonly ChainRange[],
 ): Promise<ReturnedOriginals> {
+  const chosen = selectedRecords(select);
   const saleIds = sql`(with recursive parents(id) as (
-    select sale_id from verifactu_records where node_id = ${sourceNodeId}
+    select sale_id from verifactu_records where ${chosen.where}
     union select s.corrects_sale_id from sales s join parents p on p.id = s.id
       where s.corrects_sale_id is not null
     union select s.substituted_sale_id from sale_substitutions s
@@ -74,10 +86,10 @@ export async function readReturnedOriginals(
     where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
   const records = tx.all<ReturnRow>(sql`
-    select * from verifactu_records where node_id = ${sourceNodeId} order by secuencia`);
+    select * from verifactu_records where ${chosen.where} order by ${chosen.order}`);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
-    select device_id from verifactu_records where node_id = ${sourceNodeId}
+    select device_id from verifactu_records where ${chosen.where}
     union select device_id from sales where id in ${saleIds}
     union select device_id from refunds where sale_id in ${saleIds} and state <> 'failed'
     union select p.device_id from payments p join refunds r
@@ -93,7 +105,7 @@ export async function readReturnedOriginals(
     e.mensaje_error, e.enviado_en, e.confirmado_en, e.reconciled_resubmit_at
     from verifactu_submissions e
     join verifactu_records r on r.id = e.registro_id
-    where r.node_id = ${sourceNodeId} order by e.registro_id`);
+    where ${chosen.where} order by e.registro_id`);
   const tenders = tx.all<ReturnRow>(
     sql`select * from tenders where sale_id in ${saleIds} order by id`,
   );
@@ -128,6 +140,13 @@ export async function readReturnedOriginals(
     voids,
     substitutions,
   };
+}
+
+export function readOtherBoxesOriginals(
+  tx: Transaction,
+  ranges: readonly ChainRange[],
+): Promise<ReturnedOriginals> {
+  return readReturnedOriginals(tx, ranges);
 }
 
 async function insertRow(tx: Transaction, table: string, row: ReturnRow) {
