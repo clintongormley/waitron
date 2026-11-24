@@ -5,7 +5,8 @@ import { page, userEvent } from "vitest/browser";
 import type { DashboardApi } from "../api/client.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { cleanupWidgets, dialogClosed, mountWidget, putBack } from "./test-helpers.js";
-import "../screens/menus-screen.js";
+import "./set-menu-lines-form.js";
+import "./set-menu-terms-form.js";
 
 useLocale("en-GB");
 afterEach(cleanupWidgets);

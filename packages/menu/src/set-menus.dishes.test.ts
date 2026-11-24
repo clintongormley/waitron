@@ -14,10 +14,18 @@ import { useMenuDb } from "../test/fixtures.js";
 import { duplicateMenu } from "./menu-copy.js";
 import { requireMenuRoot } from "./menu-structure.js";
 import { createMenu, deactivateMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
-import { addMember, addProducts, moveMember, removeMember, replaceMember } from "./sections.js";
+import {
+  addMember,
+  addProducts,
+  createSectionIn,
+  moveMember,
+  removeMember,
+  replaceMember,
+} from "./sections.js";
 import {
   addSetMenuDishes,
   copySetMenuDishes,
+  listDashboardMenus,
   readSetMenu,
   saveSetMenuLines,
   saveSetMenuVariantChoices,
@@ -257,6 +265,45 @@ it("reads the full menus holding the draft as well as its own names and terms", 
   });
   await app((tx) => deactivateMenu(tx, full.id));
   expect((await reading()).heldBy).toEqual([]);
+});
+
+it("lists each active offering menu once and refreshes when a placement is removed", async () => {
+  const { dinner, weekend, unused, nested, direct, repeated } = await app(async (tx) => {
+    const dinner = await createMenu(tx, { name: "Dinner" });
+    const weekend = await createMenu(tx, { name: "Weekend" });
+    const retired = await createMenu(tx, { name: "Retired" });
+    const unused = await createMenu(tx, { ...terms, name: "Unused" });
+    const root = await requireMenuRoot(tx, dinner.id);
+    const nested = await createSectionIn(tx, root, { internalName: "Specials" });
+    const ref = { kind: "set_menu", menuId: f.menuId } as const;
+    const direct = await addMember(tx, root, ref);
+    const repeated = await addMember(tx, nested.id, ref);
+    await addMember(tx, await requireMenuRoot(tx, weekend.id), {
+      kind: "section",
+      sectionId: root,
+    });
+    await addMember(tx, await requireMenuRoot(tx, retired.id), ref);
+    await deactivateMenu(tx, retired.id);
+    return { dinner, weekend, unused, nested, direct, repeated };
+  });
+
+  const list = async () => new Map((await app(listDashboardMenus)).map((row) => [row.id, row]));
+  const before = await list();
+  expect(before.get(f.menuId)?.heldBy).toHaveLength(2);
+  expect(before.get(f.menuId)?.heldBy).toEqual(
+    expect.arrayContaining([
+      { id: dinner.id, name: "Dinner" },
+      { id: weekend.id, name: "Weekend" },
+    ]),
+  );
+  expect(before.get(unused.id)?.heldBy).toEqual([]);
+  expect(before.get(dinner.id)).not.toHaveProperty("heldBy");
+
+  await app(async (tx) => {
+    await removeMember(tx, await requireMenuRoot(tx, dinner.id), direct.id);
+    await removeMember(tx, nested.id, repeated.id);
+  });
+  expect((await list()).get(f.menuId)?.heldBy).toEqual([]);
 });
 
 it("reports missing dishes, missing lines and a line with no active course", async () => {

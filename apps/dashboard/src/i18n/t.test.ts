@@ -104,7 +104,10 @@ it("says menú in Spanish only for an on-screen menu or a set menu, never a rest
     "menus.set_menu_price",
     "menus.set_menu_sources_load_error",
     "nav.account_menu",
+    "nav.set_menus",
     "sales.set_menus",
+    "set_menus.empty",
+    "set_menus.search",
   ]);
   expect(codeMessage("product.on_live_menu", "es")).not.toMatch(menu);
   expect(es["sales.set_menus"]).toBe("Menús");

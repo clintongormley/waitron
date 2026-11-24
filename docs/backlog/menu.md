@@ -330,7 +330,7 @@ retain the earlier scope and the six follow-ups.
 
 - **Menu sorting on phones** (watcher, 2026-11-23). The Status heading sorts by status where
   it is visible. The phone layout sorts by Name when Status disappears.
-  [Menus screen](../../apps/dashboard/src/screens/menus-screen.ts#L880-L891)
+  [Menus screen](../../apps/dashboard/src/screens/menus-screen.ts) applies the fallback in `updated`.
 
 ### Filters keeps a fixed breakpoint
 
@@ -778,8 +778,6 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
   menu as it is today; "Categories at time of sale" still reads what each line recorded.
 
 ### A1515. Set menus
-
-_2026-11-24: Set menus are to have a page of their own beside Menus, approved by the owner: [spec](../superpowers/specs/2026-11-24-menus-list-tabs-design.md)._
 
 _2026-11-24: Menus, set menus, products and variants use permanent Delete. The remaining code-only product deletion renames follow in their own pull request. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 

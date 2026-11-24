@@ -1,7 +1,14 @@
 import type { Transaction } from "@waitron/db";
 import { AppError, TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
 import { sql, type SQL } from "drizzle-orm";
-import { namedRows, blankIn, LIVE_CANDIDATE, POSITION } from "./content-translation-candidates.js";
+import {
+  namedRows,
+  translationParent,
+  blankIn,
+  LIVE_CANDIDATE,
+  POSITION,
+  type NamedRow,
+} from "./content-translation-candidates.js";
 import {
   canonicalTranslationLanguage,
   invalidTranslationQuery as invalid,
@@ -173,18 +180,12 @@ function filtered(filter: Filter, settings: TranslationSettings): SQL {
     ? sql`exists (select 1 from content_suggestions s where s.kind = candidates.kind and s.item_id = candidates.id and (s.fix_field is not null or s.placeholder = 1))`
     : sql`1`;
   return sql`with candidates as (${namedRows(undefined, filter.kind ? [filter.kind] : KINDS)}), filtered as (
-    select kind, id, name, owner, owner_name, ${POSITION} as position from candidates
+    select kind, id, name, owner, owner_name, owner_kind, ${POSITION} as position from candidates
     where ${LIVE_CANDIDATE} and (kind <> 'included_menu' or exists (select 1 from json_each(names)))
       and ${missingIn} and ${search} and ${fixes}
   )`;
 }
-type ItemRow = {
-  kind: TranslationRef["kind"];
-  id: string;
-  name: string;
-  owner: string | null;
-  owner_name: string | null;
-};
+type ItemRow = Pick<NamedRow, "kind" | "id" | "name" | "owner" | "owner_name" | "owner_kind">;
 async function items(
   tx: Transaction,
   refs: TranslationRef[],
@@ -212,12 +213,11 @@ async function items(
     const key = JSON.stringify([r.kind, r.id]);
     const row = byRef.get(key);
     const projected = byItem.get(key)!;
+    const parent = row && translationParent(row);
     return {
       ...r,
       name: row?.name ?? "",
-      ...(row?.owner && r.kind !== "product"
-        ? { parent: { id: row.owner, name: row.owner_name ?? "" } }
-        : {}),
+      ...(parent ? { parent } : {}),
       owners: projected[0]!.owners,
       cells: projected,
     };
@@ -233,7 +233,7 @@ export async function listTranslationItems(
   const configuration = translationConfiguration(settings);
   if ("targets" in checked) {
     const rows = await tx.execute<ItemRow>(
-      sql`select kind, id, name, owner, owner_name from (${namedRows(checked.targets)})`,
+      sql`select kind, id, name, owner, owner_name, owner_kind from (${namedRows(checked.targets)})`,
     );
     return {
       ...settings,
@@ -258,7 +258,7 @@ export async function listTranslationItems(
     ? sql`where position > ${KINDS.indexOf(last.kind)} or (position = ${KINDS.indexOf(last.kind)} and id > ${last.id})`
     : sql``;
   const page = await tx.execute<ItemRow>(
-    sql`${source} select kind, id, name, owner, owner_name from filtered ${after} order by position, id limit 51`,
+    sql`${source} select kind, id, name, owner, owner_name, owner_kind from filtered ${after} order by position, id limit 51`,
   );
   const refs = page.rows.slice(0, 50).map(({ kind, id }) => ({ kind, id }));
   return {

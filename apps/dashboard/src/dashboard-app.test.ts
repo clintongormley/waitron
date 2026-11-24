@@ -465,6 +465,7 @@ const NAV_SCREENS = [
   "sales",
   "products",
   "menus",
+  "set-menus",
   "bookings",
   "staff",
   "approvals",
@@ -1160,7 +1161,11 @@ describe("dashboard-app", () => {
       ],
     ],
     ["nothing", [], ["my-schedule", "orders"]],
-    ["menu.manage", ["menu.manage"], ["menus", "modifiers", "content-languages", "orders"]],
+    [
+      "menu.manage",
+      ["menu.manage"],
+      ["menus", "set-menus", "modifiers", "content-languages", "orders"],
+    ],
   ])(
     "a person holding only %s signs in and sees permitted pages",
     async (_name, permissions, screens) => {
@@ -3725,10 +3730,51 @@ describe("dashboard-app", () => {
     expect(order).toEqual([
       "nav-products",
       "nav-menus",
+      "nav-set-menus",
       "nav-modifiers",
       "nav-courses",
       "nav-units",
     ]);
+  });
+
+  it("opens each menu sidebar page without retaining an editor address", async () => {
+    history.replaceState(null, "", "/menus/menu/dinner/view/structure");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        listMenus: vi.fn().mockResolvedValue([
+          {
+            id: "dinner",
+            name: "Dinner",
+            kind: "menu",
+            active: true,
+            setPrice: null,
+            setVatClass: null,
+          },
+          {
+            id: "lunch",
+            name: "Lunch",
+            kind: "set_menu",
+            active: true,
+            setPrice: "12.00",
+            setVatClass: "reduced",
+            heldBy: [],
+          },
+        ]),
+      }),
+    });
+    await flush(el);
+    navItem(el, "menus")!.click();
+    await vi.waitFor(() => expect(location.pathname).toBe("/menus"));
+
+    navItem(el, "set-menus")!.click();
+    await vi.waitFor(() => expect(location.pathname).toBe("/set-menus"));
+    expect(el.shadowRoot!.querySelector("dashboard-set-menus-screen")).toBeTruthy();
+
+    history.pushState(null, "", "/set-menus/menu/lunch");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(location.pathname).toBe("/set-menus/menu/lunch"));
+    navItem(el, "set-menus")!.click();
+    await vi.waitFor(() => expect(location.pathname).toBe("/set-menus"));
   });
 
   it("hides Courses without venue.view", async () => {
@@ -8080,6 +8126,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
 
   it.each([
     ["menus", "dashboard-menus-screen"],
+    ["set-menus", "dashboard-set-menus-screen"],
     ["device-profiles", "dashboard-device-profiles-screen"],
     ["diagnostics", "dashboard-diagnostics-screen"],
     ["backup", "dashboard-backup-screen"],
@@ -8589,6 +8636,7 @@ describe("the nav search", () => {
     expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
     expect(shownItems(el)).toEqual([
       "nav-menus",
+      "nav-set-menus",
       "nav-products",
       "nav-modifiers",
       "nav-courses",

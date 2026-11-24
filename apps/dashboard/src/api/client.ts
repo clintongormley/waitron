@@ -88,7 +88,7 @@ export interface HandoverIntervals {
  * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { LegalAbout, TimingBand } from "@waitron/shared";
-import type { ProductItemsChange, SetMenuDetails } from "@waitron/menu";
+import type { DashboardMenuSummary, ProductItemsChange, SetMenuDetails } from "@waitron/menu";
 import type { ProductItemsRoutingPreview, RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
@@ -570,7 +570,7 @@ export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 export { DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
 export type { DietaryLabel, DietarySuitability, ContainsTag, DietOverride } from "@waitron/shared";
 
-export type { SetMenuDetails, SetMenuLine };
+export type { DashboardMenuSummary, SetMenuDetails, SetMenuLine };
 
 type SetMenuDraftTerms = {
   setPrice?: string;
@@ -3505,8 +3505,8 @@ export class DashboardApi {
 
   // ── Menu management ──────────────────────────────────────────────────────────────────────
 
-  listMenus(): Promise<MenuSummary[]> {
-    return this.#request<MenuSummary[]>("/management-api/menus", "GET");
+  listMenus(): Promise<DashboardMenuSummary[]> {
+    return this.#request<DashboardMenuSummary[]>("/management-api/menus", "GET");
   }
 
   getMenuStructures(): Promise<{ menu: MenuSummary; structure: MenuStructure }[]> {

@@ -331,7 +331,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   );
 
   it.each([390, 1280])(
-    "accessible menus list with price clash links and a set menu's Status, %ipx wide",
+    "accessible menus list with price clash links and only full menus, %ipx wide",
     async (width) => {
       const frame = { width: window.innerWidth, height: window.innerHeight };
       await page.viewport(width, 900);
@@ -341,7 +341,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await vi.waitFor(() => {
         expect(table.shadowRoot!.querySelector('[data-test="clashes-menu-lunch"]')).not.toBeNull();
         expect(table.shadowRoot!.querySelector('[data-test="clashes-menu-dinner"]')).not.toBeNull();
-        expect(table.shadowRoot!.querySelector('[data-test="status-set-daily"]')).not.toBeNull();
+        expect(table.shadowRoot!.querySelector('[data-test="open-set-daily"]')).toBeNull();
       });
       await expectNoA11yViolations(host);
     },
@@ -358,7 +358,6 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const { el, host } = await mount("populated", theme, "/menus");
     q(el, '[data-test="add-menu"]').click();
     await el.updateComplete;
-    q(el, '[data-test="create-menu"]').click();
     await vi.waitFor(() =>
       expect(q(el, '[data-test="menu-form"]').shadowRoot!.querySelector("wt-modal")?.open).toBe(
         true,

@@ -107,6 +107,7 @@ import "./screens/access-roles-screen.js";
 import "./screens/products-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
+import "./screens/set-menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/courses-screen.js";
 import "./screens/department-receipt-editor.js";
@@ -186,6 +187,7 @@ const CORE_SCREENS = [
   "products",
   "modifiers",
   "menus",
+  "set-menus",
   "courses",
   "units",
   "appearance",
@@ -305,6 +307,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { screen: "products", labelKey: "nav.products" },
       { screen: "menus", labelKey: "nav.menus", requiresPermission: "menu.manage" },
+      { screen: "set-menus", labelKey: "nav.set_menus", requiresPermission: "menu.manage" },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresPermission: "menu.manage" },
       { screen: "courses", labelKey: "nav.courses", requiresPermission: "venue.view" },
       { screen: "units", labelKey: "nav.units" },
@@ -2733,10 +2736,30 @@ export class DashboardApp extends LitElement {
 
   #selectScreen(screen: ScreenId, proceeded?: () => void): void {
     const destination = this.#permittedScreen(screen);
-    const navigation =
-      destination === "venue-operations"
-        ? this.#url.write({ dashboard: destination, department: null, view: null, zone: null })
-        : this.#writeScreenUrl(destination);
+    const navigate = () => {
+      switch (destination) {
+        case "venue-operations":
+          return this.#url.write({
+            dashboard: destination,
+            department: null,
+            view: null,
+            zone: null,
+          });
+        case "menus":
+          return this.#url.write({
+            dashboard: destination,
+            menu: null,
+            view: null,
+            section: null,
+            "price-filter": null,
+          });
+        case "set-menus":
+          return this.#url.write({ dashboard: destination, setMenu: null });
+        default:
+          return this.#writeScreenUrl(destination);
+      }
+    };
+    const navigation = navigate();
     void Promise.resolve(navigation).then((outcome) => {
       if (outcome === "proceeded" && this.isConnected && this.screen === destination) {
         this.#openGroupOf(destination);
@@ -3617,6 +3640,11 @@ export class DashboardApp extends LitElement {
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
           .reportLatePriceSave=${this.#lateSaveReporter("menus.price_not_saved")}
         ></dashboard-menus-screen>`;
+      case "set-menus":
+        return html`<dashboard-set-menus-screen
+          .api=${this.api}
+          .permissionContinuation=${this.#permissionContinuation}
+        ></dashboard-set-menus-screen>`;
       case "products":
         return html`<dashboard-products-screen .api=${this.api}></dashboard-products-screen>`;
       case "units":

@@ -111,11 +111,11 @@ export const CASA_DELGADO_ES = {
     lunch: MENU_DEL_DIA,
     setMenus: DEMO_SET_MENUS,
     setMenuHolderName: {
-      en: "Set menus",
-      es: "Menús",
-      ca: "Menús",
-      "ca-ES-valencia": "Menús",
-      gl: "Menús",
+      en: "Lunch menus",
+      es: "Menús de mediodía",
+      ca: "Menús de migdia",
+      "ca-ES-valencia": "Menús de migdia",
+      gl: "Menús do xantar",
     },
     drinksName: {
       en: "Drinks",

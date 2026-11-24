@@ -55,6 +55,7 @@ import {
   addProducts,
   addSetMenuDishes,
   copySetMenuDishes,
+  listDashboardMenus,
   readSetMenu,
   refuseSetMenu,
   saveSetMenuDishCourse,
@@ -1149,7 +1150,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   app.get("/management-api/menus", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(c, sessionId, (tx) => listMenus(tx));
+      const rows = await gated(c, sessionId, listDashboardMenus);
       return c.json(rows);
     }),
   );

@@ -122,6 +122,16 @@ async function addSoup(f: Awaited<ReturnType<typeof fixture>>) {
   return member;
 }
 
+it("lists the full menu that offers a set menu", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, (tx) => addMember(tx, f.fullRoot, f.ref));
+
+  const rows = await json<{ id: string }[]>(await f.send("GET", menus), 200);
+  expect(rows.find(({ id }) => id === f.set.id)).toMatchObject({
+    heldBy: [{ id: f.full.id, name: "Lunch" }],
+  });
+});
+
 it("creates a set-menu draft with its own price and rates", async () => {
   const { send } = await fixture();
   const created = await json<{ id: string }>(

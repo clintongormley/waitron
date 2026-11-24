@@ -803,12 +803,13 @@ it.each([
   ["option_label", "/modifiers/view/options/list/owner%20id"],
   ["extra_list", "/modifiers/view/extras/list/off-page"],
   ["menu", "/menus/menu/owner%20id/view/structure"],
+  ["menu", "/set-menus/menu/owner%20id", "set_menu"],
   ["section", "/menus/menu/owner%20id/view/structure"],
   ["included_menu", "/menus/menu/owner%20id/view/structure"],
   ["unit", "/units"],
 ] as const)(
   "keeps a %s note's exact editor link when its item is off the current page",
-  async (kind, href) => {
+  async (kind, href, ownerKind?) => {
     const { el, api } = await mount([
       suggestion({
         kind,
@@ -817,7 +818,14 @@ it.each([
         cell: null,
         fix: null,
         placeholder: true,
-        item: { name: "STAFF off-page", parent: { id: "owner id", name: "STAFF owner" } },
+        item: {
+          name: "STAFF off-page",
+          parent: {
+            id: "owner id",
+            name: "STAFF owner",
+            ...(ownerKind ? { kind: ownerKind } : {}),
+          },
+        },
       }),
     ]);
     const notes = panel(el)!;
