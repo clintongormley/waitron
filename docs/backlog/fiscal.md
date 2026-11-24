@@ -918,8 +918,10 @@ Each product has its own dated takeaway rate, picked as a percentage, everything
 at the one dine-in rate, and no product screen offers an eat-in VAT class (piece A,
 [plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Left, with no plan yet:
 
-- **Piece B:** set menus with no VAT of their own, and none taken away when their products'
-  takeaway rates differ. Until then a takeaway bill holding a set menu refuses new
+- **Piece B:** set menus have no VAT of their own. For takeaway, divide a set menu's price in
+  proportion to its dishes' à la carte prices and apply each dish's rate (owner, 24 November,
+  [set-menu design §4](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md#4-the-calculation)).
+  Until then a takeaway bill holding a set menu refuses new
   payments, comps, discounts and Print the bill (`set_menu.payment_not_ready`, A1515); piece B lifts that refusal and puts the takeaway set-menu steps back in the table-service guide (English and Spanish). Its last pull request (the plan's "PR L") removes the old VAT class labels: the
   `vat_class` and `takeaway_vat_class` columns on products and order lines, their checks, the
   hidden `defaultProductVatClass` setting and the shared class table's last readers.

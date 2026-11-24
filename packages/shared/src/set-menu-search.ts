@@ -71,7 +71,6 @@ export function searchMixes(problem: MixSearchProblem): MixSearchResult {
     cutoff: () => best?.cost ?? Infinity,
     accept: (candidate) => {
       if (!best || candidate.cost < best.cost) best = candidate;
-      return true;
     },
   });
   return best!;
@@ -86,7 +85,7 @@ interface MixVectors {
   readonly solve: (counts: number[], base: number) => MixSearchResult;
   readonly cutoff: () => number;
   readonly canSolve?: () => boolean;
-  readonly accept: (candidate: MixSearchResult) => boolean;
+  readonly accept: (candidate: MixSearchResult) => void;
 }
 
 export function searchMixVectors({
@@ -116,7 +115,7 @@ export function searchMixVectors({
 
     const start = next * offerCount;
     const candidate = solve(Array.from(vectors.subarray(start, start + offerCount)), bases[next]!);
-    if (!accept(candidate)) return false;
+    accept(candidate);
     bounds[next] = Infinity;
 
     slopes.fill(0);

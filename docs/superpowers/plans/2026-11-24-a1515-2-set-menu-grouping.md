@@ -40,7 +40,9 @@ and return the other discount as unused (watcher, 24 November at 10:38).
 
 **Search limit.** Keep the mix cap for enumerated count vectors. Reserve a smaller deterministic
 placement-solve budget for finding a complete fallback, and check it on the large fixture below.
-Start with valid saved places and test whole-menu additions so a first order can get a saving.
+Start with valid saved places and compare whole-menu additions by the saving each actually delivers
+after supplements and discounts (watcher, 24 November at 12:08). Check 600 small bills against
+enumeration and unchanged replay, and compare a sample of 16–20-diner bills against raised limits.
 Use the best complete result found that keeps valid saved places when the exact price is still
 unknown. A proven cheapest price stands even if tie-breaking stops early. On an unchanged repeat,
 keep the saved fallback price and places. Close any saved menu that becomes dearer than its

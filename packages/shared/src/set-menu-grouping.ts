@@ -17,6 +17,7 @@ export interface SetMenuGroupingDish extends Pick<SetMenuDish, "id" | "productId
 export type SetMenuGroupingDiscount = {
   readonly id: string;
   readonly offerId: string;
+  /** Carries the replaced ID for this calculation so the caller can retire it when saving. */
   readonly replacesDiscountId?: string;
 } & (
   | { readonly kind: "comp" }
@@ -40,6 +41,7 @@ export interface SetMenuGroupingPrevious {
   readonly dishes: readonly SavedDish[];
 }
 
+/** The caller supplies unique IDs, whole nonnegative cents and percentages from 0 to 10,000 basis points. */
 export interface SetMenuGroupingInput {
   readonly offers: readonly SetMenuOffer[];
   readonly dishes: readonly SetMenuGroupingDish[];
@@ -83,8 +85,8 @@ interface Arc {
 
 const SCALE = 10_000;
 const PLACEMENT_LIMIT = 300;
-const REFINEMENT_LIMIT = 100;
-const REFINEMENTS_PER_MIX = 20;
+const REFINEMENT_WORK_LIMIT = 16_000;
+const REFINEMENTS_PER_MIX = 300;
 const FALLBACK_LIMIT = 100;
 
 function byId(a: { readonly id: string }, b: { readonly id: string }): number {
@@ -233,11 +235,11 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   );
   const eligibleCount = arcs.filter((options) => options.length > 0).length;
   let serial = 0;
-  function newMenu(option: number): Menu {
+  function newMenuId(): string {
     let id: string;
     do id = `new-menu-${++serial}`;
     while (oldMenu.has(id));
-    return { id, option };
+    return id;
   }
 
   const byType = new Map<string, number[]>();
@@ -247,7 +249,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     else byType.set(offer.id, [index]);
   });
 
-  const ranked = new Map<string, number>();
+  const ranked = new Map<string, { count: number; saving: number }>();
   const savedSlots = dishes.map(({ id }, i) => {
     const place = oldPlace.get(id);
     const menu = place && oldMenu.get(place.setMenuId);
@@ -257,11 +259,17 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       return line === place.lineIndex && choices[choice]!.offer.id === menu.offerId;
     });
     if (!arc) return undefined;
-    ranked.set(menu.id, (ranked.get(menu.id) ?? 0) + 1);
+    const rank = ranked.get(menu.id) ?? { count: 0, saving: 0 };
+    rank.count++;
+    rank.saving += aLaCarte[i]! - arc.supplement;
+    ranked.set(menu.id, rank);
     return { ...place, supplement: arc.supplement };
   });
   const saved = [...oldMenu.values()].sort(
-    (a, b) => (ranked.get(b.id) ?? 0) - (ranked.get(a.id) ?? 0) || byId(a, b),
+    (a, b) =>
+      (ranked.get(b.id)?.count ?? 0) - (ranked.get(a.id)?.count ?? 0) ||
+      (ranked.get(b.id)?.saving ?? 0) - (ranked.get(a.id)?.saving ?? 0) ||
+      byId(a, b),
   );
   const optionsFor = (menu: SavedMenu) => byType.get(menu.offerId) ?? [];
   const grantOf = (option: number) => choices[option]!.discount?.id ?? null;
@@ -290,7 +298,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     }
     serial = 0;
     remaining.forEach((count, option) => {
-      for (let i = 0; i < count; i++) selected.push(newMenu(option));
+      for (let i = 0; i < count; i++) selected.push({ id: newMenuId(), option });
     });
     return selected;
   }
@@ -538,30 +546,31 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       .filter((option) => limits[option]! > 0)
       .sort((a, b) => choices[a]!.baseCost - choices[b]!.baseCost)
       .slice(0, FALLBACK_LIMIT / 2);
-    for (const option of options) {
-      const { discount, offer } = choices[option]!;
-      if (discount && current.setMenus.some(({ discountId }) => discountId === discount.id))
-        continue;
-      // An offer that cannot save money on the remaining portions cannot after another offer takes some.
-      while (current.setMenus.length < FALLBACK_LIMIT - options.length) {
-        const menu = newMenu(option);
-        const layout = menuPlacement([menu]);
-        if (layout.matches.every((options, i) => assigned[i] || options.length === 0)) break;
+    const layouts = options.map((option) => menuPlacement([{ id: "", option }]));
+    while (current.setMenus.length < FALLBACK_LIMIT - options.length) {
+      const id = newMenuId();
+      let winner:
+        { menu: Menu; placed: (Assignment | undefined)[]; bill: SetMenuGrouping } | undefined;
+      for (const [index, option] of options.entries()) {
+        const menu = { id, option };
+        const layout = layouts[index]!;
+        if (layout.matches.every((matches, i) => assigned[i] || matches.length === 0)) continue;
         const added = assign([menu], layout, [], assigned);
         const placed = dishes.map((_, i): Assignment | undefined => {
           const dish = added[i];
           return assigned[i] ?? (dish && [menus.length, dish[1], dish[2]]);
         });
         const alternative = materialize([...menus, menu], placed, {
-          changedOfferId: offer.id,
+          changedOfferId: choices[option]!.offer.id,
           prior: current,
         });
-        if (alternative.totalCents >= current.totalCents) break;
-        menus.push(menu);
-        assigned = placed;
-        current = alternative;
-        if (discount) break;
+        if (alternative.totalCents < (winner?.bill.totalCents ?? current.totalCents))
+          winner = { menu, placed, bill: alternative };
       }
+      if (!winner) break;
+      menus.push(winner.menu);
+      assigned = winner.placed;
+      current = winner.bill;
     }
     return current;
   }
@@ -597,6 +606,8 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   let solves = 0;
   let refinements = 0;
   let unfinishedFloor = Infinity;
+  // A placement solve can compare every eligible portion with every occupied menu.
+  const refinementLimit = Math.min(1000, Math.floor(REFINEMENT_WORK_LIMIT / eligibleCount ** 2));
 
   function refine(menus: readonly Menu[], priceFloor: number): boolean {
     const layout = menuPlacement(menus);
@@ -611,6 +622,13 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     solves++;
     const candidate = materialize(menus, first);
     consider(candidate);
+    if (percentCount > 0 && oldPlace.size > 0 && solves < PLACEMENT_LIMIT) {
+      const saved = retainedPlaces(menus, layout);
+      if (saved.some((pin, i) => pin && (pin[0] !== first[i]?.[0] || pin[1] !== first[i]?.[1]))) {
+        solves++;
+        consider(materialize(menus, assign(menus, layout, saved)));
+      }
+    }
     if (candidate.totalCents <= priceFloor || priceFloor > best.totalCents) return true;
 
     const pending = layout.matches.flatMap((matches, i) => {
@@ -619,7 +637,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     });
     const fixed: (Assignment | undefined)[] = [];
     const available = layout.slots.map(({ capacity }) => capacity);
-    const limit = Math.min(refinements + REFINEMENTS_PER_MIX, REFINEMENT_LIMIT);
+    const limit = Math.min(refinements + REFINEMENTS_PER_MIX, refinementLimit);
     function visit(at: number): boolean {
       if (best.totalCents <= priceFloor) return true;
       if (refinements >= limit) return false;
@@ -667,7 +685,6 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
       const floor = Math.ceil(cost / SCALE) + extras + constant;
       if (menus.length > 0 && !refine(menus, floor))
         unfinishedFloor = Math.min(unfinishedFloor, floor);
-      return true;
     },
   });
   const exact = finished && unfinishedFloor >= best.totalCents;
@@ -680,7 +697,10 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     return { ...best, exact };
   }
   const anchored = fallback();
-  return pins.every((pin) => pin === undefined) && best.totalCents < anchored.totalCents
-    ? best
-    : anchored;
+  const bestKeepsSavedPlaces = pins.every((pin, i) => {
+    if (!pin) return true;
+    const place = best.dishes[i]!.place;
+    return place?.setMenuId === savedFit[pin[0]]!.id && place.lineIndex === pin[1];
+  });
+  return bestKeepsSavedPlaces && best.totalCents < anchored.totalCents ? best : anchored;
 }
