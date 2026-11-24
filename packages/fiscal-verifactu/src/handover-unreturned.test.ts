@@ -11,7 +11,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { fiscalHoldings } from "./handover-holdings.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
-import { fiscalUnreturned } from "./handover-unreturned.js";
+import { fiscalUnreturned, otherChainsToReturn } from "./handover-unreturned.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -203,5 +203,74 @@ describe("fiscalUnreturned", () => {
     expect(await reading(path, (query) => VERIFACTU_HANDOVER.unreturned!(query, []))).toEqual(
       await reading(path, (query) => fiscalUnreturned(query, [])),
     );
+  });
+});
+
+describe("otherChainsToReturn", () => {
+  const SENDER = "sender-node";
+  const MAIN = "main-node";
+
+  async function others(holdings: unknown, sender = SENDER, main = MAIN) {
+    return reading(await copy(), (query) =>
+      otherChainsToReturn(query, holdings as CanonicalValue, sender, main),
+    );
+  }
+
+  it("names a chain the main box holds none of from position 0", async () => {
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(earlier, 1);
+    await append(earlier, 2);
+
+    expect(await others([])).toEqual([{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]);
+  });
+
+  it("names only the records after the main box's matching last record", async () => {
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(earlier, 1);
+    await append(earlier, 2);
+    const holdings = await reading(await copy(), fiscalHoldings);
+    await append(earlier, 3);
+
+    expect(await others(holdings)).toEqual([
+      { nodeId: earlier.nodeId, sifId: earlier.sifId, after: 2 },
+    ]);
+  });
+
+  it("leaves out a chain whose last record differs, and one the main box is ahead on", async () => {
+    const differs = await seedNode(suite.db, "Differs");
+    const ahead = await seedNode(suite.db, "Ahead");
+    const held = await seedNode(suite.db, "Held");
+    await append(differs, 1);
+    await append(ahead, 101);
+    await append(held, 201);
+    const holdings = (await reading(await copy(), fiscalHoldings)).map((holding) => {
+      if (holding.nodeId === differs.nodeId) return { ...holding, huella: "F".repeat(64) };
+      if (holding.nodeId === ahead.nodeId)
+        return { ...holding, secuencia: holding.secuencia + 1, count: holding.count + 1 };
+      return holding;
+    });
+    await append(differs, 2);
+
+    expect(await others(holdings)).toEqual([]);
+  });
+
+  it("never names the sender's or the main box's own chain", async () => {
+    const sender = await seedNode(suite.db, "Sender");
+    const main = await seedNode(suite.db, "Main");
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(sender, 1);
+    await append(main, 101);
+    await append(earlier, 201);
+
+    expect(await others([], sender.nodeId, main.nodeId)).toEqual([
+      { nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 },
+    ]);
+  });
+
+  it("throws MalformedHoldingsError on a summary that is not a list", async () => {
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(earlier, 1);
+
+    await expect(others({ holdings: [] })).rejects.toBeInstanceOf(MalformedHoldingsError);
   });
 });
