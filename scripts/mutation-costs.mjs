@@ -1,6 +1,6 @@
 // Builds packages/db/mutation-costs.json, the per-file seconds scripts/mutation-shard.mjs packs
 // db's shards by, from the Stryker JSON reports of a nightly run's shards; its fitted charges are
-// db's. The shared, ui and ui-core tables use the recorded-duration recipes in
+// db's. For shared, ui and ui-core, use the recorded-duration recipes in
 // docs/developers/ci-and-gates.md. Usage:
 //   node scripts/mutation-costs.mjs <package> <out.json> <mutation.json> [<mutation.json> …]
 

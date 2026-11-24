@@ -1393,22 +1393,23 @@ writeFileSync("packages/ui-core/mutation-costs.json", JSON.stringify(
 finished mutation testing in 9m27s and uploaded its report before cancellation at 10m02s.
 The [next job](https://github.com/clintongormley/waitron/actions/runs/45502466146/job/138830289600)
 was cut off during mutation testing, and its retry also reached the deadline. In the completed
-[comparison run 45489322541](https://github.com/clintongormley/waitron/actions/runs/45489322541),
-eight slow mutations marked `Timeout` accounted for about 520 of the two jobs' 973 recorded
-runner seconds. Both 16-diner cases and at least one 21-diner case covered all eight. One
+self-hosted [comparison run 45489322541](https://github.com/clintongormley/waitron/actions/runs/45489322541),
+eight slow mutations marked `Timeout` accounted for about 520 of the two jobs' 969.5 recorded
+seconds. Forty cases covered all eight, including the two 16-diner cases and a 21-diner case. One
 mutation took 65.6 seconds to reach Stryker's execution-count limit. Packing with the new table
 puts placement in job 3 and search in job 4, with 486.6 weight seconds each, compared with
 847.2 and 126.0 by bytes. The weights rank work. Job time includes setup and concurrent tests.
 
 To refresh `packages/shared/mutation-costs.json`, apply the ui-core recipe to completed Shared jobs
-3 and 4 only. Use `mutation-report-shared-shard-3` and `mutation-report-shared-shard-4`. Take each
-report's file list from `config.mutate`, so a file absent from `files` still gets a weight of 0.1.
+3 and 4. Prefer GitHub-hosted measurements. Use `mutation-report-shared-shard-3` and
+`mutation-report-shared-shard-4`. Take each report's file list from `config.mutate`, so a file
+absent from `files` still gets a weight of 0.1.
 Sum `duration ?? 0` for `Killed`, `Survived` and `Timeout`, then round to tenths of a second with
 a minimum weight of 0.1. Remove or rename the corresponding key when a listed source file goes
 away or moves. `scripts/mutation-shard.test.mjs` checks the table's file names against the mutation
-selection. Use recorded durations here because Shared's reports include the time spent on
-timeouts, including mutations stopped by the execution-count limit. The db generator adds a
-fixed 82.2 seconds per timeout.
+selection. Use this recorded-duration recipe for Shared because its reports include the time spent
+on timeouts, including mutations stopped by the execution-count limit. Reserve
+`scripts/mutation-costs.mjs` for db, where the generator adds a fixed 82.2 seconds per timeout.
 
 **ui, 17 November 2026.** Scheduled run [44021607120](https://github.com/clintongormley/waitron/actions/runs/44021607120)
 cancelled `mutation-ui` shards 23 and 30 at their 50-minute limit. Packed by bytes, those two shards
