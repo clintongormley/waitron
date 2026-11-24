@@ -1968,6 +1968,7 @@ it.each([
   undefined,
   "not JSON",
   "null",
+  "[null]",
   '[{"kind":"station","stationId":null,"minutes":60}]',
   '[{"kind":"no_preparation","minutes":20}]',
   '[{"kind":"no_preparation","minutes":30,"name":"Bar"}]',

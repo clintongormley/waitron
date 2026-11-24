@@ -101,6 +101,7 @@ it("reports and clears only the deleted station's Last orders settings", async (
         lastOrders: [
           { kind: "station", stationId: f.gone, minutes: 60 },
           { kind: "no_preparation", minutes: 30 },
+          { kind: "station", stationId: f.other, minutes: -15 },
         ],
       },
       {
@@ -124,7 +125,13 @@ it("reports and clears only the deleted station's Last orders settings", async (
         .from(menuPeriods)
         .orderBy(menuPeriods.name),
     ).toEqual([
-      { name: "Breakfast", lastOrders: [{ kind: "no_preparation", minutes: 30 }] },
+      {
+        name: "Breakfast",
+        lastOrders: [
+          { kind: "no_preparation", minutes: 30 },
+          { kind: "station", stationId: f.other, minutes: -15 },
+        ],
+      },
       { name: "Lunch", lastOrders: [] },
       {
         name: "Supper",
