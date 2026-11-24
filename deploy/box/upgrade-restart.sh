@@ -16,7 +16,7 @@ if pending; then
     "$node" "$host/box/upgrades/cli.mjs" offline-recovery "$box"
   else
     "$node" "$host/box/upgrades/cli.mjs" recover "$box"
-    pending && refuse "run waitron.sh status, then choose restore or keep" 78
+    pending && refuse "run waitron.sh status, then choose restore or keep (only restore if the producer changes)" 78
   fi
 fi
 [ "$1" = run ] || exit 0

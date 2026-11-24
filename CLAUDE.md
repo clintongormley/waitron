@@ -716,7 +716,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
 - **Of the paths that migrate, only boot, bucket rebuild, the contained upgrade data checker, a restore's preview (`readRecoveryCopyPreview`) and a restore about to place its copy (`writeValidated`) call `assertNotAhead` (a handover's compare refuses such a copy itself); a checked manual `waitron.sh install <ref>`
-  holds a failed check for Restore or Keep.** `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths
+  holds a failed check for Restore or Keep (Restore only when it changes the producer).** `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths
   do not carry that check. Their list: [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
   "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
@@ -978,7 +978,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   seconds after the last ends) finds it, waits for two devices or a person to confirm its time
   before any later payment (owner, 2026-11-10; the jump, 2026-11-11), and AEAT refusing as dated in
   the future (`1112`) a record written since its time was last confirmed makes it wait for a person
-  or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's), and a producer change makes the start wait until its new installation is open: records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -1010,9 +1010,12 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
   date and time on a till or on Box status; AEAT is not asked, and orders still reach the kitchen** (owner,
-  2026-11-10; "or on Box status" is the watcher's, 2026-11-10 and 2026-11-13, for the owner to confirm). Guards:
-  `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
-  `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule.
+  2026-11-10; "or on Box status" is the watcher's, 2026-11-10 and 2026-11-13, for the owner to confirm). While an upgrade's
+  producer-change note waits, the start keeps waiting, synchronised or not, until the new installation
+  is open: the time service's or a person's confirmation is held until then, and two devices do not
+  end the wait (who may confirm: owner, 2026-11-22). Guards:
+  `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts`,
+  `apps/server/src/boot.start-clock-gate.test.ts` and `apps/server/src/boot.identity-change.test.ts`, weaker than the rule.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **While the box's internet time service is synchronised, a till's time, a jump or the latest
   record's time never stops a sale; a box already waiting carries on at the clock watch's first look
@@ -1059,14 +1062,19 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the rule. [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
-- **The producer's tax number does not change before A993 lands** (owner, 2026-11-06): a
-  production start whose chain names another refuses `sif.producer_changed`, and the publish job
-  refuses a new one unless `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Exception (owner,
-  2026-11-08): today's placeholder values may be replaced by the real ones once, before any
-  production start, with that variable set to the real number. Guards:
-  `apps/server/src/boot.producer-change.test.ts` and the publish cases in
-  `scripts/ci-workflow.test.mjs`, weaker than the rule: a stand-in `docker`, never a real publish.
-  [Detail](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings)
+- **A production box opens a new installation for another producer only at the start of a release
+  the checked upgrade installed, whose note names that producer, once that start's time is confirmed; every
+  other start whose chain holds a record under another producer refuses `sif.producer_changed`**
+  (owner, 2026-11-06), so a stray setting opens nothing. The publish job refuses a new tax number
+  unless `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Guards:
+  `apps/server/src/boot.producer-change.test.ts`, `apps/server/src/boot.identity-change.test.ts`,
+  `packages/fiscal-verifactu/src/identity-change.test.ts`,
+  `packages/fiscal-verifactu/src/identity-change-authority.test.ts`, the producer cases in
+  `scripts/box/upgrades/host.test.mjs`, `scripts/box/upgrades/candidate.test.mjs` and
+  `scripts/box/upgrades/transaction.test.mjs`, and the publish cases in
+  `scripts/ci-workflow.test.mjs`, weaker than the rule.
+  [Detail](docs/developers/conventions-data.md#a-change-of-producer-opens-a-new-installation) and
+  [publish job](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings).
 - **Restore and promotion start a new chain under a new installation name.**
   Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
@@ -1080,6 +1088,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
   person confirmed on that page, while the box has not rebooted, the server has not restarted and
   its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's).
+  A producer change takes the box's current minute on a weaker confirmation: the time service, or any
+  person the till or Box status lets confirm the time, even with no second clock (owner, 2026-11-22).
   A minute whose name is already in a history the box reads is not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction. On a development box (`WAITRON_ENV=dev`) a preproduction first setup on the setup page takes the box's own clock as its second clock (owner, 2026-11-17); the person still confirms it there.

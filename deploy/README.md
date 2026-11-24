@@ -282,7 +282,8 @@ database changes on a fresh copy while the current version keeps selling. A fail
 trial ends the attempt before selling stops and names the failed check. A pass is advice:
 the command still stops the writers and keeps
 a copy of their data and configuration. It checks a disposable copy, including a real primary
-cash sale, before reopening the candidate. The test sale never reaches the live venue.
+cash sale with the copy told that its time is synchronised, before reopening the candidate. The
+test sale never reaches the live venue.
 
 `install` treats a box as existing when its folder holds a `compose.yml` and Docker either has the
 box's state volume or cannot list volumes. The volume is `waitron_state`, or `<project>_state` when
@@ -304,7 +305,8 @@ used for Restore. A leftover trial folder from an interrupted attempt is removed
 
 If a final stopped-copy check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
 `sudo bash waitron.sh restore` to return to the stopped copy, or `sudo bash waitron.sh keep`
-to start the candidate despite the failed checks. Keep still uses the ordinary boot guards.
+to start the candidate despite the failed checks. Keep refuses an upgrade that changes the software
+producer, and still uses the ordinary boot guards.
 Restore puts back the copied data, Compose configuration and old images; the host clock
 service, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while

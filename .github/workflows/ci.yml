@@ -4850,8 +4850,8 @@ jobs:
           echo "release_repository=$repo" >> "$GITHUB_OUTPUT"
 
       # A production box refuses to start on a chain made under another producer tax number
-      # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
-      # until A993. So a new tax number reaches an image only when the repository variable
+      # (`sif.producer_changed`) unless an upgrade installed it, and then opens a new fiscal
+      # installation. So a new tax number reaches an image only when the repository variable
       # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number. A value left set lets through only a
       # change to that same number, later ones included. A change of name or address alone is not compared.
       - name: Refuse a change of the producer's tax number that nobody allowed
@@ -4892,7 +4892,8 @@ jobs:
             echo "the producer tax number changes from :main's; WAITRON_PRODUCER_CHANGE_ALLOWED allows it"
           else
             echo "the secret WAITRON_PRODUCER_TAX_ID differs from the one :main carries, and production" >&2
-            echo "boxes refuse to start on it until A993. To publish it anyway, set the repository" >&2
+            echo "boxes refuse to start on it unless it is installed as an upgrade, which opens a new" >&2
+            echo "fiscal installation. To publish it anyway, set the repository" >&2
             echo "variable WAITRON_PRODUCER_CHANGE_ALLOWED to the new tax number, then start a new run" >&2
             echo "(a re-run of this job may not read a variable set after its first attempt)." >&2
             exit 1

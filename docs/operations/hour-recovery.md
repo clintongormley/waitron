@@ -317,6 +317,9 @@ replaces its hour names with minute names and its clock confirmation with the 30
 
 ## A working box keeps its fiscal identity
 
-You cannot start a new chain on a working box while keeping its database. Use the restore procedure
+You cannot start a new chain on a working box while keeping its database, except to
+[switch it after an invoice identity conflict](#switch-a-running-box-after-an-invoice-identity-conflict)
+or by [upgrading it to a release with another producer](release.md#when-the-producer-or-the-system-code-changes).
+Use the restore procedure
 for a replacement box, or promote a previously admitted spare. Those paths retain the clock,
 history and authentication checks described above.

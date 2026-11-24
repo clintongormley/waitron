@@ -41,7 +41,8 @@ waitron.sh: usage:
   waitron.sh check-upgrade-offer  check which signed release is offered to this box
   waitron.sh install-offered-upgrade  apply the signed offer during the quiet window
   waitron.sh restore           restore the intact copy from a held manual upgrade
-  waitron.sh keep              start the candidate despite its failed checks
+  waitron.sh keep              start the candidate despite its failed checks (not for an upgrade
+                               that changes the software producer)
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
                                joined another, the start-again records and the files a Move set
                                aside; --all drops them too)
@@ -934,7 +935,7 @@ upgrade_pending() {
 
 refuse_pending_upgrade() {
   if upgrade_pending; then
-    die "upgrade pending — run 'waitron.sh status', then choose restore or keep; nothing was refreshed or reset"
+    die "upgrade pending — run 'waitron.sh status', then choose restore or keep (only restore if the producer changes); nothing was refreshed or reset"
   fi
 }
 
@@ -1180,7 +1181,7 @@ cmd_checked_install() (
   [ -z "$result" ] || printf '%s\n' "$result"
   [ "$status" -eq 0 ] || exit "$status"
   if upgrade_pending; then
-    die "upgrade held — run 'waitron.sh status', then choose restore or keep"
+    die "upgrade held — run 'waitron.sh status', then choose restore or keep (only restore if the producer changes)"
   fi
   [ "$mode" = manual ] || exit 0
   flock -u 9
