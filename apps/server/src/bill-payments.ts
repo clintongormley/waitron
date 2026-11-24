@@ -554,22 +554,38 @@ export async function refusePaidLines(
 
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
- * plus the applied of its pending ones is at most its total, except on a bill Pay for items left
- * above it, where a write may keep or lessen that excess (`allowed`) but not raise it. The line writers that take lines off
- * a bill or lower a quantity call it before they commit. No trigger stands behind it, because the
- * total is computed, not stored, so a writer that forgets it is seen only by its own tests.
+ * plus the applied of its pending ones is at most its total. The line writers that take lines off
+ * a bill or lower a quantity call it, or {@link assertLinesKeptExcess} where Pay for items may have
+ * left the bill above it, before they commit. No trigger stands behind it, because the total is
+ * computed, not stored, so a writer that forgets it is seen only by its own tests.
  */
 export async function assertBillInvariant(
   tx: Transaction,
   workingOrderIds: readonly string[],
-  /** An excess these bills already had, which the write may keep or lessen but not raise. */
-  allowed?: ReadonlyMap<string, Decimal>,
 ): Promise<void> {
   for (const [workingOrderId, excess] of await billExcesses(tx, workingOrderIds)) {
-    if (compareDecimal(excess, allowed?.get(workingOrderId) ?? ZERO) > 0) {
-      throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
-    }
+    refuseExcess(workingOrderId, excess, undefined);
   }
+}
+
+function refuseExcess(workingOrderId: string, excess: Decimal, allowed: Decimal | undefined) {
+  if (compareDecimal(excess, allowed ?? ZERO) > 0) {
+    throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
+  }
+}
+
+/** By how much the bill, holding these of its payments, has received and reserved more than its
+ * total now; undefined when it is not overpaid. */
+async function excessOf(
+  tx: Transaction,
+  workingOrderId: string,
+  held: readonly PaymentMoney[],
+  advances: BillAdvances,
+): Promise<Decimal | undefined> {
+  if (held.length === 0) return undefined;
+  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
+  const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
+  return compareDecimal(excess, ZERO) > 0 ? excess : undefined;
 }
 
 /** By how much each of these bills holding a payment has received and reserved more than its
@@ -582,16 +598,39 @@ export async function billExcesses(
   const excesses = new Map<string, Decimal>();
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
-    if (held.length === 0) continue;
-    const funds = fundsOf(
-      workingOrderId,
-      await billPaymentTotal(tx, workingOrderId, advances),
-      held,
-    );
-    const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
-    if (compareDecimal(excess, ZERO) > 0) excesses.set(workingOrderId, excess);
+    const excess = await excessOf(tx, workingOrderId, held, advances);
+    if (excess !== undefined) excesses.set(workingOrderId, excess);
   }
   return excesses;
+}
+
+/** One bill's {@link HeldMoney} and by how much it is paid over its total (undefined when it is
+ * not). */
+export interface BillExcess extends HeldMoney {
+  workingOrderId: string;
+  excess: Decimal | undefined;
+}
+
+/** The bill's {@link BillExcess}, read now. */
+export async function readBillExcess(tx: Transaction, workingOrderId: string): Promise<BillExcess> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  return {
+    workingOrderId,
+    held,
+    advances,
+    excess: await excessOf(tx, workingOrderId, held, advances),
+  };
+}
+
+/**
+ * {@link assertBillInvariant} after a write that changed the bill's lines but none of its payments,
+ * refunds or advances, against `before`, read ahead of the write: only the bill's new total is
+ * read. The write may keep or lessen an excess the bill already had, but not raise it.
+ */
+export async function assertLinesKeptExcess(tx: Transaction, before: BillExcess): Promise<void> {
+  const { workingOrderId, held, advances } = before;
+  const excess = await excessOf(tx, workingOrderId, held, advances);
+  if (excess !== undefined) refuseExcess(workingOrderId, excess, before.excess);
 }
 
 function receivedHoldsMoney({ row, netApplied, netTip }: PaymentMoney): boolean {

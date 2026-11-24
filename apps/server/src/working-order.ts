@@ -373,9 +373,10 @@ import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead
 import { outstandingOf } from "./bill-payment-money.js";
 import {
   assertBillInvariant,
-  billExcesses,
+  assertLinesKeptExcess,
   issueIfFullyPaid,
   linkBillCardPaymentsToSale,
+  readBillExcess,
   readPaidQuantities,
   readPaymentsByBill,
   refuseBillHoldingMoney,
@@ -6247,7 +6248,7 @@ async function applyLineEdits(
 ): Promise<{ changed: boolean; chargesUnchanged: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
   // A bill Pay for items left overpaid takes dishes that use up its excess.
-  const excessBefore = await billExcesses(tx, [orderId]);
+  const excessBefore = await readBillExcess(tx, orderId);
   const routing = routingOnce(tx, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, orderId);
   const stationChanges = await readStationChanges(
@@ -7228,7 +7229,7 @@ async function applyLineEdits(
         ),
       );
   }
-  await assertBillInvariant(tx, [orderId], excessBefore);
+  await assertLinesKeptExcess(tx, excessBefore);
   if (changed) await refuseOrderOverSimplifiedLimit(tx, cfg, orderId, before);
   if (changed) {
     await partyAfterEdit(

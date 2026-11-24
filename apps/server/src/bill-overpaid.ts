@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { billAdvances, billPayments, recordActivity, tenders, type Transaction } from "@waitron/db";
+import { billPayments, recordActivity, tenders, type Transaction } from "@waitron/db";
 import { readPaymentsSettings } from "@waitron/payments";
 import { AppError, centsToDecimal, compareDecimal, decimalToCents } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -8,7 +8,7 @@ import {
   findSubmission,
   issueIfFullyPaid,
   readBillBalance,
-  readPaymentMoney,
+  readBillExcess,
   requireRefundableBill,
   type BillBalance,
 } from "./bill-payments.js";
@@ -74,32 +74,30 @@ export async function keepOverpaidAsTip(
   const earlier = await findSubmission(tx, workingOrderId, submissionId);
   if (earlier.payment !== undefined || earlier.refund !== undefined)
     throw new AppError("submission.id_reused", { submissionId });
-  const excess = (await billExcesses(tx, [workingOrderId])).get(workingOrderId);
+  const { excess, held, advances } = await readBillExcess(tx, workingOrderId);
   if (excess === undefined) throw new AppError("bill.not_overpaid", { workingOrderId });
   if (!(await readPaymentsSettings(tx)).doc.tipsEnabled)
     throw new AppError("bill.tip_not_allowed_on_excess", { workingOrderId });
 
-  const held = (await readPaymentMoney(tx, [workingOrderId])).filter(
-    ({ row }) => row.state === "received",
+  const received = held.filter(
+    ({ row }) => row.state === "received" && !advances.payments.has(row.id),
   );
-  const ids = held.map(({ row }) => row.id);
-  const settled = new Set([
-    ...(
+  const tendered = new Set(
+    (
       await tx
         .select({ id: tenders.billPaymentId })
         .from(tenders)
-        .where(inArray(tenders.billPaymentId, ids))
+        .where(
+          inArray(
+            tenders.billPaymentId,
+            received.map(({ row }) => row.id),
+          ),
+        )
     ).map(({ id }) => id),
-    ...(
-      await tx
-        .select({ id: billAdvances.billPaymentId })
-        .from(billAdvances)
-        .where(inArray(billAdvances.billPaymentId, ids))
-    ).map(({ id }) => id),
-  ]);
+  );
   // An items payment's applied money is what its paid lines record, so it keeps it.
-  const newestFirst = held
-    .filter(({ row }) => !settled.has(row.id) && row.kind !== "items")
+  const newestFirst = received
+    .filter(({ row }) => !tendered.has(row.id) && row.kind !== "items")
     .sort((a, b) => b.row.receivedAt!.localeCompare(a.row.receivedAt!));
   let left = decimalToCents(excess);
   const moved: { billPaymentId: string; amount: string }[] = [];
