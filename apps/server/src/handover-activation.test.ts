@@ -27,6 +27,7 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashPassword, dashboardSessions } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readOperationAuthority } from "@waitron/module";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-corrected-incident.js";
@@ -51,6 +52,7 @@ import {
   ADMIN_EMAIL,
   OPERATION,
   PASSWORD,
+  bases,
   binding,
   fiscalModules,
   placedSpareFixture,
@@ -125,14 +127,14 @@ type Answer = {
 };
 type Service = ReturnType<typeof serviceFor>;
 
-function serviceFor(store: Store) {
+function serviceFor(store: Store, modules = fiscalModules) {
   return createNodeOperationPreparation({
     stateDir: dirs().spareState,
     venueDir: dirs().spareVenue,
     db: store.venue,
     nodeDb: store.node,
     node: standby,
-    modules: fiscalModules,
+    modules,
     credentialKeyRing: TOTP_KEY_RING,
     coordinator: createFirstSetupCoordinator(),
     environment: {},
@@ -484,7 +486,31 @@ describe("activating on a real placed copy", () => {
   }, 60_000);
   it("activates under a new SIF and series, with M1's SIF and series untouched", async () => {
     const store = await placedSpare();
-    const { app } = spareOn(store);
+    const collected = vi.fn();
+    const fiscal = fiscalModules[0]!;
+    const service = serviceFor(store, [
+      {
+        ...fiscal,
+        operations: {
+          ...fiscal.operations!,
+          configure(host) {
+            const configured = fiscal.operations!.configure!(host);
+            return {
+              ...configured,
+              prepare(operation, run) {
+                collected(
+                  operation.binding,
+                  operation.input,
+                  readOperationAuthority(operation.authority, operation.binding)?.operatorId,
+                );
+                return configured.prepare(operation, run);
+              },
+            };
+          },
+        },
+      },
+    ]);
+    const { app } = spareOn(store, service);
     const seriesOf = async (nodeId: string) =>
       store.venue.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, nodeId));
     const oldSif = (await sifRows(store)).filter((row) => row.nodeId === primary.nodeId);
@@ -492,8 +518,11 @@ describe("activating on a real placed copy", () => {
     expect(oldSif).toHaveLength(1);
     expect(oldSeries.length).toBeGreaterThan(0);
     const selected = await selectName(app);
+    collected.mockClear();
 
     const answer = await activate(app, selected.input);
+
+    expect(collected.mock.calls).toEqual([[binding, selected.input, ADMIN]]);
 
     expect(answer).toEqual({
       status: 200,
@@ -506,9 +535,11 @@ describe("activating on a real placed copy", () => {
     expect(own.map((row) => row.numeroInstalacion)).toEqual([selected.identity]);
     expect(own[0]!.numeroInstalacion).not.toBe(oldSif[0]!.numeroInstalacion);
     expect(await seriesOf(primary.nodeId)).toEqual(oldSeries);
-    const newCodes = (await seriesOf(standby.nodeId)).map((row) => row.code);
-    expect(newCodes.length).toBeGreaterThan(0);
-    for (const code of newCodes) {
+    const ownSeries = await seriesOf(standby.nodeId);
+    expect(ownSeries.map(({ code, purpose }) => ({ code, purpose }))).toEqual(
+      bases.map(({ code, purpose }) => ({ code: `${code}-${selected.identity}`, purpose })),
+    );
+    for (const { code } of ownSeries) {
       expect(oldSeries.map((row) => row.code)).not.toContain(code);
     }
   }, 60_000);

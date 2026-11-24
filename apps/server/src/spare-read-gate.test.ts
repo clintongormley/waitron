@@ -43,7 +43,7 @@ function fixture(
       now: () => NOW,
     }),
   );
-  app.post("/management-api/promote", (c) => {
+  app.post("/api/node/handover/operation-one/activate", (c) => {
     mode.mirror = false;
     return c.json({ restarting: true });
   });
@@ -99,7 +99,10 @@ it("keeps public role and signed handover status reachable without opening sibli
 
 it("keeps reads closed after promotion opens the original write gate until restart", async () => {
   const app = fixture();
-  expect((await app.request("/management-api/promote", { method: "POST" })).status).toBe(200);
+  expect(
+    (await app.request("/api/node/handover/operation-one/activate", { method: "POST" })).status,
+  ).toBe(200);
+  expect((await app.request("/management-api/menus", { method: "POST" })).status).toBe(200);
   expect((await app.request("/management-api/menus")).status).toBe(403);
 });
 
@@ -111,7 +114,6 @@ it("preserves the read-only write refusals and the existing mirror POST exemptio
     "/api/node/membership",
     "/api/node/handover/offer",
     "/api/node/handover/operation-one/preparation",
-    "/api/node/handover/operation-one/activate",
   ]) {
     expect((await app.request(path, { method: "POST" })).status).toBe(200);
   }
@@ -126,6 +128,9 @@ it("preserves the read-only write refusals and the existing mirror POST exemptio
       { error: { code: "node.read_only", params: {} } },
     ]);
   }
+  expect(
+    (await app.request("/api/node/handover/operation-one/activate", { method: "POST" })).status,
+  ).toBe(200);
 });
 
 it.each(["en-GB", "es-ES"] as const)(

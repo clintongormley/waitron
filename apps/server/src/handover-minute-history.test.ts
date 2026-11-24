@@ -46,7 +46,6 @@ import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifa
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintMasterKey } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -81,7 +80,6 @@ const joinBinding: OperationBinding = {
 const binding: OperationBinding = { ...joinBinding, action: "promote", eventId: "promotion" };
 const context = { oldNodeNeutralised: true, noParallelRecovery: true };
 let root: string;
-let key: { name: string; secret: string };
 
 /** What a box's selection reads, with the clocks agreeing and no history of its own. */
 const hourFacts = (eventId: string) => ({
@@ -192,7 +190,6 @@ beforeEach(async () => {
   await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
-  key = await mintMasterKey(suite.db);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -251,24 +248,23 @@ async function switchOnWritesSetup(s: ReturnType<typeof spareService>) {
 }
 /** The spare's promotion selection: a fresh clock comparison, then `select`. */
 async function spareSelects(s: ReturnType<typeof spareService>) {
-  const auth = { breakGlass: key.secret };
-  const challenge = (await s.prepare(
+  const challenge = (await s.prepareWithDormantSetup(
     binding,
-    auth,
+    credentials,
     context,
     { action: "clock-challenge" },
     { onBox: true },
   )) as { id: string };
-  const compared = (await s.prepare(
+  const compared = (await s.prepareWithDormantSetup(
     binding,
-    auth,
+    credentials,
     context,
     { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
     { onBox: true },
   )) as { id: string };
-  return (await s.prepare(
+  return (await s.prepareWithDormantSetup(
     binding,
-    auth,
+    credentials,
     context,
     { action: "select", comparisonId: compared.id },
     { onBox: true },
@@ -276,24 +272,20 @@ async function spareSelects(s: ReturnType<typeof spareService>) {
 }
 /** The spare's promotion, activating the selection `select` answered. */
 async function sparePromotes(s: ReturnType<typeof spareService>, input: unknown) {
-  return s.withPromotion(
-    { binding, input },
-    { breakGlass: key.secret },
-    context,
-    (modules, runner) =>
-      promoteMirrorToPrimary(
-        {
-          db: suite.db,
-          node: suite.node,
-          nodeId: standby.nodeId,
-          ring,
-          modules,
-          holders: createDeploymentHolders("mirror", "secondary"),
-          log: () => {},
-          withModuleOperations: runner,
-        },
-        { oldNodeNeutralised: true },
-      ),
+  return s.withPromotion({ binding, input }, credentials, context, (modules, runner) =>
+    promoteMirrorToPrimary(
+      {
+        db: suite.db,
+        node: suite.node,
+        nodeId: standby.nodeId,
+        ring,
+        modules,
+        holders: createDeploymentHolders("mirror", "secondary"),
+        log: () => {},
+        withModuleOperations: runner,
+      },
+      { oldNodeNeutralised: true },
+    ),
   );
 }
 /** M1's later name, recorded in the copy as a retired installation of M1's. */

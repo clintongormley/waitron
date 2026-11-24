@@ -1,17 +1,21 @@
-import { openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, openVenueDatabase } from "@waitron/db";
+import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { readModuleConfig } from "./module-config.js";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { enabledModules } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeMirrorLink } from "@waitron/node-db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
+import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
@@ -117,6 +121,64 @@ async function post(
   );
   return { status: response.status, body: await response.json() };
 }
+
+it.each([
+  ["a planned handover", "controlled"],
+  ["an emergency switch", "emergency"],
+] as const)(
+  "a fenced box cannot prepare or activate %s",
+  async (_name, scenario) => {
+    const copy = await (scenario === "controlled"
+      ? fixture.placeRealCopy()
+      : fixture.placeSpareEmergencyCopy());
+    try {
+      if (scenario === "emergency") {
+        const store = { node: copy.node, nodeId: standby.nodeId };
+        await beginHandover(
+          store,
+          {
+            operationId: OPERATION,
+            scenario,
+            venue: { country: "ES", taxId: "89890001K", environment: "preproduction" },
+            sourceNodeId: primary.nodeId,
+            destinationNodeId: standby.nodeId,
+            membership: { term: copy.chart.body.term, digest: "a".repeat(64) },
+          },
+          "destination",
+        );
+        await advanceHandover(store, OPERATION, "emergency_declared", {});
+      }
+      await setNodeMode(copy, standby.nodeId, "primary", "promote");
+    } finally {
+      await copy.close();
+    }
+    const body = {
+      ...copy.chart.body,
+      term: copy.chart.body.term + 1,
+      nodes: copy.chart.body.nodes.map((node) =>
+        node.nodeId === standby.nodeId ? { ...node, standing: "sell-only" as const } : node,
+      ),
+    };
+    holdChart(join(dirs().spareVenue, "venue.db"), {
+      ...copy.chart,
+      body,
+      signature: signDocumentBody(body, copy.mainKey),
+    });
+    beforeServerStarts();
+    started = await startServer(await spareEnv(), undefined, {
+      peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+    });
+    const operation = { moduleOperation: { binding, input: null }, signIn };
+    const refused = { status: 403, body: { error: { code: "node.read_only", params: {} } } };
+    expect(
+      await post("preparation", { ...operation, proposal: { action: "clock-challenge" } }),
+    ).toEqual(refused);
+    expect(await post("activate", operation)).toEqual(refused);
+    await started.close();
+    expect(readDisk()).toMatchObject({ chartTerm: body.term, ownSif: 0, activations: 0 });
+  },
+  180_000,
+);
 
 let sentActivation: unknown;
 
@@ -258,6 +320,25 @@ describe("a real start over the old file a chart moved on in", () => {
 });
 
 describe("a real restart after activating, then the same request again", () => {
+  async function fiscalState(advance?: number) {
+    const { spareVenue, spareState } = dirs();
+    const { venue: db, close } = await openVenueDatabase(spareVenue);
+    try {
+      if (advance !== undefined) await advanceSeriesTo(db, standby.nodeId, advance);
+      return {
+        series: await db
+          .select(seriesWithNextNumber)
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.nodeId, standby.nodeId))
+          .orderBy(invoiceSeries.id),
+        allocations: await allocationRows(db),
+        journal: await readFile(join(spareState, "module-records/fiscal-verifactu.json"), "utf8"),
+      };
+    } finally {
+      await close();
+    }
+  }
+
   const onNodeDb = (statements: string[]) => {
     const node = new DatabaseSync(join(dirs().spareVenue, "node.db"));
     try {
@@ -285,10 +366,13 @@ describe("a real restart after activating, then the same request again", () => {
       await fixture.stoppedBeforePlacing();
       const first = await startAndTryToActivate();
       expect(first.activation).toEqual({ activated: true, restarting: true });
+      const before = await fiscalState(47);
+      expect(before.series.map((series) => series.nextNumber)).toEqual([47, 47, 47, 47]);
       onNodeDb(lost);
 
       const restarts: string[] = [];
       beforeServerStarts();
+      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
       started = await startServer(await spareEnv(), undefined, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
         peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
@@ -309,6 +393,7 @@ describe("a real restart after activating, then the same request again", () => {
         activations: 1,
       });
       expect(restarts).toEqual([]);
+      expect(await fiscalState()).toEqual(before);
     },
     180_000,
   );

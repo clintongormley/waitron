@@ -108,14 +108,21 @@ function service(
   });
 }
 
-const prepare = (context: Record<string, unknown>) =>
-  service().prepare(
+async function prepare(context: Record<string, unknown>) {
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: hashPassword(PASSWORD),
+  });
+  return service({ signIn: true }).prepareWithDormantSetup(
     promote,
-    { breakGlass: secret },
+    { personId: ADMIN, password: PASSWORD },
     { oldNodeNeutralised: true, noParallelRecovery: true, ...context },
     {},
     { onBox: false },
   );
+}
 
 it("hands a mirror's promotion that says the old box relinquished to the module as relinquished, not offline, without the live-box check", async () => {
   await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror", "adopt"));
@@ -164,7 +171,7 @@ it("hands boot's setter the agreement limit the module sent, as the signed-in pe
   const answer = await service({
     clockCorrection: { set, steps: () => 3 },
     signIn: true,
-  }).prepare(
+  }).prepareWithDormantSetup(
     promote,
     { personId: ADMIN, password: PASSWORD },
     { oldNodeNeutralised: true, noParallelRecovery: true },

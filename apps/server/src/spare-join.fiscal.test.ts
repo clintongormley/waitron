@@ -17,7 +17,7 @@ import { readNodeMode } from "@waitron/node-db";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import { promoteMirrorToPrimary } from "./promote.js";
+import { promoteMirrorToPrimary, type PromotionOperationRunner } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { fiscalRows, preparationIn } from "./testing/fiscal-rows.js";
@@ -138,6 +138,20 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       coordinator: createFirstSetupCoordinator(),
       environment: {},
     });
+    const promote = (runner: PromotionOperationRunner) =>
+      promoteMirrorToPrimary(
+        {
+          db: store.venue,
+          node: store.node,
+          nodeId: standby.nodeId,
+          ring: SPARE_RING,
+          modules: fiscalModules,
+          holders: createDeploymentHolders("mirror", "secondary"),
+          log: () => {},
+          withModuleOperations: runner,
+        },
+        { oldNodeNeutralised: true },
+      );
     const app = new Hono();
     mountPromoteApi(app, {
       appDb: store.venue,
@@ -146,21 +160,8 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       credentialKeyRing: TOTP_KEY_RING,
       modules: fiscalModules,
       nodePreparation: service,
-      run: async (attestation, runner) => {
-        const result = await promoteMirrorToPrimary(
-          {
-            db: store.venue,
-            node: store.node,
-            nodeId: standby.nodeId,
-            ring: SPARE_RING,
-            modules: fiscalModules,
-            holders: createDeploymentHolders("mirror", "secondary"),
-            log: () => {},
-            withModuleOperations: runner,
-          },
-          attestation,
-        );
-        return { ...result, restarting: !result.alreadyPrimary };
+      run: async () => {
+        throw new Error("the legacy fixture tests preparation only");
       },
     });
     const send = async (path: string, body: Record<string, unknown>) => {
@@ -179,7 +180,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
     };
     const prepare = (proposal: unknown) =>
       send("/preparation", { moduleOperation: { binding, input: null }, proposal });
-    return { service, send, prepare };
+    return { service, prepare, promote };
   }
 
   const preparationHistory = () =>
@@ -275,22 +276,28 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       }),
     ]);
 
-    const challenge = await spare.prepare({ action: "clock-challenge" });
-    expect(challenge.status, JSON.stringify(challenge.body)).toBe(200);
-    const compared = await spare.prepare({
+    const prepare = (proposal: unknown) =>
+      spare.service.prepareWithDormantSetup(binding, credentials, context, proposal, {
+        onBox: true,
+      });
+    const challenge = (await prepare({ action: "clock-challenge" })) as { id: string };
+    const compared = (await prepare({
       action: "compare-clocks",
-      browser: { challengeId: challenge.body.id, instantMs: Date.now() },
-    });
-    expect(compared.status, JSON.stringify(compared.body)).toBe(200);
-    const selected = await spare.prepare({ action: "select", comparisonId: compared.body.id });
-    expect(selected.body).toMatchObject({ status: "selected", bases });
-    const promoted = await spare.send("", {
-      moduleOperation: { binding, input: selected.body.input },
-    });
-    expect(promoted, JSON.stringify(promoted.body)).toMatchObject({
-      status: 200,
-      body: { alreadyPrimary: false },
-    });
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    })) as { id: string };
+    const selected = (await prepare({ action: "select", comparisonId: compared.id })) as {
+      identity: string;
+      input: unknown;
+    };
+    expect(selected).toMatchObject({ status: "selected", bases });
+    expect(
+      await spare.service.withPromotion(
+        { binding, input: selected.input },
+        credentials,
+        context,
+        (_modules, runner) => spare.promote(runner),
+      ),
+    ).toMatchObject({ alreadyPrimary: false });
     const opened = await store.venue
       .select(seriesWithNextNumber)
       .from(invoiceSeries)
@@ -298,7 +305,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
     expect(opened.map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))).toEqual(
       bases.map((base) => ({
         ...base,
-        code: `${base.code}-${String(selected.body.identity)}`,
+        code: `${base.code}-${selected.identity}`,
         nextNumber: 1,
       })),
     );

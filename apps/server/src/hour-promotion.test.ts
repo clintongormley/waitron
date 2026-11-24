@@ -1,5 +1,4 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
-import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedVenueSettings,
@@ -9,12 +8,12 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { invoiceSeries, nodes, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
-import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import { readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -38,15 +37,7 @@ import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
-import { Hono } from "hono";
-import { mountPromoteApi } from "./promote-api.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import { TLSSocket } from "node:tls";
-import { Socket } from "node:net";
-import { Agent } from "undici";
-import { ensureBoxSecrets } from "./box-secrets.js";
-import { freePorts } from "./testing/free-ports.js";
-import { startServer, type StartedServer } from "./boot.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
@@ -58,13 +49,6 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
-}));
-// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
-// ask; these cases observe the ask itself.
-const restartAsked = vi.hoisted(() => vi.fn<() => void>());
-vi.mock("./run-server.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./run-server.js")>()),
-  restartProcess: restartAsked,
 }));
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
@@ -243,10 +227,10 @@ async function admit(s: Awaited<ReturnType<typeof service>>) {
 }
 async function compare(
   s: Awaited<ReturnType<typeof service>>,
-  auth: unknown = { breakGlass: key.secret },
+  auth: unknown = credentials,
   held = binding,
 ) {
-  const challenge = (await s.prepare(
+  const challenge = (await s.prepareWithDormantSetup(
     held,
     auth,
     context,
@@ -255,7 +239,7 @@ async function compare(
   )) as {
     id: string;
   };
-  const compared = (await s.prepare(
+  const compared = (await s.prepareWithDormantSetup(
     held,
     auth,
     context,
@@ -278,7 +262,7 @@ async function rows() {
 async function promote(
   s: Awaited<ReturnType<typeof service>>,
   input: unknown,
-  auth: unknown = { breakGlass: key.secret },
+  auth: unknown = credentials,
 ) {
   return s.withPromotion({ binding, input }, auth, context, (modules, runner) =>
     promoteMirrorToPrimary(
@@ -297,72 +281,48 @@ async function promote(
   );
 }
 
-it.each(["key", "manager"])(
-  "selects a promotion hour only after dormant admission, with %s authority",
-  async (method) => {
-    const s = await service();
-    const before = await rows();
-    await admit(s);
-    expect(await rows()).toEqual(before);
-    expect(
-      await readModulePreparationHistory(
-        { stateDir: join(root, "state"), venueDir: join(root, "venue") },
-        binding.module,
-      ),
-    ).toEqual([
-      expect.objectContaining({ entries: [], dormant: [expect.objectContaining({ bases })] }),
-    ]);
-    const auth = method === "key" ? { breakGlass: key.secret } : credentials;
-    await compare(s, auth);
-    const selected = (await s.prepare(
-      binding,
-      auth,
-      context,
-      {
-        action: "select",
-        comparisonId,
-      },
-      { onBox: true },
-    )) as { input: unknown };
-    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
-    expect(await rows()).toEqual(before);
-    expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: false });
-    const after = await rows();
-    expect(after.allocations).toHaveLength(2);
-    expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
-    expect(
-      after.series
-        .filter((row) => row.nodeId === standby.nodeId)
-        .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
-    ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-0CNQR`, nextNumber: 1 })));
-    expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
-    expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
-    expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: true });
-    expect(await rows()).toEqual(after);
-    expect(
-      await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8"),
-    ).not.toContain(key.secret);
-  },
-);
-
-it("refuses a selection that still carries an installation code, writing nothing", async () => {
+it("a signed-in manager selects and activates a promotion after dormant admission", async () => {
   const s = await service();
-  await admit(s);
-  await compare(s);
   const before = await rows();
-  await expect(
-    s.prepare(
-      binding,
-      { breakGlass: key.secret },
-      context,
-      { action: "select", comparisonId, installationCodes: ["0CNQX"] },
-      { onBox: true },
-    ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "event_mismatch" },
-  });
+  await admit(s);
   expect(await rows()).toEqual(before);
+  expect(
+    await readModulePreparationHistory(
+      { stateDir: join(root, "state"), venueDir: join(root, "venue") },
+      binding.module,
+    ),
+  ).toEqual([
+    expect.objectContaining({ entries: [], dormant: [expect.objectContaining({ bases })] }),
+  ]);
+  await compare(s);
+  const selected = (await s.prepareWithDormantSetup(
+    binding,
+    credentials,
+    context,
+    {
+      action: "select",
+      comparisonId,
+    },
+    { onBox: true },
+  )) as { input: unknown };
+  expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
+  expect(await rows()).toEqual(before);
+  expect(await promote(s, selected.input)).toMatchObject({ alreadyPrimary: false });
+  const after = await rows();
+  expect(after.allocations).toHaveLength(2);
+  expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
+  expect(
+    after.series
+      .filter((row) => row.nodeId === standby.nodeId)
+      .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
+  ).toEqual(bases.map((base) => ({ ...base, code: `${base.code}-0CNQR`, nextNumber: 1 })));
+  expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
+  expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
+  expect(await promote(s, selected.input)).toMatchObject({ alreadyPrimary: true });
+  expect(await rows()).toEqual(after);
+  expect(
+    await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8"),
+  ).not.toContain(PASSWORD);
 });
 
 it.each(["key", "isolation", "parallel", "source", "node"])(
@@ -410,9 +370,9 @@ it("retains the selected hour across restart but discards transient comparison a
   const first = await service();
   await admit(first);
   await compare(first);
-  const selected = (await first.prepare(
+  const selected = (await first.prepareWithDormantSetup(
     binding,
-    { breakGlass: key.secret },
+    credentials,
     context,
     {
       action: "select",
@@ -428,9 +388,9 @@ it("retains the selected hour across restart but discards transient comparison a
   vi.setSystemTime(new Date("2026-10-16T13:10:00Z"));
   await compare(next);
   expect(
-    await next.prepare(
+    await next.prepareWithDormantSetup(
       binding,
-      { breakGlass: key.secret },
+      credentials,
       context,
       {
         action: "select",
@@ -468,236 +428,6 @@ it.each(["standard", "full", "corrective", "full_corrective"])(
   },
 );
 
-it("never counts a browser on the box itself as the promotion's second clock", async () => {
-  const s = await service();
-  await admit(s);
-  external.internet.mockImplementation(async () => ({
-    source: "internet",
-    result: "unavailable",
-    reason: "offline",
-  }));
-  const compare = async (requestFromBox?: () => boolean) => {
-    const app = new Hono();
-    mountPromoteApi(app, {
-      appDb: suite.db,
-      nodeDb: suite.node,
-      nodeId: standby.nodeId,
-      credentialKeyRing: TOTP_KEY_RING,
-      nodePreparation: s,
-      requestFromBox,
-      run: async () => {
-        throw new Error("not promoting");
-      },
-    });
-    const socket = new TLSSocket(new Socket());
-    Object.defineProperty(socket, "remoteAddress", { value: "127.0.0.1" });
-    try {
-      const send = async (proposal: unknown) => {
-        const response = await app.request(
-          "https://box.test/management-api/promote/preparation",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              ...context,
-              breakGlass: key.secret,
-              moduleOperation: { binding, input: null },
-              proposal,
-            }),
-          },
-          { incoming: { socket } },
-        );
-        expect(response.status).toBe(200);
-        return response.json();
-      };
-      const challenge = await send({ action: "clock-challenge" });
-      return (
-        await send({
-          action: "compare-clocks",
-          browser: { challengeId: challenge.id, instantMs: Date.now() },
-        })
-      ).clock as { secondClock: boolean; unavailable: unknown[] };
-    } finally {
-      socket.destroy();
-    }
-  };
-  const box = await compare();
-  expect(box.secondClock).toBe(false);
-  expect(box.unavailable).toContainEqual(
-    expect.objectContaining({ source: "browser", reason: "same_machine" }),
-  );
-  expect((await compare(() => false)).secondClock).toBe(true);
-});
-
-it("serves clock, selection and authenticated promotion through the management routes", async () => {
-  const s = await service();
-  await admit(s);
-  const app = new Hono();
-  mountPromoteApi(app, {
-    appDb: suite.db,
-    nodeDb: suite.node,
-    nodeId: standby.nodeId,
-    credentialKeyRing: TOTP_KEY_RING,
-    modules: ALL_MODULES.filter((module) => module.name === binding.module),
-    nodePreparation: s,
-    run: async (attestation, runner) => {
-      const result = await promoteMirrorToPrimary(
-        {
-          db: suite.db,
-          node: suite.node,
-          nodeId: standby.nodeId,
-          ring,
-          modules: ALL_MODULES.filter((module) => module.name === binding.module),
-          holders: createDeploymentHolders("mirror", "secondary"),
-          log: () => {},
-          withModuleOperations: runner,
-        },
-        attestation,
-      );
-      return { ...result, restarting: !result.alreadyPrimary };
-    },
-  });
-  const socket = new TLSSocket(new Socket());
-  try {
-    const send = async (path: string, body: unknown) => {
-      const response = await app.request(
-        `https://box.test/management-api/promote${path}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        { incoming: { socket } },
-      );
-      expect(response.status).toBe(200);
-      const value = await response.json();
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      return value;
-    };
-    const body = { ...context, breakGlass: key.secret, moduleOperation: { binding, input: null } };
-    const challenge = await send("/preparation", {
-      ...body,
-      proposal: { action: "clock-challenge" },
-    });
-    const compared = await send("/preparation", {
-      ...body,
-      proposal: {
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      },
-    });
-    const selected = await send("/preparation", {
-      ...body,
-      proposal: { action: "select", comparisonId: compared.id },
-    });
-    expect(selected).toMatchObject({ status: "selected", identity: "0CNQR" });
-    const plain = await app.request("http://box.test/management-api/promote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...body, moduleOperation: { binding, input: selected.input } }),
-    });
-    expect(plain.status).toBe(403);
-    expect(await plain.json()).toEqual({
-      error: { code: "node.operation_page_required", params: {} },
-    });
-    expect((await rows()).allocations).toHaveLength(1);
-    expect(
-      await send("", { ...body, moduleOperation: { binding, input: selected.input } }),
-    ).toMatchObject({ alreadyPrimary: false, restarting: true });
-    expect((await rows()).allocations).toHaveLength(2);
-  } finally {
-    socket.destroy();
-  }
-});
-
-it("a promotion whose preparation and promote bodies both claim the old box relinquished stores a version 1 approval saying offline, with no oldMachineRelinquished key", async () => {
-  const s = await service();
-  await admit(s);
-  const app = new Hono();
-  mountPromoteApi(app, {
-    appDb: suite.db,
-    nodeDb: suite.node,
-    nodeId: standby.nodeId,
-    credentialKeyRing: TOTP_KEY_RING,
-    modules: ALL_MODULES.filter((module) => module.name === binding.module),
-    nodePreparation: s,
-    run: async (attestation, runner) => {
-      const result = await promoteMirrorToPrimary(
-        {
-          db: suite.db,
-          node: suite.node,
-          nodeId: standby.nodeId,
-          ring,
-          modules: ALL_MODULES.filter((module) => module.name === binding.module),
-          holders: createDeploymentHolders("mirror", "secondary"),
-          log: () => {},
-          withModuleOperations: runner,
-        },
-        attestation,
-      );
-      return { ...result, restarting: !result.alreadyPrimary };
-    },
-  });
-  const socket = new TLSSocket(new Socket());
-  try {
-    const send = async (path: string, body: unknown) => {
-      const response = await app.request(
-        `https://box.test/management-api/promote${path}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        { incoming: { socket } },
-      );
-      const value = await response.json();
-      expect([response.status, value]).toEqual([200, expect.anything()]);
-      return value;
-    };
-    const body = {
-      ...context,
-      oldMachineRelinquished: true,
-      breakGlass: key.secret,
-      moduleOperation: { binding, input: null },
-    };
-    const challenge = await send("/preparation", {
-      ...body,
-      proposal: { action: "clock-challenge" },
-    });
-    const compared = await send("/preparation", {
-      ...body,
-      proposal: {
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      },
-    });
-    const selected = await send("/preparation", {
-      ...body,
-      proposal: { action: "select", comparisonId: compared.id },
-    });
-    expect(selected).toMatchObject({ status: "selected" });
-    const before = new Set((await rows()).allocations.map((row) => row.eventKey));
-    await send("", { ...body, moduleOperation: { binding, input: selected.input } });
-    const added = (await rows()).allocations.filter((row) => !before.has(row.eventKey));
-    expect(added).toHaveLength(1);
-    const [{ approval }] = added;
-    expect(approval).toStrictEqual({
-      version: 1,
-      eventId: approval.eventId,
-      operatorId: approval.operatorId,
-      sourceId: approval.sourceId,
-      targetNodeId: approval.targetNodeId,
-      oldMachineOffline: true,
-      oldMachineAbsent: false,
-      noParallelRecovery: true,
-      confirmedAt: approval.confirmedAt,
-      incidentEvidence: approval.incidentEvidence,
-    });
-  } finally {
-    socket.destroy();
-  }
-});
-
 it("a promotion beside a leftover start-again note file is not held back by the file's floor", async () => {
   const stateDir = join(root, "state");
   const s = await service();
@@ -713,38 +443,17 @@ it("a promotion beside a leftover start-again note file is not held back by the 
     }),
   );
   const recovery = binding;
-  const auth = { breakGlass: key.secret };
+  const auth = credentials;
   await compare(s, auth, recovery);
   expect(
-    await s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
-  ).toMatchObject({ status: "selected" });
-});
-
-it("waits past the minute a recorded installation name holds, writing no fiscal rows", async () => {
-  const s = await service();
-  await admit(s);
-  const [live] = await suite.db.select().from(verifactuIdentities);
-  const minute = Math.floor(Date.now() / 60_000) * 60_000;
-  await suite.db.insert(verifactuIdentities).values({
-    nodeId: primary.nodeId,
-    nif: live!.nif,
-    idSistemaInformatico: live!.idSistemaInformatico,
-    numeroInstalacion: encodeMinuteIdentity(minute),
-    registradoEn: new Date(Date.now() - 60 * 60_000),
-    revocadoEn: new Date(Date.now() - 30 * 60_000),
-  });
-  await compare(s);
-  const before = await rows();
-  expect(
-    await s.prepare(
-      binding,
-      { breakGlass: key.secret },
+    await s.prepareWithDormantSetup(
+      recovery,
+      auth,
       context,
       { action: "select", comparisonId },
       { onBox: true },
     ),
-  ).toMatchObject({ status: "waiting", targetMs: minute + 60_000 });
-  expect(await rows()).toEqual(before);
+  ).toMatchObject({ status: "selected" });
 });
 
 it("a promotion takes its current minute although a later installation name is recorded", async () => {
@@ -761,9 +470,9 @@ it("a promotion takes its current minute although a later installation name is r
   });
   await compare(s);
   expect(
-    await s.prepare(
+    await s.prepareWithDormantSetup(
       binding,
-      { breakGlass: key.secret },
+      credentials,
       context,
       { action: "select", comparisonId },
       { onBox: true },
@@ -800,9 +509,9 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   await compare(s);
   key = await mintMasterKey(suite.db);
   await expect(
-    s.prepare(
+    s.prepareWithDormantSetup(
       binding,
-      { breakGlass: key.secret },
+      credentials,
       context,
       {
         action: "select",
@@ -813,9 +522,9 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "clock_stale" } });
   await compare(s);
   expect(
-    await s.prepare(
+    await s.prepareWithDormantSetup(
       binding,
-      { breakGlass: key.secret },
+      credentials,
       context,
       {
         action: "select",
@@ -825,227 +534,6 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
     ),
   ).toMatchObject({ identity: "0CNQR" });
 });
-
-it("the real mirror boot serves preparation over verified HTTPS and promotes the dormant node once", async () => {
-  const s = await service();
-  await admit(s);
-  const stateDir = join(root, "state");
-  await writeMirrorLink(suite.node, standby.nodeId, {
-    originUrl: "https://127.0.0.1:1/",
-    boxHostname: "box.test",
-    boxCaPem: "unused-ca",
-    originNodeId: primary.nodeId,
-  });
-  for (const [index, set] of manifestSets().entries())
-    await cp(migrations[index]!.migrationsFolder, join(root, "migrations", set.name), {
-      recursive: true,
-    });
-  await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-  await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-  const [port] = await freePorts(1);
-  let server: StartedServer | undefined;
-  let agent: Agent | undefined;
-  restartAsked.mockReset();
-  try {
-    server = await startServer({
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_STATE_DIR: stateDir,
-      WAITRON_MIGRATIONS_DIR: join(root, "migrations"),
-      WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_NODE_ID: standby.nodeId,
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_ENV: "dev",
-      WAITRON_MANAGEMENT_RP_ID: "localhost",
-      WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
-    });
-    agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-    const send = async (path: string, body: unknown) => {
-      const response = await fetch(`https://127.0.0.1:${port}/management-api/promote${path}`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          Origin: `https://127.0.0.1:${port}`,
-          "Sec-Fetch-Site": "same-origin",
-        },
-        body: JSON.stringify(body),
-        dispatcher: agent,
-      } as RequestInit);
-      const value = await response.json();
-      expect(response.status, JSON.stringify(value)).toBe(200);
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      return value;
-    };
-    const body = { ...context, breakGlass: key.secret, moduleOperation: { binding, input: null } };
-    const challenge = await send("/preparation", {
-      ...body,
-      proposal: { action: "clock-challenge" },
-    });
-    const compared = await send("/preparation", {
-      ...body,
-      proposal: {
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      },
-    });
-    const selected = await send("/preparation", {
-      ...body,
-      proposal: { action: "select", comparisonId: compared.id },
-    });
-    expect(selected).toMatchObject({ identity: "0CNQR" });
-    expect(
-      await send("", { ...body, moduleOperation: { binding, input: selected.input } }),
-    ).toMatchObject({ alreadyPrimary: false, restarting: true });
-    await vi.waitFor(() => expect(restartAsked).toHaveBeenCalled());
-  } finally {
-    await agent?.close();
-    await server?.close();
-  }
-  expect((await rows()).allocations).toHaveLength(2);
-  expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
-}, 120_000);
-
-it.each(["key", "manager"])(
-  "reboots a promoted mirror in a later hour without allocating again or resetting counters, with %s authority",
-  async (method) => {
-    const auth = method === "key" ? { breakGlass: key.secret } : credentials;
-    const s = await service();
-    await admit(s);
-    await compare(s, auth);
-    const selected = (await s.prepare(
-      binding,
-      auth,
-      context,
-      {
-        action: "select",
-        comparisonId,
-      },
-      { onBox: true },
-    )) as { input: unknown };
-    expect(selected).toMatchObject({ identity: "0CNQR" });
-    await writeMirrorLink(suite.node, standby.nodeId, {
-      originUrl: "https://127.0.0.1:1/",
-      boxHostname: "box.test",
-      boxCaPem: "unused-ca",
-      originNodeId: primary.nodeId,
-    });
-    for (const [index, set] of manifestSets().entries())
-      await cp(migrations[index]!.migrationsFolder, join(root, "migrations", set.name), {
-        recursive: true,
-      });
-    const stateDir = join(root, "state");
-    await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-    await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
-    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const [port] = await freePorts(1);
-    const env = {
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_STATE_DIR: stateDir,
-      WAITRON_MIGRATIONS_DIR: join(root, "migrations"),
-      WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_NODE_ID: standby.nodeId,
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_ENV: "dev",
-      WAITRON_MANAGEMENT_RP_ID: "localhost",
-      WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
-    };
-    let server: StartedServer | undefined;
-    let agent: Agent | undefined;
-    restartAsked.mockReset();
-    const send = async () => {
-      const response = await fetch(`https://127.0.0.1:${port}/management-api/promote`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          Origin: `https://127.0.0.1:${port}`,
-          "Sec-Fetch-Site": "same-origin",
-        },
-        body: JSON.stringify({
-          ...context,
-          ...auth,
-          moduleOperation: { binding, input: selected.input },
-        }),
-        dispatcher: agent,
-      } as RequestInit);
-      const body = await response.json();
-      expect(response.status, JSON.stringify(body)).toBe(200);
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      return body;
-    };
-    try {
-      // The listener owns a new preparation service, so it must compare again before consuming intent.
-      server = await startServer(env);
-      agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-      const post = async (proposal: unknown) => {
-        const response = await fetch(
-          `https://127.0.0.1:${port}/management-api/promote/preparation`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              ...context,
-              ...auth,
-              moduleOperation: { binding, input: null },
-              proposal,
-            }),
-            dispatcher: agent,
-          } as RequestInit,
-        );
-        const body = await response.json();
-        expect(response.status, JSON.stringify(body)).toBe(200);
-        return body;
-      };
-      const challenge = await post({ action: "clock-challenge" });
-      await post({
-        action: "compare-clocks",
-        browser: { challengeId: challenge.id, instantMs: Date.now() },
-      });
-      expect(await send()).toEqual({ alreadyPrimary: false, restarting: true });
-      await vi.waitFor(() => expect(restartAsked).toHaveBeenCalled());
-      await agent.close();
-      agent = undefined;
-      await server.close();
-      server = undefined;
-      await advanceSeriesTo(suite.db, standby.nodeId, 47);
-      const before = await rows();
-      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(4);
-      expect(before.allocations).toHaveLength(2);
-      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
-        expect.arrayContaining(
-          ["A-0CNQR", "FF-0CNQR", "R-0CNQR", "RF-0CNQR"].map((code) =>
-            expect.objectContaining({ code, nextNumber: 47 }),
-          ),
-        ),
-      );
-      const journal = await readFile(
-        join(stateDir, "module-records/fiscal-verifactu.json"),
-        "utf8",
-      );
-      restartAsked.mockClear();
-      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
-      server = await startServer(env);
-      agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-      expect(await send()).toEqual({ alreadyPrimary: true, restarting: false });
-      expect(restartAsked).not.toHaveBeenCalled();
-      expect(await rows()).toEqual(before);
-      expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
-        journal,
-      );
-      expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
-      expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
-    } finally {
-      await agent?.close();
-      await server?.close();
-    }
-  },
-  120_000,
-);
 
 it("establishes the real reserved node and identity while keeping its fiscal state dormant", async () => {
   const identity = generateStandbyIdentity();
@@ -1159,7 +647,9 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
 it("refuses promotion preparation without retained dormant admission", async () => {
   const s = await service();
   const before = await rows();
-  await expect(compare(s)).rejects.toMatchObject({
+  await expect(
+    s.prepare(binding, credentials, context, { action: "clock-challenge" }, { onBox: true }),
+  ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "reservation_mismatch" },
   });
@@ -1178,9 +668,9 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
     const s = await service();
     await admit(s);
     await compare(s);
-    const selected = (await s.prepare(
+    const selected = (await s.prepareWithDormantSetup(
       binding,
-      { breakGlass: key.secret },
+      credentials,
       context,
       {
         action: "select",
@@ -1208,7 +698,7 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
       fault === "binding"
         ? s.withPromotion(
             { binding: { ...binding, eventId: "other" }, input },
-            { breakGlass: key.secret },
+            credentials,
             context,
             (modules, runner) =>
               promoteMirrorToPrimary(
@@ -1239,9 +729,9 @@ it.each(["module", "operation-action", "prepare-action", "promotion-action"])(
     const operation = { binding: { ...binding, action: "setup" }, input: {} };
     await expect(
       fault === "module"
-        ? s.prepare(
+        ? s.prepareWithDormantSetup(
             { ...binding, module: "unknown" },
-            { breakGlass: key.secret },
+            credentials,
             context,
             {
               action: "clock-challenge",
@@ -1251,7 +741,7 @@ it.each(["module", "operation-action", "prepare-action", "promotion-action"])(
         : fault === "operation-action"
           ? s.withOperation(operation, credentials, context, async () => "unexpected")
           : fault === "prepare-action"
-            ? s.prepare(joinBinding, credentials, context, {}, { onBox: true })
+            ? s.prepareWithDormantSetup(joinBinding, credentials, context, {}, { onBox: true })
             : s.withPromotion(
                 { ...operation, binding: joinBinding },
                 credentials,
@@ -1273,19 +763,15 @@ it.each(["database", "node"])(
   async (fault) => {
     const s = await service();
     await expect(
-      s.withPromotion(
-        { binding, input: {} },
-        { breakGlass: key.secret },
-        context,
-        async (_modules, runner) =>
-          runner(
-            {
-              db: fault === "database" ? spare.db : suite.db,
-              nodeDb: fault === "database" ? spare.node : suite.node,
-              node: fault === "node" ? primary : standby,
-            },
-            async () => "unexpected",
-          ),
+      s.withPromotion({ binding, input: {} }, credentials, context, async (_modules, runner) =>
+        runner(
+          {
+            db: fault === "database" ? spare.db : suite.db,
+            nodeDb: fault === "database" ? spare.node : suite.node,
+            node: fault === "node" ? primary : standby,
+          },
+          async () => "unexpected",
+        ),
       ),
     ).rejects.toMatchObject({ code: "module.operation_invalid" });
   },
@@ -1355,7 +841,7 @@ it("refuses a recovery key rotated while a comparison is in flight", async () =>
     return { source: "internet", result: "unavailable", reason: "offline" };
   });
   const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
-  const pending = compare(s);
+  const pending = compare(s, { breakGlass: key.secret });
   await started;
   key = await mintMasterKey(suite.db);
   const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });

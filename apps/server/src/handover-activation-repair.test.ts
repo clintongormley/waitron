@@ -296,7 +296,7 @@ describe("a box killed while activating, then a real start with its old box swit
     expect(operationStateOnDisk()).toBe("activated");
   }, 180_000);
 
-  it("a box whose own chart names it primary but holds no handover_activations row is not recorded as activated", async () => {
+  it("an unfinished operation on a primary with no committed activation refuses a repeat", async () => {
     await killedActivating("venue-commit");
     const venue = new DatabaseSync(join(dirs().spareVenue, "venue.db"));
     try {
@@ -312,6 +312,8 @@ describe("a box killed while activating, then a real start with its old box swit
     }
 
     await startAfterTheKill();
+    const repeat = await post("activate", fresh());
+    expect([repeat.status, codeOf(repeat)]).toEqual([409, "handover.source_no_longer_main"]);
     await started!.close();
     started = undefined;
 
