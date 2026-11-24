@@ -1,3 +1,4 @@
+import { sifIdentityFields } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import type { stagedHourCrash } from "./staged-hour-crash.js";
 
 type Snapshot = Awaited<ReturnType<Awaited<ReturnType<typeof stagedHourCrash>>["snapshot"]>>;
@@ -12,10 +13,7 @@ export function resultFacts<T extends RestoreRows>(
     ...rows,
     registrations: rows.registrations.map((row) => ({
       id: sif(row.id),
-      nodeId: row.nodeId,
-      nif: row.nif,
-      idSistemaInformatico: row.idSistemaInformatico,
-      numeroInstalacion: row.numeroInstalacion,
+      ...sifIdentityFields(row),
       registradoEn: null,
       revocadoEn: row.revocadoEn !== null,
     })),

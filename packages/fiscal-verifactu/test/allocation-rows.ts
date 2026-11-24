@@ -1,5 +1,6 @@
 import type { Database, Transaction } from "@waitron/db";
 import { asc, isNotNull } from "drizzle-orm";
+import type { DatabaseSync } from "node:sqlite";
 import { allocationOf } from "../src/identity-allocation.js";
 import { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 
@@ -18,4 +19,12 @@ export async function allocationRows(db: Database | Transaction) {
     installationIdentity: row.numeroInstalacion,
     activatedAt: row.registradoEn,
   }));
+}
+
+export function allocationInstallations(db: DatabaseSync) {
+  return db
+    .prepare(
+      "select environment, numero_instalacion as identity from verifactu_identities where event_key is not null",
+    )
+    .all();
 }
