@@ -97,19 +97,20 @@ const clickForNewPage: BrowserCommand<
 // A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
 // otherwise run as real test files.
 const exclude = [...configDefaults.exclude, "**/.stryker-tmp/**"];
+// Vite serves the package pre-bundled (`@oddbird_popover-polyfill.js`) or raw from `node_modules/.pnpm`.
+const popoverChunk = /@oddbird[/_]popover-polyfill/;
 const refusePopoverChunk: BrowserCommand<[refuse: boolean]> = async (context, refuse) => {
   const { page } = context as unknown as {
     page: {
       route: (
-        pattern: string,
+        pattern: RegExp,
         handle: (route: { abort(): Promise<void> }) => Promise<void>,
       ) => Promise<void>;
-      unroute: (pattern: string) => Promise<void>;
+      unroute: (pattern: RegExp) => Promise<void>;
     };
   };
-  const pattern = "**/*popover-polyfill*";
-  if (refuse) await page.route(pattern, (route) => route.abort());
-  else await page.unroute(pattern);
+  if (refuse) await page.route(popoverChunk, (route) => route.abort());
+  else await page.unroute(popoverChunk);
 };
 const fallbackTests = "src/popover-fallback.test.ts";
 const touchTests = "src/icon-button.touch.test.ts";
