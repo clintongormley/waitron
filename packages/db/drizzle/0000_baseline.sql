@@ -102,6 +102,7 @@ CREATE TABLE `working_order_lines` (
 	`group_id` text,
 	`credited_to` text,
 	`list_unit_price_gross` integer,
+	`a_la_carte_unit_price` integer,
 	`menu_item_id` text,
 	`menu_id` text,
 	`menu_name` text,
@@ -150,6 +151,7 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_vat_class_ck" CHECK("working_order_lines"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_takeaway_vat_class_ck" CHECK("working_order_lines"."takeaway_vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "working_order_lines_line_no_ck" CHECK("working_order_lines"."line_no" >= 1),
+	CONSTRAINT "working_order_lines_a_la_carte_price_ck" CHECK("working_order_lines"."a_la_carte_unit_price" is null or "working_order_lines"."a_la_carte_unit_price" >= 0),
 	CONSTRAINT "working_order_lines_set_menu_role_ck" CHECK("working_order_lines"."set_menu_role" in ('set_menu', 'dish')),
 	CONSTRAINT "working_order_lines_set_menu_ck" CHECK(("working_order_lines"."set_menu_role" is null
           and "working_order_lines"."set_menu_id" is null and "working_order_lines"."set_menu_version_id" is null
@@ -3319,6 +3321,7 @@ BEGIN
       AND new.cohort_ordinal IS old.cohort_ordinal
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -3394,6 +3397,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -3487,6 +3491,7 @@ BEGIN
       AND new.cohort_ordinal IS old.cohort_ordinal
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name

@@ -63,6 +63,15 @@ export function setMenuCopyOf(copy: ServedSetMenuCopy, versionId: string): SetMe
   };
 }
 
+/** The version a bill recording a set menu's newest copy on sale records now: the first of the
+ *  copy's versions that a menu selling now holds, else its first. The till and the server agree. */
+export function newBillVersionOf(
+  versionIds: readonly string[],
+  selling: ReadonlySet<string> | undefined,
+): string | undefined {
+  return versionIds.find((versionId) => selling?.has(versionId)) ?? versionIds[0];
+}
+
 export function copiesListing(
   copies: readonly SetMenuCopy[],
   productId: string,

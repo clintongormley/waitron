@@ -55,6 +55,8 @@ export type {
   ZoneMenuState,
   ZoneOfferedModifier,
   ZoneOffers,
+  ZoneSelling,
+  ZoneSetMenus,
   ZoneUnavailable,
   PreparationRoute,
   MakerOutcome,

@@ -44,6 +44,7 @@ describe("VENUE_SERVICE", () => {
       "listStationNotices",
       "listStationsNotices",
       "listZoneOffers",
+      "listZoneSetMenus",
       "menuState",
       "mergePartyAllergies",
       "moveAllergyDraftTicks",

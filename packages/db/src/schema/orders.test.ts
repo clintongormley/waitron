@@ -758,6 +758,28 @@ describe("working_order_lines", () => {
     await seed(db);
   });
 
+  describe("a line's a la carte price", () => {
+    it("refuses a negative price and stores zero and a positive one", async () => {
+      const bill = await openOrder(db);
+      const error = await captureError(() =>
+        db
+          .insert(workingOrderLines)
+          .values({ ...LINE, workingOrderId: bill, aLaCarteUnitPrice: -1 }),
+      );
+      expect(checkFailed(error, "working_order_lines_a_la_carte_price_ck")).toBe(true);
+      for (const [lineNo, price] of [
+        [2, 0],
+        [3, 800],
+      ] as const) {
+        const [line] = await db
+          .insert(workingOrderLines)
+          .values({ ...LINE, workingOrderId: bill, lineNo, aLaCarteUnitPrice: price })
+          .returning({ aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice });
+        expect(line.aLaCarteUnitPrice).toBe(price);
+      }
+    });
+  });
+
   describe("a line's sold-as context", () => {
     async function addLine() {
       const bill = await openOrder(db);

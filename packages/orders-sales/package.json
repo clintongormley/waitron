@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./a-la-carte-price.js": "./src/a-la-carte-price.ts",
     "./bill-allocation.js": "./src/bill-allocation.ts",
     "./errors.js": "./src/errors.ts",
     "./find-bill-dates.js": "./src/find-bill-dates.ts",

@@ -317,6 +317,7 @@ export async function seedSales(
           descriptions: line.descriptions,
           quantity: stringToThousandths(line.quantity),
           unitPriceGross: decimalToCents(line.grossUnitPrice),
+          aLaCarteUnitPrice: decimalToCents(line.grossUnitPrice),
           vatClass: chosen[i]!.product.vatClass,
           takeawayVatClass: chosen[i]!.product.takeawayVatClass ?? chosen[i]!.product.vatClass,
           lineTotal: decimalToCents(line.lineGross),

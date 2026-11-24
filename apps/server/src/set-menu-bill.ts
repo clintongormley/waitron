@@ -89,10 +89,7 @@ export async function refuseTakeawaySetMenuMoney(
   if (line !== undefined) throw new AppError("set_menu.payment_not_ready", {});
 }
 
-export async function refuseUnlessSetMenuBill(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<void> {
+export async function isSetMenuBill(tx: Transaction, workingOrderId: string): Promise<boolean> {
   const [order] = await tx
     .select({
       partyId: workingOrders.partyId,
@@ -101,12 +98,17 @@ export async function refuseUnlessSetMenuBill(
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  if (
-    order === undefined ||
-    (order.dining !== "takeaway" && (order.partyId === null || order.serviceMode !== "table_tab"))
-  ) {
-    throw new AppError("set_menu.not_seated", {});
-  }
+  return (
+    order !== undefined &&
+    (order.dining === "takeaway" || (order.partyId !== null && order.serviceMode === "table_tab"))
+  );
+}
+
+export async function refuseUnlessSetMenuBill(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  if (!(await isSetMenuBill(tx, workingOrderId))) throw new AppError("set_menu.not_seated", {});
 }
 
 export async function readBillSetMenuVersions(

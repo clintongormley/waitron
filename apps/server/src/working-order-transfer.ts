@@ -32,10 +32,12 @@ import { VENUE_SERVICE } from "./modules.js";
 import { grossLineTotal, perDishExtraPicks, extraQuantityFor } from "./order-line-quantities.js";
 import { recordPortionEvents, carryLineReductions } from "./order-portions.js";
 import {
+  isSetMenuBill,
   refuseUnlessSetMenuBill,
   refuseDraftLosingSetMenuPlace,
   carryBillSetMenuCopies,
 } from "./set-menu-bill.js";
+import { recordedSetMenusListing } from "./set-menu-links.js";
 import { replaceMovedDishes } from "./set-menu-moves.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
@@ -122,6 +124,8 @@ export async function moveOrderLines(
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      parentLineId: workingOrderLines.parentLineId,
       setMenuRole: workingOrderLines.setMenuRole,
       setMenuId: workingOrderLines.setMenuId,
       setMenuLineId: workingOrderLines.setMenuLineId,
@@ -142,9 +146,8 @@ export async function moveOrderLines(
     ({ setMenuRole, setMenuLineId }) =>
       setMenuRole === "dish" && (setMenuLineId === null || !movedMenuIds.has(setMenuLineId)),
   );
-  if (movedMenus.length > 0 || looseDishes.length > 0) {
-    await refuseUnlessSetMenuBill(tx, toTabId);
-  }
+  const toTakesSetMenus = movedMenus.length > 0 || looseDishes.length > 0;
+  if (toTakesSetMenus) await refuseUnlessSetMenuBill(tx, toTabId);
   // A whole-bill merge carries the draft along with its menus.
   if (lineNos !== undefined && movedMenus.length > 0) {
     await refuseDraftLosingSetMenuPlace(
@@ -154,13 +157,14 @@ export async function moveOrderLines(
       new Set(source.map(({ id }) => id)),
     );
   }
-  if (lineNos === undefined || movedMenus.length > 0) {
-    await carryBillSetMenuCopies(
-      tx,
-      fromTabId,
-      toTabId,
-      lineNos === undefined ? undefined : movedMenus.map(({ setMenuId }) => setMenuId!),
-    );
+  if (lineNos === undefined) {
+    await carryBillSetMenuCopies(tx, fromTabId, toTabId);
+  } else {
+    const carried = new Set(movedMenus.map(({ setMenuId }) => setMenuId!));
+    const listing = await recordedSetMenusListing(tx, fromTabId, source);
+    if (listing.length > 0 && (toTakesSetMenus || (await isSetMenuBill(tx, toTabId))))
+      for (const setMenuId of listing) carried.add(setMenuId);
+    if (carried.size > 0) await carryBillSetMenuCopies(tx, fromTabId, toTabId, [...carried]);
   }
 
   const [agg] = await tx
@@ -438,6 +442,7 @@ async function carveLines(
         offerUnitPrecision: workingOrderLines.offerUnitPrecision,
         offerVatClass: workingOrderLines.offerVatClass,
         offerCategoryName: workingOrderLines.offerCategoryName,
+        aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
       },
       ticketItemId: ticketItems.id,
     })

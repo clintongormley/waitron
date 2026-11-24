@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
-import { products, workingOrderLines } from "@waitron/db";
+import { billSetMenuCopies, products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin, persons } from "@waitron/identity";
 import {
@@ -20,6 +20,7 @@ import {
   updateMenuPeriod,
 } from "@waitron/venue-service";
 import { fireGroup } from "./order-groups.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { setSetMenuCount } from "./set-menu-count.js";
 import { mountTillApi } from "./till-api.js";
 import { send as tillRequest } from "./testing/bill-venue.js";
@@ -30,6 +31,7 @@ import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
   inTx,
+  order,
   seatWithNoAllergies,
   setupPartyVenue,
   type PartyVenue,
@@ -335,4 +337,57 @@ it("takes the newest copy on sale and records a full menu that sells it now", as
       await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [] });
     });
   }
+});
+
+it("keeps a set menu linked by a dish ordered at lunch usable for a dessert sent after lunch", async () => {
+  at("14:30");
+  const { tabId, partyId } = await seatWithNoAllergies(
+    venue,
+    await venue.table(crypto.randomUUID()),
+  );
+  await order(venue, tabId, "Flan");
+  at("16:00");
+  const { recorded } = await countDaily(tabId, 1);
+  at("16:15");
+  const draft = await saveSetMenuDraft(
+    venue,
+    { tabId, partyId },
+    {
+      menuItemId: daily.menuItemId,
+      menuVersionId: recorded[daily.menuId]!,
+      setMenuId: daily.menuId,
+      quantity: "1",
+    },
+  );
+  const sent = await send(draft, "fire");
+  expect(sent.groups[0]).toMatchObject({ state: "fired" });
+  expect(await dishRow(sent.groups[0]!.lineIds[0]!)).toMatchObject({
+    setMenuRole: "dish",
+    latePeriodName: null,
+  });
+});
+
+it("links the set menus on sale when the dish was priced, though the clock passes lunch's end before the link", async () => {
+  at("14:00");
+  const { tabId } = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  vi.setSystemTime(new Date("2026-11-19T14:59:59.999+01:00"));
+  const resolve = VENUE_SERVICE.resolveDepartmentService;
+  const service = vi
+    .spyOn(VENUE_SERVICE, "resolveDepartmentService")
+    .mockImplementation(async (...args) => {
+      const resolved = await resolve(...args);
+      vi.setSystemTime(new Date("2026-11-19T15:00:00.001+01:00"));
+      return resolved;
+    });
+  try {
+    await order(venue, tabId, "Flan");
+    expect(service).toHaveBeenCalled();
+  } finally {
+    service.mockRestore();
+  }
+  const linked = await venue.db
+    .select({ menuId: billSetMenuCopies.setMenuId })
+    .from(billSetMenuCopies)
+    .where(eq(billSetMenuCopies.workingOrderId, tabId));
+  expect(linked).toEqual([{ menuId: daily.menuId }]);
 });

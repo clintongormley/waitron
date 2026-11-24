@@ -39,6 +39,7 @@ import {
   stringToThousandths,
   decimalToCents,
 } from "@waitron/shared";
+import { setMenuALaCartePrices } from "@waitron/orders-sales/a-la-carte-price.js";
 import { offeredKey } from "@waitron/venue-service";
 import { and, inArray, eq } from "drizzle-orm";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -57,6 +58,7 @@ import {
   type SetMenuPlacement,
   refuseUnlessSetMenuBill,
 } from "./set-menu-bill.js";
+import type { SetMenuLinks } from "./set-menu-links.js";
 import {
   type SetMenuOfferLookup,
   setMenuOfferLookup,
@@ -294,9 +296,14 @@ export async function priceOrderLines(
   lineContexts: (LineContextInput & { placement?: Omit<SetMenuPlacement, "workingOrderLineId"> })[];
   /** The zone's offers the lines were priced from, for `lineContextColumns`. */
   offers: ZoneOffers;
+  /** For `linkSetMenusFor`, once the rows are written. */
+  setMenuLinks: SetMenuLinks;
 }> {
+  // Pricing and linking share one clock reading, so the menus that sold a dish are the ones it links.
+  const at = new Date();
   if (requestedLines.length === 0) {
     return {
+      setMenuLinks: { zoneId, selling: at, dishes: [] },
       lineRows: [],
       portionable: [],
       gross: grossBasketWithOptions([]),
@@ -357,7 +364,6 @@ export async function priceOrderLines(
     line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
   if (periodCheck === "added" && requestedLines.some(checked)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
-    const at = new Date();
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
     // after a sent dish's period they are late like a new dish of it.
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
@@ -461,8 +467,28 @@ export async function priceOrderLines(
     if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
-    return { ...line, offer, setMenuOffer };
+    return { ...line, offer, setMenuOffer, holding: selected?.document };
   });
+  const setMenuLinks: SetMenuLinks = {
+    zoneId,
+    selling:
+      service === null
+        ? at
+        : { menuIds: offers.menus.map(({ id }) => id), orderableMenuIds: service.orderableMenuIds },
+    dishes: lines.flatMap((line) =>
+      line[ADDED_EXTRAS_ONLY] === true
+        ? []
+        : [{ productId: line.offer.productId, variantId: line.variantId ?? null }],
+    ),
+  };
+  const aLaCarte = await setMenuALaCartePrices(
+    tx,
+    lines.map(({ holding, offer, variantId }) => ({
+      holding,
+      productId: offer.productId,
+      variantId: variantId ?? null,
+    })),
+  );
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodId, periodName } of late)
@@ -519,6 +545,7 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         portionable: boolean;
+        aLaCarteCents: number | null;
         placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
         late?: LineContextInput["late"];
         vatClass: VatClass;
@@ -643,6 +670,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable,
+      aLaCarteCents: aLaCarte[index]!,
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
@@ -733,6 +761,8 @@ export async function priceOrderLines(
       // re-price, so a later menu price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
+      aLaCarteUnitPrice:
+        meta.kind === "parent" ? (meta.aLaCarteCents ?? decimalToCents(line.grossUnitPrice)) : null,
       vatClass: meta.vatClass,
       takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
@@ -771,7 +801,7 @@ export async function priceOrderLines(
     ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
   const portionable = lineMeta.map((meta) => meta.kind === "parent" && meta.portionable);
-  return { lineRows, portionable, gross, identities, lineContexts, offers };
+  return { lineRows, portionable, gross, identities, lineContexts, offers, setMenuLinks };
 }
 /**
  * A line's free-text kitchen note, trimmed, or `null` for none. The body is JSON, so a non-string is

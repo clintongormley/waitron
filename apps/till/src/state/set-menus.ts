@@ -1,5 +1,6 @@
 import {
   centsToDecimal,
+  newBillVersionOf,
   placeInOrder,
   type BillSetMenuState,
   type DishToPlace,
@@ -34,7 +35,7 @@ export function orderingCopies(
   }
   for (const copy of zone) {
     if (!copy.newestOnSale || Object.hasOwn(recorded, copy.menuId)) continue;
-    const versionId = copy.versionIds.find((id) => sellingVersions?.has(id)) ?? copy.versionIds[0];
+    const versionId = newBillVersionOf(copy.versionIds, sellingVersions);
     if (versionId !== undefined) copies.push({ copy, versionId });
   }
   return copies;

@@ -71,6 +71,7 @@ import {
 } from "./order-portions.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { type SetMenuPlacement, placeSetMenuRows } from "./set-menu-bill.js";
+import { linkSetMenusFor } from "./set-menu-links.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
@@ -995,6 +996,7 @@ export async function applyLineEdits(
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
+  await linkSetMenusFor(tx, orderId, priced.setMenuLinks);
   const addedToExisting = changes.filter(
     (change) =>
       change.action === "free" &&

@@ -57,8 +57,15 @@ import type {
   ServiceMode,
   ZoneMenuState,
   ZoneOffers,
+  ZoneSelling,
+  ZoneSetMenus,
 } from "@waitron/module";
-import { AppError, type PublishedSetMenu } from "@waitron/shared";
+import {
+  AppError,
+  type PublishedSetMenu,
+  type ServedSetMenu,
+  type ServedSetMenuOffer,
+} from "@waitron/shared";
 import { markNewestOnSale, serveSetMenuCopy, setMenuCopyKey } from "./set-menu-copies.js";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
@@ -888,25 +895,8 @@ export async function listZoneOffers(
     structure: document.root,
     home: document.home,
   }));
-  const copies = new Map<
-    string,
-    { menuId: string; copy: PublishedSetMenu; versionIds: string[]; orderable: boolean }
-  >();
-  if (options.menuItemIds === undefined) {
-    for (const { menuId, document, versionId } of published) {
-      const orderable = isOrderable(menuId);
-      for (const [setMenuId, copy] of Object.entries(document.setMenus ?? {})) {
-        const key = setMenuCopyKey(setMenuId, copy);
-        const previous = copies.get(key);
-        if (previous === undefined) {
-          copies.set(key, { menuId: setMenuId, copy, versionIds: [versionId], orderable });
-        } else {
-          previous.versionIds.push(versionId);
-          previous.orderable ||= orderable;
-        }
-      }
-    }
-  }
+  const copies =
+    options.menuItemIds === undefined ? zoneSetMenuCopies(published, isOrderable) : new Map();
   const {
     offers: served,
     setMenuOffers,
@@ -917,11 +907,6 @@ export async function listZoneOffers(
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
     [...copies.values()].map(({ copy }) => copy),
   );
-  const setMenus = [...copies].map(([key, { menuId, copy, versionIds, orderable }]) => ({
-    ...serveSetMenuCopy(key, menuId, copy, setMenuOffers.get(copy)!),
-    versionIds: versionIds.sort(),
-    orderable,
-  }));
   return {
     defaultMenuId,
     service: {
@@ -934,9 +919,91 @@ export async function listZoneOffers(
     },
     menus,
     offers: published.flatMap((menu) => served.get(menu.menuId)!),
-    setMenus: markNewestOnSale(setMenus),
+    setMenus: servedSetMenus(copies, setMenuOffers),
     liveFields,
   };
+}
+
+type ZoneSetMenuCopies = Map<
+  string,
+  { menuId: string; copy: PublishedSetMenu; versionIds: string[]; orderable: boolean }
+>;
+
+function zoneSetMenuCopies(
+  published: readonly { menuId: string; versionId: string; document: MenuDocument }[],
+  isOrderable: (menuId: string) => boolean,
+): ZoneSetMenuCopies {
+  const copies: ZoneSetMenuCopies = new Map();
+  for (const { menuId, document, versionId } of published) {
+    const orderable = isOrderable(menuId);
+    for (const [setMenuId, copy] of Object.entries(document.setMenus ?? {})) {
+      const key = setMenuCopyKey(setMenuId, copy);
+      const previous = copies.get(key);
+      if (previous === undefined) {
+        copies.set(key, { menuId: setMenuId, copy, versionIds: [versionId], orderable });
+      } else {
+        previous.versionIds.push(versionId);
+        previous.orderable ||= orderable;
+      }
+    }
+  }
+  return copies;
+}
+
+function servedSetMenus(
+  copies: ZoneSetMenuCopies,
+  setMenuOffers: Map<PublishedSetMenu, ServedSetMenuOffer[]>,
+): ServedSetMenu[] {
+  return markNewestOnSale(
+    [...copies].map(([key, { menuId, copy, versionIds, orderable }]) => ({
+      ...serveSetMenuCopy(key, menuId, copy, setMenuOffers.get(copy)!),
+      versionIds: versionIds.sort(),
+      orderable,
+    })),
+  );
+}
+
+/** {@link listZoneOffers}' set menus, without serving the zone's other offers; a zone whose menus
+ *  hold no set menu answers no selling versions either, without reading its timetable. A
+ *  `ZoneSelling` supplies the zone's menu ids and the orderable ones, so neither the zone's menu
+ *  list nor its timetable is read. */
+export async function listZoneSetMenus(
+  tx: Transaction,
+  zoneId: string,
+  when: Date | ZoneSelling = new Date(),
+): Promise<ZoneSetMenus> {
+  const timed = when instanceof Date;
+  const published = await zoneLiveDocuments(tx, zoneId, [], timed ? undefined : when.menuIds);
+  if (!published.some(({ document }) => Object.keys(document.setMenus ?? {}).length > 0))
+    return { setMenus: [], sellingVersionIds: [] };
+  const orderableMenuIds = timed
+    ? await orderableMenuIdsAt(tx, zoneId, when)
+    : when.orderableMenuIds;
+  const isOrderable = (menuId: string) => orderableMenuIds.includes(menuId);
+  const copies = zoneSetMenuCopies(published, isOrderable);
+  const { setMenuOffers } = await applyLiveFields(
+    tx,
+    [],
+    undefined,
+    [...copies.values()].map(({ copy }) => copy),
+  );
+  return {
+    setMenus: servedSetMenus(copies, setMenuOffers),
+    sellingVersionIds: published
+      .filter(({ menuId }) => isOrderable(menuId))
+      .map(({ versionId }) => versionId),
+  };
+}
+
+async function orderableMenuIdsAt(tx: Transaction, zoneId: string, at: Date) {
+  const { departmentId } = await resolveZoneContext(tx, zoneId);
+  const service = await resolveDepartmentService(
+    tx,
+    departmentId,
+    at,
+    await readServiceDayPlan(tx, at),
+  );
+  return service.orderableMenuIds;
 }
 
 /** The key {@link productsOfferedIn} answers for a product, or one of its variants. */

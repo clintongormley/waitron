@@ -150,6 +150,8 @@ to the new files before building; if not, the branch runs lane H's script after 
 
 ## PR 1 — À la carte price and links (`feat/a1515-3-a-la-carte-price`)
 
+_2026-11-24, after review: the price helper lives in `packages/orders-sales/src/a-la-carte-price.ts`, and a raised quantity also links (a review ruling, not a spec line)._
+
 ### Task 1: The column
 
 **Files:**
