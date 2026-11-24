@@ -1422,11 +1422,6 @@ declare module "@waitron/shared" {
      */
     "promotion.fence_not_attested": Record<string, never>;
     /**
-     * A local-secondary promote was called on a read-only MIRROR, which needs the mirror→primary
-     * path (`promoteMirrorToPrimary`) instead. `mode` is the node's own configured role.
-     */
-    "promotion.not_a_local_secondary": { mode: string };
-    /**
      * A mirror→primary promote minted a membership document at term N+1 over the held N, but a
      * document at term ≥ N+1 had landed meanwhile; the term-guarded write
      * (`persistNodeMembershipIfNewerTx`) refused it, so the whole promote transaction aborts and the

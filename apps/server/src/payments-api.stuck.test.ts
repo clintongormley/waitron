@@ -19,8 +19,6 @@ import {
   withTransaction,
   saveSettings,
   workingOrders,
-  readNodeMembership,
-  stampDeployment,
   writeNodeMembership,
   withFoldedPersonChanges,
 } from "@waitron/db";
@@ -92,13 +90,7 @@ import {
   watchedOrder,
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
-import { setSingletonRole } from "@waitron/node-db";
-import { generateNodeKeyPair } from "@waitron/membership";
-import { createDeploymentHolders } from "./deployment-holders.js";
-import { establishNodeIdentity } from "./node-identity.js";
-import { promoteLocalSecondaryToPrimary } from "./promote.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { seedDevice, seedNode, withInvoiceNumberCollision } from "@waitron/db/testing/seed.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
@@ -480,7 +472,7 @@ describe("A1381 manager collection ownership", () => {
     },
   );
 
-  it("recovers the replaced primary's payments after a real plain promotion", async () => {
+  it("lets the primary recover a replaced box's payments when the chart marks it sell-only", async () => {
     const role = { isPrimary: false };
     const v = await setup(role);
     const previous = await seedNode(suite.db);
@@ -494,21 +486,10 @@ describe("A1381 manager collection ownership", () => {
       kind: "attempting",
       intent: { status: "requires_payment_method" },
     });
-    const key = generateNodeKeyPair();
-    await stampDeployment(suite.db, "preproduction");
-    await setSingletonRole(
-      { venue: suite.db, node: suite.node },
-      v.cfg.nodeId,
-      "secondary",
-      "fenced",
-    );
-    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, v.cfg.nodeId);
-    await pinMainBoxKey(suite.node, v.cfg.nodeId, { nodeId: previous, publicKey: key.publicKey });
     await writeNodeMembership(
       suite.db,
       signedMembershipDoc(1, {
         signerNodeId: previous,
-        keyPair: key,
         nodes: [
           { nodeId: previous, standing: "serving-primary", contactUrl: "https://old.example.test" },
           {
@@ -528,30 +509,21 @@ describe("A1381 manager collection ownership", () => {
       [],
     );
     role.isPrimary = false;
-    const holders = createDeploymentHolders("primary", "secondary");
-    await promoteLocalSecondaryToPrimary(
-      {
-        db: suite.db,
-        node: suite.node,
-        nodeId: v.cfg.nodeId,
-        holders,
-        ring: RING,
-        log: noopLog,
-      },
-      { oldNodeNeutralised: true },
+    await writeNodeMembership(
+      suite.db,
+      signedMembershipDoc(2, {
+        signerNodeId: v.cfg.nodeId,
+        nodes: [
+          { nodeId: previous, standing: "sell-only", contactUrl: "https://old.example.test" },
+          {
+            nodeId: v.cfg.nodeId,
+            standing: "serving-primary",
+            contactUrl: "https://self.example.test",
+          },
+          { nodeId: other, standing: "serving-secondary", contactUrl: "https://peer.example.test" },
+        ],
+      }),
     );
-    role.isPrimary = holders.singletonRole.current === "primary";
-    expect(
-      (await readNodeMembership(suite.db))!.body.nodes.map(({ nodeId, standing }) => ({
-        nodeId,
-        standing,
-      })),
-    ).toEqual([
-      { nodeId: previous, standing: "sell-only" },
-      { nodeId: v.cfg.nodeId, standing: "serving-primary" },
-      { nodeId: other, standing: "serving-secondary" },
-    ]);
-    role.isPrimary = false;
     expect(await (await send(v, "GET", "/management-api/payments/bill-payments")).json()).toEqual(
       [],
     );

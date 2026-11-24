@@ -7,10 +7,8 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import {
-  captureError,
   nodes,
   readStandardSeriesId,
   openVenueDatabase,
@@ -65,15 +63,7 @@ beforeEach(() => {
   restartAsked.mockReset();
 });
 
-// A booted local secondary (mode='primary', singleton_role='secondary') files nothing; an
-// in-process promote flips singleton_role live, and the running fiscal pass starts draining on its
-// next tick, with the till surface answering 200 throughout.
-//
-// The suite writes through its own handles only while no server is running.
-//
-// `undici`'s `fetch` rejects, so the post-promote drain's AEAT submit fails fast into an observable
-// attempted state instead of dialling AEAT. Node's global `fetch`, a separate module identity, still
-// serves the `/api/staff` probes.
+// Refuse outbound filing requests during the secondary test.
 vi.mock("undici", async (importOriginal) => {
   const actual = await importOriginal<typeof import("undici")>();
   return {
@@ -227,36 +217,11 @@ async function readSubmission(
   return { estado: row.estado, intentos: row.intentos, incidencia: row.incidencia === 1 };
 }
 
-/** Keeps the shared directory order-independent; `incidents` has no record ID, so it is cleared
- * wholesale. Every caller runs after `server.close()`. */
-async function cleanupFiscalWork(seeded: { recordIds: string[] }): Promise<void> {
-  await appDb.execute(
-    sql`update verifactu_submissions set estado = 'aceptado' where registro_id in ${seeded.recordIds}`,
-  );
-  await appDb.execute(sql`delete from incidents `);
-}
-
-// Short ticks so both passes land inside the poll budget: an idle secondary's empty pass returns
-// `nextDueAt: null`, so the loop would otherwise sleep `maxTickMs`.
 const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 
-/** A prior test may have promoted the shared directory's node. Its chart goes too, or the start
- * would finish that promotion's role from it. */
-async function resetLocalSecondary(): Promise<void> {
-  await setSingletonRole(
-    { venue: appDb, node: appNode },
-    TILL_ENV.WAITRON_NODE_ID,
-    "secondary",
-    "fenced",
-  );
-  await appDb.execute(sql`delete from node_membership`);
-}
-
-describe("historical promote: local secondary → primary, live", () => {
-  it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
-    await resetLocalSecondary();
-    const seeded = await seedFiscalWork();
-    const { recordIds } = seeded;
+describe("boot as a local secondary", () => {
+  it("does not file or reconcile and still serves the till", async () => {
+    const { recordIds } = await seedFiscalWork();
     const port = await freePort();
 
     const server = await startServer(
@@ -278,7 +243,7 @@ describe("historical promote: local secondary → primary, live", () => {
         "fiscal.reconciliation": { state: "not_applicable", lastRunAt: null },
       });
 
-      expect(server.promoteLocalSecondaryToPrimary).toBeDefined();
+      expect(server).not.toHaveProperty("promoteLocalSecondaryToPrimary");
       expect(server.promoteMirrorToPrimary).toBeUndefined();
       expect(await readSubmission(recordIds[0]!)).toEqual({
         estado: "pendiente",
@@ -288,71 +253,8 @@ describe("historical promote: local secondary → primary, live", () => {
       const staffA = await fetch(`${base}/api/staff`);
       expect(staffA.status).toBe(200);
       expect(await staffA.json()).toEqual([]);
-
-      const result = await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
-      expect(result).toEqual({ alreadyPrimary: false });
-      expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe("primary");
-
-      // Phase B — now the singleton. Poll on `incidencia`, set as the LAST step of a failed attempt,
-      // not `intentos`, set at claim while estado is still 'enviando'.
-      await poll(async () => ((await readSubmission(recordIds[0]!)).incidencia ? true : undefined));
-      expect(await readSubmission(recordIds[0]!)).toEqual({
-        estado: "pendiente",
-        intentos: 1,
-        incidencia: true,
-      });
-
-      await poll(async () => {
-        const jobs = server.health.readJobs?.();
-        return jobs?.["payments.reconcile"]?.lastRunAt && jobs["fiscal.reconciliation"]?.lastRunAt
-          ? true
-          : undefined;
-      });
-
-      const staffB = await fetch(`${base}/api/staff`);
-      expect(staffB.status).toBe(200);
-      expect(await staffB.json()).toEqual([]);
     } finally {
       await server.close();
-      await cleanupFiscalWork(seeded);
-    }
-  }, 60_000);
-
-  it("refuses an unattested promote and keeps filing off", async () => {
-    await resetLocalSecondary();
-    const seeded = await seedFiscalWork();
-    const { recordIds } = seeded;
-    const port = await freePort();
-
-    const server = await startServer(
-      {
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: appVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      },
-      {},
-      { timings: TIMINGS },
-    );
-    try {
-      await waitForPass(server.health);
-
-      const error = await captureError(() =>
-        server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: false }),
-      );
-      expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
-
-      expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe(
-        "secondary",
-      );
-      expect(await readSubmission(recordIds[0]!)).toEqual({
-        estado: "pendiente",
-        intentos: 0,
-        incidencia: false,
-      });
-    } finally {
-      await server.close();
-      await cleanupFiscalWork(seeded);
     }
   }, 60_000);
 });
@@ -457,7 +359,6 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
 
     try {
       expect(server.promoteMirrorToPrimary).toBeDefined();
-      expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
 
       const request = seed.fixture();
       const result = await server.promoteMirrorToPrimary!(

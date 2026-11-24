@@ -1262,7 +1262,7 @@ Not in any track until the standalone primary is done.
 
 - **Series and module-preparation gaps at handover** (bundle of 2, at least 1 go-live, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
-- **Decide what the old promote route still does** (bundle of 2, at least 1 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
+- **Decide what the old promote route still does** (size S). Review the open card payments left by that route. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
 
 - **Two safe handover states stay open for good.** A box handed a fencing chart between the role and
   its record, then killed, stays restricted at `filing_assumed`; one handed it between the venue save

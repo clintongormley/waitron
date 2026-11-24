@@ -651,14 +651,10 @@ Slice 3.
 
 ## Bundle: Decide what the old promote route still does
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **After a plain promote nobody sweeps the old box's open card payments.** That route writes no
-  activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
-  resolves it on the new box. A text search found no screen calling the route. Left open by A1018
-  Slice 5 (Rulings R47, R48).
-- **A1279: a local secondary promotes only over a chart it signed itself.** No production caller.
-  [Detail](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself)
+After a plain promote nobody sweeps the old box's open card payments. That route writes no
+activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
+resolves it on the new box. A text search found no screen calling the route. Left open by A1018
+Slice 5 (Rulings R47, R48).
 
 ## Bundle: Address search provider, province names, guide lines
 
@@ -673,6 +669,11 @@ Slice 3.
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 ## Decisions and deliberate limits
+
+### A1279: a local secondary promotes only over a chart it signed itself
+
+On 24 November 2026 the watcher cleared removal of the unused in-process promotion and closed
+A1279. The 11 November decision to defer immediate job-runner role notifications still stands.
 
 **Setup keeps offering to join as a spare (owner, 2026-11-22), settling the question open since
 #443.** Setup's first page offers joining, and leads with **Join it as a spare** when another box
@@ -983,17 +984,6 @@ restructuring wider than a review fix:
 - Matching lock nests use `withVenueAndNodeTransaction`; the remaining sites do work before or
   between venue transactions. Keep their separate commit/check stages when consolidating them:
   credential rotation, spare join, recovery-pack replacement, first setup and return records.
-
-## A1279: a local secondary promotes only over a chart it signed itself
-
-Left open by A947 slice 3a. `promoteLocalSecondaryToPrimary` (`apps/server/src/promote.ts`) runs the
-trust check with no pinned main-box key, because only joining pins one, so it trusts its own key
-alone. It has no production caller: the promote endpoint never calls it
-(`apps/server/src/boot.ts`, "it NEVER calls `promoteLocalSecondaryToPrimary`"), and the in-process
-handle a started server carries (`makeStartedServer`, `apps/server/src/boot.ts`) is used only by
-tests. Decide its trust set if it gains a caller. That same slice owns the immediate runner role
-notifications and a real promotion test including a mirror. Codex attached that follow-through
-here after the watcher deferred immediate wiring from A1308 jr2 on 2026-11-11 at 05:18.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 
