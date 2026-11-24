@@ -118,13 +118,12 @@ export const finishEn = {
   "done.task.in_progress": "In progress",
   "done.task.to_do": "To do",
   "done.task.join": "Join the restaurant",
-  "done.task.label": "Print this box's label",
+  "done.task.label": "Print the QR code for this box",
   "done.task.label_why":
-    "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
-  "done.task.label_stuck": "I've stuck it on",
+    "Print the QR code and attach it to this box. If the main box fails, you can scan the QR code with a till or phone on the venue's network to promote this box from spare to be the new main box.",
   "done.label.why":
-    "Stick it on this box. Every box in the restaurant has one: if the main box fails, scan the label on a spare with any till or phone on the venue's network to switch to that spare.",
-  "done.label.print": "Print label",
+    "Print the QR code and attach it to this box. Every box in the restaurant has one: if the main box fails, scan the QR code on a spare with a till or phone on the venue's network to switch to that spare.",
+  "done.label.print": "Print QR code",
   "done.label.words":
     "If the main box fails, scan this with any till or phone on the venue's network",
   "done.label.qr_alt": "QR code that opens this box's switch page",
@@ -252,13 +251,12 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.in_progress": "En curso",
   "done.task.to_do": "Pendiente",
   "done.task.join": "Unirse al restaurante",
-  "done.task.label": "Imprimir la etiqueta de este servidor",
+  "done.task.label": "Imprimir el código QR de este servidor",
   "done.task.label_why":
-    "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
-  "done.task.label_stuck": "Ya la he pegado",
+    "Imprime el código QR y pégalo en este servidor. Si el servidor principal falla, puedes escanear el código QR con una caja o un móvil de la red del local para convertir este servidor de reserva en el nuevo servidor principal.",
   "done.label.why":
-    "Pégala en este servidor. Cada servidor del restaurante tiene una: si el servidor principal falla, escanea la etiqueta de un servidor de reserva con cualquier caja o móvil conectado a la red del local para cambiar a ese servidor.",
-  "done.label.print": "Imprimir etiqueta",
+    "Imprime el código QR y pégalo en este servidor. Cada servidor del restaurante tiene uno: si el servidor principal falla, escanea el código QR de un servidor de reserva con una caja o un móvil de la red del local para cambiar a ese servidor.",
+  "done.label.print": "Imprimir código QR",
   "done.label.words":
     "Si el servidor principal falla, escanea esto con cualquier caja o móvil conectado a la red del local",
   "done.label.qr_alt": "Código QR que abre la página de cambio de este servidor",

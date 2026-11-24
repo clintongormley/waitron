@@ -54,9 +54,8 @@ en el servidor nuevo y **Añadir como reserva** en el servidor principal, en cua
 códigos no coinciden, elige **No**.
 
 Deja abierta la página de unión del servidor nuevo. Después, el servidor nuevo recibe su primera
-copia por la red del local y se reinicia como servidor de reserva. Su página te pide guardar la clave
-del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en
-el servidor.
+copia por la red del local y se reinicia como servidor de reserva. Su página te pide imprimir su
+[código QR](servers.md#switch-label) y pegarlo en el servidor.
 
 En el servidor principal, abre **Sistema → Servidores** y busca las filas **Servidor principal** y **Servidor de reserva**. En la fila de reserva, comprueba su retraso en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
@@ -68,8 +67,8 @@ La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicac
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
 
 El servidor de un restaurante nuevo ofrece su etiqueta en su página **Configuración completada**, y
-un servidor de reserva en su propia página: elige **Imprimir etiqueta** y pega la
-etiqueta en ese servidor. Para volver a imprimirla, abre **Sistema → Servidores** en el servidor
+un servidor de reserva en su propia página: elige **Imprimir código QR** y pégalo en ese
+servidor. Para volver a imprimirla, abre **Sistema → Servidores** en el servidor
 principal, abre el menú de la fila del servidor y elige **Imprimir etiqueta de cambio** y después
 **Imprimir**. Si
 el servidor principal falla, escanea la etiqueta del servidor de reserva con cualquier caja o móvil

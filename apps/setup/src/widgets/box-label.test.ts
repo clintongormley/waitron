@@ -105,14 +105,36 @@ describe("setup-box-label", () => {
     expect(text(el, "label-name")).toBe("box-77bb.waitron.local");
   });
 
-  it("puts what it is given beside Print label", async () => {
+  it("tells its page when Print QR code is pressed", async () => {
+    let finish!: (qr: string) => void;
+    const printFrame = vi.fn<(view: Window) => void>();
     const { el } = await mountWidget<SetupBoxLabel>("setup-box-label", {
       address: ADDRESS,
-      drawQr: async () => PIXEL,
+      drawQr: () => new Promise<string>((resolve) => (finish = resolve)),
+      printFrame,
     });
-    const extra = document.createElement("button");
-    el.append(extra);
-    const slot = part(el, "print-label")!.parentElement!.querySelector("slot")!;
-    expect(slot.assignedElements()).toEqual([extra]);
+    const heard = vi.fn<(event: Event) => void>();
+    document.body.addEventListener("label-printed", heard);
+    try {
+      const print = part(el, "print-label")! as HTMLElement & { disabled: boolean };
+      print.click();
+      print.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+      expect(heard).not.toHaveBeenCalled();
+      finish(PIXEL);
+      await vi.waitFor(() => expect(print.disabled).toBe(false));
+      print.click();
+      await vi.waitFor(() => expect(printFrame).toHaveBeenCalledTimes(1));
+      expect(heard).toHaveBeenCalledTimes(1);
+      const event = heard.mock.calls[0]![0];
+      expect(event.bubbles).toBe(true);
+      expect(event.composed).toBe(true);
+      printFrame.mock.calls[0]![0].dispatchEvent(new Event("afterprint"));
+      print.click();
+      await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(printFrame).toHaveBeenCalledTimes(2));
+      printFrame.mock.calls[1]![0].dispatchEvent(new Event("afterprint"));
+    } finally {
+      document.body.removeEventListener("label-printed", heard);
+    }
   });
 });

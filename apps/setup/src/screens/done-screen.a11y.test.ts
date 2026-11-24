@@ -251,6 +251,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           mirrorJoin: true,
           serversUrl: "https://waitron.local/servers",
           contactUrl: "https://box-41aa.waitron.local",
+          printFrame: () => {},
         },
         theme,
       );
@@ -271,7 +272,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         expect(label.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
       );
       await expectNoA11yViolations(host);
-      q(el, "[data-test=label-stuck]")!.click();
+      label.shadowRoot!.querySelector<HTMLElement>("[data-test=print-label]")!.click();
       await el.updateComplete;
       expect(q(el, "[data-test=task-label]")!.getAttribute("data-done")).toBe("true");
       await expectNoA11yViolations(host);

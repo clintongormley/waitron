@@ -259,13 +259,13 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private breakGlassSaveFailed = false;
 
-  @state() private labelStuck = false;
+  @state() private labelPrinted = false;
 
   @state() private joined = false;
 
   @state() private lost = false;
 
-  /** Set the first time the box joins or is lost, and never cleared, so the label task stays shown. */
+  /** Never cleared, so the QR code task stays offered after a lost box answers as joining again. */
   @state() private revealed = false;
 
   @state() private copyStage?: JoinCopyStage;
@@ -716,13 +716,15 @@ export class SetupDoneScreen extends LitElement {
       : nothing;
   }
 
-  #boxLabel(extra: TemplateResult | typeof nothing = nothing): TemplateResult {
+  #boxLabel(): TemplateResult {
     return html`<setup-box-label
       .address=${this.contactUrl!}
       .drawQr=${this.drawQr}
       .printFrame=${this.printFrame}
-      >${extra}</setup-box-label
-    >`;
+      @label-printed=${() => {
+        this.labelPrinted = true;
+      }}
+    ></setup-box-label>`;
   }
 
   #mainLabel(): TemplateResult | typeof nothing {
@@ -882,21 +884,10 @@ export class SetupDoneScreen extends LitElement {
           labelShown
             ? this.#task(
                 "label",
-                this.labelStuck ? "done" : "to_do",
+                this.labelPrinted ? "done" : "to_do",
                 t("done.task.label"),
-                this.labelStuck
-                  ? nothing
-                  : html`<p data-test="label-why">${t("done.task.label_why")}</p>
-                      ${this.#boxLabel(
-                        html`<wt-button
-                          variant="secondary"
-                          data-test="label-stuck"
-                          @click=${() => {
-                            this.labelStuck = true;
-                          }}
-                          >${t("done.task.label_stuck")}</wt-button
-                        >`,
-                      )}`,
+                html`<p data-test="label-why">${t("done.task.label_why")}</p>
+                  ${this.#boxLabel()}`,
               )
             : nothing
         }
