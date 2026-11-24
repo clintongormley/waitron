@@ -325,6 +325,7 @@ import {
   type RefundSubmission,
   type Submission,
 } from "./state/bill-payment.js";
+import { CounterOverpaidRead } from "./state/counter-overpaid.js";
 import {
   itemsAllocatedFrom,
   itemsRefusal,
@@ -8194,6 +8195,11 @@ export class TillApp extends LitElement {
     )
       await this.#collectCard(event, true, lateSend);
   }
+
+  readonly #counterOverpaid = new CounterOverpaidRead(
+    (billId) => this.api.getBillBalance(billId),
+    () => this.requestUpdate(),
+  );
 
   #basketPaidInPartFor?: {
     orders: HeldOrderSummary[];
@@ -24658,7 +24664,7 @@ export class TillApp extends LitElement {
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
-        .paidTotal=${this.#basketPaidInPart()?.total ?? null}
+        .overpaidBalance=${this.#counterOverpaid.balanceFor(this.#basketPaidInPart())}
         .overpaidBusy=${this.overpaidBusy}
         .keepsTips=${this.tipsEnabled && this.permissions.includes("payment.take")}
         .cardProvider=${this.#cardReader()}

@@ -3,6 +3,7 @@ import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/pr
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { BillBalance, MenuState } from "../api/client.js";
 import { billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
+import { overpaidOf } from "../state/bill-state.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, floorChipStyles } from "@waitron/ui";
@@ -16,14 +17,9 @@ import {
   shownMenu,
 } from "../menu-filter.js";
 import {
-  MONEY_SCALE,
   centsToDecimal,
-  compareDecimal,
-  decimal,
   formatMoney,
-  subtractDecimal,
   sumDecimals,
-  toScale,
   type BillSetMenuState,
   type DishMove,
 } from "@waitron/shared";
@@ -247,8 +243,10 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) payHeld = false;
   /** Outstanding amount offered through the bill-payment flow. */
   @property() payRest: string | null = null;
-  /** The total of the order `payRest` is left on; a negative `payRest` is what it was paid over it. */
-  @property() paidTotal: string | null = null;
+  /** The order's bill balance while it may be paid over its total: undefined until it is read,
+   * with Pay held back meanwhile. */
+  @property({ attribute: false }) overpaidBalance:
+    Pick<BillBalance, "overpaid" | "total"> | null | undefined = null;
   @property({ type: Boolean }) overpaidBusy = false;
   /** Keep as tip needs `payment.take` and tips on. */
   @property({ type: Boolean }) keepsTips = false;
@@ -425,14 +423,6 @@ export class TillCounterScreen extends LitElement {
           ></till-counter-waiting>`;
   }
 
-  #overpaid(): Pick<BillBalance, "overpaid" | "total"> | null {
-    if (this.payRest === null || this.paidTotal === null) return null;
-    const over = subtractDecimal(decimal("0"), decimal(this.payRest));
-    return compareDecimal(over, decimal("0")) > 0
-      ? { total: this.paidTotal, overpaid: toScale(over, MONEY_SCALE) }
-      : null;
-  }
-
   #emit(name: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -447,7 +437,8 @@ export class TillCounterScreen extends LitElement {
 
   #gridBody(): TemplateResult {
     const { placedPrice, total } = this.#setMenuPrices();
-    const overpaid = this.#overpaid();
+    const balance = this.overpaidBalance;
+    const overpaid = balance != null && overpaidOf(balance) !== null ? balance : null;
     return html`<div class="body grid-body">
       ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
@@ -514,11 +505,11 @@ export class TillCounterScreen extends LitElement {
                   onGiveBack: (excess) => this.#emit("counter-give-back", { excess }),
                   onKeepAsTip: (overpaid) => this.#emit("counter-keep-as-tip", { overpaid }),
                 })
-              : this.payRest === null
+              : this.payRest === null || balance === undefined
                 ? nothing
                 : this.#takeRest(this.payRest)
           }<till-tender-pay
-            .payOffered=${overpaid === null}
+            .payOffered=${overpaid === null && balance !== undefined}
             .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}

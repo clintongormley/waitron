@@ -1012,6 +1012,53 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       );
     });
 
+    it("at the Counter the overpaid amount shown and sent is the bill balance's, read once", async () => {
+      const keepOverpaidAsTip = vi.fn().mockResolvedValue(balanceOf({ workingOrderId: "wo-1" }));
+      let paid = false;
+      const getBillBalance = vi.fn(async () =>
+        balanceOf({
+          workingOrderId: "wo-1",
+          total: paid ? "88.00" : "120.00",
+          received: "95.00",
+          outstanding: paid ? "0.00" : "25.00",
+          overpaid: paid ? "7.00" : "0.00",
+          payments: [paymentOf({ applied: "95.00", tendered: "95.00" })],
+        }),
+      );
+      const el = await leftOverpaid(
+        {
+          listWorkingOrders: vi.fn(async () => [
+            paid
+              ? { ...heldWo1, total: "90.00", outstanding: "-5.00", hasPayments: true }
+              : { ...heldWo1, outstanding: "25.00", hasPayments: true },
+          ]),
+          getBillBalance,
+          keepOverpaidAsTip,
+          payForItems: vi.fn(async () => {
+            paid = true;
+            return paidOnWo9();
+          }),
+        },
+        ["payment.take"],
+      );
+      await flush(el, 6);
+      const reads = getBillBalance.mock.calls.length;
+
+      const notice = counter(el).shadowRoot!.querySelector("[data-overpaid]");
+      expect(text(notice?.querySelector("p"))).toBe(
+        fill(t("table.overpaid"), { amount: money("7.00") }),
+      );
+      counter(el).requestUpdate();
+      el.requestUpdate();
+      await flush(el, 4);
+      expect(getBillBalance.mock.calls.length).toBe(reads);
+
+      notice!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+      await flush(el, 6);
+
+      expect(keepOverpaidAsTip.mock.calls[0]![2]).toBe("7.00");
+    });
+
     it("at the Counter giving back the whole excess starts a new sale", async () => {
       const settledByGiveBack = {
         refund: {
