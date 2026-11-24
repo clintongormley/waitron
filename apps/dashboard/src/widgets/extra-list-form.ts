@@ -16,7 +16,7 @@ import { baseStyles, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/menu/src/extra-contract.js";
 import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
-import { decimal, toScale, type ContentLanguages } from "@waitron/shared";
+import { decimal, newRowId, toScale, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -531,11 +531,11 @@ export class ExtraListForm extends LitElement {
     if (this.busy || !productId) return;
     this.#editItems(() => {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
-      // list and re-inserts the body's under `item.id ?? randomUUID()`
+      // list and re-inserts the body's under `item.id ?? newRowId()`
       // (packages/menu/src/extras.ts), so a row keeps its identity across a save only because
       // the body carried an id for it.
       const item: DraftItem = {
-        id: crypto.randomUUID(),
+        id: newRowId(),
         productId,
         maxQuantity: "1",
         preselected: false,

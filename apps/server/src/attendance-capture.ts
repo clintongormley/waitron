@@ -1,5 +1,5 @@
 import "./errors.js";
-import { newId } from "@waitron/db";
+import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
@@ -18,7 +18,7 @@ export async function captureKitchenActivity(
   attendance: { recorder: AttendanceRecorder; clock: TrustedClock } | undefined,
   personId: string | null | undefined,
   orderIds: readonly string[],
-  commandKey: string = newId(),
+  commandKey: string = randomUUID(),
 ): Promise<void> {
   if (attendance === undefined || !personId || orderIds.length === 0) return;
   const at = attendance.clock.now().instant.toISOString();

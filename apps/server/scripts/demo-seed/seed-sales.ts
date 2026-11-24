@@ -11,7 +11,6 @@ import { withIssuanceTransaction } from "@waitron/core";
 // A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
 // the past.
 
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -28,6 +27,7 @@ import {
 } from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
+import { newRowId } from "@waitron/shared";
 import {
   customerPresentationText,
   localCalendarDate,
@@ -294,7 +294,7 @@ export async function seedSales(
       // Bills closed counts a sale on the day its bill was settled, and the Orders screen shows a
       // bill's dishes from its lines, so each sale gets a bill with its lines, settled at its
       // instant. Written directly: `createOpenOrder` re-prices from the live menu.
-      const workingOrderId = randomUUID();
+      const workingOrderId = newRowId();
       await tx.insert(workingOrders).values({
         id: workingOrderId,
         source: origin.source,

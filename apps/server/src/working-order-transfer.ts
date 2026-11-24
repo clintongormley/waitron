@@ -22,7 +22,7 @@ import {
   decimalToThousandths,
 } from "@waitron/shared";
 import { or, eq, and, inArray, sql, isNull, isNotNull, exists } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { newId } from "@waitron/db";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { refusePaidLines } from "./bill-payments.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
@@ -537,7 +537,7 @@ async function carveLines(
       parentLineId: string | null,
     ): Promise<string> => {
       const movedThousandths = decimalToThousandths(moved);
-      const splitRowId = randomUUID();
+      const splitRowId = newId();
       const lineNo = ++nextLineNo;
       await tx.insert(workingOrderLines).values({
         ...row.context,
@@ -721,7 +721,7 @@ async function splitTicketItem(
     .update(ticketItems)
     .set({ quantity: asked - movedThousandths })
     .where(eq(ticketItems.id, ticketItemId));
-  const id = randomUUID();
+  const id = newId();
   await tx
     .insert(ticketItems)
     .values({ ...ticket!, id, workingOrderLineId: splitLineId, quantity: movedThousandths });
@@ -735,7 +735,7 @@ async function splitTicketItem(
     await tx
       .insert(ticketItemMoves)
       .values(
-        moves.map((move) => ({ ...move, id: randomUUID(), workingOrderLineId: splitLineId })),
+        moves.map((move) => ({ ...move, id: newId(), workingOrderLineId: splitLineId })),
       );
   }
   return id;

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "./errors.js";
 import type { DeviceId, SaleId } from "./ids.js";
 import {
   deviceId,
   fiscalRecordId,
   isUuid,
+  newRowId,
   nodeId,
   normaliseUuid,
   saleId,
@@ -17,6 +18,25 @@ import {
 
 const UUID_A = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+
+describe("newRowId", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("starts with the UTC millisecond and uses the UUIDv7 version and variant", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_645_557_742_000);
+    expect(newRowId()).toMatch(/^017f22e2-79b0-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("sorts an earlier millisecond first across a prefix boundary", () => {
+    vi.spyOn(Date, "now").mockReturnValueOnce(0x017f22e2ffff).mockReturnValueOnce(0x017f22e30000);
+    expect(newRowId() < newRowId()).toBe(true);
+  });
+
+  it("mints distinct IDs in the same millisecond", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_645_557_742_000);
+    expect(newRowId()).not.toBe(newRowId());
+  });
+});
 
 const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => string]> = [
   ["deviceId", "DeviceId", deviceId],

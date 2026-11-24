@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { getTableColumns, sql, type AnyColumn, type SQL, type Table } from "drizzle-orm";
 import { SQLiteSyncDialect, check, getTableConfig } from "drizzle-orm/sqlite-core";
 import {
@@ -35,6 +35,7 @@ import * as vocabulary from "./columns.js";
 import { drawerOpens } from "./drawer-opens.js";
 import * as publicSurface from "../index.js";
 import { binary as doorBinary, day as doorDay, table as doorTable } from "../index.js";
+import { useVenueDb } from "../testing/venue-db.js";
 
 const probe = table("probe", {
   pk: id("pk").primaryKey().$defaultFn(newId),
@@ -54,6 +55,36 @@ const probe = table("probe", {
   big: bigCount("big"),
   bytes: binary("bytes"),
   tags: labelList("tags"),
+});
+
+describe("row IDs written by Drizzle", () => {
+  const rows = table("row_id_probe", { id: id("id").primaryKey().$defaultFn(newId) });
+  const venue = useVenueDb({
+    migrations: [],
+    setup: async (db) => {
+      await db.run(sql`create table row_id_probe (id text primary key)`);
+    },
+  });
+
+  it("orders minted IDs by time and stores a caller's existing ID unchanged", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0x017f22e2ffff);
+    const existing = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
+    try {
+      await venue.db.insert(rows).values({ id: existing });
+      await venue.db.insert(rows).values({});
+      clock.mockReturnValue(0x017f22e30000);
+      await venue.db.insert(rows).values({});
+      const stored = await venue.db.select().from(rows).orderBy(rows.id);
+      expect(stored.map((row) => row.id.slice(0, 15))).toEqual([
+        "017f22e2-ffff-7",
+        "017f22e3-0000-7",
+        existing.slice(0, 15),
+      ]);
+      expect(stored[2]?.id).toBe(existing);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });
 
 const otherProbe = table("other_probe", {

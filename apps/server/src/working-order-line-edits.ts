@@ -15,7 +15,7 @@ import {
   decimalToCents,
 } from "@waitron/shared";
 import { eq, inArray, or, sql, and } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { newId } from "@waitron/db";
 import {
   readBillExcess,
   readPaidQuantities,
@@ -821,7 +821,7 @@ export async function applyLineEdits(
       const { cohortId } = change.portion!;
       let ordinal = nextOrdinal.get(cohortId) ?? change.portion!.nextOrdinal;
       for (let k = 0; k < change.copies; k++) {
-        const dishId = randomUUID();
+        const dishId = newId();
         copyIds.push(dishId);
         inserted.push({
           ...stored!,
@@ -834,7 +834,7 @@ export async function applyLineEdits(
         copiedContexts.push({ from: parent.id, to: dishId });
         copiedDishes.push({ from: parent.id, to: dishId });
         for (const extra of storedExtras) {
-          const id = randomUUID();
+          const id = newId();
           inserted.push({
             ...extra,
             id,
@@ -846,7 +846,7 @@ export async function applyLineEdits(
           copiedContexts.push({ from: extra.id, to: id });
         }
         for (const extra of addedExtras) {
-          const id = randomUUID();
+          const id = newId();
           inserted.push({ ...extra, id, parentLineId: dishId, lineNo: ++nextLineNo });
           insertedContexts.push({
             ...insertedContexts.find((context) => context.workingOrderLineId === extra.id)!,

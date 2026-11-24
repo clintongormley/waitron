@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { newRowId } from "@waitron/shared";
 import { sql, type AnyColumn } from "drizzle-orm";
 import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
@@ -177,7 +177,7 @@ export const labelList = (name: string) => text(name, { mode: "json" }).$type<st
  * `now` and `nowIso` are two functions so the typechecker refuses a `ts` column paired with
  * `nowIso` and a `tsString` column paired with `now`.
  */
-export const newId = () => randomUUID();
+export const newId = newRowId;
 export const now = () => new Date();
 export const nowIso = () => new Date().toISOString();
 

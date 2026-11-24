@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
+import { newRowId, stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import type { RecordSaleLine } from "./record-sale.js";
 
 /**
@@ -15,7 +14,7 @@ export function saleLineRows(
   lines: readonly RecordSaleLine[],
   { corrective = false }: { corrective?: boolean } = {},
 ) {
-  const ids = lines.map(() => randomUUID());
+  const ids = lines.map(() => newRowId());
   const byLineNo = new Map(lines.map((line, index) => [line.lineNo, ids[index]!]));
   return lines.map((line, index) => ({
     id: ids[index]!,

@@ -55,8 +55,7 @@ export const incidents = table(
     // A NULL `device_id` and a NULL `sale_id` are each indexed as the empty string. SQLite has no
     // `NULLS NOT DISTINCT`, and in a SQLite unique index every NULL differs from every other NULL,
     // so two open incidents from one job source with the same code and no sale would both be
-    // accepted. The empty string is a safe stand-in because `newId` — the `randomUUID()` behind
-    // `devices.id` and `sales.id` — never returns it. Written as a CASE rather than
+    // accepted. The empty string can stand in for NULL because `newId` always mints a UUID. Written as a CASE rather than
     // `coalesce(x, '')` because drizzle-kit splits an index expression on its commas and emits each
     // piece as a quoted identifier.
     //

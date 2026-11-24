@@ -252,6 +252,8 @@ See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-str
 
 Revisit content-named pieces, a read-only archive database and continuous Cloud copies after
 time-ordered IDs and real venue measurements (owner, 17 November 2026, 23:16 and 23:19).
+The [time-ordered ID plan](../superpowers/plans/2026-11-24-time-ordered-row-ids.md) covers the synthetic
+comparison. Measure a live venue before using its result to choose a copy format.
 Lane M's LEAN-BACKUPS investigation, `lean-backups-and-live-db.md`, found that one day touched
 11,126 of 11,926 fixed 1 MiB pieces (M1). Consecutive compacted copies shared 29.6% of their
 pages by content (M2). With the shipped print-payload retention, the representative year's

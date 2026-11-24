@@ -20,12 +20,9 @@ function plainName(kind: string, name: string): string {
 /**
  * A fresh UUID, generated in SQL.
  *
- * `change_log.id` is a plain `text` primary key whose default is a JavaScript call
- * (`newId`, `./schema/columns.ts`), and a trigger's INSERT never goes through Drizzle, so the
- * value has to be built here. SQLite has no UUID function; `randomblob` plus the version and
- * variant nibbles is the usual spelling of a version-4 one. `random() & 3` rather than
- * `abs(random()) % 4`: `abs()` on the smallest 64-bit integer is an overflow error in SQLite, and
- * a mask cannot be.
+ * A trigger bypasses the column’s Drizzle default. The change rows are deleted in the same
+ * transaction, so their IDs can use SQLite’s random bytes with the version-4 and variant bits.
+ * The mask handles every draw, including the smallest 64-bit integer that `abs()` cannot take.
  */
 const NEW_ID_SQL =
   `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || ` +

@@ -9,6 +9,7 @@ import {
   devices,
   deviceProfiles,
   kitchenStations,
+  newId,
   printJobs,
   orderGroups,
   ticketItems,
@@ -443,13 +444,13 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
       return { outcome: outcomeOf(answers), seen: 1 };
     };
   const counterSale = async () => {
-    const id = randomUUID();
+    const id = newId();
     return {
       cookie,
       method: "POST",
       path: `/api/working-orders/${id}/payments`,
       body: {
-        submissionId: id,
+        submissionId: randomUUID(),
         kind: "share",
         shareOf: 1,
         method: "cash",

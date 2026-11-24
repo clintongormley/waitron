@@ -1,7 +1,7 @@
 // `createOptionList` and `writeProductModifiers` are not session-gated, so this calls them directly
 // rather than raw-inserting.
 
-import { randomUUID } from "node:crypto";
+import { newRowId } from "@waitron/shared";
 import { createOptionList, writeProductModifiers } from "@waitron/menu";
 import type { ProductModifierRef } from "@waitron/menu";
 import type { Transaction } from "@waitron/db";
@@ -32,7 +32,7 @@ export async function seedOptionLists(
     for (const list of lists) {
       // The label ids are minted HERE because `defaultLabelId` has to name one of the labels in the
       // same body; `parseOptionListInput` refuses one that does not.
-      const labels = list.labels.map((label) => ({ id: randomUUID(), ...label }));
+      const labels = list.labels.map((label) => ({ id: newRowId(), ...label }));
       const created = await createOptionList(
         tx,
         {

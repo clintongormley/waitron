@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { alias } from "drizzle-orm/sqlite-core";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import {
@@ -8,7 +7,7 @@ import {
   products,
   type Transaction,
 } from "@waitron/db";
-import { AppError, type ContentLanguages } from "@waitron/shared";
+import { AppError, newRowId, type ContentLanguages } from "@waitron/shared";
 import {
   parseOptionListInput,
   type OptionLabel,
@@ -259,7 +258,7 @@ export async function createOptionList(
   void fallbackLanguage;
   const input = parseOptionListInput(value);
   normalizeNames(input, value);
-  const optionListId = randomUUID();
+  const optionListId = newRowId();
   await tx.insert(optionLists).values({ id: optionListId, ...listValues(input) });
   await writeLabels(tx, optionListId, input);
   return getOptionList(tx, optionListId);

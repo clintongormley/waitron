@@ -1,4 +1,5 @@
-import { id, json, label, newId, now, table, ts } from "./columns.js";
+import { randomUUID } from "node:crypto";
+import { id, json, label, now, table, ts } from "./columns.js";
 import type { Endorsement } from "@waitron/membership";
 
 /**
@@ -17,7 +18,7 @@ import type { Endorsement } from "@waitron/membership";
  * modules, so the running SIF knows its backend without re-resolving.
  */
 export const nodes = table("nodes", {
-  id: id("id").primaryKey().$defaultFn(newId),
+  id: id("id").primaryKey().$defaultFn(randomUUID),
   name: label("name").notNull(),
   filingModule: label("filing_module"),
   taxModule: label("tax_module"),

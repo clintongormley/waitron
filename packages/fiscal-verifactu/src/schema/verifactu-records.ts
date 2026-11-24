@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { check, index, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
@@ -8,7 +9,6 @@ import {
   id,
   json,
   label,
-  newId,
   nodes,
   now,
   originChecks,
@@ -26,7 +26,7 @@ import { verifactuIdentities } from "./verifactu-identities.js";
 export const verifactuRecords = table(
   "verifactu_records",
   {
-    id: id("id").primaryKey().$defaultFn(newId),
+    id: id("id").primaryKey().$defaultFn(randomUUID),
     correctsRegistroId: id("corrects_registro_id").references(
       (): AnySQLiteColumn => verifactuRecords.id,
     ),

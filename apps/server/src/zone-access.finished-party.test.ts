@@ -1,9 +1,9 @@
 import { cashPayment } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import crypto, { randomUUID } from "node:crypto";
-import { syncBuiltinESMExports } from "node:module";
+import { randomUUID } from "node:crypto";
+import { mockRowIdOrder } from "./testing/descending-ids.js";
 import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { devices, parties, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -203,12 +203,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
   it.each(["ascending", "descending"] as const)(
     "leaves out a bill emptied by a merge, whatever zone it was recorded in (bill IDs %s)",
     async (order) => {
-      let sequence = 0x10000;
-      const ids = vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
-        sequence += order === "ascending" ? 1 : -1;
-        return `a1023${order === "ascending" ? "000" : "001"}-0000-4000-8000-${sequence.toString(16).padStart(12, "0")}`;
-      });
-      syncBuiltinESMExports();
+      const restoreIds = mockRowIdOrder(order);
       try {
         const p = await servedParty();
         const water = p.lines.find((line) => line.name === "Water")!;
@@ -242,8 +237,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
         expect(answer.status, JSON.stringify(answer.json)).toBe(200);
         expect(await withZones([patio], () => read(p.partyId, burger.id))).toMatchObject(refused);
       } finally {
-        ids.mockRestore();
-        syncBuiltinESMExports();
+        restoreIds();
       }
     },
   );

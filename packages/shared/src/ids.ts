@@ -20,6 +20,13 @@ export type FiscalRecordId = Branded<string, "FiscalRecordId">;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** A row ID sorts by its minting millisecond. The random tail breaks ties between writers. */
+export function newRowId(): ReturnType<typeof crypto.randomUUID> {
+  const time = Date.now().toString(16).padStart(12, "0");
+  const random = crypto.randomUUID();
+  return `${time.slice(0, 8)}-${time.slice(8)}-7${random.slice(15, 18)}-${random.slice(19, 23)}-${random.slice(24)}`;
+}
+
 /**
  * Whether the value is UUID-shaped, in either case. It does not settle the spelling: a caller that
  * stores or compares the value needs {@link normaliseUuid}.

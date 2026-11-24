@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, label, newId, table, tsString } from "../columns.js";
+import { randomUUID } from "node:crypto";
+import { enumCheck, enumType, id, label, table, tsString } from "../columns.js";
 import { persons } from "./persons.js";
 
 export const signInChallengeKind = enumType([
@@ -14,7 +15,7 @@ export const signInChallengeKind = enumType([
 export const signInChallenges = table(
   "sign_in_challenges",
   {
-    id: id("id").primaryKey().$defaultFn(newId),
+    id: id("id").primaryKey().$defaultFn(randomUUID),
     kind: signInChallengeKind("kind").notNull(),
     personId: id("person_id"),
     challenge: label("challenge"),

@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { adjustmentLines } from "@waitron/adjustments";
 import {
+  newId,
   insertInChunks,
   orderEvents,
   saleLineDishes,
@@ -58,9 +58,9 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
         `expandPortionRows: line ${row.id}'s quantity ${row.quantity} is not a whole number of portions`,
       );
     refuseTooManyPortions(count);
-    const cohort = randomUUID();
+    const cohort = newId();
     for (let ordinal = 1; ordinal <= count; ordinal++) {
-      const id = ordinal === 1 ? row.id! : randomUUID();
+      const id = ordinal === 1 ? row.id! : newId();
       out.push({
         ...share(row, count),
         id,
@@ -71,7 +71,7 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
       contexts.push({ ...lineContexts[i]!, workingOrderLineId: id });
       requestOfRow.push(request);
       for (const { child, context } of extras) {
-        const childId = ordinal === 1 ? child.id! : randomUUID();
+        const childId = ordinal === 1 ? child.id! : newId();
         out.push({ ...share(child, count), id: childId, parentLineId: id });
         contexts.push({ ...context, workingOrderLineId: childId });
         requestOfRow.push(request);

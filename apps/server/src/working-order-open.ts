@@ -25,7 +25,7 @@ import {
   AppError,
 } from "@waitron/shared";
 import { eq, and, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { newId } from "@waitron/db";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -380,7 +380,7 @@ export async function openTab(
     throw new AppError("tab.already_open", { tableId: req.tableId });
   }
 
-  const tabId = randomUUID();
+  const tabId = newId();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId,
     partyId: req.partyId,

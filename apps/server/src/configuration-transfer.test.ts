@@ -6776,7 +6776,7 @@ describe("special days in a configuration transfer", () => {
     for (const row of imported.rows) {
       expect(sourceIds.has(row.id)).toBe(false);
       expect(row.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
     }
     const dayStates = await targetSuite.db.execute<{ n: number }>(sql`
@@ -6893,7 +6893,7 @@ describe("special days in a configuration transfer", () => {
 
 describe("public holidays in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
-  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
   async function moveTo(db: typeof suite.db, province: string, city: string) {
     await withTransaction(db, (tx) => seedVenueSettings(tx, { province, city }));

@@ -11,7 +11,7 @@ const wellDoneId = "33333333-3333-4333-8333-333333333333";
 const sauceId = "44444444-4444-4444-8444-444444444444";
 const aioliId = "55555555-5555-4555-8555-555555555555";
 const unknownId = "66666666-6666-4666-8666-666666666666";
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The three names carry three DIFFERENT texts everywhere, so a function reading the wrong one fails
 // rather than passing on a coincidence (CLAUDE.md §3).
@@ -216,7 +216,7 @@ describe("option list authoring contract", () => {
     expect(parsed.kitchenName).toBeNull();
     expect(parsed.defaultLabelId).toBe(parsed.labels[0]!.id);
     expect(parsed.labels[0]).toEqual({
-      id: expect.stringMatching(UUID),
+      id: expect.stringMatching(ROW_ID),
       name: "Medium rare",
       customerName: null,
       kitchenName: null,
@@ -321,7 +321,7 @@ describe("option list authoring contract", () => {
       defaultLabelId: null,
       labels: [{ ...mediumRare, id: undefined }],
     });
-    expect(parsed.labels[0]!.id).toMatch(UUID);
+    expect(parsed.labels[0]!.id).toMatch(ROW_ID);
   });
 
   it("makes the first available label the default when none is named", () => {
