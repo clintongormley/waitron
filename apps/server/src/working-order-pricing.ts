@@ -58,6 +58,7 @@ import {
   type SetMenuPlacement,
   refuseUnlessSetMenuBill,
 } from "./set-menu-bill.js";
+import type { SetMenuLinks } from "./set-menu-links.js";
 import {
   type SetMenuOfferLookup,
   setMenuOfferLookup,
@@ -295,9 +296,14 @@ export async function priceOrderLines(
   lineContexts: (LineContextInput & { placement?: Omit<SetMenuPlacement, "workingOrderLineId"> })[];
   /** The zone's offers the lines were priced from, for `lineContextColumns`. */
   offers: ZoneOffers;
+  /** For `linkSetMenusFor`, once the rows are written. */
+  setMenuLinks: SetMenuLinks;
 }> {
+  // One clock reading for the whole round, so the menus that sold a dish are the ones it links.
+  const at = new Date();
   if (requestedLines.length === 0) {
     return {
+      setMenuLinks: { zoneId, selling: at, dishes: [] },
       lineRows: [],
       portionable: [],
       gross: grossBasketWithOptions([]),
@@ -358,7 +364,6 @@ export async function priceOrderLines(
     line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
   if (periodCheck === "added" && requestedLines.some(checked)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
-    const at = new Date();
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
     // after a sent dish's period they are late like a new dish of it.
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
@@ -464,6 +469,18 @@ export async function priceOrderLines(
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
     return { ...line, offer, setMenuOffer, holding: selected?.document };
   });
+  const setMenuLinks: SetMenuLinks = {
+    zoneId,
+    selling:
+      service === null
+        ? at
+        : { menuIds: offers.menus.map(({ id }) => id), orderableMenuIds: service.orderableMenuIds },
+    dishes: lines.flatMap((line) =>
+      line[ADDED_EXTRAS_ONLY] === true
+        ? []
+        : [{ productId: line.offer.productId, variantId: line.variantId ?? null }],
+    ),
+  };
   const aLaCarte = await setMenuALaCartePrices(
     tx,
     lines.map(({ holding, offer, variantId }) => ({
@@ -784,7 +801,7 @@ export async function priceOrderLines(
     ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
   const portionable = lineMeta.map((meta) => meta.kind === "parent" && meta.portionable);
-  return { lineRows, portionable, gross, identities, lineContexts, offers };
+  return { lineRows, portionable, gross, identities, lineContexts, offers, setMenuLinks };
 }
 /**
  * A line's free-text kitchen note, trimmed, or `null` for none. The body is JSON, so a non-string is

@@ -39,7 +39,7 @@ import {
   placeSetMenuRows,
 } from "./set-menu-bill.js";
 import { setSetMenuCount } from "./set-menu-count.js";
-import { linkSetMenusFor } from "./set-menu-links.js";
+import { linkSetMenusFor, type SetMenuLinks } from "./set-menu-links.js";
 import {
   type OrderLineIdentity,
   totalBeforeEdit,
@@ -271,7 +271,7 @@ export async function createOpenOrder(
     workingOrderLines,
     lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
   );
-  await linkSetMenusFor(tx, id, lineRows, effectiveZoneId);
+  await linkSetMenusFor(tx, id, pricedLines.setMenuLinks);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, billNumber, gross, identities, lineRows };
@@ -428,6 +428,7 @@ export interface PricedTabRound {
   portionable: boolean[];
   lineContexts: Awaited<ReturnType<typeof priceOrderLines>>["lineContexts"];
   offers: ZoneOffers;
+  setMenuLinks: SetMenuLinks;
 }
 /**
  * Price a round for the bill and number its rows after the bill's last line, writing no line.
@@ -454,7 +455,7 @@ export async function priceTabRound(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
   const context = await VENUE_SERVICE.findOrderContext(tx, tabId);
-  const { lineRows, portionable, lineContexts, offers } = await priceOrderLines(
+  const { lineRows, portionable, lineContexts, offers, setMenuLinks } = await priceOrderLines(
     tx,
     cfg,
     tabId,
@@ -471,6 +472,7 @@ export async function priceTabRound(
     portionable,
     lineContexts,
     offers,
+    setMenuLinks,
   };
 }
 /** Insert a priced round's rows and record their line contexts; answers what {@link fireLines} reads. */
@@ -505,7 +507,7 @@ export async function insertTabRound(
         })),
     );
   }
-  await linkSetMenusFor(tx, round.tabId, placed);
+  await linkSetMenusFor(tx, round.tabId, round.setMenuLinks);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
 }

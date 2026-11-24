@@ -698,7 +698,6 @@ export async function applyLineEdits(
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
   const setMenuPlacements: SetMenuPlacement[] = [];
-  const ordered = new Set<string>();
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
@@ -913,7 +912,6 @@ export async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
-      if (as.joins === undefined && row.parentLineId === null) ordered.add(row.id!);
       const origin = as.origin;
       const placement = group.contexts[rowIndex]!.placement;
       if (placement !== undefined) {
@@ -995,15 +993,10 @@ export async function applyLineEdits(
       setMenuPlacements,
     );
     await insertInChunks(tx, workingOrderLines, placed);
-    await linkSetMenusFor(
-      tx,
-      orderId,
-      placed.filter(({ id }) => ordered.has(id!)),
-      context?.zoneId,
-    );
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
+  await linkSetMenusFor(tx, orderId, priced.setMenuLinks);
   const addedToExisting = changes.filter(
     (change) =>
       change.action === "free" &&

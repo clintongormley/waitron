@@ -329,8 +329,17 @@ it("links the set menus of a dish added when a parked order is saved again", asy
   });
 });
 
-it("links nothing when a saved-again parked order only raises a dish already on it", async () => {
+it("links nothing when a parked order is saved again unchanged", async () => {
   const { venue } = fixture;
+  const id = await parkTakeaway(takeaway.flanItem);
+  await venue.db.delete(billSetMenuCopies).where(eq(billSetMenuCopies.workingOrderId, id));
+  await saveAgain(id, [{ menuItemId: takeaway.flanItem, quantity: "1" }]);
+  expect(await links(id)).toEqual([]);
+});
+
+it("links the set menus of a dish whose quantity a saved-again parked order raises", async () => {
+  const { venue, copy } = fixture;
+  const versionId = await currentVersion();
   const id = await parkTakeaway(takeaway.flanItem);
   await venue.db.delete(billSetMenuCopies).where(eq(billSetMenuCopies.workingOrderId, id));
   await saveAgain(id, [{ menuItemId: takeaway.flanItem, quantity: "2" }]);
@@ -339,7 +348,10 @@ it("links nothing when a saved-again parked order only raises a dish already on 
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id));
   expect(dishes).toHaveLength(2);
-  expect(await links(id)).toEqual([]);
+  expect(byMenu(await links(id))).toEqual({
+    [copy.menuId]: versionId,
+    [special.menuId]: versionId,
+  });
 });
 
 it("links the set menus of a sent dish raised on its bill, which adds a row", async () => {

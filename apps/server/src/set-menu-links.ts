@@ -6,16 +6,26 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import type { ZoneSetMenus } from "@waitron/module";
-import { copiesListing, setMenuCopyOf, type SetMenuCopy } from "@waitron/shared";
+import type { ZoneSelling, ZoneSetMenus } from "@waitron/module";
+import { copiesListing, newBillVersionOf, setMenuCopyOf, type SetMenuCopy } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { carryBillSetMenuCopies, isSetMenuBill, readBillSetMenuVersions } from "./set-menu-bill.js";
+import { isSetMenuBill, readBillSetMenuVersions } from "./set-menu-bill.js";
 
 /** A dish as a set menu lists it: a variant by its parent's id and its own. */
 interface ListedDish {
   productId: string;
   variantId: string | null;
+}
+
+/** What linking a priced round's set menus needs, as pricing resolved it. */
+export interface SetMenuLinks {
+  zoneId: string | undefined;
+  /** What the zone sold at the instant the lines were priced, or that instant when pricing
+   *  resolved no service: a link never reads the clock again. */
+  selling: Date | ZoneSelling;
+  /** Every dish the round orders a portion of, a raised quantity included. */
+  dishes: readonly ListedDish[];
 }
 
 type DishRow = Pick<
@@ -28,12 +38,7 @@ export function copiesOnSale(zone: ZoneSetMenus): SetMenuCopy[] {
   const selling = new Set(zone.sellingVersionIds);
   return zone.setMenus
     .filter(({ newestOnSale }) => newestOnSale)
-    .map((copy) =>
-      setMenuCopyOf(
-        copy,
-        copy.versionIds.find((versionId) => selling.has(versionId)) ?? copy.versionIds[0]!,
-      ),
-    );
+    .map((copy) => setMenuCopyOf(copy, newBillVersionOf(copy.versionIds, selling)!));
 }
 
 function listingAny(copies: readonly SetMenuCopy[], dishes: readonly ListedDish[]) {
@@ -77,24 +82,18 @@ async function listedDishes(tx: Transaction, productIds: readonly string[]) {
   }));
 }
 
-/** Records on a set-menu bill the copy on sale of every set menu listing one of the top-level
- *  dishes among `rows`; a set menu the bill already records keeps its copy. Any other bill is left
- *  alone. */
+/** Records on a set-menu bill the copy on sale of every set menu listing one of `links`' dishes; a
+ *  set menu the bill already records keeps its copy. Any other bill is left alone. */
 export async function linkSetMenusFor(
   tx: Transaction,
   billId: string,
-  rows: readonly DishRow[],
-  /** The bill's zone when the caller holds it; read from the bill's order context otherwise. */
-  knownZoneId?: string,
+  { zoneId, selling, dishes }: SetMenuLinks,
 ): Promise<void> {
-  const productIds = topLevelProductIds(rows);
-  if (productIds.length === 0 || !(await venueHasSetMenus(tx))) return;
+  if (dishes.length === 0 || zoneId === undefined || !(await venueHasSetMenus(tx))) return;
   if (!(await isSetMenuBill(tx, billId))) return;
-  const zoneId = knownZoneId ?? (await VENUE_SERVICE.findOrderContext(tx, billId))?.zoneId;
-  if (zoneId === undefined) return;
-  const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId));
+  const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, selling));
   if (onSale.length === 0) return;
-  const linked = listingAny(onSale, await listedDishes(tx, productIds));
+  const linked = listingAny(onSale, dishes);
   if (linked.length === 0) return;
   await tx
     .insert(billSetMenuCopies)
@@ -110,37 +109,19 @@ export async function linkSetMenusFor(
     });
 }
 
-/** Brings to `toBillId` the source's recorded copy of every set menu listing a moved dish. */
-export async function carrySetMenuLinks(
+/** The set menus `billId` records a copy of that list one of the top-level dishes among `rows`. */
+export async function recordedSetMenusListing(
   tx: Transaction,
-  fromBillId: string,
-  toBillId: string,
-  lineIds: readonly string[],
-): Promise<void> {
-  const recorded = await readBillSetMenuVersions(tx, fromBillId);
-  if (recorded.size === 0 || !(await isSetMenuBill(tx, toBillId))) return;
-  const lines = await tx
-    .select({
-      productId: workingOrderLines.productId,
-      parentLineId: workingOrderLines.parentLineId,
-      setMenuRole: workingOrderLines.setMenuRole,
-    })
-    .from(workingOrderLines)
-    .where(
-      inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(lineIds)}))`),
-    );
-  const productIds = topLevelProductIds(lines);
-  if (productIds.length === 0) return;
+  billId: string,
+  rows: readonly DishRow[],
+): Promise<string[]> {
+  const productIds = topLevelProductIds(rows);
+  if (productIds.length === 0) return [];
+  const recorded = await readBillSetMenuVersions(tx, billId);
+  if (recorded.size === 0) return [];
   const requests = [...recorded].map(([menuId, versionId]) => ({ menuId, versionId }));
   const copies = (await serveRecordedSetMenus(tx, requests)).map((copy, index) =>
     setMenuCopyOf(copy, requests[index]!.versionId),
   );
-  const listed = listingAny(copies, await listedDishes(tx, productIds));
-  if (listed.length === 0) return;
-  await carryBillSetMenuCopies(
-    tx,
-    fromBillId,
-    toBillId,
-    listed.map(({ setMenuId }) => setMenuId),
-  );
+  return listingAny(copies, await listedDishes(tx, productIds)).map(({ setMenuId }) => setMenuId);
 }

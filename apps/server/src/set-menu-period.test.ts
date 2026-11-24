@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
-import { products, workingOrderLines } from "@waitron/db";
+import { billSetMenuCopies, products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin, persons } from "@waitron/identity";
 import {
@@ -20,6 +20,7 @@ import {
   updateMenuPeriod,
 } from "@waitron/venue-service";
 import { fireGroup } from "./order-groups.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { setSetMenuCount } from "./set-menu-count.js";
 import { mountTillApi } from "./till-api.js";
 import { send as tillRequest } from "./testing/bill-venue.js";
@@ -364,4 +365,29 @@ it("keeps a set menu linked by a dish ordered at lunch usable for a dessert sent
     setMenuRole: "dish",
     latePeriodName: null,
   });
+});
+
+it("links the set menus on sale when the dish was priced, though the clock passes lunch's end before the link", async () => {
+  at("14:00");
+  const { tabId } = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  vi.setSystemTime(new Date("2026-11-19T14:59:59.999+01:00"));
+  const resolve = VENUE_SERVICE.resolveDepartmentService;
+  const service = vi
+    .spyOn(VENUE_SERVICE, "resolveDepartmentService")
+    .mockImplementation(async (...args) => {
+      const resolved = await resolve(...args);
+      vi.setSystemTime(new Date("2026-11-19T15:00:00.001+01:00"));
+      return resolved;
+    });
+  try {
+    await order(venue, tabId, "Flan");
+    expect(service).toHaveBeenCalled();
+  } finally {
+    service.mockRestore();
+  }
+  const linked = await venue.db
+    .select({ menuId: billSetMenuCopies.setMenuId })
+    .from(billSetMenuCopies)
+    .where(eq(billSetMenuCopies.workingOrderId, tabId));
+  expect(linked).toEqual([{ menuId: daily.menuId }]);
 });
