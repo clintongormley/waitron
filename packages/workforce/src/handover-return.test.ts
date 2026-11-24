@@ -250,8 +250,59 @@ describe("receiveWorkforceBatch", () => {
     const old = await heldChain(oldBox);
     expect(verifyChain(old)).toEqual({ ok: true });
     expect(old.at(-1)!.sequenceNo).toBe(4);
-    await appendChainEntries(main.db, mainBox, [clockIn(personId, 11)]);
-    expect((await heldChain(mainBox)).map((row) => row.sequenceNo)).toEqual([1, 2]);
+  });
+
+  it("stores a manager's proposal, a worker's request and the worker's self-approval of it", async () => {
+    const manager = await seedPerson(suite.db, "Marta");
+    const missingOut = (
+      by: string,
+      direction: "manager_proposal" | "worker_request",
+    ): TimeEntryAppend => ({
+      ...clockIn(personId, 1),
+      entryKind: "correction",
+      recordedByPersonId: by,
+      correctionReason: "Forgot to clock out",
+      correctionStatus: "requested",
+      correctionActorId: by,
+      extension: {
+        selfApproved: false,
+        authorKind: by === manager ? "manager" : "worker",
+        direction,
+        missingEntryKind: "out",
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    });
+    const request = missingOut(personId, "worker_request");
+    const [, , requested] = await appendChainEntries(suite.db, oldBox, [
+      clockIn(personId, 0),
+      missingOut(manager, "manager_proposal"),
+      request,
+    ]);
+    await appendChainEntries(suite.db, oldBox, [
+      {
+        ...request,
+        correctionStatus: "approved",
+        extension: {
+          ...request.extension!,
+          selfApproved: true,
+          authorKind: "manager",
+          respondsToEntryId: requested!,
+        },
+      },
+    ]);
+
+    expect(await receive(await readBatch())).toBe(true);
+
+    const held = await heldChain(oldBox);
+    expect(held.map((row) => row.extension?.direction ?? null)).toEqual([
+      null,
+      "manager_proposal",
+      "worker_request",
+      "worker_request",
+    ]);
+    expect(held[3]!.extension).toMatchObject({ selfApproved: true, respondsToEntryId: requested });
+    expect(verifyChain(held)).toEqual({ ok: true });
   });
 
   it("adds a missing person suspended with only a name, and a missing device deleted", async () => {
@@ -344,7 +395,19 @@ describe("receiveWorkforceBatch", () => {
     };
   }
 
-  it.each<[string, string, Arrange, number[], boolean?]>([
+  async function correctAnotherBoxsEntry(): Promise<TimeEntryAppend> {
+    const [foreign] = await appendChainEntries(suite.db, otherBox, [clockIn(personId, 9)]);
+    return {
+      ...clockIn(personId, 2),
+      entryKind: "correction",
+      correctsEntryId: foreign!,
+      correctionReason: "Forgot",
+      correctionStatus: "requested",
+      correctionActorId: personId,
+    };
+  }
+
+  it.each<[string, string, Arrange, number[], ((previous: string) => Promise<TimeEntryAppend>)?]>([
     [
       "a held id with different content",
       "attendance.return_entry_clash",
@@ -406,15 +469,22 @@ describe("receiveWorkforceBatch", () => {
       "attendance.return_entry_invalid",
       holdFirst,
       [1, 2],
-      true,
+      nameAClosure,
     ],
-  ])("refuses %s with %s, keeping the rows before it", async (_, code, arrange, kept, closure) => {
+    [
+      "a correction of another box's entry the main box lacks",
+      "attendance.return_entry_invalid",
+      holdFirst,
+      [1, 2],
+      correctAnotherBoxsEntry,
+    ],
+  ])("refuses %s with %s, keeping the rows before it", async (_, code, arrange, kept, third) => {
     const [, second] = await appendChainEntries(suite.db, oldBox, [
       clockIn(personId, 0),
       clockIn(personId, 1),
     ]);
     await appendChainEntries(suite.db, oldBox, [
-      closure ? await nameAClosure(second!) : clockIn(personId, 2),
+      third ? await third(second!) : clockIn(personId, 2),
       clockIn(personId, 3),
     ]);
     const batch = await readBatch();

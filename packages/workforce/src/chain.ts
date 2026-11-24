@@ -209,6 +209,55 @@ export async function appendToChain(
   });
 }
 
+type StoredTimeEntry = typeof timeEntries.$inferSelect;
+
+/** The fields of a stored row that {@link verifiableEntry} reads. */
+export type ChainedTimeEntry = Omit<StoredTimeEntry, "id">;
+
+/**
+ * A stored row as the chain hash reads it. `readChain`, the main box receiving a replaced box's
+ * entries (handover-return.ts) and backup verification all build their entries here.
+ */
+export function verifiableEntry(row: ChainedTimeEntry): VerifiableEntry {
+  const extensionFields = [
+    row.authorKind,
+    row.correctionDirection,
+    row.missingEntryKind,
+    row.respondsToEntryId,
+    row.payPeriodClosureId,
+  ];
+  return {
+    sequenceNo: row.sequenceNo,
+    personId: row.personId,
+    nodeId: row.nodeId,
+    entryKind: row.entryKind,
+    eventAt: row.eventAt,
+    recordedAt: row.recordedAt,
+    eventOffsetMinutes: row.eventOffsetMinutes,
+    recordedByPersonId: row.recordedByPersonId,
+    capturedBySource: row.capturedBySource,
+    capturedByDeviceId: row.capturedByDeviceId,
+    correctsEntryId: row.correctsEntryId,
+    correctionReason: row.correctionReason,
+    correctionStatus: row.correctionStatus,
+    correctionActorId: row.correctionActorId,
+    prevEntryHash: row.prevEntryHash,
+    entryHash: row.entryHash,
+    isFirstEntry: row.isFirstEntry,
+    extension:
+      !row.selfApproved && extensionFields.every((value) => value === null)
+        ? null
+        : {
+            selfApproved: row.selfApproved,
+            authorKind: row.authorKind,
+            direction: row.correctionDirection,
+            missingEntryKind: row.missingEntryKind,
+            respondsToEntryId: row.respondsToEntryId,
+            payPeriodClosureId: row.payPeriodClosureId,
+          },
+  };
+}
+
 /**
  * Ordered by chain position. `event_at` and `recorded_at` read back as the exact strings
  * `attemptAppend` wrote and hashed.
@@ -218,63 +267,9 @@ export async function readChain(
   key: ChainKey,
 ): Promise<VerifiableEntry[]> {
   const rows = await tx
-    .select({
-      sequenceNo: timeEntries.sequenceNo,
-      personId: timeEntries.personId,
-      nodeId: timeEntries.nodeId,
-      entryKind: timeEntries.entryKind,
-      eventAt: timeEntries.eventAt,
-      recordedAt: timeEntries.recordedAt,
-      eventOffsetMinutes: timeEntries.eventOffsetMinutes,
-      recordedByPersonId: timeEntries.recordedByPersonId,
-      capturedBySource: timeEntries.capturedBySource,
-      capturedByDeviceId: timeEntries.capturedByDeviceId,
-      correctsEntryId: timeEntries.correctsEntryId,
-      correctionReason: timeEntries.correctionReason,
-      correctionStatus: timeEntries.correctionStatus,
-      correctionActorId: timeEntries.correctionActorId,
-      selfApproved: timeEntries.selfApproved,
-      authorKind: timeEntries.authorKind,
-      correctionDirection: timeEntries.correctionDirection,
-      missingEntryKind: timeEntries.missingEntryKind,
-      respondsToEntryId: timeEntries.respondsToEntryId,
-      payPeriodClosureId: timeEntries.payPeriodClosureId,
-      prevEntryHash: timeEntries.prevEntryHash,
-      entryHash: timeEntries.entryHash,
-      isFirstEntry: timeEntries.isFirstEntry,
-    })
+    .select()
     .from(timeEntries)
     .where(eq(timeEntries.nodeId, key.nodeId))
     .orderBy(timeEntries.sequenceNo);
-  return rows.map(
-    ({
-      selfApproved,
-      authorKind,
-      correctionDirection,
-      missingEntryKind,
-      respondsToEntryId,
-      payPeriodClosureId,
-      ...row
-    }) => ({
-      ...row,
-      extension:
-        !selfApproved &&
-        [
-          authorKind,
-          correctionDirection,
-          missingEntryKind,
-          respondsToEntryId,
-          payPeriodClosureId,
-        ].every((value) => value === null)
-          ? null
-          : {
-              selfApproved,
-              authorKind,
-              direction: correctionDirection,
-              missingEntryKind,
-              respondsToEntryId,
-              payPeriodClosureId,
-            },
-    }),
-  );
+  return rows.map(verifiableEntry);
 }

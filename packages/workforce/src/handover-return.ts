@@ -2,9 +2,9 @@ import "./errors.js";
 import { getTableColumns, sql } from "drizzle-orm";
 import { foldForUniqueness, type Database, type Transaction } from "@waitron/db";
 import type { ModuleHandoverContribution } from "@waitron/module";
-import { AppError, type ErrorCode, type Source } from "@waitron/shared";
+import { AppError, type ErrorCode } from "@waitron/shared";
 import { computeEntryHash } from "./chain-hash.js";
-import type { RecordExtension } from "./record-types.js";
+import { verifiableEntry, type ChainedTimeEntry } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { markAttendanceEntry } from "./staff-activity.js";
 
@@ -26,7 +26,8 @@ export const WORKFORCE_RETURN_MAX_BYTES = 200 * 1024;
 /** The largest row the routes can write measured 4,010 bytes (handover-return.test.ts), so 51 fit. */
 export const WORKFORCE_RETURN_ROW_CAP = 51;
 
-const ENTRY_COLUMNS = new Set(Object.values(getTableColumns(timeEntries)).map((c) => c.name));
+const COLUMNS = Object.entries(getTableColumns(timeEntries));
+const ENTRY_COLUMNS = new Set(COLUMNS.map(([, column]) => column.name));
 
 function staffIds(row: ReturnRow) {
   return [row.person_id, row.recorded_by_person_id, row.correction_actor_id];
@@ -225,62 +226,29 @@ async function restoreNames(
 
 const nullableText = (value: ReturnRow[string]) => (value === null ? null : String(value));
 
-/** The row as {@link computeEntryHash} reads it, as `readChain` builds it from a stored row. */
-function hashInput(row: ReturnRow) {
-  const text = (key: string) => nullableText(row[key]!);
-  const extensionFields = [
-    "author_kind",
-    "correction_direction",
-    "missing_entry_kind",
-    "responds_to_entry_id",
-    "pay_period_closure_id",
-  ].map(text);
-  const selfApproved = row.self_approved === 1;
-  const [authorKind, direction, missingEntryKind, respondsToEntryId, payPeriodClosureId] =
-    extensionFields;
-  return {
-    sequenceNo: Number(row.sequence_no),
-    personId: String(row.person_id),
-    nodeId: String(row.node_id),
-    entryKind: String(row.entry_kind),
-    eventAt: String(row.event_at),
-    recordedAt: String(row.recorded_at),
-    eventOffsetMinutes: Number(row.event_offset_minutes),
-    recordedByPersonId: text("recorded_by_person_id"),
-    capturedBySource: String(row.captured_by_source) as Source,
-    capturedByDeviceId: text("captured_by_device_id"),
-    correctsEntryId: text("corrects_entry_id"),
-    correctionReason: text("correction_reason"),
-    correctionStatus: text("correction_status"),
-    correctionActorId: text("correction_actor_id"),
-    prevEntryHash: text("prev_entry_hash"),
-    extension:
-      !selfApproved && extensionFields.every((value) => value === null)
-        ? null
-        : ({
-            selfApproved,
-            authorKind,
-            direction,
-            missingEntryKind,
-            respondsToEntryId,
-            payPeriodClosureId,
-          } as RecordExtension),
-  };
+/** The row as drizzle reads it back from the database, which is how `readChain` reads it. */
+function asStored(row: ReturnRow): ChainedTimeEntry {
+  return Object.fromEntries(
+    COLUMNS.map(([key, column]) => {
+      const value = row[column.name]!;
+      return [key, value === null ? null : column.mapFromDriverValue(value)];
+    }),
+  ) as ChainedTimeEntry;
 }
 
 const sameRow = (a: ReturnRow, b: ReturnRow) =>
   [...ENTRY_COLUMNS].every((key) => a[key] === b[key]);
 
-/** Why `entry` cannot be stored next, or null when it can (or is already held as sent). */
-function checkEntry(tx: Transaction, sourceNodeId: string, entry: ReturnRow): ErrorCode | null {
-  if (
-    [...ENTRY_COLUMNS].some((key) => !(key in entry)) ||
-    entry.node_id !== sourceNodeId ||
-    !held(tx, "nodes", sourceNodeId)
-  )
+/** Why `entry` cannot be stored next, "held" when it is already held as sent, or null. */
+function checkEntry(
+  tx: Transaction,
+  sourceNodeId: string,
+  entry: ReturnRow,
+): ErrorCode | "held" | null {
+  if ([...ENTRY_COLUMNS].some((key) => !(key in entry)) || entry.node_id !== sourceNodeId)
     return "attendance.return_entry_invalid";
   const own = held(tx, "time_entries", entry.id);
-  if (own) return sameRow(own, entry) ? null : "attendance.return_entry_clash";
+  if (own) return sameRow(own, entry) ? "held" : "attendance.return_entry_clash";
   const position = Number(entry.sequence_no);
   const atPosition = (at: number) =>
     tx.all<ReturnRow>(sql`select * from time_entries
@@ -293,7 +261,7 @@ function checkEntry(tx: Transaction, sourceNodeId: string, entry: ReturnRow): Er
       : entry.is_first_entry === 0 &&
         previous !== undefined &&
         previous.entry_hash === entry.prev_entry_hash;
-  if (!continues || computeEntryHash(hashInput(entry)) !== entry.entry_hash)
+  if (!continues || computeEntryHash(verifiableEntry(asStored(entry))) !== entry.entry_hash)
     return "attendance.return_entry_invalid";
   const pointsAtHeld = (table: string, key: string) =>
     entry[key] === null || held(tx, table, entry[key]!) !== undefined;
@@ -318,10 +286,12 @@ export async function receiveWorkforceBatch(
   batch: WorkforceReturnBatch,
   now: Date,
 ): Promise<true | { refusal: ErrorCode }> {
+  if (batch.entries.length > 0 && !held(tx, "nodes", sourceNodeId))
+    return { refusal: "attendance.return_entry_invalid" };
   for (const entry of batch.entries) {
-    const refusal = checkEntry(tx, sourceNodeId, entry);
-    if (refusal) return { refusal };
-    if (held(tx, "time_entries", entry.id)) continue;
+    const check = checkEntry(tx, sourceNodeId, entry);
+    if (check === "held") continue;
+    if (check) return { refusal: check };
     const names = missingNames(tx, batch, entry);
     if (!names) return { refusal: "attendance.return_entry_invalid" };
     await restoreNames(tx, names, now);
