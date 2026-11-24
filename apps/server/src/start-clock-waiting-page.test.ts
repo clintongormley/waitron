@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type Page, type Route } from "playwright";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
 import { authorityKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
@@ -507,3 +507,64 @@ it("gives up on a look that stalls and looks again, so a request hung across the
     await page.clock.runFor(5_000);
     await runUntil(page, 5_000, async () => (await page.locator("h1").innerText()) === "Trading");
   }));
+
+it.each(["a key sent", "a key typed", "a PDF chosen"] as const)(
+  "drops a chosen PDF's late answer once %s after it",
+  (newer) =>
+    withPage("en-GB", async (page) => {
+      await open(page, 0);
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      await page.route(
+        "**/restore-clock/pack",
+        async (route) => {
+          await held;
+          await route.fallback();
+        },
+        { times: 1 },
+      );
+      const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+      const late = page.waitForResponse((response) =>
+        response.url().endsWith("/restore-clock/pack"),
+      );
+      // Sent, the key was typed before the PDF was chosen, so only sending it comes after.
+      if (newer === "a key sent") await page.getByLabel(words.keyLabel).fill(KEY);
+      await choosePack(page, await recoveryPackPdf(other));
+      if (newer === "a PDF chosen") await choosePack(page, await recoveryPackPdf(KEY));
+      if (newer === "a key sent")
+        await page.getByRole("button", { name: words.keyContinue }).click();
+      if (newer === "a key typed") await page.getByLabel(words.keyLabel).fill(KEY);
+      else await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+      release();
+      await (await late).finished();
+      // Room for the page to apply the late answer, as it did before.
+      await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
+      expect(await page.getByLabel(words.keyLabel).inputValue()).toBe(KEY);
+      expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
+      expect(await page.locator("#clock-pack-error").isVisible()).toBe(false);
+    }),
+);
+
+it.each([
+  ["loses its connection", (route: Route) => route.abort("connectionreset")],
+  [
+    "is not answered by the box",
+    (route: Route) => route.fulfill({ status: 502, contentType: "text/html", body: "Bad Gateway" }),
+  ],
+] as const)(
+  "says so when a chosen PDF's upload %s, and the same PDF can be chosen again",
+  (_, fail) =>
+    withPage("en-GB", async (page) => {
+      await open(page, 0);
+      await page.route("**/restore-clock/pack", fail, { times: 1 });
+      const bytes = await recoveryPackPdf(KEY);
+      await choosePack(page, bytes);
+      await expect.poll(() => page.locator("#clock-pack-error").isVisible()).toBe(true);
+      expect(await page.locator("#clock-pack-error").innerText()).toBe(words.packFailed);
+      expect(await page.getByLabel(field.button).getAttribute("aria-invalid")).toBe("");
+      expect(await page.getByLabel(field.button).inputValue()).toBe("");
+      await choosePack(page, bytes);
+      await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+      expect(await page.locator("#clock-pack-error").isVisible()).toBe(false);
+    }),
+);

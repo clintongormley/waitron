@@ -271,6 +271,7 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
   const packLines = {
     notPack: words.notPack,
     damaged: words.damaged,
+    failed: words.packFailed,
     elsewhere: words.elsewhere,
     elsewhereOn: words.elsewhereOn,
     keyRefused: words.keyRefused,
@@ -358,17 +359,29 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     $("clock-pack-error").hidden = text === null;
     pack.toggleAttribute("aria-invalid", text !== null);
   };
+  // Each PDF chosen and each key typed or sent is a new attempt; a PDF's answer is used only while
+  // its choice is still the latest attempt.
+  let attempt = 0;
+  field.addEventListener("input", () => (attempt += 1));
   // The chosen PDF is read on the box; the master key it answers is used as if typed.
   pack.addEventListener("change", quietly(async () => {
     const file = pack.files[0];
     if (file === undefined) return;
-    const response = await fetch("/restore-clock/pack", {
-      method: "POST",
-      headers: { "content-type": "application/pdf" },
-      body: file,
-    });
-    pack.value = "";
-    const answer = response.status === 413 ? { result: "not_a_pack" } : await response.json();
+    const mine = (attempt += 1);
+    let answer;
+    try {
+      const response = await fetch("/restore-clock/pack", {
+        method: "POST",
+        headers: { "content-type": "application/pdf" },
+        body: file,
+      });
+      answer = response.status === 413 ? { result: "not_a_pack" } : await response.json();
+    } catch {
+      answer = { result: "failed" };
+    } finally {
+      pack.value = "";
+    }
+    if (mine !== attempt) return;
     if (typeof answer.key === "string") {
       packLine(null);
       field.value = answer.key;
@@ -386,11 +399,14 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
           : packLines.elsewhereOn.replace("{heldBy}", String(answer.heldBy))
         : answer.result === "damaged"
           ? packLines.damaged
-          : packLines.notPack,
+          : answer.result === "failed"
+            ? packLines.failed
+            : packLines.notPack,
     );
   }));
   $("clock-key").addEventListener("submit", (event) => {
     event.preventDefault();
+    attempt += 1;
     packLine(null);
     void quietly(compare)();
   });

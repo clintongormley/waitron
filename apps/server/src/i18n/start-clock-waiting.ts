@@ -17,6 +17,8 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       packButton: string;
       notPack: string;
       damaged: string;
+      /** The chosen PDF did not reach the box, or its answer did not come back. */
+      packFailed: string;
       elsewhere: string;
       /** `{heldBy}` stands for the number of the pack holding the master key. */
       elsewhereOn: string;
@@ -39,6 +41,7 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     packButton: "Choose the recovery pack PDF",
     notPack: "This PDF is not a recovery pack.",
     damaged: "This recovery pack PDF is damaged. Type the key.",
+    packFailed: "The box could not read this PDF. Choose it again, or type the key.",
     elsewhere:
       "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it.",
     elsewhereOn:
@@ -65,6 +68,7 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     packButton: "Elegir el PDF del paquete de recuperación",
     notPack: "Este PDF no es un paquete de recuperación.",
     damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
+    packFailed: "El servidor no ha podido leer este PDF. Vuelve a elegirlo o escribe la clave.",
     elsewhere:
       "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.",
     elsewhereOn:
