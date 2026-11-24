@@ -5,6 +5,9 @@ their full text.
 
 ## A1569. The till's sold-out window needs a design with the owner
 
+On hold (owner, 2026-11-24): "leave the sold out window on hold for now, we can review it when we do
+the device screens".
+
 Owner, 2026-11-24, shown the window during the Products list design: "let's add this to designs we
 need to sort out". The owner had seen a picture of it and could not find it on the till. The owner
 approved the feature itself on 2026-11-11 (A1516); this is about how it looks and is found.
