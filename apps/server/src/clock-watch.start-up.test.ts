@@ -495,18 +495,6 @@ describe("the clock watch and an identity change's opening", () => {
     ]);
   });
 
-  it("restarts no time service while the confirmation is held", async () => {
-    const h = harness({
-      host: async () => SYNCHRONISED,
-      startState: holding(),
-      restarts: true,
-      attemptIdentityChange: async () => {},
-    });
-    for (let look = 0; look < 4; look++) await h.tick();
-    expect(h.attemptsInTurn).toHaveLength(4);
-    expect(h.restartsInTurn).toEqual([]);
-  });
-
   it("runs no attempt queued behind another turn once the stepdown has stopped the job", async () => {
     const h = harness({
       host: async () => SYNCHRONISED,

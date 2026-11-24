@@ -536,13 +536,18 @@ describe("an opening refused at the start", () => {
 });
 
 describe("a chart that changes while the box waits to open its new installation", () => {
-  it.each<[string, Standing, Standing, number]>([
-    ["lists a spare that joined", "serving-primary", "serving-secondary", 6],
-    ["lists a main box it replaced, not yet removed", "serving-primary", "sell-only", 8],
-    ["evicts it in favour of another", "evicted", "serving-primary", 10],
+  it.each<[string, [own: Standing, other: Standing] | null, number]>([
+    ["the chart lists a spare that joined", ["serving-primary", "serving-secondary"], 6],
+    [
+      "the chart lists a main box it replaced, not yet removed",
+      ["serving-primary", "sell-only"],
+      8,
+    ],
+    ["the chart evicts it in favour of another", ["evicted", "serving-primary"], 10],
+    ["no chart is saved", null, 12],
   ])(
-    "keeps it from opening, with an alert, while the chart %s, and lets it open once it serves alone",
-    async (_label, own, other, minute) => {
+    "keeps it from opening, with an alert, while %s, and lets it open once it serves alone",
+    async (_label, standings, minute) => {
       inMinute(minute);
       const stateDir = await newStateDir();
       const producer = await noteTheOtherProducer(stateDir);
@@ -554,7 +559,8 @@ describe("a chart that changes while the box waits to open its new installation"
         clockStatus: async () => clockServiceAnswer(synchronised),
       };
       const seen = await serving({ producer, host, stateDir }, async () => {
-        await holdChart(suite.db, 1, own, [{ ...box, standing: other }]);
+        if (standings === null) suite.db.run(sql`delete from node_membership`);
+        else await holdChart(suite.db, 1, standings[0], [{ ...box, standing: standings[1] }]);
         synchronised = true;
         await built.watch!.check();
         const blocked = {

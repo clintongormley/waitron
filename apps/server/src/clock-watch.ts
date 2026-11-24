@@ -26,10 +26,9 @@ export function createClockWatch(deps: {
   store: Pick<ClockWitnessStore, "witnesses">;
   clock: Pick<TrustedClock, "now">;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
-  /** The correction's one-at-a-time turn, taken around the devices' confirmation, the time-service
-   * restart and the jump check; each look also writes the rows of steps whose rows could not be
-   * written when they happened. The watch is to be added as its anchor, so a set re-takes the jump
-   * check's baseline; its set count covers a set whose re-anchoring did not run. */
+  /** The correction's one-at-a-time turn; each look also writes the rows of steps whose rows could
+   * not be written when they happened. The watch is to be added as its anchor, so a set re-takes the
+   * jump check's baseline; its set count covers a set whose re-anchoring did not run. */
   correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending" | "steps">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
