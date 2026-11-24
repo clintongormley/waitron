@@ -4,11 +4,15 @@
 
 **Status: plan, refreshed 2026-11-22 on `main` at `dbf567d417`, revised after fresh reads 1, 2
 and 3 (`~/waitron-campaign-l/receipts/a993-plan-read-{1,2,3}.md`) and the owner's answer of
-2026-11-22; waiting for the owner's choice on decisions 3, 7 and 12. Not yet approved: do not
-build. Fiscal: the owner lands every pull request.** Every `file:line` below was read on that
-commit. Besides the `git grep`/`grep` commands quoted, the things run are listed in "Changed after
-the owner's answer" and "Changed after read 3". What no longer held from the 2026-11-11 version is
-in "What changed since 2026-11-11"; what each review changed is in the "Changed after" sections.
+2026-11-22. Cleared by the watcher 2026-11-22 12:41, who also took decision 12 as recommended
+(`~/waitron-campaign-l/questions.md`, "WATCHER 2026-11-22 12:41"); the owner answered "yes" to
+decisions 3 and 7 on 2026-11-22 12:52 (same file, "WATCHER 2026-11-22 12:52 — OWNER: A993
+decisions 3 and 7: yes to both"). Building from 2026-11-24 on `main` at `9f25456694`; a
+`file:line` below that has moved since `dbf567d417` is re-found by name. Fiscal: the owner lands
+every pull request.** Besides the `git grep`/`grep` commands quoted, the things run are listed in
+"Changed after the owner's answer" and "Changed after read 3". What no longer held from the
+2026-11-11 version is in "What changed since 2026-11-11"; what each review changed is in the
+"Changed after" sections.
 
 **Goal:** a production box upgraded to a release whose producer differs from its chain's opens a
 new installation (new chain, new five-symbol installation name, new series from 1) by itself and
