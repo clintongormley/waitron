@@ -5,6 +5,7 @@ import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
@@ -24,7 +25,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
-import { createSetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
@@ -2253,7 +2254,7 @@ function makeAdoptDeps(overrides: Partial<SetupDeps> & { adopt?: AdoptJoined | u
 async function fromOwnPage(
   app: Hono,
   path: string,
-  { body, handle }: { body?: unknown; handle?: string } = {},
+  { body, handle, env }: { body?: unknown; handle?: string; env?: Record<string, unknown> } = {},
 ): Promise<Response> {
   const socket = new TLSSocket(new Socket());
   try {
@@ -2268,7 +2269,7 @@ async function fromOwnPage(
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       },
-      { incoming: { socket } },
+      { incoming: { socket }, ...env },
     );
   } finally {
     socket.destroy();
@@ -2278,7 +2279,7 @@ async function fromOwnPage(
 const joinHandles = new WeakMap<Hono, string>();
 
 /** Finish joining on `app`, starting the page's join on its first call. */
-async function postAdopt(app: Hono): Promise<Response> {
+async function postAdopt(app: Hono, env?: Record<string, unknown>): Promise<Response> {
   let handle = joinHandles.get(app);
   if (handle === undefined) {
     const started = await fromOwnPage(app, "/setup-api/join/start", {
@@ -2288,7 +2289,11 @@ async function postAdopt(app: Hono): Promise<Response> {
     handle = ((await started.json()) as { handle: string }).handle;
     joinHandles.set(app, handle);
   }
-  return fromOwnPage(app, "/setup-api/adopt", { body: {}, handle });
+  return fromOwnPage(app, "/setup-api/adopt", {
+    body: {},
+    handle,
+    ...(env === undefined ? {} : { env }),
+  });
 }
 
 async function postRestore(
@@ -3102,6 +3107,57 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
         adopted: true,
         restarting: true,
       });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts only once Finish joining's reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-written-"));
+    try {
+      const app = new Hono();
+      const { deps, requestRestart } = makeAdoptDeps({
+        operations: createSetupOperationStore(dir),
+      });
+      mountSetup(app, deps, noopLog);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postAdopt(app, { outgoing });
+      expect(response.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still restarts, after the error reply is written, when the join is saved but its setup record is not", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-complete-fails-"));
+    try {
+      const store = createSetupOperationStore(dir);
+      const operations: SetupOperationStore = {
+        read: () => store.read(),
+        run: (kind, hash, fn, hold) =>
+          store.run(
+            kind,
+            hash,
+            (operation) =>
+              fn({ ...operation, complete: () => Promise.reject(new Error("disk gone")) }),
+            hold,
+          ),
+      };
+      const app = new Hono();
+      const { deps, adopt, requestRestart } = makeAdoptDeps({ operations });
+      mountSetup(app, deps, noopLog);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postAdopt(app, { outgoing });
+      expect(adopt).toHaveBeenCalledTimes(1);
+      expect(response.ok).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

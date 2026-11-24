@@ -95,6 +95,7 @@ import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
 import { sentFromThisOrigin } from "./own-page.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
 import "./errors.js";
 
@@ -1365,6 +1366,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
+    // Once the join is written the box must restart, even if saving the setup record then fails.
+    let adopted = false;
     const run = async (joined: JoinedBox, operation?: ActiveSetupOperation) => {
       const secret = await adoptJoined(joined, {
         // Past "started", the store keeps the record, so a different request cannot run over a
@@ -1377,9 +1380,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       });
       // The operator's only chance to record the offline promote fallback. It is NEVER logged.
       const contactUrl = labelContactUrl(deps.advertisedOrigin, joined.identity.nodeId);
-      const response = c.json({ adopted: true, ...secret, restarting: true, ...contactUrl }, 200);
-      setTimeout(() => requestRestart(), 0);
-      return response;
+      adopted = true;
+      return c.json({ adopted: true, ...secret, restarting: true, ...contactUrl }, 200);
     };
     return runAdopt(c, log, async () => {
       let succeeded = false;
@@ -1405,6 +1407,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         return response;
       } finally {
         if (!succeeded) provisioning = false;
+        if (adopted) {
+          const outgoing = outgoingOf(c);
+          setTimeout(() => restartAfterResponse(outgoing, requestRestart, log), 0);
+        }
       }
     });
   });
