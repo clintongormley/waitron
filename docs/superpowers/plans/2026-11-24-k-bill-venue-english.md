@@ -1,0 +1,11 @@
+# English names for the bill test venue
+
+Server test authors will use English names for the rice dish and beer in the shared bill fixture. Staff, customers and the kitchen each get distinct text. The Spanish refund look uses “Error”.
+
+1. Change only the expected kitchen label in `apps/server/src/kitchen-ticket-bill.test.ts` first. Run that file and see its existing reprint check fail because the ticket still says `PAELLA`.
+2. In `apps/server/src/testing/bill-venue.ts`, use “Seafood rice” / “Seafood rice platter” / “RICE PAN” and “Draft beer” / “Small draft beer” / “BEER SMALL”. Keep the fixture’s prices and setup. Follow the bill, order, deferred-close, advance, zone-payment and invoice-customer fixtures to update only their matching test selectors, seed text and displayed names. Keep independent venues and their examples intact. Pause if a literal golden hash, huella or filed-record value would change. Keep the existing fiscal, invoice-number and money assertions as the watcher directed in the 2026-11-24 09:25 Lane K note.
+3. The 2012 look spec was temporary (tasks 17a–17b in the plan at `bbd01f65ed`). Use “Error” in the temporary Spanish refund view if recreating it. The existing `adjustments-api.test.ts` language case passes with that name from `testing/adjustment-venue.ts`. Keep the look check local and leave the tracked Spanish reason as it is.
+4. Run all changed server test files by path with `pnpm --filter @waitron/server exec vitest run`, including `split-table.fiscal.test.ts`, `taxpayer-rename.filing.test.ts` and `sale-operation-description.integration.test.ts`. Run the unedited `write-path.e2e.test.ts` and `inmutabilidad.test.ts` with the fiscal-verifactu package filter. In the PR list the renamed expectations with their locations and explain the watcher’s scope.
+5. Delete this item from `docs/backlog.md` and update the two remaining BillVenue inventory references in `docs/backlog/architecture.md`. Review and land the test-only branch through the normal gates.
+
+Estimated 98 files plus this plan. The direct seed-path search found 96 test and test-support files with about 725 matching lines before checking independent samples. Expect up to about 725 additions and 725 removals in those files, with zero product-code changes.
