@@ -3665,7 +3665,8 @@ describe("the test shards", () => {
         id.endsWith("-merge") ? 5 : id === "test-webkit-startup" ? 8 : 10,
       );
     }
-    for (const id of ["lint", "root-guards"]) expect(minutesOf(job(id).body), id).toBe(8);
+    for (const id of ["lint", "root-guards", "root-process-guards"])
+      expect(minutesOf(job(id).body), id).toBe(8);
   });
 
   it("caps light-bin package concurrency explicitly", () => {
@@ -4333,19 +4334,22 @@ describe("the lint and root guard jobs", () => {
   it("excludes exactly the suites the hosted root job runs", () => {
     const workflow = parse(lines.join("\n"));
     const args = (id) => {
-      const step = workflow.jobs[id]?.steps.find(({ run }) => run?.includes("pnpm vitest run"));
+      const rootJob = workflow.jobs[id];
+      const step = rootJob?.steps.find(({ run }) => run?.includes("pnpm vitest run"));
       expect(step, id).toBeDefined();
+      expect(step.if, id).toBeUndefined();
+      expect(step["continue-on-error"] ?? false, id).toBe(false);
       const result = spawnSync(
         "bash",
-        ["-e", "-c", `pnpm() { printf '%s\\n' "$@"; }\n${step.run}`],
+        ["-e", "-c", `pnpm() { printf '%s\\n' "$@"; return 17; }\n${step.run}`],
         {
           cwd: repoRoot,
-          env: { ...process.env, ...workflow.env },
+          env: { ...process.env, ...workflow.env, ...rootJob.env, ...step.env },
           encoding: "utf8",
           timeout: 5_000,
         },
       );
-      expect(result.status, result.stderr).toBe(0);
+      expect(result.status, result.stderr).toBe(17);
       return result.stdout.trimEnd().split("\n");
     };
     const [tool, command, ...suites] = args("root-process-guards");

@@ -2262,7 +2262,7 @@ GitHub. The coverage job excludes that list, and `ci` waits for both jobs.
 
 Before moving another suite to the hosted job, run unfiltered root coverage and compare the
 per-file covered and total counts with that suite excluded. The initial split matched all 457
-coverage report entries from two unfiltered controls on the source at `e8df6f7699`.
+coverage metrics from two unfiltered controls on the source at `e8df6f7699`.
 
 On a pull request or ordinary `main` push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
 (see "The lint job reuses earlier results except on a full run").
@@ -3315,7 +3315,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
 | ci.yml             | changes                           | 0.9                            | 5     |
 | ci.yml             | lint                              | 5.1 (root guards then included) | 8     |
-| ci.yml             | root-guards, root-process-guards  | see run timing                  | 8     |
+| ci.yml             | root-guards, root-process-guards  | not yet measured after split   | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
 | ci.yml             | ci                                | 0.7                            | 15    |
