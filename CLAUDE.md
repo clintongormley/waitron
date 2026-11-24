@@ -147,9 +147,9 @@ hook, or how tests are scheduled. What named guards miss:
 - **Two pushes to `main` must never share a CI concurrency group; `publish-ui.yml`'s fixed group is
   the exception while it keeps `queue: max` and `cancel-in-progress: false` (#2526).** Check after a
   merge that its own run exists. Publishing asks `scripts/main-tag-guard.sh` before moving `:main`.
-  Guards: `scripts/ci-workflow.test.mjs`, weaker than its name: it parses each push workflow's
-  top-level group, not other job-level groups or the workflows a push run calls; and
+  Guards: `scripts/ci-workflow.test.mjs`, weaker than its name, and
   `scripts/main-tag-guard.test.mjs`.
+  [Limits](docs/developers/ci-and-gates.md#two-pushes-to-main-must-never-share-a-concurrency-group).
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
@@ -291,7 +291,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts`, `apps/server/src/guide-box-word.test.ts`,
   `apps/setup/src/i18n/box-word.test.ts`, `packages/recovery-pack/src/i18n/box-word.test.ts` and the
   box-word cases in `apps/print-agent/src/setup-page.test.ts` and
-  `scripts/box/installer-presentation.test.mjs` read named tables and pages only.
+  `scripts/box/installer-presentation.test.mjs`.
   [Limits](docs/developers/conventions-ui.md#the-waitron-machine-is-box-and-servidor).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a fixture gives the three DIFFERENT text**. Which surface reads which: [products.md](docs/developers/products.md).
 - **A replay reports the original transaction facts; side effects are gated separately.**
@@ -850,8 +850,8 @@ passed while proving nothing.
   answered — never by a fixed sleep.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
 - **A test of two writers on one lock starts the waiting side only after the holding side signals
-  that it holds the lock.** Started one after the other, they race and the test proves nothing.
-  Cost: #456's first version passed locally and timed out on CI. Nothing guards it.
+  that it holds the lock.** Cost: #456's first version passed locally and timed out on CI.
+  Nothing guards it.
   [Receipt](docs/developers/testing-guide.md#a-two-sided-concurrency-test-starts-the-waiting-side-after-the-holding-side-says-it-holds).
 - **Dispatch events when testing a `composedPath()` guard.** [Detail](docs/developers/testing-guide.md).
 - **A click whose outcome depends on whether an update one listener schedules has run before a later
