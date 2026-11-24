@@ -1,6 +1,15 @@
 import PDFKit from "pdfkit";
 import { deflateSync } from "node:zlib";
-import { PDFArray, PDFDict, PDFDocument, PDFName } from "pdf-lib";
+import {
+  decodePDFRawStream,
+  PDFArray,
+  PDFContext,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFNull,
+  PDFRef,
+} from "pdf-lib";
 import {
   buildRecoveryPackFile,
   MAX_PACK_FILE,
@@ -152,5 +161,112 @@ describe("an attached file that inflates past the limit", () => {
     const bytes = await withAttachment(deflateSync(buildRecoveryPackFile(file)));
     // The carrier's digest is of the original attachment, which this one equals.
     expect(await readRecoveryPackPdf(bytes)).toEqual(file);
+  });
+});
+
+/** Every decoding stage's buffer growth, in bytes, during the reads in this file. */
+const growth = vi.spyOn(
+  Object.getPrototypeOf(
+    Object.getPrototypeOf(decodePDFRawStream(PDFContext.create().flateStream(new Uint8Array(1)))),
+  ) as { ensureBuffer: (requested: number) => Uint8Array },
+  "ensureBuffer",
+);
+
+function largestRequest(): number {
+  return Math.max(0, ...growth.mock.calls.map(([requested]) => requested));
+}
+
+/** A document built by hand around Flate streams of `[keys, inflated]`, numbered from 3. */
+function documentAround(
+  streams: readonly (readonly [string, Uint8Array])[],
+  xrefStream = false,
+): Uint8Array {
+  const parts: Uint8Array[] = [];
+  const offsets: number[] = [];
+  const length = () => parts.reduce((n, p) => n + p.length, 0);
+  const push = (s: string | Uint8Array) =>
+    parts.push(typeof s === "string" ? Buffer.from(s, "latin1") : s);
+  push("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n");
+  offsets[1] = length();
+  push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  offsets[2] = length();
+  push("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n");
+  streams.forEach(([keys, inflated], i) => {
+    const z = deflateSync(inflated);
+    offsets[3 + i] = length();
+    push(`${3 + i} 0 obj\n<< ${keys} /Filter /FlateDecode /Length ${z.length} >>\nstream\n`);
+    push(z);
+    push("\nendstream\nendobj\n");
+  });
+  const end = length();
+  const size = 3 + streams.length;
+  if (xrefStream) push(`startxref\n${offsets.at(-1)}\n%%EOF\n`);
+  else
+    push(
+      `xref\n0 ${size}\n0000000000 65535 f \n` +
+        offsets
+          .slice(1)
+          .map((offset) => String(offset).padStart(10, "0") + " 00000 n \n")
+          .join("") +
+        `trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${end}\n%%EOF\n`,
+    );
+  return Buffer.concat(parts);
+}
+
+/** An object stream holding one `null` as object `number`, padded with spaces to `size` bytes. */
+function paddedObjectStream(number: number, size: number): readonly [string, Uint8Array] {
+  const head = `${number} 0\n`;
+  const inflated = new Uint8Array(size).fill(0x20);
+  inflated.set(Buffer.from(head + "null", "latin1"));
+  return [`/Type /ObjStm /N 1 /First ${head.length}`, inflated];
+}
+
+describe("a document whose own structure inflates past the limit", () => {
+  beforeEach(() => {
+    decoded.length = 0;
+    growth.mockClear();
+  });
+
+  it("is refused without inflating an object stream", async () => {
+    const bytes = documentAround([
+      ["/Type /ObjStm /N 1 /First 4", new Uint8Array(64 * 1024 * 1024).fill(0x20)],
+    ]);
+    expect(bytes.length).toBeLessThan(128 * 1024);
+    expect(await reason(bytes)).toBe("size");
+    expect(largestRequest()).toBeLessThanOrEqual(32 * MAX_PACK_FILE);
+  });
+
+  it("is refused without inflating a cross-reference stream", async () => {
+    const bytes = documentAround(
+      [
+        [
+          "/Type /XRef /Size 4 /W [1 2 1] /Index [0 1] /Root 1 0 R",
+          new Uint8Array(64 * 1024 * 1024),
+        ],
+      ],
+      true,
+    );
+    expect(bytes.length).toBeLessThan(128 * 1024);
+    expect(await reason(bytes)).toBe("size");
+    expect(largestRequest()).toBeLessThanOrEqual(32 * MAX_PACK_FILE);
+  });
+
+  it("is refused when streams each within the limit add up past it", async () => {
+    const quarter = 4 * MAX_PACK_FILE;
+    const parts = [3, 4, 5, 6, 7].map((n) => paddedObjectStream(n, quarter - 1024));
+    expect(await reason(documentAround(parts.slice(0, 2)))).toBe("not_a_pack");
+    growth.mockClear();
+    expect(await reason(documentAround(parts))).toBe("size");
+    expect(largestRequest()).toBeLessThanOrEqual(32 * MAX_PACK_FILE);
+  });
+
+  it("leaves another pdf-lib load at the same time unbounded", async () => {
+    const large = documentAround([paddedObjectStream(3, 64 * MAX_PACK_FILE)]);
+    const [refused, other] = await Promise.all([
+      reason(documentAround([paddedObjectStream(3, 64 * MAX_PACK_FILE)])),
+      PDFDocument.load(large),
+    ]);
+    expect(refused).toBe("size");
+    expect(other.context.lookup(PDFRef.of(3))).toBe(PDFNull);
   });
 });
