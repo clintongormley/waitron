@@ -143,12 +143,22 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
    * sent and the duty keeps asking.
    */
   async function acknowledgeAndRestart(
-    order: Extract<ReplacedResetCheck, { outcome: "ordered" }>,
+    first: Extract<ReplacedResetCheck, { outcome: "ordered" }>,
   ): Promise<boolean> {
+    let order = first;
     // A return that succeeds now loses nothing. Once per order: the duty may ask again for it.
-    if (order.acceptLoss && extraPassFor !== order.orderId) {
+    if (order.setAside && extraPassFor !== order.orderId) {
       await deps.returnPass();
       extraPassFor = order.orderId;
+      // A loss order sets aside whatever the main box answers.
+      if (!order.acceptLoss && !stopping.signal.aborted) {
+        const askedAt = now();
+        const again = await attempt();
+        if (again?.outcome === "ordered" && again.orderId === order.orderId) {
+          order = again;
+          hear(again, askedAt);
+        }
+      }
     }
     if (stopping.signal.aborted) return true;
     if (order.setAside)
