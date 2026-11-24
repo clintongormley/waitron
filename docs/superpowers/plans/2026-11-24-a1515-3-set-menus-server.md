@@ -572,6 +572,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   calculated or written. Freezing a row takes it out of the input, so it counts as a change. Stored
   whole, not hashed, so a match cannot be a collision. Alternative: callers pass the changed line ids.
 
+  _2026-11-24, dropped: the watcher asked for a measurement first (lane B questions.md, 22:05). `groupSetMenus` alone, 30 runs each, took 0.4–1.6 ms median for four diners and 65–135 ms for sixteen, so 2a stores no input and calculates on every regrouping. The D28 steps below (`set_menus_input`, `setMenusInput`, `stored.input`, `skipped`, the `calculate` spy not called) were not built; 2b's tests do not assert a skip._
+
 ### Global constraints for PR 2
 
 - Every regrouping runs in the path's own transaction, after its last line write and before its own
@@ -613,6 +615,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
 ---
 
 ### PR 2a — The grouping writer (`feat/a1515-3-regroup-writer`)
+
+_2026-11-24, as built: D28 was dropped (see D28). The set-menu line check leaves `set_menu_id` free only on a top-level line with no role; an extras pick with no role still has none._
 
 #### Task 2a.1: The schema
 

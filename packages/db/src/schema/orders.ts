@@ -280,7 +280,7 @@ export const workingOrderLines = table(
     // set menu's own row.
     aLaCarteUnitPrice: money("a_la_carte_unit_price"),
     // The course the dish counts as in a set menu, its product's when it was added; null on an
-    // extras pick and a set menu's own row. No key, as for `set_menu_counts_as_course_id`.
+    // extras pick and a set menu's own row. No key: the line keeps a deleted course's id.
     countsAsCourseId: id("counts_as_course_id"),
     menuItemId: id("menu_item_id"),
     menuId: id("menu_id"),
