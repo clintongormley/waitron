@@ -610,6 +610,8 @@ Slice 3.
   Still open, as its own pull request
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): the old box
   also returning other boxes' invoice records it holds.
+  The new main box's button cannot fetch from an old box on the waiting page, which offers its own
+  download instead.
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 
