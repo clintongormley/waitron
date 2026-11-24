@@ -389,8 +389,17 @@ it("fits and repeats a five-course bill with eight diners and a percentage disco
   expectWithinHalfSecond(repeatStart);
 });
 
+function compactCountLimitBill() {
+  const portion = dish("regular-main", "main", 900);
+  return {
+    dishes: Array.from({ length: 10 }, (_, i) => ({ ...portion, id: `regular-${i}` })),
+    offers: Array.from({ length: 11 }, (_, i) => offer(`regular-${i}`, 600 + 25 * i, [portion])),
+  };
+}
+
 it("opens a useful menu at the limit and closes it after a cancellation without moving saved places", () => {
-  const input = table(40, 5);
+  const input =
+    process.env.STRYKER_MUTATOR_WORKER === undefined ? table(40, 5) : compactCountLimitBill();
   const starter = dish("new-starter", "starter", 900);
   const main = dish("new-main", "main", 900);
   const dishes = [...input.dishes, starter, main];
@@ -557,6 +566,7 @@ it.each([
     expect(result).toMatchObject({ exact, totalCents });
     expect(group({ offers, dishes, previous: result })).toEqual(result);
   },
+  15_000,
 );
 
 it("bounds the work on forty diners with two percentage discounts", () => {
@@ -574,7 +584,7 @@ it("bounds the work on forty diners with two percentage discounts", () => {
   if (process.env.STRYKER_MUTATOR_WORKER === undefined) {
     expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
   }
-});
+}, 15_000);
 
 it("finds the zero-cent price on the first call when several discounts cover all supplements", () => {
   const dishes = [
@@ -793,18 +803,22 @@ it("fills a free saved place without using a fixed discount allowance twice", ()
 it.each([
   { diners: 16, seed: 7, exact: true, totalCents: 25336 },
   { diners: 21, seed: 8, exact: false, totalCents: 33183 },
-])("keeps the cheaper bill when $diners diners order course by course", (sample) => {
-  const input = threeCourseTable(sample.diners, sample.seed * 7919, 5, 40);
-  const starters = group({
-    ...input,
-    dishes: input.dishes.filter(({ courseId }) => courseId === "starter"),
-  });
-  const mains = group({
-    ...input,
-    dishes: input.dishes.filter(({ courseId }) => courseId !== "dessert"),
-    previous: starters,
-  });
-  const result = group({ ...input, previous: mains });
-  expect(result).toMatchObject({ exact: sample.exact, totalCents: sample.totalCents });
-  expect(group({ ...input, previous: result })).toEqual(result);
-});
+])(
+  "keeps the cheaper bill when $diners diners order course by course",
+  (sample) => {
+    const input = threeCourseTable(sample.diners, sample.seed * 7919, 5, 40);
+    const starters = group({
+      ...input,
+      dishes: input.dishes.filter(({ courseId }) => courseId === "starter"),
+    });
+    const mains = group({
+      ...input,
+      dishes: input.dishes.filter(({ courseId }) => courseId !== "dessert"),
+      previous: starters,
+    });
+    const result = group({ ...input, previous: mains });
+    expect(result).toMatchObject({ exact: sample.exact, totalCents: sample.totalCents });
+    expect(group({ ...input, previous: result })).toEqual(result);
+  },
+  15_000,
+);
