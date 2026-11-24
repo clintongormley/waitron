@@ -41,7 +41,6 @@ import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
-import { DEFAULT_MANAGEMENT_RP_ID } from "./config.js";
 import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
 import {
   joinAsBundleAnswer,
@@ -219,6 +218,7 @@ async function boot(
   const env: Record<string, string> = {
     ...tradingBootEnv(suite.db, dir, nodeId, migrationsRoot),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
+    WAITRON_MANAGEMENT_RP_ID: "dashboard.example",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
@@ -857,7 +857,7 @@ describe("the start check on a real start", () => {
     }, 60_000);
 
     it("the waiting page's download takes a passkey made at the dashboard's name", async () => {
-      const passkey = signingPasskey(DEFAULT_MANAGEMENT_RP_ID);
+      const passkey = signingPasskey("dashboard.example");
       await boot(suite, {
         spareUrl: OWN_URL,
         joined: true,
@@ -882,7 +882,7 @@ describe("the start check on a real start", () => {
       });
       expect(options.status).toBe(200);
       const { challenge, rpId } = (await options.json()) as { challenge: string; rpId: string };
-      expect(rpId).toBe(DEFAULT_MANAGEMENT_RP_ID);
+      expect(rpId).toBe("dashboard.example");
       const answer = passkey.assert(challenge, "https://dashboard.example");
       const response = await fetch(`http://127.0.0.1:${httpPort()}/old-box-data`, {
         method: "POST",
