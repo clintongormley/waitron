@@ -506,6 +506,19 @@ export interface FiscalBackend {
    */
   checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>;
 
+  /**
+   * When this node's open chain was filed under the producer `note` moves from, opens a new
+   * installation, with new series, for the producer this backend files under. Takes no caller
+   * transaction: it reads `secondClock` outside the write lock, then asks `mayOpen` first inside
+   * the transaction that opens. Optional: a backend that names no producer omits it.
+   */
+  openIdentityChange?(
+    nodeId: NodeId,
+    note: IdentityChangeNote,
+    secondClock: SecondClock,
+    mayOpen: (tx: Transaction) => Promise<boolean>,
+  ): Promise<"opened" | "nothing-to-open" | "not-named">;
+
   /** How many records this node has not yet had confirmed. */
   pendingCount(nodeId: NodeId): Promise<number>;
 }
