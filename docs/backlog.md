@@ -1475,9 +1475,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Fiscal history also retains conflicts found in AEAT replies and lookups.
   Orders and Sales can run the receipt helper, invoice selection and Find a bill search and date
   suites independently. The Find a bill routes and readers remain in the server. When changing
-  the parser, also run the server's `find-bill-bills`, `find-bill-transactions` and `bill-advances`
-  suites, which exercise it against bill and transaction data. Further slices move server callers
-  with the shared code and error declarations they use.
+  the parser, also run the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
+  and `bill-advances` suites to check the HTTP routes and bill and transaction data. Run `orders-api`
+  when changing the shared search limit to check the Orders API's search and table filters.
+  Further slices move server callers with the shared code and error declarations they use.
   [Receipt helpers](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
   [Invoice selection](superpowers/plans/2026-11-23-a1308-invoice-selection.md)
   [Find a bill query](superpowers/plans/2026-11-24-a1308-find-bill-query.md)
