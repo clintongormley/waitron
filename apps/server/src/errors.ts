@@ -1003,7 +1003,8 @@ declare module "@waitron/shared" {
      * no refund route Waitron can record before asking.
      */
     "bill.refund_unsupported": { paymentId: string };
-    /** A standalone terminal refund requires a manager's PIN on this request. */
+    /** A standalone-terminal refund that needs `sale.refund`, as one giving back more than the bill
+     * is paid over its total does, requires the PIN of a holder of it on this request. */
     "bill.manual_refund_pin_required": { paymentId: string };
     /**
      * A card refund of the bill is still pending: until the card provider shows its outcome, the

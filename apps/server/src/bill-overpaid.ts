@@ -25,18 +25,18 @@ import {
 import "./errors.js";
 
 /**
- * The permission a give-back of `applied` money from a bill payment needs (owner, 2026-11-24): on
- * a bill Pay for items left holding more than it owes, handing back no more than that excess is
- * money just taken on this bill, so `payment.take`; any other refund `sale.refund`. A tip given
- * back with it is not counted: the excess is applied money only.
+ * The permission a give-back of `amount` from a bill payment needs, its applied money and tip
+ * together (owner, 2026-11-24): on a bill Pay for items left holding more than it owes, handing
+ * back no more than that excess is money just taken on this bill, so `payment.take`; any other
+ * refund `sale.refund`.
  */
 export async function refundPermission(
   tx: Transaction,
   workingOrderId: string,
-  applied: Decimal,
+  amount: Decimal,
 ): Promise<"payment.take" | "sale.refund"> {
   const excess = (await billExcesses(tx, [workingOrderId])).get(workingOrderId);
-  return excess !== undefined && compareDecimal(applied, excess) <= 0
+  return excess !== undefined && compareDecimal(amount, excess) <= 0
     ? "payment.take"
     : "sale.refund";
 }

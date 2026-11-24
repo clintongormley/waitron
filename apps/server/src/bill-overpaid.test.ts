@@ -381,7 +381,20 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
   });
 
-  it("gives back a payment's tip with applied money within the excess, needing no refund permission", async () => {
+  it("gives back a payment's tip with its applied money, needing no refund permission when both together are within the excess", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    await take(billId, "cash", "12.00");
+    const tipped = await take(billId, "cash", "3.00", "2.00");
+    await payForCroquettes(party.partyId, billId);
+
+    const given = await giveBack(billId, tipped, "3.00", randomUUID(), { tip: "2.00" });
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "2.00" });
+  });
+
+  it("giving back a payment's tip with applied money that together exceed the excess needs the refund permission", async () => {
     const party = await seatedWith(venue, "Croquettes", "Croquettes");
     const billId = party.tabId;
     await take(billId, "cash", "11.00");
@@ -390,8 +403,11 @@ describe("A1515 a bill left owing less than it was paid", () => {
 
     const given = await giveBack(billId, tipped, "4.00", randomUUID(), { tip: "2.00" });
 
-    expect(given.status, JSON.stringify(given.json)).toBe(200);
-    expect(await balanceOf(billId)).toMatchObject({ overpaid: "1.00" });
+    expect(given).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
   });
 
   it("keeps as a tip none of a payment for chosen items taken the old way", async () => {
