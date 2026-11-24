@@ -189,6 +189,19 @@ background: var(--wt-color-primary-disabled);
 color: var(--wt-color-on-primary-disabled);
 cursor: not-allowed;
 }
+.box-form button.secondary {
+border: var(--wt-field-line-width) solid var(--wt-color-border);
+background: var(--wt-color-bg);
+color: var(--wt-color-text);
+}
+.box-form button.secondary:hover:enabled {
+border-color: var(--wt-color-primary);
+background: var(--wt-color-bg);
+}
+.box-form button.secondary:disabled {
+background: var(--wt-color-bg);
+color: var(--wt-color-text-muted);
+}
 @media (forced-colors: active) {
 .box-form input:not([type="checkbox"], [type="hidden"]) { border-bottom: var(--wt-field-line-width) solid CanvasText; }
 .box-form input[aria-describedby$="-error"]:not([type="checkbox"]) { border-bottom-width: var(--wt-field-line-width-active); }

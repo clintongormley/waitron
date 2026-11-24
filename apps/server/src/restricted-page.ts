@@ -53,6 +53,8 @@ export type OldBoxDownloadRefusal =
   | "busy"
   | "throttled"
   | "signInRefused"
+  | "passkeyRefused"
+  | "passkeyExpired"
   | "totpRequired"
   | "notPermitted"
   | "failed";
@@ -66,6 +68,8 @@ export interface OldBoxDownloadState {
   askCode?: boolean;
   /** The refused form's `returnTo`, as posted; only the waiting page draws one. */
   returnTo?: string;
+  /** Whether the passkey form was posted: its line is drawn above that form's button instead. */
+  passkey?: true;
 }
 
 interface RestrictedView {
@@ -286,10 +290,92 @@ function refusalMessages(
   }
 }
 
+/**
+ * Offers a passkey sign-in where the browser can make one: asks this box for a challenge, has the
+ * browser answer it, and posts the answer as the passkey form's one field. Its words come from the
+ * button's `data-failed`, so one script serves every language. A wipe that began after the page was
+ * drawn answers 409, and the page is fetched again to say so.
+ */
+const PASSKEY_SCRIPT = `(() => {
+  const button = document.getElementById("old-box-data-passkey");
+  const form = document.getElementById("old-box-data-passkey-form");
+  if (!button || !form || !window.PublicKeyCredential) return;
+  button.hidden = false;
+  const text = (buffer) =>
+    btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  const bytes = (value) =>
+    Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const clear = () => {
+    document.getElementById("old-box-data-message")?.remove();
+    document.getElementById("old-box-data-passkey-message")?.remove();
+    // A field's mark goes with the line above the button that explained it.
+    const section = form.closest("section");
+    for (const error of section.querySelectorAll('[id$="-error"]')) error.remove();
+    for (const field of section.querySelectorAll("[aria-invalid]")) {
+      field.removeAttribute("aria-invalid");
+      field.removeAttribute("aria-describedby");
+    }
+  };
+  const say = (line) => {
+    clear();
+    const alert = document.createElement("p");
+    alert.id = "old-box-data-passkey-message";
+    alert.setAttribute("role", "alert");
+    alert.textContent = line;
+    button.parentElement.before(alert);
+  };
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const reply = await fetch("/old-box-data/passkey-options", { method: "POST", cache: "no-store" });
+      if (reply.status === 409) {
+        // A fresh GET: reload() of a page a refused form drew would post that form again.
+        location.assign(location.pathname);
+        return;
+      }
+      if (!reply.ok) throw new Error("options refused");
+      const options = await reply.json();
+      const credential = await navigator.credentials.get({
+        publicKey: { challenge: bytes(options.challenge), rpId: options.rpId, userVerification: "required", timeout: options.timeout },
+      });
+      if (!credential) throw new Error("no passkey");
+      const answer = credential.response;
+      form.elements.passkey.value = JSON.stringify({
+        id: credential.id,
+        rawId: text(credential.rawId),
+        type: credential.type,
+        response: {
+          clientDataJSON: text(answer.clientDataJSON),
+          authenticatorData: text(answer.authenticatorData),
+          signature: text(answer.signature),
+          userHandle: answer.userHandle ? text(answer.userHandle) : undefined,
+        },
+        clientExtensionResults: {},
+      });
+      clear();
+      form.submit();
+    } catch {
+      say(button.dataset.failed);
+    }
+    // submit() returns before the answer arrives, and a downloaded workbook leaves this page in
+    // place; a press while the workbook is still being made is answered "busy", as the password
+    // form's is.
+    button.disabled = false;
+  });
+})();`;
+
+/** Whether the download section draws its sign-in forms, rather than only a sentence. */
+function drawsDownloadForm(view: RestrictedView, secure: boolean): boolean {
+  return secure && !wiping(view);
+}
+
+const wiping = (view: RestrictedView) =>
+  view.reset === "ordered" || view.download?.refusal === "wipeUnderWay";
+
 function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: boolean): string {
   const words = RESTRICTED_DOWNLOAD_WORDS[locale];
   const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
-  if (view.reset === "ordered" || view.download?.refusal === "wipeUnderWay") {
+  if (wiping(view)) {
     const alert = view.download === undefined ? "" : ' role="alert"';
     return `<section>\n${heading}<p${alert}>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
   }
@@ -298,12 +384,15 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
     locale,
     secure,
     view.download,
+    undefined,
+    true,
   )}</section>`;
 }
 
 /**
  * The download block, unwrapped so the page drawing it chooses its section: its heading,
- * `introText`, then the form, or over HTTP why not. The form carries `returnTo` when given.
+ * `introText`, then the form, or over HTTP why not. The form carries `returnTo` when given;
+ * `withPasskey` adds the passkey form and its script, which the page's answer must allow.
  */
 export function downloadForm(
   introText: string,
@@ -311,12 +400,17 @@ export function downloadForm(
   secure: boolean,
   download?: OldBoxDownloadState,
   returnTo?: string,
+  withPasskey = false,
 ): string {
   const words = RESTRICTED_DOWNLOAD_WORDS[locale];
   const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
   const intro = `<p>${escapeHtml(introText)}</p>\n`;
   if (!secure) return `${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n`;
-  const shown = downloadMessages(download, words);
+  const drawn = downloadMessages(download, words);
+  // A refused passkey post's line goes above the passkey button, where the script draws its own.
+  const fromPasskey = withPasskey && download?.passkey === true;
+  const shown = fromPasskey ? { askCode: false } : drawn;
+  const passkeyLine = fromPasskey ? drawn.message : undefined;
   const error = (field: "email" | "password" | "totp") =>
     shown[field] === undefined
       ? ""
@@ -333,6 +427,14 @@ export function downloadForm(
     shown.message === undefined
       ? ""
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
+  const passkeyForm = withPasskey
+    ? `<form method="post" action="/old-box-data" class="box-form" id="old-box-data-passkey-form">
+<input type="hidden" name="passkey">
+${passkeyLine === undefined ? "" : `<p id="old-box-data-passkey-message" role="alert">${escapeHtml(passkeyLine)}</p>\n`}<p><button type="button" class="secondary" id="old-box-data-passkey" data-failed="${escapeHtml(words.passkeyCancelled)}" hidden>${escapeHtml(words.passkeyAction)}</button></p>
+</form>
+<script>${PASSKEY_SCRIPT}</script>
+`
+    : "";
   return `${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
 ${returnTo === undefined ? "" : `<input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">\n`}<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("old-box-data-email", download?.email ?? "", invalid("email"))}</p>
@@ -340,7 +442,7 @@ ${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.passwo
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
 ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
 </form>
-`;
+${passkeyForm}`;
 }
 
 /** The replaced box's page, its download section included. */
@@ -397,13 +499,14 @@ export async function restrictedPageAnswer(
   c.header("Cache-Control", "no-store");
   c.header("Vary", "Accept-Language");
   try {
-    return boxPageAnswer(
-      c,
-      renderRestrictedPage(await readView(deps, c.get("requestId"), download), locale, isSecure(c)),
-      status,
-      "no-store",
-      { inline: [], connectSelf: false, formSelf: true },
-    );
+    const view = await readView(deps, c.get("requestId"), download);
+    const secure = isSecure(c);
+    const passkey = drawsDownloadForm(view, secure);
+    return boxPageAnswer(c, renderRestrictedPage(view, locale, secure), status, "no-store", {
+      inline: passkey ? [PASSKEY_SCRIPT] : [],
+      connectSelf: passkey,
+      formSelf: true,
+    });
   } catch (error) {
     deps.log("error", "restricted_page.failed", {
       errorCode: codeOf(error),

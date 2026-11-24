@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { Hono } from "hono";
+import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +10,8 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
 import { seedManager, seedPerson } from "@waitron/identity/test/fixtures.js";
-import { PIN_THROTTLE_FREE_ATTEMPTS } from "@waitron/identity";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
+import { PIN_THROTTLE_FREE_ATTEMPTS, webauthnCredentials } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
@@ -17,7 +19,9 @@ import { generateSync } from "otplib";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { appendToChain } from "@waitron/workforce";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
+import { RESTRICTED_DOWNLOAD_WORDS } from "./i18n/restricted-page.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import { escapeHtml } from "./html-page.js";
 import type { Logger } from "./logger.js";
 import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import type { PasswordThrottle } from "./password-throttle.js";
@@ -33,6 +37,10 @@ const suite = useVenueDb({
 const NODE_ID = "00000000-0000-4000-8000-0000000000cc";
 const ORIGIN = "https://old-box.test";
 const EMAIL = "Owner.Person@Example.test";
+const RP_ID = "waitron.local";
+const VENUE_ORIGIN = "https://waitron.local";
+/** This box's own name, as `ownContactUrl` gives it for NODE_ID. */
+const BOX_ORIGIN = "https://box-0000.waitron.local";
 const fiscal: WaitronModule = {
   name: "fiscal",
   version: "1.0.0",
@@ -72,6 +80,7 @@ function appWith(
     mainHoldings?: OldBoxDataDeps["mainHoldings"];
     mainCopy?: OldBoxDataDeps["mainCopy"];
     nodeId?: string;
+    managementOrigin?: string;
   } = {},
 ) {
   const app = new Hono();
@@ -86,6 +95,11 @@ function appWith(
     ...restrictedDownloadDeps(page),
     modules: options.modules ?? [fiscal],
     totpKeyRing: TOTP_KEY_RING,
+    passkey: {
+      rpId: RP_ID,
+      managementOrigin: options.managementOrigin ?? VENUE_ORIGIN,
+      nodeId: page.nodeId,
+    },
     throttle: options.throttle,
     mainHoldings: options.mainHoldings,
     mainCopy: options.mainCopy,
@@ -317,9 +331,10 @@ describe("POST /old-box-data on the old box", () => {
     await expectPage(await post(app, { ...signIn, email: EMAIL.toLowerCase() }), 429);
   });
 
-  it("refuses a form larger than the cap", async () => {
+  it("refuses a form one byte over 16 KiB without judging it", async () => {
     await admin();
-    await expectPage(await post(appWith(), { ...signIn, totp: "1".repeat(5000) }), 400);
+    const filler = 16 * 1024 + 1 - new URLSearchParams({ ...signIn, totp: "" }).toString().length;
+    await expectPage(await post(appWith(), { ...signIn, totp: "1".repeat(filler) }), 400);
     expect(lines).toEqual([]);
   });
 
@@ -483,5 +498,288 @@ describe("the since tabs of POST /old-box-data", () => {
     expect(downloaded?.fields).toMatchObject({ since: "copy", hoursRows: 1 });
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
+  });
+});
+
+describe("signing in with a passkey on the old box", () => {
+  async function passkeyFor(
+    role: "admin" | "manager" = "admin",
+    options: { status?: "active" | "suspended"; credentialId?: string } = {},
+  ) {
+    const personId = await seedPerson(suite.db, role, options.status ?? "active");
+    const passkey = signingPasskey(RP_ID);
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(webauthnCredentials).values({
+        personId,
+        credentialId: options.credentialId ?? passkey.credentialId,
+        publicKey: passkey.publicKey,
+        counter: 0,
+      }),
+    );
+    return { personId, passkey };
+  }
+
+  function askOptions(
+    app: Hono,
+    options: { secure?: boolean; headers?: Record<string, string> } = {},
+  ): Promise<Response> {
+    return Promise.resolve(
+      app.request(
+        `${ORIGIN}/old-box-data/passkey-options`,
+        {
+          method: "POST",
+          headers: { origin: ORIGIN, "sec-fetch-site": "same-origin", ...options.headers },
+        },
+        options.secure === false ? {} : { incoming: { socket } },
+      ),
+    );
+  }
+
+  async function challengeFrom(app: Hono): Promise<string> {
+    const response = await askOptions(app);
+    expect(response.status).toBe(200);
+    return ((await response.json()) as { challenge: string }).challenge;
+  }
+
+  const words = RESTRICTED_DOWNLOAD_WORDS["en-GB"];
+
+  /** Checks the page's one alert is `line`, drawn above the passkey button, and no field is marked. */
+  function expectPasskeyLine(page: string, line: string): void {
+    // The page's style names `[role="alert"]`, and its script the ids and marks it clears.
+    const section = page.slice(page.indexOf("<section"));
+    const html = section.replace(/<script>[\s\S]*?<\/script>/g, "");
+    expect(html.match(/role="alert"/g)).toHaveLength(1);
+    expect(html).toContain(
+      `<p id="old-box-data-passkey-message" role="alert">${escapeHtml(line)}</p>\n<p><button type="button" class="secondary" id="old-box-data-passkey"`,
+    );
+    expect(html).not.toContain("old-box-data-message");
+    expect(html).not.toMatch(/-error"|aria-invalid/);
+  }
+
+  /** Checks the page drew `refusal` with `status`, and the log names the code behind it. */
+  async function expectRefused(
+    response: Response,
+    status: number,
+    refusal: "passkeyRefused" | "notPermitted",
+    errorCode: string,
+  ): Promise<void> {
+    await expectPage(response.clone(), status);
+    expectPasskeyLine(await response.text(), words[refusal]);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        event: "old_box_data.refused",
+        fields: expect.objectContaining({ errorCode }),
+      }),
+    );
+  }
+
+  it("gives options for this box's name that ask the person to verify, naming no passkey", async () => {
+    const response = await askOptions(appWith());
+    expect(response.status).toBe(200);
+    const options = (await response.json()) as Record<string, unknown>;
+    expect(options).toMatchObject({ rpId: RP_ID, userVerification: "required" });
+    expect(options.allowCredentials ?? []).toEqual([]);
+    expect(typeof options.challenge).toBe("string");
+  });
+
+  it("downloads the workbook for a passkey made at the venue's name, answered at this box's own name", async () => {
+    const { personId, passkey } = await passkeyFor();
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), BOX_ORIGIN);
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename=/);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        event: "old_box_data.downloaded",
+        fields: expect.objectContaining({ personId }),
+      }),
+    );
+  });
+
+  it("downloads the workbook for an answer at the venue's name too", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), VENUE_ORIGIN);
+    expect((await post(app, { passkey: JSON.stringify(answer) })).status).toBe(200);
+  });
+
+  it("refuses an answer made at another origin", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), "https://box-ffff.waitron.local");
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    await expectRefused(response, 401, "passkeyRefused", "passkey.verification_failed");
+  });
+
+  it("refuses an answer whose signature its passkey did not make", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), BOX_ORIGIN);
+    const forged = {
+      ...answer,
+      response: {
+        ...answer.response,
+        signature: signingPasskey(RP_ID).assert("eA", BOX_ORIGIN).response.signature,
+      },
+    };
+    const response = await post(app, { passkey: JSON.stringify(forged) });
+    await expectRefused(response, 401, "passkeyRefused", "passkey.verification_failed");
+  });
+
+  it("refuses a passkey this box has no record of", async () => {
+    const app = appWith();
+    const answer = signingPasskey(RP_ID).assert(await challengeFrom(app), BOX_ORIGIN);
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    await expectRefused(response, 401, "passkeyRefused", "passkey.not_registered");
+  });
+
+  it("refuses an answer whose passkey id is not text as naming no passkey", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const answer = { ...passkey.assert(await challengeFrom(app), BOX_ORIGIN), id: 7 };
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    await expectRefused(response, 401, "passkeyRefused", "passkey.not_registered");
+  });
+
+  it("refuses a suspended person's passkey with the same words as one it has no record of", async () => {
+    const { passkey } = await passkeyFor("admin", { status: "suspended" });
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), BOX_ORIGIN);
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    await expectRefused(response, 401, "passkeyRefused", "passkey.verification_failed");
+  });
+
+  it("refuses an answer that is not a passkey's answer", async () => {
+    const response = await post(appWith(), { passkey: "{not json" });
+    await expectPage(response.clone(), 401);
+    expectPasskeyLine(await response.text(), words.passkeyRefused);
+  });
+
+  it("refuses a challenge this box did not make, and one already used, as expired", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const notMade = await post(app, {
+      passkey: JSON.stringify(passkey.assert("bm90LW1hZGUtaGVyZQ", BOX_ORIGIN)),
+    });
+    await expectPage(notMade.clone(), 401);
+    expectPasskeyLine(await notMade.text(), words.passkeyExpired);
+
+    const answer = JSON.stringify(passkey.assert(await challengeFrom(app), BOX_ORIGIN));
+    expect((await post(app, { passkey: answer })).status).toBe(200);
+    const again = await post(app, { passkey: answer });
+    await expectPage(again.clone(), 401);
+    expectPasskeyLine(await again.text(), words.passkeyExpired);
+  });
+
+  it("refuses a passkey whose owner does not hold node.manage", async () => {
+    const { passkey } = await passkeyFor("manager");
+    const app = appWith();
+    const answer = passkey.assert(await challengeFrom(app), BOX_ORIGIN);
+    const response = await post(app, { passkey: JSON.stringify(answer) });
+    await expectRefused(response, 403, "notPermitted", "authorization.not_permitted");
+  });
+
+  /**
+   * An RS256 passkey on a 4096-bit key whose answers carry a user handle: with WebAuthn's longest
+   * passkey id (1,023 bytes) and a long name, about the largest answer a browser sends.
+   */
+  function longestPasskey(credentialId: string) {
+    const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 4096 });
+    const jwk = publicKey.export({ format: "jwk" });
+    // COSE key {kty: RSA, alg: RS256, n, e}, CBOR-encoded by hand for a 512-byte n and a 3-byte e.
+    const cose = Buffer.concat([
+      Buffer.from([0xa4, 0x01, 0x03, 0x03, 0x39, 0x01, 0x00, 0x20, 0x59, 0x02, 0x00]),
+      Buffer.from(jwk.n!, "base64url"),
+      Buffer.from([0x21, 0x43]),
+      Buffer.from(jwk.e!, "base64url"),
+    ]);
+    const assert = (challenge: string, origin: string) => {
+      const clientData = Buffer.from(
+        JSON.stringify({ type: "webauthn.get", challenge, origin, crossOrigin: false }),
+      );
+      const authData = Buffer.concat([
+        createHash("sha256").update(RP_ID).digest(),
+        Buffer.from([0x05, 0, 0, 0, 1]),
+      ]);
+      const signature = sign(
+        "sha256",
+        Buffer.concat([authData, createHash("sha256").update(clientData).digest()]),
+        privateKey,
+      );
+      return {
+        id: credentialId,
+        rawId: credentialId,
+        type: "public-key",
+        clientExtensionResults: {},
+        response: {
+          clientDataJSON: clientData.toString("base64url"),
+          authenticatorData: authData.toString("base64url"),
+          signature: signature.toString("base64url"),
+          userHandle: randomBytes(64).toString("base64url"),
+        },
+      };
+    };
+    return { publicKey: cose.toString("base64url"), assert };
+  }
+
+  it("judges an answer over 4 KiB: WebAuthn's longest passkey id, answered at a long name", async () => {
+    const credentialId = randomBytes(1023).toString("base64url");
+    const passkey = longestPasskey(credentialId);
+    const personId = await seedPerson(suite.db, "admin");
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(webauthnCredentials)
+        .values({ personId, credentialId, publicKey: passkey.publicKey, counter: 0 }),
+    );
+    // 253 characters, the longest a host name may be.
+    const managementOrigin = `https://${["a", "b", "c"].map((c) => c.repeat(63)).join(".")}.${"d".repeat(61)}`;
+    const app = appWith({ managementOrigin });
+    const fields = {
+      passkey: JSON.stringify(passkey.assert(await challengeFrom(app), managementOrigin)),
+    };
+    expect(new URLSearchParams(fields).toString().length).toBeGreaterThan(4096);
+    expect((await post(app, fields)).status).toBe(200);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        event: "old_box_data.downloaded",
+        fields: expect.objectContaining({ personId }),
+      }),
+    );
+  });
+
+  it("judges a form of exactly 16 KiB", async () => {
+    const fields = { passkey: "x".repeat(16 * 1024 - "passkey=".length) };
+    const response = await post(appWith(), fields);
+    await expectRefused(response, 401, "passkeyRefused", "passkey.verification_failed");
+  });
+
+  it("leaves the passkey's counter and last use as they were", async () => {
+    const { passkey } = await passkeyFor();
+    const app = appWith();
+    const stored = () =>
+      suite.db
+        .select({
+          counter: webauthnCredentials.counter,
+          lastUsedAt: webauthnCredentials.lastUsedAt,
+        })
+        .from(webauthnCredentials);
+    const before = await stored();
+    const answer = passkey.assert(await challengeFrom(app), BOX_ORIGIN);
+    expect((await post(app, { passkey: JSON.stringify(answer) })).status).toBe(200);
+    expect(await stored()).toEqual(before);
+    expect(before).toEqual([{ counter: 0, lastUsedAt: null }]);
+  });
+
+  it("refuses to give options over plain HTTP, from another page, or while the box is wiped", async () => {
+    expect((await askOptions(appWith(), { secure: false })).status).toBe(403);
+    expect(
+      (
+        await askOptions(appWith(), {
+          headers: { origin: "https://elsewhere.test", "sec-fetch-site": "cross-site" },
+        })
+      ).status,
+    ).toBe(403);
+    expect((await askOptions(appWith({ resetOrdered: () => true }))).status).toBe(409);
   });
 });

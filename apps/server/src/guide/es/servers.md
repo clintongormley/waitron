@@ -291,8 +291,10 @@ El envío a Hacienda continúa en el principal.
 Antes de que el servidor principal borre este servidor, descarga sus datos en **Descargar los datos
 de este servidor**. Introduce el correo electrónico y la contraseña de un administrador, o de una
 cuenta con **Gestionar servidores**, tal como estaban la última vez que este servidor llevó el local,
-y el código del autenticador si la cuenta lo usa; las llaves de acceso y el inicio de sesión con
-Google no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los
+y el código del autenticador si la cuenta lo usa, y elige **Descargar**. También puedes elegir
+**Entrar con passkey** y usar una passkey que esa cuenta tuviera entonces; el archivo se
+descarga enseguida.
+El inicio de sesión con Google no funciona aquí. La pestaña **Facturas** del archivo lista los
 registros de facturación; su primera línea dice si son solo los que el principal no tenía o todos
 los que tiene este servidor. Tras un [traspaso de emergencia](servers.md#emergency), el archivo tiene
 también las pestañas **Pedidos**, **Pagos y caja**, **Horas de trabajo** y **Actividad**. La primera
@@ -394,7 +396,8 @@ Si el otro servidor responde antes, manda su respuesta. Un servidor que ya ha pa
 seguir; su página lo indica en lugar de mostrar el formulario.
 
 Debajo del formulario, la página también ofrece **Descargar los datos de este servidor**, la misma
-descarga y el mismo inicio de sesión que en [un servidor que ya no lleva el local](servers.md#handed-over).
+descarga que en [un servidor que ya no lleva el local](servers.md#handed-over), solo con el inicio de
+sesión con correo electrónico y contraseña.
 
 Si la copia de seguridad confirma que otro servidor ha pasado a llevar el local, este servidor se
 niega a seguir como principal. Abre el otro servidor con el enlace. Si esa información aparece después

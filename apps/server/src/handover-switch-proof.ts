@@ -138,8 +138,9 @@ interface HeldChallenge {
 }
 
 /**
- * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
- * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once, and is live
+ * Passkey challenges kept in memory and never in `sign_in_challenges`: for the switch, because that
+ * table streams with the copy a spare follows (A947 4d plan D9), and for a replaced box's data
+ * download, because that box writes nothing to its venue database. Each succeeds at most once, and is live
  * for 2 minutes from when it is made, or 15 from when it is given back or last carried by a
  * catching-up take.
  */
@@ -193,7 +194,7 @@ export interface SwitchSignIn extends Omit<SwitchProofDeps, "db" | "now"> {
   challenges: ReturnType<typeof createSwitchChallenges>;
 }
 
-function challengeOf(response: AuthenticationResponseJSON): string | undefined {
+export function challengeOf(response: AuthenticationResponseJSON): string | undefined {
   try {
     const { challenge } = decodeClientDataJSON(response.response.clientDataJSON);
     return typeof challenge === "string" ? challenge : undefined;

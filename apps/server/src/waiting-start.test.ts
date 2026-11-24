@@ -1477,6 +1477,22 @@ describe("the waiting start", () => {
         expect(plain).not.toContain('action="/old-box-data"');
       });
 
+      it("offers no passkey sign-in: no passkey form on the page, and no passkey options route", async () => {
+        expect(await page()).not.toContain("old-box-data-passkey");
+        const options = await h.app().request(
+          "https://box.test/old-box-data/passkey-options",
+          {
+            method: "POST",
+            headers: { origin: "https://box.test", "sec-fetch-site": "same-origin" },
+          },
+          tls(),
+        );
+        expect(options.status).toBe(404);
+        const posted = await download({ passkey: "x" });
+        expect(posted.status).toBe(400);
+        expect(await posted.text()).toContain(escapeHtml(words.emailMissing));
+      });
+
       it("draws the carry-on and download blocks in the waiting page's one section, over HTTPS and HTTP", async () => {
         for (const secure of [true, false]) {
           const shown = await page(secure);

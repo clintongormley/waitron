@@ -531,7 +531,10 @@ describe("the box pages' form style", () => {
         const lefts = () =>
           Promise.all(
             ["h2", "form"].map((selector) =>
-              page.locator(selector).evaluate((el) => el.getBoundingClientRect().left),
+              page
+                .locator(selector)
+                .first()
+                .evaluate((el) => el.getBoundingClientRect().left),
             ),
           );
         await page.setContent(download);
@@ -580,7 +583,7 @@ describe("the box pages' form style", () => {
             ),
           );
         await page.setContent(downloadPage);
-        const expected = await lefts("h2", "form");
+        const expected = await lefts("h2", "form >> nth=0");
         await page.setContent(
           renderWaitingPage(
             "the other box",
