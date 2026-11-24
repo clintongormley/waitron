@@ -634,6 +634,11 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const { masterKey, masterKeyName: name } = await retried.json();
     const rows = await storedMasterKeys();
     expect(rows).toHaveLength(2);
+    expect(
+      rows
+        .map((row) => row.checkValue)
+        .filter((value) => value !== masterKeyCheckValue(decodeMasterKeyCode(masterKey))),
+    ).toHaveLength(1);
     expect(await readCurrentMasterKey(venueDb.db)).toMatchObject({
       number: 2,
       name,

@@ -261,7 +261,7 @@ it("a Copy the browser refuses says so under the key box, never Copied., and lea
   await userEvent.click(control(el, "copy")!);
   await expect
     .poll(() => text(el, "copy-failed"))
-    .toBe("Copy did not work. Use Download or Print, or write the key down.");
+    .toBe("Copy did not work. Use Download or Print.");
   expect(control(el, "copied")).toBeNull();
   expect(control(el, "kept")).toBeNull();
   expect((await axe.run(host)).violations).toEqual([]);
@@ -362,5 +362,5 @@ it("says in Spanish when a Copy is refused", async () => {
   await userEvent.click(control(el, "copy")!);
   await expect
     .poll(() => text(el, "copy-failed"))
-    .toBe("No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.");
+    .toBe("No se ha podido copiar. Usa Descargar o Imprimir.");
 });

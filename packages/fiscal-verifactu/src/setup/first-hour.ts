@@ -87,7 +87,7 @@ export const firstHourStrings = {
     print: "Print",
     copy: "Copy",
     copied: "Copied.",
-    copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
+    copyFailed: "Copy did not work. Use Download or Print.",
     printFailed: "Print did not open. Use Download, or allow pop-ups and try again.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
@@ -117,7 +117,7 @@ export const firstHourStrings = {
     print: "Imprimir",
     copy: "Copiar",
     copied: "Copiada.",
-    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
+    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir.",
     printFailed:
       "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
     confirmKept: "Continuar",
