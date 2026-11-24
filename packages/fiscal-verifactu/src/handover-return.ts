@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ReturnDiscrepancy } from "@waitron/module";
+import type { ReturnDiscrepancy, ReturnedRecordsOwner } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import {
   COVERAGE_REFUSAL,
@@ -315,15 +315,12 @@ export async function receiveReturnedOriginals(
   sourceNodeId: string,
   returned: ReturnedOriginals,
   now: Date,
-  accepted: readonly string[] = [],
-  others?: { destinationNodeId: string },
+  owner: ReturnedRecordsOwner = { own: { accepted: [] } },
 ): Promise<{ complete: boolean; refusal?: "fiscal.return_record_clash" }> {
+  const others = owner.others;
+  const accepted = owner.own?.accepted ?? [];
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
-  if (others && accepted.length)
-    throw new AppError("fiscal.return_invalid", {
-      reason: "accepted payment clash for another box's record",
-    });
   if (
     returned.refunds.some((row) => row.state !== "completed" && row.state !== "pending") ||
     returned.orders.some((row) => row.status !== "settled")

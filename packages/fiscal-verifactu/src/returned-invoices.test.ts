@@ -74,7 +74,7 @@ async function receive(
       node.nodeId,
       batch as unknown as CanonicalValue,
       now,
-      [],
+      { own: { accepted: [] } },
     ),
   );
 }
@@ -133,7 +133,7 @@ it("marks originals in an incomplete payment batch and rolls back with the calle
         node.nodeId,
         later as unknown as CanonicalValue,
         receivedAt,
-        [],
+        { own: { accepted: [] } },
       );
       throw aborted;
     }),
@@ -190,8 +190,7 @@ it("lists an earlier box's returned record under the box that wrote it", async (
         sender.nodeId,
         batch as unknown as CanonicalValue,
         receivedAt,
-        [],
-        { destinationNodeId: randomUUID() },
+        { others: { destinationNodeId: randomUUID() } },
       ),
     ),
   ).toBe(true);

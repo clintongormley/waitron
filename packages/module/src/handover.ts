@@ -37,6 +37,14 @@ export interface UnreturnedChain {
   records: UnreturnedRecord[];
 }
 
+/**
+ * Whose records a returned batch holds: the sending box's own, with the payment clashes a person
+ * accepted, or other boxes' records sent on to the main box named, for which no clash is accepted.
+ */
+export type ReturnedRecordsOwner =
+  | { readonly own: { readonly accepted: readonly string[] }; readonly others?: never }
+  | { readonly others: { readonly destinationNodeId: string }; readonly own?: never };
+
 /** Thrown by a module's `lacking` seat when another box's `holdings` are not in its shape. */
 export class MalformedHoldingsError extends Error {}
 
@@ -75,8 +83,7 @@ export interface ModuleHandoverContribution {
       sourceNodeId: string,
       batch: CanonicalValue,
       now: Date,
-      accepted?: readonly string[],
-      others?: { destinationNodeId: string },
+      owner: ReturnedRecordsOwner,
     ): Promise<boolean | ReturnRefusal>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;

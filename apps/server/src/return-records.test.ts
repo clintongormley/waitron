@@ -69,9 +69,9 @@ const modules: WaitronModule[] = [
       summarise: async () => null,
       returnRecords: {
         read: async () => ["first", "second"],
-        receive: async (_tx, _source, batch, _now, _accepted) => {
+        receive: async (_tx, _source, batch, _now, owner) => {
           received.push(batch);
-          return accounted || (_accepted ?? []).includes(returnDigest(batch));
+          return accounted || (owner.own?.accepted ?? []).includes(returnDigest(batch));
         },
         acceptPermission: "sample.accept",
         inspect: async (_tx, _source, batch) => [
@@ -1051,9 +1051,12 @@ it("stores a signed batch once and accounts separately for two clashes inside it
   );
   const receive = vi
     .spyOn(seat, "receive")
-    .mockImplementation(async (_tx, _source, batch, _now, accepted = []) =>
-      ["A", "B"].every((saleId) => accepted.includes(returnDigest([batch, saleId, heldVersion]))),
-    );
+    .mockImplementation(async (_tx, _source, batch, _now, owner) => {
+      const accepted = owner.own?.accepted ?? [];
+      return ["A", "B"].every((saleId) =>
+        accepted.includes(returnDigest([batch, saleId, heldVersion])),
+      );
+    });
   try {
     const app = destination();
     const session = await acceptanceSession();
@@ -2036,7 +2039,8 @@ function receiveByPart(
   const calls: { batch: CanonicalValue; others: unknown }[] = [];
   const spy = vi
     .spyOn(seat, "receive")
-    .mockImplementation(async (_tx, _source, batch, _now, _accepted, part) => {
+    .mockImplementation(async (_tx, _source, batch, _now, owner) => {
+      const part = owner.others;
       calls.push({ batch, others: part });
       received.push(batch);
       return part === undefined ? true : others(batch);
@@ -2049,7 +2053,8 @@ it("sends an earlier box's tail before its own correction of it", async () => {
   const calls: unknown[] = [];
   const receive = vi
     .spyOn(seat, "receive")
-    .mockImplementation(async (_tx, _source, batch, _now, _accepted, others) => {
+    .mockImplementation(async (_tx, _source, batch, _now, owner) => {
+      const others = owner.others;
       if (others === undefined && !received.includes("earlier"))
         throw new Error("FOREIGN KEY constraint failed");
       calls.push(others ?? null);
@@ -2142,7 +2147,8 @@ it("a second-part payment difference stores no clash, answers accounted, and the
   // payment difference is; taken as another box's, only its invoice records count.
   const receive = vi
     .spyOn(seat, "receive")
-    .mockImplementation(async (_tx, _source, batch, _now, _accepted, part) => {
+    .mockImplementation(async (_tx, _source, batch, _now, owner) => {
+      const part = owner.others;
       received.push(batch);
       return batch !== "earlier" || part !== undefined;
     });

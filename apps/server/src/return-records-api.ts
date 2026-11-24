@@ -67,8 +67,8 @@ export function mountReturnRecordsApi(
           // Another box's records: no clash is asked or kept, and no takeover step moves.
           if (body.part === "others") {
             const now = deps.now?.() ?? new Date();
-            const complete = await seat.receive(tx, source, body.payload!, now, [], {
-              destinationNodeId: deps.nodeId,
+            const complete = await seat.receive(tx, source, body.payload!, now, {
+              others: { destinationNodeId: deps.nodeId },
             });
             return typeof complete === "boolean" ? { others: complete } : complete;
           }
@@ -78,7 +78,7 @@ export function mountReturnRecordsApi(
             source,
             body.payload!,
             deps.now?.() ?? new Date(),
-            accepted,
+            { own: { accepted } },
           );
           if (typeof complete !== "boolean") return complete;
           const open =

@@ -1014,7 +1014,9 @@ it("stops when both boxes independently settled the same sale", async () => {
   });
   const receive = (batch = returned) =>
     withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, batch, now, [clash!.fingerprint]),
+      receiveReturnedOriginals(tx, source.nodeId, batch, now, {
+        own: { accepted: [clash!.fingerprint] },
+      }),
     );
   expect(await receive()).toEqual({ complete: true });
   expect(receiver.db.all<{ id: string }>(sql`select id from tenders`)).toEqual([
@@ -1639,7 +1641,9 @@ it.each([
       expect(clash!.eligible).toBe(true);
       expect(
         await withTransaction(receiver.db, (tx) =>
-          receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+          receiveReturnedOriginals(tx, source.nodeId, returned, now, {
+            own: { accepted: [clash!.fingerprint] },
+          }),
         ),
       ).toEqual({ complete: true });
       expect(receiver.db.all<{ id: string }>(sql`select id from refunds order by id`)).toEqual([
@@ -1755,7 +1759,7 @@ function receiveOthers(
   destinationNodeId: string,
 ) {
   return withTransaction(receiver.db, (tx) =>
-    receiveReturnedOriginals(tx, source, returned, returnedAt, [], { destinationNodeId }),
+    receiveReturnedOriginals(tx, source, returned, returnedAt, { others: { destinationNodeId } }),
   );
 }
 
@@ -2087,24 +2091,6 @@ it("holds back a correction whose earlier record's box clashes, without a databa
     refusal: "fiscal.return_record_clash",
   });
   expect(heldRecordIds()).toEqual(["receiver-original"]);
-});
-
-it("refuses an accepted payment clash for another box's records", async () => {
-  const { main, sender, earlier } = await boxesWithAnEarlierOne();
-  await appendOriginal(earlier, "Earlier", 1);
-  const tail = await readTail(earlier, 0);
-
-  await expect(
-    withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, sender.nodeId, tail, returnedAt, ["a-fingerprint"], {
-        destinationNodeId: main.nodeId,
-      }),
-    ),
-  ).rejects.toMatchObject({
-    code: "fiscal.return_invalid",
-    params: { reason: "accepted payment clash for another box's record" },
-  });
-  expect(heldRecordIds()).toEqual([]);
 });
 
 it("refuses records that correct each other rather than looping", async () => {

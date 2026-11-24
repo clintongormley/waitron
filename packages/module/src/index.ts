@@ -18,6 +18,7 @@ export type {
   ModuleHandoverContribution,
   ReturnDiscrepancy,
   ReturnRefusal,
+  ReturnedRecordsOwner,
   UnreturnedChain,
   UnreturnedRecord,
 } from "./handover.js";
