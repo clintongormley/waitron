@@ -176,6 +176,7 @@ export function boxStatusRows(
     if (list === undefined) other += 1;
     else list.push(alert);
   }
+  const blocked = identityChangeBlocked(alerts);
   const rows = parts.map((id) => {
     const notices = noticesOn.get(id)!;
     const rowAlerts = alertsOn.get(id)!;
@@ -192,7 +193,7 @@ export function boxStatusRows(
     return {
       id,
       state,
-      line: lineOf(id, health, notices, stopped, rowAlerts),
+      line: lineOf(id, health, notices, stopped, rowAlerts, blocked),
       details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
@@ -222,6 +223,7 @@ function lineOf(
   notices: readonly Notice[],
   stopped: readonly Notice[],
   alerts: readonly AlertView[],
+  blocked: AlertView | undefined,
 ): string {
   if (id === "sales") {
     // A full disk stops everything, so it wins over a wrong clock.
@@ -229,14 +231,16 @@ function lineOf(
       stopped.find((notice) => notice.code === "storage.disk_full") ??
       stopped.find((notice) => notice.code === "clock.unusable");
     if (reason !== undefined) return t(STOPPED_WORDS[reason.code]!);
-    if (health.clock.waiting !== undefined) return t("box_status.sales.clock_waiting");
+    if (health.clock.waiting !== undefined)
+      return blocked === undefined
+        ? t("box_status.sales.clock_waiting")
+        : alertMessage(blocked.code, blocked.params, currentLocale());
     return t("box_status.sales.ok");
   }
   const words = stopped.find((notice) => Object.hasOwn(STOPPED_WORDS, notice.code));
   if (words !== undefined) return t(STOPPED_WORDS[words.code]!);
   const waiting = id === "clock" ? health.clock.waiting : undefined;
   if (waiting !== undefined) {
-    const blocked = identityChangeBlocked(alerts);
     if (blocked !== undefined) return alertMessage(blocked.code, blocked.params, currentLocale());
     const key = WAITING_LINES[waiting.cause ?? "start"] ?? "box_status.clock.waiting";
     const line = fill(key, {

@@ -813,6 +813,22 @@ describe("the Clock row while the start waits for its time", () => {
     });
   });
 
+  it("says on the Sales row what the bell says while the new fiscal installation is blocked, to a person who can see the alert", () => {
+    const blocked = alert("sif.identity_change_blocked", "box", { severity: "error" });
+    const waiting = waitingHealth(true, "identity_change");
+    const sales = (health: BoxHealth, alerts: AlertView[]) =>
+      row(boxStatusRows(health, alerts).rows, "sales");
+    expect(sales(waiting, [blocked])).toMatchObject({
+      state: "stopped",
+      line: "The box could not open its new fiscal installation for the new software producer, so it is not taking payments. It keeps trying. If this stays, open Box status and press Restart the box.",
+      alerts: [],
+    });
+    expect(sales(waiting, []).line).toBe(
+      "Payments wait until the box's time is confirmed: see the Clock row",
+    );
+    expect(sales(quietHealth(), [blocked]).line).toBe(t("box_status.sales.ok"));
+  });
+
   it("leaves the bell's sentence off the Clock row once the wait has ended", () => {
     const { rows, other } = boxStatusRows(quietHealth(), [UNCONFIRMED]);
     expect(row(rows, "clock")).toMatchObject({
