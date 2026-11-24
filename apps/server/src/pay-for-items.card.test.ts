@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   billAdvances,
+  billPayments,
   deviceProfiles,
   devices,
   invoiceCorrections,
@@ -255,7 +256,7 @@ async function contribute(billId: string, amount: string, ownReceipt = false) {
       ...(ownReceipt ? { ownReceipt: true } : {}),
     }),
   );
-  expect(answer.status).toBe(200);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
 }
 
 /** A 3.00 advance on the bill: its sale's id. */
@@ -328,6 +329,32 @@ async function stuckThenFailed(sourceId: string): Promise<{ newBill: string; pay
       .where(eq(payments.billPaymentId, payment!.id)),
   );
   return { newBill, paymentId: payment!.id };
+}
+
+/**
+ * A 1.00 cash payment in `state`, written on the bill after its items payment. The till's routes
+ * refuse a second payment while that card is pending (`order.payment_in_flight`), so it is written
+ * directly.
+ */
+async function laterPayment(billId: string, state: "received" | "failed") {
+  await inTx(venue, (tx) =>
+    tx.insert(billPayments).values({
+      workingOrderId: billId,
+      submissionId: randomUUID(),
+      fingerprint: "fixture",
+      kind: "contribution",
+      method: "cash",
+      applied: 100,
+      tendered: 100,
+      state,
+      requestedBy: venue.operatorId,
+      source: "device",
+      deviceId: venue.deviceId,
+      ...(state === "received"
+        ? { receivedAt: venue.clock.now().instant.toISOString() }
+        : { failedAt: venue.clock.now().instant.toISOString() }),
+    }),
+  );
 }
 
 describe("A1515 pay for items on the card reader", () => {
@@ -789,6 +816,38 @@ describe("A1515 pay for items on the card reader", () => {
       state: "pending",
     });
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
+  });
+
+  it("a card taken after a later payment was written on the items' bill still issues the source", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { answer, release, newBill } = await heldTartaPayment(sourceId);
+    await laterPayment(newBill, "failed");
+    release();
+
+    const paid = await answer;
+
+    expect(paid.json.payment).toMatchObject({ outcome: "received" });
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a declined card with other money on the items' bill keeps the items there and issues the source", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { answer, release, newBill } = await heldTartaPayment(sourceId);
+    await laterPayment(newBill, "received");
+    venue.card.failNextCollect();
+    release();
+
+    const paid = await answer;
+
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+    expect(await statusOf(venue, newBill)).toBe("open");
+    expect(await lineTotals(sourceId)).toEqual(["3.00"]);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
   });
 
   it("a full disk noted before the card is asked issues no invoice for a source its own payments cover", async () => {

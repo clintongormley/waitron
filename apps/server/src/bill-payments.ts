@@ -2520,34 +2520,31 @@ export async function completeBillPayment(
   // An invoice issued or settled is answered, so with none `figures` still stand.
   if (issued.invoice === null)
     await issueAdvanceIfOwed(tx, deps, takenAt, payment!, printers, issued.figures);
-  const sourceId = await itemsPaymentSource(tx, payment!);
-  if (sourceId !== null) await issueHeldSource(tx, deps, takenAt, payment!, sourceId);
+  const items = await itemsPaymentSource(tx, payment!);
+  if (items !== null) await issueHeldSource(tx, deps, takenAt, payment!, items.sourceId);
   return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
 }
 
 /**
- * The bill Pay for items moved `payment`'s items from, when `payment` is the one it took: its bill
- * names a source and holds no other payment in any state. Pay for items inserts its payment in the
- * transaction that makes the bill, so any later payment there finds it; `null` otherwise.
+ * The bill Pay for items moved `payment`'s items from, when `payment` is the one it took: the
+ * earliest payment of a bill that names a source, as Pay for items inserts it in the transaction
+ * that makes the bill. `alone` when no other payment there is pending or received, so no other
+ * money sits on the bill. `null` otherwise.
  */
-async function itemsPaymentSource(tx: Transaction, payment: PaymentRow): Promise<string | null> {
+async function itemsPaymentSource(
+  tx: Transaction,
+  payment: PaymentRow,
+): Promise<{ sourceId: string; alone: boolean } | null> {
   const [bill] = await tx
     .select({ itemsPaidFrom: workingOrders.itemsPaidFrom })
     .from(workingOrders)
     .where(eq(workingOrders.id, payment.workingOrderId));
   const sourceId = bill?.itemsPaidFrom ?? null;
   if (sourceId === null) return null;
-  const [other] = await tx
-    .select({ id: billPayments.id })
-    .from(billPayments)
-    .where(
-      and(
-        eq(billPayments.workingOrderId, payment.workingOrderId),
-        sql`${billPayments.id} <> ${payment.id}`,
-      ),
-    )
-    .limit(1);
-  return other === undefined ? sourceId : null;
+  const { rows } = await readPaymentRows(tx, [payment.workingOrderId]);
+  if (rows[0]?.id !== payment.id) return null;
+  const alone = rows.slice(1).every((row) => row.state !== "pending" && row.state !== "received");
+  return { sourceId, alone };
 }
 
 /** A card bill payment that charged nothing becomes `failed`, releasing its reservation, and the
@@ -2578,11 +2575,11 @@ export async function failBillPayment(
 
 /**
  * Every line of a Pay for items bill goes back to the bill it came from when the payment Pay for
- * items took there fails ({@link itemsPaymentSource}), and the emptied bill is abandoned. Its own
- * savepoint: a refusal leaves the items on their own open bill, to be paid there, and the
- * payment's failure stands. A source no longer open is the same case. Pay for items held the
- * source's invoice back for this payment, so where the items stay, the source is issued if its
- * own payments now cover it ({@link issueHeldBill}).
+ * items took there fails ({@link itemsPaymentSource}) and no other money sits on the bill, and the
+ * emptied bill is abandoned. Its own savepoint: a refusal leaves the items on their own open bill,
+ * to be paid there, and the payment's failure stands. A source no longer open is the same case.
+ * Pay for items held the source's invoice back for this payment, so where the items stay, the
+ * source is issued if its own payments now cover it ({@link issueHeldSource}).
  */
 async function putItemsBack(
   tx: Transaction,
@@ -2591,10 +2588,10 @@ async function putItemsBack(
   failed: PaymentRow,
   issueSource: boolean,
 ) {
-  const sourceId = await itemsPaymentSource(tx, failed);
-  if (sourceId === null) return;
-  if (!(await movedItemsBack(tx, cfg, failed, sourceId)) && issueSource)
-    await issueHeldSource(tx, deps, cfg, failed, sourceId);
+  const items = await itemsPaymentSource(tx, failed);
+  if (items === null) return;
+  const moved = items.alone && (await movedItemsBack(tx, cfg, failed, items.sourceId));
+  if (!moved && issueSource) await issueHeldSource(tx, deps, cfg, failed, items.sourceId);
 }
 
 /**
