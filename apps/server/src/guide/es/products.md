@@ -503,6 +503,9 @@ separado.
 
 ## Consulta la información nutricional de un plato en la caja {#nutrition-at-the-till}
 
+Pulsa el icono **Filtros** junto a **Buscar** para limitar los platos por dieta o alérgeno. El número
+indica cuántos filtros están activos.
+
 Mantén pulsado el botón de un producto para abrir su ventana de información. Ves los alérgenos del
 plato, incluidos sus cereales o frutos de cáscara, y sus etiquetas dietéticas. Un plato sin revisar lo
 indica en la ventana. Elige **Añadir al pedido** para seleccionar el plato, o **Cerrar** para volver

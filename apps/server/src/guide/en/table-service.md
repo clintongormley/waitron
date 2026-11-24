@@ -546,6 +546,8 @@ with **Send all** above them while you have dishes to send. After you send every
 stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
 menu and the order sit side by side.
 
+Use the **Menu** field beside **Search** to switch between the menus available now.
+
 ## Set menus {#set-menus}
 
 Set the number of each set menu on the bill. Open its folder from the grid or type its name

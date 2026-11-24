@@ -7647,7 +7647,13 @@ describe("A773 non-open bill draft restrictions", () => {
       const order = await openTable(el);
       await tap(el, "Beer");
       expect(rows(el)).toEqual([]);
-      expect(browser(el)!.inert).toBe(true);
+      expect(browser(el)!.inert).toBe(false);
+      expect(
+        browser(el)!.shadowRoot!.querySelector("[data-region=search]")?.hasAttribute("inert"),
+      ).toBe(true);
+      expect(
+        browser(el)!.shadowRoot!.querySelector("[data-menu-content]")?.hasAttribute("inert"),
+      ).toBe(true);
       expect(order.orderId).toBe("wo-4");
       expect(order.bills[0]!.status).toBe(status);
       expect(api.getTabLines).toHaveBeenCalledWith("wo-4");
@@ -7745,7 +7751,13 @@ describe("A773 known bill draft switch restrictions", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     await tap(el, "Beer");
     expect(rows(el)).toEqual([]);
-    expect(browser(el)!.inert).toBe(true);
+    expect(browser(el)!.inert).toBe(false);
+    expect(
+      browser(el)!.shadowRoot!.querySelector("[data-region=search]")?.hasAttribute("inert"),
+    ).toBe(true);
+    expect(
+      browser(el)!.shadowRoot!.querySelector("[data-menu-content]")?.hasAttribute("inert"),
+    ).toBe(true);
     expect(server.saveDraft).not.toHaveBeenCalled();
   });
 });

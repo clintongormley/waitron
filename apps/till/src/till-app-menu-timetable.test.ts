@@ -1434,7 +1434,10 @@ describe("an open table's order", () => {
     };
     await poll(el);
     expect(tableScreen(el).selectedMenuId).toBe("");
-    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    const browser = tableScreen(el).shadowRoot!.querySelector("till-menu-browser")!;
+    expect(browser.shadowRoot!.querySelector("wt-input")).toBeNull();
+    expect(browser.querySelector("till-diet-filter")).toBeNull();
+    expect(browser.shadowRoot!.querySelector(".tile")).toBeNull();
   });
 
   it("restores the table-zone menu when the table is reopened within its occurrence", async () => {

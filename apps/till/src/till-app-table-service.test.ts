@@ -459,7 +459,10 @@ describe("till-app table ordering: the table's menus", () => {
     expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id);
     expect(screen.menus).toEqual(diningOffers.menus);
     expect(screen.selectedMenuId).toBe("");
-    expect(screen.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    const browser = screen.shadowRoot!.querySelector("till-menu-browser")!;
+    expect(browser.shadowRoot!.querySelector("wt-input")).toBeNull();
+    expect(browser.querySelector("till-diet-filter")).toBeNull();
+    expect(browser.shadowRoot!.querySelector(".tile")).toBeNull();
   });
 
   it("switches the TABLE's menu on a pick, leaving the counter's menu and its stored preference alone", async () => {

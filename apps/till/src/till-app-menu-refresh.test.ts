@@ -2696,9 +2696,22 @@ it("passes keep-open recovery through a standalone table drill", async () => {
 
 describe("zone-only menu-state changes", () => {
   it("redraws the counter when only its zone closes and reopens", async () => {
-    const { el } = await mountApp();
+    const open = {
+      ...V1,
+      menus: [
+        ...V1.menus,
+        {
+          ...V1.menus[0]!,
+          id: "staff-lunch",
+          name: "Staff lunch",
+          isDefault: false,
+          audience: "staff" as const,
+        },
+      ],
+    };
+    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(open) });
     await toCounter(el);
-    const closed = { ...V1, service: { ...V1.service, zoneOpen: false } };
+    const closed = { ...open, service: { ...open.service, zoneOpen: false } };
     api.listZoneOffers.mockResolvedValue(closed);
     api.menuState.mockResolvedValue({ ...menuState("v1"), service: closed.service });
     await poll(el);
@@ -2706,7 +2719,7 @@ describe("zone-only menu-state changes", () => {
       expect(counter(el).shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull(),
     );
     expect(counter(el).shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
-    api.listZoneOffers.mockResolvedValue(V1);
+    api.listZoneOffers.mockResolvedValue(open);
     api.menuState.mockResolvedValue(menuState("v1"));
     await poll(el);
     await vi.waitFor(() =>

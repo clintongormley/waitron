@@ -30,6 +30,8 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  pageAt,
+  resetPage,
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { openDraftLine, resized, showView } from "./till-table-order-screen.test-helpers.js";
@@ -5285,16 +5287,57 @@ describe("till-table-order-screen", () => {
 
     const gridNames = (el: TillTableOrderScreen) =>
       [...grid(el).shadowRoot!.querySelectorAll(".name")].map((n) => n.textContent);
-    const switcherButtons = (el: TillTableOrderScreen) => [
-      ...el
-        .shadowRoot!.querySelector("till-menu-switcher")!
-        .shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
-    ];
+    const picker = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector("till-menu-switcher")!.shadowRoot!.querySelector("wt-combobox")!;
+
+    it("keeps the first menu choice focused beside Search and Filter on a restricted handheld", async () => {
+      await pageAt(390, 844);
+      try {
+        const { el } = await mount({
+          ...bothMenus,
+          handheld: true,
+          menuSelectionRequired: true,
+          orderingAllowed: false,
+        });
+        const browser = grid(el);
+        expect(browser).not.toBeNull();
+        const field = picker(el);
+        const trigger = field.shadowRoot!.querySelector("button")!;
+        el.addEventListener("menu-selected", (event) => {
+          el.selectedMenuId = (event as CustomEvent<{ id: string }>).detail.id;
+        });
+        await userEvent.click(trigger);
+        await userEvent.click(field.shadowRoot!.querySelectorAll('[role="option"]')[1]!);
+        await el.updateComplete;
+        await browser.updateComplete;
+
+        expect(field.shadowRoot!.activeElement).toBe(trigger);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+        const search = browser.shadowRoot!.querySelector("wt-input")!;
+        const filter = browser.querySelector("till-diet-filter")!;
+        const bounds = [trigger, search, filter].map((each) => each.getBoundingClientRect());
+        expect(Math.max(...bounds.map((box) => box.top))).toBeLessThan(
+          Math.min(...bounds.map((box) => box.bottom)),
+        );
+        expect(bounds[0]!.right).toBeLessThanOrEqual(bounds[1]!.left);
+        expect(bounds[1]!.right).toBeLessThanOrEqual(bounds[2]!.left);
+        expect(Math.abs(bounds[0]!.width - bounds[1]!.width)).toBeLessThanOrEqual(1);
+        expect(
+          browser.shadowRoot!.querySelector("[data-region=search]")?.hasAttribute("inert"),
+        ).toBe(true);
+        expect(
+          browser.shadowRoot!.querySelector("[data-menu-content]")?.hasAttribute("inert"),
+        ).toBe(true);
+        expect(field.disabled).toBe(false);
+      } finally {
+        await resetPage();
+      }
+    });
 
     it("filters the round grid to the selected menu; removing the filter shows every menu's products", async () => {
       const { el } = await mount({ ...bothMenus, selectedMenuId: "cat-food" });
       expect(gridNames(el)).toEqual(["Bocadillo"]);
-      expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
+      expect(picker(el).options.map((option) => option.label)).toEqual(["Comida", "Bebidas"]);
 
       // Switching the selection (the app updates the prop) re-filters to the other menu.
       el.selectedMenuId = "cat-drinks";
@@ -5309,6 +5352,7 @@ describe("till-table-order-screen", () => {
       } satisfies TillZoneMenu;
       const { el } = await mount({ ...bothMenus, menus: [foodMenu, drinksBar] });
       expect(grid(el).menu).toBe(foodMenu);
+      expect(picker(el).value).toBe("cat-food");
       el.selectedMenuId = "cat-drinks";
       await el.updateComplete;
       await grid(el).updateComplete;

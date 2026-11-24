@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillMenuSwitcher } from "./menu-switcher.js";
 
@@ -13,8 +15,12 @@ const twoMenus = [
   },
 ];
 
+function picker(el: TillMenuSwitcher) {
+  return el.shadowRoot!.querySelector("wt-combobox")!;
+}
+
 function options(el: TillMenuSwitcher): HTMLElement[] {
-  return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]')];
+  return [...(picker(el)?.shadowRoot?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
 }
 
 afterEach(cleanupWidgets);
@@ -34,12 +40,15 @@ describe("till-menu-switcher", () => {
       ],
       selectedId: "customer",
     });
+    const field = picker(el);
+    expect(field).not.toBeNull();
+    await field.updateComplete;
+    await userEvent.click(field.shadowRoot!.querySelector("button")!);
     expect(options(el).map((option) => option.textContent?.trim())).toEqual([
       "Lunch",
       "Staff lunch",
     ]);
-    options(el)[1]!.click();
-    expect(options(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+    expect(options(el)[0]!.getAttribute("aria-selected")).toBe("true");
   });
 
   it("takes no space when just one running menu remains among retained menus", async () => {
@@ -63,44 +72,53 @@ describe("till-menu-switcher", () => {
     expect(options(el)).toHaveLength(0);
   });
 
-  it("renders one option per menu, labelled by the menu name, and marks the selected one", async () => {
-    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
-      menus: twoMenus,
-      selectedId: "cat-food",
-    });
-    const opts = options(el);
-    expect(opts).toHaveLength(2);
-    expect(opts.map((o) => o.textContent?.trim())).toEqual(["Food", "Drinks"]);
-    // The selected menu is marked (aria-pressed) and the others are not.
-    expect(
-      el.shadowRoot!.querySelector('[data-test="menu-cat-food"]')!.getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(
-      el.shadowRoot!.querySelector('[data-test="menu-cat-drinks"]')!.getAttribute("aria-pressed"),
-    ).toBe("false");
+  it("updates the field label with the till language and shows just the selected menu name", async () => {
+    const previous = currentLocale();
+    try {
+      setLocale("en-GB");
+      const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+        menus: twoMenus,
+        selectedId: "cat-food",
+      });
+      const field = picker(el);
+      expect(field).not.toBeNull();
+      await field.updateComplete;
+      expect(field.shadowRoot!.querySelector("label")!.textContent?.trim()).toBe("Menu");
+      expect(field.shadowRoot!.querySelector("button .value")!.textContent?.trim()).toBe("Food");
+      setLocale("es-ES");
+      await el.updateComplete;
+      await field.updateComplete;
+      expect(field.shadowRoot!.querySelector("label")!.textContent?.trim()).toBe("Carta");
+    } finally {
+      setLocale(previous);
+    }
   });
 
-  it("emits a composed, bubbling menu-selected with the clicked menu's id — and holds no state itself", async () => {
-    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+  it("forwards one keyboard pick and displays only the selection accepted by the parent", async () => {
+    const { el, host } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
       menus: twoMenus,
       selectedId: "cat-food",
     });
-
-    let captured: CustomEvent<{ id: string }> | undefined;
-    el.addEventListener("menu-selected", (e) => {
-      captured = e as CustomEvent<{ id: string }>;
+    const field = picker(el);
+    expect(field).not.toBeNull();
+    await field.updateComplete;
+    const events: CustomEvent<{ id: string }>[] = [];
+    host.addEventListener("menu-selected", (event) => {
+      events.push(event as CustomEvent<{ id: string }>);
     });
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="menu-cat-drinks"]')!.click();
-    await el.updateComplete;
 
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ id: "cat-drinks" });
-    // Presentational: the widget does NOT move its own selection — the parent owns selectedId.
-    expect(
-      el.shadowRoot!.querySelector('[data-test="menu-cat-food"]')!.getAttribute("aria-pressed"),
-    ).toBe("true");
+    await userEvent.click(field.shadowRoot!.querySelector("button")!);
+    await userEvent.keyboard("{End}{Enter}");
+    await field.updateComplete;
+    expect(events.map(({ detail }) => detail)).toEqual([{ id: "cat-drinks" }]);
+    expect(events[0]!.composed).toBe(true);
+    expect(events[0]!.bubbles).toBe(true);
+    expect(field.shadowRoot!.querySelector("button .value")!.textContent?.trim()).toBe("Food");
+
+    el.selectedId = "cat-drinks";
+    await el.updateComplete;
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector("button .value")!.textContent?.trim()).toBe("Drinks");
   });
 
   it("renders NOTHING with a single menu — a single-menu venue looks exactly as before", async () => {
@@ -116,7 +134,7 @@ describe("till-menu-switcher", () => {
       ],
       selectedId: "cat-food",
     });
-    expect(el.shadowRoot!.querySelector('[data-test^="menu-"]')).toBeNull();
+    expect(picker(el)).toBeNull();
     expect(el.shadowRoot!.textContent?.trim()).toBe("");
   });
 
@@ -125,6 +143,6 @@ describe("till-menu-switcher", () => {
       menus: [],
       selectedId: "",
     });
-    expect(el.shadowRoot!.querySelector('[data-test^="menu-"]')).toBeNull();
+    expect(picker(el)).toBeNull();
   });
 });

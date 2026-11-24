@@ -194,11 +194,45 @@ export class TillMenuBrowser extends LitElement {
         align-content: start;
       }
 
+      .menu-toolbar,
       [data-region="search"] {
         display: flex;
         gap: var(--wt-space-2);
         align-items: end;
       }
+      ::slotted([slot="menu-picker"]) {
+        flex: 1;
+      }
+
+      [data-region="search"] {
+        flex: 2;
+        min-inline-size: 0;
+      }
+
+      @supports (grid-template-columns: subgrid) {
+        .menu-toolbar[data-menu-picker] {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+        }
+
+        .menu-toolbar[data-menu-picker] [data-region="search"] {
+          display: grid;
+          grid-column: 2 / -1;
+          grid-template-columns: subgrid;
+        }
+      }
+
+      [data-menu-content] {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-4);
+      }
+
+      [data-region="search"][inert],
+      [data-menu-content][inert] {
+        opacity: var(--wt-opacity-disabled);
+      }
+
       [data-region="search"] wt-input {
         flex: 1;
         min-width: 0;
@@ -438,6 +472,8 @@ export class TillMenuBrowser extends LitElement {
   @property({ attribute: false }) changeAvailability?: ChangeAvailability;
   @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
   @property({ attribute: false }) menu?: TillZoneMenu;
+  @property({ type: Boolean }) hasMenuPicker = false;
+  @property({ type: Boolean }) locked = false;
 
   /** This menu's offers as till products. */
   @property({ attribute: false }) products: TillProduct[] = [];
@@ -1305,26 +1341,39 @@ export class TillMenuBrowser extends LitElement {
         ${this.#grid([this.#setMenuTile(undefined, true)], display)}
       </section>`;
     }
-    if (view === nothing && this.placeRequest === undefined) return nothing;
+    if (view === nothing && this.placeRequest === undefined && !this.hasMenuPicker) return nothing;
     return html`
       ${
-        menu === undefined
+        menu === undefined && !this.hasMenuPicker
           ? nothing
-          : html`<div data-region="search">
-              <wt-input
-                type="search"
-                name="menu-search"
-                label=${t("menu.search")}
-                .value=${this.query}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
-                >${helpBadge("help.menu.dishes", t("menu.search"), {
-                  guide: "products.nutrition-at-the-till",
-                  slot: "help",
-                })}</wt-input
-              >
-              <slot name="filters"></slot>
+          : html`<div class="menu-toolbar" ?data-menu-picker=${this.hasMenuPicker}>
+              <slot name="menu-picker"></slot>
+              ${
+                menu === undefined
+                  ? nothing
+                  : html`<div data-region="search" ?inert=${this.locked}>
+                      <wt-input
+                        type="search"
+                        name="menu-search"
+                        label=${t("menu.search")}
+                        .value=${this.query}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSearch(event)}
+                        >${helpBadge("help.menu.dishes", t("menu.search"), {
+                          guide: "products.nutrition-at-the-till",
+                          slot: "help",
+                        })}</wt-input
+                      >
+                      <slot name="filters"></slot>
+                    </div>`
+              }
             </div>`
       }
+      <div data-menu-content ?inert=${this.locked}>${this.#menuContent(view)}</div>
+    `;
+  }
+
+  #menuContent(view: TemplateResult | typeof nothing): TemplateResult {
+    return html`
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}
       ${

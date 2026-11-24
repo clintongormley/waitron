@@ -4085,8 +4085,9 @@ describe("typing a weighed dish's weight with a keyboard", () => {
   });
 
   it("while the order is sending and the menu is inert, typing does not change the weight", async () => {
-    const { host, weigh, pad } = await weighHam();
-    host.inert = true;
+    const { el, weigh, pad } = await weighHam();
+    el.locked = true;
+    await el.updateComplete;
     await blurAll();
     await userEvent.keyboard("0.25");
     await weigh.updateComplete;
