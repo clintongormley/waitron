@@ -138,8 +138,8 @@ async function openSplitBill(
 }
 
 /**
- * Copies every line of `fromBillId` onto `toBillId`, which holds none. Kitchen state, print links and
- * sale links stay with the originals.
+ * Copies every line of `fromBillId` onto `toBillId`, which holds none, with whether its set menus were
+ * proven cheapest. Kitchen state, print links and sale links stay with the originals.
  */
 export async function copyBillDishes(
   tx: Transaction,
@@ -175,6 +175,14 @@ export async function copyBillDishes(
   const pairs = rows.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
   await carryLineReductions(tx, pairs);
   await carryBillSetMenuCopies(tx, fromBillId, toBillId);
+  const [from] = await tx
+    .select({ setMenusExact: workingOrders.setMenusExact })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, fromBillId));
+  await tx
+    .update(workingOrders)
+    .set({ setMenusExact: from!.setMenusExact })
+    .where(eq(workingOrders.id, toBillId));
   const cancellations = await tx
     .select({ cancellation: lineServiceCancellations })
     .from(lineServiceCancellations)
