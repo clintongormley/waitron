@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8a07f4cb-4898-46e1-a1ef-badd3fda4149",
+  "id": "4c6e162f-b83a-4e41-86b5-b34133c1cb87",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "declaraciones_responsables": {
@@ -686,6 +686,55 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "event_key": {
+          "name": "event_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allocation_key": {
+          "name": "allocation_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allocation": {
+          "name": "allocation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approval": {
+          "name": "approval",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bases": {
+          "name": "bases",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -705,6 +754,20 @@
           ],
           "isUnique": true,
           "where": "\"verifactu_identities\".\"revocado_en\" is null"
+        },
+        "verifactu_identities_event_key_uq": {
+          "name": "verifactu_identities_event_key_uq",
+          "columns": [
+            "event_key"
+          ],
+          "isUnique": true
+        },
+        "verifactu_identities_allocation_uq": {
+          "name": "verifactu_identities_allocation_uq",
+          "columns": [
+            "allocation_key"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -728,6 +791,10 @@
         "verifactu_identities_numero_ck": {
           "name": "verifactu_identities_numero_ck",
           "value": "length(\"verifactu_identities\".\"numero_instalacion\") between 1 and 30"
+        },
+        "verifactu_identities_allocation_ck": {
+          "name": "verifactu_identities_allocation_ck",
+          "value": "(\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"environment\" is null)\n        and (\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"allocation_key\" is null)\n        and (\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"allocation\" is null)\n        and (\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"approval\" is null)\n        and (\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"bases\" is null)\n        and (\"verifactu_identities\".\"event_key\" is null) = (\"verifactu_identities\".\"result\" is null)"
         }
       }
     },

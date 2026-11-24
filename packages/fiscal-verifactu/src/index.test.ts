@@ -10,7 +10,6 @@ import {
   verifactuSubmissions,
   fromRegistroRow,
   readChainHead,
-  registerSif,
   verifactuIdentities,
   verifactuRecords,
   toRegistroRow,
@@ -30,7 +29,6 @@ describe("package public surface (./index.js)", () => {
   });
 
   it("re-exports the fiscal registration operations", () => {
-    expect(typeof registerSif).toBe("function");
     expect(typeof activateAllocation).toBe("function");
     expect(typeof currentSif).toBe("function");
   });

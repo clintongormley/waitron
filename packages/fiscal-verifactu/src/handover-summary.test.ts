@@ -16,7 +16,7 @@ import {
   type ChainSummary,
   ENVIO_STATES,
 } from "./handover-summary.js";
-import { registerSif } from "./registro-sif.js";
+import { registerSif } from "../test/sif-fixture.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });

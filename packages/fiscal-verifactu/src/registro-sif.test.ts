@@ -3,6 +3,7 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import {
   UNIQUE_VIOLATION,
   captureError,
+  checkFailed,
   refusalOn,
   withTransaction,
   type Database,
@@ -13,7 +14,8 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { currentSif, writeReservedSif } from "./registro-sif.js";
+import { writeReservedSif } from "../test/sif-fixture.js";
+import { currentSif } from "./registro-sif.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { TAXPAYER_A, TAXPAYER_B, seedSoldRegistro, seedTaxpayers } from "../test/fixtures.js";
 
@@ -271,6 +273,76 @@ describe("currentSif", () => {
     const found = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(found.id).toBe(second.id);
     expect(found.id).not.toBe(first.id);
+  });
+});
+
+describe("identity allocation columns", () => {
+  const allocation = {
+    environment: "preproduction",
+    event_key: "event",
+    allocation_key: "allocation",
+    allocation: "{}",
+    approval: "{}",
+    bases: "[]",
+    result: "{}",
+  };
+
+  function insertIdentity(
+    nodeId: string,
+    installation: string,
+    fields: Partial<Record<keyof typeof allocation, string | null>>,
+  ) {
+    return db.execute(sql`insert into verifactu_identities
+      (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en,
+       environment, event_key, allocation_key, allocation, approval, bases, result)
+      values (${installation}, ${nodeId}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
+        ${installation}, '2026-09-22T10:00:00.000Z',
+        ${fields.environment ?? null}, ${fields.event_key ?? null}, ${fields.allocation_key ?? null},
+        ${fields.allocation ?? null}, ${fields.approval ?? null}, ${fields.bases ?? null}, ${fields.result ?? null})`);
+  }
+
+  it.each(Object.keys(allocation) as (keyof typeof allocation)[])(
+    "rejects an otherwise complete allocation missing %s",
+    async (missing) => {
+      const error = await captureError(() =>
+        insertIdentity(TAXPAYER_A.nodeId, "incomplete", { ...allocation, [missing]: null }),
+      );
+      expect(checkFailed(error, "verifactu_identities_allocation_ck")).toBe(true);
+    },
+  );
+
+  it("rejects an event key by itself", async () => {
+    const error = await captureError(() =>
+      insertIdentity(TAXPAYER_A.nodeId, "event-only", { event_key: allocation.event_key }),
+    );
+    expect(checkFailed(error, "verifactu_identities_allocation_ck")).toBe(true);
+  });
+
+  it.each(["event_key", "allocation_key"] as const)("refuses reusing %s", async (column) => {
+    await insertIdentity(TAXPAYER_A.nodeId, "first", allocation);
+    const error = await captureError(() =>
+      insertIdentity(TAXPAYER_A.nodeId2, "second", {
+        ...allocation,
+        event_key: "other-event",
+        allocation_key: "other-allocation",
+        [column]: allocation[column],
+      }),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "verifactu_identities", columns: [column] }),
+    ).toBe(true);
+  });
+
+  it("keeps separate installation names when neither identity has an allocation", async () => {
+    await insertIdentity(TAXPAYER_A.nodeId, "first-empty", {});
+    await insertIdentity(TAXPAYER_A.nodeId2, "second-empty", {});
+    const found =
+      await db.execute(sql`select numero_instalacion, event_key from verifactu_identities
+      order by numero_instalacion`);
+    expect(found.rows).toEqual([
+      { numero_instalacion: "first-empty", event_key: null },
+      { numero_instalacion: "second-empty", event_key: null },
+    ]);
   });
 });
 

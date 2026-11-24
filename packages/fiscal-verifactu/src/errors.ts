@@ -47,14 +47,8 @@ declare module "@waitron/shared" {
 
     "sif.not_registered": { nodeId: string };
 
-    /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap. Thrown by
-     * `assertUsableIdSistema` (./registro-sif.ts, which says where the bound is applied). */
     "sif.id_sistema_invalid": { value: string; maxLength: number };
 
-    /** A standby's reserved SIF state arrived from the primary malformed (the mirror bundle is wire
-     * input). Checked before `writeReservedSif`, so a bad `idSistemaInformatico` in a bundle
-     * reports this code rather than `sif.id_sistema_invalid`. `reason` is our own English
-     * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
     "sif.allocation_invalid": {
       reason: string;

@@ -60,7 +60,7 @@ async function prohibitOperationalCalls() {
     import("@waitron/fiscal-verifactu/src/allocation-envelope.js"),
     import("@waitron/fiscal-verifactu/src/allocation-preparation.js"),
     import("@waitron/fiscal-verifactu/src/allocated-lifecycle.js"),
-    import("@waitron/fiscal-verifactu/src/registro-sif.js"),
+    import("@waitron/fiscal-verifactu/test/sif-fixture.js"),
     import("@waitron/fiscal-verifactu/src/chain.js"),
     import("@waitron/fiscal-verifactu/src/paper-evidence.js"),
     import("@waitron/fiscal-verifactu/src/drain.js"),

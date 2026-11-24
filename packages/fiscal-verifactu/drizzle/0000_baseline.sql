@@ -152,12 +152,27 @@ CREATE TABLE `verifactu_identities` (
 	`numero_instalacion` text NOT NULL,
 	`registrado_en` text NOT NULL,
 	`revocado_en` text,
+	`environment` text,
+	`event_key` text,
+	`allocation_key` text,
+	`allocation` text,
+	`approval` text,
+	`bases` text,
+	`result` text,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "verifactu_identities_numero_ck" CHECK(length("verifactu_identities"."numero_instalacion") between 1 and 30)
+	CONSTRAINT "verifactu_identities_numero_ck" CHECK(length("verifactu_identities"."numero_instalacion") between 1 and 30),
+	CONSTRAINT "verifactu_identities_allocation_ck" CHECK(("verifactu_identities"."event_key" is null) = ("verifactu_identities"."environment" is null)
+        and ("verifactu_identities"."event_key" is null) = ("verifactu_identities"."allocation_key" is null)
+        and ("verifactu_identities"."event_key" is null) = ("verifactu_identities"."allocation" is null)
+        and ("verifactu_identities"."event_key" is null) = ("verifactu_identities"."approval" is null)
+        and ("verifactu_identities"."event_key" is null) = ("verifactu_identities"."bases" is null)
+        and ("verifactu_identities"."event_key" is null) = ("verifactu_identities"."result" is null))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `verifactu_identities_instalacion_uq` ON `verifactu_identities` (`nif`,`id_sistema_informatico`,`numero_instalacion`);--> statement-breakpoint
 CREATE UNIQUE INDEX `verifactu_identities_activo_uq` ON `verifactu_identities` (`node_id`) WHERE "verifactu_identities"."revocado_en" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `verifactu_identities_event_key_uq` ON `verifactu_identities` (`event_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `verifactu_identities_allocation_uq` ON `verifactu_identities` (`allocation_key`);--> statement-breakpoint
 CREATE TABLE `verifactu_records` (
 	`id` text PRIMARY KEY NOT NULL,
 	`corrects_registro_id` text,
@@ -310,3 +325,17 @@ BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never dele
 --> statement-breakpoint
 CREATE TRIGGER verifactu_sending_state_no_delete BEFORE DELETE ON verifactu_sending_state
 BEGIN SELECT RAISE(ABORT, 'verifactu_sending_state: the sending gate is never deleted'); END
+--> statement-breakpoint
+CREATE TRIGGER verifactu_identities_guard_update BEFORE UPDATE ON verifactu_identities
+WHEN new.id IS NOT old.id OR new.node_id IS NOT old.node_id OR new.nif IS NOT old.nif
+  OR new.id_sistema_informatico IS NOT old.id_sistema_informatico
+  OR new.numero_instalacion IS NOT old.numero_instalacion OR new.environment IS NOT old.environment
+  OR new.event_key IS NOT old.event_key OR new.allocation_key IS NOT old.allocation_key
+  OR new.allocation IS NOT old.allocation OR new.approval IS NOT old.approval
+  OR new.bases IS NOT old.bases OR new.result IS NOT old.result
+  OR new.registrado_en IS NOT old.registrado_en
+  OR (old.revocado_en IS NOT NULL AND new.revocado_en IS NOT old.revocado_en)
+BEGIN SELECT RAISE(ABORT, 'verifactu_identities: only revocado_en may be set, once'); END
+--> statement-breakpoint
+CREATE TRIGGER verifactu_identities_no_delete BEFORE DELETE ON verifactu_identities
+BEGIN SELECT RAISE(ABORT, 'verifactu_identities: an identity is never deleted'); END

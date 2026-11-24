@@ -28,8 +28,8 @@ export {
   type AeatCert,
 } from "./provisioning-secret.js";
 export { verifactuSubmissions, verifactuIdentities, verifactuRecords } from "./schema/index.js";
-export { currentSif, registerSif } from "./registro-sif.js";
-export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
+export { currentSif } from "./registro-sif.js";
+export type { SifRegistration } from "./registro-sif.js";
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 export type { DrainDeps } from "./drain.js";
 export { appendToChain, readChainHead } from "./chain.js";

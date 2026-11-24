@@ -12,6 +12,8 @@ import { applyMigrations } from "../packages/migrations/src/apply.js";
 import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
 import {
+  IDENTITY_CHANGE_REFUSAL,
+  IDENTITY_DELETE_REFUSAL,
   SENDING_STATE_DELETE_REFUSAL,
   SUBMISSION_CHANGE_REFUSAL,
   SUBMISSION_DELETE_REFUSAL,
@@ -149,6 +151,8 @@ const EXPECTED_TRIGGERS = [
   "refunds_no_delete",
   "invoice_corrections_guard_update",
   "invoice_corrections_no_delete",
+  "verifactu_identities_guard_update",
+  "verifactu_identities_no_delete",
   "verifactu_sending_state_no_delete",
   "verifactu_submissions_guard_update",
   "verifactu_submissions_no_delete",
@@ -546,6 +550,77 @@ describe("invoice_series_guard_update", () => {
     } finally {
       connection.exec("pragma foreign_keys = off");
     }
+  });
+});
+
+describe("VeriFactu identity guards", () => {
+  const identity = "where id = 'identity-guard'";
+  const change = (set) =>
+    refusalFor(connection, `update verifactu_identities set ${set} ${identity}`);
+
+  it("holds the identity and its approval fixed, and permits one revocation followed by activation", () => {
+    connection.exec(`insert into verifactu_identities
+      (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en,
+       environment, event_key, allocation_key, allocation, approval, bases, result)
+      values ('identity-guard', 'identity-node', '50000000R', 'WT', 'first', '${STAMP}',
+              'preproduction', 'event', 'allocation', '{}', '{}', '[]', '{}')`);
+    for (const set of [
+      "id = 'other'",
+      "node_id = 'other'",
+      "nif = '60000000J'",
+      "id_sistema_informatico = 'WX'",
+      "numero_instalacion = 'other'",
+      "registrado_en = '2026-09-22T09:00:00.000Z'",
+      "environment = 'production'",
+      "event_key = 'other'",
+      "allocation_key = 'other'",
+      "allocation = '{\"changed\":true}'",
+      "approval = '{\"changed\":true}'",
+      "bases = '[{}]'",
+      "result = '{\"changed\":true}'",
+    ]) {
+      expect(change(set), set).toBe(IDENTITY_CHANGE_REFUSAL);
+    }
+    expect(change(`revocado_en = '${STAMP}'`)).toBeUndefined();
+    expect(change("revocado_en = '2026-09-22T11:00:00.000Z'")).toBe(IDENTITY_CHANGE_REFUSAL);
+    expect(change("revocado_en = null")).toBe(IDENTITY_CHANGE_REFUSAL);
+    connection.exec(`insert into verifactu_identities
+      (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en,
+       environment, event_key, allocation_key, allocation, approval, bases, result)
+      values ('identity-replacement', 'identity-node', '50000000R', 'WT', 'second', '${STAMP}',
+              'preproduction', 'replacement-event', 'replacement-allocation', '{}', '{}', '[]', '{}')`);
+    expect(
+      connection
+        .prepare(
+          `select id, revocado_en from verifactu_identities
+        where node_id = 'identity-node' order by id`,
+        )
+        .all(),
+    ).toEqual([
+      { id: "identity-guard", revocado_en: STAMP },
+      { id: "identity-replacement", revocado_en: null },
+    ]);
+  });
+
+  it("keeps an unused installation name and refuses to add an approval later", () => {
+    connection.exec(`insert into verifactu_identities
+      (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
+      values ('identity-unallocated', 'unallocated-node', '50000000R', 'WT', 'unused', '${STAMP}')`);
+    const row = "where id = 'identity-unallocated'";
+    expect(
+      refusalFor(
+        connection,
+        `update verifactu_identities set environment = 'preproduction',
+      event_key = 'later-event', allocation_key = 'later-allocation', allocation = '{}',
+      approval = '{}', bases = '[]', result = '{}' ${row}`,
+      ),
+    ).toBe(IDENTITY_CHANGE_REFUSAL);
+    expect(refusalFor(connection, `delete from verifactu_identities ${row}`)).toBe(
+      IDENTITY_DELETE_REFUSAL,
+    );
+    expect(connection.prepare(`select event_key from verifactu_identities ${row}`).get()).toEqual({
+      event_key: null,
+    });
   });
 });
 

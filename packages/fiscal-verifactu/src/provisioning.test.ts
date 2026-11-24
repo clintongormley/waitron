@@ -10,7 +10,8 @@ import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { readChainHead } from "./chain.js";
-import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
+import { ID_SISTEMA_MAX_LENGTH } from "../test/sif-fixture.js";
+import { currentSif } from "./registro-sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
 
