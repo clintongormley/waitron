@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import {
@@ -35,6 +35,8 @@ import {
   type SaleId,
 } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { refundProvidersOf, type RefundProviderFor } from "./bill-refunds.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -63,6 +65,22 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { TradingAdmission } from "./trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
+/** Armed, the next corrective `recordCorrection` files is refused, as AEAT's seat refusing it. */
+const filingFault = vi.hoisted(() => ({ armed: false }));
+vi.mock("@waitron/core", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/core")>();
+  return {
+    ...real,
+    recordCorrection: (...args: Parameters<typeof real.recordCorrection>) => {
+      if (filingFault.armed) {
+        filingFault.armed = false;
+        return Promise.reject(new Error("filing refused"));
+      }
+      return real.recordCorrection(...args);
+    },
+  };
+});
+
 // Each product's staff, customer-facing and kitchen names differ (docs/developers/products.md).
 const DISHES = [
   { name: "Paella", customer: "Seafood paella", kitchen: "PAELLA", price: "18.50" },
@@ -86,6 +104,8 @@ let till: DeviceBinding;
 /** The extras list offered with the Paella, holding the Aioli at €3.00. */
 let sauces: string;
 let aioliId: string;
+/** The administrator, holding every right, signed in on the first till. */
+let adminCookie: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -145,6 +165,12 @@ useVenueDb({
         .innerJoin(deviceProfiles, deviceProfileJoin)
         .where(eq(devices.id, venue.deviceId));
       till = toDeviceBinding(venue.deviceId, row!);
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.adminId,
+        pin: "1234",
+      });
+      adminCookie = `${SESSION_COOKIE}=${session.token}; ${deviceProofOf(venue.cookie)}`;
     });
   },
 });
@@ -1090,5 +1116,260 @@ describe("planGiveBack: the rights it needs (D9)", () => {
     expect(
       await preview(saleId, ask("dishes", "18.50", { lineIds: paella }), { authority: holding() }),
     ).toEqual(planned(refund, { needs: ["sale.refund"] }));
+  });
+});
+
+/** The `waitron_device=…` part of a till's cookie. */
+function deviceProofOf(cookie: string): string {
+  return cookie.split("; ").find((part) => part.startsWith(`${DEVICE_COOKIE}=`))!;
+}
+
+/** What a give-back may write, read straight from the tables. */
+function effects() {
+  return venue.db.all<{
+    refunds: number;
+    corrections: number;
+    sales: number;
+    drawerJobs: number;
+    drawerOpens: number;
+    drawerCents: number;
+  }>(sql`
+    select (select count(*) from refunds) as refunds,
+           (select count(*) from invoice_corrections) as corrections,
+           (select count(*) from sales) as sales,
+           (select count(*) from print_jobs where kind = 'drawer') as drawerJobs,
+           (select count(*) from drawer_opens) as drawerOpens,
+           (select coalesce(sum(amount), 0) from drawer_entries) as drawerCents`)[0]!;
+}
+
+const routePreview = (saleId: string, request: GiveBackRequest, app = venue.app) =>
+  send(app, adminCookie, "POST", `/api/transactions/${saleId}/give-back/preview`, request);
+
+/** The write's body for `request`: fresh ids, and `expected` as the preview answers it now. */
+async function giveBody(saleId: string, request: GiveBackRequest) {
+  const previewed = await routePreview(saleId, request);
+  expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+  return {
+    ...request,
+    reasonId: correctionReasonId,
+    note: "Cold",
+    submissionIds: {
+      refund: randomUUID(),
+      extra: randomUUID(),
+      correction: randomUUID(),
+      leg: randomUUID(),
+    },
+    expected: (previewed.json as unknown as GiveBackPlan).parts,
+  };
+}
+
+const give = (saleId: string, body: unknown, cookie = adminCookie, app = venue.app) =>
+  send(app, cookie, "POST", `/api/transactions/${saleId}/give-back`, body);
+
+/** Expects `answer` to be the refusal `code`, with nothing written since `before`. */
+function expectRefusedUnwritten(
+  answer: Awaited<ReturnType<typeof give>>,
+  code: string,
+  before: ReturnType<typeof effects>,
+) {
+  expect((answer.json as { code?: string }).code, JSON.stringify(answer.json)).toBe(code);
+  expect(answer.status).toBeGreaterThanOrEqual(400);
+  expect(effects()).toEqual(before);
+}
+
+describe("POST …/give-back in cash", () => {
+  it("refunds the paella's cancel, then corrects and files the cheesecake, opening the drawer once", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const ticked = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    const before = effects();
+    const answer = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "24.50", { lineIds: ticked })),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "correction", amount: "6.00", state: "completed" },
+      ],
+      refusal: null,
+      underWay: null,
+      rest: null,
+    });
+    const [refundPart, correctionPart] = (
+      answer.json as { parts: { refundId?: string; correctionId?: string }[] }
+    ).parts;
+    const links = await venue.db.all<{ adjustment_id: string; amount: number }>(
+      sql`select adjustment_id, amount from adjustment_refunds where refund_id = ${refundPart!.refundId!}`,
+    );
+    expect(links).toEqual([{ adjustment_id: cancelId, amount: 1850 }]);
+    const [correction] = await venue.db
+      .select()
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, correctionPart!.correctionId!));
+    expect(correction).toMatchObject({ state: "filed", gross: 600 });
+    expect(correction!.correctiveSaleId).not.toBeNull();
+    expect(effects()).toEqual({
+      refunds: before.refunds + 2,
+      corrections: before.corrections + 1,
+      sales: before.sales + 1,
+      drawerJobs: before.drawerJobs + 1,
+      drawerOpens: before.drawerOpens + 1,
+      drawerCents: before.drawerCents - 2450,
+    });
+  });
+
+  it("gives the extra back alone, then files the goodwill's correction, opening the drawer once", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    const before = effects();
+    const answer = await give(
+      saleId,
+      await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00" })),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "extra", amount: "3.00", state: "completed" },
+        { kind: "correction", amount: "10.00", state: "completed" },
+      ],
+      refusal: null,
+      underWay: null,
+      rest: null,
+    });
+    const extraId = (answer.json as { parts: { refundId: string }[] }).parts[0]!.refundId;
+    const [extra] = await venue.db.select().from(refunds).where(eq(refunds.id, extraId));
+    expect(extra).toMatchObject({ appliedAmount: 0, tipAmount: 300, state: "completed" });
+    expect(effects()).toEqual({
+      refunds: before.refunds + 2,
+      corrections: before.corrections + 1,
+      sales: before.sales + 1,
+      drawerJobs: before.drawerJobs + 1,
+      drawerOpens: before.drawerOpens + 1,
+      drawerCents: before.drawerCents - 1300,
+    });
+  });
+
+  it("gives the cash back and leaves the correction open for the card's share, filing nothing yet", async () => {
+    const b = await tab(["Paella", "Cheesecake", ["Croquetas", "4"], ["Bread", "3"]]);
+    const saleId = await pay(b, [{ cash: "30.00" }, { card: "17.00" }]);
+    const before = effects();
+    const answer = await give(saleId, await giveBody(saleId, ask("goodwill", "45.00")));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "45.00", state: "pending" }],
+      refusal: null,
+      underWay: { state: "open", gross: "45.00", moneyBack: "30.00", left: "15.00" },
+      rest: null,
+    });
+    expect(effects()).toEqual({
+      ...before,
+      refunds: before.refunds + 1,
+      corrections: before.corrections + 1,
+      drawerJobs: before.drawerJobs + 1,
+      drawerOpens: before.drawerOpens + 1,
+      drawerCents: before.drawerCents - 3000,
+    });
+  });
+
+  it("undoes the whole give-back, the extra included, when filing the corrective is refused", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00" }));
+    const before = effects();
+    filingFault.armed = true;
+    onTestFinished(() => {
+      filingFault.armed = false;
+    });
+    const answer = await give(saleId, body);
+    expect(filingFault.armed).toBe(false);
+    expect(answer.status).toBe(500);
+    expect(effects()).toEqual(before);
+  });
+
+  it("refuses give_back.changed when the parts are no longer what the preview showed", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, {
+        ...body,
+        expected: [{ kind: "refund", amount: "10.00", way: "cash" }],
+      }),
+      "give_back.changed",
+      before,
+    );
+    const changed = await give(saleId, {
+      ...body,
+      expected: [{ kind: "correction", amount: "9.00", way: "cash", lineIds: [] }],
+    });
+    expect(changed.status).toBe(409);
+    expect(changed.json).toMatchObject({ code: "give_back.changed" });
+  });
+
+  it("answers a resend with its first result, writing nothing and opening no drawer, and refuses the same ids with another amount (I1)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    await cancel(b, "Paella", "1", true);
+    const body = await giveBody(saleId, ask("goodwill", "25.00", { extra: "3.00" }));
+    const first = await give(saleId, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(first.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "extra", amount: "3.00", state: "completed" },
+        { kind: "correction", amount: "6.50", state: "completed" },
+      ],
+    });
+    const after = effects();
+    expect(await give(saleId, body)).toEqual(first);
+    expect(effects()).toEqual(after);
+    expectRefusedUnwritten(
+      await give(saleId, { ...body, amount: "20.00" }),
+      "submission.id_reused",
+      after,
+    );
+    expectRefusedUnwritten(
+      await give(saleId, {
+        ...body,
+        expected: body.expected.map((part) =>
+          part.kind === "extra" ? { ...part, amount: "2.00" } : part,
+        ),
+        extra: "2.00",
+      }),
+      "submission.id_reused",
+      after,
+    );
+  });
+
+  it("refuses clock.unconfirmed on a give-back of a cancelled dish alone, writing nothing (I4)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    await cancel(b, "Paella", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const body = await giveBody(saleId, ask("dishes", "18.50", { lineIds: paella }));
+    expect(body.expected).toEqual([expect.objectContaining({ kind: "refund", amount: "18.50" })]);
+    const gated = venue.appWith({ backend: gateSeatOnStartClock(venue.backend, () => true) });
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, body, adminCookie, gated),
+      "clock.unconfirmed",
+      before,
+    );
+  });
+
+  it("refuses a request whose device is not the session's, as assertRequestDevice refuses", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const otherDevice = `${adminCookie.split("; ")[0]}; ${deviceProofOf(venue.cookie2)}`;
+    const before = effects();
+    const answer = await give(saleId, body, otherDevice);
+    expect(answer).toEqual({ status: 401, json: { code: "device.unauthorized", params: {} } });
+    expect(effects()).toEqual(before);
   });
 });

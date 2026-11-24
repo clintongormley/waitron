@@ -1,15 +1,18 @@
+import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
-import { readCancelsForRefund } from "@waitron/adjustments";
+import { findAdjustmentReason, readCancelsForRefund } from "@waitron/adjustments";
 import { correctionTargetFor } from "@waitron/core";
 import {
   adjustments,
+  invoiceCorrections,
+  refunds as refundRows,
   saleLines,
   sales,
   tenders as tenderRows,
   type Transaction,
 } from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
-import { holds, type PersonAuthority } from "@waitron/identity";
+import { authorize, holds, type PersonAuthority } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   addDecimal,
@@ -29,20 +32,28 @@ import { invalid } from "./bill-allocation.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
+import { giveCorrectionCash } from "./invoice-correction-cash.js";
 import { correctionOpenRefusal, openCorrectionOf } from "./invoice-correction-legs.js";
 import {
+  openInvoiceCorrection,
+  previewInvoiceCorrection,
   readCorrectableNow,
   readInvoiceCorrection,
   recordsNeedChecking,
+  uuidOf,
+  type InvoiceCorrectionDeps,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
+import { enqueueRefundDrawer } from "./receipt-print.js";
+import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
-import { refuseUntilRefundable } from "./tender-refund-completion.js";
+import { carryNewTenderRefund, refuseUntilRefundable } from "./tender-refund-completion.js";
 import {
   allocateToCancels,
   cancelsStillOwedBy,
   isPartPayment,
   moneyCents,
+  reserveTenderRefund,
 } from "./tender-refund-reservation.js";
 import type { RefundableTender } from "./tender-refund-types.js";
 import { sendsRefunds } from "./tender-refunds.js";
@@ -146,6 +157,8 @@ export async function giveBackWaits(
     correctionWaiting: AppError | null;
     correctable: number;
     tenderId: string | undefined;
+    /** `recordsNeedChecking`'s answer, read once however often it is asked. */
+    recordsUnchecked: () => Promise<boolean>;
   },
 ): Promise<GiveBackWaits> {
   const all = await waitOf(async () => {
@@ -160,7 +173,7 @@ export async function giveBackWaits(
     read.correctionWaiting === null &&
     tenderId !== undefined &&
     (await isPartPayment(tx, saleId)) &&
-    (read.correctable === 0 || (await recordsNeedChecking(tx, deps.backend, cfg.nodeId)))
+    (read.correctable === 0 || (await read.recordsUnchecked()))
       ? await waitOf(() => refusePlainRefundOfAdvance(tx, saleId, { tenderId }))
       : null;
   return {
@@ -435,6 +448,7 @@ interface GiveBackFacts {
   correctable: number;
   /** The cancels with Refund ticked on each line. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
+  recordsUnchecked: () => Promise<boolean>;
 }
 
 async function readFacts(
@@ -447,7 +461,10 @@ async function readFacts(
 ): Promise<GiveBackFacts> {
   const correctable = await readCorrectableNow(tx, deps.backend, cfg, reading, saleId, () => false);
   const openCorrectionId = await openCorrectionOf(tx, saleId);
+  let unchecked: Promise<boolean> | undefined;
+  const recordsUnchecked = () => (unchecked ??= recordsNeedChecking(tx, deps.backend, cfg.nodeId));
   const waits = await giveBackWaits(tx, deps, cfg, reading, saleId, {
+    recordsUnchecked,
     openCorrectionId,
     correctionWaiting: correctable.waiting,
     correctable: correctable.amounts.correctable,
@@ -493,6 +510,7 @@ async function readFacts(
     tenders: correctable.tenders,
     correctable: correctable.amounts.correctable,
     cancelIds,
+    recordsUnchecked,
   };
 }
 
@@ -682,9 +700,7 @@ export async function planGiveBack(
   if (rest > 0) {
     if (waits.correction !== null) throw refusal(waits.correction);
     const correctable =
-      facts.correctable > 0 && !(await recordsNeedChecking(tx, deps.backend, cfg.nodeId))
-        ? facts.correctable
-        : 0;
+      facts.correctable > 0 && !(await facts.recordsUnchecked()) ? facts.correctable : 0;
     if (correctable === 0) {
       refund += rest;
       rest = 0;
@@ -734,4 +750,413 @@ export async function planGiveBack(
     ),
     manual: way.manual,
   };
+}
+
+export type GiveBackWriteDeps = GiveBackDeps & InvoiceCorrectionDeps;
+
+/** The ids the till made for one press, one per part it may write. */
+export interface GiveBackSubmissionIds {
+  refund: string;
+  extra: string;
+  correction: string;
+  leg: string;
+}
+
+export type GiveBackPartState = "completed" | "pending" | "failed" | "not_started";
+
+export interface GiveBackOutcome {
+  parts: {
+    kind: GiveBackPart["kind"];
+    amount: string;
+    state: GiveBackPartState;
+    refundId?: string;
+    correctionId?: string;
+  }[];
+  /** A later part refused after an earlier one moved money. */
+  refusal: { code: string; params: object } | null;
+  underWay: InvoiceCorrectionView | null;
+  /** What was not sent yet; needs fresh ids. */
+  rest: null | GiveBackRequest;
+}
+
+/** A part as the preview showed it, in a form two spellings of the same part compare equal in. */
+interface ComparablePart {
+  kind: string;
+  amount: number;
+  way: string;
+  cancellationIds: string[] | null;
+  lineIds: string[] | null;
+}
+
+function sortedIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !isUuid(id)))
+    throw invalid("expected");
+  return value.map((id: string) => id.toLowerCase()).sort();
+}
+
+function comparablePartsOf(value: unknown): ComparablePart[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 3) throw invalid("expected");
+  return value.map((part: unknown) => {
+    if (typeof part !== "object" || part === null) throw invalid("expected");
+    const { kind, amount, way, cancellationIds, lineIds } = part as Record<string, unknown>;
+    if (typeof kind !== "string" || typeof way !== "string") throw invalid("expected");
+    return {
+      kind,
+      amount: moneyCents(amount, "expected"),
+      way: way.toLowerCase(),
+      cancellationIds: cancellationIds === undefined ? null : sortedIds(cancellationIds),
+      lineIds: lineIds === undefined ? null : sortedIds(lineIds),
+    };
+  });
+}
+
+const partsKey = (parts: readonly ComparablePart[]) => JSON.stringify(parts);
+
+interface GiveBackWrite {
+  request: GiveBackRequest;
+  reasonId: string;
+  note: string | null;
+  ids: GiveBackSubmissionIds;
+  expected: ComparablePart[];
+}
+
+function parseGiveBackWrite(body: Record<string, unknown>): GiveBackWrite {
+  const request = parseGiveBackRequest(body);
+  const reasonId = uuidOf(body.reasonId, "reasonId");
+  const note = body.note ?? null;
+  if (note !== null && typeof note !== "string") throw invalid("note");
+  const raw = body.submissionIds;
+  if (typeof raw !== "object" || raw === null) throw invalid("submissionIds");
+  const given = raw as Record<string, unknown>;
+  const ids = {
+    refund: uuidOf(given.refund, "submissionIds"),
+    extra: uuidOf(given.extra, "submissionIds"),
+    correction: uuidOf(given.correction, "submissionIds"),
+    leg: uuidOf(given.leg, "submissionIds"),
+  };
+  if (new Set(Object.values(ids)).size !== 4) throw invalid("submissionIds");
+  return {
+    request,
+    reasonId,
+    note: note === null || note.trim() === "" ? null : note.trim(),
+    ids,
+    expected: comparablePartsOf(body.expected),
+  };
+}
+
+/** The id of the `index`th refund one part writes when it takes money from more than one cash
+ * payment: the till's own id first, then ids derived from it, so a resend finds every one. */
+function partSubmissionId(submissionId: string, index: number): string {
+  if (index === 0) return submissionId;
+  const hex = createHash("sha256").update(`${submissionId}:${index}`).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+async function reasonTextOf(tx: Transaction, ask: GiveBackWrite): Promise<string> {
+  const reason = await findAdjustmentReason(tx, ask.reasonId);
+  if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
+  return (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(0, 500);
+}
+
+type RefundRow = typeof refundRows.$inferSelect;
+
+interface StoredGiveBack {
+  refund: RefundRow[];
+  extra: RefundRow[];
+  correction: typeof invoiceCorrections.$inferSelect | undefined;
+}
+
+/** The rows the press `ids` wrote on `saleId`; undefined when it wrote none. */
+async function readStoredGiveBack(
+  tx: Transaction,
+  saleId: SaleId,
+  ids: GiveBackSubmissionIds,
+): Promise<StoredGiveBack | undefined> {
+  const payments = await tx
+    .select({ id: tenderRows.id })
+    .from(tenderRows)
+    .where(eq(tenderRows.saleId, saleId));
+  const idsOfPart = (submissionId: string) =>
+    payments.map((_, index) => partSubmissionId(submissionId, index));
+  const rows = await tx
+    .select()
+    .from(refundRows)
+    .where(
+      and(
+        eq(refundRows.saleId, saleId),
+        inArray(refundRows.submissionId, [...idsOfPart(ids.refund), ...idsOfPart(ids.extra)]),
+      ),
+    )
+    .orderBy(asc(refundRows.createdAt), asc(refundRows.id));
+  const [correction] = await tx
+    .select()
+    .from(invoiceCorrections)
+    .where(
+      and(
+        eq(invoiceCorrections.originalSaleId, saleId),
+        eq(invoiceCorrections.submissionId, ids.correction),
+      ),
+    );
+  if (rows.length === 0 && correction === undefined) return undefined;
+  const of = (submissionId: string) => {
+    const own = new Set(idsOfPart(submissionId));
+    return rows.filter((row) => own.has(row.submissionId!));
+  };
+  return { refund: of(ids.refund), extra: of(ids.extra), correction };
+}
+
+function refundsState(rows: readonly RefundRow[]): GiveBackPartState {
+  if (rows.some((row) => row.state === "failed")) return "failed";
+  return rows.every((row) => row.state === "completed") ? "completed" : "pending";
+}
+
+/** The answer for the press whose rows are `stored`, the same on its first send and any resend. */
+async function outcomeOf(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  stored: StoredGiveBack,
+  parts: readonly ComparablePart[],
+): Promise<GiveBackOutcome> {
+  const answer: GiveBackOutcome["parts"] = parts.map((part) => {
+    const amount = centsToDecimal(part.amount);
+    if (part.kind === "correction") {
+      const row = stored.correction!;
+      return {
+        kind: "correction",
+        amount,
+        state: row.state === "filed" ? "completed" : row.state === "open" ? "pending" : "failed",
+        correctionId: row.id,
+      };
+    }
+    const rows = part.kind === "extra" ? stored.extra : stored.refund;
+    return {
+      kind: part.kind as "refund" | "extra",
+      amount,
+      state: refundsState(rows),
+      refundId: rows[0]!.id,
+    };
+  });
+  return {
+    parts: answer,
+    refusal: null,
+    underWay:
+      stored.correction?.state === "open"
+        ? await readInvoiceCorrection(tx, deps.backend, cfg, stored.correction.id)
+        : null,
+    rest: null,
+  };
+}
+
+/**
+ * Checks a resend of the press `ask` against the rows its first send wrote, as each write's own
+ * replay checks them: every part it names was written with the same money, reason and cancels,
+ * and nothing it does not name was. Writes nothing.
+ */
+async function checkResend(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  reading: TrustedReading,
+  saleId: SaleId,
+  ask: GiveBackWrite,
+  stored: StoredGiveBack,
+  personId: string,
+): Promise<void> {
+  const reused = () => new AppError("submission.id_reused", { submissionId: ask.ids.refund });
+  const amountOf = (kind: string) =>
+    ask.expected.filter((part) => part.kind === kind).reduce((sum, part) => sum + part.amount, 0);
+  const asked = cents(ask.request.amount);
+  if (
+    ask.request.purpose === "extra"
+      ? amountOf("extra") !== asked || ask.expected.some((part) => part.kind !== "extra")
+      : amountOf("refund") + amountOf("correction") !== asked ||
+        amountOf("extra") !== cents(ask.request.extra)
+  )
+    throw reused();
+  const reason = await reasonTextOf(tx, ask);
+  const kinds = new Set(ask.expected.map((part) => part.kind));
+  if (
+    stored.refund.length > 0 !== kinds.has("refund") ||
+    stored.extra.length > 0 !== kinds.has("extra") ||
+    (stored.correction !== undefined) !== kinds.has("correction")
+  )
+    throw reused();
+  for (const part of ask.expected) {
+    if (part.kind === "correction") {
+      const row = stored.correction!;
+      if (
+        row.gross !== part.amount ||
+        JSON.stringify([...(row.lineIds ?? [])].sort()) !== JSON.stringify(part.lineIds ?? []) ||
+        row.reason !== reason
+      )
+        throw new AppError("submission.id_reused", { submissionId: ask.ids.correction });
+      continue;
+    }
+    const rows = part.kind === "extra" ? stored.extra : stored.refund;
+    const field = part.kind === "extra" ? "tipAmount" : "appliedAmount";
+    if (rows.reduce((sum, row) => sum + row[field], 0) !== part.amount) throw reused();
+    for (const row of rows)
+      await reserveTenderRefund(
+        tx,
+        cfg,
+        saleId,
+        {
+          submissionId: row.submissionId!,
+          tenderId: row.tenderId!,
+          appliedAmount: centsToDecimal(row.appliedAmount),
+          tipAmount: centsToDecimal(row.tipAmount),
+          reason,
+          ...(part.cancellationIds === null ? {} : { cancellationIds: part.cancellationIds }),
+        },
+        { requestedBy: personId, authorizedBy: row.authorizedBy },
+        reading.instant.toISOString(),
+        { backend: deps.backend, reading },
+      );
+  }
+}
+
+/** Fills `amount` cents from `payments` in order, each up to what `left` says it holds. */
+function fromCashPayments(
+  amount: number,
+  payments: readonly RefundableTender[],
+  left: (payment: RefundableTender) => number,
+): { tenderId: string; cents: number }[] {
+  const legs: { tenderId: string; cents: number }[] = [];
+  let rest = amount;
+  for (const payment of payments) {
+    if (rest === 0) break;
+    const share = Math.min(rest, left(payment));
+    if (share > 0) legs.push({ tenderId: payment.tenderId, cents: share });
+    rest -= share;
+  }
+  if (rest > 0) throw invalid("amount");
+  return legs;
+}
+
+/**
+ * Gives `body` back on the receipt `saleId` in cash (5.3), in the caller's one transaction: the
+ * plain refunds of what cancels still owe, the extra, then one correction of the rest with its
+ * cash leg, filed here once all its money is back; a refused filing undoes every part. The drawer
+ * opens once, on the last cash write. A resend of the same ids answers its first result and
+ * writes nothing; parts other than `body.expected` refuse `give_back.changed`.
+ */
+export async function giveBack(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  who: {
+    device: DeviceBinding | null;
+    authority: PersonAuthority;
+    personId: string;
+    sessionId: string;
+  },
+  body: object,
+): Promise<GiveBackOutcome> {
+  const ask = parseGiveBackWrite(body as Record<string, unknown>);
+  const reading = deps.clock.now();
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  const authorizeFor = (permission: GiveBackRight) =>
+    authorize(tx, { sessionId: who.sessionId, permission });
+  const kinds = new Set(ask.expected.map((part) => part.kind));
+  const earlier = await readStoredGiveBack(tx, saleId, ask.ids);
+  if (earlier !== undefined) {
+    await authorizeFor("sale.refund");
+    if (kinds.has("correction")) await authorizeFor("sale.rectify");
+    await checkResend(tx, deps, cfg, reading, saleId, ask, earlier, who.personId);
+    return outcomeOf(tx, deps, cfg, earlier, ask.expected);
+  }
+
+  const plan = await planGiveBack(tx, deps, cfg, reading, saleId, who, ask.request);
+  if (partsKey(comparablePartsOf(plan.parts)) !== partsKey(ask.expected))
+    throw new AppError("give_back.changed", { saleId });
+  if (plan.parts.some((part) => part.way !== "cash")) throw invalid("way");
+  const reason = await reasonTextOf(tx, ask);
+  const refundAuthorization = await authorizeFor("sale.refund");
+  const correction = plan.parts.find((part) => part.kind === "correction");
+  const rectifyAuthorization =
+    correction === undefined ? undefined : await authorizeFor("sale.rectify");
+  const leg = correction === undefined ? 0 : cents(correction.amount) - cents(plan.leftUnderWay);
+
+  const cash = (await readRefundableTenders(tx, saleId)).filter((row) => row.method === "cash");
+  const writes = plan.parts.flatMap((part) => {
+    if (part.kind === "correction") return [];
+    const isExtra = part.kind === "extra";
+    const submissionId = isExtra ? ask.ids.extra : ask.ids.refund;
+    return fromCashPayments(cents(part.amount), cash, (payment) =>
+      cents(isExtra ? payment.tipRemaining : payment.appliedRemaining),
+    ).map((share, index) => ({
+      submissionId: partSubmissionId(submissionId, index),
+      tenderId: share.tenderId,
+      appliedAmount: centsToDecimal(isExtra ? 0 : share.cents),
+      tipAmount: centsToDecimal(isExtra ? share.cents : 0),
+      ...(part.kind === "refund" && part.cancellationIds !== undefined
+        ? { cancellationIds: part.cancellationIds }
+        : {}),
+    }));
+  });
+  const createdAt = reading.instant.toISOString();
+  for (const [index, write] of writes.entries()) {
+    const { refund: reserved } = await reserveTenderRefund(
+      tx,
+      cfg,
+      saleId,
+      { ...write, reason },
+      { requestedBy: who.personId, authorizedBy: refundAuthorization.authorizedBy },
+      createdAt,
+      { backend: deps.backend, reading },
+    );
+    const opensDrawer = leg === 0 && index === writes.length - 1;
+    await carryNewTenderRefund(
+      tx,
+      deps,
+      cfg.nodeId,
+      reading,
+      reserved,
+      opensDrawer
+        ? {
+            openDrawer: (done, printers) =>
+              enqueueRefundDrawer(tx, cfg, done.id, who.personId, refundAuthorization, printers),
+          }
+        : {},
+    );
+  }
+  if (correction !== undefined) {
+    const lineIds = correction.kind === "correction" ? correction.lineIds : [];
+    const selection = {
+      gross: correction.amount,
+      ...(lineIds.length === 0 ? {} : { lineIds }),
+    };
+    const split = await previewInvoiceCorrection(tx, deps.backend, cfg, reading, saleId, selection);
+    const opened = await openInvoiceCorrection(
+      tx,
+      deps,
+      cfg,
+      saleId,
+      {
+        submissionId: ask.ids.correction,
+        gross: decimal(correction.amount),
+        ...(lineIds.length === 0 ? {} : { lineIds }),
+        reasonId: ask.reasonId,
+        note: ask.note,
+        expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
+      },
+      { personId: who.personId, authorization: rectifyAuthorization! },
+    );
+    if (leg > 0)
+      await giveCorrectionCash(
+        tx,
+        deps,
+        cfg,
+        opened.correction.id,
+        { submissionId: ask.ids.leg, amount: centsToDecimal(leg) },
+        {
+          personId: who.personId,
+          authz: { sessionId: who.sessionId },
+          authorization: refundAuthorization,
+        },
+      );
+  }
+  return outcomeOf(tx, deps, cfg, (await readStoredGiveBack(tx, saleId, ask.ids))!, ask.expected);
 }

@@ -199,3 +199,17 @@ describe("POST …/give-back/preview on a part payment's ticket", () => {
     });
   });
 });
+
+describe("POST …/give-back/preview checks the records once", () => {
+  it("on a part payment's ticket whose goodwill reaches the correction", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const checks = vi.spyOn(venue().backend, "checkIntegrity");
+    onTestFinished(() => checks.mockRestore());
+    expect(await preview(advanceId, { purpose: "goodwill", amount: "10.00" })).toMatchObject({
+      status: 200,
+      json: { parts: [{ kind: "correction", amount: "10.00" }] },
+    });
+    expect(checks).toHaveBeenCalledTimes(1);
+  });
+});
