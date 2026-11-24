@@ -15,6 +15,9 @@
 > checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
 > `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
 
+> **2026-11-24, A1323 PR 3b-field:** the separate key field named below is now the **Master key**
+> field, which also takes the key from **Choose the recovery pack PDF**.
+
 # Recover a filing box from an old backup
 
 An archive gives you the venue's saved history. It cannot tell you which installation names

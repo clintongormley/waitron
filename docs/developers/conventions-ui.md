@@ -215,7 +215,7 @@ was open; restoring it kept the question deferred until after closing and the ne
 
 A `<select>`, a `<textarea>`, or an `<input>` that takes text or a file is drawn by a field
 primitive (`wt-input`, `wt-textarea`, `wt-price-input`, `wt-number-stepper`, `wt-combobox`,
-`wt-file-input`); where none fits,
+`wt-file-input`, `wt-master-key-input`); where none fits,
 add to one or add one (owner, 2026-10-01, A178). Cost: a native `<select>`'s open list is drawn by
 the browser and cannot take the approved look, and fields a screen drew itself did not follow
 changes to the shared ones, so A178 moved the fields screens drew in the dashboard, setup, the till and
@@ -227,7 +227,8 @@ file or a response), or with its tag name split across a `${…}` is invisible t
 the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
 second field added inside one passes; and some files are allowed by name (the hidden username
 input for the browser's password manager, in `packages/ui/src/autofill-username.ts`, the print agent's setup page, the
-recovery page's password box, and the carry-on form on the page a box serves while it waits for
+recovery page's password box, the restore clock page's master-key field and its recovery pack PDF
+chooser, and the carry-on form on the page a box serves while it waits for
 its peers), each
 held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
 made visible, or a field added on a line that already has one passes. See design-system.md → Forms.

@@ -2493,18 +2493,12 @@ The station printers check reads the multi-select's rendered `aria-selected` opt
 in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “the station editor retains
 printer memberships independently for each station”, rather than relying on the host values alone.
 
-### Wait for the recovery PDF picker's import
+### Wait for the master-key field's PDF read
 
 A test that chooses a recovery pack PDF in `wt-master-key-input` awaits the field's `pdfRead`
 before reading the filled key or the refusal line. `pdfRead` is the read the real file-picker
 event started, with the real reader, and it settles once the field shows its result. A one-second
 assertion window is not the read's completion signal.
-
-On 19 October, A679's full fiscal run failed the wrong-key-name case with an empty error while
-its helper did not await the import. In an independently installed candidate, a controlled 1.5-second file
-read reproduced that assertion failure; awaiting the same native import passed with the same
-delay and unchanged refusal assertion. The restored full recovery-key file passed 20 cases.
-This control qualifies waiting for the import, not the cause of every slow PDF read.
 
 ## A reopened polling dialog owns a new in-flight gate.
 

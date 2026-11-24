@@ -11,9 +11,10 @@ collections or refunds stop. Money already captured remains recorded for later c
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
-box over HTTPS. Use the venue's current master key in the **Master key** field. A dashboard sign-in, backup password or
-older master key does not replace it. Enter the key and choose **Check conflict** to inspect
-the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
+box over HTTPS. Use the venue's current master key: type it in **Master key**, or choose **Choose
+the recovery pack PDF** and pick the pack that holds it. A dashboard sign-in, backup password or
+older master key does not replace it. Then choose **Check conflict** to inspect the affected invoice
+and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
 page then shows the box's time and this device's: check that both are right, then choose **Confirm
 the time**.
