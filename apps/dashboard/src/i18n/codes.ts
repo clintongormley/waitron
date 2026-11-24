@@ -580,7 +580,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "menu.deleted": {
     en: "This menu was deleted. Reload the menu list and choose another menu.",
-    es: "Esta carta se ha eliminado. Vuelve a cargar la lista y elige otra carta.",
+    es: "Ya se ha eliminado. Vuelve a cargar la lista y elige otra opción.",
   },
   "menu.delete_default": {
     en: "The venue default menu changed or its replacement is no longer available. Close this window and open Delete again.",

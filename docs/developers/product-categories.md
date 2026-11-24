@@ -155,7 +155,7 @@ unknown menu answers `menu.not_found` (404).
 
 Creating a menu (`POST /management-api/menus`) and renaming one
 (`PATCH /management-api/menus/:id`, with `{ name }`) also refuse a name held by another menu
-with `menu.name_taken` (409, `field: "name"`). Inactive menus hold their names too. Comparisons
+with `menu.name_taken` (409, `field: "name"`). You can reuse a deleted menu's name. Comparisons
 ignore case, Unicode composition and surrounding whitespace, but retain accents and interior
 spacing. Existing duplicate names do not block presentation edits that keep the stored name;
 changing that name must pass the check.

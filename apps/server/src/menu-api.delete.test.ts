@@ -4,6 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions } from "@waitron/identity";
 import {
   addMember,
+  addShortcut,
   createMenu,
   createProduct,
   createSectionIn,
@@ -98,6 +99,7 @@ it("reports distinct products placed in the menu’s own sections in the delete 
     await addMember(tx, ownSection.id, { kind: "product", productId: own.id });
     await addMember(tx, nextRoot, { kind: "product", productId: included.id });
     await addMember(tx, oldRoot, { kind: "section", sectionId: nextRoot });
+    await addShortcut(tx, old.id, { kind: "product", productId: included.id });
   });
   const impact = await send("GET", "/delete-impact");
   expect(impact.status).toBe(200);

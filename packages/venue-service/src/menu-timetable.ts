@@ -451,7 +451,7 @@ export async function updateMenuPeriod(
   });
 }
 
-async function menuArchiveChanges(tx: Transaction, menuId: string) {
+async function menuDeleteChanges(tx: Transaction, menuId: string) {
   const periods = (await readActivePeriods(tx)).filter(
     (period) => period.menuId === menuId || period.staffMenuIds.includes(menuId),
   );
@@ -496,7 +496,7 @@ export async function readMenuDeletePeriods(
   tx: Transaction,
   menuId: string,
 ): Promise<MenuDeletePeriod[]> {
-  return (await menuArchiveChanges(tx, menuId)).map(({ impact }) => impact);
+  return (await menuDeleteChanges(tx, menuId)).map(({ impact }) => impact);
 }
 
 export async function replaceDeletedPeriodMenus(
@@ -504,7 +504,7 @@ export async function replaceDeletedPeriodMenus(
   menuId: string,
   replacements: Readonly<Record<string, string>>,
 ): Promise<void> {
-  const changes = await menuArchiveChanges(tx, menuId);
+  const changes = await menuDeleteChanges(tx, menuId);
   for (const periodId of Object.keys(replacements))
     if (!changes.some(({ impact }) => impact.id === periodId && impact.replacement !== null))
       throw new AppError("menu_period.delete_replacement", { periodId });

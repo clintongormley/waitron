@@ -132,7 +132,7 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
 
-describe("archiving a period menu", () => {
+describe("deleting a period menu", () => {
   it("promotes a staff choice and removes the retired menu from other periods", async () => {
     const v = await venue();
     const { Breakfast, Lunch, Dinner } = v.menus;

@@ -27,6 +27,7 @@ import {
   UrlStateController,
   encodePathSegment,
   paleSwatch,
+  rowActionTail,
   type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -2571,14 +2572,17 @@ export class MenusScreen extends LitElement {
                 if (!this.copyingMenu) this.copyingMenu = menu;
               }}
               >${t("menus.copy")}</wt-button
-            ><wt-button
-              icon="menu-delete"
-              data-test=${`delete-${menu.id}`}
-              @click=${() => {
-                this.deletingMenu = menu;
-              }}
-              >${t("action.delete_dialog")}</wt-button
-            ></wt-row-actions
+            >${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${menu.id}`}
+                @click=${() => {
+                  this.deletingMenu = menu;
+                }}
+                >${t("action.delete_dialog")}</wt-button
+              >`,
+            ])}</wt-row-actions
           >`,
       },
     ];

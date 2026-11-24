@@ -13686,17 +13686,35 @@ it.each(
   },
 );
 
-it("opens the delete window for the chosen menu", async () => {
+it("marks Delete as destructive and removes the chosen menu after confirmation", async () => {
+  const listMenus = vi.fn().mockResolvedValue(menus);
   const client = api({
+    listMenus,
     getMenuDeleteImpact: vi
       .fn()
       .mockResolvedValue({ periods: [], dependants: [], defaultChoices: null, productCount: 0 }),
+    deleteMenu: vi.fn(async () => {
+      listMenus.mockResolvedValue(menus.filter(({ id }) => id !== "menu-lunch"));
+    }),
   });
   const el = await mount(client);
+  const deleteAction = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="delete-menu-lunch"]',
+  )!;
+  expect(deleteAction.variant).toBe("danger");
+  expect(deleteAction.previousElementSibling?.tagName).toBe("HR");
   await inTable(el, "delete-menu-lunch");
   const dialog = el.shadowRoot!.querySelector("dashboard-menu-delete-dialog")!;
   expect(dialog.menu.id).toBe("menu-lunch");
   await vi.waitFor(() => expect(client.getMenuDeleteImpact).toHaveBeenCalledWith("menu-lunch"));
+  const confirm =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="delete"]')!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await userEvent.click(page.elementLocator(confirm.shadowRoot!.querySelector("button")!));
+  await vi.waitFor(() =>
+    expect(table(el).shadowRoot.querySelector('tr[data-row-key="menu-lunch"]')).toBeNull(),
+  );
+  expect(client.deleteMenu).toHaveBeenCalledWith("menu-lunch", { replacements: {} });
 });
 
 it("shows status checking while the Published filter is waiting for statuses", async () => {

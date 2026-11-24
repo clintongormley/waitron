@@ -144,7 +144,19 @@ it("removes a deleted set menu’s placement from the holder’s draft", async (
   expect(draft.nodes.map(({ ref }) => ref)).toContainEqual(product(f.soup));
 });
 
-it("excludes archived parents from the draft structure and publication advice", async () => {
+it("takes a deleted included menu out of a current draft even if a deleted menu also included it", async () => {
+  const f = await menusFixture(fx.db);
+  const refs = async () =>
+    (await app((tx) => readMenuStructure(tx, f.dinner))).nodes.map(({ ref }) => ref);
+  expect(await refs()).toContainEqual(section(f.drinks));
+
+  await app((tx) => deleteMenu(tx, f.lunch, "person-1"));
+  await app((tx) => deleteMenu(tx, f.drinksMenu, "person-1"));
+
+  expect(await refs()).toEqual([section(f.mains)]);
+});
+
+it("excludes inactive parents from the draft structure and publication advice", async () => {
   const f = await menusFixture(fx.db);
   const read = () => app((tx) => readMenuStructure(tx, f.lunch));
   await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
@@ -163,7 +175,7 @@ it("excludes archived parents from the draft structure and publication advice", 
   expect([(await read()).includedBy, await alsoOn()]).toEqual([[], undefined]);
 });
 
-it("keeps a published include until the parent is republished after archive", async () => {
+it("keeps a published include of an inactive menu until the parent is republished", async () => {
   const f = await menusFixture(fx.db);
   const parent = await app((tx) => createMenu(tx, { name: "Evening" }));
   const root = (await app((tx) => readMenuStructure(tx, parent.id))).rootSectionId;
@@ -195,7 +207,7 @@ it("keeps a published include until the parent is republished after archive", as
   expect(replaced?.document.includedMenuHashes).not.toHaveProperty(f.lunch);
 });
 
-it("refuses changes to an archived menu's draft, device home and publications", async () => {
+it("refuses changes to an inactive menu's draft, device home and publications", async () => {
   const f = await menusFixture(fx.db);
   const live = await publish(f.lunch);
   const { offer, variantOffer, list, shortcut } = await app(async (tx) => {
