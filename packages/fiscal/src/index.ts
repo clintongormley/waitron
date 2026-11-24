@@ -42,6 +42,7 @@ export type {
   ClockStepRequest,
   FutureDateRefusal,
   IdentityChangeNote,
+  IdentityChangeOutcome,
   SecondClock,
   CorrectionAdmission,
   Counterparty,

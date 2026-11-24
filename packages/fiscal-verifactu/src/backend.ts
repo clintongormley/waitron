@@ -22,6 +22,7 @@ import type {
   FiledReceipt,
   FiledInvoiceEvidence,
   IdentityChangeNote,
+  IdentityChangeOutcome,
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
@@ -802,8 +803,15 @@ export class VerifactuBackend implements FiscalBackend {
     note: IdentityChangeNote,
     secondClock: SecondClock,
     mayOpen: (tx: Transaction) => Promise<boolean>,
-  ): Promise<"opened" | "nothing-to-open" | "not-named"> {
-    return openIdentityChange(this.db, nodeId, note, secondClock, mayOpen);
+  ): Promise<IdentityChangeOutcome> {
+    return openIdentityChange(
+      this.db,
+      { identity: this.identity, environment: this.deploymentEnvironment },
+      nodeId,
+      note,
+      secondClock,
+      mayOpen,
+    );
   }
 
   /**

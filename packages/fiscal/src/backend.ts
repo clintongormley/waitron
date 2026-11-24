@@ -299,6 +299,10 @@ export type SecondClock =
   | { kind: "time-service"; read: () => Promise<boolean> }
   | { kind: "confirmed-start"; standing: () => boolean };
 
+/** What `openIdentityChange` did: opened a new installation, found none to open, or found the
+ * note does not name this release, this producer, or the producer the open chain was filed under. */
+export type IdentityChangeOutcome = "opened" | "nothing-to-open" | "not-named";
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -517,7 +521,7 @@ export interface FiscalBackend {
     note: IdentityChangeNote,
     secondClock: SecondClock,
     mayOpen: (tx: Transaction) => Promise<boolean>,
-  ): Promise<"opened" | "nothing-to-open" | "not-named">;
+  ): Promise<IdentityChangeOutcome>;
 
   /** How many records this node has not yet had confirmed. */
   pendingCount(nodeId: NodeId): Promise<number>;

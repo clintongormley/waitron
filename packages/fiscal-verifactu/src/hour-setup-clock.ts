@@ -11,8 +11,8 @@ import {
   AGREEMENT_MS,
   boxClockSample,
   canSelectHour,
-  STEP_MS,
   compareHourClocks,
+  wallClockStepped,
   type HourClockDecision,
   type HourClockObservation,
 } from "./hour-clock.js";
@@ -145,7 +145,12 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
   const current = (held: Reading, sample: ReturnType<typeof box>) => {
     const elapsed = sample.monotonicFinishedMs - held.monotonic;
     if (elapsed < 0 || elapsed > 30_000 || !Number.isFinite(elapsed)) return refuse("clock_stale");
-    if (Math.abs(sample.wallFinishedMs - held.wall - elapsed) > STEP_MS)
+    if (
+      wallClockStepped(
+        { wallMs: held.wall, monotonicMs: held.monotonic },
+        { wallMs: sample.wallFinishedMs, monotonicMs: sample.monotonicFinishedMs },
+      )
+    )
       return refuse("clock_corrected");
     return compareHourClocks([...held.observations, sample], release(), {
       boxClockAlone: held.boxClockAlone,

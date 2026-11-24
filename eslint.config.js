@@ -28,7 +28,7 @@ export default tseslint.config(
   {
     // Before the package blocks below: a later block's zones replace these, and each of those
     // already refuses every fiscal-verifactu import.
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,js,mjs,cjs}"],
     ignores: ["packages/fiscal-verifactu/src/**"],
     plugins: { "import-x": importX },
     settings: { "import-x/resolver": { typescript: true } },

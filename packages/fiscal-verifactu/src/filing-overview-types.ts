@@ -112,7 +112,8 @@ export interface NotIssuedHereView extends LookupObservationView {
   seriesCode: string;
 }
 
-/** A new fiscal identity activated other than by a handover, after an earlier one. */
+/** A new fiscal identity activated after an earlier one, other than by a handover or a producer
+ * change: both relinquish the old machine in their approval. */
 export interface IdentityChangeView {
   installationName: string;
   earlierInstallationName: string;
