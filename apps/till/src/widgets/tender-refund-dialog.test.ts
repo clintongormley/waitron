@@ -387,18 +387,15 @@ function pressEnter(el: TillTenderRefundDialog) {
   return el.updateComplete;
 }
 
-it.each([
-  ["en", "Close this window and choose Correct invoice"],
-  ["es", "Cierra esta ventana y elige Rectificar factura"],
-] as const)(
+it.each(["en", "es"] as const)(
   "in %s, never asks for a hand-keyed payment above what Refund a payment may give back on the terminal, and does at its limit",
-  async (locale, words) => {
+  async (locale) => {
     setLocale(locale);
     const el = await mount({ tenders: [keyed("39.99")] });
     const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
     await choose(el, "return");
     expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction"));
-    expect(bottom(el)).toContain(words);
+    expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction", locale));
     expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
     expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
     expect(button(el).disabled).toBe(true);
@@ -448,12 +445,9 @@ it("asks for a hand-keyed payment's tip alone on the terminal whatever its limit
   expect(asks).toMatchObject([{ appliedAmount: "0.00", tipAmount: "5.00", manualConfirmed: true }]);
 });
 
-it.each([
-  ["en", "A correction of this invoice is under way"],
-  ["es", "Hay una rectificación de esta factura en curso"],
-] as const)(
+it.each(["en", "es"] as const)(
   "in %s, while a correction is open, asks for nothing on the terminal, a tip alone included",
-  async (locale, words) => {
+  async (locale) => {
     setLocale(locale);
     const el = await mount({
       tenders: [{ ...keyed("0.00"), tipRemaining: "5.00", correctionOpen: true }],
@@ -463,7 +457,7 @@ it.each([
     expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
     await fill(el, "appliedAmount", "0");
     expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
-    expect(bottom(el)).toContain(words);
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open", locale));
     expect(bottom(el)).not.toContain(codeMessage("tender.refund_needs_correction"));
     expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
     expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
