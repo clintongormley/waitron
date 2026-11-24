@@ -25,6 +25,8 @@ import {
   serveSpecBill,
   setupSetMenuSpecVenue,
   specDeps,
+  sendSpecDishes,
+  setSpecCount,
   specRows,
   type SpecLunch,
   type SpecVenue,
@@ -325,6 +327,40 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     ]);
     expect(itemsAndVat(settled)).toEqual(itemsAndVat(original));
     expect(itemsAndVat(bySaleId)).toEqual(itemsAndVat(original));
+  });
+
+  it("lists a dish with no weight under its divided set menu when a one-rate set menu is on the same bill", async () => {
+    const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
+    await setSpecCount(spec, bill.tabId, spec.daily, 1);
+    const daily = { ...spec.daily, versionId: lunch.versionId };
+    await sendSpecDishes(spec, bill, [
+      { dish: "Soup", from: daily },
+      { dish: "Hake", from: daily },
+    ]);
+    await printSpecBill(spec, bill.partyId, bill.tabId);
+    const { original, settled, bySaleId } = await prints(bill.tabId);
+    expect(itemsAndVat(original)).toEqual([
+      "1 Lunch menu 14,00",
+      "1 Soup A",
+      "1 Hake A",
+      "1 Lemonade B",
+      "1 Bread roll B",
+      "1 Daily menu 14,00 A",
+      "A 10% 23,38 2,34 25,72",
+      "B 21% 1,88 0,40 2,28",
+    ]);
+    expect(itemsAndVat(settled)).toEqual(itemsAndVat(original));
+    expect(itemsAndVat(bySaleId)).toEqual(itemsAndVat(original));
+    const creditId = await inTx(venue, async (tx) =>
+      creditWholeInvoice(tx, specDeps(spec), venue.cfg, (await readOrderInvoice(tx, bill.tabId))!, {
+        sessionId: venue.operator.sessionId,
+      }),
+    );
+    const credit = await printed(
+      await inTx(venue, (tx) => readTransactionReceipt(venue.backend, tx, venue.cfg, creditId)),
+      creditId,
+    );
+    expect(itemsAndVat(credit)).toContain("-1 Bread roll B");
   });
 
   it("prints a set menu whose dishes share one rate as today (control)", async () => {

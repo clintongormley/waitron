@@ -77,9 +77,8 @@ export interface TillSaleLine {
   setMenuRole?: "set_menu" | "dish";
   /**
    * The filed row's `set_menu_part`, on the rows of a set menu whose price was divided between its
-   * dishes: how much of `gross` is the set menu's price; 0.00 on a simplified ticket's dish of
-   * such a set menu that took no part. A simplified ticket prints the sold amount, `gross` less
-   * this.
+   * dishes: how much of `gross` is the set menu's price, 0.00 on a dish with no weight. A
+   * simplified ticket prints the sold amount, `gross` less this.
    */
   setMenuPart?: string;
   /** Presentation only. On a correction's set-menu dish filed with a list price, which a

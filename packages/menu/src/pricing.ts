@@ -351,6 +351,7 @@ export function shareSetMenus(gross: GrossLines, on: string): GrossLines {
   if (gross.lines.some((line) => line.vatRates.length === 0)) return gross;
   const indexByLineNo = new Map(gross.lines.map((line, index) => [line.lineNo, index]));
   const parts = new Map<number, Decimal>();
+  const divided = new Set<number>();
   const menus = new Map<number, GrossLine>();
   for (const [menuLineNo, dishes] of weightedDishes(gross)) {
     const menuIndex = indexByLineNo.get(menuLineNo)!;
@@ -378,6 +379,7 @@ export function shareSetMenus(gross: GrossLines, on: string): GrossLines {
       dishes.map((dish) => dish.weight),
     );
     const lead = largest(shares);
+    divided.add(menuLineNo);
     shares.forEach((share, at) => {
       const index = dishes[at]!.index;
       parts.set(index, addDecimal(parts.get(index) ?? ZERO, share));
@@ -396,7 +398,11 @@ export function shareSetMenus(gross: GrossLines, on: string): GrossLines {
     const menu = menus.get(index);
     if (menu !== undefined) return menu;
     const part = parts.get(index);
-    if (part === undefined) return line;
+    // A dish with no weight files a part of 0.00, so its row still says it was in a divided set menu.
+    if (part === undefined)
+      return line.setMenuParts?.some((held) => divided.has(held.setMenuLineNo))
+        ? { ...line, setMenuPart: toScale(ZERO, MONEY_SCALE) }
+        : line;
     const lineGross = addDecimal(line.lineGross, part);
     return {
       ...line,

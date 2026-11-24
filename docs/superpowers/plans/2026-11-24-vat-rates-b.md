@@ -189,7 +189,8 @@ Read on `af930f2b30`; "ran" marks what was run.
   the set menu's row is charged after its own comps and discounts (and its A445 share, S1).
 - **S6. A dish left out, a 0.00 dish, no dish.** The price is divided over the dishes on the bill, so a set
   menu without its lemonade is all food (the adviser's own question 4 case). A dish with no weight takes no
-  part. A set menu with no dish that has a weight files whole at the **highest** takeaway rate among the
+  share of the price; in a divided set menu its row files a part of 0.00 (S8), so the simplified ticket still
+  lists it under that set menu. A set menu with no dish that has a weight files whole at the **highest** takeaway rate among the
   products its recorded copy can hold (B1.1's `setMenuProductIds` and `highestRates`): never less VAT than a
   division could give. Only this case reads the set menu's copy; if it cannot be read the bill is refused
   `menu.reset_required` (it takes an upgrade that changes the menu format with such an order open).

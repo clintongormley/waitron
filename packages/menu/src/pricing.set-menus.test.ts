@@ -187,10 +187,10 @@ describe("shareSetMenus — a takeaway set menu's price divided between its dish
     expect(rated(shared)[4]).toEqual(["Cheese", "1.50", "21.00"]);
   });
 
-  it("gives a dish with no weight no part, and files its 0.00 at the set menu's lead rate", () => {
+  it("gives a dish with no weight a part of 0.00, and files its 0.00 at the set menu's lead rate", () => {
     const bread = dish(5, "Bread", AT_4, [[1, "0.00"]]);
     const shared = shareSetMenus(workedExample([bread]), ON);
-    expect(shared.lines[4]).not.toHaveProperty("setMenuPart");
+    expect(shared.lines[4]!.setMenuPart).toBe("0.00");
     expect(shared.lines[4]!.lineGross).toBe("0.00");
     expect(figures(shared).slice(1, 4)).toEqual([
       ["Soup", "3.58", "3.58"],
@@ -200,6 +200,24 @@ describe("shareSetMenus — a takeaway set menu's price divided between its dish
     const priced = rateLines(shared, ON);
     expect(priced.lines[4]!.vatRate).toBe("10.00");
     expect(priced.vatBreakdown.map((v) => v.rate)).toEqual(["10.00", "21.00"]);
+  });
+
+  it("gives a dish with no weight a part only in its own set menu when another set menu is not divided", () => {
+    const shared = shareSetMenus(
+      workedExample([
+        dish(5, "Bread", AT_4, [[1, "0.00"]]),
+        menu(6, "14.00"),
+        dish(7, "Soup", AT_10, [[6, "5.50"]]),
+        dish(8, "Olives", AT_4, [[6, "0.00"]]),
+      ]),
+      ON,
+    );
+    expect(figures(shared).slice(4)).toEqual([
+      ["Bread", "0.00", "0.00"],
+      ["Daily menu", "14.00", null],
+      ["Soup", "0.00", null],
+      ["Olives", "0.00", null],
+    ]);
   });
 
   it("files a free extra on an a la carte takeaway dish at its dish's rate", () => {

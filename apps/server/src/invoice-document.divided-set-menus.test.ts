@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { printers, printJobs, products, taxpayer } from "@waitron/db";
+import { kitchenCourses, printers, printJobs, products, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setTakeawayVatRate } from "@waitron/menu";
+import { addSetMenuDishes, createProduct, menuItems, setTakeawayVatRate } from "@waitron/menu";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -21,9 +21,12 @@ import { RECIPIENT } from "./testing/deferred-close-fixture.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { inTx, type PartyVenue } from "./testing/party-venue.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   addSpecLunch,
   lunchBill,
+  sendSpecDishes,
+  setSpecCount,
   setupSetMenuSpecVenue,
   specDeps,
   specRows,
@@ -37,6 +40,8 @@ import {
 let spec: SpecVenue;
 let venue: PartyVenue;
 let lunch: SpecLunch;
+/** The Lunch menu's Bread roll: a dish at 0.00, so with no weight, taken away at 21%. */
+let rollItem: string;
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -62,6 +67,26 @@ beforeAll(async () => {
       .update(taxpayer)
       .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
       .where(eq(taxpayer.id, 1));
+    const roll = await createProduct(tx, {
+      categoryId: null,
+      name: "Bread roll",
+      pricingUnit: "each",
+      unitPrice: "0.00",
+      vatClass: "reduced",
+      takeawayVatRate: "21.00",
+    });
+    const [{ id: bread }] = await tx
+      .insert(kitchenCourses)
+      .values({ name: "Bread", displayOrder: 40 })
+      .returning({ id: kitchenCourses.id });
+    await tx.update(products).set({ courseId: bread }).where(eq(products.id, roll.id));
+    await addSetMenuDishes(tx, lunch.menuId, [{ productId: roll.id, excludedVariantIds: [] }]);
+    const [item] = await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(and(eq(menuItems.menuId, lunch.menuId), eq(menuItems.productId, roll.id)));
+    rollItem = item!.id;
+    lunch.versionId = await publishWorkingMenu(tx, venue.tables.menuId);
   });
 });
 
@@ -263,6 +288,21 @@ describe("the full invoice of a takeaway set menu divided between 10% and 21%", 
       ["Lemonade", "1", "1,69", "1,69", "21%", "2,05"],
     ]);
     expect(settled.total).toBe("12.60");
+  });
+
+  it("leaves out a dish that files 0.00 in its divided set menu when a one-rate set menu is on the same bill", async () => {
+    const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
+    await setSpecCount(spec, bill.tabId, spec.daily, 1);
+    const daily = { ...spec.daily, versionId: lunch.versionId };
+    await sendSpecDishes(spec, bill, [
+      { dish: "Soup", from: daily },
+      { dish: "Hake", from: daily },
+    ]);
+    await payWhole(bill.tabId, "28.00");
+    const { settled, document } = await both(bill.tabId);
+    const expected = [...DIVIDED_FIGURES, ["Daily menu", "1", "12.73", "12.73", "10.00", "14.00"]];
+    expect(filedRows(settled)).toEqual(expected);
+    expect(filedRows(document.result as TillSaleResult)).toEqual(expected);
   });
 
   it("prints a set menu whose dishes share one rate as today (control)", async () => {

@@ -196,20 +196,11 @@ async function dishLines(
   ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
   if (filed !== undefined) {
     const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
-    // A filed dish names no set menu, so a dish that took no part is listed under its divided set
-    // menu only when every set menu on the ticket was divided.
-    const menus = filed.filter((row) => row.setMenuRole === "set_menu");
-    const allDivided =
-      !fullInvoice && menus.length > 0 && menus.every((row) => row.setMenuPart !== null);
     // Every caller gives a line's sold amount, so a divided set menu's filed part is added back.
     lines = lines.map((line, i) => {
       const row = byLineNo.get(priced.lines[i]!.lineNo)!;
       const vatRate = basisPointsToDecimal(row.rate);
-      if (row.setMenuPart === null) {
-        return allDivided && row.setMenuRole === "dish"
-          ? { ...line, vatRate, setMenuPart: "0.00" }
-          : { ...line, vatRate };
-      }
+      if (row.setMenuPart === null) return { ...line, vatRate };
       const setMenuPart = centsToDecimal(row.setMenuPart);
       return {
         ...line,
