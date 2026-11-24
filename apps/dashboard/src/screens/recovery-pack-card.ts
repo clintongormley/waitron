@@ -7,11 +7,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type {
-  RecoveryPackDialog,
-  RecoveryPackDialogKind,
-  RecoveryPackMade,
-} from "../widgets/recovery-pack-dialog.js";
+import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
 import "../widgets/recovery-pack-dialog.js";
 import { keyHolder, packDate, unreceivedWords } from "../widgets/recovery-pack-words.js";
 
@@ -205,7 +201,7 @@ export class RecoveryPackCard extends LitElement {
         url.searchParams.delete("recovery-pack");
         history.replaceState(history.state, "", url);
       }
-      this.#make("pack");
+      this.#make();
     }
   }
 
@@ -290,9 +286,16 @@ export class RecoveryPackCard extends LitElement {
     if (older || !this.dialog?.isOpen) this.reload();
   }
 
-  #make(kind: RecoveryPackDialogKind): void {
+  #make(): void {
     this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
-    this.dialog?.show(this.failed ? null : this.status, kind);
+    this.dialog?.show(this.failed ? null : this.status, "pack");
+  }
+
+  /** Offered only once a status has loaded: its keep date and its box key come from that status. */
+  #makeMasterKey(): void {
+    if (this.status === null || this.failed) return;
+    this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
+    this.dialog?.show(this.status, "master-key");
   }
 
   #date(iso: string): string {
@@ -327,19 +330,16 @@ export class RecoveryPackCard extends LitElement {
             : nothing
         }
         ${
-          this.status?.serverKey === "none" || this.status?.serverKey === "not_yet"
-            ? nothing
-            : html`<wt-button
+          this.status?.serverKey === "set" && !this.failed
+            ? html`<wt-button
                 data-test="make-master-key"
                 variant="ghost"
-                @click=${() => this.#make("master-key")}
+                @click=${() => this.#makeMasterKey()}
                 >${t("recovery_pack.make_master_key")}</wt-button
               >`
+            : nothing
         }
-        <wt-button
-          data-test="make-recovery-pack"
-          variant="primary"
-          @click=${() => this.#make("pack")}
+        <wt-button data-test="make-recovery-pack" variant="primary" @click=${() => this.#make()}
           >${t("recovery_pack.make")}</wt-button
         >
       </div>

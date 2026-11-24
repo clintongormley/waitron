@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/client.js";
@@ -60,13 +61,13 @@ function stubApi() {
 type Api = ReturnType<typeof stubApi>;
 
 async function open(
-  options: { api?: Api; at?: RecoveryPackStatus | null; kind?: RecoveryPackDialogKind } = {},
+  options: { api?: Api; at?: RecoveryPackStatus; kind?: RecoveryPackDialogKind } = {},
 ) {
   const api = options.api ?? stubApi();
   const { el } = await mountWidget<RecoveryPackDialog>("dashboard-recovery-pack-dialog", {
     api: api as unknown as DashboardApi,
   });
-  el.show(options.at === undefined ? status() : options.at, options.kind ?? "pack");
+  el.show(options.at ?? status(), options.kind ?? "pack");
   await el.updateComplete;
   const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
@@ -481,6 +482,51 @@ describe("closing", () => {
     answer.reject({ code: "connection.failed" });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.getRecoveryPackStatus).not.toHaveBeenCalled();
+    expect(dialog.open).toBe(false);
+  });
+
+  it.each(["Stop", "Escape"] as const)(
+    "keeps %s from closing while a new master key is being made, and shows the key when it arrives",
+    async (how) => {
+      const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+      const api = stubApi();
+      const answer = deferred<MadeRecoveryPack>();
+      api.makeRecoveryPack.mockReturnValue(answer.promise);
+      const { el, dialog } = await open({ api, kind: "master-key" });
+      const seen = made(el);
+      button(el, "make-pack")!.click();
+      await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
+      await el.updateComplete;
+      expect(button(el, "cancel-pack")!.disabled).toBe(true);
+      if (how === "Stop") button(el, "cancel-pack")!.click();
+      else await userEvent.keyboard("{Escape}");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(dialog.open).toBe(true);
+      answer.resolve({
+        pdf: pdf(),
+        number: 4,
+        key: "replaced",
+        madeAt: "2026-11-23T09:00:00.000Z",
+        masterKey: { key: KEY, name: "2026-11-23 · QZJV" },
+      });
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=master-key]")?.textContent)
+        .toBe(KEY);
+      expect(dialog.open).toBe(true);
+      expect(seen).toHaveLength(1);
+    },
+  );
+
+  it("lets Stop close again once the box has refused a new master key", async () => {
+    const api = stubApi();
+    api.makeRecoveryPack.mockRejectedValue({ status: 500, code: "server.internal" });
+    const { el, dialog } = await open({ api, kind: "master-key" });
+    button(el, "make-pack")!.click();
+    await expect.poll(() => bottom(el)).not.toBe("");
+    expect(button(el, "cancel-pack")!.disabled).toBe(false);
+    const closed = dialogClosed(dialog);
+    button(el, "cancel-pack")!.click();
+    await closed;
     expect(dialog.open).toBe(false);
   });
 

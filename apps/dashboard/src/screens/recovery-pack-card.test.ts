@@ -90,7 +90,6 @@ it.each([
     expect(words(root.querySelector("h2"))).toBe(heading);
     expect(words(root.querySelector("h2 + p"))).toBe(intro);
     expect(words(root.querySelector("wt-button[data-test=make-master-key]"))).toBe(make);
-    expect(root.querySelector("[data-test=row-emergency-code]")).toBeNull();
   },
 );
 
@@ -778,16 +777,54 @@ describe("making a pack", () => {
     expect(show).toHaveBeenCalledWith(STATES["up to date"], "master-key");
   });
 
-  it.each(["none", "not_yet"] as const)(
-    "offers no Make a new master key while the box has no box key to replace with it (%s)",
-    async (serverKey) => {
+  it.each([
+    ["none", false],
+    ["not_yet", false],
+    ["set", true],
+  ] as const)(
+    "offers Make a new master key only once the status says the box has a box key to replace with it (%s)",
+    async (serverKey, offered) => {
       const el = await mount(stubApi(status({ serverKey })));
-      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]") !== null).toBe(
+        offered,
+      );
       expect(
         el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]"),
       ).not.toBeNull();
     },
   );
+
+  it("offers no Make a new master key while the status is still being read", async () => {
+    const api = stubApi(STATES["up to date"]);
+    const slow = deferred<RecoveryPackStatus>();
+    api.getRecoveryPackStatus.mockReturnValue(slow.promise);
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
+    slow.resolve(STATES["up to date"]);
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+  });
+
+  it("offers no Make a new master key when the status cannot be read, since nothing is known", async () => {
+    const api = stubApi(STATES["up to date"]);
+    api.getRecoveryPackStatus.mockRejectedValueOnce({ code: "connection.failed" });
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
+  });
+
+  it("stops offering Make a new master key when a later read fails", async () => {
+    const api = stubApi(STATES["up to date"]);
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+    api.getRecoveryPackStatus.mockRejectedValueOnce({ code: "connection.failed" });
+    el.reload();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+  });
 
   it("offers the made pack to download and print, then re-reads the status", async () => {
     const api = stubApi(STATES.none);
@@ -1390,3 +1427,38 @@ it("opens the linked maker after the initial status read fails", async () => {
     )
     .toBe(true);
 });
+
+it.each([
+  ...Object.entries(STATES),
+  [
+    "an emergency code printed",
+    status({
+      latest: latest({
+        parts: [...PARTS, { part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
+      }),
+      upToDate: true,
+    }),
+  ],
+] as [string, RecoveryPackStatus][])("draws no emergency code row (%s)", async (_state, at) => {
+  const el = await mount(stubApi(at));
+  expect(el.shadowRoot!.querySelector("[data-test=pack-status], dl")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=row-emergency-code]")).toBeNull();
+});
+
+it.each([
+  ["en-GB", "backup key", "encryption"],
+  ["es-ES", "clave de las copias", "cifrado"],
+] as const)(
+  "calls it the backup key in the card's own sentences, as its row does (%s)",
+  async (locale, name, old) => {
+    setLocale(locale);
+    for (const sentence of [
+      fill("recovery_pack.reason.key_changed", { date: "x" }),
+      fill("recovery_pack.keep_backup_key", { number: "1", date: "x", until: "y" }),
+      t("recovery_pack.older_key"),
+    ]) {
+      expect(sentence.toLowerCase()).toContain(name);
+      expect(sentence).not.toContain(old);
+    }
+  },
+);

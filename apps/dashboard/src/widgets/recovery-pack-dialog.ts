@@ -143,7 +143,12 @@ export class RecoveryPackDialog extends LitElement {
     new LocaleChangeController(this);
   }
 
-  /** Opens the dialog; `status` is the card's latest answer, which names the pack holding the key. */
+  /**
+   * Opens the dialog; `status` is the card's latest answer, which names the pack holding the key.
+   * A new master key needs one: its keep date is that answer's.
+   */
+  show(status: RecoveryPackStatus, kind?: RecoveryPackDialogKind): void;
+  show(status: RecoveryPackStatus | null, kind?: "pack"): void;
   show(status: RecoveryPackStatus | null, kind: RecoveryPackDialogKind = "pack"): void {
     if (this.opened) return;
     this.#generation++;
@@ -191,6 +196,11 @@ export class RecoveryPackDialog extends LitElement {
   /** The venue's zone, which the pack's pages are dated in; the browser's until a status names it. */
   get #zone(): string | undefined {
     return (this.reread ?? this.status)?.timeZone;
+  }
+
+  /** The box saves a new master key before it answers, so the answer must reach the person. */
+  get #making(): boolean {
+    return this.busy && this.kind === "master-key";
   }
 
   #draft(): Draft {
@@ -395,6 +405,7 @@ export class RecoveryPackDialog extends LitElement {
             : "recovery_pack_dialog.heading",
       )}
       .open=${open}
+      .dismissible=${!this.#making}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
@@ -411,7 +422,7 @@ export class RecoveryPackDialog extends LitElement {
           this.kind === "master-key"
             ? html`<p data-test="intro">
                   ${fill("master_key_dialog.text", {
-                    date: keepDate(this.status?.keepOldPackUntil, this.#zone),
+                    date: keepDate(this.status!.keepOldPackUntil, this.#zone),
                   })}
                 </p>
                 <p class="note" data-test="note">${t("master_key_dialog.note")}</p>`
@@ -542,7 +553,12 @@ export class RecoveryPackDialog extends LitElement {
         }
       </wt-form-actions>`;
     return html`<wt-form-actions slot="footer" .error=${this.refusal}>
-      <wt-button slot="cancel" data-test="cancel-pack" variant="secondary" @click=${leave}
+      <wt-button
+        slot="cancel"
+        data-test="cancel-pack"
+        variant="secondary"
+        ?disabled=${this.#making}
+        @click=${leave}
         >${t(master ? "master_key_dialog.stop" : "action.cancel")}</wt-button
       >
       <wt-button
