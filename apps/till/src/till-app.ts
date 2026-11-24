@@ -22856,6 +22856,11 @@ export class TillApp extends LitElement {
       return;
     }
     void this.#printOwedReceipt(id);
+    await this.#newSaleAfterSettled();
+  }
+
+  /** A settled order is no longer held, so reading it again would only say it is gone. */
+  async #newSaleAfterSettled(): Promise<void> {
     this.#replaceBasket(() => this.#onNewSale());
     await this.#refreshAfterWrite("held", "refresh.held_after_sale");
   }
@@ -24199,6 +24204,10 @@ export class TillApp extends LitElement {
         terminal: open.asked!.manualConfirmed === true,
       },
     };
+    if (open.surface === "counter" && result.balance.status === "settled") {
+      if (!this.#hasLeftCounterOrder(open.billId, open.visit)) await this.#newSaleAfterSettled();
+      return;
+    }
     await this.#rereadPayingOrder(open, result.balance);
   }
 

@@ -1012,6 +1012,69 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       );
     });
 
+    it("at the Counter giving back the whole excess starts a new sale", async () => {
+      const settledByGiveBack = {
+        refund: {
+          id: "r-1",
+          paymentId: "pay-1",
+          submissionId: "rs-1",
+          appliedAmount: "5.00",
+          tipAmount: "0.00",
+          reason: cancelReason.name,
+          state: "completed" as const,
+          createdAt: "2026-09-30T20:10:00.000Z",
+          completedAt: "2026-09-30T20:10:00.000Z",
+        },
+        balance: balanceOf({
+          workingOrderId: "wo-1",
+          status: "settled",
+          total: "90.00",
+          received: "90.00",
+          outstanding: "0.00",
+        }),
+      };
+      const el = await leftOverpaid({
+        listAdjustmentReasons: vi.fn().mockResolvedValue([cancelReason]),
+        refundBillPayment: vi.fn(async () => {
+          vi.mocked(api.retrieveWorkingOrder).mockRejectedValue({
+            code: "working_order.not_found",
+            status: 404,
+          });
+          vi.mocked(api.listWorkingOrders).mockResolvedValue([]);
+          return settledByGiveBack;
+        }),
+      });
+      vi.mocked(api.printReceipt).mockClear();
+      counter(el)
+        .shadowRoot!.querySelector<HTMLElement>("[data-overpaid] [data-give-back]")!
+        .click();
+      await flush(el, 6);
+      const refund =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-bill-refund-dialog"]>(
+          "till-bill-refund-dialog",
+        )!;
+      const combo = refund.shadowRoot!.querySelector(
+        'wt-combobox[name="reason"]',
+      ) as HTMLElementTagNameMap["wt-combobox"];
+      await expect.poll(() => combo.options[0]?.value).toBeDefined();
+      combo.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: combo.options[0]!.value },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      refund.shadowRoot!.querySelector<HTMLElement>("[data-refund-continue]")!.click();
+      await flush(el, 8);
+
+      expect(api.refundBillPayment).toHaveBeenCalledOnce();
+      expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-1", { ifOwed: true });
+      expect(counter(el).store.id).not.toBe("wo-1");
+      expect(counter(el).shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+    });
+
     it("at the Counter Print payment slip names the bill that received the payment", async () => {
       const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
       const el = await retrieved({
