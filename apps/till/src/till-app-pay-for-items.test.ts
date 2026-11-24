@@ -715,8 +715,16 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     }
 
     it("at the Counter the window stays, says the payment was taken, and reads the order again", async () => {
-      const payForItems = vi.fn().mockResolvedValue(paidOnWo9());
+      let paid = false;
+      const payForItems = vi.fn(async () => {
+        paid = true;
+        return paidOnWo9();
+      });
       const el = await retrieved({
+        getTabLines: vi.fn(async () => ({
+          lines: paid ? bill120.slice(1) : bill120,
+          revision: paid ? 1 : 0,
+        })),
         previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
         payForItems,
       });
@@ -755,6 +763,29 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       expect(dialog(el)!.balance?.workingOrderId).toBe("wo-1");
       expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toContainEqual(["wo-1"]);
       expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(orderReads);
+      expect(dialog(el)!.lines.map((row) => row.lineId)).toEqual(
+        bill120.slice(1).map((dish) => dish.id),
+      );
+    });
+
+    it("at the Counter a card charged for a different amount still warns", async () => {
+      const answer = paidOnWo9();
+      answer.payment.balance.captureWarning = { requestedAmount: "30.00", reportedAmount: "25.00" };
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        payForItems: vi.fn().mockResolvedValue(answer),
+      });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+
+      expect(dialog(el)).not.toBeNull();
+      const warning = el.shadowRoot!.querySelector<
+        HTMLElement & { open: boolean; message: string }
+      >("[data-capture-warning]");
+      expect(warning?.open).toBe(true);
+      expect(warning?.message).toContain(money("25.00"));
     });
 
     it("at the Counter with no edit state the order is read again before items are paid", async () => {

@@ -22900,8 +22900,10 @@ export class TillApp extends LitElement {
    * waiter has left the order. */
   async #rereadPayingOrder(open: PayingOrder, balance?: BillBalance): Promise<void> {
     if (open.surface === "counter") {
-      if (!this.#hasLeftCounterOrder(open.billId, open.visit))
+      if (!this.#hasLeftCounterOrder(open.billId, open.visit)) {
         await this.#reloadCounterOrder(open.billId, open.visit);
+        this.#refreshOpenPayLines(open.billId);
+      }
     } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
       await this.#rereadAmounts(open.billId, open.visit, balance);
     }
@@ -22925,8 +22927,10 @@ export class TillApp extends LitElement {
 
   #refreshOpenPayLines(billId: string): void {
     const open = this.billPaying;
-    if (open?.surface === "table" && open.billId === billId && open.asked === null && !open.busy)
-      this.billPaying = { ...open, lines: this.#payLinesOnScreen() };
+    if (open === null || open.billId !== billId || open.asked !== null || open.busy) return;
+    if (open.surface === "table") this.billPaying = { ...open, lines: this.#payLinesOnScreen() };
+    else if (this.counterLines?.orderId === billId)
+      this.billPaying = { ...open, lines: this.#counterPayLines() };
   }
 
   /** The bill payment dialog on the bill on screen, unless one is open already; the balance last
@@ -23611,9 +23615,9 @@ export class TillApp extends LitElement {
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     const slipPaymentId = readerMakesSlip ? undefined : result.payment.id;
+    if (result.invoice !== undefined) this.captureWarning = result.balance.captureWarning ?? null;
     // At the Counter the new bill's receipt window would start a new sale and drop the order.
     if (result.invoice !== undefined && (own !== undefined || open.surface === "table")) {
-      this.captureWarning = result.balance.captureWarning ?? null;
       await this.#showPaidTicket(
         open,
         result.invoice,
