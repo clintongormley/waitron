@@ -7306,3 +7306,22 @@ now takes its own whole cents, `byPortion` and `rowRefundsIn` in
 one-rate tickets (2026-11-23) produced no uneven grouped row: the portions split into separate rows
 instead.
 
+## A box reaches another box only over https or on this machine
+
+The queue item BOX-TO-BOX-HTTPS-ONLY (2026-11-24) asked to refuse plain http between boxes outside
+development, because the old box's workbook (customers' names and tax numbers) and returned invoice
+records travel between boxes. The lane built the rule `WAITRON_MANAGEMENT_ORIGIN` follows instead,
+https or plain http at a loopback host, in every environment, and the watcher cleared it. A box's own
+contact address is built from that origin (`ownContactUrl(config.managementOrigin, …)`), so no box,
+development ones included, advertises plain http at a network address. The development-only version
+would also have needed "is this a development box" passed to the dozen or so `postToBox` and
+`askPeerStatus` callers, and the test files that run two boxes on `http://127.0.0.1` outside
+development would have had to switch to development mode, which changes other behaviour they test.
+
+`isEncryptedOrLoopback` in `apps/server/src/primary-url.ts` holds the rule, and `usableBase` in
+`apps/server/src/handover-destination-duty.ts` uses it too. Its loopback set is `isLoopbackHost`'s
+(all of 127.0.0.0/8 and ::1), wider than `secureManagementOrigin`'s three hosts. `openBoxRequest`
+checks the URL before any lookup, and `openAt` checks each address before it dials, so a plain-http
+request to `localhost` goes only to a literal loopback address, whatever the resolver answers. The
+spare's bucket-stream pipe (`apps/server/src/spare-pipe.ts`) does not use `openBoxRequest`; it
+connects with `node:tls`.

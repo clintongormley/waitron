@@ -43,7 +43,7 @@ import {
 import type { Logger } from "./logger.js";
 import { boxDownload, boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerQueryPurpose, PeerStatusBody } from "./peer-status-api.js";
-import { isLoopbackHost } from "./primary-url.js";
+import { isEncryptedOrLoopback } from "./primary-url.js";
 import { lowestFreeBytes, START_FREE_SPACE_FLOOR } from "./start-space.js";
 import "./errors.js";
 
@@ -143,7 +143,7 @@ export function usableBase(url: string | undefined): string | undefined {
     return undefined;
   }
   // `boxDownload` ignores its trust over plain http, so the pin would protect nothing.
-  if (parsed.protocol === "https:" || isLoopbackHost(parsed.hostname)) {
+  if (isEncryptedOrLoopback(parsed)) {
     return trimTrailingSlashes(url);
   }
   return undefined;

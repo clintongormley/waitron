@@ -649,6 +649,15 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   till, device and schedule mounts' routes. A new route the walk sees answered as with nobody signed
   in goes in its `BLIND` list, and one that needs a body in `BODIES`.
   [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
+- **A box sends another box an HTTP request only through `openBoxRequest`
+  (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`),
+  except the spare's bucket-stream pipe, which always connects over TLS
+  (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine,
+  in every environment; `parseHello` refuses a joining spare's plain-http contact address off this
+  machine** (the watcher, 2026-11-24, not the owner's). Guards: the plain-http cases in
+  `apps/server/src/mirror-bundle-fetch.test.ts` and `apps/server/src/box-join-api.test.ts`, weaker
+  than the rule: they cannot see a new request path that skips `openBoxRequest`.
+  [Receipt](docs/developers/conventions-data.md#a-box-reaches-another-box-only-over-https-or-on-this-machine).
 - **A module with a migration set names in `requires` every other set its SQL references, puts a
   trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.

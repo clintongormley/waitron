@@ -638,6 +638,7 @@ describe("the spare trusts only the box its link pins", () => {
     ["http://localhost:8080/", "http://localhost:8080"],
     ["http://192.168.1.5:8080", undefined],
     ["http://box.local", undefined],
+    ["ftp://127.0.0.1", undefined],
     ["not an address", undefined],
     ["", undefined],
     [undefined, undefined],

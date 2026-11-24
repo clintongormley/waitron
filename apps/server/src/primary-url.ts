@@ -78,6 +78,11 @@ export function isLoopbackHost(host: string): boolean {
   return kind === 4 ? LOOPBACK_V4.check(h, "ipv4") : LOOPBACK_V6.check(h, "ipv6");
 }
 
+/** An address whose traffic is encrypted, or never leaves this machine. */
+export function isEncryptedOrLoopback(url: URL): boolean {
+  return url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHost(url.hostname));
+}
+
 // True only for a literal IP in a rule-2 range; a DNS name returns false.
 export function isBlockedIpLiteral(host: string): boolean {
   const h = stripLiteral(host.toLowerCase());

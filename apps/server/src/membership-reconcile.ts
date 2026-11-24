@@ -52,10 +52,11 @@ export async function reconcileMembershipOnBoot(
 }
 
 /**
- * Answers `null` for an address that is not a URL, a transport error, a refused certificate, no
- * answer within `timeoutMs`, a non-2xx response, an unparseable body or a peer holding no chart, so
- * "unreachable → proceed" holds. An https peer is asked only under `authority`, this box's venue authority. The returned
- * document is UNVERIFIED; `acceptDocument` is the fence.
+ * Answers `null` for an address that is not a URL, an address that is neither https nor plain http
+ * to this machine, a transport error, a refused certificate, no answer within `timeoutMs`, a non-2xx
+ * response, an unparseable body or a peer holding no chart, so "unreachable → proceed" holds. An
+ * https peer is asked only under `authority`, this box's venue authority. The returned document is
+ * UNVERIFIED; `acceptDocument` is the fence.
  */
 export async function fetchPeerMembershipDocument(
   url: string,
