@@ -1485,7 +1485,7 @@ describe("the waiting start", () => {
         expect(plain).not.toContain('action="/old-box-data"');
       });
 
-      it("offers the passkey sign-in below the password form over HTTPS, and no passkey form over HTTP", async () => {
+      it("offers the passkey sign-in below the password form over HTTPS, and no passkey form over HTTP or without a passkey setting", async () => {
         const answer = await h
           .app()
           .request("https://box.test/", { headers: { "accept-language": "en-GB" } }, tls());
@@ -1503,6 +1503,26 @@ describe("the waiting start", () => {
           shown.indexOf('id="old-box-data-passkey-form"'),
         );
         expect(await page(false)).not.toContain("old-box-data-passkey");
+
+        // A carry-on without a passkey setting offers the password form alone.
+        await h.waiting.server.close();
+        h = harness(() => new Promise(() => {}), {
+          node: suite.node,
+          intervalMs: 60_000,
+          carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [fiscal] },
+        });
+        const withoutPasskey = await page();
+        expect(withoutPasskey).toContain('id="old-box-data-password"');
+        expect(withoutPasskey).not.toContain("old-box-data-passkey");
+        const options = await h.app().request(
+          "https://box.test/old-box-data/passkey-options",
+          {
+            method: "POST",
+            headers: { origin: "https://box.test", "sec-fetch-site": "same-origin" },
+          },
+          tls(),
+        );
+        expect(options.status).toBe(404);
       });
 
       describe("with a passkey", () => {
