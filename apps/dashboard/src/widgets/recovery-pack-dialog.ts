@@ -6,11 +6,13 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type MasterKeyUsedDetail,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-master-key-box.js";
 import type { DashboardApi, RecoveryPackKeyState, RecoveryPackStatus } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -45,7 +47,7 @@ function answeredByBox(error: unknown): boolean {
 }
 
 type Step = "form" | "lost" | "key-failed" | "shown";
-/** A shown master key not yet downloaded, printed or copied is lost when the dialog closes. */
+/** A shown master key whose pack was not yet downloaded or printed is lost when the dialog closes. */
 type Draft = { unkept: boolean };
 
 /**
@@ -73,43 +75,6 @@ export class RecoveryPackDialog extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-surface);
       }
-      .master-key {
-        margin: var(--wt-space-3) 0;
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .master-key-name {
-        margin: 0 0 var(--wt-space-1);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .master-key code {
-        display: block;
-        font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
-        overflow-wrap: anywhere;
-      }
-      .key-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: var(--wt-space-3) 0;
-      }
-      .copied {
-        margin: 0;
-        color: var(--wt-color-success);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .copy-failed {
-        margin: 0;
-        color: var(--wt-color-danger);
-      }
     `,
   ];
 
@@ -127,11 +92,9 @@ export class RecoveryPackDialog extends LitElement {
   @state() private refusal = "";
   /** The status read again after a lost answer or an unreplaced key; null when unreadable. */
   @state() private reread: RecoveryPackStatus | null = null;
-  @state() private lostTicked = false;
+  @state() private lostMasterKey = false;
   @state() private shown: { key: string; name: string; url: string; number: number } | null = null;
   @state() private used = false;
-  @state() private copied = false;
-  @state() private copyFailed = false;
 
   #generation = 0;
   #sent = false;
@@ -230,8 +193,6 @@ export class RecoveryPackDialog extends LitElement {
     if (this.shown) URL.revokeObjectURL(this.shown.url);
     this.shown = null;
     this.used = false;
-    this.copied = false;
-    this.copyFailed = false;
   }
 
   #dialog(): WtDialog | null {
@@ -266,7 +227,7 @@ export class RecoveryPackDialog extends LitElement {
       }
       this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
-      this.lostTicked = newServerKey;
+      this.lostMasterKey = newServerKey;
       this.step = "lost";
       this.busy = false;
       return;
@@ -350,42 +311,11 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
   }
 
-  #kept(): void {
+  /** Copy does not count: the pack also holds the new box key, which Copy leaves out. */
+  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
+    if (event.detail.action === "copy") return;
     this.used = true;
     this.#scope?.changed();
-  }
-
-  #download(): void {
-    const shown = this.shown;
-    if (shown === null) return;
-    const anchor = document.createElement("a");
-    anchor.href = shown.url;
-    anchor.download = `waitron-recovery-pack-${shown.number}.pdf`;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    this.#kept();
-  }
-
-  #print(): void {
-    if (this.shown === null) return;
-    window.open(this.shown.url, "_blank");
-    this.#kept();
-  }
-
-  async #copy(): Promise<void> {
-    const shown = this.shown;
-    if (shown === null) return;
-    let refused = false;
-    try {
-      await navigator.clipboard.writeText(shown.key);
-    } catch {
-      refused = true;
-    }
-    if (shown !== this.shown) return;
-    this.copied = !refused;
-    this.copyFailed = refused;
-    if (!refused) this.#kept();
   }
 
   #retry(): void {
@@ -434,44 +364,30 @@ export class RecoveryPackDialog extends LitElement {
       ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
   }
 
-  #shown(shown: { key: string; name: string }): TemplateResult {
+  #shown(shown: { key: string; name: string; url: string; number: number }): TemplateResult {
     return html`<p data-test="shown-lead">${t("master_key_shown.lead")}</p>
       <p class="warning" data-test="shown-warning">${t("master_key_shown.warning")}</p>
-      <div class="master-key">
-        <p class="master-key-name" data-test="master-key-name">
-          ${fill("master_key_shown.key_name", { name: shown.name })}
-        </p>
-        <code data-test="master-key">${shown.key}</code>
-      </div>
-      ${
-        this.copyFailed
-          ? html`<p class="copy-failed" data-test="copy-failed" role="alert">
-              ${t("master_key_shown.copy_failed")}
-            </p>`
-          : nothing
-      }
-      <div class="key-actions">
-        <wt-button data-test="key-download" variant="secondary" @click=${() => this.#download()}
-          >${t("master_key_shown.download")}</wt-button
-        >
-        <wt-button data-test="key-print" variant="secondary" @click=${() => this.#print()}
-          >${t("master_key_shown.print")}</wt-button
-        >
-        <wt-button data-test="key-copy" variant="secondary" @click=${() => void this.#copy()}
-          >${t("master_key_shown.copy")}</wt-button
-        >
-        ${
-          this.copied
-            ? html`<p class="copied" data-test="key-copied" role="status">
-                ${t("master_key_shown.copied")}
-              </p>`
-            : nothing
-        }
-      </div>`;
+      <wt-master-key-box
+        data-test="master-key-box"
+        .masterKey=${shown.key}
+        .keyName=${shown.name}
+        .pdfUrl=${shown.url}
+        fileName=${`waitron-recovery-pack-${shown.number}.pdf`}
+        .copy=${{
+          name: (name: string) => fill("master_key_shown.key_name", { name }),
+          download: t("master_key_shown.download"),
+          print: t("master_key_shown.print"),
+          copy: t("master_key_shown.copy"),
+          copied: t("master_key_shown.copied"),
+          copyFailed: t("master_key_shown.copy_failed"),
+          printFailed: t("master_key_shown.print_failed"),
+        }}
+        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+      ></wt-master-key-box>`;
   }
 
   #lost(): TemplateResult {
-    if (!this.lostTicked)
+    if (!this.lostMasterKey)
       return html`<div data-test="lost" role="alert">
         <p>${t("recovery_pack_dialog.lost")}</p>
         <p>${t("recovery_pack_dialog.lost_choices")}</p>
@@ -537,10 +453,10 @@ export class RecoveryPackDialog extends LitElement {
     if (this.step === "lost")
       return html`<wt-form-actions slot="footer">
         <wt-button slot="cancel" data-test="stop-pack" variant="secondary" @click=${leave}
-          >${t(this.lostTicked ? "master_key_dialog.stop" : "recovery_pack_dialog.stop")}</wt-button
+          >${t(this.lostMasterKey ? "master_key_dialog.stop" : "recovery_pack_dialog.stop")}</wt-button
         >
         ${
-          this.lostTicked
+          this.lostMasterKey
             ? html`<wt-button
                 data-test="remake-pack"
                 variant="danger"

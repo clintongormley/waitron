@@ -9,6 +9,7 @@ import "./recovery-pack-dialog.js";
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  vi.restoreAllMocks();
 });
 
 const STATUS: RecoveryPackStatus = {
@@ -26,14 +27,22 @@ const STATUS: RecoveryPackStatus = {
 };
 
 type State =
-  "empty" | "master key" | "busy" | "refused" | "lost" | "key failed" | "key shown" | "key copied";
+  | "empty"
+  | "master key"
+  | "busy"
+  | "refused"
+  | "lost"
+  | "key failed"
+  | "key shown"
+  | "key copied"
+  | "key downloaded";
 
 function makeFor(state: State) {
   if (state === "busy") return vi.fn(() => new Promise(() => undefined));
   if (state === "refused")
     return vi.fn().mockRejectedValue({ code: "password.throttled", status: 429 });
   if (state === "lost") return vi.fn().mockRejectedValue({ code: "connection.failed" });
-  if (state === "key shown" || state === "key copied")
+  if (state.startsWith("key ") && state !== "key failed")
     return vi.fn().mockResolvedValue({
       pdf: new Blob(["%PDF"], { type: "application/pdf" }),
       number: 4,
@@ -58,6 +67,7 @@ const STATES: State[] = [
   "key failed",
   "key shown",
   "key copied",
+  "key downloaded",
 ];
 
 describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%s)", (theme) => {
@@ -92,11 +102,17 @@ describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%
       await expect.poll(() => root.querySelector("[data-test=lost]")).toBeTruthy();
     if (state === "key failed")
       await expect.poll(() => root.querySelector("[data-test=key-failed]")).toBeTruthy();
-    if (state === "key shown" || state === "key copied")
-      await expect.poll(() => root.querySelector("[data-test=master-key]")).toBeTruthy();
+    const box = () => root.querySelector("wt-master-key-box")?.shadowRoot ?? null;
+    if (state.startsWith("key ") && state !== "key failed")
+      await expect.poll(() => box()?.querySelector("[data-test=master-key]")).toBeTruthy();
     if (state === "key copied") {
       vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-      root.querySelector<HTMLElement>("wt-button[data-test=key-copy]")!.click();
+      box()!.querySelector<HTMLElement>("wt-button[data-test=copy]")!.click();
+      await expect.poll(() => box()!.querySelector("[data-test=copied]")).toBeTruthy();
+    }
+    if (state === "key downloaded") {
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+      box()!.querySelector<HTMLElement>("wt-button[data-test=download]")!.click();
       await expect.poll(() => root.querySelector("wt-button[data-test=key-continue]")).toBeTruthy();
     }
     await el.updateComplete;

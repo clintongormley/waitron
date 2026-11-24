@@ -74,6 +74,15 @@ async function open(
   return { el, api, dialog };
 }
 
+/** A part of the dialog's master key box: its key, name, buttons and what they say. */
+function inBox(el: RecoveryPackDialog, name: string) {
+  return (
+    el
+      .shadowRoot!.querySelector("wt-master-key-box")
+      ?.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`) ?? null
+  );
+}
+
 function button(el: RecoveryPackDialog, test: string) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     `wt-button[data-test=${test}]`,
@@ -217,9 +226,7 @@ describe("the new master key", () => {
     const opened = await open({ api, kind: "master-key" });
     const seen = made(opened.el);
     button(opened.el, "make-pack")!.click();
-    await expect
-      .poll(() => opened.el.shadowRoot!.querySelector("[data-test=master-key]"))
-      .not.toBeNull();
+    await expect.poll(() => inBox(opened.el, "master-key")).not.toBeNull();
     return { ...opened, seen };
   }
 
@@ -249,11 +256,9 @@ describe("the new master key", () => {
       const root = el.shadowRoot!;
       expect(words(root.querySelector("[data-test=shown-lead]"))).toBe(lead);
       expect(words(root.querySelector("[data-test=shown-warning]"))).toBe(warning);
-      expect(words(root.querySelector("[data-test=master-key-name]"))).toBe(name);
-      expect(root.querySelector("[data-test=master-key]")!.textContent).toBe(KEY);
-      expect(["key-download", "key-print", "key-copy"].map((b) => words(button(el, b)))).toEqual(
-        labels,
-      );
+      expect(words(inBox(el, "master-key-name"))).toBe(name);
+      expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+      expect(["download", "print", "copy"].map((b) => words(inBox(el, b)))).toEqual(labels);
       expect(button(el, "key-continue")).toBeNull();
       expect(button(el, "make-pack")).toBeNull();
       expect(seen).toHaveLength(1);
@@ -261,38 +266,49 @@ describe("the new master key", () => {
     },
   );
 
-  it("Copy puts the key on the clipboard exactly as printed, says Copied., then offers Continue", async () => {
+  it("Copy puts the key on the clipboard exactly as printed and says Copied., but Continue waits for Download or Print: the pack also holds the new box key", async () => {
     const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const { el, dialog } = await shown();
-    button(el, "key-copy")!.click();
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=key-copied]")).not.toBeNull();
+    inBox(el, "copy")!.click();
+    await expect.poll(() => inBox(el, "copied")).not.toBeNull();
     expect(write).toHaveBeenCalledWith(KEY);
-    expect(words(el.shadowRoot!.querySelector("[data-test=key-copied]"))).toBe(
-      t("master_key_shown.copied"),
-    );
+    expect(words(inBox(el, "copied"))).toBe(t("master_key_shown.copied"));
+    await el.updateComplete;
+    expect(button(el, "key-continue")).toBeNull();
+    inBox(el, "download")!.click();
     await expect.poll(() => button(el, "key-continue")).not.toBeNull();
     expect(words(button(el, "key-continue"))).toBe(t("master_key_shown.continue"));
     const closed = dialogClosed(dialog);
     button(el, "key-continue")!.click();
     await closed;
     expect(dialog.open).toBe(false);
-    expect(el.shadowRoot!.querySelector("[data-test=master-key]")).toBeNull();
+    expect(inBox(el, "master-key")).toBeNull();
   });
 
   it("a Copy the browser refuses says so and counts for nothing", async () => {
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
     const { el } = await shown();
-    button(el, "key-copy")!.click();
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=copy-failed]")).not.toBeNull();
-    expect(words(el.shadowRoot!.querySelector("[data-test=copy-failed]"))).toBe(
-      t("master_key_shown.copy_failed"),
+    inBox(el, "copy")!.click();
+    await expect.poll(() => inBox(el, "copy-failed")).not.toBeNull();
+    expect(words(inBox(el, "copy-failed"))).toBe(t("master_key_shown.copy_failed"));
+    expect(inBox(el, "copied")).toBeNull();
+    expect(button(el, "key-continue")).toBeNull();
+  });
+
+  it("a Print the browser blocks says so where a refused Copy does, and counts for nothing", async () => {
+    vi.spyOn(window, "open").mockReturnValue(null);
+    const { el } = await shown();
+    inBox(el, "print")!.click();
+    await expect.poll(() => inBox(el, "print-failed")).not.toBeNull();
+    expect(words(inBox(el, "print-failed"))).toBe(
+      "Print did not open. Use Download, or allow pop-ups and try again.",
     );
-    expect(el.shadowRoot!.querySelector("[data-test=key-copied]")).toBeNull();
     expect(button(el, "key-continue")).toBeNull();
   });
 
   it("Download saves the pack and Print opens it, each then offering Continue", async () => {
-    const opened = vi.spyOn(window, "open").mockReturnValue(null);
+    const opened = vi.spyOn(window, "open").mockReturnValue({} as Window);
     const clicked: { href: string; download: string }[] = [];
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
       this: HTMLAnchorElement,
@@ -300,7 +316,7 @@ describe("the new master key", () => {
       clicked.push({ href: this.href, download: this.download });
     });
     const first = await shown();
-    button(first.el, "key-download")!.click();
+    inBox(first.el, "download")!.click();
     await expect.poll(() => button(first.el, "key-continue")).not.toBeNull();
     expect(clicked).toEqual([
       { href: expect.stringMatching(/^blob:/), download: "waitron-recovery-pack-4.pdf" },
@@ -308,7 +324,7 @@ describe("the new master key", () => {
     expect(await (await fetch(clicked[0]!.href)).text()).toBe("%PDF-1.7 pack");
     cleanupWidgets();
     const second = await shown();
-    button(second.el, "key-print")!.click();
+    inBox(second.el, "print")!.click();
     await expect.poll(() => button(second.el, "key-continue")).not.toBeNull();
     expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^blob:/), "_blank");
   });
@@ -349,13 +365,11 @@ describe("the new master key", () => {
     el.show(status(), "master-key");
     await el.updateComplete;
     button(el, "make-pack")!.click();
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=master-key]")).not.toBeNull();
+    await expect.poll(() => inBox(el, "master-key")).not.toBeNull();
     expect(prompt).toHaveBeenCalledOnce();
     expect(makes).toBe(2);
-    expect(el.shadowRoot!.querySelector("[data-test=master-key]")!.textContent).toBe(KEY);
-    expect(words(el.shadowRoot!.querySelector("[data-test=master-key-name]"))).toBe(
-      `Master key · ${NAME}`,
-    );
+    expect(inBox(el, "master-key")!.textContent).toBe(KEY);
+    expect(words(inBox(el, "master-key-name"))).toBe(`Master key · ${NAME}`);
   });
 
   it("shows no key when the box answered without one, and closes as a made pack", async () => {
@@ -364,7 +378,7 @@ describe("the new master key", () => {
     button(el, "make-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     await expect.poll(() => dialog.open).toBe(false);
-    expect(el.shadowRoot!.querySelector("[data-test=master-key]")).toBeNull();
+    expect(inBox(el, "master-key")).toBeNull();
   });
 });
 
@@ -509,9 +523,7 @@ describe("closing", () => {
         madeAt: "2026-11-23T09:00:00.000Z",
         masterKey: { key: KEY, name: "2026-11-23 · QZJV" },
       });
-      await expect
-        .poll(() => el.shadowRoot!.querySelector("[data-test=master-key]")?.textContent)
-        .toBe(KEY);
+      await expect.poll(() => inBox(el, "master-key")?.textContent).toBe(KEY);
       expect(dialog.open).toBe(true);
       expect(seen).toHaveLength(1);
     },
@@ -626,14 +638,18 @@ describe("the box key was not replaced", () => {
 });
 
 describe("a lost answer", () => {
-  async function lose(options: { ticked: boolean; error?: unknown; after?: RecoveryPackStatus }) {
+  async function lose(options: {
+    masterKey: boolean;
+    error?: unknown;
+    after?: RecoveryPackStatus;
+  }) {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue(options.error ?? { code: "connection.failed" });
     api.getRecoveryPackStatus.mockResolvedValue(options.after ?? status());
     const { el, dialog } = await open({
       api,
       at: HELD,
-      kind: options.ticked ? "master-key" : "pack",
+      kind: options.masterKey ? "master-key" : "pack",
     });
     button(el, "make-pack")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=lost]")).not.toBeNull();
@@ -641,7 +657,7 @@ describe("a lost answer", () => {
   }
 
   it("after Make a new master key, reads the status again and warns that the only copy of the key may be on a pack the person does not have", async () => {
-    const { el, api } = await lose({ ticked: true });
+    const { el, api } = await lose({ masterKey: true });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(t("recovery_pack_dialog.lost_new_key"));
@@ -666,7 +682,7 @@ describe("a lost answer", () => {
       (event) => statuses.push((event as CustomEvent<RecoveryPackStatus>).detail),
       { signal: listening.signal },
     );
-    const { el } = await lose({ ticked: true, after });
+    const { el } = await lose({ masterKey: true, after });
     listening.abort();
     expect(statuses).toEqual([after]);
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
@@ -676,14 +692,14 @@ describe("a lost answer", () => {
   });
 
   it("names no pack when the status names none unreceived", async () => {
-    const { el } = await lose({ ticked: true, after: HELD });
+    const { el } = await lose({ masterKey: true, after: HELD });
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).not.toContain("recovery pack 3");
     expect(lost).not.toContain("recovery pack 4");
   });
 
   it("offers Make a new master key again, through the shared sign-in gate", async () => {
-    const { el, api } = await lose({ ticked: true });
+    const { el, api } = await lose({ masterKey: true });
     button(el, "remake-pack")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
@@ -694,7 +710,7 @@ describe("a lost answer", () => {
   });
 
   it("Stop closes the dialog", async () => {
-    const { el, dialog } = await lose({ ticked: true });
+    const { el, dialog } = await lose({ masterKey: true });
     const closed = dialogClosed(dialog);
     button(el, "stop-pack")!.click();
     await closed;
@@ -702,7 +718,7 @@ describe("a lost answer", () => {
   });
 
   it("after a plain make, says the pack may have been made and offers Try again and Stop", async () => {
-    const { el, api } = await lose({ ticked: false });
+    const { el, api } = await lose({ masterKey: false });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(t("recovery_pack_dialog.lost"));
@@ -713,7 +729,7 @@ describe("a lost answer", () => {
   });
 
   it("Try again sends the request once more", async () => {
-    const { el, api } = await lose({ ticked: false });
+    const { el, api } = await lose({ masterKey: false });
     api.makeRecoveryPack.mockResolvedValue({
       pdf: pdf(),
       number: 5,
@@ -728,14 +744,14 @@ describe("a lost answer", () => {
   });
 
   it("counts a body the browser refused as not whole as lost", async () => {
-    const { el } = await lose({ ticked: true, error: { code: "recovery.pack_invalid" } });
+    const { el } = await lose({ masterKey: true, error: { code: "recovery.pack_invalid" } });
     expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
       t("recovery_pack_dialog.lost_new_key"),
     );
   });
 
   it("counts a connection dropped mid-body as lost", async () => {
-    const { el } = await lose({ ticked: true, error: new TypeError("network error") });
+    const { el } = await lose({ masterKey: true, error: new TypeError("network error") });
     expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
       t("recovery_pack_dialog.lost_new_key"),
     );
@@ -883,6 +899,7 @@ describe("the words", () => {
     "master_key_shown.copy",
     "master_key_shown.copied",
     "master_key_shown.copy_failed",
+    "master_key_shown.print_failed",
     "master_key_shown.continue",
   ] as const;
 

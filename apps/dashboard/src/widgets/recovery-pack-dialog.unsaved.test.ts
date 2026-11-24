@@ -21,6 +21,7 @@ customElements.define("recovery-pack-leave-test-app", RecoveryPackLeaveApp);
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  vi.restoreAllMocks();
 });
 
 const STATUS: RecoveryPackStatus = {
@@ -60,7 +61,10 @@ async function fixture(kind: "pack" | "master-key" = "master-key") {
   const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
   const press = (test: string) =>
-    host.shadowRoot!.querySelector<HTMLElement>(`wt-button[data-test=${test}]`)!;
+    (host.shadowRoot!.querySelector<HTMLElement>(`wt-button[data-test=${test}]`) ??
+      host
+        .shadowRoot!.querySelector("wt-master-key-box")
+        ?.shadowRoot!.querySelector<HTMLElement>(`wt-button[data-test=${test}]`))!;
   return { app, host, dialog, press, makeRecoveryPack };
 }
 
@@ -68,7 +72,12 @@ async function fixture(kind: "pack" | "master-key" = "master-key") {
 async function showKey(f: Awaited<ReturnType<typeof fixture>>) {
   f.press("make-pack").click();
   await expect
-    .poll(() => f.host.shadowRoot!.querySelector("[data-test=master-key]"))
+    .poll(
+      () =>
+        f.host
+          .shadowRoot!.querySelector("wt-master-key-box")
+          ?.shadowRoot!.querySelector("[data-test=master-key]") ?? null,
+    )
     .not.toBeNull();
 }
 
@@ -99,11 +108,11 @@ it.each(["pack", "master-key"] as const)(
   },
 );
 
-it("a shown master key not yet downloaded, printed or copied asks before Escape", async () => {
+it("a shown master key not yet downloaded or printed asks before Escape", async () => {
   const f = await fixture();
   await showKey(f);
   await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(true);
-  f.press("key-copy").focus();
+  f.press("copy").focus();
   await userEvent.keyboard("{Escape}");
   await expect.poll(async () => (await question(f.app)).open).toBe(true);
   expect(f.dialog.open).toBe(true);
@@ -113,13 +122,33 @@ it("a shown master key not yet downloaded, printed or copied asks before Escape"
   expect(f.dialog.open).toBe(false);
 });
 
-it("a shown master key that was copied closes on Escape without asking", async () => {
+it("a shown master key that was only copied still asks before Escape: the pack also holds the new box key", async () => {
   vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
   const f = await fixture();
   await showKey(f);
-  f.press("key-copy").click();
+  f.press("copy").click();
+  await expect
+    .poll(
+      () =>
+        f.host
+          .shadowRoot!.querySelector("wt-master-key-box")
+          ?.shadowRoot!.querySelector("[data-test=copied]") ?? null,
+    )
+    .not.toBeNull();
+  expect(f.app.leave.coordinator.isDirty()).toBe(true);
+  f.press("copy").focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(async () => (await question(f.app)).open).toBe(true);
+  expect(f.dialog.open).toBe(true);
+});
+
+it("a shown master key that was downloaded closes on Escape without asking", async () => {
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const f = await fixture();
+  await showKey(f);
+  f.press("download").click();
   await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(false);
-  f.press("key-copy").focus();
+  f.press("copy").focus();
   const closed = dialogClosed(f.dialog);
   await userEvent.keyboard("{Escape}");
   await closed;

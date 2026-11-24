@@ -1773,6 +1773,8 @@ export const en = {
   "master_key_shown.copied": "Copied.",
   "master_key_shown.copy_failed":
     "Copy did not work. Use Download or Print, or write the key down.",
+  "master_key_shown.print_failed":
+    "Print did not open. Use Download, or allow pop-ups and try again.",
   "master_key_shown.continue": "Continue",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
@@ -6615,6 +6617,8 @@ export const es: Record<StringKey, string> = {
   "master_key_shown.copied": "Copiada.",
   "master_key_shown.copy_failed":
     "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
+  "master_key_shown.print_failed":
+    "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
   "master_key_shown.continue": "Continuar",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
