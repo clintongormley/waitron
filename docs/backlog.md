@@ -1554,18 +1554,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   screen languages, themes and phone/desktop widths when the stack is available. The regional cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A974. Finish the remaining English names in general code.**
-  A private person binding (`marta`, shown as Martha) remains in the protected
-  `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
-  Protected fiscal and receipt helpers still need their boundary audit.
-  Other split-suite comments and file names remain.
-  Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
-  identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
-  Other record and submission names remain in server seed, snapshot and fiscal-identity suites;
-  check protected fixtures and fiscal-provider contracts before renaming them.
-  Low priority.
-  [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
-
 - **Qualify the split-table new-bill no-sale check.** Find a control that reaches the existing
   no-sale assertions with an unwanted sale or record. Existing probes have not established that
   they can fail; no product defect has been demonstrated.
@@ -1624,7 +1612,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and short-email `ana@bo.es` sample;
   made-here and till-table supervisor display samples use English names.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
-  served-at-huella, split-bill fiscal and tabs filing suites.
+  served-at-fiscal-hash, split-bill fiscal and tabs filing suites.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
   Administrator, Food and Drinks for its local staff samples; its product and fiscal text remain. Current-order, order-group,

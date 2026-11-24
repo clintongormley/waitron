@@ -89,7 +89,7 @@ function snapshot() {
   return venue.db.all(sql`
     select
       (select count(*) from sales) as sales,
-      (select count(*) from verifactu_records) as registros,
+      (select count(*) from verifactu_records) as recordCount,
       (select count(*) from tenders) as tenders,
       (select count(*) from sale_settlements) as settlements,
       (select count(*) from payments) as payments,

@@ -23,7 +23,7 @@ Historical review inventory, 2026-10-28. The owner authorizes removal of the obs
 | [apps/server/src/restore-email.test.ts](../../apps/server/src/restore-email.test.ts) | Remove unused retired series-setting fixture; email assertions unchanged. |
 | [apps/server/src/restore-fiscal-e2e.test.ts](../../apps/server/src/restore-fiscal-e2e.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/retired-fiscal-operation-entry.test.ts](../../apps/server/src/retired-fiscal-operation-entry.test.ts) | Keep production restore-runner refusal and unchanged row equality; remove the two retired command entries. |
-| [apps/server/src/served-at-huella.test.ts](../../apps/server/src/served-at-huella.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
+| [apps/server/src/served-at-huella.test.ts](../../apps/server/src/served-at-fiscal-hash.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/till-api.test.ts](../../apps/server/src/till-api.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/venue-details.test.ts](../../apps/server/src/venue-details.test.ts) | Historical allocation fixture uses the retained restore hook instead of rerunning a seed; retained assertions unchanged. |
 | [packages/db/src/reserved-identity.test.ts](../../packages/db/src/reserved-identity.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |

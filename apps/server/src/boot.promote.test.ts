@@ -192,7 +192,7 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
 }
 
 /** One due `verifactu_submissions` row and a usable `fiscal.aeat` credential, so a singleton's drain tries it. */
-async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
+async function seedFiscalWork(): Promise<{ recordIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
@@ -213,25 +213,25 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
       },
     }),
   );
-  return { registroIds: seeded.registroIds };
+  return { recordIds: seeded.registroIds };
 }
 
 /** A raw statement reaches no column mapper, so the `incidencia` flag arrives as 1 or 0. */
-async function readEnvio(
-  registroId: string,
+async function readSubmission(
+  recordId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
   const rows = await appDb.execute<{ estado: string; intentos: number; incidencia: number }>(
-    sql`select estado, intentos, incidencia from verifactu_submissions where registro_id = ${registroId}`,
+    sql`select estado, intentos, incidencia from verifactu_submissions where registro_id = ${recordId}`,
   );
   const row = rows.rows[0]!;
   return { estado: row.estado, intentos: row.intentos, incidencia: row.incidencia === 1 };
 }
 
-/** Keeps the shared directory order-independent; `incidents` has no registro id, so it is cleared
+/** Keeps the shared directory order-independent; `incidents` has no record ID, so it is cleared
  * wholesale. Every caller runs after `server.close()`. */
-async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
+async function cleanupFiscalWork(seeded: { recordIds: string[] }): Promise<void> {
   await appDb.execute(
-    sql`update verifactu_submissions set estado = 'aceptado' where registro_id in ${seeded.registroIds}`,
+    sql`update verifactu_submissions set estado = 'aceptado' where registro_id in ${seeded.recordIds}`,
   );
   await appDb.execute(sql`delete from incidents `);
 }
@@ -256,7 +256,7 @@ describe("historical promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     await resetLocalSecondary();
     const seeded = await seedFiscalWork();
-    const { registroIds } = seeded;
+    const { recordIds } = seeded;
     const port = await freePort();
 
     const server = await startServer(
@@ -280,7 +280,7 @@ describe("historical promote: local secondary → primary, live", () => {
 
       expect(server.promoteLocalSecondaryToPrimary).toBeDefined();
       expect(server.promoteMirrorToPrimary).toBeUndefined();
-      expect(await readEnvio(registroIds[0]!)).toEqual({
+      expect(await readSubmission(recordIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
         incidencia: false,
@@ -295,8 +295,8 @@ describe("historical promote: local secondary → primary, live", () => {
 
       // Phase B — now the singleton. Poll on `incidencia`, set as the LAST step of a failed attempt,
       // not `intentos`, set at claim while estado is still 'enviando'.
-      await poll(async () => ((await readEnvio(registroIds[0]!)).incidencia ? true : undefined));
-      expect(await readEnvio(registroIds[0]!)).toEqual({
+      await poll(async () => ((await readSubmission(recordIds[0]!)).incidencia ? true : undefined));
+      expect(await readSubmission(recordIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 1,
         incidencia: true,
@@ -321,7 +321,7 @@ describe("historical promote: local secondary → primary, live", () => {
   it("refuses an unattested promote and keeps filing off", async () => {
     await resetLocalSecondary();
     const seeded = await seedFiscalWork();
-    const { registroIds } = seeded;
+    const { recordIds } = seeded;
     const port = await freePort();
 
     const server = await startServer(
@@ -345,7 +345,7 @@ describe("historical promote: local secondary → primary, live", () => {
       expect((await readNodeMode(appNode, TILL_ENV.WAITRON_NODE_ID)).singletonRole).toBe(
         "secondary",
       );
-      expect(await readEnvio(registroIds[0]!)).toEqual({
+      expect(await readSubmission(recordIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
         incidencia: false,

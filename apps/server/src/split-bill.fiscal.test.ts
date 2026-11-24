@@ -218,8 +218,8 @@ function seqOf(result: TillSaleResult): number {
   return Number(m[1]);
 }
 
-describe("split-bill: pay each check files its own registro", () => {
-  it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 registros with contiguous numbers", async () => {
+describe("split-bill: pay each check files its own record", () => {
+  it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 records with contiguous numbers", async () => {
     const seeded = await setupVenue({ takeaway: true });
     const deps = { db: suite.db, backend, clock };
 
@@ -274,7 +274,7 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(new Set(waterLinks.map((link) => link.portionId)).size).toBe(3);
   });
 
-  it("on a tab written before portions, the whole agua line files on its own check", async () => {
+  it("on a tab written before portions, the whole water line files on its own check", async () => {
     const { cfg, waterId, hamId, tableId, offers } = await setupVenue({ takeaway: true });
     const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
     const lines = offers.toOfferLines([
@@ -379,7 +379,7 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(checksWith10).toEqual(new Set([a]));
   });
 
-  it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
+  it("paying a check twice files exactly ONE record (sale-idempotency replay)", async () => {
     const { cfg, waterId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
 

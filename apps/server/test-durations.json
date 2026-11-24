@@ -1039,7 +1039,7 @@
   "src/sent-dish-change.test.ts": 7.5,
   "src/sent-line-nutrition.test.ts": 9.3,
   "src/sent-order-number.test.ts": 4.3,
-  "src/served-at-huella.test.ts": 4.1,
+  "src/served-at-fiscal-hash.test.ts": 4.1,
   "src/served.test.ts": 10.2,
   "src/server-command.test.ts": 5.6,
   "src/service-delete.disabled-bookings.test.ts": 2,

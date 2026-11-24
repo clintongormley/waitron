@@ -75,7 +75,7 @@ const F = {
  * generator that only the insert builder runs, so a hand-written INSERT gets a NOT NULL refusal
  * (`packages/db/src/schema/columns.ts`).
  */
-async function seedFiscalRegistro(db: Database): Promise<void> {
+async function seedFiscalRecord(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
@@ -236,7 +236,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
   await applyMigrations(baselineDir, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(baselineDir);
   try {
-    await seedFiscalRegistro(store.venue);
+    await seedFiscalRecord(store.venue);
     artifactSecrets.set(
       artifact,
       await mintBreakGlassSecret({ venue: store.venue, node: store.node }, F.nodeId),

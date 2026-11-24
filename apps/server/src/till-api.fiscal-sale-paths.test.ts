@@ -2306,7 +2306,7 @@ describe("handheld sales and device capability gates", () => {
     },
   );
 
-  it("allows a handheld CASH sale (200) and files exactly one chained registro under the node/SIF — parity with a counter cash sale", async () => {
+  it("allows a handheld CASH sale (200) and files exactly one chained record under the node/SIF — parity with a counter cash sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -2358,7 +2358,7 @@ describe("handheld sales and device capability gates", () => {
     expect(only!.entorno).toBe(deploymentEnvironment(process.env));
   });
 
-  it("allows a handheld MANUAL CARD sale (200) and files one chained registro under the node/SIF plus one captured payment — parity with a counter card sale", async () => {
+  it("allows a handheld MANUAL CARD sale (200) and files one chained record under the node/SIF plus one captured payment — parity with a counter card sale", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -3699,7 +3699,7 @@ describe("a sale cannot hand over settled extras or options", () => {
       await suite.db.execute(sql`
         select (select count(*) from sales) as sales,
                (select count(*) from working_orders) as orders,
-               (select count(*) from verifactu_records) as registros`)
+               (select count(*) from verifactu_records) as recordCount`)
     ).rows[0];
   }
 

@@ -252,13 +252,13 @@ export async function seedFiscalRegistro(
   opts: SeedFiscalRegistroOptions = {},
 ): Promise<SeededFiscalRegistro> {
   const ids = await seedFiscalParents(db, opts);
-  const registro = await insertFiscalRegistro(db, ids, opts);
+  const record = await insertFiscalRegistro(db, ids, opts);
 
   if (opts.envio) {
     const estado =
       typeof opts.envio === "object" ? (opts.envio.estado ?? "pendiente") : "pendiente";
-    await db.insert(verifactuSubmissions).values({ registroId: registro.registroId, estado });
+    await db.insert(verifactuSubmissions).values({ registroId: record.registroId, estado });
   }
 
-  return { ...ids, ...registro };
+  return { ...ids, ...record };
 }

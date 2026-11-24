@@ -81,20 +81,6 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
   The regional cuts' local launches refused at Mailpit's absent Docker socket; their native setup
   component views and database/media checks do not qualify those live screens.
-- **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
-  The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  The server split suites' comments and shared helper consumers remain.
-  Record and submission names also remain in server seed,
-  snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
-  Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
-  and their consumers stay with A976, as do the filing order-portion samples.
-  Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
-  under A976.
-  Menu display names, seasonal venue and zone names and printer-screen display labels
-  also stay with A976, along with counter-screen display text, station-screen display names,
-  kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
-  device/printer deletion fixture text.
-  Low priority.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The shared bill and order venues use Anna, Administrator and Sophia for staff samples.
   The shared party venue uses Administrator, including station authorizer readbacks.
@@ -381,31 +367,7 @@ OPEN.
 
 - [Index and key names that still read `tenant`](#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone).
 
-## A974. Finish the remaining English names in general code.
-
-- **A974. Finish the remaining English names in general code.**
-  A private person binding (`marta`, shown as Martha) remains in the protected
-  `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
-  Protected fiscal and receipt helpers still need their boundary audit.
-  Other split-suite comments, shared helper consumers and file names remain.
-  Private drink bindings remain in `sale-till-source.receipt.test.ts`,
-  `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
-  `served-at-huella.test.ts`; audit their fiscal fixture boundaries before renaming.
-  Other record and submission names, including `registros` and `envios`, remain in server seed,
-  provisioning, receipt, clock and fiscal-identity suites. Examples include
-  `scripts/demo-seed/seed-sales.test.ts`, `src/provision.test.ts`, `src/orders-reprint.test.ts`,
-  `src/sale-clock.test.ts` and `src/full-comp.fiscal-identity.test.ts` under `apps/server/`.
-  Check protected golden fixtures and fiscal-provider contracts before changing those names.
-  Keep accented search fixtures unchanged. Shared helper display samples and their consumers
-  stay with A976.
-  Other fixture text stays with A976, including menu
-  display names, seasonal venue and zone names, printer-screen display
-  labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
-  payment/queue widget display text, the table-action suite's beer/cake display names,
-  variant media fixtures and device/printer deletion fixture text.
-  [Detail](architecture.md#a913s-fix-items-general-code-english-only). Low priority.
-
-### A974 review assertion gaps
+## A974 review assertion gaps
 
 Qualify the no-sale assertions in `split-table.fiscal.test.ts`, in "the new bill holds no sale".
 The 6 November naming review's attempts to issue every split bill, including a route-scoped
@@ -468,7 +430,7 @@ also qualifies the historical operation-description references in this section.
   and short-email `ana@bo.es` sample;
   made-here and till-table supervisor display samples use English names.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
-  served-at-huella, split-bill fiscal and tabs filing suites.
+  served-at-fiscal-hash, split-bill fiscal and tabs filing suites.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
@@ -500,12 +462,12 @@ also qualifies the historical operation-description references in this section.
   `party-arriving-dishes.test.ts` and `receipt-guests.test.ts`. Spanish display samples remain in
   `order-portions.filing.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
-  other shared-helper samples and their consumers' dish selectors also remain. These belong to
-  A976 rather than the private-name work in A974. Triage the `receipt-document.test.ts`
-  fixture descriptions and test titles while preserving Spanish receipt output and
-  deliberate locale checks. Fiscal-sale
-  descriptions also retain Spanish words. The fiscal-sale
-  suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
+  other shared-helper samples and their consumers' dish selectors also remain. Keep those selectors
+  with their fixture text. Triage menu, seasonal venue and zone, printer, counter, station,
+  kitchen-ticket grouping, payment and queue widget, variant media, and device and printer deletion
+  samples. Triage `receipt-document.test.ts` fixture descriptions and test titles while preserving
+  Spanish receipt output and deliberate locale checks. Fiscal-sale descriptions also retain
+  Spanish words. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
   checks remain. UI switch behavior and accessibility suites

@@ -1076,7 +1076,7 @@ describe("seedDemoRestaurant", () => {
       const { rows: backends } = await tx.execute<{ fiscal_backend: string }>(
         sql`select fiscal_backend from sales`,
       );
-      const { rows: registros } = await tx.execute<{ count: number }>(
+      const { rows: recordCounts } = await tx.execute<{ count: number }>(
         sql`select count(*) as count from verifactu_records`,
       );
       const { rows: takeawayRates } = await tx.execute<{ rate: number }>(
@@ -1087,7 +1087,7 @@ describe("seedDemoRestaurant", () => {
         gaps,
         customerName: JSON.parse(products[0]!.customer_name) as object,
         backends: backends.map((row) => row.fiscal_backend),
-        registros: registros[0]!.count,
+        recordCount: recordCounts[0]!.count,
         takeawayRates: takeawayRates.map((row) => row.rate),
       };
     });
@@ -1096,7 +1096,7 @@ describe("seedDemoRestaurant", () => {
     expect(Object.keys(read.customerName)).toEqual(["en"]);
     expect(read.backends.length).toBeGreaterThan(0);
     expect(new Set(read.backends)).toEqual(new Set(["none"]));
-    expect(read.registros).toBe(0);
+    expect(read.recordCount).toBe(0);
     // Spain's 4% and 21% are not offered here, so every product takes the area's 0%.
     expect(read.takeawayRates).toEqual([0]);
     expect((await withTransaction(suite.db, venueMenus)).map(({ name }) => name).sort()).toEqual([

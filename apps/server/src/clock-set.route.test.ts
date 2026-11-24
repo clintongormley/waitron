@@ -30,7 +30,7 @@ const DAY = 24 * HOUR;
 let venue: BillVenue;
 let counter: ZoneOffers;
 let dishId = "";
-let marta: Manager;
+let martha: Manager;
 let mario: Manager;
 
 interface Manager {
@@ -68,7 +68,7 @@ useVenueDb({
       await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, { productIds: [dishId] });
     });
-    marta = await seedPerson("manager", "Martha");
+    martha = await seedPerson("manager", "Martha");
     mario = await seedPerson("admin", "Mario");
   },
 });
@@ -377,7 +377,7 @@ it("lets only an administrator with a management session set the clock", async (
   const before = written(box);
   const body = { challengeId: randomUUID(), deviceAt: box.behind + 10 * MINUTE };
 
-  const manager = await setWith(box, marta.cookie, body);
+  const manager = await setWith(box, martha.cookie, body);
   expect(manager.status).toBe(403);
   expect(manager.json).toEqual({
     code: "authorization.not_permitted",
@@ -782,7 +782,7 @@ it("refuses a confirmation on the box itself, and from anyone but an administrat
   const box = await stoppedBox(0, { start });
   const body = { challengeId: randomUUID(), asShown: true };
   const answers = [];
-  for (const cookie of ["", venue.cookie, marta.cookie])
+  for (const cookie of ["", venue.cookie, martha.cookie])
     answers.push(await send(box.app, cookie, "POST", "/api/box/clock-confirm", body));
   box.setFromBox(true);
   answers.push(await send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", body));

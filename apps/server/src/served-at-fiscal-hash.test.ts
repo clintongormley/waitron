@@ -81,7 +81,7 @@ function frozenClock(): TrustedClock {
       anchorAgeSeconds: 0,
     }),
     anchor: () => {
-      throw new Error("served-at-huella.test: anchor() is not used by recordSale");
+      throw new Error("served-at-fiscal-hash.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -144,10 +144,10 @@ interface Shop {
   db: Database;
   backend: FiscalBackend;
   cfg: DeviceRequestConfig;
-  aguaId: string;
-  cafeId: string;
-  aguaMenuItemId: string;
-  cafeMenuItemId: string;
+  waterId: string;
+  coffeeId: string;
+  waterMenuItemId: string;
+  coffeeMenuItemId: string;
   menuId: string;
   categoryId: string;
   tableId: string;
@@ -179,30 +179,30 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   );
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const agua = await createProduct(tx, {
-      categoryId: bebidas.id,
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const water = await createProduct(tx, {
+      categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const cafe = await createProduct(tx, {
-      categoryId: bebidas.id,
+    const coffee = await createProduct(tx, {
+      categoryId: drinks.id,
       name: "Café solo",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const aguaMenuItem = await addProductToMenu(tx, {
+    const waterMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: agua.id,
+      productId: water.id,
       grossPrice: "1.50",
     });
-    const cafeMenuItem = await addProductToMenu(tx, {
+    const coffeeMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: cafe.id,
+      productId: coffee.id,
       grossPrice: "2.00",
     });
     // The table sits in a table_tab zone offering this menu, with a route per product to the
@@ -212,12 +212,12 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     await publishWorkingMenu(tx, cat.id);
     const table = await createTable(tx, { label: "T1", zoneId });
     return {
-      aguaId: agua.id,
-      cafeId: cafe.id,
-      aguaMenuItemId: aguaMenuItem.id,
-      cafeMenuItemId: cafeMenuItem.id,
+      waterId: water.id,
+      coffeeId: coffee.id,
+      waterMenuItemId: waterMenuItem.id,
+      coffeeMenuItemId: coffeeMenuItem.id,
       menuId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       tableId: table.id,
     };
   });
@@ -233,13 +233,13 @@ async function openServeAndPay(
   serveEveryLine: boolean,
   options: { fire?: boolean } = {},
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, {
       tableId,
       lines: [
-        { menuItemId: aguaMenuItemId, quantity: "1" },
-        { menuItemId: cafeMenuItemId, quantity: "1" },
+        { menuItemId: waterMenuItemId, quantity: "1" },
+        { menuItemId: coffeeMenuItemId, quantity: "1" },
       ],
     });
   });
@@ -323,13 +323,13 @@ describe("served_at is not part of the huella", () => {
  * sibling tests.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, {
       tableId,
       lines: [
-        { menuItemId: aguaMenuItemId, quantity: "1" },
-        { menuItemId: cafeMenuItemId, quantity: "1" },
+        { menuItemId: waterMenuItemId, quantity: "1" },
+        { menuItemId: coffeeMenuItemId, quantity: "1" },
       ],
     });
   });
@@ -444,7 +444,7 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
 });
 
 /**
- * Offer a ONE-item extras list on this shop's `agua` product and return the list's id with the
+ * Offer a ONE-item extras list on this shop's `water` product and return the list's id with the
  * offered product's. The picked product's fiscal-bearing fields — names, the offer's price and the
  * VAT class — are the constants below, so only `overlay`'s allergen declaration varies between
  * shops.
@@ -460,7 +460,7 @@ async function attachExtra(
   overlay: { allergens: OverlayAllergens | null },
 ): Promise<{ listId: string; productId: string }> {
   return withTransaction(shop.db, async (tx) => {
-    const panecillo = await createProduct(tx, {
+    const breadRoll = await createProduct(tx, {
       categoryId: null,
       name: EXTRA_PRODUCT_NAME,
       pricingUnit: "each",
@@ -478,28 +478,28 @@ async function attachExtra(
         maxPicks: 1,
         active: true,
         items: [
-          { productId: panecillo.id, maxQuantity: 1, preselected: false, price: EXTRA_PRICE },
+          { productId: breadRoll.id, maxQuantity: 1, preselected: false, price: EXTRA_PRICE },
         ],
       },
       shop.cfg.locale,
     );
-    await writeProductModifiers(tx, shop.aguaId, [{ kind: "extras", id: list.id }]);
+    await writeProductModifiers(tx, shop.waterId, [{ kind: "extras", id: list.id }]);
 
     await publishWorkingMenu(tx, shop.menuId);
-    return { productId: panecillo.id, listId: list.id };
+    return { productId: breadRoll.id, listId: list.id };
   });
 }
 
 /**
- * Open a two-line tab — `agua` WITH the extra picked (a parent row + one child row) plus a plain
- * `cafe` — then pay it through the real pay path with the FROZEN clock, returning the filed huella
+ * Open a two-line tab — `water` WITH the extra picked (a parent row + one child row) plus a plain
+ * `coffee` — then pay it through the real pay path with the FROZEN clock, returning the filed huella
  * (registro #1 at secuencia 1).
  */
 async function openWithExtraAndPay(
   shop: Shop,
   extra: { listId: string; productId: string },
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   // `openTab` takes only plain lines; `addTabRound` is the path that accepts `extras`.
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, { tableId });
@@ -507,11 +507,11 @@ async function openWithExtraAndPay(
   await withTransaction(db, async (tx) => {
     await addTabRound(tx, cfg, tabId, [
       {
-        menuItemId: aguaMenuItemId,
+        menuItemId: waterMenuItemId,
         quantity: "1",
         extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }],
       },
-      { menuItemId: cafeMenuItemId, quantity: "1" },
+      { menuItemId: coffeeMenuItemId, quantity: "1" },
     ]);
   });
 
