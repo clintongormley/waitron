@@ -2493,7 +2493,7 @@ async function bootServer(
   if (!fencedOrMirror && nodeBackend.checkFilingIdentity !== undefined) {
     const checkFilingIdentity = nodeBackend.checkFilingIdentity.bind(nodeBackend);
     // The gate that keeps a waiting box from selling holds only on a box that files records, so any
-    // other is refused, note or none.
+    // other ignores the note.
     const note = filesRecords() ? await readIdentityChangeNote(config.stateDir) : null;
     const answer = await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId, note));
     if (note !== null && answer?.pending) {
