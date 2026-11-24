@@ -762,9 +762,54 @@ export async function assertCopyRoom(paths, directory, { run = command, statfs =
     throw new Error("not enough room for the upgrade copy");
 }
 
-export async function clockStatusRelay({ directory, socketPath = "/run/waitron-box/box.sock" }) {
+const TOLD_SYNCHRONISED =
+  "The upgrade's checks were told that the box's time is synchronised; " +
+  "its time service did not say so.\n";
+// Under the server's wait for a status, DEFAULT_STATUS_MS in apps/server/src/box-host-client.ts.
+const HOST_ANSWER_MS = 1000;
+
+function saysSynchronised(reply) {
+  try {
+    const answer = JSON.parse(reply);
+    return answer.ok === true && answer.synchronised === true;
+  } catch {
+    return false;
+  }
+}
+
+const synchronisedReply = () =>
+  JSON.stringify({
+    ok: true,
+    service: "on",
+    unit: null,
+    synchronised: true,
+    lastSyncAt: null,
+    nowMs: Date.now(),
+  }) + "\n";
+
+/** `answerSynchronised` is for the stopped checks' copy alone: the live server asks the host. */
+export async function clockStatusRelay({
+  directory,
+  socketPath = "/run/waitron-box/box.sock",
+  answerSynchronised = false,
+  attemptDirectory,
+}) {
   await fs.mkdir(directory, { mode: 0o755 });
   const clients = new Set();
+  let told;
+  const forCopy = async (reply) => {
+    if (saysSynchronised(reply)) return reply;
+    try {
+      await (told ??= writeFileDurable(
+        join(attemptDirectory, "clock-answer.txt"),
+        TOLD_SYNCHRONISED,
+      ));
+    } catch {
+      // An answer this attempt holds no record of is not given.
+      return reply;
+    }
+    return synchronisedReply();
+  };
   const server = createServer((client) => {
     clients.add(client);
     let source;
@@ -783,18 +828,25 @@ export async function clockStatusRelay({ directory, socketPath = "/run/waitron-b
         return;
       }
       source = createConnection(socketPath);
+      if (answerSynchronised) source.setTimeout(HOST_ANSWER_MS, () => source.destroy());
+      let answered = false;
+      const answer = async (reply) => {
+        if (answered) return;
+        answered = true;
+        client.end(answerSynchronised && !client.destroyed ? await forCopy(reply) : reply);
+      };
       source.on("connect", () => source.write("clock.status\n"));
       let reply = "";
       source.on("data", (chunk) => {
         reply += chunk.toString();
         const end = reply.indexOf("\n");
         if (end >= 0) {
-          client.end(reply.slice(0, end + 1));
+          void answer(reply.slice(0, end + 1));
           source.destroy();
         } else if (reply.length > 4096) source.destroy();
       });
-      source.on("error", () => client.end('{"ok":false,"reason":"unavailable"}\n'));
-      source.on("close", () => client.end());
+      source.on("error", () => void answer('{"ok":false,"reason":"unavailable"}\n'));
+      source.on("close", () => void answer(""));
     });
   });
   const path = join(directory, "box.sock");
@@ -807,6 +859,7 @@ export async function clockStatusRelay({ directory, socketPath = "/run/waitron-b
       await new Promise((done, reject) =>
         server.close((error) => (error ? reject(error) : done())),
       );
+      await told?.catch(() => {});
     },
   };
 }

@@ -1103,6 +1103,11 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
   shape (`host.test.mjs:1100-1101` shows it) and writes one line saying so into the attempt
   directory. Every other request is still refused as `forbidden`, so the copy still cannot set or
   restart anything on the host.
+  - **As built 2026-11-24:** the line goes to `clock-answer.txt`, in the folder the relay is given
+    as `attemptDirectory`. With the option, a host that sends nothing for a second counts as
+    unavailable, since the copy stops waiting after two. If the line cannot be written, the relay
+    passes on what the host said. Nothing in the code reads the line, and a finished attempt's
+    folder is deleted with it, so a person can read it only while an attempt is held.
 - Modify `scripts/box/upgrades/candidate.mjs:72`: the stopped checks' relay passes
   `answerSynchronised: true`. Nothing else starts a relay (`git grep -n clockStatusRelay`: only
   `candidate.mjs:8,72` and the host's own tests).

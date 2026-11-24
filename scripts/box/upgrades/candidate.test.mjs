@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { checkUpgradeCandidate, removeUpgradeCheckContainers } from "./candidate.mjs";
 import { IDENTITY_CHANGE_FILE } from "../../../packages/store/src/state-layout.js";
+import { boxHostClient } from "../../../apps/server/src/box-host-client.js";
 import { readIdentityChangeNote } from "../../../apps/server/src/identity-change-note.js";
 
 async function fixture(
@@ -176,6 +177,32 @@ it("finishes successful checks when Docker already removed their containers", as
   await expect(
     checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run }),
   ).resolves.toHaveLength(2);
+});
+
+it("tells only the stopped checks' copy that its time is synchronised, whatever the host says", async () => {
+  const f = await fixture();
+  const relay = join(f.directory, "check", "clock");
+  let status;
+  const run = async (file, args) => {
+    if (args.at(-1) === "sale")
+      status = await boxHostClient({ socketPath: join(relay, "box.sock") }).clockStatus();
+    return f.run(file, args);
+  };
+  await checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run });
+  expect(status).toMatchObject({ available: true, synchronised: true });
+  const mount = `type=bind,src=${relay},dst=/run/waitron-box,readonly`;
+  const given = f.calls.filter((args) => args.some((arg) => arg.includes("/run/waitron-box")));
+  expect(given.map((args) => args.includes(mount))).toEqual([true, true]);
+  expect(given.map((args) => args[args.indexOf("--name") + 1])).toEqual([
+    expect.stringMatching(/-readiness$/),
+    expect.stringMatching(/-sale$/),
+  ]);
+  await expect(fs.access(relay)).rejects.toMatchObject({ code: "ENOENT" });
+  const told = (await fs.readdir(f.directory)).filter((name) => name.endsWith(".txt"));
+  expect(told).toEqual(["clock-answer.txt"]);
+  expect(await fs.readFile(join(f.directory, told[0]), "utf8")).toMatch(
+    /^The upgrade's checks .*\n$/,
+  );
 });
 
 describe("an attempt that changes the producer", () => {

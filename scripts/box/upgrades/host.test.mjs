@@ -14,6 +14,9 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { createConnection, createServer } from "node:net";
+import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -40,6 +43,7 @@ import { runUpgradeCli } from "./cli.mjs";
 import { offerTrustFixture } from "./offers.test-support.mjs";
 import { isNumberedVersion } from "../release-list.mjs";
 import { IDENTITY_CHANGE_FILE } from "../../../packages/store/src/state-layout.js";
+import { boxHostClient } from "../../../apps/server/src/box-host-client.js";
 import { readIdentityChangeNote } from "../../../apps/server/src/identity-change-note.js";
 
 async function mountVenue(suite, boxDirectory) {
@@ -1152,6 +1156,196 @@ it("relays only the real clock status line and refuses a clock change without co
     await relay?.close();
     await new Promise((done) => upstream.close(done));
   }
+});
+
+describe("the clock relay told to answer synchronised", () => {
+  const LINE =
+    "The upgrade's checks were told that the box's time is synchronised; its time service did not say so.\n";
+  const reply = (synchronised) =>
+    `{"ok":true,"service":"on","unit":"chrony.service","synchronised":${synchronised},"lastSyncAt":null,"nowMs":1795420800000}\n`;
+
+  async function relayed({ answer, host = answer !== undefined, attempt = "attempt", ...told }) {
+    const root = await mkdtemp(join(tmpdir(), "upgrade-relay-"));
+    onTestFinished(() => rm(root, { recursive: true, force: true }));
+    await mkdir(join(root, "attempt"));
+    const source = join(root, "host.sock");
+    const received = [];
+    const connections = new Set();
+    if (host) {
+      const upstream = createServer((socket) => {
+        connections.add(socket);
+        socket.on("error", () => {});
+        socket.on("data", (bytes) => {
+          received.push(bytes.toString());
+          answer?.(socket);
+        });
+      });
+      await new Promise((done) => upstream.listen(source, done));
+      onTestFinished(async () => {
+        for (const socket of connections) socket.destroy();
+        await new Promise((done) => upstream.close(done));
+      });
+    }
+    const { clockStatusRelay } = await import("./host.mjs");
+    const relay = await clockStatusRelay({
+      directory: join(root, "relay"),
+      socketPath: source,
+      answerSynchronised: true,
+      attemptDirectory: join(root, attempt),
+      ...told,
+    });
+    onTestFinished(() => relay.close().catch(() => {}));
+    const socketPath = join(root, "relay", "box.sock");
+    const exchange = (line) =>
+      new Promise((done, reject) => {
+        const socket = createConnection(socketPath);
+        let text = "";
+        socket.on("connect", () => socket.write(line));
+        socket.on("data", (bytes) => {
+          text += bytes.toString();
+        });
+        socket.on("end", () => done(text));
+        socket.on("error", reject);
+      });
+    const lines = async () =>
+      Promise.all(
+        (await readdir(join(root, "attempt"))).map((name) =>
+          readFile(join(root, "attempt", name), "utf8"),
+        ),
+      );
+    return { relay, received, exchange, lines, client: boxHostClient({ socketPath }) };
+  }
+
+  it.each([
+    ["answers not synchronised", (socket) => socket.end(reply(false))],
+    ["refuses", (socket) => socket.end('{"ok":false,"reason":"host_failed"}\n')],
+    [
+      "says synchronised in a refusal",
+      (socket) => socket.end('{"ok":false,"synchronised":true}\n'),
+    ],
+    ["answers something else", (socket) => socket.end('"synchronised":true\n')],
+    ["answers null", (socket) => socket.end("null\n")],
+    ["names the flag as text", (socket) => socket.end(reply('"true"'))],
+    ["answers part of a line", (socket) => socket.end(reply(true).slice(0, -1))],
+    ["answers too much", (socket) => socket.end(" ".repeat(5000))],
+    ["hangs up", (socket) => socket.end()],
+    ["never answers", () => {}],
+    ["is not there", undefined],
+  ])(
+    "tells the copy its time is synchronised, and says so once, when the host %s",
+    async (_, answer) => {
+      const t = await relayed({ answer });
+      for (let read = 0; read < 2; read += 1)
+        expect(await t.client.clockStatus()).toEqual({
+          available: true,
+          service: "on",
+          unit: null,
+          synchronised: true,
+          lastSyncAt: null,
+        });
+      expect(t.received).toEqual(answer ? ["clock.status\n", "clock.status\n"] : []);
+      expect(await t.lines()).toEqual([LINE]);
+    },
+  );
+
+  it("passes a synchronised host's own answer on unchanged, and writes nothing", async () => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(true)) });
+    expect(await t.exchange("clock.status\n")).toBe(reply(true));
+    expect(t.received).toEqual(["clock.status\n"]);
+    expect(await t.lines()).toEqual([]);
+  });
+
+  it.each([
+    'clock.set {"targetMs":1}\n',
+    "clock.sync-on\n",
+    "clock.retry\n",
+    "clock.status\nclock.retry\n",
+    "upgrade.status\n",
+  ])("refuses %j without contacting the host", async (line) => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
+    expect(await t.exchange(line)).toBe('{"ok":false,"reason":"forbidden"}\n');
+    expect(t.received).toEqual([]);
+    expect(await t.lines()).toEqual([]);
+  });
+
+  it("passes the host's own answer on when the line cannot be written", async () => {
+    const t = await relayed({
+      answer: (socket) => socket.end(reply(false)),
+      attempt: "missing",
+    });
+    expect(await t.exchange("clock.status\n")).toBe(reply(false));
+  });
+
+  it("passes the host's own answer on, and writes nothing, without the option", async () => {
+    const t = await relayed({
+      answer: (socket) => socket.end(reply(false)),
+      answerSynchronised: undefined,
+    });
+    expect(await t.exchange("clock.status\n")).toBe(reply(false));
+    expect(await t.lines()).toEqual([]);
+  });
+
+  it("cuts no host short without the option", async () => {
+    const t = await relayed({ answer: () => {}, answerSynchronised: undefined });
+    expect(await t.client.clockStatus()).toMatchObject({ available: false, reason: "timeout" });
+  });
+
+  it("answers two reads at once", async () => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
+    const answers = await Promise.all([t.client.clockStatus(), t.client.clockStatus()]);
+    expect(answers.map(({ synchronised }) => synchronised)).toEqual([true, true]);
+    expect(await t.lines()).toEqual([LINE]);
+  });
+
+  it("writes nothing for a copy that stopped waiting", async () => {
+    let asked;
+    const waiting = new Promise((done) => {
+      asked = done;
+    });
+    const t = await relayed({ answer: (socket) => asked(socket) });
+    const answered = t.exchange("clock.status\n");
+    const host = await waiting;
+    const left = once(host, "close");
+    await t.relay.close();
+    expect(await answered).toBe("");
+    await left;
+    await delay(200);
+    expect(await t.lines()).toEqual([]);
+  });
+
+  it("finishes writing its line before it closes", async () => {
+    const probe = await open(tmpdir(), "r");
+    const prototype = Object.getPrototypeOf(probe);
+    await probe.close();
+    let release;
+    const gate = new Promise((done) => {
+      release = done;
+    });
+    let begun;
+    const writing = new Promise((done) => {
+      begun = done;
+    });
+    const { sync } = prototype;
+    const spy = vi.spyOn(prototype, "sync").mockImplementation(async function () {
+      begun();
+      await gate;
+      return sync.call(this);
+    });
+    onTestFinished(() => spy.mockRestore());
+    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
+    const answered = t.exchange("clock.status\n");
+    await writing;
+    let closed = false;
+    const closing = t.relay.close().then(() => {
+      closed = true;
+    });
+    await delay(50);
+    expect(closed).toBe(false);
+    release();
+    await closing;
+    await answered;
+    expect(await t.lines()).toEqual([LINE]);
+  });
 });
 
 it.each([false, true])(
