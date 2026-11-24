@@ -1359,7 +1359,7 @@ packed by `packages/ui/mutation-costs.json`: per file, the MEDIAN over the shard
 [43712380973](https://github.com/clintongormley/waitron/actions/runs/43712380973),
 [43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319) and 44021607120
 (which lacks shards 23 and 30) of the same per-file sum as ui-core's. These are ranking weights, not
-job predictions. Keep thirty shards and the 50-minute limit. Files no report holds (the re-exports
+job predictions. Keep thirty shards and the 50-minute limit. Files no report holds (the pure re-exports
 of ui-core, `index.ts`, `vite-env.d.ts`: they have no mutants) are left out and take the byte
 fallback. Do not regenerate this table with the db-calibrated `scripts/mutation-costs.mjs`. Refresh
 from several runs' reports, each downloaded with
@@ -1420,6 +1420,19 @@ two killed mutants into survivors). The hold made the coverage run of shard 30 i
 [44492844528](https://github.com/clintongormley/waitron/actions/runs/44492844528) exceed Stryker's
 5-minute default for that run (`Initial test run timed out!`), so `packages/ui/stryker.config.json`
 sets `dryRunTimeoutMinutes` to 15, as `packages/db` sets 20; the 50-minute job limit is unchanged.
+
+**ui, 24 November 2026.** Scheduled run [45330866483](https://github.com/clintongormley/waitron/actions/runs/45330866483)
+cancelled `mutation-ui` shard 30 at its 50-minute limit. The shard held `src/components/wt-icon.ts`,
+to which #4135 and #4173 added 53 icon drawings, registered when the module loads; the shard's log
+reported 75 static mutants, and its survivors rose from 26 to 51 before it was cancelled. Only five
+of the icons were named by any ui test: with the other 48 drawings blanked, the whole ui suite still
+passed. `src/components/wt-icon.test.ts` now draws every icon in `MENU_ICONS` by name, as
+`src/floor-chips.test.ts` does for the floor cues, and pins the record's names, so an icon added to
+`MENU_ICONS` without a case fails it. The `menu-retry` blank-drawing mutant stays static: in a
+focused Stryker run during the branch's review, it was killed after 54 of 81 tests with the new file
+and survived all 28 without it. `packages/ui/mutation-costs.json` has no entry for `wt-icon.ts`, so
+it takes the byte fallback until the table is refreshed from runs that hold it. Whether shard 30 now
+finishes inside its 50-minute limit was not measured before landing.
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
