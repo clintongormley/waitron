@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -20,7 +21,6 @@ import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import {
   paperCustodianFingerprint,
   signPaperBlock,
@@ -193,7 +193,7 @@ async function rows() {
         .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .orderBy(invoiceSeries.code),
-      allocations: await store.venue.select().from(fiscalAllocations),
+      allocations: await allocationRows(store.venue),
     };
   } finally {
     await store.close();

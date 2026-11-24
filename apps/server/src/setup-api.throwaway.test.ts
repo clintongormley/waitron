@@ -378,7 +378,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     return {
       taxpayer: venueDb.db.all(sql`select tax_id from taxpayer`),
       deployment: venueDb.db.all(sql`select environment from deployment`),
-      allocations: venueDb.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`),
+      allocations: venueDb.db.all(
+        sql`select nif as taxpayer_nif, environment from verifactu_identities where event_key is not null`,
+      ),
       sif: venueDb.db.all(sql`select numero_instalacion from verifactu_identities`),
       series: venueDb.db.all(
         sql`select code, purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series`,
@@ -391,7 +393,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       { numero_instalacion: "0CNNW" },
     ]);
     expect(
-      venueDb.db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
+      venueDb.db.all(
+        sql`select nif as taxpayer_nif, environment, allocation_key from verifactu_identities where event_key is not null`,
+      ),
     ).toEqual([
       {
         taxpayer_nif: "50000000R",
@@ -952,7 +956,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect((await post(body("demo"))).status).toBe(500);
     expectThrowawayVenue("preproduction");
     const before = facts();
-    const ledger = venueDb.db.all(sql`select * from fiscal_allocations`);
+    const ledger = venueDb.db.all(
+      sql`select * from verifactu_identities where event_key is not null`,
+    );
 
     const replayed = await post(body("demo"));
 
@@ -966,7 +972,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     });
     expect(await storedMasterKeys()).toHaveLength(1);
     expect(facts()).toEqual(before);
-    expect(venueDb.db.all(sql`select * from fiscal_allocations`)).toEqual(ledger);
+    expect(
+      venueDb.db.all(sql`select * from verifactu_identities where event_key is not null`),
+    ).toEqual(ledger);
     expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
   });
 });

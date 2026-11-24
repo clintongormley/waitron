@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seedDeviceProfiles, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -12,11 +13,7 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { deviceOrigin, seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
-import {
-  fiscalAllocations,
-  verifactuIdentities,
-  VerifactuBackend,
-} from "@waitron/fiscal-verifactu";
+import { verifactuIdentities, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import * as internetClock from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
@@ -154,7 +151,7 @@ it.each([
       expect(await store.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(
         recovered.series,
       );
-      expect(await store.venue.select().from(fiscalAllocations)).toEqual(recovered.allocations);
+      expect(await allocationRows(store.venue)).toEqual(recovered.allocations);
       expect(await store.venue.select().from(verifactuIdentities)).toEqual(recovered.registrations);
       expect(restore.journal()).toBe(journal);
       const clock = { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: new Date() }) };

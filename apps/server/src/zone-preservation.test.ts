@@ -345,7 +345,6 @@ it("configuration export carries settings without fiscal, payment, venue history
     ...Object.keys(before),
     "nodes",
     "day_cutover_changes",
-    "fiscal_allocations",
     "verifactu_identities",
   ])
     expect(exported.tables).not.toHaveProperty(name);

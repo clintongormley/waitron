@@ -20,7 +20,8 @@ import {
   parseConflictActivation,
   type ConflictAllocationInput,
 } from "./conflict-recovery-contract.js";
-import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
+import type { ActivationResult } from "./allocation-types.js";
+import { allocationOf } from "./identity-allocation.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { lookupConflict } from "./history.js";
@@ -104,20 +105,21 @@ export async function readCommittedConflictSwitch(
   input?: ConflictAllocationInput,
 ): Promise<ActivationResult | null> {
   checkBinding(node, binding, conflict, authority);
-  const [prior] = await tx
+  const [identity] = await tx
     .select()
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.eventKey, binding.eventId));
-  if (prior === undefined) return null;
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.eventKey, binding.eventId));
+  if (identity === undefined) return null;
+  const prior = allocationOf(identity)!;
   await checkOriginal(tx, node, conflict);
   const result = parseConflictActivation(prior.result);
   if (
     result === null ||
-    prior.nodeId !== node.nodeId ||
+    identity.nodeId !== node.nodeId ||
     prior.approval.sourceId !== binding.sourceId ||
-    prior.sifId === conflict.sifId ||
+    identity.id === conflict.sifId ||
     result.activationEventId !== binding.eventId ||
-    result.sifId !== prior.sifId
+    result.sifId !== identity.id
   )
     return refuse("event_mismatch");
   const retained = { allocation: prior.allocation, approval: prior.approval };

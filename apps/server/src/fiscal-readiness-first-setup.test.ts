@@ -123,7 +123,7 @@ function facts(directory: string) {
         "select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') order by id",
       ),
       allocations: all(
-        "select event_key, allocation_key, node_id, environment from fiscal_allocations",
+        "select event_key, allocation_key, node_id, environment from verifactu_identities where event_key is not null",
       ),
       identities: all("select id, node_id, numero_instalacion from verifactu_identities"),
       series: all(

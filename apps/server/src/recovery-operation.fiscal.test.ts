@@ -185,12 +185,7 @@ async function promote(overrides: Partial<AllocationContext> = {}) {
 }
 async function snapshot() {
   const rows: unknown[] = [];
-  for (const table of [
-    "verifactu_identities",
-    "invoice_series",
-    "fiscal_allocations",
-    "node_membership",
-  ])
+  for (const table of ["verifactu_identities", "invoice_series", "node_membership"])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
   return rows;
 }
@@ -235,8 +230,11 @@ describe("recovery-key fiscal attribution", () => {
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual(
       expectedSeries,
     );
-    const audit = (await suite.db.execute(sql`select approval, allocation from fiscal_allocations`))
-      .rows;
+    const audit = (
+      await suite.db.execute(
+        sql`select approval, allocation from verifactu_identities where event_key is not null`,
+      )
+    ).rows;
     expect(audit).toHaveLength(1);
     const recorded = JSON.parse(audit[0]!.approval as string);
     expect(recorded).toEqual(input.approval);
@@ -336,7 +334,11 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     expect(result.seriesId).toBe(
       (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.code, "A-0CNPG")))[0]!.id,
     );
-    const audit = (await suite.db.execute(sql`select approval from fiscal_allocations`)).rows;
+    const audit = (
+      await suite.db.execute(
+        sql`select approval from verifactu_identities where event_key is not null`,
+      )
+    ).rows;
     expect(JSON.parse(audit[0]!.approval as string)).toEqual(input.approval);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);

@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, cp, readFile, rm, writeFile } from "node:fs/promises";
@@ -7,7 +8,6 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { invoiceSeries, openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { runEntry } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -315,7 +315,7 @@ it.each(["direct", "supervised"])(
       server = undefined;
       const db = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);
       try {
-        const rows = await db.venue.select().from(fiscalAllocations);
+        const rows = await allocationRows(db.venue);
         expect(
           rows.map((row) => ({
             nodeId: row.nodeId,
@@ -452,7 +452,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
   expect(waited.stdout).not.toContain("[no/yes/unknown]");
   const stored = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);
   try {
-    expect(await stored.venue.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(stored.venue)).toEqual([]);
     expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
     expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
   } finally {

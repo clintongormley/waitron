@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readChainHead } from "./chain.js";
-import { currentSif, writeReservedSif } from "./registro-sif.js";
+import { writeReservedSif } from "../test/sif-fixture.js";
+import { currentSif } from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -16,15 +16,6 @@ let fixture: SifContentionFixture;
 // Each case starts with unregistered nodes.
 beforeEach(async () => {
   fixture = await seedNodesForSifContention(suite.db, 2);
-});
-
-afterEach(async () => {
-  // These fixtures have no filed records; clear only their mutable identity rows.
-  await suite.db.transaction(async (tx) => {
-    for (const table of ["verifactu_identities", "nodes", "taxpayer"]) {
-      await tx.execute(sql`delete from ${sql.identifier(table)}`);
-    }
-  });
 });
 
 function withTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

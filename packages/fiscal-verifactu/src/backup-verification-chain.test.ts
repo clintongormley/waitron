@@ -9,7 +9,7 @@ import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { computeHuella } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
-import { registerSif } from "./registro-sif.js";
+import { registerSif } from "../test/sif-fixture.js";
 import {
   altaFor,
   anulacionFor,

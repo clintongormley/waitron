@@ -1,6 +1,7 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,7 +17,6 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import {
   createHourDormantPreparation,
   readRetainedHourDormant,
@@ -80,7 +80,7 @@ async function rows() {
     sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     records: await suite.db.select().from(verifactuRecords),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
 }
 async function reserve(source = primary, target = standby) {
@@ -505,8 +505,11 @@ it.each(["taxpayer", "country", "environment", "primary-sif", "sif-nif"])(
     if (fault === "country") await suite.db.update(taxpayer).set({ country: "FR" });
     if (fault === "environment") await suite.db.delete(deployment);
     if (fault === "primary-sif")
-      await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
-    if (fault === "sif-nif") await suite.db.update(verifactuIdentities).set({ nif: "50000000R" });
+      await suite.db
+        .update(verifactuIdentities)
+        .set({ revocadoEn: new Date() })
+        .where(isNull(verifactuIdentities.revocadoEn));
+    if (fault === "sif-nif") await suite.db.update(taxpayer).set({ taxId: "50000000R" });
     const before = await rows();
     await expect(reserve()).rejects.toMatchObject({
       code: "sif.allocation_invalid",

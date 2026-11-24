@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { resultFacts } from "./testing/restore-result-facts.js";
 import { generateKeyPairSync } from "node:crypto";
 import {
@@ -18,7 +19,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   WAITRON_ID_SISTEMA as SOFTWARE_ID,
   VerifactuBackend,
-  fiscalAllocations,
   verifactuRecords,
 } from "@waitron/fiscal-verifactu";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -288,7 +288,7 @@ it("completes a real sale after current-hour recovery without calling fetch", as
   vi.stubGlobal("fetch", network);
   const copy = await openVenueDatabase(f.venueDir);
   try {
-    const activation = (await copy.venue.select().from(fiscalAllocations)).find(
+    const activation = (await allocationRows(copy.venue)).find(
       (row) => row.eventKey === f.binding.eventId,
     )!;
     const standard = activation.result.series.find((row) => row.purpose === "standard")!;

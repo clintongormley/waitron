@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { readModuleConfig } from "./module-config.js";
 import { dirname, join } from "node:path";
@@ -12,7 +13,6 @@ import { ALL_MODULES } from "@waitron/composition";
 import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { publicFirstSetupState } from "./first-setup-owner.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
@@ -203,7 +203,7 @@ it("activates the frozen assignment once and completes only after host publicati
   expect(state.status).toBe("complete");
   expect(state.frozen.nodeId).toBe(f.claim.state.nodeId);
   expect((await f.db.select().from(nodes)).map((n) => n.id)).toEqual([f.claim.state.nodeId]);
-  expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(f.db)).toHaveLength(1);
   expect(
     (await f.db.select(seriesWithNextNumber).from(invoiceSeries)).map((s) => s.nextNumber),
   ).toEqual([1, 1, 1, 1]);
@@ -242,7 +242,7 @@ it("retains a consumed uncertain assignment after rollback and refuses blind act
   expect((await f.activate()).status).toBe(500);
   expect(await f.db.select().from(taxpayer)).toEqual([]);
   expect(await f.db.select().from(nodes)).toEqual([]);
-  expect(await f.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(f.db)).toEqual([]);
   const state = (await f.host.store.read())!;
   expect(state.status).toBe("uncertain");
   expect(state.consumptionIntent).toBe(true);
@@ -393,7 +393,7 @@ it("an uncertain attempt with a retained fiscal commit publishes nothing even wi
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
   expect((await f.host.store.read())?.status).toBe("uncertain");
   expect(await f.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(f.db)).toHaveLength(1);
 });
 
 it("an ordinary retry with a changed certificate is refused before anything is written", async () => {

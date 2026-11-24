@@ -278,8 +278,9 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code`, `--corrective-series-code` and `--full-corrective-series-code` are the same | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted
-several: SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved
-into the fiscal module as `sif.id_sistema_invalid`, and the instance-path deletion dropped
+several. SP-3c dropped `provisioning.id_sistema_invalid` when the software-id bound moved into
+the fiscal module. Since Fi9, `sif.id_sistema_invalid` belongs to the legacy writers used in test
+fixtures. Fiscal activation uses Waitron's software ID. The instance-path deletion dropped
 `provisioning.role_over_privileged`, `role_unusable`, `role_creation_failed`,
 `membership_grant_failed` and `grant_ineffective` along with the only code that threw them. The
 venue command's own repointing dropped two more the same way — `provisioning.admin_uri_missing` and

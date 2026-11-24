@@ -1,6 +1,6 @@
 import { seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { readChainHead } from "./chain.js";
-import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
+import { seedFixtureSif as registerSif, withoutIdentityTriggers } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -131,10 +131,12 @@ describe("restoreFiscal", () => {
     const later = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF, nodeId: TAXPAYER_A.nodeId, numeroInstalacion: "P000042" }),
     );
-    await db.execute(sql`delete from verifactu_identities where id = ${later.id}`);
-    await db.execute(
-      sql`update verifactu_identities set revocado_en = null where node_id = ${TAXPAYER_A.nodeId}`,
-    );
+    await withoutIdentityTriggers(db, async (tx) => {
+      await tx.execute(sql`delete from verifactu_identities where id = ${later.id}`);
+      await tx.execute(
+        sql`update verifactu_identities set revocado_en = null where node_id = ${TAXPAYER_A.nodeId}`,
+      );
+    });
     const fixture = recoveryFixture(
       [
         { code: "FA", purpose: "standard" },

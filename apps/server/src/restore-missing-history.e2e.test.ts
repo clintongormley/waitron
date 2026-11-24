@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { readdir } from "node:fs/promises";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -16,7 +17,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import { fiscalAllocations, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
   aeatInvoiceNumber,
@@ -202,7 +203,7 @@ it.each(["archive", "stream"] as const)(
       });
       expect(numbers()).toEqual(["A-0CNNW/1", "A-0CNQR/1"]);
 
-      const allocationsBefore = await store.venue.select().from(fiscalAllocations);
+      const allocationsBefore = await allocationRows(store.venue);
       const taxpayer = await withTransaction(store.venue, readTaxpayer);
       const sweep = createReconciliationSweep({
         db: store.venue,
@@ -238,7 +239,7 @@ it.each(["archive", "stream"] as const)(
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
       ).toEqual(["A-0CNQR", "FF-0CNQR", "R-0CNQR", "RF-0CNQR"]);
-      expect(await store.venue.select().from(fiscalAllocations)).toEqual(allocationsBefore);
+      expect(await allocationRows(store.venue)).toEqual(allocationsBefore);
       await sell(standard("live").id);
       expect(numbers()).toEqual(["A-0CNNW/1", "A-0CNQR/1", "A-0CNQR/2"]);
       expect(network).not.toHaveBeenCalled();

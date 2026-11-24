@@ -1,6 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, stampDeployment, withTransaction, type Transaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  newId,
+  now,
+  stampDeployment,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -11,10 +18,9 @@ import {
   seedPendingEnvios,
   type SeededDrain,
 } from "../test/drain-fixtures.js";
-import { seedFixtureSif } from "../test/sif-fixture.js";
+import { withoutIdentityTriggers } from "../test/sif-fixture.js";
 import type { RecoveryApproval } from "./allocation-types.js";
 import { readFilingOverview } from "./filing-overview.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
@@ -32,7 +38,6 @@ async function installationOf(sifId: string): Promise<string> {
   return row!.name;
 }
 
-/** A new identity for the seeded node, with its activation row, as an activation writes both. */
 async function activate(
   seeded: SeededDrain,
   options: {
@@ -43,17 +48,8 @@ async function activate(
     sifId?: string;
   },
 ): Promise<string> {
-  return inTx(async (tx) => {
-    const sifId =
-      options.sifId ??
-      (
-        await seedFixtureSif(tx, {
-          nodeId: brandNodeId(seeded.nodeId),
-          nif: seeded.nif,
-          idSistemaInformatico: "WT",
-          numeroInstalacion: options.installation,
-        })
-      ).id;
+  const write = async (tx: Transaction) => {
+    const sifId = options.sifId ?? newId();
     const environment = options.environment ?? "production";
     const fields = {
       eventId: `event-${options.installation}`,
@@ -74,34 +70,52 @@ async function activate(
             oldMachineAbsent: false,
           }
         : { ...fields, version: 1, oldMachineOffline: true, oldMachineAbsent: false };
-    await tx.insert(fiscalAllocations).values({
+    const allocation = {
       eventKey: `event-${options.installation}`,
       allocationKey: `allocation-${options.installation}`,
-      nodeId: seeded.nodeId,
-      sifId,
-      taxpayerNif: seeded.nif,
-      softwareId: "WT",
       environment,
-      installationIdentity: options.installation,
       allocation: {
-        version: 1,
+        version: 1 as const,
         allocationId: `allocation-${options.installation}`,
         taxpayerNif: seeded.nif,
         softwareId: "WT",
         environment,
         installationIdentity: options.installation,
         series: [],
-        source: "hour",
+        source: "hour" as const,
         reservationEvidence: null,
         issuedAt: options.activatedAt,
       },
       approval,
       bases: [],
       result: { activationEventId: `event-${options.installation}`, sifId, series: [] },
-      activatedAt: new Date(options.activatedAt),
-    });
+      registradoEn: new Date(options.activatedAt),
+    };
+    if (options.sifId !== undefined) {
+      await tx.update(verifactuIdentities).set(allocation).where(eq(verifactuIdentities.id, sifId));
+    } else {
+      await tx
+        .update(verifactuIdentities)
+        .set({ revocadoEn: now() })
+        .where(
+          and(
+            eq(verifactuIdentities.nodeId, seeded.nodeId),
+            isNull(verifactuIdentities.revocadoEn),
+          ),
+        );
+      await tx.insert(verifactuIdentities).values({
+        ...allocation,
+        id: sifId,
+        nodeId: seeded.nodeId,
+        nif: seeded.nif,
+        idSistemaInformatico: "WT",
+        numeroInstalacion: options.installation,
+      });
+    }
     return sifId;
-  });
+  };
+  // Add captured approval facts to already seeded chains without changing their record IDs.
+  return options.sifId === undefined ? inTx(write) : withoutIdentityTriggers(suite.db, write);
 }
 
 async function seriesConflict(seeded: SeededDrain, code: string, number: string, at: string) {

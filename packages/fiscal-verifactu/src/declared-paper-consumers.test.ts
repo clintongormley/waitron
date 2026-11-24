@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,7 +15,6 @@ import {
 } from "./allocation-preparation.js";
 import { createBoundPaperAllocationSource } from "./allocation-paper-source.js";
 import type { DeclaredRegisterHistory } from "./paper-register-protocol.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TAXPAYER_A.nodeId },
@@ -111,7 +111,7 @@ it.each(["setup", "restore"])(
       history = checkpoint(prefix);
     const old = allocationFixture({ node: primary, bases, identity: `${prefix}000040` });
     await expect(attempt(old, action, history)).rejects.toMatchObject(refusal);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     const fresh = allocationFixture({ node: primary, bases, identity: `${prefix}000043` });
     const result = await attempt(fresh, action, history);
     expect(result.series.map((x) => x.code)).toEqual([
@@ -179,7 +179,7 @@ it.each(["old", "fresh", "missing known file", "malformed known file"])(
         ]);
       else {
         await expect(run()).rejects.toMatchObject(refusal);
-        expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+        expect(await allocationRows(suite.db)).toEqual([]);
       }
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -213,7 +213,7 @@ it("conflicting known checkpoints cannot replace the higher floor with a lower f
         ),
       ),
     ).rejects.toMatchObject(refusal);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -257,6 +257,6 @@ it.each(["setup", "restore"])(
     const prefix = action === "setup" ? "S" : "P",
       f = allocationFixture({ node: primary, bases, identity: `${prefix}000042` });
     await expect(attempt(f, action, checkpoint(prefix))).rejects.toMatchObject(refusal);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );

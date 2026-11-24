@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { isNull } from "drizzle-orm";
@@ -19,7 +20,7 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
+import { type ActivationResult } from "./allocation-types.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -158,7 +159,7 @@ it("activates every purpose through the public module preparation seat", async (
     { code: "R-P000042", purpose: "corrective" },
     { code: "RF-P000042", purpose: "full_corrective" },
   ]);
-  const rows = await suite.db.select().from(fiscalAllocations);
+  const rows = await allocationRows(suite.db);
   expect(rows).toHaveLength(1);
   expect(rows[0]?.approval).toEqual(approval);
   expect(rows[0]?.result).toEqual(result);
@@ -177,7 +178,7 @@ it("refuses submitted input that has never been collected", async () => {
       ),
     ).rejects.toMatchObject(refusal("outside_confirmation_missing"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("refuses a copied prepared token while accepting the original in the same authority scope", async () => {
@@ -224,7 +225,7 @@ it("revokes preparation after the callback even while its authentication remains
       ),
     ).rejects.toMatchObject(refusal("outside_confirmation_missing"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["action", "eventId", "sourceId", "targetNodeId"] as const)(
@@ -238,7 +239,7 @@ it.each(["action", "eventId", "sourceId", "targetNodeId"] as const)(
         }),
       ),
     ).rejects.toMatchObject(refusal("event_mismatch"));
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );
 
@@ -250,7 +251,7 @@ it("refuses a prepared token combined with another live authentication", async (
       ),
     ).rejects.toMatchObject(refusal("reauthentication_required"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("rolls back activation when the later host write refuses", async () => {
@@ -261,7 +262,7 @@ it("rolls back activation when the later host write refuses", async () => {
       throw new Error("later-host-refusal");
     }),
   ).rejects.toThrow("later-host-refusal");
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
 });
@@ -301,7 +302,7 @@ it("refuses missing host trust through the public paper selector", async () => {
       ),
     ).rejects.toMatchObject(refusal("reservation_untrusted"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each([null, undefined, "copied marker", 7])("refuses an unprepared token %#", async (token) => {
@@ -316,5 +317,5 @@ it.each([null, undefined, "copied marker", 7])("refuses an unprepared token %#",
       ),
     ).rejects.toMatchObject(refusal("outside_confirmation_missing"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });

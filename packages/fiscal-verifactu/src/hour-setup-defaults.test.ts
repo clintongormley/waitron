@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { withTransaction, deployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -6,7 +7,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { createHostedHourPreparation } from "./hour-preparation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
@@ -135,7 +135,7 @@ it("the default host clock provider reaches the unchanged real activation writer
       ),
     ),
   );
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+  expect(await allocationRows(suite.db)).toEqual([
     expect.objectContaining({
       installationIdentity: "0CNNW",
       environment: "preproduction",
@@ -223,7 +223,7 @@ async function expectRefusedUnwritten(activation: Promise<unknown>) {
     code: "sif.allocation_invalid",
     params: { reason: "second_clock_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(0);
+  expect(await allocationRows(suite.db)).toHaveLength(0);
 }
 it("a synchronised time service lets activation run however long after the series step", async () => {
   const f = fixture();
@@ -232,7 +232,7 @@ it("a synchronised time service lets activation run however long after the serie
   );
   vi.advanceTimersByTime(31_000);
   await activate(f, selected.input);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+  expect(await allocationRows(suite.db)).toEqual([
     expect.objectContaining({ allocationKey: "hour/owned-hour" }),
   ]);
 });
@@ -248,7 +248,7 @@ it.each([
     vi.advanceTimersByTime(waitMs);
     if (writes) await activate(f, selected.input);
     else await expectRefusedUnwritten(activate(f, selected.input));
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
+    expect(await allocationRows(suite.db)).toHaveLength(writes ? 1 : 0);
   },
 );
 const sameBoot = (boot: { id: string | null } = { id: "boot-1" }) => ({
@@ -270,7 +270,7 @@ it.each([
     change(boot);
     if (writes) await activate(f, selected.input);
     else await expectRefusedUnwritten(activate(f, selected.input));
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(writes ? 1 : 0);
+    expect(await allocationRows(suite.db)).toHaveLength(writes ? 1 : 0);
   },
 );
 it("a name the time service alone admitted is not carried to a later Provision without it", async () => {
@@ -304,7 +304,7 @@ it("a fresh confirmed choice after a clock step renews the time Provision carrie
   });
   vi.advanceTimersByTime(120_000);
   await activate(f, selected.input);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 it("a confirmed choice after the time service goes renews a time it alone admitted", async () => {
   const f = fixture(sameBoot());
@@ -318,7 +318,7 @@ it("a confirmed choice after the time service goes renews a time it alone admitt
   });
   vi.advanceTimersByTime(120_000);
   await activate(f, selected.input);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("in development the box's clock alone, confirmed, passes the first setup's clock check", async () => {
@@ -385,7 +385,7 @@ it.each([
     vi.advanceTimersByTime(120_000);
     change(f);
     await activate(f, selected.input);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect(await allocationRows(suite.db)).toHaveLength(1);
   },
 );
 it("in development, a setup frozen for production takes no clock alone as the second clock", async () => {

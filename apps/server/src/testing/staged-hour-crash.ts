@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedModuleSettings } from "../../test/module-settings.js";
 import { copyFile, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
@@ -24,7 +25,6 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import {
   verifactuSubmissions,
-  fiscalAllocations,
   verifactuIdentities,
   verifactuRecords,
   VerifactuBackend,
@@ -259,7 +259,7 @@ export async function stagedHourCrash(
         return {
           submissions: await copy.venue.select().from(verifactuSubmissions),
           nodeKeys: await copy.node.select().from(box),
-          allocations: await copy.venue.select().from(fiscalAllocations),
+          allocations: await allocationRows(copy.venue),
           registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select(seriesWithNextNumber).from(invoiceSeries),
           records: await copy.venue.select().from(verifactuRecords),

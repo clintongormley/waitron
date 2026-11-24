@@ -6,8 +6,7 @@ import {
 } from "@waitron/db";
 import type { HourHistorySource } from "./hour-history.js";
 import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
-import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
-import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
+import { allocationOf } from "./identity-allocation.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
@@ -50,38 +49,14 @@ export interface HourHistoryRows {
     purpose: string;
     retiredAt: Moment;
   }[];
-  readonly sifs: readonly {
-    id: string;
-    nodeId: string;
-    nif: string;
-    idSistemaInformatico: string;
-    numeroInstalacion: string;
-    registradoEn: Moment;
-    revocadoEn: Moment;
-  }[];
-  readonly allocations: readonly {
-    eventKey: string;
-    allocationKey: string;
-    nodeId: string;
-    sifId: string;
-    taxpayerNif: string;
-    softwareId: string;
-    environment: string;
-    installationIdentity: string;
-    allocation: FiscalAllocation | null;
-    approval: RecoveryApproval | null;
-    bases: unknown;
-    result: ActivationResult | null;
-    activatedAt: Moment;
-  }[];
+  readonly sifs: readonly (typeof verifactuIdentities.$inferSelect)[];
 }
 
 export function hourHistorySource(
-  { taxpayer, series, sifs, allocations }: HourHistoryRows,
+  { taxpayer, series, sifs }: HourHistoryRows,
   environment: DeploymentEnvironment | null,
 ): HourHistorySource {
-  let complete =
-    series.length + sifs.length + allocations.length === 0 || (taxpayer && environment !== null);
+  let complete = series.length + sifs.length === 0 || (taxpayer && environment !== null);
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
@@ -111,36 +86,30 @@ export function hourHistorySource(
       recordedAtMs: time(row.retiredAt),
     });
   }
-  for (const row of allocations) {
-    const sif = sifs.find((value) => value.id === row.sifId);
-    const allocation = row.allocation;
-    const result = row.result;
-    const approval = row.approval;
+  for (const sif of sifs) {
+    const retained = allocationOf(sif);
+    if (retained === undefined) continue;
+    const { allocation, approval, bases, eventKey, allocationKey, result } = retained;
     if (
-      sif === undefined ||
-      sif.nodeId !== row.nodeId ||
-      sif.nif !== row.taxpayerNif ||
-      sif.idSistemaInformatico !== row.softwareId ||
-      sif.numeroInstalacion !== row.installationIdentity ||
-      allocation?.allocationId !== row.allocationKey ||
-      allocation.taxpayerNif !== row.taxpayerNif ||
-      allocation.softwareId !== row.softwareId ||
-      allocation.environment !== row.environment ||
-      allocation.installationIdentity !== row.installationIdentity ||
-      approval?.eventId !== row.eventKey ||
-      approval.targetNodeId !== row.nodeId ||
-      result?.activationEventId !== row.eventKey ||
-      result.sifId !== row.sifId ||
-      !validBases(row.bases) ||
-      !isMinuteAllocatedSeries(allocation.series, row.installationIdentity, row.bases) ||
+      allocation?.allocationId !== allocationKey ||
+      allocation.taxpayerNif !== sif.nif ||
+      allocation.softwareId !== sif.idSistemaInformatico ||
+      allocation.environment !== retained.environment ||
+      allocation.installationIdentity !== sif.numeroInstalacion ||
+      approval?.eventId !== eventKey ||
+      approval.targetNodeId !== sif.nodeId ||
+      result?.activationEventId !== eventKey ||
+      result.sifId !== sif.id ||
+      !validBases(bases) ||
+      !isMinuteAllocatedSeries(allocation.series, sif.numeroInstalacion, bases) ||
       !Array.isArray(result.series) ||
-      !isMinuteAllocatedSeries(result.series, row.installationIdentity, row.bases) ||
+      !isMinuteAllocatedSeries(result.series, sif.numeroInstalacion, bases) ||
       result.series.some(
         (entry) =>
           !series.some(
             (stored) =>
               stored.id === entry.id &&
-              stored.nodeId === row.nodeId &&
+              stored.nodeId === sif.nodeId &&
               stored.code === entry.code &&
               stored.purpose === entry.purpose,
           ),
@@ -148,14 +117,14 @@ export function hourHistorySource(
     )
       complete = false;
     records.push({
-      reference: `fiscal_allocations/${row.eventKey}`,
+      reference: `verifactu_identities/allocation/${eventKey}`,
       kind: "intent",
-      taxpayerNif: row.taxpayerNif,
-      environment: row.environment,
-      softwareId: row.softwareId,
-      nodeId: row.nodeId,
-      identity: row.installationIdentity,
-      recordedAtMs: time(row.activatedAt, allocation?.issuedAt, approval?.confirmedAt),
+      taxpayerNif: sif.nif,
+      environment: retained.environment,
+      softwareId: sif.idSistemaInformatico,
+      nodeId: sif.nodeId,
+      identity: sif.numeroInstalacion,
+      recordedAtMs: time(sif.registradoEn, allocation?.issuedAt, approval?.confirmedAt),
     });
   }
   return { reference: "venue", complete, records };
@@ -176,33 +145,6 @@ export async function readHourHistory(
       retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries);
-  const sifs = await tx
-    .select({
-      id: verifactuIdentities.id,
-      nodeId: verifactuIdentities.nodeId,
-      nif: verifactuIdentities.nif,
-      idSistemaInformatico: verifactuIdentities.idSistemaInformatico,
-      numeroInstalacion: verifactuIdentities.numeroInstalacion,
-      registradoEn: verifactuIdentities.registradoEn,
-      revocadoEn: verifactuIdentities.revocadoEn,
-    })
-    .from(verifactuIdentities);
-  const allocations = await tx
-    .select({
-      eventKey: fiscalAllocations.eventKey,
-      allocationKey: fiscalAllocations.allocationKey,
-      nodeId: fiscalAllocations.nodeId,
-      sifId: fiscalAllocations.sifId,
-      taxpayerNif: fiscalAllocations.taxpayerNif,
-      softwareId: fiscalAllocations.softwareId,
-      environment: fiscalAllocations.environment,
-      installationIdentity: fiscalAllocations.installationIdentity,
-      allocation: fiscalAllocations.allocation,
-      approval: fiscalAllocations.approval,
-      bases: fiscalAllocations.bases,
-      result: fiscalAllocations.result,
-      activatedAt: fiscalAllocations.activatedAt,
-    })
-    .from(fiscalAllocations);
-  return hourHistorySource({ taxpayer: taxpayer !== null, series, sifs, allocations }, environment);
+  const sifs = await tx.select().from(verifactuIdentities);
+  return hourHistorySource({ taxpayer: taxpayer !== null, series, sifs }, environment);
 }

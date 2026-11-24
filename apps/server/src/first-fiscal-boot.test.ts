@@ -426,7 +426,11 @@ it.each(["trading", "completion-state"])(
       server = undefined;
       const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
       try {
-        expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
+        expect(
+          db
+            .prepare("select count(*) as n from verifactu_identities where event_key is not null")
+            .get()?.n,
+        ).toBe(1);
         expect(db.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
         expect(
           db

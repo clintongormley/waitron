@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import {
   external,
@@ -33,7 +34,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readModulePreparationHistory } from "@waitron/provisioning";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import {
   runRestoreHooks,
@@ -385,7 +385,7 @@ describe("selected-hour admission before archive placement", () => {
               .select(seriesWithNextNumber)
               .from(invoiceSeries)
               .orderBy(invoiceSeries.code),
-            allocations: await placed.venue.select().from(fiscalAllocations),
+            allocations: await allocationRows(placed.venue),
             recorded: await recordedRecoveryRows(placed.venue),
           };
         } finally {
@@ -515,7 +515,7 @@ describe("selected-hour admission before archive placement", () => {
     await advanceSeriesTo(suite.db, node.nodeId, 456);
     await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
     const previous = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-    const previousAllocations = await suite.db.select().from(fiscalAllocations);
+    const previousAllocations = await allocationRows(suite.db);
     external.internet.mockClear();
     await writeFile(join(f.roots.stateDir, "trading.env"), "untouched identity");
     const journal = await readModulePreparationHistory(f.roots, binding.module);
@@ -526,7 +526,7 @@ describe("selected-hour admission before archive placement", () => {
       expect(await retained.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(
         previous,
       );
-      expect(await retained.venue.select().from(fiscalAllocations)).toEqual(previousAllocations);
+      expect(await allocationRows(retained.venue)).toEqual(previousAllocations);
     } finally {
       await retained.close();
     }
@@ -706,7 +706,7 @@ describe("selected-hour admission before archive placement", () => {
       );
       await advanceSeriesTo(placed.venue, node.nodeId, 917);
       rows = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
-      allocations = await placed.venue.select().from(fiscalAllocations);
+      allocations = await allocationRows(placed.venue);
     } finally {
       await placed.close();
     }
@@ -720,7 +720,7 @@ describe("selected-hour admission before archive placement", () => {
     const replay = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(await replay.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(rows);
-      expect(await replay.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      expect(await allocationRows(replay.venue)).toEqual(allocations);
     } finally {
       await replay.close();
     }
@@ -857,7 +857,7 @@ describe("selected-hour admission before archive placement", () => {
         identity: "0CNSP",
         binding: preparation.binding,
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+      expect(await allocationRows(suite.db)).toHaveLength(1);
     } finally {
       await agent?.close();
       await server?.close();

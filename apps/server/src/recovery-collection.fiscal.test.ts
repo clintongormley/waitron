@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,10 +8,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { drawEmergencyIdentity } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import {
-  fiscalAllocations,
-  type ActivationResult,
-} from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { type ActivationResult } from "@waitron/fiscal-verifactu/src/allocation-types.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
@@ -119,7 +117,7 @@ it("authenticates the real node key, collects outside the write lock and activat
     { code: `R-${draw.identity}`, purpose: "corrective" },
   ]);
   expect(await suite.db.select().from(verifactuIdentities)).toHaveLength(1);
-  const ledger = await suite.db.select().from(fiscalAllocations);
+  const ledger = await allocationRows(suite.db);
   expect(ledger).toHaveLength(1);
   expect(ledger[0]?.approval.operatorId).toEqual(operator);
   expect(ledger[0]?.result).toEqual(result);

@@ -71,7 +71,10 @@ it.each(["archive", "bucket"] as const)(
     const closes = suite.db.all(sql`select * from drawer_entries order by sequence`);
     expect(closes).toHaveLength(2);
     const before = await recordedRecoveryRows(suite.db);
-    const allocations = suite.db.all(sql`select * from fiscal_allocations order by rowid`);
+    const approvals = sql`select id, node_id, nif, id_sistema_informatico, numero_instalacion,
+      registrado_en, environment, event_key, allocation_key, allocation, approval, bases, result
+      from verifactu_identities where event_key is not null order by rowid`;
+    const allocations = suite.db.all(approvals);
     const identities = suite.db.all<Record<string, unknown>>(
       sql`select * from verifactu_identities order by rowid`,
     );
@@ -108,9 +111,7 @@ it.each(["archive", "bucket"] as const)(
       expect(restoredIdentities).toHaveLength(identities.length + 1);
       expect(await recordedRecoveryRows(db)).toEqual(before);
       expect(db.all(sql`select * from drawer_entries order by sequence`)).toEqual(closes);
-      expect(
-        db.all(sql`select * from fiscal_allocations order by rowid`).slice(0, allocations.length),
-      ).toEqual(allocations);
+      expect(db.all(approvals).slice(0, allocations.length)).toEqual(allocations);
       await db.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
       );

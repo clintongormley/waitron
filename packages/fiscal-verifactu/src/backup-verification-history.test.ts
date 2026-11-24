@@ -247,9 +247,9 @@ type HistoryFixture = {
 };
 function change(db: DatabaseSync, column: string, mutate: (value: HistoryFixture) => unknown) {
   const row = db
-    .prepare(`select ${column} as value from fiscal_allocations where event_key='event-0'`)
+    .prepare(`select ${column} as value from verifactu_identities where event_key='event-0'`)
     .get()!;
-  db.prepare(`update fiscal_allocations set ${column}=? where event_key='event-0'`).run(
+  db.prepare(`update verifactu_identities set ${column}=? where event_key='event-0'`).run(
     JSON.stringify(mutate(JSON.parse(String(row.value)))),
   );
 }
@@ -301,32 +301,27 @@ it("accepts a genuinely empty fiscal owner", async () => {
 it.each([
   [
     "registration node",
-    "update verifactu_identities set node_id='missing' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "update verifactu_identities set node_id='missing' where event_key='event-0'",
   ],
   [
     "registration scope",
-    "update verifactu_identities set nif='B12345674' where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "update verifactu_identities set nif='B12345674' where event_key='event-0'",
   ],
   [
     "revoked registration instant",
     "update verifactu_identities set revocado_en='bad' where revocado_en is not null",
   ],
-  ["allocation node", "update fiscal_allocations set node_id='missing' where event_key='event-0'"],
   [
     "allocation scope",
-    "update fiscal_allocations set environment='production' where event_key='event-0'",
+    "update verifactu_identities set environment='production' where event_key='event-0'",
   ],
   [
     "activation timestamp",
-    "update fiscal_allocations set activated_at='bad' where event_key='event-0'",
-  ],
-  [
-    "missing historical SIF",
-    "delete from verifactu_identities where id=(select sif_id from fiscal_allocations where event_key='event-0')",
+    "update verifactu_identities set registrado_en='bad' where event_key='event-0'",
   ],
   [
     "missing historical series",
-    "delete from invoice_series where id=json_extract((select result from fiscal_allocations where event_key='event-0'),'$.series[0].id')",
+    "delete from invoice_series where id=json_extract((select result from verifactu_identities where event_key='event-0'),'$.series[0].id')",
   ],
   [
     "historical series node",
@@ -393,7 +388,6 @@ it.each([
 
 it.each([
   "verifactu_identities",
-  "fiscal_allocations",
   "verifactu_submissions",
   "verifactu_sending_state",
   "verifactu_certificates",
@@ -415,7 +409,9 @@ it.each([
 
 function paper(db: DatabaseSync, declared = false, emergency = false) {
   const row = db
-    .prepare("select allocation,approval,result from fiscal_allocations where event_key='event-0'")
+    .prepare(
+      "select allocation,approval,result from verifactu_identities where event_key='event-0'",
+    )
     .get()!;
   const original = JSON.parse(String(row.allocation));
   const approval = JSON.parse(String(row.approval));
@@ -509,12 +505,8 @@ function paper(db: DatabaseSync, declared = false, emergency = false) {
       activation.series[i].id,
     );
   }
-  db.prepare("update verifactu_identities set numero_instalacion=? where id=?").run(
-    identity,
-    activation.sifId,
-  );
   db.prepare(
-    "update fiscal_allocations set allocation=?,approval=?,installation_identity=?,result=? where event_key='event-0'",
+    "update verifactu_identities set allocation=?,approval=?,numero_instalacion=?,result=? where event_key='event-0'",
   ).run(JSON.stringify(candidate), JSON.stringify(approval), identity, JSON.stringify(activation));
 }
 function canonical(v: unknown): string {
@@ -581,7 +573,7 @@ it("does not swallow unavailable query failures into an integrity result", async
 function cloud(db: DatabaseSync) {
   paper(db, true);
   const row = db
-    .prepare("select allocation,result from fiscal_allocations where event_key='event-0'")
+    .prepare("select allocation,result from verifactu_identities where event_key='event-0'")
     .get()!;
   const a = JSON.parse(String(row.allocation)) as {
     source: string;
@@ -609,12 +601,8 @@ function cloud(db: DatabaseSync) {
       r.series[i]!.id,
     );
   }
-  db.prepare("update verifactu_identities set numero_instalacion=? where id=?").run(
-    a.installationIdentity,
-    r.sifId,
-  );
   db.prepare(
-    "update fiscal_allocations set allocation=?,result=?,installation_identity=? where event_key='event-0'",
+    "update verifactu_identities set allocation=?,result=?,numero_instalacion=? where event_key='event-0'",
   ).run(JSON.stringify(a), JSON.stringify(r), a.installationIdentity);
 }
 it("keeps a retained Cloud reference unsupported even with a configured public key", async () => {
@@ -640,7 +628,9 @@ it.each(["allocation", "approval", "bases", "result"])(
   "rejects malformed captured JSON in %s",
   async (column) => {
     await capture();
-    both((db) => db.exec(`update fiscal_allocations set ${column}='{' where event_key='event-0'`));
+    both((db) =>
+      db.exec(`update verifactu_identities set ${column}='{' where event_key='event-0'`),
+    );
     expect(await verify()).toEqual(result("invalid"));
   },
 );
@@ -649,7 +639,7 @@ it.each(["allocation", "approval", "bases", "result"])(
   async (column) => {
     await capture();
     both((db) =>
-      db.exec(`update fiscal_allocations set ${column}='null' where event_key='event-0'`),
+      db.exec(`update verifactu_identities set ${column}='null' where event_key='event-0'`),
     );
     expect(await verify()).toEqual(result("invalid"));
   },
@@ -742,7 +732,7 @@ it("does not prepare activate draw or sign while verifying retained history", as
 it("rejects a binary value where captured JSON is required", async () => {
   await capture();
   both((db) =>
-    db.exec("update fiscal_allocations set allocation=x'7b7d' where event_key='event-0'"),
+    db.exec("update verifactu_identities set allocation=x'7b7d' where event_key='event-0'"),
   );
   expect(await verify()).toEqual(result("invalid"));
 });
@@ -782,7 +772,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);
@@ -883,7 +873,7 @@ function storedApproval(eventKey: string) {
   const db = new DatabaseSync(join(directory!, "after.db"), { readOnly: true });
   try {
     const row = db
-      .prepare("select approval from fiscal_allocations where event_key=?")
+      .prepare("select approval from verifactu_identities where event_key=?")
       .get(eventKey)!;
     return JSON.parse(String(row.approval)) as Record<string, unknown>;
   } finally {
@@ -911,9 +901,9 @@ it("a stored version 1 approval verifies as today", async () => {
 
 function rewriteApproval(db: DatabaseSync, eventKey: string, fields: Record<string, unknown>) {
   const row = db
-    .prepare("select approval from fiscal_allocations where event_key=?")
+    .prepare("select approval from verifactu_identities where event_key=?")
     .get(eventKey)!;
-  db.prepare("update fiscal_allocations set approval=? where event_key=?").run(
+  db.prepare("update verifactu_identities set approval=? where event_key=?").run(
     JSON.stringify({ ...JSON.parse(String(row.approval)), ...fields }),
     eventKey,
   );

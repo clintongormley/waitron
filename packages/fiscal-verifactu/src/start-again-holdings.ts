@@ -2,11 +2,8 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { InitialSetupContribution } from "@waitron/module";
 
-/** Must equal the append-only tables a first-setup activation writes. */
-export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = [
-  "fiscal_allocations",
-  "verifactu_certificates",
-];
+/** Setup's certificate can be discarded. The module counts later installs separately. */
+export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = ["verifactu_certificates"];
 
 type Target = Pick<Database, "execute">;
 

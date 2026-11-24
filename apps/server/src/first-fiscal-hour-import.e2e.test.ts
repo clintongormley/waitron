@@ -11,6 +11,7 @@ import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/menu";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { allocationInstallations } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
@@ -180,12 +181,7 @@ async function configurationArtifact() {
     new Date("2026-10-15T12:00:00Z"),
     await schemaVersionsByModule({ venue: source.db, node: source.node }, selected),
   );
-  for (const name of [
-    "invoice_series",
-    "fiscal_allocations",
-    "verifactu_records",
-    "verifactu_identities",
-  ])
+  for (const name of ["invoice_series", "verifactu_records", "verifactu_identities"])
     expect(bundle.tables).not.toHaveProperty(name);
   return {
     artifact: encodeConfigurationBundle(bundle, "import passphrase"),
@@ -337,7 +333,7 @@ it.each([
       try {
         if (change !== "none") {
           expect(disk.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
-          expect(disk.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(0);
+          expect(allocationInstallations(disk)).toEqual([]);
           expect(disk.prepare("select count(*) as n from products").get()?.n).toBe(0);
         } else {
           expect(disk.prepare("select name from products").all()).toEqual([
@@ -358,13 +354,7 @@ it.each([
             { code: `${LONGEST_BASE}-0CNNY`, purpose: "full_corrective", nextNumber: 1 },
             { code: "A-0CNNY", purpose: "standard", nextNumber: 1 },
           ]);
-          expect(
-            disk
-              .prepare(
-                "select environment, installation_identity as identity from fiscal_allocations",
-              )
-              .all(),
-          ).toEqual([{ environment, identity: "0CNNY" }]);
+          expect(allocationInstallations(disk)).toEqual([{ environment, identity: "0CNNY" }]);
           expect(disk.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
           expect(disk.prepare("select id from nodes").all()).not.toContainEqual({
             id: sourceNodeId,

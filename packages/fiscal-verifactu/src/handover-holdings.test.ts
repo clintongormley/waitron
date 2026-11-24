@@ -11,7 +11,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { fiscalHoldings, fiscalLacking, type ChainHolding } from "./handover-holdings.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
-import { registerSif } from "./registro-sif.js";
+import { registerSif } from "../test/sif-fixture.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });

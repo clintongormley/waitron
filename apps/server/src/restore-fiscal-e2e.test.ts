@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { readCloudVenueId, readVenueSettings, saveCloudVenueId } from "@waitron/db";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
@@ -41,7 +42,6 @@ import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fix
 import { nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu";
 import { ALL_MODULES } from "./modules.js";
 import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -582,7 +582,7 @@ describe("fiscal restore, end to end", () => {
         .from(verifactuIdentities);
       expect(sifs).toHaveLength(1); // the hook's new row rolled back
       expect(sifs).toEqual([{ numeroInstalacion: "1" }]);
-      expect(await store.venue.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(store.venue)).toEqual([]);
       expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
       await store.close();

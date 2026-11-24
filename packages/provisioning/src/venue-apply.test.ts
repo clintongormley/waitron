@@ -1160,14 +1160,7 @@ it.each([
       modules: ALL_MODULES,
     });
     const before = Object.fromEntries(
-      [
-        "taxpayer",
-        "settings",
-        "nodes",
-        "invoice_series",
-        "verifactu_identities",
-        "fiscal_allocations",
-      ].map((table) => [
+      ["taxpayer", "settings", "nodes", "invoice_series", "verifactu_identities"].map((table) => [
         table,
         suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
       ]),

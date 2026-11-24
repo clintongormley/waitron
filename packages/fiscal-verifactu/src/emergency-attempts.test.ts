@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import * as fs from "node:fs/promises";
 import nativeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -13,7 +14,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { withEmergencyAttempt } from "./emergency-attempt.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -104,7 +104,7 @@ it("retains an unfinished attempt before activation and its returned result afte
         outcome: "started",
       },
     ]);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     return activate(operation);
   });
   const record = await incident();
@@ -119,9 +119,7 @@ it("retains an unfinished attempt before activation and its returned result afte
   expect(record.attempts[0].id).toMatch(/^[0-9a-f-]{36}$/);
   expect(Number.isNaN(Date.parse(record.attempts[0].startedAt))).toBe(false);
   expect(Number.isNaN(Date.parse(record.attempts[0].finishedAt))).toBe(false);
-  expect(record.allocation).toEqual(
-    (await suite.db.select().from(fiscalAllocations))[0]?.allocation,
-  );
+  expect(record.allocation).toEqual((await allocationRows(suite.db))[0]?.allocation);
   expect((await fs.stat(incidentPath)).mode & 0o777).toBe(0o600);
   expect(await fs.readdir(outside)).toHaveLength(3);
 });
@@ -142,7 +140,7 @@ it("records a thrown attempt without storing its message or claiming local rollb
       outcome: "threw",
     },
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
   expect(await fs.readFile(incidentPath, "utf8")).not.toContain(secret);
 });
 
@@ -165,7 +163,7 @@ it("appends a confirmed replay result while keeping the consumed allocation and 
   });
   expect(after.attempts[1].id).not.toBe(after.attempts[0].id);
   expect(consumptionOnly(after)).toEqual(consumptionOnly(before));
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("refuses activation if the started attempt cannot be published, leaving the name consumed", async () => {
@@ -174,7 +172,7 @@ it("refuses activation if the started attempt cannot be published, leaving the n
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect((await incident()).allocation.source).toBe("emergency");
   await fs.rmdir(`${incidentPath}.next`);
   await expect(attempt(activate)).rejects.toMatchObject({
@@ -194,7 +192,7 @@ it("keeps an unfinished record and refuses success when the result cannot be ret
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
   expect((await incident()).attempts).toEqual([
     { id: expect.any(String), startedAt: expect.any(String), finishedAt: null, outcome: "started" },
   ]);
@@ -248,7 +246,7 @@ it("removes only its own replacement file if publishing it fails", async () => {
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect((await incident()).attempts).toEqual([]);
   expect(await fs.readdir(outside)).toHaveLength(2);
 });
@@ -309,7 +307,7 @@ it("does not invent a result when the unfinished attempt was removed during its 
     params: { reason: "outside_confirmation_missing" },
   });
   expect((await incident()).attempts).toEqual([]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("leaves another holder's lock and the complete consumed record intact", async () => {
@@ -326,7 +324,7 @@ it("leaves another holder's lock and the complete consumed record intact", async
   });
   expect(await fs.readFile(`${incidentPath}.lock`, "utf8")).toBe("another holder");
   expect(await fs.readFile(incidentPath, "utf8")).toBe(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it.each([
@@ -372,7 +370,7 @@ it.each([
   });
   expect(await fs.readFile(incidentPath, "utf8")).toBe(before);
   expect(await fs.readdir(outside)).toHaveLength(3);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("refuses a changed consumed identity after the callback without overwriting the outside change", async () => {
@@ -389,5 +387,5 @@ it("refuses a changed consumed identity after the callback without overwriting t
   });
   expect((await incident()).allocation.installationIdentity).toBe("E00000000000000000000000000");
   expect((await incident()).attempts[0].outcome).toBe("started");
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });

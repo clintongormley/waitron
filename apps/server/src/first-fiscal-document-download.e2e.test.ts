@@ -444,8 +444,11 @@ it.each(["en", "es"] as const)(
             async (_authority, commit) =>
               commit(
                 async (tx) =>
-                  (await tx.execute<{ n: number }>("select count(*) as n from fiscal_allocations"))
-                    .rows[0]!.n,
+                  (
+                    await tx.execute<{ n: number }>(
+                      "select count(*) as n from verifactu_identities where event_key is not null",
+                    )
+                  ).rows[0]!.n,
               ),
           ),
         ).resolves.toBe(1);

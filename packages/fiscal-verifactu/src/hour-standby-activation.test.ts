@@ -1,6 +1,7 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
@@ -13,7 +14,6 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { compareHourClocks } from "./hour-clock.js";
 import { createHourSelection } from "./hour-selection.js";
 import type { HourHistorySource } from "./hour-history.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
@@ -99,7 +99,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
     records: await suite.db.select().from(verifactuRecords),
   };
 }
@@ -164,7 +164,10 @@ it("refuses a new event for an already active standby without retiring its serie
 });
 
 it("also refuses reuse after the original SIF and every original series are retired", async () => {
-  await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date("2026-10-16T11:45:00Z") });
+  await suite.db
+    .update(verifactuIdentities)
+    .set({ revocadoEn: new Date("2026-10-16T11:45:00Z") })
+    .where(isNull(verifactuIdentities.revocadoEn));
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date("2026-10-16T11:45:00Z") });
   const before = await snapshot();
   await expect(activate(fixture("promote", "0CNNW"))).rejects.toMatchObject({
@@ -427,8 +430,8 @@ it("detaches target, authority carrier and bases before its first awaited read",
     ),
   );
   const after = await snapshot();
-  expect(after.allocations[1]!.nodeId).toBe(standby.nodeId);
-  expect(after.allocations[1]!.bases).toEqual(bases);
+  const activation = after.allocations.find((row) => row.eventKey === f.binding.eventId);
+  expect(activation).toMatchObject({ nodeId: standby.nodeId, bases });
   expect(after.sifs.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.sifs);
   expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
 });
@@ -467,8 +470,8 @@ it("a promotion admitted with oldMachineRelinquished activates and stores its ve
   expect(result.activationEventId).toBe("promotion");
   const [stored] = await suite.db
     .select()
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.eventKey, "promotion"));
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.eventKey, "promotion"));
   expect(stored!.approval).toEqual(f.input.approval);
 });
 
@@ -483,8 +486,8 @@ it("refuses a relinquished promotion whose version 2 approval also says the old 
   expect(
     await suite.db
       .select()
-      .from(fiscalAllocations)
-      .where(eq(fiscalAllocations.eventKey, "promotion")),
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.eventKey, "promotion")),
   ).toEqual([]);
   expect(await snapshot()).toEqual(before);
 });

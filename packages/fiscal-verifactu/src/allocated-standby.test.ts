@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
@@ -10,7 +11,6 @@ import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
 
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { signPaperBlock, signPaperReservationForBlock } from "./paper-evidence.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -100,7 +100,7 @@ async function rows() {
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,
       )
     ).rows,
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
 }
 function refusal(reason: string) {

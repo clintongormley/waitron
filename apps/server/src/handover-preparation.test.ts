@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -28,7 +29,6 @@ import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocate
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
@@ -432,7 +432,7 @@ async function promoteWith(
   );
 }
 const standbyAllocations = async () =>
-  (await suite.db.select().from(fiscalAllocations)).filter((row) => row.nodeId === standby.nodeId);
+  (await allocationRows(suite.db)).filter((row) => row.nodeId === standby.nodeId);
 
 it("releases the sign-in write lock before the emergency activation callback", async () => {
   let holdingLock = false;
@@ -1374,7 +1374,7 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
     );
   const venueRows = async () => ({
     nodes: await suite.db.select().from(nodes),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
     sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
   });

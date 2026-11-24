@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
@@ -19,7 +20,6 @@ import type { HourSelectionStore } from "./hour-selection.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -162,7 +162,7 @@ async function snapshot() {
   return {
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
-    activations: await suite.db.select().from(fiscalAllocations),
+    activations: await allocationRows(suite.db),
   };
 }
 async function restore(

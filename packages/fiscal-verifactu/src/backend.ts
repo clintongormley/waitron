@@ -249,7 +249,7 @@ export class VerifactuBackend implements FiscalBackend {
   /**
    * Confirms — rather than performs — a node's Veri*Factu provisioning. The generic signature
    * carries no NIF and no `IdSistemaInformatico`, so it cannot mint a SIF identity; it reads back
-   * what `registerSif` (`./registro-sif.ts`) established, and `currentSif` throws
+   * what fiscal activation established, and `currentSif` throws
    * `sif.not_registered` when there is none.
    */
   async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {

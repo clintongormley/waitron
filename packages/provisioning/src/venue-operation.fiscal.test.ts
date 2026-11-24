@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -11,7 +12,7 @@ import { activateAuthenticatedAllocation } from "@waitron/fiscal-verifactu/src/a
 import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { FISCAL_SLOT, liveSeriesBases } from "@waitron/fiscal-verifactu";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -198,7 +199,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       { code: "R-S000042", purpose: "corrective" },
       { code: "RF-S000042", purpose: "full_corrective" },
     ]);
-    const [held] = await suite.db.select().from(fiscalAllocations);
+    const [held] = await allocationRows(suite.db);
     expect(held!.approval.operatorId).toBe(ADMIN);
     expect(held!.nodeId).toBe(NODE);
     expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
@@ -211,7 +212,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "reauthentication_required" },
     });
-    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, verifactuIdentities])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 
@@ -232,14 +233,14 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
-    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, verifactuIdentities])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 });
 
 it("hands setup the signed allocation's active references with no unsuffixed scaffolds", async () => {
   const result = await establish(undefined, true);
-  const [ledger] = await suite.db.select().from(fiscalAllocations);
+  const [ledger] = await allocationRows(suite.db);
   expect(result.seriesIds).toEqual(ledger!.result.series.map((series) => series.id));
   expect(
     (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
@@ -263,7 +264,7 @@ it("reapplies allocated setup without creating another SIF, allocation or series
   expect(retry.seriesIds).toEqual(first.seriesIds);
   expect(retry.seeded).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
   expect(
     (await suite.db.execute(sql`select numero_instalacion, revocado_en from verifactu_identities`))
       .rows,

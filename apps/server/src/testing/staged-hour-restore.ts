@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedModuleSettings } from "../../test/module-settings.js";
 import { sealFixtureArtifact } from "../../test/fixture-salt.js";
@@ -19,7 +20,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
-import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";
@@ -249,7 +250,7 @@ export async function stagedHourRestore(
       const copy = await openVenueDatabase(roots.venueDir);
       try {
         return {
-          allocations: await copy.venue.select().from(fiscalAllocations),
+          allocations: await allocationRows(copy.venue),
           registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select(seriesWithNextNumber).from(invoiceSeries),
         };

@@ -91,9 +91,11 @@ describe("the throwaway allocation seat", () => {
       expect(
         suite.db.all(sql`select numero_instalacion, node_id from verifactu_identities`),
       ).toEqual([{ numero_instalacion: "0CNNW", node_id: node.nodeId }]);
-      expect(suite.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`)).toEqual([
-        { taxpayer_nif: TAXPAYER, environment: "preproduction" },
-      ]);
+      expect(
+        suite.db.all(
+          sql`select nif as taxpayer_nif, environment from verifactu_identities where event_key is not null`,
+        ),
+      ).toEqual([{ taxpayer_nif: TAXPAYER, environment: "preproduction" }]);
       expect(series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
         { code: "A-0CNNW", purpose: "standard" },
         { code: "FF-0CNNW", purpose: "full" },
@@ -102,12 +104,12 @@ describe("the throwaway allocation seat", () => {
       ]);
     });
 
-    it("marks every identifier it chooses as throwaway, and nothing in the SIF row", async () => {
+    it("marks the allocation evidence as throwaway and keeps identity fields unmarked", async () => {
       const administratorId = randomUUID();
       const prepared = signFor(administratorId);
       await activate(prepared, administratorId);
       const [row] = suite.db.all<{ allocation_key: string; allocation: string; approval: string }>(
-        sql`select allocation_key, allocation, approval from fiscal_allocations`,
+        sql`select allocation_key, allocation, approval from verifactu_identities where event_key is not null`,
       );
       const allocation = JSON.parse(row!.allocation) as {
         allocationId: string;
@@ -134,7 +136,8 @@ describe("the throwaway allocation seat", () => {
         environment: "preproduction",
         installationIdentity: "0CNNW",
       });
-      const sif = suite.db.all(sql`select * from verifactu_identities`);
+      const sif = suite.db.all(sql`select id, node_id, nif, id_sistema_informatico,
+        numero_instalacion, registrado_en, revocado_en from verifactu_identities`);
       expect(sif).toHaveLength(1);
       expect(JSON.stringify(sif)).not.toMatch(/throwaway/i);
     });

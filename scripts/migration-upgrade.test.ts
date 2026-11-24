@@ -1407,6 +1407,13 @@ type Row = Record<string, Value>;
  */
 const CANDIDATES: Record<string, readonly Value[]> = {
   "verifactu_submissions.case_resolution_key": ["decision-1", "decision-2"],
+  "verifactu_identities.environment": ["preproduction"],
+  "verifactu_identities.event_key": ["event-1", "event-2"],
+  "verifactu_identities.allocation_key": ["allocation-1", "allocation-2"],
+  "verifactu_identities.allocation": ["{}"],
+  "verifactu_identities.approval": ["{}"],
+  "verifactu_identities.bases": ["[]"],
+  "verifactu_identities.result": ["{}"],
   "settings.module": ["venue", "another"],
   "settings.doc": ['{"invoiceLocales":["es"]}'],
   "verifactu_history.data": [

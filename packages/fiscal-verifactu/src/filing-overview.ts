@@ -20,7 +20,6 @@ import type {
   SystemView,
 } from "./filing-overview-types.js";
 import { ENVIO_STATES, type EnvioState } from "./handover-summary.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
@@ -124,17 +123,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
         eq(verifactuIdentities.nif, taxpayer.taxId),
         isNotNull(invoiceSeries.retiredAt),
         or(
-          exists(
-            tx
-              .select({ one: sql`1` })
-              .from(fiscalAllocations)
-              .where(
-                and(
-                  eq(fiscalAllocations.sifId, verifactuIdentities.id),
-                  eq(fiscalAllocations.environment, environment),
-                ),
-              ),
-          ),
+          eq(verifactuIdentities.environment, environment),
           exists(
             tx
               .select({ one: sql`1` })
@@ -160,11 +149,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
   };
 }
 
-/**
- * A change's earlier identity is the identity of this taxpayer and environment inserted just
- * before its own (`verifactu_identities.rowid`), never one chosen by a clock: an activation inserts its
- * identity and its `fiscal_allocations` row in one transaction.
- */
+/** Use insertion order for identity changes because recovery can move the clock backwards. */
 async function readIdentityChanges(
   tx: Transaction,
   taxId: string,
@@ -180,21 +165,21 @@ async function readIdentityChanges(
       select s.rowid as position, s.id, s.node_id, s.numero_instalacion as installation
       from verifactu_identities s
       where s.nif = ${taxId} and (
-        exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${environment})
+        s.environment = ${environment}
         or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${environment})
       )
     ),
     changes as (
-      select a.rowid as position, a.activated_at, n.numero_instalacion as installation, (
+      select n.rowid as position, n.registrado_en as activated_at, n.numero_instalacion as installation, (
         select i.position from identities i
         where i.position < n.rowid
         order by i.position desc limit 1
       ) as earlier
-      from fiscal_allocations a join verifactu_identities n on n.id = a.sif_id
-      where a.taxpayer_nif = ${taxId} and a.environment = ${environment}
+      from verifactu_identities n
+      where n.nif = ${taxId} and n.environment = ${environment} and n.event_key is not null
         and not (
-          json_extract(a.approval, '$.version') = 2
-          and json_type(a.approval, '$.oldMachineRelinquished') = 'true'
+          json_extract(n.approval, '$.version') = 2
+          and json_type(n.approval, '$.oldMachineRelinquished') = 'true'
         )
     )
     select c.installation, c.activated_at, e.installation as earlier_installation,

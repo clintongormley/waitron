@@ -553,7 +553,7 @@ it("selects the Spain time-record exporter only from enabled contributions", () 
   ]);
 });
 
-it("Start again explicitly exempts only the fiscal activation and the master keys from append-only holdings", () => {
+it("Start again exempts only fiscal setup certificates and master keys from append-only holdings", () => {
   expect(
     ALL_MODULES.filter((m) => m.startAgainDeletable !== undefined).map((m) => [
       m.name,
@@ -561,7 +561,7 @@ it("Start again explicitly exempts only the fiscal activation and the master key
     ]),
   ).toEqual([
     ["core", ["master_keys"]],
-    ["fiscal-verifactu", ["fiscal_allocations", "verifactu_certificates"]],
+    ["fiscal-verifactu", ["verifactu_certificates"]],
   ]);
   expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
 });

@@ -92,9 +92,7 @@ export async function seedTaxpayerNodeSif(db: Database): Promise<void> {
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
  *
  * Deliberately narrower than `seedTaxpayerNodeSif` above: no invoice series, no sale, no
- * pre-existing `verifactu_identities` row. `registerSif` is exactly what mints that row under test, so
- * seeding one here would make every "first registration" assertion false before the test body
- * even runs. The SIF is the node, so `registerSif` keys on these nodes.
+ * pre-existing `verifactu_identities` row. The registration fixture needs unregistered nodes.
  */
 export async function seedTaxpayers(db: Database): Promise<void> {
   await db
@@ -229,7 +227,7 @@ async function insertNodeAndSeries(
 
 /**
  * Seeds a node, invoice series and till device at the venue, and registers a
- * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
+ * LIVE Veri*Factu SIF identity in the fixture — everything `write-path.e2e.test.ts` needs for
  * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTaxpayerNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
  * own fixed ids), which would collide with `write-path.e2e.test.ts`'s own first allocated invoice
@@ -246,7 +244,7 @@ async function insertNodeAndSeries(
  * test in the same file will mint — the counter starts at `20000001Y` and climbs.
  *
  * WHAT THE OVERRIDE DOES NOT REACH. The `taxpayer` insert below does nothing when the row already
- * exists, so after an earlier seed the override reaches `registerSif` alone and the `taxpayer` row
+ * exists, so after an earlier seed the override reaches the identity alone and the `taxpayer` row
  * keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella because the
  * hashed `IDEmisorFactura` is read from the SIF registration (`currentSif(tx, nodeId).nif`), not
  * from `taxpayer`. A test that needs `taxpayer.tax_id` itself to match must seed before anything

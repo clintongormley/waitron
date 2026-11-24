@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq, isNull, sql } from "drizzle-orm";
@@ -20,7 +21,6 @@ import { compareHourClocks } from "./hour-clock.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import type { HourSelectionStore } from "./hour-selection.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
@@ -107,7 +107,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
     records: await suite.db.select().from(verifactuRecords),
     cases: (
       await suite.db.execute(
@@ -373,7 +373,7 @@ it("never allocates twice when two requests repeat the same unresolved event", a
     if (result.status === "fulfilled") expect(result.value).toEqual(successes[0]!.value);
     else expect(result.reason).toMatchObject(refusal("uncertain_prior_activation"));
   }
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
 });
 
 it("refuses changed input and an event whose committed replacement has since been retired", async () => {

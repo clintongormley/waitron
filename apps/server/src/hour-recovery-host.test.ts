@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import {
@@ -27,7 +28,6 @@ import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-read
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
@@ -86,7 +86,7 @@ it("persists a recovery hour before the real configured restore runner activates
     { code: "R-0CNQT", nextNumber: 1 },
     { code: "RF-0CNQT", nextNumber: 1 },
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
 });
 
 it("a restore's chosen name records no backup-created reference", async () => {
@@ -160,7 +160,7 @@ it("replays the exact restore after reading the now-committed database history",
     withModuleOperations: runner,
   });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
   expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
 });
 
@@ -499,7 +499,7 @@ it("finishes an already committed restore after restart without selecting or com
     withModuleOperations: next.service.runner(selected.input),
   });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
   expect(await readModulePreparationHistory(next.roots, binding.module)).toHaveLength(2);
   expect(external.internet).not.toHaveBeenCalled();
 });
@@ -526,7 +526,7 @@ describe("the database supplied by the placement runner", () => {
       }),
     ).rejects.toMatchObject({ code: "module.operation_invalid" });
     expect(await placed.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
-    expect(await placed.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(placed.db)).toEqual([]);
   });
 });
 
@@ -729,7 +729,7 @@ describe("module-owned recovery facts from the actual database", () => {
       withModuleOperations: next.service.runner(selected.input),
     });
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+    expect(await allocationRows(suite.db)).toHaveLength(2);
     expect(await readModulePreparationHistory(next.roots, binding.module)).toHaveLength(2);
     expect(external.internet).not.toHaveBeenCalled();
   });
@@ -743,7 +743,7 @@ describe("module-owned recovery facts from the actual database", () => {
       params: { reason: "old_machine_active" },
     });
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect(await allocationRows(suite.db)).toHaveLength(1);
   });
 
   it("keeps fiscal bases owned by the database when an isolation callback returns extra fields", async () => {
@@ -775,7 +775,7 @@ it("refuses a selection that still carries an installation code, writing nothing
   const f = await host();
   const compared = await f.compare();
   const beforeSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-  const beforeAllocations = await suite.db.select().from(fiscalAllocations);
+  const beforeAllocations = await allocationRows(suite.db);
   await expect(
     f.prepare({ action: "select", comparisonId: compared.id, installationCodes: ["0CNQX"] }),
   ).rejects.toMatchObject({
@@ -784,7 +784,7 @@ it("refuses a selection that still carries an installation code, writing nothing
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(beforeSeries);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(beforeAllocations);
+  expect(await allocationRows(suite.db)).toEqual(beforeAllocations);
 });
 
 async function sellAt(instant: string) {

@@ -140,7 +140,7 @@ it("makes the PDF recovery pack, fiscal page included, for a venue set up with a
   const { response, record } = await makePack();
   expect(
     suite.db.all(
-      sql`select json_extract(allocation, '$.allocationId') like 'throwaway-%' as throwaway from fiscal_allocations`,
+      sql`select json_extract(allocation, '$.allocationId') like 'throwaway-%' as throwaway from verifactu_identities where event_key is not null`,
     ),
   ).toEqual([{ throwaway: 1 }]);
   expect(response.status).toBe(200);

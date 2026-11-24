@@ -34,11 +34,7 @@ import {
 } from "./testing/bill-venue.js";
 import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import {
-  filedRecordOf,
-  lastFiledProducer,
-  renameFixtureInstallation,
-} from "./testing/fiscal-fixtures.js";
+import { filedRecordOf, lastFiledProducer } from "./testing/fiscal-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -143,7 +139,6 @@ const suite = useVenueDb({
     // The opening reads a history of minute names, which the fixture's own identity is not.
     venue = await provisionBillVenue(db, { apply: applyVenueUnderInstallation(INSTALLATION) });
     counter = await offerProducts(db, { zone: "counter", orderStart: "counter" });
-    renameFixtureInstallation(db, INSTALLATION);
     await stampDeployment(db, "production");
     await seedModuleSettings(db, { "fiscal-none": false });
     await writeNodeMembership(db, chart(0, "serving-primary", []));

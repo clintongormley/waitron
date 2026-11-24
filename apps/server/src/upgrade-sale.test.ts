@@ -33,11 +33,7 @@ import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
 import { applyVenueUnderInstallation } from "./testing/bill-venue.js";
-import {
-  acceptFiledRecords,
-  filedRecordOf,
-  renameFixtureInstallation,
-} from "./testing/fiscal-fixtures.js";
+import { acceptFiledRecords, filedRecordOf } from "./testing/fiscal-fixtures.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { loadConfig } from "./config.js";
 import { systemClock } from "./till-backend.js";
@@ -374,7 +370,6 @@ describe("a production copy whose record another producer filed", () => {
         apply: applyVenueUnderInstallation(INSTALLATION),
       });
       const { nodeId } = changing.cfg;
-      renameFixtureInstallation(db, INSTALLATION);
       await writeNodeMembership(db, signedMembershipDoc(0, { signerNodeId: nodeId }));
       await stampDeployment(db, "production");
       const backend = new VerifactuBackend({

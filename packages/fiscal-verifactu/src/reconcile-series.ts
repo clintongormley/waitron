@@ -18,7 +18,7 @@ export async function readLiveReconciliationSeries(
     where s.node_id = ${scope.nodeId} and s.nif = ${scope.taxpayerId}
       and s.revocado_en is null and i.retired_at is null
       and (
-        exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${scope.environment})
+        s.environment = ${scope.environment}
         or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${scope.environment})
       )
   `)
@@ -51,7 +51,7 @@ async function readRetainableSeries(
         or (s.revocado_en is not null and i.retired_at = s.revocado_en)
       )
       and (
-        exists (select 1 from fiscal_allocations a where a.sif_id = s.id and a.environment = ${scope.environment})
+        s.environment = ${scope.environment}
         or exists (select 1 from verifactu_records r where r.sif_id = s.id and r.entorno = ${scope.environment})
       )
   `)

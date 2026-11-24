@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { dirname, join, resolve } from "node:path";
 import { mkdir, cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { resultFacts } from "./testing/restore-result-facts.js";
@@ -9,7 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase, readStandardSeriesId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { fiscalAllocations, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { orderedMigrationSets } from "@waitron/module";
@@ -124,7 +125,7 @@ async function expectFinishedRetry(f: Awaited<ReturnType<typeof stage>>, journal
   const active = await f.snapshot();
   expect(active.records).toEqual(f.originalRecords);
   expect(active.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
-  expect(active.allocations.slice(0, 1)).toEqual(await suite.db.select().from(fiscalAllocations));
+  expect(active.allocations.slice(0, 1)).toEqual(await allocationRows(suite.db));
   expect(active.allocations.filter((row) => row.eventKey === f.binding.eventId)).toHaveLength(1);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
   expect(

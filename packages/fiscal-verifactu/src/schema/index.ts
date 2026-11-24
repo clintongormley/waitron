@@ -10,8 +10,6 @@ export { verifactuSubmissions } from "./verifactu-submissions.js";
 export { verifactuRecords } from "./verifactu-records.js";
 export { verifactuIdentities } from "./verifactu-identities.js";
 
-export { fiscalAllocations } from "./allocations.js";
-
 export { verifactuSeriesConflicts } from "./verifactu-series-conflicts.js";
 
 export { returnedInvoiceRecords } from "./returned-invoices.js";

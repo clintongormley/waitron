@@ -7,7 +7,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { registerSif, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import {
   freshFiscalIds,

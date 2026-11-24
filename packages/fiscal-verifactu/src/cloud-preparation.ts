@@ -6,7 +6,8 @@ import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { deployment, nodes, readTaxpayer, type Database } from "@waitron/db";
 import type { ProvisionedNode } from "@waitron/module";
-import { fiscalAllocations } from "./schema/allocations.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { allocationOf } from "./identity-allocation.js";
 import { AppError, isUuid } from "@waitron/shared";
 import { readOperationAuthority, type ModuleOperationPreparation } from "@waitron/module";
 import { createAllocationPreparation } from "./allocation-preparation.js";
@@ -256,13 +257,14 @@ export async function readCloudAllocationReport(
     !isDeepStrictEqual(record.operatorId, approval.operatorId)
   )
     refuse("event_mismatch");
-  const [prior] = await db
+  const [identity] = await db
     .select()
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.eventKey, approval.eventId));
-  if (prior === undefined) refuse("prior_activation_requires_replay");
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.eventKey, approval.eventId));
+  if (identity === undefined) refuse("prior_activation_requires_replay");
+  const prior = allocationOf(identity)!;
   if (
-    prior.nodeId !== node.nodeId ||
+    identity.nodeId !== node.nodeId ||
     !isDeepStrictEqual(prior.allocation, receipt.payload.allocation) ||
     !isDeepStrictEqual(prior.approval, approval)
   )
@@ -274,7 +276,7 @@ export async function readCloudAllocationReport(
   const taxpayer = await readTaxpayer(db);
   const [stamp] = await db.select().from(deployment).where(eq(deployment.id, 1));
   if (storedNode === undefined) refuse("node_mismatch");
-  if (taxpayer?.taxId !== prior.taxpayerNif) refuse("taxpayer_mismatch");
+  if (taxpayer?.taxId !== identity.nif) refuse("taxpayer_mismatch");
   if (stamp?.environment !== prior.environment) refuse("environment_mismatch");
   return {
     operationId: record.reportOperationId,
@@ -282,8 +284,8 @@ export async function readCloudAllocationReport(
     body: {
       venueId: receipt.payload.venueId,
       scope: {
-        taxpayerNif: prior.taxpayerNif,
-        softwareId: prior.softwareId,
+        taxpayerNif: identity.nif,
+        softwareId: identity.idSistemaInformatico,
         environment: prior.environment,
       },
       receipt,
@@ -291,7 +293,7 @@ export async function readCloudAllocationReport(
       activationEvidence: {
         version: 1,
         eventId: prior.eventKey,
-        nodeId: prior.nodeId,
+        nodeId: identity.nodeId,
         result: prior.result,
       },
     },

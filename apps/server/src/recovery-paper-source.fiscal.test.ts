@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,7 +16,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
@@ -181,7 +181,7 @@ it("combines real key authentication, configured paper files and the complete ac
   await withFiles(async (paths) => {
     const external = await readFile(paths.confirmationPath, "utf8");
     const result = await recover(paths);
-    const ledger = await suite.db.select().from(fiscalAllocations);
+    const ledger = await allocationRows(suite.db);
     expect(ledger).toHaveLength(1);
     expect(ledger[0]?.result).toEqual(result);
     expect(ledger[0]?.approval).toEqual(approval);
@@ -210,7 +210,7 @@ it("refuses activation when the key changes during configured-source collection"
     await expect(recover(paths, true)).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);

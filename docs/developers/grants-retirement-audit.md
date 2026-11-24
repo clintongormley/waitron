@@ -157,6 +157,11 @@ changing enforcement, keeping each legitimate mutation path.
 `verifactu_sending_state_no_delete` trigger keeps the wait row after the drainer first creates it.
 The drainer can still update the wait after a reply.
 
+**2026-11-24.** A1308 Fi9 settled `registro_sif`, now `verifactu_identities`.
+`verifactu_identities_no_delete` keeps each installation name even if it never signed an invoice.
+`verifactu_identities_guard_update` lets activation set `revocado_en` once and holds the remaining
+fields fixed.
+
 **2026-11-23:** A1308 Fi6 settled `envios`, now `verifactu_submissions`. The
 `verifactu_submissions_no_delete` trigger refuses deletion of a submission row.
 

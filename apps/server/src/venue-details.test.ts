@@ -813,7 +813,9 @@ describe("venue details preserve committed history", () => {
     await fixture.transaction(suite.db, "restore", (tx, operation) =>
       ALLOCATED_FISCAL_RESTORE(tx, { nodeId: venue.cfg.nodeId }, operation),
     );
-    expect(suite.db.all(sql`select * from fiscal_allocations`)).toHaveLength(1);
+    expect(
+      suite.db.all(sql`select * from verifactu_identities where event_key is not null`),
+    ).toHaveLength(1);
     expect(
       suite.db.all(sql`select name from sqlite_master where name = 'contadores_instalacion'`),
     ).toEqual([]);
@@ -829,7 +831,6 @@ describe("venue details preserve committed history", () => {
     "sale_voids",
     "verifactu_records",
     "verifactu_identities",
-    "fiscal_allocations",
     "working_orders",
     "working_order_lines",
     "ticket_items",
@@ -841,7 +842,9 @@ describe("venue details preserve committed history", () => {
     return Object.fromEntries(
       retainedTables.map((table) => [
         table,
-        suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
+        suite.db.all<Record<string, unknown>>(
+          sql`select * from ${sql.identifier(table)} order by rowid`,
+        ),
       ]),
     );
   }
@@ -851,7 +854,7 @@ describe("venue details preserve committed history", () => {
     )();
     const initial = await read();
     const history = retained();
-    expect(history.fiscal_allocations).toHaveLength(1);
+    expect(history.verifactu_identities.filter((row) => row.event_key !== null)).toHaveLength(1);
     const venueDoc = suite.db.all(sql`select * from settings order by module`);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -885,7 +888,7 @@ describe("venue details preserve committed history", () => {
   it("a rolled-back real sale does not leave history or consume a series number", async () => {
     const sell = await prepareSale();
     const before = retained();
-    expect(before.fiscal_allocations).toHaveLength(1);
+    expect(before.verifactu_identities.filter((row) => row.event_key !== null)).toHaveLength(1);
     await suite.db.execute(
       sql`create trigger detail_sale_rollback before insert on sale_settlements begin select raise(abort, 'sale rollback probe'); end`,
     );

@@ -28,8 +28,8 @@ export {
   type AeatCert,
 } from "./provisioning-secret.js";
 export { verifactuSubmissions, verifactuIdentities, verifactuRecords } from "./schema/index.js";
-export { currentSif, registerSif } from "./registro-sif.js";
-export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
+export { currentSif } from "./registro-sif.js";
+export type { SifRegistration } from "./registro-sif.js";
 export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 export type { DrainDeps } from "./drain.js";
 export { appendToChain, readChainHead } from "./chain.js";
@@ -47,7 +47,6 @@ export { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
 export { FISCAL_CLASSIFICATION } from "./classification.js";
 export { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
-export { fiscalAllocations } from "./schema/allocations.js";
 export { activateAllocation } from "./allocation.js";
 export { drawEmergencyIdentity, validateAllocationEnvelope } from "./allocation-envelope.js";
 export type {

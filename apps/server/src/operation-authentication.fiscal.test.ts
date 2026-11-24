@@ -66,7 +66,6 @@ async function snapshot() {
     "verifactu_identities",
     "invoice_series",
     "verifactu_records",
-    "fiscal_allocations",
     "node_membership",
   ])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
@@ -113,11 +112,13 @@ describe("authenticated internal takeover plus the host's promotion transaction"
       mode: "primary",
       singletonRole: "primary",
     });
-    expect((after[3] as Record<string, unknown>[])[0]).toMatchObject({
-      installation_identity: "0CNPG",
+    expect(
+      (after[0] as Record<string, unknown>[]).find((row) => row.id === result.sifId),
+    ).toMatchObject({
+      numero_instalacion: "0CNPG",
       event_key: "takeover-1",
     });
-    expect(after[4]).toHaveLength(1);
+    expect(after[3]).toHaveLength(1);
   });
 
   it("rolls back every activation row, and the role stays, if the host membership write is refused", async () => {

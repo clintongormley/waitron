@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import {
   seriesWithNextNumber,
   advanceSeriesTo,
@@ -7,7 +8,7 @@ import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
-import { sql } from "drizzle-orm";
+import { isNull, sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -21,7 +22,6 @@ import {
   signPaperConsumptionForBlock,
   type PaperAllocation,
 } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envelope.js";
 
@@ -133,7 +133,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    activations: await suite.db.select().from(fiscalAllocations),
+    activations: await allocationRows(suite.db),
   };
 }
 
@@ -244,9 +244,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
-  expect((await suite.db.select().from(fiscalAllocations))[0]!.approval.operatorId).toBe(
-    "administrator",
-  );
+  expect((await allocationRows(suite.db))[0]!.approval.operatorId).toBe("administrator");
 });
 
 it("refuses a promotion without an hour authority", async () => {
@@ -446,7 +444,7 @@ it("detaches submitted signed input before reading the database", async () => {
       await expect(result).resolves.toHaveProperty("series.0.code", "A-P000042");
     }),
   );
-  expect((await suite.db.select().from(fiscalAllocations))[0]!.approval).toEqual(approval);
+  expect((await allocationRows(suite.db))[0]!.approval).toEqual(approval);
 });
 
 it("detaches the host binding before reading the database", async () => {
@@ -547,7 +545,7 @@ it("activates all purposes from opaque module input with the independently authe
   ]);
   const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.id).toBe(result.sifId);
-  const [retained] = await suite.db.select().from(fiscalAllocations);
+  const [retained] = await allocationRows(suite.db);
   expect(retained!.result).toEqual(result);
   expect(retained!.approval).toEqual(approval);
   expect(retained!.allocation).toEqual(input.allocation);
@@ -616,48 +614,42 @@ it("refuses unallocated live series rather than blessing scaffold references", a
   expect(await snapshot()).toEqual(before);
 });
 
-it.each([
-  "taxpayer",
-  "environment",
-  "identity",
-  "code",
-  "retired",
-  "extra",
-  "software",
-  "sif-retired",
-])("refuses a committed allocation after its %s changed", async (field) => {
-  await activateForRead();
-  if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
-  if (field === "environment") await suite.db.update(deployment).set({ environment: "production" });
-  if (field === "identity")
-    await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'P000043'`);
-  if (field === "code")
-    await withInvoiceSeriesGuardDropped(suite.db, () =>
-      suite.db
+it.each(["taxpayer", "environment", "code", "retired", "extra", "sif-retired"])(
+  "refuses a committed allocation after its %s changed",
+  async (field) => {
+    await activateForRead();
+    if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
+    if (field === "environment")
+      await suite.db.update(deployment).set({ environment: "production" });
+    if (field === "code")
+      await withInvoiceSeriesGuardDropped(suite.db, () =>
+        suite.db
+          .update(invoiceSeries)
+          .set({ code: "changed" })
+          .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`),
+      );
+    if (field === "retired")
+      await suite.db
         .update(invoiceSeries)
-        .set({ code: "changed" })
-        .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`),
-    );
-  if (field === "retired")
-    await suite.db
-      .update(invoiceSeries)
-      .set({ retiredAt: new Date() })
-      .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
-  if (field === "extra")
-    await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
-  if (field === "software")
-    await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
-  if (field === "sif-retired")
-    await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
-  const before = await snapshot();
-  await expect(readAllocated()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "activation_superseded" },
-  });
-  expect(await snapshot()).toEqual(before);
-});
+        .set({ retiredAt: new Date() })
+        .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
+    if (field === "extra")
+      await suite.db
+        .insert(invoiceSeries)
+        .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
+    if (field === "sif-retired")
+      await suite.db
+        .update(verifactuIdentities)
+        .set({ revocadoEn: new Date() })
+        .where(isNull(verifactuIdentities.revocadoEn));
+    const before = await snapshot();
+    await expect(readAllocated()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "activation_superseded" },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it("refuses a live SIF that has no committed allocation ledger", async () => {
   await withTransaction(suite.db, (tx) =>

@@ -8,7 +8,8 @@ import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { createHash } from "node:crypto";
 import { readRetainedHourDormant } from "./hour-dormant-standby.js";
-import { fiscalAllocations } from "./schema/allocations.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { allocationOf } from "./identity-allocation.js";
 import { eq } from "drizzle-orm";
 
 export const readHourRecoveryHistory: NonNullable<
@@ -64,31 +65,22 @@ export const readHourRecoveryState: NonNullable<
         typeof row === "object" &&
         row !== null &&
         "reference" in row &&
-        row.reference === `fiscal_allocations/${binding.eventId}`,
+        row.reference === `verifactu_identities/allocation/${binding.eventId}`,
     );
     if (committed) {
-      if (binding.action === "restore") {
-        const [prior] = await tx
-          .select()
-          .from(fiscalAllocations)
-          .where(eq(fiscalAllocations.eventKey, binding.eventId));
-        if (
-          prior === undefined ||
-          prior.nodeId !== node.nodeId ||
-          prior.approval.sourceId !== binding.sourceId
-        )
+      const [identity] = await tx
+        .select()
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.eventKey, binding.eventId));
+      const prior = identity === undefined ? undefined : allocationOf(identity);
+      if (identity?.nodeId !== node.nodeId || prior?.approval.sourceId !== binding.sourceId) {
+        if (binding.action === "restore")
           throw new AppError("sif.allocation_invalid", {
             reason: "prior_activation_requires_replay",
           });
-      } else {
-        const [prior] = await tx
-          .select()
-          .from(fiscalAllocations)
-          .where(eq(fiscalAllocations.eventKey, binding.eventId));
-        if (prior?.nodeId !== node.nodeId || prior.approval.sourceId !== binding.sourceId)
-          return refuse();
-        await readModuleAllocationSeries(tx, node, bases);
+        return refuse();
       }
+      if (binding.action !== "restore") await readModuleAllocationSeries(tx, node, bases);
     }
     return {
       country: taxpayer.country,

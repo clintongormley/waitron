@@ -236,11 +236,6 @@ export function acceptFiledRecords(db: Database): void {
   db.run(sql`update verifactu_submissions set estado = 'aceptado'`);
 }
 
-/** Gives a venue's one fixture installation another name, before anything is filed under it. */
-export function renameFixtureInstallation(db: Database, name: string): void {
-  db.run(sql`update verifactu_identities set numero_instalacion = ${name}`);
-}
-
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /** Also seed an `verifactu_submissions` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };

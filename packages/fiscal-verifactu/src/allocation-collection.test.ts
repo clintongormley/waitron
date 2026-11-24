@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { generateKeyPairSync } from "node:crypto";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +18,7 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
+import type { ActivationResult } from "./allocation-types.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity } from "./allocation-envelope.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
@@ -158,7 +159,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
-    activations: await suite.db.select().from(fiscalAllocations),
+    activations: await allocationRows(suite.db),
   };
 }
 
@@ -339,7 +340,7 @@ it("rolls back after authentication expires while the final audit write is await
               if (property !== "insert") return Reflect.get(target, property);
               return (table: Parameters<Transaction["insert"]>[0]) => {
                 const insertion = target.insert(table);
-                if (table !== fiscalAllocations) return insertion;
+                if (table !== verifactuIdentities) return insertion;
                 return new Proxy(insertion, {
                   get(builder, key) {
                     if (key !== "values") return Reflect.get(builder, key);

@@ -159,9 +159,8 @@ interface Shop {
  *
  * The huella hashes the AEAT identity fields that `verifactu_records_identidad_uq` makes unique, so the two
  * records a test compares must share them — which only separate databases allow. The shared issuer
- * NIF keeps `IDEmisorFactura` identical; restoring (`registerSif` revokes the old identity,
- * mints a fresh installation number and resets the chain) makes each shop file a first record under
- * it. The NumeroInstalacion is not hashed, so it cannot move the huella.
+ * NIF keeps `IDEmisorFactura` identical. Each shop files its first record in its own database.
+ * The NumeroInstalacion is not hashed, so it cannot move the huella.
  */
 async function seedShop(db: Database, issuerNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
