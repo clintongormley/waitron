@@ -130,10 +130,10 @@ describe("setup's Recovery pack step", () => {
     setLocale("es-ES");
     const el = await mountStep();
     await userEvent.click(q(el, "[data-test=print]")!);
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=print-failed]")).toBe(
-        "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
-      ),
+    await vi.waitFor(() => expect(q(el, "[data-test=print-failed]")).not.toBeNull());
+    expect(text(el, "[data-test=print-failed]")).toBe(finishEs["done.pack.print_failed"]);
+    expect(finishEs["done.pack.print_failed"]).not.toBe(
+      "Print did not open. Use Download, or allow pop-ups and try again.",
     );
   });
 
