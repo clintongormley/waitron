@@ -388,7 +388,7 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
   code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
   tail is written through `redactSecrets` and the personal-data mask (except the frozen-process
   watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
-  the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
+  the partial personal-data mask, 2026-10-26). `redactSecrets` masks only a
   password in a URL, which is why no code's params and no logged message may carry a secret. Its
   password forms, for `setup.start_again_files_found`, `deployment.environment_mismatch` and the failed-start Bookings-Off action, take
   the administrator password over HTTPS only; their Move choices are the exceptions to never
@@ -640,7 +640,7 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
 - **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`), except the spare's bucket-stream pipe, which always connects over TLS
   (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine,
   in every environment; `parseHello` refuses a joining spare's plain-http contact address off this
-  machine** (the watcher, 2026-11-24, not the owner's). Guards: the plain-http cases in
+  machine** (the watcher, 2026-11-24, kept). Guards: the plain-http cases in
   `apps/server/src/mirror-bundle-fetch.test.ts` and `apps/server/src/box-join-api.test.ts`, weaker
   than the rule.
   [Receipt](docs/developers/conventions-data.md#a-box-reaches-another-box-only-over-https-or-on-this-machine).
@@ -961,7 +961,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   seconds after the last ends) finds it, waits for two devices or a person to confirm its time
   before any later payment (owner, 2026-11-10; the jump, 2026-11-11), and AEAT refusing as dated in
   the future (`1112`) a record written since its time was last confirmed makes it wait for a person
-  or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's), and a producer change makes the start wait until its new installation is open: records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, owner, 2026-11-24), and a producer change makes the start wait until its new installation is open: records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -969,8 +969,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   by signed query, trusting only the venue's authority (`tls/ca.crt`), before selling or filing,
   and waits while every box it counts is silent (a box it took over from, or demoted by its own
   promotion, it asks but never waits for; one whose signed answer says it is still joining it sets
-  aside, [3b plan](docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's
-  decision, which the owner may overrule), until one answers or an administrator carries on over
+  aside, [3b plan](docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, which the
+  owner landed with #2942, 2026-11-13), until one answers or an administrator carries on over
   HTTPS for that start only. Carrying on is refused once this box's `node.db` records that it
   handed over. Before asking, a box whose `node.db` holds neither a role nor a signing key for it,
   while its held chart lists it and does not name it the serving primary, refuses to start
@@ -993,7 +993,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
   date and time on a till or on Box status; AEAT is not asked, and orders still reach the kitchen** (owner,
-  2026-11-10; "or on Box status" is the watcher's, 2026-11-10 and 2026-11-13, for the owner to confirm). While an upgrade's
+  2026-11-10; "or on Box status": owner, 2026-11-10 16:37, "Admins keep them", and 2026-11-22). While an upgrade's
   producer-change note waits, the start keeps waiting, synchronised or not, until the new installation
   is open: the time service's or a person's confirmation is held until then, and two devices do not
   end the wait (who may confirm: owner, 2026-11-22). Guards:
@@ -1010,8 +1010,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   service is not synchronised back to waiting once, if that record was written since the time was
   last confirmed; a box synchronised when the refusal arrives is never sent back, two devices do
   not end that wait, and such refusals never start a hold on later records** (the stop, owner,
-  2026-11-10 14:59, and 2026-11-11 14:34; no hold, 2026-11-10 15:31; devices, A1420 D9, the
-  watcher's, 2026-11-10 17:28, not the owner's). Guards:
+  2026-11-10 14:59, and 2026-11-11 14:34; no hold, 2026-11-10 15:31; devices, A1420 D9,
+  owner, 2026-11-24 21:46: "keep it as built and drop the question"). Guards:
   `apps/server/src/clock-watch.start-up.test.ts`, `apps/server/src/clock-correction.test.ts`,
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-watch.future-date.test.ts`,
   `apps/server/src/boot.start-clock-gate.test.ts` and
@@ -1066,12 +1066,12 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   another machine's clock counts only once the person proved on that page (the setup password on
   setup, the backup's master key on restore, a `node.manage` sign-in on promotion, the venue's
   current master key on the conflict switch) confirms both times or sets the box's clock from that
-  machine (owner, 2026-11-13; the conflict switch's proof is not owner-approved). A restore's start uses the restore page's choice while the box's boot id
+  machine (owner, 2026-11-13; the conflict switch's proof, 2026-11-15 and 2026-11-21). A restore's start uses the restore page's choice while the box's boot id
   is unchanged and its clock has not been stepped since. Otherwise it waits until the time service
   synchronises or the master key confirms again, held by the browser that pressed Restore
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
   person confirmed on that page, while the box has not rebooted, the server has not restarted and
-  its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's).
+  its clock has not been stepped (the owner landed #3600 with this choice named, 2026-11-17); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (owner, 2026-11-17, #3695).
   A producer change takes the box's current minute once the time service says it is synchronised, or
   on a weaker confirmation: any person the till or Box status lets confirm the time (owner,
   2026-11-22), even with no second clock (A993 decision 3, the plan's).
