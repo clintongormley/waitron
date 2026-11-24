@@ -15,8 +15,9 @@ import { generateSync } from "otplib";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { encodeRecoveryKey } from "@waitron/fiscal-verifactu";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
 import {
+  masterKeyAuthorising,
   stagedAuthorityKey,
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
@@ -452,6 +453,6 @@ describe("a recovery key's authority", () => {
     expect(await result).toBe("committed");
     const replaced = await replacement;
     expect(order).toEqual(["venue write committed", "key replaced"]);
-    expect(await verifyBreakGlass(suite.db, replaced.secret)).toBe(true);
+    expect(await masterKeyAuthorising(suite.db, replaced.secret)).not.toBeNull();
   });
 });

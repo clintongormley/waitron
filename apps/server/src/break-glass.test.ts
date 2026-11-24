@@ -5,7 +5,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { makeMasterKey } from "@waitron/credentials";
 import { encodeMasterKeyCode } from "@waitron/shared";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier } from "@waitron/node-db";
-import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { masterKeyAuthorising } from "./operation-authentication.js";
 import { boxKeyStored } from "./testing/box-key.js";
 import { mintMasterKey } from "./testing/master-key.js";
 
@@ -103,18 +104,18 @@ describe("break-glass mint + verify", () => {
   });
 });
 
-describe("verifyBreakGlass", () => {
-  it("verifyBreakGlass answers the venue's current master key true, an older one false, and false with no row", async () => {
+describe("masterKeyAuthorising", () => {
+  it("authorises the venue's current master key, and neither an older one nor any key before the venue has one", async () => {
     const bytes = makeMasterKey();
-    expect(await verifyBreakGlass(suite.db, encodeMasterKeyCode(bytes))).toBe(false);
+    expect(await masterKeyAuthorising(suite.db, encodeMasterKeyCode(bytes))).toBeNull();
     const boxKey = await mintBreakGlassSecret(handles(), NODE);
     const older = await mintMasterKey(suite.db, { bytes });
     expect(older.secret).toBe(encodeMasterKeyCode(bytes));
-    expect(await verifyBreakGlass(suite.db, older.secret)).toBe(true);
+    expect(await masterKeyAuthorising(suite.db, older.secret)).not.toBeNull();
     const newer = await mintMasterKey(suite.db);
-    expect(await verifyBreakGlass(suite.db, older.secret)).toBe(false);
-    expect(await verifyBreakGlass(suite.db, newer.secret)).toBe(true);
+    expect(await masterKeyAuthorising(suite.db, older.secret)).toBeNull();
+    expect(await masterKeyAuthorising(suite.db, newer.secret)).not.toBeNull();
     for (const garbage of [undefined, null, "", "wrong", { secret: newer.secret }, boxKey])
-      expect(await verifyBreakGlass(suite.db, garbage)).toBe(false);
+      expect(await masterKeyAuthorising(suite.db, garbage)).toBeNull();
   });
 });

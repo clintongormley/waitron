@@ -11,7 +11,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { readRecoveryKeyName, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
-import { masterKeyAuthorising } from "./operation-authentication.js";
 
 /**
  * Stores only the secret's verifier and returns the RAW secret, which is never stored or logged.
@@ -86,12 +85,4 @@ export async function mintBreakGlassKey(
   return withNodeTransaction(handles.node, (tx) =>
     mintBreakGlassKeyTx(handles.venue, tx, nodeId, made),
   );
-}
-
-/** Whether `secret` is the venue's current master key; `false`, never a throw, before it has one. */
-export async function verifyBreakGlass(
-  db: Database | Transaction,
-  secret: unknown,
-): Promise<boolean> {
-  return (await masterKeyAuthorising(db, secret)) !== null;
 }
