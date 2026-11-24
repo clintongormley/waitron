@@ -1947,6 +1947,51 @@ it("counts an earlier box's batch complete when its records went in but a paymen
   ]);
 });
 
+it("counts an earlier box's batch complete when both hold its record and settle its sale differently", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await receiveOwn(earlier);
+  for (const [db, label] of [
+    [suite.db, "sender"],
+    [receiver.db, "receiver"],
+  ] as const)
+    await db.insert(saleSettlements).values({
+      id: `${label}-settlement`,
+      saleId: first.saleId,
+      settledAt: returnedAt.toISOString(),
+    });
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 0), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(heldRecordIds()).toEqual([first.recordId]);
+  expect(receiver.db.all(sql`select id from sale_settlements`)).toEqual([
+    { id: "receiver-settlement" },
+  ]);
+});
+
+it("counts an earlier box's batch complete when both hold its record and void its sale differently", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await receiveOwn(earlier);
+  for (const [db, label] of [
+    [suite.db, "sender"],
+    [receiver.db, "receiver"],
+  ] as const)
+    await db.insert(saleVoids).values({
+      id: `${label}-void`,
+      saleId: first.saleId,
+      reason: "Incorrect invoice",
+      voidedAt: returnedAt.toISOString(),
+    });
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 0), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(heldRecordIds()).toEqual([first.recordId]);
+  expect(receiver.db.all(sql`select id from sale_voids`)).toEqual([{ id: "receiver-void" }]);
+});
+
 /** Two earlier boxes, the one whose id sorts first having corrected the other's last record. */
 async function correctionOfAnEarlierBox(records = 1) {
   const main = await seedNode(suite.db, "Main");

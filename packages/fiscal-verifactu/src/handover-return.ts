@@ -427,7 +427,8 @@ export async function receiveReturnedOriginals(
       .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
       .map((clash) => clash.saleId),
   );
-  let missing = false;
+  // Another box's sale and payment rows stay as the receiver has them; only its records count.
+  let saleRowsDiffer = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id)) {
       const createdAt = now.toISOString();
@@ -474,7 +475,7 @@ export async function receiveReturnedOriginals(
         refundClash = true;
     }
     if (refundClash) {
-      missing = true;
+      saleRowsDiffer = true;
       continue;
     }
     try {
@@ -527,7 +528,7 @@ export async function receiveReturnedOriginals(
         !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
       )
         throw error;
-      missing = true;
+      saleRowsDiffer = true;
     }
   }
   let inserted = false;
@@ -595,11 +596,12 @@ export async function receiveReturnedOriginals(
           conflict = true;
         }
       }
-      if (conflict) missing = true;
+      if (conflict) saleRowsDiffer = true;
     }
   }
   if (inserted && (await checkFiscalChains(liveBackupQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
+  let missing = saleRowsDiffer && !others;
   for (const [table, rows] of [
     ["verifactu_records", returned.records],
     ["sales", returned.sales],
