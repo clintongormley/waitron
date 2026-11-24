@@ -7,6 +7,7 @@ import {
   type ClockMoment,
   type KeptClockConfirmation,
 } from "@waitron/module";
+import { createTurns } from "./backup-turns.js";
 import { bootReader, type BootReading } from "./boot-reader.js";
 import { MAX_PACK_PDF, RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
@@ -108,19 +109,18 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   /** The recovery pack PDF the page's person chose: its master key when it is the staged one, so
    * the page fills the field with it, or what is wrong with the file. One PDF is taken and read at
    * a time; a waiting sender's body stays unread until its turn. */
-  let packTurn: Promise<unknown> = Promise.resolve();
+  const packTurns = createTurns();
   app.post("/restore-clock/pack", async (c) => {
     c.header("Cache-Control", "no-store");
     if (!sentFromThisOrigin(c)) return refuseOrigin(c);
     const tooLarge = () => c.json({ result: "not_a_pack" }, 413);
     if (Number(c.req.header("content-length") ?? 0) > MAX_PACK_PDF) return tooLarge();
-    const read = packTurn.then(async () => {
+    const read = packTurns(async () => {
       const bytes = await readUpTo(c.req.raw.body, MAX_PACK_PDF);
       if (bytes === null) return null;
       const { readRecoveryPackPdf } = await packReader();
       return readRecoveryPackPdf(bytes);
     });
-    packTurn = read.catch(() => {});
     let masterKey: string | null;
     let heldBy: number | null;
     try {
