@@ -6,6 +6,7 @@ import {
   billLabelInText,
   billName,
   billToShow,
+  finishBlocker,
   printBillOffered,
   shownBills,
   stillOwed,
@@ -305,5 +306,32 @@ describe("stillOwed", () => {
     expect(stillOwed(bill({ total: "30.00", outstanding: "25.00", hasPayments: true }))).toBe(
       "25.00",
     );
+  });
+});
+
+describe("finishBlocker", () => {
+  const owes = bill({ workingOrderId: "wo-owes" });
+  const over = bill({
+    workingOrderId: "wo-over",
+    total: "10.00",
+    outstanding: "0.00",
+    overpaid: "5.00",
+    hasPayments: true,
+  });
+  const empty = bill({ workingOrderId: "wo-empty", total: "0.00", outstanding: "0.00" });
+  const paid = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
+  const departed = bill({ workingOrderId: "wo-left", leftUnpaid: true });
+
+  it("names a bill owing money, then one paid over its total, then one with nothing to pay", () => {
+    expect(finishBlocker([empty, over, owes], undefined)).toBe(owes);
+    expect(finishBlocker([empty, over, paid], undefined)).toBe(over);
+    expect(finishBlocker([paid, empty, departed], undefined)).toBe(empty);
+    expect(finishBlocker([paid, departed], undefined)).toBeUndefined();
+  });
+
+  it("prefers a bill other than the one on screen within the same kind", () => {
+    const other = bill({ workingOrderId: "wo-other" });
+    expect(finishBlocker([owes, other], "wo-owes")).toBe(other);
+    expect(finishBlocker([owes, over], "wo-owes")).toBe(owes);
   });
 });

@@ -135,6 +135,7 @@ import {
   billLabel,
   billName,
   billNumberLabel,
+  finishBlocker,
   overpaidOf,
   owing,
   paidInPart,
@@ -5477,16 +5478,10 @@ export class TillTableOrderScreen extends LitElement {
     return formatMoney(decimal(amount), currentLocale());
   }
 
-  /** Finish table's refusal while a bill is unpaid, with Take payment for another unpaid bill
-   * first, since the bill on screen is charged in the foot below. A bill paid over its total comes
-   * after every unpaid one. */
+  /** Finish table's refusal while a bill is unpaid, naming the bill {@link finishBlocker} picks. */
   #finishRefusal(): TemplateResult | typeof nothing {
     if (this.party === null || !this.finishRefused) return nothing;
-    const unpaid = this.#shownBills().filter((bill) => !bill.leftUnpaid && owing(bill));
-    const offScreenFirst = (bills: PartyBill[]) =>
-      bills.find((bill) => bill.workingOrderId !== this.orderId) ?? bills[0];
-    const firstUnpaid =
-      offScreenFirst(unpaid.filter((bill) => overpaidOf(bill) === null)) ?? offScreenFirst(unpaid);
+    const firstUnpaid = finishBlocker(this.#shownBills(), this.orderId);
     if (firstUnpaid !== undefined && overpaidOf(firstUnpaid) !== null) {
       const id = firstUnpaid.workingOrderId;
       return finishOverpaidRefusal(

@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { activityLog, billPayments, sales, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct } from "@waitron/menu";
 import { centsToDecimal } from "@waitron/shared";
@@ -11,7 +12,8 @@ import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-gua
 import { clockAtIso, filedFor } from "./testing/later-sale-date-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
-import { readBillEditState } from "./bill-editing.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
+import { numberBill } from "./testing/bill-identities.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { setTipsForTest } from "./testing/payment-settings.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -614,6 +616,38 @@ describe("A1515 a bill left owing less than it was paid", () => {
     });
     expect(await invoicesOf(billId)).toEqual([]);
     expect(await balanceOf(billId)).toMatchObject({ status: "open", overpaid: "5.00" });
+  });
+
+  it("Finish table counts an overpaid bill as unpaid and an empty bill beside it as not", async () => {
+    const { billId, partyId } = await overpaidBill();
+    const empty = await inTx(venue, async (tx) => {
+      const row = await seedWorkingOrder(tx, { source: "dashboard", partyId });
+      await numberBill(tx, row.id, partyId);
+      return row.id;
+    });
+    const finish = async () =>
+      send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/finish`, {
+        expectedPartyRevision: await partyRevisionOf(venue, billId),
+        expectedEdits: await inTx(venue, async (tx) => {
+          const edits = [];
+          for (const id of await readPartyBillIds(tx, [partyId]))
+            edits.push(await readBillEditState(tx, id));
+          return edits;
+        }),
+      });
+
+    expect(await finish()).toMatchObject({
+      status: 409,
+      json: { code: "party.bill_outstanding" },
+    });
+    expect((await keepAsTip(billId, "5.00")).status).toBe(200);
+
+    // The unserved Croquettes are the next thing Finish asks about, after every bill is paid.
+    expect(await finish()).toMatchObject({
+      status: 409,
+      json: { code: "party.unserved_dishes" },
+    });
+    expect(await statusOf(venue, empty)).toBe("open");
   });
 
   it("keep as tip is refused when tips are off", async () => {

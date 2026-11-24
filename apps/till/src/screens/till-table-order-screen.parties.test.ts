@@ -553,6 +553,30 @@ describe("till-table-order-screen: Finish table", () => {
       expect(shadow(el).querySelector("[data-overpaid] [data-give-back]")).not.toBeNull();
     });
 
+    it("names the overpaid bill, not an empty bill beside it that Finish does not wait for", async () => {
+      const empty: PartyBill = {
+        ...paidTab,
+        workingOrderId: "wo-empty",
+        billNumber: 3,
+        status: "open",
+        total: "0.00",
+        receiptAvailable: false,
+      };
+      const el = await mountScreen({
+        finishRefused: true,
+        bills: [paidTab, overpaidCheck, empty],
+      });
+      const asked = capture(el, "take-payment");
+
+      const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+      expect(refusal.textContent).toContain(
+        fill(t("table.finish_overpaid_give_back"), { bill: "Bill 2", amount: money("5.00") }),
+      );
+      refusal.querySelector<HTMLElement>("[data-show-overpaid-bill]")!.click();
+
+      expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
+    });
+
     it("an unpaid bill is asked for first, with Take payment", async () => {
       const el = await mountScreen({
         finishRefused: true,

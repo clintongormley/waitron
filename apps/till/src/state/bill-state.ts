@@ -1,4 +1,11 @@
-import { MONEY_SCALE, compareDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  compareDecimal,
+  decimal,
+  isZeroDecimal,
+  subtractDecimal,
+  toScale,
+} from "@waitron/shared";
 import type { BillBalance, PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 import { moneyPlus, type RefundAsk } from "./bill-payment.js";
@@ -26,6 +33,28 @@ export function givesBackOverpaid(
 /** Open or placed; unlike `stillToPay`, counts an open bill with nothing outstanding. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
   return bill.status === "open" || bill.status === "placed";
+}
+
+/** The bill Finish table's refusal names: one owing money first, then one paid over its total,
+ * then an open bill with nothing to pay on it, which may hold no dish, and Finish does not wait for
+ * a bill with no dish (`billOwes`, apps/server/src/parties.ts); within each, a bill other than
+ * `shownId` first, as the bill on screen is charged below. */
+export function finishBlocker(
+  bills: readonly PartyBill[],
+  shownId: string | undefined,
+): PartyBill | undefined {
+  const unpaid = bills.filter((bill) => !bill.leftUnpaid && owing(bill));
+  const nothingToPay = (bill: PartyBill) =>
+    bill.status === "open" && !bill.hasPayments && isZeroDecimal(decimal(bill.total));
+  for (const tier of [
+    unpaid.filter((bill) => overpaidOf(bill) === null && !nothingToPay(bill)),
+    unpaid.filter((bill) => overpaidOf(bill) !== null),
+    unpaid.filter(nothingToPay),
+  ]) {
+    const found = tier.find((bill) => bill.workingOrderId !== shownId) ?? tier[0];
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 /** As the server's `needsPaper`: only a full invoice going to A4 or by email prints no receipt. */
