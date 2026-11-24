@@ -19,13 +19,15 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
   KEEPS_NON_ENGLISH,
   SPANISH_WORDS,
-  type Violation,
+  englishFileProblems,
+  englishFindings,
   findAccented,
   findSpanish,
   isHome,
   readText,
 } from "../packages/db/src/english-only.js";
 import { forbiddenVocabulary, vocabularyOwners } from "../packages/module/src/vocabulary.js";
+import { PRE_PUSH_WORDS } from "./check-english-only.js";
 import { STILL_TO_CLEAN } from "./english-only-still-to-clean.js";
 
 const OWNERS = vocabularyOwners(ALL_MODULES);
@@ -85,10 +87,6 @@ function scannedTexts(root: string): Map<string, string> {
   return texts;
 }
 
-function findings(source: string): Violation[] {
-  return [...findSpanish(source, FORBIDDEN), ...findAccented(source)];
-}
-
 const TRACKED = trackedFiles(repoRoot);
 const SCANNED = scannedTexts(repoRoot);
 const STILL_LISTED: ReadonlySet<string> = new Set(STILL_TO_CLEAN);
@@ -127,6 +125,10 @@ const ANCHORS: Record<string, readonly string[]> = {
 };
 
 describe("configuration", () => {
+  it("uses the same forbidden words before push and in CI", () => {
+    expect(PRE_PUSH_WORDS).toEqual(FORBIDDEN);
+  });
+
   it(
     "reads tracked text files only: never an untracked screenshot or a file holding a NUL byte",
     () => {
@@ -215,7 +217,10 @@ describe("configuration", () => {
     ]) {
       expect(TRACKED, path).toContain(path);
       expect(SCANNED.has(path), path).toBe(false);
-      expect(findings(readText(join(repoRoot, path))!).length, path).toBeGreaterThan(0);
+      expect(
+        englishFindings(readText(join(repoRoot, path))!, FORBIDDEN).length,
+        path,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -786,27 +791,42 @@ describe("findAccented", () => {
   });
 });
 
+describe("per-file English rules", () => {
+  it("explains a finding in an unlisted file", () => {
+    const path = "packages/example/src/main.ts";
+    const problems = englishFileProblems(path, "// Heading\nconst mesa = 1;", FORBIDDEN, false);
+    expect(problems).toContain(`${path}:2: mesa — const mesa = 1;`);
+    expect(problems.join("\n")).toContain("Use English");
+  });
+
+  it.each([
+    ["const mesa = 1; const mesas = 2;", 2],
+    ["const table = 1;", 0],
+  ])("refuses a kept file with %s (%i findings)", (source, count) => {
+    const path = "packages/shared/src/locales.ts";
+    expect(englishFileProblems(path, source, FORBIDDEN, false).join("\n")).toContain(
+      `${path}: expected 1 finding(s), found ${count}`,
+    );
+  });
+
+  it("asks for both list changes after cleaning a still-listed file", () => {
+    const path = "apps/dashboard/src/api/client.test.ts";
+    const problems = englishFileProblems(path, "const table = 1;", FORBIDDEN, true).join("\n");
+    expect(problems).toContain(path);
+    expect(problems).toContain("scripts/english-only-still-to-clean.ts");
+    expect(problems).toContain("STILL_TO_CLEAN_COUNT");
+  });
+});
+
 describe.each([...SCANNED])("%s", (path, source) => {
   const keep = KEEPS_NON_ENGLISH[path];
-  if (keep !== undefined) {
-    it("holds exactly its kept number of findings", () => {
-      expect(
-        findings(source).map((v) => `${v.line}: ${v.word} — ${v.text}`),
-        "a kept file's findings changed: clean any new text, or set `findings` to the new count (delete the keep when none are left)",
-      ).toHaveLength(keep.findings);
-    });
-  } else if (STILL_LISTED.has(path)) {
-    it("still holds non-English text, so it stays listed", () => {
-      expect(
-        findings(source).length,
-        "nothing left to clean: delete it from the list",
-      ).toBeGreaterThan(0);
-    });
-  } else {
-    it("uses English only", () => {
-      // Reported as formatted lines rather than a bare count: a failure needs to say which word on
-      // which line, or the next person deletes the test.
-      expect(findings(source).map((v) => `${v.line}: ${v.word} — ${v.text}`)).toEqual([]);
-    });
-  }
+  const stillToClean = STILL_LISTED.has(path);
+  const name = keep
+    ? "holds exactly its kept number of findings"
+    : stillToClean
+      ? "still holds non-English text, so it stays listed"
+      : "uses English only";
+  it(name, () => {
+    expect(englishFileProblems(path, source, FORBIDDEN, stillToClean)).toEqual([]);
+  });
 });

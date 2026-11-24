@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { STILL_TO_CLEAN } from "./english-only-still-to-clean.js";
 
 const root = join(import.meta.dirname, "..");
 const zero = "0".repeat(40);
@@ -29,7 +30,13 @@ vi.setConfig({ testTimeout: HOOK_TIMEOUT_MS + 10_000 });
 function fixture(
   path,
   run,
-  { signed = true, fail = "", emptySelection = false, realFormat = false } = {},
+  {
+    signed = true,
+    fail = "",
+    emptySelection = false,
+    realFormat = false,
+    realEnglish = false,
+  } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), "waitron-push-"));
   // Outside `dir`, because the fixture runs `git add .` there.
@@ -80,7 +87,10 @@ function fixture(
       );
     }
     mkdirSync(join(dir, "packages/source/src"), { recursive: true });
-    writeFileSync(join(dir, "packages/source/src/deleted.ts"), "base\n");
+    writeFileSync(
+      join(dir, "packages/source/src/deleted.ts"),
+      realEnglish ? "const mesa = 1;\n" : "base\n",
+    );
     mkdirSync(join(dir, "bin"));
     writeFileSync(
       join(dir, "bin", "pnpm"),
@@ -88,12 +98,22 @@ function fixture(
 const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
-fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(args) + "\\n");
-const kind = args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
+const isEnglish = args.includes("../../scripts/check-english-only.ts");
+const input = isEnglish ? fs.readFileSync(0, "utf8") : undefined;
+const call = isEnglish ? [...args, { changedPaths: [...new Set(input.split("\\n").filter(Boolean))].sort() }] : args;
+fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(call) + "\\n");
+const kind = isEnglish ? "English-only check" : args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
 if (process.env.PUSH_FAIL === kind) process.exit(17);
 if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
   const result = require("node:child_process").spawnSync(process.execPath,
     [${JSON.stringify(join(root, "node_modules/prettier/bin/prettier.cjs"))}, ...(args[0] === "exec" ? args.slice(2) : ["--check", "."])], { stdio: "inherit" });
+  process.exit(result.status ?? 1);
+}
+if (process.env.PUSH_REAL_ENGLISH === "1" && isEnglish) {
+  const result = require("node:child_process").spawnSync("pnpm", args, {
+    cwd: ${JSON.stringify(root)}, input, stdio: ["pipe", "inherit", "inherit"],
+    env: { ...process.env, PATH: ${JSON.stringify(env.PATH)} },
+  });
   process.exit(result.status ?? 1);
 }
 if (kind === "ls") {
@@ -138,10 +158,12 @@ if (kind === "ls") {
           PUSH_FAIL: fail,
           PUSH_EMPTY: emptySelection ? "1" : "0",
           PUSH_REAL_FORMAT: realFormat ? "1" : "0",
+          PUSH_REAL_ENGLISH: realEnglish ? "1" : "0",
           WAITRON_PRE_PUSH_FETCH_SECONDS: "5",
           ...extraEnv,
         },
       });
+      if (result.error) throw result.error;
       const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
       return { ...result, calls, checks: calls.filter((args) => !args.includes("ls")) };
     };
@@ -191,7 +213,18 @@ const cheap = (...paths) => [
     ...paths,
   ],
 ];
-const checks = cheap("packages/source/src/index.ts");
+const englishCommand = [
+  "--dir",
+  "apps/server",
+  "exec",
+  "node",
+  "--import",
+  "tsx",
+  "../../scripts/check-english-only.ts",
+];
+const english = (...paths) => [...englishCommand, expect.any(String), { changedPaths: paths }];
+const source = "packages/source/src/index.ts";
+const checks = [...cheap(source), english(source)];
 
 describe("pre-push fast checks", () => {
   it("checks changed files and dependent types, leaving tests to CI", () => {
@@ -243,7 +276,14 @@ describe("pre-push fast checks", () => {
             kind === "empty" ? "" : kind === "unknown" ? ref(head, "f".repeat(40)) : ref(),
           );
           expect(result.status, result.stdout + result.stderr).toBe(0);
-          expect(result.checks).toEqual([...whole, ["typecheck"]]);
+          if (kind !== "global") {
+            expect(result.stdout).toContain("CI will run the English-only check");
+          }
+          expect(result.checks).toEqual([
+            ...whole,
+            ...(kind === "global" ? [english("tsconfig.base.json")] : []),
+            ["typecheck"],
+          ]);
         },
       );
     },
@@ -257,7 +297,10 @@ describe("pre-push fast checks", () => {
       git("commit", "-qs", "-m", "Delete a path and add a symlink");
       const result = invoke(ref(git("rev-parse", "HEAD")));
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks.slice(0, 3)).toEqual(cheap(kept));
+      expect(result.checks.slice(0, 4)).toEqual([
+        ...cheap(kept),
+        english(kept, "packages/source/src/deleted.ts", "packages/source/src/link.ts"),
+      ]);
     });
   });
   it("skips empty file lists without losing the remaining checks", () => {
@@ -265,7 +308,11 @@ describe("pre-push fast checks", () => {
       rmSync(join(dir, "packages/source/src/index.ts"));
       const result = invoke();
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks).toEqual([install, ["--filter", "...@waitron/source", "typecheck"]]);
+      expect(result.checks).toEqual([
+        install,
+        english(source),
+        ["--filter", "...@waitron/source", "typecheck"],
+      ]);
     });
   });
   it("blocks a malformed changed file with real cached Prettier, then accepts its correction", () => {
@@ -306,6 +353,65 @@ describe("pre-push fast checks", () => {
       );
     },
   );
+  it("blocks non-English changes and accepts the correction within the pushed paths", () => {
+    const changed = "packages/source/src/index.ts";
+    const translation = "packages/source/src/i18n/words.ts";
+    const outside = "scripts/fixture-word.ts";
+    const linked = "packages/source/src/linked.ts";
+    const missing = "packages/source/src/missing.ts";
+    const replaced = "packages/source/src/former-directory";
+    const samples = [
+      translation,
+      outside,
+      missing,
+      replaced + "/index.ts",
+      ...STILL_TO_CLEAN.slice(0, 1),
+    ];
+    fixture(
+      changed,
+      ({ invoke, dir, git, ref }) => {
+        for (const path of samples) {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), "const mesa = 1;\n");
+        }
+        writeFileSync(join(dir, changed), "// Heading\nconst mesa = 1;\nconst huella = 2;\n");
+        symlinkSync("../../../" + outside, join(dir, linked));
+        git("add", changed, linked, ...samples);
+        git("commit", "-qs", "--amend", "--no-edit");
+        const push = ref(git("rev-parse", "HEAD"));
+        rmSync(join(dir, missing));
+        rmSync(join(dir, replaced), { recursive: true });
+        writeFileSync(join(dir, replaced), "const table = 1;\n");
+
+        const bad = invoke(push + push);
+        const finding = changed + ":2: mesa";
+        expect(bad.status, bad.stdout + bad.stderr).toBe(1);
+        expect(bad.stdout).toContain("'English-only check' failed");
+        expect(
+          bad.stderr.split("\n").filter((line) => line.startsWith(finding)),
+          bad.stderr,
+        ).toHaveLength(1);
+        expect(bad.stderr).toContain(`${changed}:3: huella`);
+        expect(bad.stderr).toContain("Use English");
+        expect(bad.stderr).toContain("move translated text to its translation home");
+        expect(bad.stderr).toContain("KEEPS_NON_ENGLISH");
+
+        const reproduced = spawnSync("pnpm", [...englishCommand, dir, changed], {
+          cwd: root,
+          input: "",
+          encoding: "utf8",
+          timeout: HOOK_TIMEOUT_MS,
+        });
+        expect(reproduced.status, reproduced.stderr).toBe(1);
+        expect(reproduced.stderr).toContain(finding);
+
+        writeFileSync(join(dir, changed), "const table = 1;\n");
+        const fixed = invoke(push);
+        expect(fixed.status, fixed.stdout + fixed.stderr).toBe(0);
+      },
+      { realEnglish: true },
+    );
+  }, 55_000);
   it("blocks unsigned commits before running pnpm", () => {
     fixture(
       "packages/source/src/index.ts",
@@ -324,7 +430,8 @@ describe("pre-push fast checks", () => {
       const result = invoke(ref(rebased, head));
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.checks).toEqual([
-        ...cheap("packages/consumer/src/index.ts", "packages/source/src/index.ts"),
+        ...cheap("packages/consumer/src/index.ts", source),
+        english("packages/consumer/src/index.ts", source),
         ["--filter", "...@waitron/consumer", "--filter", "...@waitron/source", "typecheck"],
       ]);
     });
@@ -408,7 +515,7 @@ describe("pre-push fast checks", () => {
       { fail: "lint" },
     );
   });
-  it.each(["--frozen-lockfile", "format:check", "lint", "typecheck"])(
+  it.each(["--frozen-lockfile", "format:check", "lint", "English-only check", "typecheck"])(
     "blocks a failed %s check",
     (fail) => {
       fixture(
@@ -417,7 +524,13 @@ describe("pre-push fast checks", () => {
           const result = invoke();
           expect(result.status).not.toBe(0);
           expect(result.stdout).toContain("pre-push BLOCKED");
-          const index = ["--frozen-lockfile", "format:check", "lint", "typecheck"].indexOf(fail);
+          const index = [
+            "--frozen-lockfile",
+            "format:check",
+            "lint",
+            "English-only check",
+            "typecheck",
+          ].indexOf(fail);
           expect(result.checks).toEqual(
             [...checks, ["--filter", "...@waitron/source", "typecheck"]].slice(0, index + 1),
           );

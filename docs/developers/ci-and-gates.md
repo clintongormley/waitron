@@ -609,7 +609,7 @@ caps package concurrency at two. Direct package commands retain their Vitest tim
 ## The pre-push hook
 
 The pre-push hook (`.husky/pre-push`) checks sign-offs, runs
-`pnpm install --frozen-lockfile`, formatting and lint on changed files, then
+`pnpm install --frozen-lockfile`, formatting, lint and English on changed files, then
 `typecheck` over changed packages and their dependents. `scripts/changed-packages.mjs` resolves
 the scope for both the hook and CI. Before anything else the hook refreshes `origin/main` from
 `origin`, giving up after 20 seconds plus the deadline runner's 5-second grace
@@ -627,6 +627,11 @@ that still exist as regular files, excluding symlinks. Each tool keeps a content
 `node_modules/.cache/waitron-pre-push/`; its own ignores and file support still apply. Empty
 file lists skip the tool. Global or unknown scopes retain uncached whole-repository
 `pnpm format:check` and `pnpm lint`. The existing scope classifier decides this fallback.
+
+The English check uses the same per-file rules as CI. It reads changed regular files in
+`apps/` and `packages/` outside translation homes, including when a known range has global scope.
+If the hook cannot determine the range, it tells you that CI will check English. CI checks the
+tracked text under those directories and verifies both exception lists.
 
 **Run `prettier --check` after `prettier --write`.** With Prettier 3.9.10 and 3.10.1, one `--write`
 sometimes left a long call chain (most often a `vi.fn().mockResolvedValue(…)` chain) in a shape the
@@ -889,11 +894,11 @@ from passing having read nothing, but lets a listing that drops a few other memb
 
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
-them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
-`.ts` file under `scripts/` is a guard SUITE, which Vitest leaves out of its own table whatever
-`coverage.include` says, except `scripts/dev-server-proxy.ts`, `scripts/english-only-still-to-clean.ts`
-and `scripts/personal-log-scan.ts`, which no table measures; the T3 subsection below says what it
-costs to leave the first where it is.
+them the two classifiers that decide what CI and the hook run — and the vocabulary module.
+Vitest leaves guard suites out of its own table. The other TypeScript files under `scripts/`,
+including `scripts/check-english-only.ts`, `scripts/dev-server-proxy.ts`,
+`scripts/english-only-still-to-clean.ts` and `scripts/personal-log-scan.ts`, are outside the include
+list. The T3 subsection below records the cost of leaving the dev server proxy where it is.
 
 ### The first promotion — measured 2026-09-23
 

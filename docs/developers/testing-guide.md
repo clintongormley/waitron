@@ -2888,7 +2888,9 @@ in the root `coverage.include` IF IT IS TO BE MEASURED AT ALL, and excluded from
 That `include` is one file-type glob (`scripts/**/*.mjs`) plus the explicit paths added beside it,
 so root-level source of another type is
 measured only when somebody names it, suite or no suite — `scripts/dev-server-proxy.ts`,
-`scripts/english-only-still-to-clean.ts` and `scripts/personal-log-scan.ts` are such files today, and [ci-and-gates.md](ci-and-gates.md) records what naming it would cost.
+`scripts/check-english-only.ts`, `scripts/english-only-still-to-clean.ts` and
+`scripts/personal-log-scan.ts` are such files today. [CI and gates](ci-and-gates.md) records the cost
+of including the dev server proxy.
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 

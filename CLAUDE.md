@@ -79,8 +79,9 @@ normal pre-push hook run the local checks once; scoped package tests run in PR C
 Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
 for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
-The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, changed-file formatting and
-lint, and scoped package types. Global or unknown scopes keep whole-repository formatting and lint.
+The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, changed-file formatting,
+lint and English, and scoped package types. Global or unknown scopes keep whole-repository
+formatting and lint.
 Tests and coverage, including root guards, run in CI. Which pushes stop early,
 and which keep the full gate: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
@@ -776,8 +777,8 @@ passed while proving nothing.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
   OUTER config's `test.browser` block**. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
-- **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
-  output**; unset both to see it.
+- **Under an AI agent (`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX` or `CODEX_THREAD_ID` set), Vitest
+  hides a passing test's console output.** Pass `--reporter=default` to see it.
 - **A Vitest run that shows no `Tests` count is no evidence that anything passed, whatever its exit
   status.** Read the count, never a blank output or the exit status of a pipe; under a reporter
   that prints none, read the reporter's own result.

@@ -5336,13 +5336,14 @@ behaviour `multi-root.test.ts` asserts. Check both before committing.
 ## Local checks before pushing
 
 Use focused tests while you build a change, then push through the normal hook. You get quick local
-feedback on sign-offs, dependency consistency, formatting, lint and types while CI runs the package
-suites and enforces their coverage thresholds. You do not need a full local workspace test run just
-to open a PR.
+feedback on sign-offs, dependency consistency, formatting, lint, English and types. CI runs the
+package suites and enforces their coverage thresholds on full runs. You do not need a full local
+workspace test run just to open a PR.
 
 The Husky hook (`.husky/pre-push`) runs `pnpm install --frozen-lockfile`, checks formatting and lint
 on changed files with content caches, then typechecks changed packages and their dependents.
-Global or unknown scopes keep whole-repository formatting and lint. Root guards run in CI.
+Global or unknown scopes keep whole-repository formatting and lint. The English check uses the
+known changed paths. CI scans tracked text in `apps/` and `packages/` for English and runs the other root guards.
 The hook checks commit sign-offs first and stops at a failed check with a command to reproduce it.
 
 A documentation-only push stops after formatting. Repository machinery changes (`scripts/`,

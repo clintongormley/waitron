@@ -431,3 +431,41 @@ export function findAccented(source: string): Violation[] {
       : [{ line: index + 1, word: letter, text: originalLines[index]!.trim() }];
   });
 }
+
+export function englishFindings(source: string, words: ReadonlySet<string>): Violation[] {
+  return [...findSpanish(source, words), ...findAccented(source)];
+}
+
+export function englishFileProblems(
+  path: string,
+  source: string,
+  words: ReadonlySet<string>,
+  stillToClean: boolean,
+): string[] {
+  const findings = englishFindings(source, words);
+  const keep = KEEPS_NON_ENGLISH[path];
+  if (keep !== undefined && findings.length === keep.findings) return [];
+
+  if (keep === undefined && stillToClean) {
+    return findings.length > 0
+      ? []
+      : [
+          `${path}: remove the clean file from scripts/english-only-still-to-clean.ts and lower STILL_TO_CLEAN_COUNT in scripts/english-only.test.ts.`,
+        ];
+  }
+
+  const details = findings.map(({ line, word, text }) => `${path}:${line}: ${word} — ${text}`);
+  if (keep !== undefined) {
+    return [
+      ...details,
+      `${path}: expected ${keep.findings} finding(s), found ${findings.length}. Clean new text or update the keep in packages/db/src/english-only.ts. Remove the keep when no findings remain.`,
+    ];
+  }
+
+  return details.length === 0
+    ? []
+    : [
+        ...details,
+        `${path}: Use English in this file or move translated text to its translation home. For required non-English text, see KEEPS_NON_ENGLISH in packages/db/src/english-only.ts.`,
+      ];
+}
