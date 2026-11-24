@@ -117,12 +117,13 @@ by Git under `apps/*/src/` and `packages/*/src/` with the `.ts` extension. The s
 `i18n/alert-messages.ts`, country packs' `src/demo/` data and the generated
 `packages/reporting/src/dr303-layout.ts`.
 
-The guard uses the caps as entered. In review, check the shape and approval of cap changes and
-look for product code renamed or moved into any excluded path. For example, the two excluded
-`codes.ts` catalogues already contain resolver code. Untracked files, other extensions and files
-outside the named source directories lie outside the scan. Two pull requests can each pass
-against their own heads while together growing a file past its cap or shrinking it enough to need
-a lower cap. The root guard on main evaluates the combined result.
+The guard uses the caps as entered. In review, check that caps are whole numbers, each path
+appears only once, and each added or raised cap has approval. Look for product code renamed
+or moved into any excluded path. For example, the two excluded `codes.ts` catalogues already
+contain resolver code. Untracked files, other extensions and files outside the named source
+directories lie outside the scan. Two pull requests can each pass against their own heads while
+together growing a file past its cap or shrinking it enough to need a lower cap. The root guard
+on main evaluates the combined result.
 
 ## The image's release metadata comes from its source
 
