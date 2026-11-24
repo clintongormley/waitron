@@ -59,7 +59,7 @@ the person's contract takes, holding limits such as the most hours a week and a 
 shifts, weekly rest, breaks and the yearly overtime cap. Today these are
 one `convenio_config` row (`packages/workforce-es/src/schema/convenio-config.ts`);
 moving them per person reaches every reader, so start from `packages/workforce/src/ruleset.ts` and
-grep `convenio`. Still to decide: whether the owner can change a ready-made set or only pick one,
+grep `convenio`. To ask the owner when that work starts: whether the owner can change a ready-made set or only pick one,
 and which sets ship first.
 
 A586 also owns the yearly-hours ceiling and rota warning, and distinguishing overtime from complementary hours.
@@ -91,23 +91,21 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
-## Nothing in the product closes a pay period
+## MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends
 
-(found by A793's design, read). The workforce
+Queued as MONTH-CLOSE (lane I). The owner, 2026-11-24: "my guess is automatically a few days after month
+end", then, on closing by itself and adjustable, "3 working days of grace, adjustable". Working days are
+Monday to Friday, skipping the public holidays in the venue's calendar (the watcher's default, told to
+the owner). Totals are frozen, not the record; nothing blocks; corrections are shown beside the closed
+total and carried as an adjustment; nobody reopens a month; an email goes the day before only when
+something is open.
+
+Found by A793's design, read: the workforce
 module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
 files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
-scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
-with the owner who closes a period and when (a manager's button, or automatically once it is
-due), then build it. Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
+scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one.
+Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
 When closing is built, an old main box's return of working hours (`packages/workforce/src/handover-return.ts`) must also carry its closures, which today's batches do not; until then a returned entry naming a closure the new main box lacks is refused (`attendance.return_entry_invalid`) and stops the return of working hours.
-
-## A644. Staffing slots stop at minute 1440 on a business day longer than a day
-
-When the
-changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
-hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
-block can ask for anyone in the last hour, while `placeShift` can place a shift there. Next: decide
-whether a block may run to the day's real end.
 
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
 
@@ -134,13 +132,13 @@ mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broke
 words that say it is the person's preference, not their contract. The `availability` table
 exists unused. Shown in A585's picker and warnings. After A586.
 
-## Bundle: Give the built close step a caller, then its cadence rule
+## Bundle: Closing a month's hours, then its cadence rule
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M.
 
-- **Nothing in the product closes a pay period** (found by A793's design, read). A793's slice 6
-  (tips frozen with the pay period) waits for one. Decide with the owner who closes a period and when.
-  [Detail](workforce.md#nothing-in-the-product-closes-a-pay-period).
+- **MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends, adjustable** (owner,
+  2026-11-24). Queued in lane I. A793's slice 6 (tips frozen with the pay period) waits for it.
+  [Detail](workforce.md#month-close-a-months-hours-close-by-themselves-3-working-days-after-it-ends).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
   in the backlog until then.
@@ -152,7 +150,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
   whether it can still be applied. Open shifts, disputed corrections, unanswered questions
   and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
 
-- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). Longer-than-day staffing remains A644.
+- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept (A644, closed 2026-11-24).
 
 ### A1268 corrections after a backward clock step
 

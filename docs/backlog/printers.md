@@ -253,23 +253,6 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
   read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
   need an A4 page, or A4 printers stay out for them.
 
-## Find a bill's pay offers no guests field
-
-- **Find a bill's pay offers no guests field (left open by A663 Part 3b).** A bill collected from
-  Find a bill (`apps/till/src/widgets/find-bill-dialog.ts`) sends no guests count. A bill with no
-  invoice yet is recorded then, and stores the count that would print by default at that moment;
-  one already invoiced by an unpaid departure keeps the count stored at the departure
-  (`issueUnpaidInvoice`, `apps/server/src/working-order-invoice.ts`), because collecting it records no new
-  sale (`runCollectOrder`, `apps/server/src/till-sale.ts`). Either way the waiter cannot choose
-  another number, or leave the line out, there. The owner's decision
-  of 2026-10-16 put the «Comensales» field on the payment screen only; this records the gap
-  without deciding whether Find a bill should ask too.
-
-## One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still open
-
-- The paper-width dropdown names widths only, not printers, so two printers of one width at
-  different resolutions cannot be told apart (owner's call).
-
 ## Share printed logo dots per library photo (A1308 dv16 M3)
 
 - Keep the cached dots when printing. On the Intel Core i5-6400T test box, drawing both paper sizes
@@ -282,24 +265,6 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
 - Follow-up (ruling C): the preview no longer shows the QR link as text for a raster receipt. A
   possible fix is to carry the link alongside the print job so the preview can still show it as
   text.
-- Deferred (ruling H): decide whether to warn when no legal QR dot size exists. Re-check the
-  valid-link range with `apps/server/src/qr-link-range.test.ts` before changing the fallback.
-
-## Loose ends left by A663 Part 3b (#1827)
-
-- Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
-  amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-
-## Loose ends left by A661 (#1745)
-
-- The print queue's Reprint, on its own printer or another (A405, #2678), does not follow the
-  till's rule for a full invoice's printer. A till refuses to resend an original a print request
-  sent, when that printer is not the till's invoice printer (`receiptPrinterWithdrawn`,
-  `apps/server/src/invoice-delivery-status.ts`). The dashboard's
-  `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply that
-  rule, and since A405 it can send a full invoice's original that never printed (out of delivery
-  attempts, or still waiting on a disabled or unseen printer) to any other active receipt printer.
-  Decide whether a manager's reprint should.
 
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 
@@ -391,14 +356,12 @@ Hardware and inbox checks to complete in the owner session.
   with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
   "A clock jump"). Left open by A798-B slice 9 (#2025).
 
-## Bundle: Receipt layout pass
+## A1201. A receipt's extra shows its own count under a grouped dish
 
-1 entry, size S.
-
-- **A1201. Owner question: a receipt's extra prints no count beside a grouped dish (seen in A803
-  slice 1's LOOK).** Two Pollo asado with Padrón peppers print "2 Pollo asado con patatas 19.00"
-  then "Pimientos de Padrón 4.00", at 58 and 80 mm. What a line of two printed before slice 1 was not
-  checked. Decide whether the extra's row shows its count.
+Queued as RECEIPT-EXTRA-COUNT (lane I). Two Pollo asado with Padrón peppers print "2 Pollo asado con
+patatas 19.00" then "Pimientos de Padrón 4.00", at 58 and 80 mm (seen in A803 slice 1's LOOK). The owner
+picked, 2026-11-24, "Yes, show its total (Recommended)": "2 Pimientos de Padrón 4.00". Paper only; the
+owner sees it before it lands.
 
 ## Bundle: A print agent somewhere other than the box
 
@@ -419,15 +382,6 @@ Hardware and inbox checks to complete in the owner session.
   Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29; it waits for a
   device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
   Cloud over mobile data at once? [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
-
-## Bundle: Guest count
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Find a bill's pay offers no guests field** (left open by A663 Part 3b). Not decided.
-  [Detail](printers.md#find-a-bills-pay-offers-no-guests-field)
-- **Loose ends left by A663 Part 3b (#1827).**
-  [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
 
@@ -457,7 +411,8 @@ Hardware and inbox checks to complete in the owner session.
 - **Document/printer routing scope (A790).** The owner dropped G4/A947, the recovery-origin
   file, browser journal, prepare/accept and duplicate-print protection on 9 November 2026 at
   20:34. Landed foundations grant no cleanup authority. Keep the Printers tab’s A4-printers
-  wording; F2 replacement and A661’s print-queue Resend policy remain separate work. See the
+  wording; F2 replacement stays separate work; the print queue's Reprint keeps its own printer choice (A661,
+  closed 2026-11-24). See the
   [closeout and implementation receipts](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a790-payment-invoice-printer.md).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is

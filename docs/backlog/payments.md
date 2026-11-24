@@ -16,59 +16,23 @@ Stripe reader before using Stripe, and cover the on-device amount path if that a
 The approved implementation is in
 [the A1389 cut-back plan](../superpowers/plans/2026-11-08-a1389-actual-card-amounts.md).
 
-## A846's points for the owner at land: held card payments
+## A846. A held card payment is Refunded or Put on a bill
 
-Each stays open until the owner answers it. "The picture" was a mock-up, removed from the repository on 2026-11-02.
+Queued as HELD-KEPT (lane F). The owner, 2026-11-24, on "Kept: the money was owed": "this is no longer
+true, the receipt would be made regardless, it doesn't depend on the bill being paid, no?", and then
+"yes" to removing it. The outcomes become "Refunded" and "Put on a bill": the dishes are rung up again
+and the money recorded as taken on another card machine.
 
-1. **"Kept: the money was owed" leaves money with no invoice.** The payment stays captured on an
-   abandoned order with no sale, and Waitron files nothing for it. Whether the money needs an
-   invoice is a fiscal question A846 does not answer.
-2. **"Next morning" is midnight UTC** (01:00 or 02:00 in Spain), not the venue's business-day
-   changeover, so a venue still open then sees the held-payments alert come back during service.
-3. **A replaced alert reads "handled by someone"** in the Handled tab when the check replaced it
-   because a new held payment appeared. Alternative: a distinct "replaced by a newer alert" line.
-4. **The alert's button reads "Go to Card payments"** (the screen's name in the navigation), as
-   other alerts' links do, not the picture's "Open Payments".
-5. **The outcome is a dropdown, not the picture's two radio buttons**: no radio-group field exists
-   among the shared components. Building one is a new shared field with its own tests.
-6. **The morning return needs the payments check to get past its Stripe account.** While the
-   Stripe credential cannot be used, the check starts and throws in `resolveAccount()`
-   (`packages/payments-stripe/src/reconciler.ts`) before reading anything, so a handled
-   held-payments alert does not come back; what shows instead is the check's own failure
-   (`reconcile.run_failed` and `reconcile.run_parked` log lines, and `/health`'s `parked` count
-   and a `duty.degraded` log line for the pass that parks it). The alternative is refreshing the
-   held alert before the check resolves its Stripe account.
+The same item takes:
 
-7. **The alert reads "1 card payments … refund them … with each"** for a single payment: the alert
-   wording has no singular form, like the other payment alerts beside it.
-8. **The dialog changes width when an outcome is chosen** (244 px empty, 372 px with the longest
-   choice at 1280); the picture draws it wide throughout.
-9. **At phone width the chosen outcome is cut short**: "Refunded in the card provider's dash…". A
-   shorter label for the closed dropdown would avoid it.
-10. **On opening, focus lands on the dialog box itself** (a ring round the whole dialog), not on the
-    Outcome field.
-11. **At 1280 the alert row's buttons wrap** ("Go to Card payments" on three lines), because the
-    actions column is drawn as narrow as its content.
-12. **No gap under the dialog's order line** before the amounts; the picture leaves one.
-13. **The picture's note under the dialog's buttons** ("Waitron refunds nothing itself…") is not in
-    the dialog.
+- **"Next morning" is midnight UTC** (01:00 or 02:00 in Spain), so a venue still open then sees the
+  held-payments alert come back during service. It becomes the venue's business day: the owner's
+  answer of 2026-10-18 is an ordinary alert that "comes back the next morning".
+- **The alert's wording for a single payment**: "1 card payments … refund them … with each".
+- **The section's introduction**, which says a manager records only the outcome the provider confirms,
+  with a note, and does not fit the held list.
 
-14. **The section's introduction does not fit the held list.** It sits under "Bill payments and
-    refunds awaiting a card provider", whose sentence says a manager records only the outcome the
-    provider confirms, with a note. A held payment is not a bill payment, its note is optional, and
-    "Kept" is not something the provider confirms.
-15. **The held alert says "closed orders"**, as the picture does, though a payment is held only when
-    its order was abandoned; the orphan alert beside it says "closed or abandoned".
-16. **A day whose check never succeeds is retried every day, with no cap** (the owner asked for a
-    next-day retry).
-17. **A payment refunded by staff between the check's two transactions could still be held**: the
-    check decides on its first read, as the existing refund-claim path does. Believed rare; not fixed.
-18. **A held payment whose order stops being abandoned** would be named by both the difference and
-    held alerts (`markOrderPlaced`, `apps/server/src/working-order-counter.ts`, updates by id with no status
-    check): reported twice, never hidden. Callers not traced.
-19. **The held list leaves `label` out when an order has none**, where its sibling lists send
-    `label: null` (`GET /management-api/payments/held`). A one-line change plus its test in
-    `apps/server/src/payments-api.held.test.ts`.
+A846's other points for the owner were closed as built on 2026-11-24.
 
 ## The SumUp Solo experiments
 
@@ -362,9 +326,9 @@ Remaining Stripe qualification and maintenance.
   change a dish's note, rename the bill and change the whole-order kitchen note. Adding, removing
   or repricing dishes, a quantity, extras or options-answer change (a card taken for the whole
   order files the options answered when the card payment began; refusing it while a refund or a
-  part payment waits is the lane's reading, not the owner's words), comps, discounts and moving
+  part payment waits is the lane's reading, kept, 2026-11-24), comps, discounts and moving
   dishes between bills stay refused. So do a partial move or split of a held dish, which rewrite
-  the rows carrying its price: that is the lane's reading, not the owner's words. Moving a whole bill
+  the rows carrying its price: that is the lane's reading, kept, 2026-11-24. Moving a whole bill
   was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
   The writes allowed above count their write with `bumpRevisionKeepingPayment`
   (`apps/server/src/working-order-edit-state.ts`). Tests: the "card payment" and "refund" cases in

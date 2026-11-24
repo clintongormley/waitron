@@ -273,9 +273,8 @@ the season painter continues saving through the season-week route._
 - **A read-only Calendar offers no prep stations in Show ([A722 Part 3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs
   `venue.configure`. A read-only Calendar reads no station list and no station times, and
-  ignores a `station` in its address. Whether a supervisor (`venue.view` without
-  `venue.configure`) gets a read-only station view is the owner's open question: backlog.md,
-  "Supervisors have no dashboard path to a prep station's times".
+  ignores a `station` in its address. A supervisor's read-only station view is queued under
+  [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).
 
 - **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it
   offers "Show {season}'s standard week", which opens the read-only painter. In Staffing a viewer's
@@ -412,7 +411,8 @@ the season painter continues saving through the season-week route._
 
 Left open by A723 (#1849).
 
-A723's plan made these choices by default and sent them to the owner to overrule if wanted:
+A723's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled, and closed
+on 2026-11-24:
 
 Decisions 1 and 3 are superseded by the stored-whole, read-intersection rule above (2026-11-15).
 
@@ -428,7 +428,8 @@ heading): the editor is now titled "<name>: special day, <dates>".
 
 Left open by A762, #1850.
 
-A762's plan made these choices by default and sent them to the owner to overrule if wanted:
+A762's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled, and closed
+on 2026-11-24:
 
 - Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
   rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits

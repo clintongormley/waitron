@@ -341,13 +341,6 @@ reset and operator gates; this entry does not start that job.
   shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se
   detiene"), and one dialog line per inherited default.
 
-## Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519)
-
-- The till names a reader deleted elsewhere with `reader.not_found`'s general sentence ("This
-  device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
-  has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
-  (#1520), whose plan kept the existing sentence.
-
 ## Loose ends left by A483 (#1544)
 
 OPEN.
@@ -877,24 +870,17 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-3 entries, size M.
+1 entry, size M.
 
-- **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
-  may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
-  `packages/menu`'s `options.test.ts`, `product-modifiers.test.ts` and `extras.test.ts`;
-  whether to keep pinning it is the owner's call.
-- **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
 
 ## Bundle: Printer, reader and device delete wording
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **Loose ends left by A435's printer, reader and device delete (steps 2 to 4).**
   [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
-- **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
-  [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
 
 ## Decisions and deliberate limits
 
@@ -931,7 +917,7 @@ An export with an optional module Off loads on a new box with that module On and
 See the [design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
 
 
-**A malformed path id keeps the status it answers today (A394 question 7, the watcher's decision of 2026-11-20 22:35 on the owner's delegation of 14:31, not the owner's own).**
+**A malformed path id keeps the status it answers today (A394 question 7, the watcher's decision of 2026-11-20 22:35 on the owner's delegation of 14:31; kept, closed 2026-11-24).**
 An address whose id is not even well formed answers 400 `shared.invalid_id` on most routes; the A394
 audit (read, not run) found the resource's not-found 404 on management-api and orders-api and 409 on
 three till routes. The rule's 404 is not applied to it. The watcher's reason: such an id comes only

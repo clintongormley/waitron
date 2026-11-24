@@ -38,20 +38,6 @@ Vitest 4.1.12. It does not test Vitest 5, so this entry remains open.
 
 See the owner's ignore-qualification decision below.
 
-## Whether a declared floor follows the installed version is undecided — one decision for every manifest
-
-Left open by #432.
-
-#432 raised five low floors (`hono`, `pg`, `playwright`, `@types/pg`,
-`@aws-sdk/client-s3`) so that every package declared one identical range; no commit or doc
-explains why those floors were low, so this was a judgement, not a rule being followed. The vite 8
-and passkey upgrades below left the same shape (at the time: `^8.0.0` against 8.3.0 installed;
-`^14.0.0` below 14.0.2 in two manifests). Dependabot's npm updates set no `versioning-strategy`; its first npm PR,
-#765, raised the floor of each caret range it changed to the new version and kept each manifest's own form (an
-exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
-`@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
-`bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
-
 ## The default browser floor rose, and no BROWSER floor is stated anywhere in the repo
 
 Left open by #450.
@@ -100,11 +86,8 @@ packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
 
 ## Bundle: What package manifests declare: floors and the root engines line
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S.
 
-- **Whether a declared floor follows the installed version is undecided — one decision for every
-  manifest.**
-  [Detail](dependencies.md#whether-a-declared-floor-follows-the-installed-version-is-undecided--one-decision-for-every-manifest)
 - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.**
   [Detail](dependencies.md#the-supported-node-version)
 

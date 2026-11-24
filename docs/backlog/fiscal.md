@@ -119,11 +119,12 @@ rule in [Q18(b)](../compliance/asesor-questions.md): the same supplier's number 
 one issue year and accepted in another with a warning. The receipt date still sets the VAT
 reporting period.
 
-## A554. Should any screen show the address an invoice email went to?
+## A554. Find a bill and Orders show the address an invoice was emailed to
 
-An owner question. Until
-it is answered none does: the delivery status the till and the dashboard read carries no address,
-and both email forms open empty. Left open by A231q.
+Queued as INVOICE-EMAIL-SHOWN (lane I). The owner picked, 2026-11-24, "Yes, in Find a bill and Orders
+(Recommended)", to people who may send it again. Today the delivery status the till and the dashboard
+read carries no address, and both email forms open empty. The address is personal data: the log rule and
+the privacy documents' lists apply to it. Left open by A231q.
 
 ## The reconcile sweep may raise a second "accepted with errors" warning
 
@@ -1065,13 +1066,6 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   an earlier one is refused; the owner suggests asking AEAT's developer channel first. No change until then.
   [Detail](fiscal.md#re-examine-the-hold-behind-an-unknown-outcome-once-aeats-developer-channel-answers)
 
-## Bundle: Decide whether any screen shows an invoice email's address
-
-1 entry, size S, needs the owner. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **A554. Should any screen show the address an invoice email went to?** An owner question, open.
-  [Detail](fiscal.md#a554-should-any-screen-show-the-address-an-invoice-email-went-to).
-
 ## Bundle: One authorised edit of a protected test, plus its neighbours
 
 4 entries, size S.
@@ -1124,8 +1118,10 @@ relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Whic
 correction's line points, reading a void's date in its sale's offset, and putting a corrective of an
 exchange invoice on that invoice's own date are the watcher's choices (the plan's D5, D7 and D8;
 [plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). The plan's
-movement table, which decides how each kind of record moves VAT, and the handover limit below were
-not put to the owner. Deliberate limits:
+movement table, which decides how each kind of record moves VAT, and the handover limit below are not
+asked: the accountant decides from the workbook, under the owner's rule of 2026-11-21 ("leave it up to
+the restaurant and their accountant. Our job then is to provide the information they need to do their
+job"). Deliberate limits:
 a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
 after a handover count on their own stamps, since nothing records when they arrived; every
 replacement and the invoice it replaces are read whatever their date. The purchases side is not
@@ -1167,12 +1163,13 @@ Its scope, free items on tickets at two or more rates only, is the watcher's cal
 lane L `questions.md`, "WATCHER 2026-11-23 13:47"). When the same ticket also carries another
 discount, every line weighs its menu price, so that discount is shared too: the watcher's call
 following the owner's O1 rule ("its the proportions which matter", said about goodwill money back),
-not the owner's own answer (O3, "WATCHER 2026-11-23 16:05"). A free item comes back with the
+not the owner's own answer (O3, "WATCHER 2026-11-23 16:05"); the owner landed #4166 on 2026-11-23 with it
+listed as the watcher's call. A free item comes back with the
 ticket's paid dishes, never on its own: the owner's words, on a €10 salad returned from a ticket
 with a free €2 water, "they would have to return both, and get the 10€ back" (O4, "WATCHER
 2026-11-23 14:17"). That it goes with the last paid dish, and that Cancel and refund of that dish
 is refused once the free item was served, pointing staff to Correct invoice, are the watcher's
-calls ("WATCHER 2026-11-23 15:17"). Question 14 of the
+calls ("WATCHER 2026-11-23 15:17"), listed as such in #4166 when the owner landed it. Question 14 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
 
@@ -1191,7 +1188,9 @@ Where Correct invoice refuses for good (another box's ticket, one replaced by a 
 filing record, a full invoice naming a customer, records that need
 checking), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
-2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still
+2026-11-23 14:55"). The owner landed #4192 on 2026-11-24 with O7 to O9 listed as the watcher's calls, and
+the same day approved one Give money back that picks the right way by itself
+([plan](../superpowers/plans/2026-11-24-give-money-back.md)), so none of them is asked again. A refund naming no dishes counts against cancelled dishes still
 owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
 refund of money Correct invoice could give back is refused before the terminal step: the watcher's clearance of the lane's change (2026-11-23 22:51).
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
@@ -1202,7 +1201,7 @@ A correction's amount is shared across the dishes in proportion to their menu pr
 words, "its the proportions which matter" (O1, lane L `questions.md`, "WATCHER 2026-11-23 14:15").
 A dish whose share is more than is left of it (after an earlier discount or correction) gives back
 what is left, and the rest is shared over the others in the same proportions: the watcher's build
-rule in that entry, not the owner's words. When staff tick dishes, the same rule runs over the
+rule in that entry. When staff tick dishes, the same rule runs over the
 ticked dishes, so ticking every dish equals ticking none: the watcher's call (O9, "WATCHER
 2026-11-23 15:17"). Question 14 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
@@ -1224,8 +1223,9 @@ are new dish rows, an exception to A1308's "the order line is the dish", because
 drawn from its bill's lines and the credited ticket must still reprint with its dishes. The design,
 D1 (an approver's PIN, as Cancel and credit), D2 (no paper for the credit note) and D3 (a part-paid
 printed bill stays refused) are the lane watcher's choices of 2026-11-20 (lane L `questions.md`,
-09:58 and 10:11), not the owner's; D4 (a dish held in an unsent group is fired first) is the lane's
-default. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tables keyed to a dish
+09:58 and 10:11); D4 (a dish held in an unsent group is fired first) is the lane's
+default. The owner landed #3876 on 2026-11-20 ("land it"), whose description lists D1 to D4 as theirs to
+change. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tables keyed to a dish
 line by hand; nothing checks it.
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
@@ -1288,8 +1288,10 @@ the right to correct invoices, or while the invoice can no longer be corrected
 only when a person's request filed it (the last cash step or File now) and the till may print
 receipts; an automatic filing and a replayed request print nothing, and a reprint is marked a copy
 and opens no drawer. When it prints is the watcher's rule (lane L `questions.md`, 2026-11-13 01:05);
-the print-receipt condition follows the card slip's and came from this branch's review. Both are
-for the owner to confirm at landing.
+the print-receipt condition follows the card slip's and came from this branch's review. The owner landed
+#3085 on 2026-11-13 ("Land it") with both as the points to confirm, and Give money back keeps them: a
+cash correction prints its receipt and a card one does not
+([plan](../superpowers/plans/2026-11-24-give-money-back.md), D14).
 _2026-11-15 (A1407): a replacement corrective's first till reprint is its original; later ones are
 copies._
 

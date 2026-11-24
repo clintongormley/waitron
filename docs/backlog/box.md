@@ -167,15 +167,6 @@ qualification, and released A947 stream/spare/membership interfaces in that hist
 For the next build, follow the new plan above rather than those superseded dependencies. Reuse settings/window policy after removing retired clock-digest inputs; keep old discovery/journal/admission and A799 download helpers unwired instead of fabricating their inputs. A799 has no separate delivery. Activate only after the new route's applicable real checks pass on the exact releases and platform.
 The historical route described here remains **UNVERIFIED / NOT RUN**. Follow the current manual-path rehearsal linked above for its separate synthetic Linux checks.
 
-## start-space.ts's `logDir: null` option is dead since A1042
-
-`freeSpaceAtStart` (`apps/server/src/start-space.ts`) still accepts `logDir: null`, meaning "no
-logs folder of its own"; both its calls in `apps/server/src/node-entry.ts` pass a folder now that
-the start no longer cleans a first-setup workspace. Removing it deletes
-the case "with no logs folder of its own, deletes no logs or crash reports below the floor, and
-still deletes staging" (`apps/server/src/start-space.test.ts:163`), a changed assertion, so the
-owner approves the removal.
-
 ## The recovery page's secret bound is a convention, not a guard
 
 #310 masks URL credentials on
@@ -316,7 +307,7 @@ username, the route also still connects to whatever server and port the request 
 answer says whether that name exists and whether the port answers.
 
 The owner put this on hold on 2026-11-16 and took it off hold on 2026-11-21. Requiring a login
-during setup is the watcher's choice (2026-11-21), not the owner's, and the owner may overrule it;
+during setup is the watcher's choice (2026-11-21), kept (closed 2026-11-24);
 the watcher dropped the setup-claim build because a claim needs no sign-in either. Cost: a venue
 whose only mail server takes mail with no login uses one with a login during setup, then saves its
 own on the dashboard's Email page.
@@ -1125,13 +1116,13 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
-## The full-disk bar waits for the owner's answers.
+## DISK-FULL-SCREEN. Out of space: a red window over the whole screen
 
-- **The full-disk bar waits for the owner's answers.** Its words; naming a deletion only from an
-  open alert under a day old (so a fresh deletion is not named while an older alert stays
-  unhandled); not saying "every backup it may"; a red edge and border rather than a filled bar; the
-  bar beside the bell's toast; and reading the queue's "no button" as the dropped Box status button.
-  The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
+Queued as DISK-FULL-SCREEN (lane I). The owner, 2026-11-24: "A modal like when the server is down - red
+covering the whole screen. Disk Full. Waitron cannot operate. or similar". Tills and dashboard; on the
+dashboard the window has Open Box status and does not cover that page (the watcher's addition, told to
+the owner). Pictures go to the owner before it is built. The long bar's words (A1127 slice 3, #2223) go,
+and #2223's other questions are closed.
 
 ## Bundle: Finish the clock work: a check at every start and every change
 
@@ -1160,18 +1151,13 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
-- **The full-disk bar waits for the owner's answers.**
-  The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
-  [Detail](box.md#the-full-disk-bar-waits-for-the-owners-answers).
+- **DISK-FULL-SCREEN. Out of space: a red window over the whole screen** (owner, 2026-11-24), queued in
+  lane I. [Detail](box.md#disk-full-screen-out-of-space-a-red-window-over-the-whole-screen).
 
 ## Bundle: What pack part 1's reviews left
 
-3 entries, size S, needs the owner.
+2 entries, size S.
 
-- **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
-  the design left open with a conservative default, among them the keep-until date counting from
-  the key's change time (a stated departure from design §4) and Make offered wherever the old
-  Recovery PDF card was. [The list](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
 - **A1187: the Backups card's receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
 - **A1187: the Backups card after a Live setup has not been seen in dark theme or at phone width.**
 
@@ -1187,16 +1173,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   Not measured: a physical box's own disk, a venue's real rate of sales, an outage of a venue's
   own line, and the side file reaching a box's 256 MiB limit.
 
-## Bundle: Backups screen leftovers
-
-1 entry, size S, needs the owner.
-
-- **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
-  the only retries are changing a setting or the box's next start. Letting it send the same settings
-  again is an exception to the Forms rule that a save stays quiet until the draft changes (A331), so
-  it needs the owner's decision. Found by fix/backups-screen-small's review, by reading
-  `#apply`'s `scope.commit` and `#applyAction`; not run.
-
 ## Decisions and deliberate limits
 
 - **Keep the recovery-key fingerprint in backup status** (owner, 2026-09-25). `backup-supervisor.ts` shows the first eight hex characters of its SHA-256. A reader of that status can compare a guessed key against it.
@@ -1205,7 +1181,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 **The server does not refuse `WAITRON_VENUE_DIR` outside development (owner, 2026-11-09).** A box never sets it because the deploy files never name it (guarded by `scripts/deploy-image-env.test.ts`); the variable is listed as a development setting: "the server does not refuse the variable outside development; it is listed as a development setting."
 
-- **A950, step 1b (watcher, 2026-11-18 22:47, open to the owner).** A numbered install that
+- **A950, step 1b (watcher, 2026-11-18 22:47; kept, closed 2026-11-24).** A numbered install that
   keeps venue data refuses an older release. A confirmed reset may choose an older signed
   release because the wipe discards that data. Fresh and reset installs keep their retained
   verifier and keys. A checked numbered upgrade refreshes both before Apply. A release
@@ -1394,14 +1370,14 @@ throttling and its five-minute grants. [Plan and changed checks](https://github.
   until it passes, so such a bucket would get no backups at all, and the recheck would mark a
   working copy's bucket unusable.
   A bucket saved before this check, on such a provider, keeps copying, and each daily clean-up
-  that has old files to remove still fails (`stream.prune_failed`). Open to the owner.
+  that has old files to remove still fails (`stream.prune_failed`). Kept, closed 2026-11-24.
 - **The Tax agency row on Box status shows the oldest unsent record's time ("Unsent since"), not
   when sends began failing** (campaign watcher, 2026-11-15 02:28, lane C questions.md; #3266).
   Nothing stores when sends began failing, and an incident's open time would cover only part of what
   raises the unsent notice (a failure marked on one record raises it with no incident open). The
   record's time is true in every case the notice shows. It is the same record time the bell's
   delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
-  and held ones count too. Open to the owner.
+  and held ones count too. Kept, closed 2026-11-24.
 
 The watcher retained invoice-delivery status’s existing claim-expiry transaction and its 507 refusal
 on 15 November 2026 at 06:10 in Lane K’s `questions.md`.
@@ -1424,7 +1400,7 @@ notes on that page.
 
 ### The bucket client's limits (A44, #676)
 
-Recorded as limits by the campaign watcher on 2026-11-11 (A1508), open to the owner.
+Recorded as limits by the campaign watcher on 2026-11-11 (A1508); kept, closed 2026-11-24.
 `createS3ObjectStore` gives a request up when it has had no reply 30 seconds after it started
 (`BUCKET_IDLE_MS`, `packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
 body then stalls is not bounded by that limit, only by its caller cancelling the call
@@ -1468,8 +1444,8 @@ The owner's four answers: no reserved
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
-- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
-- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06, open to the owner).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
+- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05; kept, closed 2026-11-24).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06; kept, closed 2026-11-24).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **The server-wide page check looks only at whether a change carries the dashboard's sign-in cookie, not at whether its session is live (A1371, 2026-11-06).** Checking the session would cost a database read on every change, and nothing but a browser sends that cookie: outside tests, its name appears only in `packages/server-kit/src/management-cookie.ts` and that package's index (a search of `apps`, `packages` and `scripts`, 2026-11-06), and `git grep` for it in Waitron Cloud's repository at `6eeb0d953` printed nothing. A change without the cookie passes, so a till on another server, Stripe's webhook and the print agent keep working. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
   **2026-11-15:** the [till origin check](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-till-origin-check.md) extends this presence check to till and device cookies. Trusted venue origins retain access; only requests with none of these cookies bypass it.
 - **The page check leaves `GET`, `HEAD` and `OPTIONS` alone (A1371, 2026-11-06).** Another page cannot read their answers, and a CORS preflight must reach the CORS middleware. Two kinds of `GET` still change something when another page sends them: every signed-in `GET` that is not a passive read moves the session's last-seen time (`packages/identity/src/management-session.ts:86-91`), so a page on another port left open in the same browser can keep a session from going idle, though it changes no venue data; and the Google sign-in's return, `GET /management-api/google/callback`, sets a session cookie, as a sign-in arriving from Google must, guarded by its own state cookie. No route takes a WebSocket. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
@@ -1521,7 +1497,7 @@ The owner's four answers: no reserved
   and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
 
 - **Backup status reads keep their own storage client per destination (the watcher's decision of
-  2026-11-07, A1391, open to the owner).** The status read holds one client per destination
+  2026-11-07, A1391; kept, closed 2026-11-24).** The status read holds one client per destination
   (`StatusClients`, `apps/server/src/backup-status-clients.ts`, owned by `BackupSupervisor`), built
   on the first read and lent to every later one; it shares nothing with the running backup's
   clients. A destination whose settings differ by value from the client's (any field, the secret
@@ -1539,7 +1515,7 @@ The owner's four answers: no reserved
   reads was not measured.
 
 - **A stored bucket-copy record is not re-checked for a user name, password, query or fragment in
-  its address (A1391 plan D1; the lane's decision of 2026-11-07, open to the owner).** Save through
+  its address (A1391 plan D1; the lane's decision of 2026-11-07; kept, closed 2026-11-24).** Save through
   Backups, whose PUT checks the address with `readBucketConfig`
   (`packages/stream/src/bucket-config.ts`). **2026-11-15, env6:** the credentials tool now refuses
   `backup.stream` changes, retiring the former CLI exception. The address is in the `backup`
@@ -1642,8 +1618,6 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   [Detail](box.md#a917--the-owner-chooses-the-servers-local-name-instead-of-waitronlocal)
 - **A device's or an administrator's time is self-reported.**
   [Detail](box.md#a-devices-or-an-administrators-time-is-self-reported)
-- **The email about a clock set before 28 October 2024 rarely leaves the box.**
-  [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-rarely-leaves-the-box)
 - **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
   staging folder**
   [Detail](box.md#resolvesafeentrypath-appsserversrcstate-secretsts-is-unchanged-and-nothing-chmods-the-staging-folder)
@@ -1872,26 +1846,18 @@ also needs its separately versioned archive contract. Full-history work under th
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
 
-## The accountant's file is comma-separated in both languages
+## ACCOUNTANT-XLSX. Deferred payments join the accountant's download, and the working-time file is an Excel file
 
-The accountant's file of deferred payments (`apps/server/src/deferred-payment-export.ts`, A275) joins
-its cells with `,` whatever the venue's language, and writes a Spanish amount with a decimal comma
-inside a quoted cell (`12,30`). The working-time export (`apps/server/src/attendance-export-csv.ts`)
-also joins with `,` in every language. LibreOffice set to es-ES opened a Spanish file written this
-way in columns (A1088 visual check, 2026-10-25, on a file A1420 PR 6 deleted). A spreadsheet set to
-expect `;` may open it in one column; Excel is not installed on the machine that checked, so Excel
-in Spain is untested. Whether the `es` file should use `;` is the owner's decision.
+Queued as ACCOUNTANT-XLSX (lane I). The owner, 2026-11-24, on Excel files for both: "yes, and do we have
+the option of making them google sheets as well?" (an Excel file opens in Google Sheets; there is no
+direct connection). The deferred payments become a sheet of the accountant's download and their own file
+goes; the working-time export becomes an Excel file.
 
-Two smaller points from the same check, in LibreOffice:
-
-- Amounts are shown without fixed decimals: `12.30` shows as `12.3` and `-5.00` as `-5`. The file
-  holds both places; the spreadsheet drops them.
-- A cell the shared formula guard protects shows its apostrophe: `=1+1` shows as `'=1+1`. The guard
-  (`csvCell`, `apps/server/src/attendance-export-csv.ts`) puts an apostrophe before text that starts,
-  after any spaces, with `=`, `+`, `-` or `@`, or with a tab or a carriage return, so the
-  spreadsheet does not run it as a formula.
-
-Left open by A1088.
+Today both files join their cells with `,` in every language (`apps/server/src/deferred-payment-export.ts`,
+`apps/server/src/attendance-export-csv.ts`), so a spreadsheet set to expect `;` may open the Spanish one
+in one column; Excel was never tried. In LibreOffice amounts lose fixed decimals (`12.30` shows as
+`12.3`), and a cell the formula guard protects (`csvCell`) shows its apostrophe (A1088's visual check,
+2026-10-25).
 
 ## A device's or an administrator's time is self-reported.
 
@@ -1929,15 +1895,6 @@ while the clock was more than a day ahead is refused by every device whose clock
 repair route reissues a leaf the box itself sees as not healthy; whether a device that refuses the
 certificate can reach that route is not checked. Slice 9c should refuse a certificate issue while a
 clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
-
-## The email about a clock set before 28 October 2024 rarely leaves the box.
-
-With a date that early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`,
-slice 10 plan P8). That failure comes before the email is handed over, so the queue retries it on
-the box alert waits for a day, by the box's own clock; once the clock is set right the email is past
-its day and is dropped unsent. The alert stays in the bell. A plain relay or the practice box's
-local capture does receive it. For the owner to know. Read, not run: no TLS relay with a
-future-dated certificate was used in 3b-ii.
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

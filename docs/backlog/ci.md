@@ -186,13 +186,6 @@ seconds, and the one re-run of the failed job passed. The log is kept at
 `~/waitron-campaign-l/ci-logs/pr3898-run44838869956-test-server-12.log`; it does not show what the
 hooks were waiting on.
 
-## `--no-verify`: the docs say "Claude never", the hook says "agents never"
-
-`CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
-never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agents never". Codex
-sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
-decides whether the rule covers every agent, then the two docs follow.
-
 ## A668-5 normal-push recurrence, 2026-10-16
 
 2026-10-22: A994 reproduces the diagnostic failure cold and starts that fixture after self refresh,
@@ -329,15 +322,6 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
   - Historical planner 43278084012: recover that run's contemporaneous admission/recovery logs; a new run cannot establish why its untouched planner waited 32 minutes without running the ratio.
 
 - **A935: setup action-download bound.** One separately cleared, selectively stalled action-transfer run on a single owned runner must retain the successful-download control, actual version/action/source/job limit, listener cancellation and worker-exit logs, with an independent safety stop and cleanup. Keep control traffic reachable. Fast refusal or manual cancellation does not qualify the job limit. The [experiment proposal](../superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is parked until a natural setup-download stall is captured (watcher, 16 November 14:56); build no guest setup hook or two-job lease reuse merely to stage it. [Source trace and limits](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
-
-## Bundle: One small pull request for rule lines
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Decide whether browser tests stop replacing modules (A943 follow-up).**
-  [Detail](ci.md#decide-whether-browser-tests-stop-replacing-modules-a943-follow-up).
-- **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
-  [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
 
 ## Bundle: Vitest settings: remaining measurements
 
@@ -943,23 +927,6 @@ On 28 October, [main run 40750935978, till shard 3](https://github.com/clintongo
 exhausted both 120-second attempts with `--depth=1`, before installation or tests. Reducing
 full-history transfers does not eliminate this observed shallow-checkout failure mode.
 
-
-## Decide whether browser tests stop replacing modules (A943 follow-up)
-
-A spy mock of
-the till's pricing module failed once in CI with its cause not found, and #1934 replaced it
-with a function the store takes. Its convention reviewer proposed a CLAUDE.md rule against
-module mocks in browser tests; #1934 did not add one, because one failure with no known
-cause is thin ground for a house rule. The owner decides.
-
-
-## `packages/db`'s static mutants are not in its mutation score
-
-Left open by A539.
-`"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
-runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
-`src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
-would cost has not been timed. Owner's call.
 
 ## drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it
 

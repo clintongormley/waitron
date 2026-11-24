@@ -912,6 +912,26 @@ ask you to confirm our reading; (c) is open.
 
 ---
 
+### Q63. An invoice with someone else's name on a customer's tax number (added 2026-11-24)
+
+**Why we ask.** A customer asks the restaurant for a copy of the personal data it holds, and the search
+is by tax number. Staff may have typed that number on an invoice in another person's name by mistake:
+Jordi's NIF, 12345678Z, on an invoice for Maria Puig at her address. Today Jordi's copy holds every
+invoice carrying his number, Maria's name and address included, and the window lists each invoice's name
+first so the administrator can see it before downloading (A980 S3, decision 20). It is built as our best
+guess; no enquiry has been sent.
+
+> Un cliente pide al restaurante una copia de sus datos personales (art. 15 RGPD) y la búsqueda se hace
+> por su NIF. Por error, el personal anotó ese NIF en una factura a nombre y domicilio de otra persona.
+>
+> **(a)** ¿Debe la copia incluir esa factura, con el nombre y el domicilio de la otra persona, debe
+> incluirla ocultando esos datos (art. 15.4 RGPD), o debe dejarla fuera?
+>
+> **(b)** ¿Basta con mostrar antes a quien prepara la copia el nombre que figura en cada factura, para que
+> lo compruebe?
+
+---
+
 ## Who to ask
 
 **Primary — an asesor fiscal who has implemented a SIF.** Not a generalist gestor. These are

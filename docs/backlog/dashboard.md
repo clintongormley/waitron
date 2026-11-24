@@ -160,8 +160,10 @@ Retiring the summary once its last consumer moves away remains open.
 
 ## Bundle: Other browser check
 
-4 entries, size S.
+5 entries, size S.
 
+- **The closed-station alert on the dashboard's alerts page has not been looked at** in the running app
+  (A773-2 B4b's look did not reach it).
 - **Choosing black in the colour field's browser picker from the no-colour state has not been
   tried by hand** (`apps/dashboard/src/widgets/color-field.ts`). With no colour chosen the picker
   holds `#000000`, so choosing black may report no change.
@@ -462,7 +464,8 @@ registered as `venue-service:week`, and the others register theirs when they exi
   Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
   tab was retired by A757 slice 2; 2026-10-24: the Kitchen tab went with A756 PR 8. Its last
   setting, Changes after sending, moved to the station editor, which needs `venue.configure`,
-  so a supervisor no longer sees it.)
+  so a supervisor no longer sees it; the owner's answer of 2026-10-25 gives a read-only view, queued under
+  [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
   #1037).** Kept as they were, because they answer a question rather than say nothing was made: the
@@ -535,14 +538,14 @@ Rulings put to the owner, with the answers:
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
     clears that option's refusal; the window opened any other way still opens quiet. **Landed as
-    #1434.** Left as built, for the owner: Save turns active only for a refusal the window holds
+  #1434.** Left as built, kept (closed 2026-11-24): Save turns active only for a refusal the window holds
     when it OPENS — one handed to it while it is already open leaves Save as it was (believed
     unreachable, from reading only: the list's own Save sits behind the open window) — and it stays active
     for the whole time that window is open, even once the refused field is edited back;
 
 Opening already savable: the printers'
   name dialog, the calibration wizard when an add opened it (the campaign runner's ruling of
-  2026-10-08, for the owner to confirm: a freshly added printer's wizard opens with a blue Save),
+  2026-10-08, kept: a freshly added printer's wizard opens with a blue Save),
   the device pairing dialog, each row of "Add a card reader", the canvas Duplicate dialog, and a new
   canvas's editor.
 
@@ -605,7 +608,6 @@ forms receive field messages from their parent screen.
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-
 
 
 ## Still open from #298/#305/#317, device checks before deployment

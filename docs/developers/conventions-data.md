@@ -4496,7 +4496,7 @@ synchronised, a start, or a clock jump of over a minute once the clock watch's n
 after the last ends) finds it, waits for two devices or a person to confirm its time before any
 later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)),
 and AEAT refusing as dated in the future (`1112`) a record written since its time was last confirmed
-makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's),
+makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, owner, 2026-11-24),
 and a producer change makes the start wait until its new installation is open
 ([below](#a-change-of-producer-opens-a-new-installation)): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
@@ -6785,7 +6785,6 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
   [failover residuals](../backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards).
 
 
-
 ## First-setup admission reads SQLite facts without a database-sized snapshot
 
 Use `inspectFirstSetupDatabase` for admission. It checks the regular file through a no-follow,
@@ -6930,14 +6929,15 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   that confirmation should be protected"; This device and the list of proofs follow the watcher's
   09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
   switch, which it gave as an administrator sign-in and whose page checks the venue's current
-  master key, a choice that is not owner-approved); a restore's start uses the restore page's
+  master key: owner, 2026-11-15, "Land with recovery key", and 2026-11-21, "i accept all 5", with the master
+  key in its place); a restore's start uses the restore page's
   choice while the box's boot id is unchanged and its clock has not been stepped since
   ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)), and otherwise waits until
   the time service synchronises or the master key confirms again, held by the browser that
   pressed Restore backup or typed on the waiting page; first setup's Provision takes its own fresh
   reading and, on the setup page without the time service, uses a device time the person confirmed
   on that page while the box has not rebooted, the server has not restarted and its clock has not been
-  stepped (the watcher's choice, 2026-11-17, not the owner's; on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's);
+  stepped (the watcher's choice, which the owner landed with #3600, 2026-11-17; on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (owner, 2026-11-17, #3695: "Land it as is");
   `packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "without a time service, a confirmed
   device time counts two minutes later while %s", and `apps/server/src/module-operation-host.test.ts`,
   "a device time confirmed through the setup page counts at Provision two minutes later without the
@@ -7278,6 +7278,8 @@ guard and pointer.
 > hold, 2026-11-10 15:31: "We fix the clock we start sending correct invoices … No waiting";
 > devices, A1420 D9, the watcher's, 2026-11-10 17:28, not the owner's)
 
+2026-11-24: the owner made the last point theirs, at 21:46: "keep it as built and drop the question".
+
 ### Declared product facts and configuration format 36 (2026-11-15, A1308 mn6)
 
 > Historical format: superseded by format 37 in [Department and zone service settings](#department-and-zone-service-settings).
@@ -7425,7 +7427,7 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 > Guards: the plain-http cases in `apps/server/src/mirror-bundle-fetch.test.ts` and `apps/server/src/box-join-api.test.ts`, weaker than the rule: they cannot see a new request path that skips `openBoxRequest`.
 
-> **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`), except the spare's bucket-stream pipe, which always connects over TLS (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine, in every environment; `parseHello` refuses a joining spare's plain-http contact address off this machine** (the watcher, 2026-11-24, not the owner's).
+> **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`), except the spare's bucket-stream pipe, which always connects over TLS (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine, in every environment; `parseHello` refuses a joining spare's plain-http contact address off this machine** (the watcher, 2026-11-24, kept).
 
 ### Migration-set ownership
 

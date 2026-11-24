@@ -46,9 +46,7 @@ Left open:
   original dish survives. An added-portion/removal/cancellation control found no such links for
   the remaining correction-only dish. HOLD CHANGED/CANCELLED jobs carry no dish links.
   The unchanged-printer control retained Grill/pass output; the [A1369 evidence](../superpowers/plans/2026-11-16-held-dish-reprint.md#evidence-and-scope)
-  records both reproductions. The watcher
-  deferred recipient routing on 2026-11-16 at 22:45: a partial route exists, but the correction-only
-  gap and whether to use a replaced printer remain open.
+  records both reproductions. Recipient routing is kept as built (deferred by the watcher on 2026-11-16, closed 2026-11-24).
 
 ## KDS corrections deferred from #191
 
@@ -71,42 +69,6 @@ The till's API client has no general request timeout (only the kitchen refresh a
 sends and offer reloads, at 150 seconds). A refusal that lands after the tab is paid, or after a
 server switch, shows the ordinary unnamed message.
 
-## A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
-
-- **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
-  (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
-  kitchen items and sends replacements. The dish keeps its earlier made-here choice
-  (`keepMadeHere`, `apps/server/src/working-order-kitchen-fire.ts`), but its extras are routed afresh in
-  `insertSplitExtras`, which reads the made-here stations of the sending device. So an extra the
-  Quesos station already received can come back as made on the spot when a device that makes
-  Quesos itself does the edit. Found by A687's review (#1720); its fifth case in
-  `apps/server/src/sent-order-number.test.ts` relies on this behaviour and will fail if it
-  changes. Decide: should extras keep their earlier choice, as the dish does?
-
-## Supervisors have no dashboard path to a prep station's times
-
-- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
-  show in the Calendar's Show picker, offered only to someone with `venue.configure`: a
-  read-only Calendar offers no stations. The stations service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
-  supervisor gets a read-only view, which would now mean offering stations in a read-only
-  Calendar's Show — left open by A506-12.
-
-## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
-
-Within one dish `ticket.already_started` is checked first (a bare raise of a started dish is not refused as started, A1382), but across a
-save the answer can be `ticket.already_fired` (found by #2044's second Codex review, not called a
-bug). Decide whether "started first" should hold across the whole save
-([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
-
-## A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question)
-
-- A card whose
-  dishes are all Ready keeps its minutes and band, so after a quiet hour it reads "277 min" and
-  pulses as forgotten, while the header line's "late" leaves it out (A797 slice 8, D9). Before slice
-  8 the Ready column's dishes carried the age border too. Should a Ready card stop ageing, age from
-  when it became Ready, or is it enough that a cook can collapse Ready to a strip that draws no
-  cards (slice 9)? Seen in A797 slice 8's LOOK.
-
 ## Bundle: Held paper followups
 
 1 entry, size M.
@@ -114,18 +76,20 @@ bug). Decide whether "started first" should hold across the whole save
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](kitchen.md#task-6-761-hold-tickets-in-advance)
 
-## Bundle: Supervisor station read
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
-  Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
-  editor, which needs `venue.configure`. Decide whether a supervisor gets a read-only view
-  ([decision note](dashboard.md)). Left open by A756 PR 8.
-- **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12).
-  [Detail](kitchen.md#supervisors-have-no-dashboard-path-to-a-prep-stations-times)
-
 ## Decisions and deliberate limits
+
+### A dish that is Ready keeps ageing, and the pass keeps its own late colour (owner, 2026-11-24; A1139, A1250)
+
+The owner: "the ready column is for the waiter, and for the cook to say "hurry up, the food is getting
+cold". so leave it as it is". A kitchen card whose dishes are all Ready keeps its minutes and its late
+colour. On the pass, a Ready dish's edge colour, the overdue count and the Forgotten mark age from when
+the dish was sent (`passItemBand`, `apps/till/src/state/pass-view.ts`), and a late card's edge is
+`--wt-color-primary` where the station board's is `--wt-color-warning`.
+
+### A move made from the old station's own screen still gives that station its notice (owner, 2026-10-10; A439)
+
+`moveDishesToStation` (`apps/server/src/station-move.ts`) gives the old station a "moved" notice, and a
+correction slip where its ticket printed, whoever moved the dish. The owner kept the self-notice.
 
 ### Kitchen paper and screens name stations, never what a station makes (owner, 2026-11-04)
 
@@ -165,8 +129,8 @@ Built by A756 PRs 1–8 (plan [2026-10-18-a756-kitchen-tab-split.md](https://git
 
 ### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
 
-This records the built default (plans A756 PRs 6–8), not an owner ruling; owner FYI, say if Add
-station should offer more. Every other choice starts at its default and is changed in the station editor: one line for
+This records the built default (plans A756 PRs 6–8), not an owner ruling; kept, closed 2026-11-24.
+Every other choice starts at its default and is changed in the station editor: one line for
 identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
 changes allowed while held or waiting.
 **2026-10-26 (A797 slice 6):** Add station also sets the Ready warning time, 3 minutes by default.
@@ -182,7 +146,8 @@ fired" dropdown (A773) is not adopted.
 retires Recall and moves every sent-dish removal to Cancel item. The following dated ruling
 records the earlier order-edit removal path; the station setting still governs Change dish.
 
-Owner FYIs, built this way; say if any should change. A dish the kitchen has started is refused
+Built this way; a mixed save's answer changes under
+[SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet). A dish the kitchen has started is refused
 first. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as
 started: the extra goes to the kitchen as a new line, and Changes after sending still decides it. Otherwise the dish's own station and the station of each extra routed elsewhere must all
 allow the change. A dish with no kitchen record, on it or on any of its extras, can be recalled whatever the
@@ -213,7 +178,7 @@ the change (plan PR 8 Decision 1).
 
 - Prep stations follows Departments and zones in the sidebar. It has Stations and Routes tabs.
   You view planned station times through Calendar's Show picker; its existing
-  `venue.configure` permission stays. The supervisor's read-only Calendar question stays open.
+  `venue.configure` permission stays. A supervisor's read-only view is queued under [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).
 - Station lists use names, with the default station in its alphabetical place and its Default label
   retained. Stations have no hand-set order, reorder route or stored order column. Courses and
   zones keep their own order.

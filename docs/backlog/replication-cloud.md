@@ -260,15 +260,6 @@ a spare of a venue that files with Veri*Factu does too; nothing yet delivers a r
 changes after the join (A1273). Re-encrypting the certificate when restoring onto Cloud also
 remains open.
 
-## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
-
-If that file is
-later repaired and `cloud/connection.json` lost, the next start restores the connection without
-the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
-by C29, #808). Since A1500, **Get a fresh reconnection request** is a second way back: it sets the
-unreadable file aside and, once the Cloud owner approves, imports the connection without the stop. Owner to choose: refuse Stop access while the replacement file is unreadable, or
-record the stop somewhere that survives the repair.
-
 ## Waitron retains
 
 The implemented Cloud connection screen and manager adapter; first-contact trust bootstrap; and the cloud-standby end-to-end
@@ -707,7 +698,7 @@ the spare instead. It says so over plain HTTP and HTTPS, on its certificate guid
 Spanish, before the first step) and on its connection page (in the page's language, beside the
 download). On a box in setup mode, the guide leaves it out while the box's latest ask heard another box answer `waitron.local`, since the guide then tells a person adding a spare that they do not need this certificate; a box showing its recovery page does not ask, so its guide always shows it (`apps/server/src/trust-page.ts`, `apps/server/src/connection-bootstrap-page.ts`).
 
-**`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice, not the owner's): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
+**`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice; kept, closed 2026-11-24): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
 
 **Restore and conflict recovery use the venue master key.** The key reader in
 `apps/server/src/operation-authentication.ts` decodes the printed code.
@@ -854,7 +845,7 @@ against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
   lane B question 4, answer (b)). Say “This server is not connected to Waitron Cloud” in English
   and “Este servidor no está conectado a Waitron Cloud” in Spanish.
 - **A Demo venue does not offer a bucket copy** (watcher, 2026-11-17 19:30, lane B questions, point 2,
-  answer (a); not the owner's). Its copy could not be restored, since restoring needs a server key a
+  answer (a); kept, closed 2026-11-24). Its copy could not be restored, since restoring needs a server key a
   Demo venue never has and no restore path names a Demo invoice series. The Backups screen shows a
   line saying so in place of the bucket-copy settings when the venue's setup choice is Demo; an
   unknown choice still shows them.
@@ -1003,8 +994,6 @@ with `ignoreHTTPSErrors: false`; it did not install an authority in the operatin
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
-- A stop made while `cloud/replacement.json` is unreadable is not recorded in it.
-  [Detail](../backlog/replication-cloud.md#a-stop-made-while-cloudreplacementjson-is-unreadable-is-not-recorded-in-it)
 - The Litestream stream's sealed-state restore and activation still need integration with Cloud
   storage and owner recovery. Connected does not mean those services are configured. Cloud service
   ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side

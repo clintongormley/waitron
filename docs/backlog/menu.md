@@ -28,12 +28,6 @@ These are Mac measurements, not box timings. The watcher chose no route split fo
 delays on 2026-11-16. Further optimisation waits for a measured sale delay that warrants it;
 the full scans and translation-gap read remain.
 
-## Sold-out tile appearance (A292, #1310): owner review
-
-- The dark theme's contrast is still for the owner to judge. An available plain tile was
-  about 1.10:1 lighter than a sold-out one in #1310's captures (lane C's `a292-shots/`). The owner
-  kept the light-theme stripe at 4 px on 2026-11-23.
-
 ## Each menu has one Device Home Page (W93, #1287): left open
 
 Left open:
@@ -61,24 +55,6 @@ and 390×844 show 3/5 whole Products data rows plus the root. Structure shows 1/
 after moving the page heading away; selection shows 1/4 plus the root after that move. Native touch
 cases record the row and content-column offsets separately. The cap, held headings and isolation
 contract are in [design-system.md](../developers/design-system.md)._
-
-## Products at phone width: a long name runs under the pinned Actions column (W85b, W85c, W85e): left open
-
-**Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
-
-- The owner answered W85b's open point (a name got about 46 px at 390 px) "maybe (b) and (c)" (b:
-  drop the product photo at phone width; c: narrow the tree's leading slots), and **W85e** (#1275,
-  2026-10-06) did (b) and narrowed the arrow slot of (c). Categories kept their folder icon, so at
-  phone width a product's name started one folder slot before a sibling category's. _(2026-10-06:
-  A294 removed the folder icon, but its slot stays and holds the category's colour square, so at
-  phone width a product's name still starts one slot before a sibling category's.)_ The grip and the
-  8 px indent step were left as they were.
-  Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
-  folder icon too at phone width so product and category names line up again (since A294 that
-  slot holds the category's colour square, so this now means moving or hiding the square).
-  The owner kept the 8 px indent step on 2026-11-23. Before/after screenshots:
-  `~/waitron-campaign/w85e-shots/pair-*.png` (local).
 
 ## Menu: no two categories with one parent, and no two Active products, share a name (W72 to W72h): left open
 
@@ -197,15 +173,6 @@ the 2026-09-30 folders design; what remains:
 
 Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-till-design.md) (owner, 2026-10-14); kept so older links resolve.
 
-## From #541's review, not blocking
-
-From **Variants as products (#511–#556) — what is left open.** How the model works is in
-[products.md](../developers/products.md), under _Variants_.
-
-- **From #541's review, not blocking:** the product list shows a variant's blank price as its
-  parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call.
-
 ## Smaller things #379 surfaced and did not take
 
 From **The product editor and menu (#345, #379, #387) — what is left open.**
@@ -247,9 +214,11 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 
 Left open by A821f. A 250 ml line is 1 ml per tap with ±1 steps, the split control turns it into
 250 lines, a course group counts it as 250 items (`itemCount`, `apps/till/src/state/draft-groups.ts`),
-and the basket-refresh dialog prices it "each". Whether a measure should ask its quantity as a
-decimal unit does — which would change the other readers of the till's `soldByTheUnit`
-(`apps/till/src/widgets/product-name.ts`) — is the owner's call. Its readers: `splitLine`
+and the basket-refresh dialog prices it "each". Queued as MEASURE-AMOUNT (lane E). The owner, 2026-11-24: "yes type the amount, or use the +- to increment
+or decrement the amount, but that should be a single value, not a line per ml. Only portions/units are
+stored one per line, eg 3 x 50g portions of ham = 3 lines of 50g ham each, but the portion is a unit, it
+is not editable." So a measure with no scale asks its amount, typed or with + and −, as one line with one
+value. The readers of the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`): `splitLine`
 (`apps/till/src/state/working-order.ts`), `countsWholeUnits` and the last-added steps and split
 control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
@@ -290,22 +259,6 @@ The watcher’s 14 November 00:22 amendment narrows read-only Cloud work to the 
 with live forwarding reserved for ordering (A509); slices 1, 2 and 4 stay unchanged.
 These are watcher-cleared plan decisions, not owner approval of the plan.
 
-## A case the content-language decisions leave open, built with the plan's default unless the owner says otherwise
-
-**A case the content-language decisions leave open, built with the plan's default unless the owner
-says otherwise** (plan, "Open points"): receipts outside Catalonia stay free, Spanish by default.
-Left by W109 (#1320, #1322); the decisions are in
-[products.md](../developers/products.md#content-languages-per-region). The other open case, a
-Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
-everywhere; entered customer text is optional).
-
-## Translate all: an Edit translations dialog left open anywhere clears the "Translations ready" notice
-
-The dialog's live reload reads the suggestions, and that read marks the run opened
-(`apps/server/src/content-suggestions-api.ts`), so a dialog forgotten on another device means
-nobody sees the notice. Seen in the Santet run (A689-21). Working as built; the owner decides
-whether it should change.
-
 ## Category authoring serialises across the whole database, and nobody has measured what that costs
 
 `withTransaction` admits one write transaction per venue file
@@ -322,29 +275,8 @@ at the real box with the owner present, alongside **The displays and the printer
 the real box** (_What to work on next_), after the owner is back on 2 November (owner,
 2026-10-17).
 
-## Bundle: Dishes sold by measure and their extras
-
-1 entry, needs the owner.
-
-- **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
-  tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
-  a decimal unit does is the owner's call.
-  [Detail](menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
-
-## Bundle: Product names on phones and sold-out tiles
-
-2 entries, size M, needs the owner.
-
-- **Products at phone width: what W85e left for the owner**
-  [Detail](menu.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
-- **Sold-out tile appearance (A292, #1310).**
-  [Detail](menu.md#sold-out-tile-appearance-a292-1310-owner-review)
-
 ## Bundle: Translate all followups
 
-- **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
-  notice.**
-  [Detail](menu.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)
 - **Translate all: open points from the review of A689's second PR.**
   [Detail](menu.md#translate-all-open-points-from-the-review-of-a689s-second-pr)
 
@@ -373,18 +305,6 @@ The remaining storage, input-validation and shared-form limits.
   selected tab.
   [Detail](menu.md#modifiers-spanish-opciones-tab-is-cut-at-a-310-px-screen-on-cis-linux-fonts)
 
-
-## Bundle: Each unit literal
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-The other entry, the copied pricing-unit fallback and the till's own copy of the Each id, was
-fixed by #3502.
-
-- **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
-  A918 slice 4, #2141).** `packages/menu/src/units.ts:26-34` is never written into a venue, but the
-  receipt reads its abbreviations to decide whether a line prints a unit
-  (`quantityText` in `packages/orders-sales/src/receipt-figures.ts`), so moving its words can change printed text: its
-  own pull request waits for the owner.
 
 ## A1517. Allergen points to revisit before go-live
 
@@ -486,7 +406,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   `--wt-space-1` (4px) with a one-pixel `--wt-color-text` line beside it, so in both themes every
   palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
   dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
-  labels are centred (products.md, _Colour_).
+  labels are centred (products.md, _Colour_). The owner kept the 4 px stripe on 2026-11-23, and
+  approved the redrawn tiles (#4259) on 2026-11-24, which closes the dark theme's question.
 
 - **Translate all's joint fault proof is recorded on pinned candidates (D85, 2026-10-20).**
   Cloud [PR #247](https://github.com/waitron-io/waitron-cloud/pull/247), commit

@@ -94,7 +94,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
   day (8), the declaration's items d) and f) (9), and a copy's header and logo and which records
   are kept ten years (10). Question 11's labour, privacy and selling-by-weight questions still
   need advisers of their own.
-- [The owner's yes-or-no read: built defaults that wait only for a nod](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 - [One owner session with a real certificate against AEAT](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
@@ -280,7 +279,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unpaid departure, Print the bill or the close of the business day that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order-invoice.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
-- **Decide whether any screen shows an invoice email's address** (bundle of 1, size S, needs the owner). Holds A554. [Detail](backlog/fiscal.md#bundle-decide-whether-any-screen-shows-an-invoice-emails-address)
+- **A554. Find a bill and Orders show the address an invoice was emailed to** — queued as
+  INVOICE-EMAIL-SHOWN (lane I). Owner, 2026-11-24, picker: "Yes, in Find a bill and Orders (Recommended)".
+  [Detail](backlog/fiscal.md#a554-find-a-bill-and-orders-show-the-address-an-invoice-was-emailed-to)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.
@@ -415,7 +416,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1161: with the database present, a public record or documents file still dead-ends Start
   again**, damaged or intact, and since A1206 so does the summary. Left
-  open by A1099; needs an owner decision.
+  open by A1099; the owner asked for a safe self-service way out of damaged evidence (2026-10-25), not designed.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -473,8 +474,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Allergens and diets are published with the menu (owner, 2026-11-24), replacing A1150.** Piece 2 of
   the same design, section 8; it stands alone.
 
-- **Product names on phones and sold-out tiles** (bundle of 2, size M, needs the owner). [Detail](backlog/menu.md#bundle-product-names-on-phones-and-sold-out-tiles)
-
 - **Smaller things #379 surfaced and did not take.** Separating product and modifier rules.
   [Detail](backlog/menu.md#smaller-things-379-surfaced-and-did-not-take)
 
@@ -489,7 +488,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **Translate all: notice and review followups** (bundle of 2, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
+- **Translate all: review followups** (bundle of 1, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and
@@ -511,28 +510,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
-- **One kind of unit refusal on the price field reads "The server rejected this value…"**, which
-  after a price message reads as the price; a unit-specific sentence needs the owner's wording
-  (left open by #1188's review, W66).
-
-- **From #541's review, not blocking:** the product list shows a variant's blank price as its
-  parent's with no marking (`apps/dashboard/src/widgets/product-list.ts`) — whether to grey it is
-  the owner's call. [Detail](backlog/menu.md#from-541s-review-not-blocking)
-
-- **Dishes sold by measure and their extras** (bundle of 1, needs the owner). [Detail](backlog/menu.md#bundle-dishes-sold-by-measure-and-their-extras)
-
-- **The extras form cannot pick a variant**, though the menu accepts one as an extras item
-  (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
-  action:** decide whether the picker should list variants.
-
-- **Each unit literal** (bundle of 1, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
+- **A821f. A product sold by a measure with no scale (ml) asks its amount** — queued as MEASURE-AMOUNT
+  (lane E). Owner, 2026-11-24: "yes type the amount, or use the +- … but that should be a single value, not
+  a line per ml". [Detail](backlog/menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
 
 - **The combined end-to-end journey has not been walked**
   [Detail](backlog/menu.md#the-combined-end-to-end-journey-has-not-been-walked)
 
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
-
 
 
 ### Service periods, opening hours and departments
@@ -566,8 +552,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Held paper followups** (1 entry, size M). [Detail](backlog/kitchen.md#bundle-held-paper-followups)
 
-- **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
-
 - **Loose ends left by service Task 5 (#750): printer policy, dish units, group records,
   and screen refresh.**
   [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
@@ -581,19 +565,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it).** —
   left open by the menus plan.
   [Detail](backlog/kitchen.md#changing-sent-lines-and-the-kitchen-screen-task-7c-710-and-the-kitchen-fixes-after-it)
-
-- **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
-  Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
-  collapse Ready to a strip that draws no cards (slice 9)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
-
-- **A move made from the old station's own screen still gives that station a "moved" notice, and a
-  correction slip where its ticket printed** — `moveDishesToStation`
-  (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
-  Left open by A439.
-
-- **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
-  (2026-10-15; open, owner decision).**
-  [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
 ### The till, devices and table service
 
@@ -618,16 +589,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a tile shows that holding it opens the window, and the till says "sold out" where the dashboard
   says "unavailable". [Detail](backlog/till.md#a1569-the-tills-sold-out-window-needs-a-design-with-the-owner)
 
-- **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
+- **Small till and floor wording fixes** (bundle of 1, size S). [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
-- **Small till and floor wording fixes** (bundle of 4, size M, 3 wait for the owner's table-screen redesign). Holds A470, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **SETTLED-SMALL. Small answers the owner gave that are not built yet** — queued (lane I): a supervisor's
+  read-only station views (A1079, A506-12), "started" wins (A1080), the station's name in refusals (A1081),
+  "Take the rest", extras keep "made here" (A692), variants in the extras form, one word per meaning
+  (A957, A1011). [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
 
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
   [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
 
-- **The till top bar fits at phone width, 1024 and 1280** (bundle of 6, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
-
-- **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020 (remaining words and choices), A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A292, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
+- **The till's top bar: loose ends (A395, #1435; A425).** Its scrolling strip is kept as agreed (closed
+  2026-11-24). [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
@@ -637,9 +610,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
 
-- **Table screen panels that do not fit** (bundle of 4, size S). Holds A1359, A1265, A1290, A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
+- **Table screen panels that do not fit** (bundle of 1, size S). Holds A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 
-- **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
+- **Every screen and slip names an order by where it is now (A678, A1235, A1032, A1031)** — queued as
+  MOVED-ORDER-PLACE (lane E). Owner, 2026-11-24, picker: "Yes, where it is now (Recommended)".
+  [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
 
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
   Owner question 2, #2360).** Correct invoice (A802) does not issue a full invoice; offer one
@@ -650,7 +625,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A1382, #3605 and #3604; fiscal and invoice wording remains).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
 
-- **What a row action takes on a grouped row** (bundle of 3, size M, needs the owner). Holds A1193, A1194, A1198. [Detail](backlog/till.md#bundle-what-a-row-action-takes-on-a-grouped-row)
+- **An action on a grouped row covers every portion (A1193, A1194)** — queued as GROUPED-ROW (lane F).
+  Owner, 2026-11-24: "firing that line now should send all 3. the kitchen has the choice of how they want
+  to receive them: 3 lines or 1 line".
+  [Detail](backlog/till.md#a1193-and-a1194-an-action-on-a-grouped-row-covers-every-portion)
 
 
 - **A937. Measure the owner's real floor plan once it is drawn (left open by A757 slice 5).** Slice
@@ -664,14 +642,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642.
   [Detail](backlog/till.md#an-element-inside-a-shadow-root-attached-after-a-drag-starts-keeps-its-own-cursor-rule-during-that-drag)
-
-- **The "Goes with" line** (bundle of 1, size S). [Detail](backlog/till.md#bundle-the-goes-with-line)
-
-- **Status words on the pass and beside it** (bundle of 2, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
-
-- **Segmented choices still break words when whole words cannot fit (left by A773-2 B4b).** Decide
-  whether such a control should stack its choices instead.
-  [Detail](backlog/till.md#segmented-choices-still-break-words-when-whole-words-cannot-fit-left-by-a773-2-b4b)
 
 - **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; two of four pull requests to come).**
   A dashed + Custom item tile for the rare thing not on the menu: typed name and price, the
@@ -700,19 +670,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **One rule for a booking when the evening's layout changes** (bundle of 2, size S, needs the owner). Holds A550, A857. [Detail](backlog/till.md#bundle-one-rule-for-a-booking-when-the-evenings-layout-changes)
+- **For the owner's redesign of the table screens and review of the device screens** (bundle of 17,
+  nothing to build before them). Holds A1211, A893, A936, A856, A859, A561, A562, A1101, A550, A857, A672,
+  A1333, A470, A1107, A1108, A1359, A1290, A1265.
+  [Detail](backlog/till.md#bundle-for-the-owners-redesign-of-the-table-screens-and-review-of-the-device-screens)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out
   its target the slow way, and smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
-- **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
-
-
-- **A turned floor plan table narrower than its unturned box stops short of the plan's left or top
-  edge.** An 8 × 4 turned 90° stops 2 squares from the left edge, because its saved corner cannot
-  go below 0. Owner question asked 2026-10-16; (a), keeping it so, is built. Left open by A672.
-  [Detail](backlog/till.md#a-turned-floor-plan-table-narrower-than-its-unturned-box-stops-short-of-the-plans-left-or-top-edge)
 
 - **Other till surfaces have not been checked against the forms rule.** The payment and weighing
   steps, the dish options picker and the supervisor override dialog hold their buttons before any
@@ -730,7 +696,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   own booking system, including online booking (A1013), works first. Without it, a venue taking
   bookings in both places can double-book a table. Not started.
 
-- **One measuring pass over the till at 390 and 1024** (1 entry remains for the owner's floor-map redesign; header observations stay with the top-bar bundle). [Detail](backlog/till.md#bundle-one-measuring-pass-over-the-till-at-390-and-1024)
+- **One measuring pass over the till at 390 and 1024** (1 entry remains for the owner's floor-map redesign). [Detail](backlog/till.md#bundle-one-measuring-pass-over-the-till-at-390-and-1024)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - Each new group Ready command moves the party's revision, so a waiter's open table screen meets
@@ -768,8 +734,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   2026-10-17).
 
 - **Qualify printer identity at enrolment.** The device enrolment design's separate printer track remains. [Detail](backlog/till.md#bundle-printer-identity-at-enrolment)
-
-- **Nothing covers the order screen's bar** (bundle of 1, size S, needs the owner). Holds A1211. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
 - **Waiter cash floats (A240)** (size L, needs a spec). [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
@@ -813,23 +777,16 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   point 4, #2678)** — needs a `print_jobs` column.
   [Detail](backlog/printers.md#reprint-kitchen-tickets-and-other-printouts-laid-out-again-for-any-printer)
 
-- **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
-
-- **Loose ends left by A661 (#1745).**
-  [Detail](backlog/printers.md#loose-ends-left-by-a661-1745)
-
 - **A4 receipt copies.** When adding A4 receipt printing, have the copy-audit writer require a
   receipt-page job. Test that it accepts a receipt page and refuses an A4 invoice page.
 
-- **Receipt layout pass** (size S). Holds A1201. [Detail](backlog/printers.md#bundle-receipt-layout-pass)
+- **A1201. A receipt's extra shows its own count under a grouped dish** — queued as RECEIPT-EXTRA-COUNT
+  (lane I). Owner, 2026-11-24, picker: "Yes, show its total (Recommended)"; the paper is shown before landing.
+  [Detail](backlog/printers.md#a1201-a-receipts-extra-shows-its-own-count-under-a-grouped-dish)
 
 - **A full invoice can print `Descuento 100%` on a row that still has a charge.** On a takeaway
   bill, make the 10% olives on a 21% pizza free and issue a full invoice. The pizza and olives can
   each say `Descuento 100%` while both still carry filed amounts after sharing the price paid (A445).
-
-- **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
-  open:**
-  [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
 
 ### Payments and card readers
 
@@ -842,12 +799,11 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
 
-
 - **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 
-- **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
-  held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
-  answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
+- **A846. A held card payment is Refunded or Put on a bill, never Kept** — queued as HELD-KEPT (lane F).
+  Owner, 2026-11-24: "yes" to removing "Kept: the money was owed"; its reminder follows the venue's business
+  day. [Detail](backlog/payments.md#a846-a-held-card-payment-is-refunded-or-put-on-a-bill)
 
 - **The SumUp Solo experiments.** Physical decline behavior, the statement/fee check and remaining
   connection probes are open. The reported decimal-`0.40` probe refunded the full payment, but its
@@ -918,14 +874,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Form implementation leftovers:** eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
 
-
-
-- **A1069. Venue settings keeps a `kitchen` tab key with no panel (owner question).** The key in
-  `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-settings-screen.ts`) lets the page's tab
-  checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
-  A756 PR 8 Decision 10.
-
-
 - **Wt dialog lifecycle** (covered-dialog reinsertion and the department and zone wrappers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
 - **One session with real phones and password managers** (bundle of 13, 3 go-live, 7 important, size M, needs the real hardware; includes profile-name updates in password managers and field-focus verification). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
@@ -942,14 +890,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [Detail](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting).
   [Print Queue measurement and decision](backlog/dashboard.md#print-queue-keeps-its-current-read).
 
-- **Account security email decisions still open** (owner, 2026-09-12): notify the old address on an
-  own-account email change; notices and wording for other administrator-made security changes
-  (administrator email edits already notify the old address) and break-glass changes; grouping a burst.
-
-- **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
-
-- **The sign-in card copies the setup wizard's card styles** rather than sharing `wt-card`, and
-  nothing keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
+- **Other browser check** (bundle of 5, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 
 ### Interface languages
 
@@ -976,8 +917,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
 
-- **A644. Staffing slots stop at minute 1440 on a business day longer than a day** (needs the owner). Decide whether a block may run to the day's real end. [Detail](backlog/workforce.md#a644-staffing-slots-stop-at-minute-1440-on-a-business-day-longer-than-a-day).
-
 - **Wages / labour cost (SP16).** Gated on the labour advisor; not fiscal.
   [Detail](backlog/workforce.md#wages--labour-cost-sp16).
 
@@ -990,7 +929,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
+- **MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends, adjustable** — queued
+  (lane I). Owner, 2026-11-24: "3 working days of grace, adjustable". The bundle also keeps the rule a
+  cadence change needs after a close. [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.
@@ -1021,9 +962,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
-- **Recovery pack defaults and the Backups card's receipts** (bundle of 3, size S, needs the owner). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
-
-- **Backups screen leftovers** (bundle of 1, size S, needs the owner). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
+- **The Backups card's receipts and looks** (bundle of 2, size S). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -1059,7 +998,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   public page offers retry, Check again and Stop; repairing a damaged linked layout remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
-- **Full disk: the till read that fails, and the words** (the strip's tint, and the full-disk bar's questions). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
+- **Full disk: the till read that fails, and the words** (the strip's tint, and DISK-FULL-SCREEN, queued in lane I: a red window over the whole screen; owner, 2026-11-24). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
 
 - **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
@@ -1156,14 +1095,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **A1407. A full invoice AEAT refused for a future date is put right by a replacement R4, built 2026-11-15 but switched off.** The writer and the case dialog's **Put this right** file an R4 "S" naming the same customer and the day the sale really happened, only while `FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts` is true; it is false, so the case dialog still says Waitron cannot put a full invoice right yet, and `computeVatReturn` counts such an invoice in its issue date's period unless it is replaced before that period ends. Turning it on waits for the R4 "S" probe on AEAT's test service (the probe entry under go-live). A simplified invoice refused for a future date is put right from the case dialog with a replacement R5 (Q37-FIX). Since A1420 PR 2, refusals for a future date (`1112`) no longer hold the rest of a chain; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`); a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8; kept by the owner on 2026-11-18 over the date-corrective plan of question 8 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)). Such a corrective goes in a corrective series apart from the tickets (owner, 2026-11-18), and when it moves VAT into or out of a period that has ended, that goes on the corrections workbook of the period it is made in (the VAT return screen's **Download corrections (XLSX)**). An enabled remedy takes the start gate first (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
-- **The accountant's file is comma-separated in both languages, and a spreadsheet set to expect
-  semicolons may open the Spanish file in one column.**
-  [Detail](backlog/box.md#the-accountants-file-is-comma-separated-in-both-languages)
-
-- **Does a SumUp Solo that is on but idle report itself offline?** The owner's unused Solo read
-  `OFFLINE` (slice 10 plan P11), and SumUp's client maps anything but `ONLINE` to offline, so if an
-  idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
-  check against the reader. Left open by A798-B slice 10.
+- **ACCOUNTANT-XLSX. Deferred payments become a sheet of the accountant's download, and the working-time
+  file an Excel file** — queued (lane I). Owner, 2026-11-24: "yes, and do we have the option of making them
+  google sheets as well?"
+  [Detail](backlog/box.md#accountant-xlsx-deferred-payments-join-the-accountants-download-and-the-working-time-file-is-an-excel-file)
 
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 
@@ -1236,17 +1171,12 @@ Not in any track until the standalone primary is done.
 - **A947 owns the spare's authenticated switch screen** (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
-- **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status
-  route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
-  would lock out a box with a wrong clock. Owner's choice. Left open by A1018 Slice 3 (Ruling R6).
-
 - **A stepdown that reaches a waiting box after it has decided to go on still restarts it, with
   nothing stopped first.** The box sells under its full start until the restart, which can overlap
   the box taking over. Refusing it instead was tried and dropped: the new main box sends its chart
   once per start (`postChartToSource`), so a refused box could go on selling. Closing it means handing a late
   stepdown to the full start's own handling once that is mounted (`apps/server/src/boot.ts`).
   Left open by WAITING-START-ENDS.
-
 
 
 - **A venue with no module that can prepare a promotion cannot hand over.** A venue without
@@ -1388,7 +1318,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 ### CI, tests and developer tooling
 
 
-
 - **CI incidents to watch.** The table groups retained CI sightings with their evidence and what to retain on recurrence, including the pauses during pnpm archive downloads and the first-hour PDF assertion in fiscal shard 2. [Detail](backlog/ci.md#ci-incidents-to-watch)
 
 - **Finish qualifying CI's server routing and action setup** (bundle of 2, size M). Checked real-run records cover tools/history/API, PR planner pickup, scheduled rescue and idle pickup, one no-op overflow, natural blind fallback and fresh-capacity route choices before later idle alarms, including an idle-server choice followed by successful server jobs and natural agreeing-row stale-count acceptance followed by a successful hosted run. The browser workload passed on disposable runners, and an earlier run supplied venue-service failure diagnostics. A passing full run confirmed the CI-only per-job split and hosted coverage merges. A1424/A1440 still need an image guest, remaining-workflow evidence and the full-day queue measurement. The historical planner cause remains unproved. Planner recovery from short workflow lists still needs natural-run evidence; standalone `check` tolerates short queued lists with an explicit partial observation, while running/job lists and other health commands retain their rules. A935 waits for a natural setup-download stall before its [experiment proposal](superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is revisited; build no new guest capability now, and the job limit remains unqualified. The bundle remains open. [Detail](backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
@@ -1400,7 +1329,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Review each remaining squash against its parent and check findings against current main before
   opening a repair.
   [Detail](backlog/ci.md#a1251-finish-qualifying-and-reviewing-historical-prs-that-skipped-the-claude-run-it-review).
-
 
 
 For package distribution and the four-minute target, use the
@@ -1421,8 +1349,6 @@ under another key fall outside that check.
   a hosted recurrence reached `fetch_refs` with an unfinished `index-pack`, without distinguishing
   transfer from indexing.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
-
-- **One small pull request for rule lines** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-one-small-pull-request-for-rule-lines)
 
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
@@ -1445,8 +1371,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Give the failover bench an endpoint that stays refused for its lifetime**, preserving its bounded actual-ECONNREFUSED probe and SDK/Litestream consumers.
   [Detail](backlog/ci.md#give-the-failover-bench-an-endpoint-that-stays-refused).
 
-- **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
-
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**
   [Detail](backlog/ci.md#drizzle-kit-03111-left-out-on-delete-when-it-generated-an-alter-table--add--references-on-this-engine-while-its-snapshot-kept-it).
 
@@ -1461,7 +1385,7 @@ _Formerly parts of B9 and Track C._ Open work:
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
   [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
 
-- **What package manifests declare: floors and the root engines line** (bundle of 2, size S). [Detail](backlog/dependencies.md#bundle-what-package-manifests-declare-floors-and-the-root-engines-line)
+- **What package manifests declare: floors and the root engines line** (bundle of 1, size S). [Detail](backlog/dependencies.md#bundle-what-package-manifests-declare-floors-and-the-root-engines-line)
 
 - **The default browser floor rose, and no BROWSER floor is stated anywhere in the repo.**
   [Detail](backlog/dependencies.md#the-default-browser-floor-rose-and-no-browser-floor-is-stated-anywhere-in-the-repo)
@@ -1655,9 +1579,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   labels are read from its strings table, and the files that still need non-English text are held
   at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
-- **Correct every sentence known to be false, then finish comment pruning** (bundle of 3, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
+- **Correct every sentence known to be false, then finish comment pruning** (bundle of 1, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
 
-- **Printer, reader and device delete wording** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
+- **Printer, reader and device delete wording** (bundle of 1, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 
 
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
@@ -1669,7 +1593,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
   **Next action:** decide whether a read-only body should take the lock at all.
   [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)
-
 
 
 - **Loose ends left by A483 (#1544).** Unselected fiscal protection, changed-trigger repair and

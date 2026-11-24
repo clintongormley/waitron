@@ -501,7 +501,7 @@ such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "a
 Signed allocation files do not replace that flow. On a development box (`WAITRON_ENV=dev`), for a
 setup frozen for preproduction, the setup page's readiness step and **Provision** take the box's own
 clock as the second clock (owner, 2026-11-17, for the readiness step; at Provision, also after a
-restart or a clock step, the lane's choice, not the owner's), and the person still confirms the time with
+restart or a clock step, #3695), and the person still confirms the time with
 **Proceed** (`packages/fiscal-verifactu/src/hour-setup-defaults.test.ts`, "in development the box's
 clock alone, confirmed, passes the first setup's clock check", "in development the box's clock
 alone still needs the person to confirm the time" and "in development with no boot id, Provision

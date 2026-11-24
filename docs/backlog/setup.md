@@ -158,12 +158,6 @@ browser's preferred supported language, falling back to English when none is sup
 - A change of country cannot import a configuration. Setup refuses an export whose country
   differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
   countries needs its own design.
-- Should a preproduction box inherit its original setup choice when it joins a venue? A box that
-  took over after joining, or one restored from a backup taken on such a box, can have no saved
-  setup choice. Backups then offers no configuration export. A venue whose first box chose Live in
-  development mode also loses the Live label. For a venue set up in Prepare, keeping the choice
-  would restore practice mode and could change card simulation and test fiscal submission. The
-  owner needs to decide whether those behaviours should carry over together.
 
 ## Loose ends left by #334.
 
@@ -188,25 +182,6 @@ and which the free space it reads (`bavail`) already leaves out. Not tried: whet
 the spare's 8 MiB on a full ext4 disk, with its journal (a run on a small throwaway ext4 filesystem,
 not the box's own disk), and copy-on-write filesystems with snapshots or compression (btrfs, zfs).
 Detail: A1127's design, "Open, not measured".
-
-## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
-
-- **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
-  explanation.** A link, device or lock file, a finisher's `setup.start_again_incomplete` for any
-  other reason, or more than 20,000 found entries: no Keep
-  or Move (owner question Q2, built with A). Left open by A1098.
-  [Detail](setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
-
-Left open by A1098 (owner question Q2, built with option A, the most cautious). When the found
-files include, at any depth, a symbolic link or special file, a lock file (`venue.lock`,
-`venue.lock-journal`, `venue.holder.json`, `migrations.lock`, `recovery.lock`), or more than
-20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
-for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
-the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
-`packages/provisioning/src/first-setup-start-again-leftovers.ts`). A finisher refusal with any
-other code is not one of the start's refusals, so that start carries on past it instead
-(`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
-for these boxes, is still open to the owner.
 
 ## A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).
 
@@ -364,11 +339,11 @@ that operation's reader. Do not remove exact-content checks to make a large file
 ## Starter courses for Italy
 
 When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.
-Ask the owner which fire immediately and which wait. Left open by A1458.
+Ask the owner then which fire immediately and which wait. Left open by A1458.
 
 ## Decisions and deliberate limits
 
-- **A stopped join is reset with no sign-in, since A1558 PR 9 (2026-11-22).** This is the join-by-code plan's decision, cleared by the watcher on 2026-11-21, not the owner's. `POST /setup-api/reset-incomplete-adopt` still refuses unless the setup record is a join that stopped partway. The plan's reason: anyone on the network can make such a box start over, but "the next start's checks (`reset-request.ts:79-94`) still refuse to wipe a box that has a `trading.env`, holds a tenant, or holds an operational venue."
+- **A stopped join is reset with no sign-in, since A1558 PR 9 (2026-11-22).** This is the join-by-code plan's decision, cleared by the watcher on 2026-11-21; the owner landed #4003 on 2026-11-22, whose question named it. `POST /setup-api/reset-incomplete-adopt` still refuses unless the setup record is a join that stopped partway. The plan's reason: anyone on the network can make such a box start over, but "the next start's checks (`reset-request.ts:79-94`) still refuse to wipe a box that has a `trading.env`, holds a tenant, or holds an operational venue."
 
 - **Damaged setup record, 2026-11-16:** the owner said “ok” at 19:19 to the warned way out for a fully damaged record only, relayed by the watcher at 19:20. Start again and Recover from backup may delete after an independent full database read finds no sales or fiscal records, warning that AEAT history is unknown. Menu and staff rows may be deleted. Readable records keep all refusals; missing, unreadable, oversized or valid-JSON invalid-envelope records, missing/unreadable databases, saved trading settings, node rows, documents and outside evidence remain excluded. The watcher cleared the plan at 20:31 and its narrower delivered scope at 21:23; the owner lands this change. The [A1089 setup-state bundle](self-service-refusals.md#setup-state) keeps the remaining damaged-record case with an installed box row.
 
@@ -398,7 +373,7 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   started in Preparation.
 
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
-  19:30, lane B questions, option (b); not the owner's). The file, bucket and Cloud restore pages
+  19:30, lane B questions, option (b); kept, closed 2026-11-24). The file, bucket and Cloud restore pages
   refuse to send without them, and the setup server refuses a restore without them unless the box
   names a `WAITRON_RECOVERY_OPERATION_FILE`. Seen on the test box on 2026-11-17: a bucket restore
   sent without them was placed and the start failed with `sif.allocation_invalid`. A country pack
@@ -464,7 +439,7 @@ current minute, just as long as that minute series doesn't exist in the database
 restore and promotion name the box's current UTC minute after the second clock and (setup and
 restore) the 90–150 second wait, and refuse it only when a name in a history the box reads already
 holds that minute; a later name, a later record, the newest invoice's time and the backup's creation
-time no longer refuse or move it. Built with these defaults, open to the owner (A1207 plan, Q2–Q7):
+time no longer refuse or move it. Built with these defaults, kept (A1207 plan, Q2–Q7; the owner answered Q1 and Q4 and accepted the limits):
 "in use" counts every history the choice read before (the database in hand, the module's own record
 of its picks, earlier abandoned attempts of the same setup, the database a restore replaces, the
 backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was

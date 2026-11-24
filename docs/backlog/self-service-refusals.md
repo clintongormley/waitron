@@ -710,8 +710,9 @@ fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 makes the same check and refuses `setup.not_ready` too
 (`apps/server/src/first-setup-start-again.test.ts`, "with the database present and empty, a %s
 public fiscal record refuses the summary and Start again setup.not_ready, and nothing is
-written", ported in A1131bc slice 4). Wanted: decide with the owner whether such a file should
-still block Start again on this path.
+written", ported in A1131bc slice 4). The owner asked for a safe self-service way out of
+damaged evidence, planned first (2026-10-25), so whether such a file should still block Start again is
+not asked again by itself; the way out is not designed.
 
 ### setup-reset
 
@@ -906,7 +907,7 @@ owner decision.
 The inventory's retry description needs two distinctions: a wrong line count and a line that
 names the wrong record are different cases, and a retained incident does not establish the latest reply.
 The [proposed inspection scope](../superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md)
-awaits the owner's decision. This milestone changes no filing behavior or alert wording.
+was overtaken by the evidence built on **Reporting → Fiscal filing** (W41s-9, 2026-11-14); its scope is no longer a question (closed 2026-11-24). This milestone changes no filing behavior or alert wording.
 
 | Boundary | Source finding and exercised limit |
 | --- | --- |

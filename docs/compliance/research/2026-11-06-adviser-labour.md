@@ -165,7 +165,7 @@ A breach is a serious offence, LISOS art. 7.5 (it lists «registro de jornada»)
 
 **Product note.** The part-time month summary with the payslip, and the overtime summary, must reach
 the worker. Payroll export is deferred, and nothing in the product closes a pay period
-([backlog](../../backlog/workforce.md#nothing-in-the-product-closes-a-pay-period)). My Schedule →
+([backlog](../../backlog/workforce.md#month-close-a-months-hours-close-by-themselves-3-working-days-after-it-ends)). My Schedule →
 Hours lets a person download their own record, which is not the same as a copy with the payslip.
 The gestoría may already issue it; see L4.3.
 
