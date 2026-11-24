@@ -71,6 +71,8 @@ import { ALL_MODULES } from "./modules.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule } from "./old-box-data-since.js";
 import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { mountOldBoxDataDownloadApi } from "./old-box-data-download-api.js";
+import { mountOldBoxDataPeerApi } from "./old-box-data-peer-api.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { listServers, removeStandby } from "./membership-removal.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -540,6 +542,11 @@ async function oldBoxBackRestricted(
     { db: mainBox.db, node: mainBox.node, nodeId: mainId },
     () => undefined,
   );
+  mountOldBoxDataPeerApi(
+    oldBox,
+    { db: mainBox.db, node: mainBox.node, ring: RING, nodeId: mainId, modules: boxes.main.modules },
+    () => undefined,
+  );
   const posted = await oldBox.request("/api/node/membership", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -571,6 +578,20 @@ async function oldBoxBackRestricted(
     { db: b.venue, node: b.node, ring: RING, nodeId: spareId, reloadStream: async () => {} },
     () => undefined,
   );
+  mountOldBoxDataDownloadApi(
+    servers,
+    {
+      db: b.venue,
+      node: b.node,
+      ring: RING,
+      nodeId: spareId,
+      modules,
+      venueLocale: "en-GB",
+      fetch: ((url: string, init: RequestInit) =>
+        oldBox.request(new URL(url).pathname, init)) as typeof fetch,
+    },
+    () => undefined,
+  );
   const serversRequest = async (path: string, body: unknown) => {
     const response = await servers.request(path, {
       method: "POST",
@@ -582,7 +603,12 @@ async function oldBoxBackRestricted(
     });
     return { status: response.status, body: (await response.json()) as unknown };
   };
-  return { newMain, serversRequest };
+  const downloadOldBoxData = () =>
+    servers.request(`/management-api/servers/${mainId}/old-box-data`, {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${boxes.main.session.token}` },
+    });
+  return { newMain, serversRequest, downloadOldBoxData };
 }
 
 /**
@@ -1508,7 +1534,11 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
           }),
         );
 
-      const { newMain, serversRequest } = await oldBoxBackRestricted(boxes, b, modules);
+      const { newMain, serversRequest, downloadOldBoxData } = await oldBoxBackRestricted(
+        boxes,
+        b,
+        modules,
+      );
       const listed = async () =>
         (await listServers(b.venue, b.node, spareId)).nodes.find((n) => n.nodeId === mainId);
       expect(await listed()).toMatchObject({
@@ -1589,6 +1619,27 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       expect(activity).toContain(LATE_SUBJECT);
       expect(activity).not.toContain(EARLY_SUBJECT);
 
+      // The same file through the new main box's Download button.
+      const downloaded = await downloadOldBoxData();
+      expect(downloaded.status).toBe(200);
+      const fetched = unzipSync(new Uint8Array(await downloaded.arrayBuffer()));
+      const fetchedTab = (name: string) => sheetNamed(fetched, name)!;
+      expect(dataRows(fetchedTab(words.invoiceSheet))).toEqual(invoices);
+      for (const name of [
+        words.ordersSheet,
+        words.paymentsSheet,
+        words.hoursSheet,
+        words.activitySheet,
+      ])
+        expect(row(fetchedTab(name), 1), name).toEqual(row(tab(name), 1));
+      expect(
+        b.venue
+          .all<{ subject_id: string }>(
+            sql`select subject_id from activity_log where kind = 'handover.old_box_data_downloaded'`,
+          )
+          .map((entry) => entry.subject_id),
+      ).toEqual([mainId]);
+
       // Wipe and remove, accepting the loss.
       const ordered = await serversRequest(`/management-api/servers/${mainId}/reset`, {
         acceptLoss: true,
@@ -1598,6 +1649,11 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       const { orderId: resetOrderId } = ordered.body as { orderId: string };
       expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
         "return_abandoned",
+      );
+      const afterOrder = await downloadOldBoxData();
+      expect(afterOrder.status).toBe(409);
+      expect(((await afterOrder.json()) as { error: { code: string } }).error.code).toBe(
+        "handover.old_box_data_wipe_ordered",
       );
 
       // The duty runs until it asks for a restart; its extra return pass still clashes.

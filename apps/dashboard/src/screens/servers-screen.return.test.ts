@@ -485,6 +485,185 @@ describe("Wipe and remove", () => {
   });
 });
 
+describe("Download the old main box's data", () => {
+  const resettable = listingWith({ removable: true, canReset: true, returnScenario: "emergency" });
+  const downloadButton = (el: ServersScreen) =>
+    dialog(el, "reset").querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "wt-button[data-test=reset-download-button]",
+    );
+  const cancelButton = (el: ServersScreen) =>
+    dialog(el, "reset").querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "wt-button[data-test=cancel-reset]",
+    )!;
+  const file = {
+    blob: new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]),
+    fileName: "waitron-old-main-box-2026-11-20.xlsx",
+  };
+
+  function spyOnSaving() {
+    const blobs: Blob[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      return "blob:old-box-data";
+    });
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const links: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      links.push(this);
+    });
+    return { blobs, revoke, links };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("sits under the download line, which keeps its words and link", async () => {
+    const el = await mount(stubApi(resettable));
+    await openAction(el, "reset");
+    const line = dialog(el, "reset").querySelector<HTMLElement>("[data-test=reset-download]")!;
+    expect(line.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+    );
+    expect(line.querySelector("a")?.getAttribute("href")).toBe("https://old.venue.example");
+    const button = downloadButton(el)!;
+    expect(button.textContent?.trim()).toBe("Download the old main box's data");
+    expect(button.variant).toBe("secondary");
+    expect(line.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.contains(button)).toBe(false);
+    expect(menu(el)!.querySelector("[data-test=reset-download-button]")).toBeNull();
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(stubApi(resettable));
+    await openAction(el, "reset");
+    expect(downloadButton(el)!.textContent?.trim()).toBe(
+      "Descargar los datos del servidor principal anterior",
+    );
+  });
+
+  it("is not offered with no address for the old box", async () => {
+    const el = await mount(
+      stubApi(listingWith({ removable: true, canReset: true, contactUrl: "" })),
+    );
+    await openAction(el, "reset");
+    expect(dialog(el, "reset").querySelector("[data-test=reset-download]")).not.toBeNull();
+    expect(downloadButton(el)).toBeNull();
+  });
+
+  it("is not offered once a wipe is ordered", async () => {
+    const el = await mount(
+      stubApi(listingWith({ removable: true, canReset: true, reset: "ordered" })),
+    );
+    await openAction(el, "reset");
+    expect(downloadButton(el)).toBeNull();
+  });
+
+  it("asks once on a double press, holds the dialog's other buttons while it runs, then saves the file under the server's name", async () => {
+    const saving = spyOnSaving();
+    let answer!: (value: typeof file) => void;
+    const downloadOldBoxData = vi.fn(
+      () => new Promise<typeof file>((resolve) => (answer = resolve)),
+    );
+    const el = await mount(stubApi(resettable, { downloadOldBoxData }));
+    await openAction(el, "reset");
+    downloadButton(el)!.click();
+    downloadButton(el)!.click();
+    await flush(el);
+    expect(downloadOldBoxData).toHaveBeenCalledExactlyOnceWith(OLD);
+    expect(downloadButton(el)!.loading).toBe(true);
+    expect(cancelButton(el).disabled).toBe(true);
+    expect(confirmButton(el, "reset").disabled).toBe(true);
+    expect(confirmButton(el, "reset").variant).toBe("secondary");
+    expect(dialog(el, "reset").dismissible).toBe(false);
+    answer(file);
+    await flush(el);
+    await flush(el);
+    expect(saving.blobs).toEqual([file.blob]);
+    expect(saving.links.map((link) => link.download)).toEqual([file.fileName]);
+    expect(saving.revoke).toHaveBeenCalledWith("blob:old-box-data");
+    expect(downloadButton(el)!.loading).toBe(false);
+    expect(cancelButton(el).disabled).toBe(false);
+    expect(confirmButton(el, "reset").disabled).toBe(false);
+    expect(confirmButton(el, "reset").variant).toBe("danger");
+    expect(dialog(el, "reset").open).toBe(true);
+  });
+
+  it("saves under a fallback name when the server gives none", async () => {
+    const saving = spyOnSaving();
+    const el = await mount(
+      stubApi(resettable, {
+        downloadOldBoxData: vi.fn().mockResolvedValue({ blob: file.blob, fileName: null }),
+      }),
+    );
+    await openAction(el, "reset");
+    downloadButton(el)!.click();
+    await flush(el);
+    await flush(el);
+    expect(saving.links.map((link) => link.download)).toEqual(["waitron-old-main-box.xlsx"]);
+  });
+
+  it("does not order the wipe when Wipe and remove is pressed while the download runs", async () => {
+    spyOnSaving();
+    let answer!: (value: typeof file) => void;
+    const api = stubApi(resettable, {
+      downloadOldBoxData: vi.fn(() => new Promise<typeof file>((resolve) => (answer = resolve))),
+    });
+    const el = await mount(api);
+    await openAction(el, "reset");
+    downloadButton(el)!.click();
+    await flush(el);
+    confirmButton(el, "reset").click();
+    await flush(el);
+    expect(api.orderServerReset).not.toHaveBeenCalled();
+    answer(file);
+    await flush(el);
+  });
+
+  it("shows a refusal as the footer's one message; pressing Wipe and remove clears it", async () => {
+    let refuseWipe!: (reason: unknown) => void;
+    const api = stubApi(resettable, {
+      downloadOldBoxData: vi
+        .fn()
+        .mockRejectedValue({ code: "handover.old_box_unreachable", status: 502 }),
+      orderServerReset: vi.fn(() => new Promise((_, reject) => (refuseWipe = reject))),
+    });
+    const el = await mount(api);
+    await openAction(el, "reset");
+    downloadButton(el)!.click();
+    await flush(el);
+    await flush(el);
+    expect(await messageIn(el, "reset")).toBe(codeMessage("handover.old_box_unreachable"));
+    expect(dialog(el, "reset").open).toBe(true);
+    confirmButton(el, "reset").click();
+    await flush(el);
+    expect(await messageIn(el, "reset")).toBeNull();
+    refuseWipe({ code: "handover.reset_loss_unaccepted", status: 409 });
+    await flush(el);
+  });
+
+  it("pressing Download clears a Wipe refusal", async () => {
+    let answer!: (value: typeof file) => void;
+    spyOnSaving();
+    const api = stubApi(resettable, {
+      downloadOldBoxData: vi.fn(() => new Promise<typeof file>((resolve) => (answer = resolve))),
+      orderServerReset: vi
+        .fn()
+        .mockRejectedValue({ code: "handover.reset_loss_unaccepted", status: 409 }),
+    });
+    const el = await mount(api);
+    await openAction(el, "reset");
+    await confirm(el, "reset");
+    expect(await messageIn(el, "reset")).toBe(codeMessage("handover.reset_loss_unaccepted"));
+    downloadButton(el)!.click();
+    await flush(el);
+    expect(await messageIn(el, "reset")).toBeNull();
+    answer(file);
+    await flush(el);
+  });
+});
+
 describe("Wipe and remove when the return cannot complete", () => {
   const losing = listingWith({
     returnOutstanding: true,

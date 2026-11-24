@@ -605,10 +605,13 @@ Slice 3.
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 - **What A1558 left open (23 November 2026).** A replaced main box's own page offers its data for
-  download, and its Servers row offers Wipe and remove, also before its records have all come back.
-  Still open ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): a
-  Download button on the new main box. As its own pull request: the old box also returning other
-  boxes' invoice records it holds.
+  download, the new main box's Wipe and remove dialog can fetch it from the old box, and the old
+  box's Servers row offers Wipe and remove, also before its records have all come back.
+  Still open, as its own pull request
+  ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): the old box
+  also returning other boxes' invoice records it holds.
+  The new main box's button cannot fetch from an old box on the waiting page, which offers its own
+  download instead.
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 

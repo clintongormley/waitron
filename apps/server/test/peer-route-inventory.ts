@@ -7,6 +7,7 @@ export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] 
   ["POST", "/api/node/membership", 262144],
   ["POST", "/api/node/return-records", 524288],
   ["POST", "/api/node/reset-order", 262144],
+  ["POST", "/api/node/old-box-data", 262144],
   ["POST", "/api/node/backup-settings", 65536],
   ["POST", "/api/node/print-agent", 65536],
   ["POST", "/api/node/join/hello", 65536],

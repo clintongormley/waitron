@@ -270,6 +270,8 @@ import {
   type RestrictedPageDeps,
 } from "./restricted-page.js";
 import { oldBoxDataRoute } from "./old-box-data-page.js";
+import { mountOldBoxDataPeerApi } from "./old-box-data-peer-api.js";
+import { oneBuildAtATime } from "./old-box-data-turn.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { startRestricted } from "./restricted-start.js";
@@ -401,6 +403,7 @@ import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-
 import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
+import { mountOldBoxDataDownloadApi } from "./old-box-data-download-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
@@ -2060,6 +2063,7 @@ async function bootServer(
       resetOrdered: () => resetOrder.answer()?.order != null,
       resetPhase: () => readReplacedResetPhase(config.stateDir),
     };
+    const oldBoxDataTurn = oneBuildAtATime();
     return startRestricted({
       app,
       returnRecords,
@@ -2081,7 +2085,22 @@ async function bootServer(
           },
           mainHoldings: () => resetOrder.mainHoldings(),
           mainCopy: () => resetOrder.mainCopy(),
+          turn: oldBoxDataTurn,
         }),
+        (restrictedApp) =>
+          mountOldBoxDataPeerApi(
+            restrictedApp,
+            {
+              db,
+              node: store.node,
+              ring,
+              nodeId: node.nodeId,
+              modules: enabledAtStart,
+              resetOrdered: restrictedPage.resetOrdered,
+              turn: oldBoxDataTurn,
+            },
+            log,
+          ),
         (restrictedApp) =>
           mountPeerStatusApi(
             restrictedApp,
@@ -4188,6 +4207,21 @@ async function bootServer(
       readBackup: () =>
         backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
+    },
+    log,
+  );
+  mountOldBoxDataDownloadApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      modules: enabledAtStart,
+      now,
+      stateDir: config.stateDir,
+      lookup: seams.boxLookup,
+      venueLocale,
     },
     log,
   );

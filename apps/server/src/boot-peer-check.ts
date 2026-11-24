@@ -27,7 +27,12 @@ import {
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
 import { caCertPath } from "./box-secrets.js";
-import { boxExchange, CheckedAddressUnreached, type BoxLookup } from "./mirror-bundle-fetch.js";
+import {
+  AnswerTooLarge,
+  boxExchange,
+  CheckedAddressUnreached,
+  type BoxLookup,
+} from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
 export type StartCheckResult = "proceed" | "superseded" | "wait";
@@ -358,6 +363,11 @@ export function boxRefusal(text: string): { code: string; params: unknown } | nu
 
 class PeerSilenceUnestablished extends Error {}
 
+/** Whether `postToBox` failed after reaching the box (or, with a `fetch` stand-in, timed out). */
+export function isSilenceAfterConnecting(error: unknown): boolean {
+  return error instanceof PeerSilenceUnestablished;
+}
+
 class PeerCertificateRefused extends Error {}
 
 /** Whether `postToBox` refused the box's certificate, or had no authority to check it under. */
@@ -394,6 +404,7 @@ export async function postToBox(
   nodeId: string,
   url: string,
   body: string,
+  { maxBytes = MAX_STATUS_BYTES }: { maxBytes?: number } = {},
 ): Promise<{ status: number; text: string }> {
   const signal = AbortSignal.timeout(deps.timeoutMs);
   let connected = false;
@@ -424,10 +435,10 @@ export async function postToBox(
           connected = true;
         },
       },
-      MAX_STATUS_BYTES,
+      maxBytes,
     );
   } catch (error) {
-    if (error instanceof PeerCertificateRefused) throw error;
+    if (error instanceof PeerCertificateRefused || error instanceof AnswerTooLarge) throw error;
     if (
       deps.fetch === undefined &&
       firstCodeInCauseChain(error, (code) => CERTIFICATE_REFUSALS.has(code)) !== null

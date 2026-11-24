@@ -161,6 +161,23 @@ it("has a sentence for each in-use delete code (device-profile follow-ons)", () 
   }
 });
 
+it("words each refusal of the old main box's data download in both languages", () => {
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  for (const code of [
+    "handover.old_box_data_unavailable",
+    "handover.old_box_data_wipe_ordered",
+    "handover.old_box_unreachable",
+    "handover.old_box_data_refused",
+    "handover.old_box_data_too_large",
+    "handover.old_box_data_busy",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+  }
+});
+
 describe("codeOf", () => {
   it("returns the code when the rejection carries one", () => {
     expect(codeOf({ code: "x" })).toBe("x");

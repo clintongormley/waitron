@@ -178,12 +178,15 @@ While its invoice records and working hours are still awaited, or after **Will n
 **Wipe and remove**. Its dialog warns that the old box has not returned all its invoice records and
 working hours: before it wipes itself it tries once more to send them, then its databases are set aside on it
 instead of deleted, and are no longer used. Tick that you have downloaded its data, or that you
-accept this, before you confirm.
+accept this, before you confirm. The dialog's **Download the old main box's data** button, below,
+works here too.
 
 Once its invoice records and working hours are back, **Wipe and remove** needs no tick. The dialog says the old
 main box may hold data that this box does not have and gives the old box's address when its row
 has one: open it and [download that data](servers.md#handed-over) before you confirm, because once
-the wipe starts it can no longer be downloaded. A **CAUTION** line in the dialog means the recovered
+the wipe starts it can no longer be downloaded. Or choose **Download the old main box's data**
+under that line: this box fetches the old box's data from it. If this box cannot reach it, use
+the old box's own page. A **CAUTION** line in the dialog means the recovered
 records exist only on this box until a backup is made. Once you confirm, the row says
 **Wipe asked**. The old main box wipes itself and leaves the list the next time it is on and can
 reach this box, then restarts on setup's first page:

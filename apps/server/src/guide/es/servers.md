@@ -197,14 +197,17 @@ Mientras se siguen esperando sus registros de facturación y horas trabajadas, o
 su fila ofrece también **Borrar y retirar**. Su diálogo avisa de que el servidor principal anterior
 no ha devuelto todos sus registros de facturación y horas trabajadas: antes de borrarse, intenta enviarlos una vez
 más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse. Antes de
-confirmar, marca que has descargado sus datos o que lo aceptas.
+confirmar, marca que has descargado sus datos o que lo aceptas. El botón **Descargar los datos del
+servidor principal anterior** del diálogo, descrito más abajo, también sirve aquí.
 
 Cuando haya devuelto sus registros de facturación y horas trabajadas, **Borrar y retirar** no pide
 marcar nada. El
 diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no tiene
 e indica la dirección del servidor anterior cuando su fila tiene una: ábrela y
 [descarga esos datos](servers.md#handed-over) antes de confirmar, porque una vez empezado el borrado
-ya no se pueden descargar. Una línea de **ATENCIÓN** en el diálogo indica que los registros
+ya no se pueden descargar. O elige **Descargar los datos del servidor principal anterior** debajo
+de esa línea: este servidor trae los datos desde el anterior. Si este servidor no puede
+conectar con él, usa la propia página del servidor anterior. Una línea de **ATENCIÓN** en el diálogo indica que los registros
 recuperados solo están en este servidor hasta que se haga una copia de seguridad. Cuando lo
 confirmes, la fila dice **Borrado solicitado**. El servidor principal anterior se borra y sale de la
 lista la próxima vez que esté encendido y pueda conectar con este servidor, y se reinicia en la

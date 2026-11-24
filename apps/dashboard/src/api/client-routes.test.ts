@@ -1574,6 +1574,39 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("downloads the old main box's data by its id as a file, passing a refusal's code through", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+          status: 200,
+          headers: {
+            "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "content-disposition": 'attachment; filename="waitron-old-main-box-2026-11-20.xlsx"',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(refusal("handover.old_box_unreachable", 502));
+    const api = new DashboardApi("", fetchImpl);
+
+    const out = await api.downloadOldBoxData("55555555-5555-4555-8555-555555555555");
+    expect(out.fileName).toBe("waitron-old-main-box-2026-11-20.xlsx");
+    expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+    await expect(api.downloadOldBoxData("a/b")).rejects.toMatchObject({
+      code: "handover.old_box_unreachable",
+      status: 502,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/servers/55555555-5555-4555-8555-555555555555/old-box-data",
+        "POST",
+        undefined,
+      ],
+      ["/management-api/servers/a%2Fb/old-box-data", "POST", undefined],
+    ]);
+  });
+
   it("clears a removed server by its id, passing a refusal's code through", async () => {
     const fetchImpl = vi
       .fn()

@@ -1756,6 +1756,30 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This main box did not take over directly from that old main box, so it cannot send it the wipe, and it was not asked to wipe itself. Choose Remove from venue on its row, then wipe that box from a terminal.",
     es: "Este servidor principal no sustituyó directamente a ese servidor principal anterior, así que no puede enviarle el borrado y no se le ha pedido que se borre. Elige Retirar del local en su fila y luego borra ese servidor desde un terminal.",
   },
+  "handover.old_box_data_unavailable": {
+    en: "That box is not listed as the old main box any more, so nothing was downloaded. Refresh the list to see where it stands.",
+    es: "Ese servidor ya no figura como el servidor principal anterior, así que no se ha descargado nada. Actualiza la lista para ver en qué punto está.",
+  },
+  "handover.old_box_data_wipe_ordered": {
+    en: "The old main box has already been asked to wipe itself, so its data can no longer be downloaded from here.",
+    es: "Ya se ha pedido al servidor principal anterior que se borre, así que sus datos ya no se pueden descargar desde aquí.",
+  },
+  "handover.old_box_unreachable": {
+    en: "This box could not reach the old main box, so nothing was downloaded. Download the data from the old main box's own page, at the address above, or switch it on, connect it to the venue's network and try again.",
+    es: "Este servidor no ha podido comunicarse con el servidor principal anterior, así que no se ha descargado nada. Descarga los datos desde la propia página del servidor principal anterior, en la dirección de arriba, o enciéndelo, conéctalo a la red del local y vuelve a intentarlo.",
+  },
+  "handover.old_box_data_refused": {
+    en: "The old main box did not send a file this box could check, so nothing was downloaded. Try again in a minute, or download the data from the old main box's own page, at the address above.",
+    es: "El servidor principal anterior no ha enviado un archivo que este servidor pueda comprobar, así que no se ha descargado nada. Vuelve a intentarlo dentro de un minuto o descarga los datos desde la propia página del servidor principal anterior, en la dirección de arriba.",
+  },
+  "handover.old_box_data_busy": {
+    en: "Another download of the old main box's data is running, so nothing was downloaded this time. Try again in a minute.",
+    es: "Ya hay otra descarga de los datos del servidor principal anterior en curso, así que esta vez no se ha descargado nada. Vuelve a intentarlo dentro de un minuto.",
+  },
+  "handover.old_box_data_too_large": {
+    en: "The old main box's file is too large to pass on through this box, so nothing was downloaded. Download it from the old main box's own page, at the address above.",
+    es: "El archivo del servidor principal anterior es demasiado grande para pasarlo por este servidor, así que no se ha descargado nada. Descárgalo desde la propia página del servidor principal anterior, en la dirección de arriba.",
+  },
   "membership.node_not_replaced": {
     en: "That box is not listed as a replaced main box any more, so it was not asked to wipe itself. Refresh the list to see where it stands.",
     es: "Ese servidor ya no figura como un servidor principal sustituido, así que no se le ha pedido que se borre. Actualiza la lista para ver en qué punto está.",

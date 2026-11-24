@@ -952,3 +952,7 @@ The download lives on the old box's own page, not on the main
 box's Servers row: an administrator or a **Manage boxes** holder signs in there with the old box's
 copy of the accounts. Revision 6 above is superseded on those points; PR 10b's own plans
 (revisions 7 and 8) were kept in the campaign's working folder, not here.
+
+**Since PR 10b's last part (24 November 2026).** The Wipe and remove dialog on the new main box
+also has a **Download the old main box's data** button, which fetches the same kind of file from
+the old box when the new main box can reach it; the old box's own page stays the fallback.

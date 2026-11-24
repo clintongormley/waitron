@@ -270,6 +270,9 @@ export class ServersScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         letter-spacing: var(--wt-letter-spacing-wide);
       }
+      .download-action {
+        margin-top: var(--wt-space-3);
+      }
       .declarations {
         display: flex;
         flex-direction: column;
@@ -321,6 +324,7 @@ export class ServersScreen extends LitElement {
   @state() private target: { action: Action; row: ServerRow } | null = null;
   @state() private actionErrorKey: string | null = null;
   @state() private busy = false;
+  @state() private downloading = false;
   @state() private declared = { switchedOff: false, noRecovery: false };
   /** Set when a Remove without the declarations was refused because the spare finished joining
    * after the list was read. */
@@ -932,8 +936,12 @@ export class ServersScreen extends LitElement {
     return this.#declaring(action, row) && !(this.declared.switchedOff && this.declared.noRecovery);
   }
 
+  get #working(): boolean {
+    return this.busy || this.downloading;
+  }
+
   #close(): void {
-    if (this.busy) return;
+    if (this.#working) return;
     this.target = null;
     this.actionErrorKey = null;
     this.#forgetDeclarations();
@@ -947,7 +955,7 @@ export class ServersScreen extends LitElement {
     const target = this.target;
     if (
       target === null ||
-      this.busy ||
+      this.#working ||
       this.#undeclared(target.action, target.row) ||
       this.#unticked(target.action, target.row)
     )
@@ -982,6 +990,25 @@ export class ServersScreen extends LitElement {
     this.#focusTarget = null;
     this.target = null;
     await this.#reread();
+  }
+
+  async #downloadOldBoxData(row: ServerRow): Promise<void> {
+    if (this.#working) return;
+    this.downloading = true;
+    this.actionErrorKey = null;
+    try {
+      const file = await this.api.downloadOldBoxData(row.nodeId);
+      const url = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.fileName ?? "waitron-old-main-box.xlsx";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.actionErrorKey = codeOf(error);
+    } finally {
+      this.downloading = false;
+    }
   }
 
   #address(row: ServerRow): string {
@@ -1142,14 +1169,28 @@ export class ServersScreen extends LitElement {
     }
     const [before, after] = t("servers.reset_download").split("{address}");
     return html`<p class="explanation follows" data-test="reset-download">
-      ${before}${
-        webAddress(target.contactUrl)
-          ? html`<a href=${target.contactUrl} target="_blank" rel="noopener noreferrer"
-              >${target.contactUrl}</a
-            >`
-          : target.contactUrl
-      }${after}
-    </p>`;
+        ${before}${
+          webAddress(target.contactUrl)
+            ? html`<a href=${target.contactUrl} target="_blank" rel="noopener noreferrer"
+                >${target.contactUrl}</a
+              >`
+            : target.contactUrl
+        }${after}
+      </p>
+      ${
+        target.reset === "ordered"
+          ? nothing
+          : html`<div class="download-action">
+              <wt-button
+                variant="secondary"
+                data-test="reset-download-button"
+                ?disabled=${this.busy}
+                .loading=${this.downloading}
+                @click=${() => void this.#downloadOldBoxData(target)}
+                >${t("servers.reset_download_button")}</wt-button
+              >
+            </div>`
+      }`;
   }
 
   #renderCaution(target: ServerRow): TemplateResult | typeof nothing {
@@ -1174,7 +1215,7 @@ export class ServersScreen extends LitElement {
       data-test=${`${action}-dialog`}
       heading=${t(title)}
       .open=${target !== null}
-      .dismissible=${!this.busy}
+      .dismissible=${!this.#working}
       @wt-close=${() => {
         // The browser reports a close a task later, by when the other dialog may have opened.
         if (this.target === null || this.target.action === action) this.#close();
@@ -1226,14 +1267,14 @@ export class ServersScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test=${`cancel-${action}`}
-          ?disabled=${this.busy}
+          ?disabled=${this.#working}
           @click=${() => this.#close()}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          variant=${undeclared ? "secondary" : "danger"}
+          variant=${undeclared || this.downloading ? "secondary" : "danger"}
           data-test=${`confirm-${action}`}
-          .disabled=${undeclared}
+          .disabled=${undeclared || this.downloading}
           .loading=${this.busy && target !== null}
           @click=${() => void this.#confirm()}
           >${t(keys.verb)}</wt-button

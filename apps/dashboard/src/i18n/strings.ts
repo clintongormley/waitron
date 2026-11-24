@@ -2477,6 +2477,7 @@ export const en = {
     "The old main box may hold data that this box does not have. You should download that data from {address} before wiping and reusing it.",
   "servers.reset_download_no_address":
     "The old main box may hold data that this box does not have. You should download that data from the old main box's own page before wiping and reusing it.",
+  "servers.reset_download_button": "Download the old main box's data",
   "servers.reset_loss_warning":
     "The old main box has not returned all its invoice records and working hours. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
   "servers.reset_loss_confirm":
@@ -7373,6 +7374,7 @@ export const es: Record<StringKey, string> = {
     "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde {address} antes de borrarlo y volver a usarlo.",
   "servers.reset_download_no_address":
     "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde la propia página del servidor principal anterior antes de borrarlo y volver a usarlo.",
+  "servers.reset_download_button": "Descargar los datos del servidor principal anterior",
   "servers.reset_loss_warning":
     "El servidor principal anterior no ha devuelto todos sus registros de facturación y horas trabajadas. Antes de borrarse, intenta enviarlos una vez más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse.",
   "servers.reset_loss_confirm":
