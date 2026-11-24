@@ -218,6 +218,10 @@ describe("finishReplacedReset without set-aside", () => {
     const tunnelDir = join(root, "tunnel");
     await writeFile(join(tunnelDir, "public-key"), "old public key");
     await writeFile(join(tunnelDir, "peer.json"), "old peer");
+    await mkdir(join(tunnelDir, "rotate-key"));
+    await expect(finishReplacedReset({ ...deps, tunnelDir })).rejects.toThrow();
+    expect(await readdir(deps.venueDir)).toContain("venue.db");
+    await rm(join(tunnelDir, "rotate-key"), { recursive: true });
 
     await expect(finishReplacedReset({ ...deps, tunnelDir })).resolves.toBe(true);
 

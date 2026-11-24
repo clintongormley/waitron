@@ -919,6 +919,8 @@ export interface StartServerSeams {
    * SIGTERM.
    */
   restart?: (kind: "restart" | "signal") => void;
+  /** The entry point runs the staged venue wipe before starting this server again. */
+  resetOnRestart?: true;
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
   spareSettings?: { checkMs?: number; retryMs?: number };
@@ -4212,13 +4214,15 @@ async function bootServer(
       readBackup: () =>
         backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
-      selfReset: {
-        stateDir: config.stateDir,
-        environment: config.environment,
-        setupUrl: new URL("/", config.managementOrigin).href,
-        isReadOnly,
-        restart,
-      },
+      ...(seams.resetOnRestart && {
+        selfReset: {
+          stateDir: config.stateDir,
+          environment: config.environment,
+          setupUrl: new URL("/", config.managementOrigin).href,
+          isReadOnly,
+          restart,
+        },
+      }),
     },
     log,
   );

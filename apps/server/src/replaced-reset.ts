@@ -98,6 +98,8 @@ export async function removeResetPrefixEntries(stateDir: string): Promise<void> 
 
 /** Deletes the environment Move's list; `scratch/` is left for the start's `emptyScratch`. */
 async function deleteAll(deps: ReplacedResetDeps): Promise<void> {
+  // A tunnel volume fault must leave the venue's files intact for the next start.
+  await requestTunnelKeyRotation(deps.tunnelDir);
   await deleteBackupRoomNote(deps.stateDir);
   await clearSelectedCopy(deps.stateDir);
   for (const piece of await environmentMoveInventory(deps)) {
@@ -107,7 +109,6 @@ async function deleteAll(deps: ReplacedResetDeps): Promise<void> {
   await removeResetPrefixEntries(deps.stateDir);
   await removeJoinedTls(deps.stateDir);
   await emptyFolder(deps.backupsDir);
-  await requestTunnelKeyRotation(deps.tunnelDir);
 }
 
 /**
@@ -152,8 +153,7 @@ export async function finishReplacedReset(
   try {
     const marker = await readReplacedResetMarker(deps.stateDir);
     if (marker?.phase !== "wiping") return false;
-    // Any Move record is this reset's own: a restricted start serves no page that begins one. The
-    // resume's own hold shares this process's.
+    // A set-aside reset comes from the restricted start, which serves no page that begins a Move.
     const resumed =
       marker.setAside &&
       (await resumeEnvironmentMove({ stateDir: deps.stateDir, venueDir: deps.venueDir })) !== null;

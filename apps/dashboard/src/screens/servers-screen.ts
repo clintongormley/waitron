@@ -355,6 +355,10 @@ export class ServersScreen extends LitElement {
   @state() private handoverProfileFailed = false;
   @state() private handoverError = "";
   @state() private handoverBusy = false;
+  get resetAccepted(): boolean {
+    return this.renderRoot.querySelector("dashboard-reset-this-box-dialog")?.resetAccepted ?? false;
+  }
+
   #operationId = "";
   #handoverSent = false;
   /** While this screen is starting a handover: the box refuses other requests before it answers,

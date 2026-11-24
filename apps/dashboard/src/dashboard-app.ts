@@ -1886,6 +1886,8 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null, next: ScreenId | null = null): void {
+    // Setup refuses the old session while the accepted reset is still opening it.
+    if (this.renderRoot.querySelector("dashboard-servers-screen")?.resetAccepted) return;
     this.sessionEpoch.advance();
     this.#suspendIdentity();
     this.#permissionContinuation.reset();

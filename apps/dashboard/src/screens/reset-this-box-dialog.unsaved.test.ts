@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi, ServerRow } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { ServersScreen } from "./servers-screen.js";
-import "./servers-screen.js";
+import type { ResetThisBoxDialog } from "./reset-this-box-dialog.js";
+import "./reset-this-box-dialog.js";
 
 const locale = currentLocale();
 beforeEach(() => setLocale("en-GB"));
@@ -14,43 +14,15 @@ afterEach(() => {
   setLocale(locale);
 });
 
-const ownBox: ServerRow = {
-  nodeId: "11111111-1111-4111-8111-111111111111",
-  contactUrl: "https://waitron.local",
-  standing: "serving-primary",
-  isSelf: true,
-  removable: false,
-  canClear: false,
-  requiresRetirementConfirmation: false,
-  returnOutstanding: false,
-  needsResetStatement: false,
-  reset: null,
-  canReset: false,
-  canWipeWithLoss: false,
-  returnScenario: null,
-  recoveredRecordsBackup: null,
-};
-
 async function mount(
   sendsReset = vi.fn<DashboardApi["resetThisBox"]>(),
-  onboardingIntent: "demo" | "prepare" = "demo",
+  canExportConfiguration = false,
 ) {
-  const api = {
-    listServers: async () => ({ term: 0, nodes: [ownBox], resetThisBox: "available" }),
-    resetThisBox: sendsReset,
-  } as unknown as DashboardApi;
-  const { el } = await mountWidget<ServersScreen>("dashboard-servers-screen", {
-    api,
-    canPromote: true,
-    onboardingIntent,
-    canOpenBackups: true,
+  const { el } = await mountWidget<ResetThisBoxDialog>("dashboard-reset-this-box-dialog", {
+    api: { resetThisBox: sendsReset },
+    canExportConfiguration,
   });
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  const menu = () => table.shadowRoot!.querySelector("wt-row-actions");
-  await expect.poll(() => Boolean(menu()?.querySelector("[data-test=reset-this-box]"))).toBe(true);
-  await userEvent.click(menu()!.shadowRoot!.querySelector("button")!);
-  await userEvent.click(menu()!.querySelector<HTMLElement>("[data-test=reset-this-box]")!);
-  const root = el.shadowRoot!.querySelector("dashboard-reset-this-box-dialog")!.shadowRoot!;
+  const root = el.shadowRoot!;
   const dialog = root.querySelector("wt-dialog")!;
   const field = root.querySelector("wt-input")!;
   const confirm = root.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button:not([slot])")!;
@@ -82,7 +54,7 @@ it("leaves a refused reset in the dialog with the reason and lets the operator t
     code: "membership.self_reset_unavailable",
     params: { reason: "remove_other_boxes" },
   });
-  const { root, field, confirm } = await mount(send, "prepare");
+  const { root, field, confirm } = await mount(send, true);
   expect(root.querySelector('a[href="/backup"]')).not.toBeNull();
   await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill("reset");
   await userEvent.click(confirm);

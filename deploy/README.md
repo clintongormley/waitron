@@ -680,7 +680,11 @@ to leave it unchanged. An administrator without a password cannot use this recov
 
 ## Resetting a box
 
-`reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local
+On a standalone Demo or Preparation box, open the Servers page at the box's own address and
+choose **Reset this box** from the current box's menu. You need **Manage boxes**. The box
+keeps its certificate and opens Setup after the restart.
+
+From the terminal, `reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local
 backups — then brings it straight back up, so the next thing anyone opens is the setup wizard, as if
 the box had just been installed. Use it to get a demo or test box back to a known state. It is not a
 recovery tool for a box holding real trading data — see the refusal below.

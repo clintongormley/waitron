@@ -324,8 +324,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    judges a database nothing has migrated yet, which the one-directional comparison in
  *    `assertNotAhead` makes safe. On the start that places a handover's accepted copy, in
  *    `bootServer`, this check has already run on the old file; the handover's compare checked the copy.
- *    A replaced box's reset (`finishReplacedReset`), which removes or sets aside the venue files,
- *    runs earlier still: after the full-disk clean-up and the spare's release, and before
+ *    A reset from Servers or from a replaced box (`finishReplacedReset`)
+ *    runs after the full-disk clean-up and the spare's release, before
  *    first-setup resolution and the counter, so a wipe that fails restarts into another try rather
  *    than the page. While its marker says it is wiping, the environment Move is not resumed: any
  *    Move record is that reset's own.
@@ -1042,7 +1042,7 @@ function bootThisProcess(): Promise<void> {
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,
-    startServer,
+    startServer: (env, base) => startServer(env, base, { resetOnRestart: true }),
     serveRecovery: async (app, options) => {
       const listener = await serveRecovery(app, options);
       installShutdownHandlers({ close: () => closeListener(listener) });

@@ -35,7 +35,7 @@ services:
       WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: ${WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK:-}
       WAITRON_TUNNEL_CONTROL_DIR: /var/lib/waitron/tunnel
       WAITRON_STAFF_SOCKET: /var/lib/waitron/tunnel/staff.sock
-      # The backups volume's mount below: a replaced main box's reset empties it.
+      # The startup wipe empties this mount when the reset deletes the venue.
       WAITRON_LOCAL_BACKUPS_DIR: /var/lib/waitron/backups
     volumes:
       - state:/var/lib/waitron/state

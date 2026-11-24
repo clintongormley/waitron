@@ -209,7 +209,7 @@ export function resolveConfigDir(raw: string | undefined, fallback: string): str
   return isUnset(raw) ? fallback : resolve(raw);
 }
 
-/** The mounted local backups folder a replaced box's reset empties, absolute; unset or `""` names none. */
+/** Empty and unset both mean there is no mounted local backups folder to empty. */
 export function localBackupsDir(env: Env): string | null {
   const raw = readVariable(env, "WAITRON_LOCAL_BACKUPS_DIR");
   return isUnset(raw) ? null : resolve(raw);

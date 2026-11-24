@@ -57,6 +57,10 @@ export class ResetThisBoxDialog extends LitElement {
   @state() private error = "";
   @state() private setupUrl = "";
   @state() private waiting = false;
+  get resetAccepted(): boolean {
+    return this.setupUrl !== "";
+  }
+
   #lifetime = new AbortController();
   #draft?: DraftScope<string>;
   #canClose?: (reason: LeaveReason) => Promise<boolean>;
@@ -150,6 +154,8 @@ export class ResetThisBoxDialog extends LitElement {
                 name="confirmation"
                 required
                 autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
                 label=${fill("servers.self_reset_confirm", { word: t("servers.self_reset_word") })}
                 .value=${this.word}
                 ?disabled=${this.busy}

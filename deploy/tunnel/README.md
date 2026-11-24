@@ -14,7 +14,10 @@ on uses the same key and pairing.
 The companion stays running while access is off. It keeps its private key in `tunnel_keys` and
 its network-admin permission in its own network namespace, including on production boxes.
 The app sees the public key and connection settings through `tunnel_control`. Restarting
-retains the box key. A box reset clears both tunnel volumes.
+retains the box key. The terminal command `waitron.sh reset` clears both tunnel volumes.
+A reset from Servers keeps the volumes and writes `rotate-key` in `tunnel_control`.
+The companion stops the old connection, generates a new key and removes the request after
+publishing the new public key.
 
 From a checkout with Docker and jq, run the connection smoke test:
 
