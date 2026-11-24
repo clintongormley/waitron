@@ -30,7 +30,7 @@ export function isIdentityChangeAuthority(authority: unknown): boolean {
   return typeof authority === "object" && authority !== null && issued.has(authority);
 }
 
-/** `identity-change` is admitted under this module's own authority alone, which admits nothing else. */
+/** `identity-change` is admitted under this module's own authority alone. */
 export function admitsAllocationAction(
   authority: unknown,
   action: string,
@@ -38,6 +38,6 @@ export function admitsAllocationAction(
 ): boolean {
   return (
     actions.includes(action) &&
-    (action === "identity-change") === isIdentityChangeAuthority(authority)
+    (action !== "identity-change" || isIdentityChangeAuthority(authority))
   );
 }

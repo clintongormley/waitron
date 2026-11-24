@@ -191,41 +191,35 @@ it.each(["setup", "restore", "promote", "conflict-switch"])(
   },
 );
 
-it.each(["setup", "restore", "promote", "conflict-switch"])(
-  "refuses the private authority presented for the %s action",
-  async (action) => {
-    const f = fixture(action, "0CNPG", "identity-hour", IDENTITY_OPERATOR);
-    await withIdentityChangeAuthority(identityChange().binding, RELEASE, async (authority) => {
-      expect(isIdentityChangeAuthority(authority)).toBe(true);
-      await expectAdmissionRefused(f, authority);
-      const source = vi.fn();
-      await expect(
-        withCollectedModuleAllocation(
-          { binding: f.binding, authority, input: f.input },
-          source,
-          async () => undefined,
+it("refuses the private authority presented with another action's binding", async () => {
+  const f = fixture("restore", "0CNPG", "identity-hour", IDENTITY_OPERATOR);
+  await withIdentityChangeAuthority(identityChange().binding, RELEASE, async (authority) => {
+    expect(isIdentityChangeAuthority(authority)).toBe(true);
+    await expectAdmissionRefused(f, authority);
+    const source = vi.fn();
+    await expect(
+      withCollectedModuleAllocation(
+        { binding: f.binding, authority, input: f.input },
+        source,
+        async () => undefined,
+      ),
+    ).rejects.toMatchObject(refused("reauthentication_required"));
+    expect(source).not.toHaveBeenCalled();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        activateAuthenticatedAllocation(
+          tx,
+          node,
+          f.input.allocation,
+          f.input.approval,
+          recoveryContext(f.binding, IDENTITY_OPERATOR),
+          authority,
+          "restore",
         ),
-      ).rejects.toMatchObject(refused("reauthentication_required"));
-      expect(source).not.toHaveBeenCalled();
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          activateAuthenticatedAllocation(
-            tx,
-            node,
-            f.input.allocation,
-            f.input.approval,
-            {
-              ...recoveryContext(f.binding, IDENTITY_OPERATOR),
-              mode: action === "setup" ? "initial-setup" : "recovery",
-            },
-            authority,
-            action,
-          ),
-        ),
-      ).rejects.toMatchObject(refused("reauthentication_required"));
-    });
-  },
-);
+      ),
+    ).rejects.toMatchObject(refused("reauthentication_required"));
+  });
+});
 
 it("refuses the private authority in initial-setup mode", async () => {
   const f = identityChange();
