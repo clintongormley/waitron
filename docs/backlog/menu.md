@@ -330,7 +330,7 @@ retain the earlier scope and the six follow-ups.
 
 - **Menu sorting on phones** (watcher, 2026-11-23). The Status heading sorts by status where
   it is visible. The phone layout sorts by Name when Status disappears.
-  [Menus screen](../../apps/dashboard/src/screens/menus-screen.ts#L880-L891)
+  [Menus screen](../../apps/dashboard/src/screens/menus-screen.ts#L854-L866)
 
 ### Filters keeps a fixed breakpoint
 
