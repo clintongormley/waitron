@@ -73,7 +73,7 @@ async function receive(
       node.nodeId,
       batch as unknown as CanonicalValue,
       now,
-      [],
+      { own: { accepted: [] } },
     ),
   );
 }
@@ -132,7 +132,7 @@ it("marks originals in an incomplete payment batch and rolls back with the calle
         node.nodeId,
         later as unknown as CanonicalValue,
         receivedAt,
-        [],
+        { own: { accepted: [] } },
       );
       throw aborted;
     }),
@@ -173,6 +173,30 @@ it("reads only marked invoices with stored bases and separate record kinds", asy
   expect(
     await withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, page: 1 })),
   ).toMatchObject({ rows: rows.rows, page: 0, total: 1, pageSize: 50 });
+});
+
+it("lists an earlier box's returned record under the box that wrote it", async () => {
+  const earlier = await seedNode(source.db, "Earlier");
+  const sender = await fixture();
+  const id = await append(earlier, 1);
+  const batch = await withTransaction(source.db, (tx) =>
+    readReturnedOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
+  );
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      VERIFACTU_HANDOVER.returnRecords!.receive(
+        tx,
+        sender.nodeId,
+        batch as unknown as CanonicalValue,
+        receivedAt,
+        { others: { destinationNodeId: randomUUID() } },
+      ),
+    ),
+  ).toBe(true);
+  const rows = await withTransaction(receiver.db, (tx) => returnedInvoices(tx, request));
+  expect(rows.rows).toMatchObject([
+    { recordId: id, sourceNodeId: earlier.nodeId, sourceName: "Node Earlier" },
+  ]);
 });
 
 it("keeps cancellations separate and orders receipt time before chain position", async () => {

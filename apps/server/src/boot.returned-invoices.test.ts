@@ -45,7 +45,7 @@ it("serves a real returned invoice through the booted fiscal backend and report 
         node.nodeId,
         batch as unknown as CanonicalValue,
         receivedAt,
-        [],
+        { own: { accepted: [] } },
       ),
     ),
   ).toBe(true);

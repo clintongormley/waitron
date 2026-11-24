@@ -14,6 +14,7 @@ import {
   type ReturnRow,
   type WorkforceReturnBatch,
   readWorkforceReturn,
+  WORKFORCE_HANDOVER,
   WORKFORCE_RETURN_MAX_BYTES,
   WORKFORCE_RETURN_ROW_CAP,
 } from "./handover-return.js";
@@ -536,6 +537,22 @@ describe("receiveWorkforceBatch", () => {
     expect(await receive({ ...batch, entries })).toEqual(refusal);
 
     expect((await heldChain(oldBox)).map((row) => row.sequenceNo)).toEqual(kept);
+  });
+
+  it("refuses a batch sent as other boxes' records and stores nothing", async () => {
+    await appendChainEntries(suite.db, oldBox, [clockIn(personId, 0)]);
+    const batch = await readBatch();
+    const receiveSeat = WORKFORCE_HANDOVER.returnRecords!.receive;
+
+    expect(
+      await main.db.transaction((tx) =>
+        receiveSeat(tx, oldBox, batch as unknown as ReturnBatchValue, NOW, {
+          others: { destinationNodeId: mainBox },
+        }),
+      ),
+    ).toEqual(invalid("not the sending box's own entries"));
+    expect(await heldChain(oldBox)).toEqual([]);
+    expect(rows(main.db, "persons", personId)).toEqual([]);
   });
 
   it("refuses an entry naming a person or device the batch does not describe", async () => {

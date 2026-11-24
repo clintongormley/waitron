@@ -267,6 +267,14 @@ it("saves the wiping marker before the acknowledgement, which carries setAside a
     },
     {
       body: expect.objectContaining({
+        sourceNodeId: source,
+        destinationNodeId: receiver,
+        holdings: { sample: HELD },
+      }),
+      marker: null,
+    },
+    {
+      body: expect.objectContaining({
         holdings: { sample: HELD },
         ack: { orderId: "order-1", setAside: true, lacking: { sample: LACKING } },
       }),
@@ -274,7 +282,8 @@ it("saves the wiping marker before the acknowledgement, which carries setAside a
     },
   ]);
   expect(main.seen[0]!.body.ack).toBeUndefined();
-  expect(JSON.parse(main.seen[1]!.marker!)).toEqual({ phase: "wiping", setAside: true });
+  expect(main.seen[1]!.body.ack).toBeUndefined();
+  expect(JSON.parse(main.seen[2]!.marker!)).toEqual({ phase: "wiping", setAside: true });
   expect(duty.answer()).toEqual({
     order: { orderId: "order-1", acceptLoss: false },
     lacking: { sample: LACKING },
@@ -407,6 +416,38 @@ it.each([
   expect(main.seen).toHaveLength(2);
   expect(duty.answer()).toEqual({ order: null, lacking: { sample: [] } });
   expect(duty.mainHoldings()).toBeNull();
+  resume();
+  await duty.stop();
+});
+
+it("keeps the summary and copy time of an order it may not act on yet because its own return is unconfirmed, and saves nothing", async () => {
+  const MAIN_HELD = { sample: [{ chain: "main-box", count: 9 }] };
+  const copyAt = Date.parse("2026-11-12T09:41:07.123Z");
+  const unconfirmed: WaitronModule[] = [
+    {
+      ...modules[0]!,
+      handover: {
+        ...modules[0]!.handover!,
+        returnRecords: { ...modules[0]!.handover!.returnRecords!, read: async () => ["unsent"] },
+      },
+    },
+  ];
+  const main = await standIn((seen) =>
+    signedOrder(seen, { orderId: "order-1", acceptLoss: false }, { sample: [] }, MAIN_HELD, {
+      lastChangeAtMs: copyAt,
+    }),
+  );
+  const { time, sleep, resume } = parkedClock();
+  const { duty, restart } = start(main.fetch, time, { modules: unconfirmed });
+  await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));
+  expect(duty.mainHoldings()).toEqual({
+    holdings: MAIN_HELD,
+    heardAt: new Date("2026-11-22T10:00:00Z"),
+  });
+  expect(duty.mainCopy()).toEqual({ lastChangeAtMs: copyAt });
+  expect(await markerOnDisk()).toBeNull();
+  expect(main.seen.every((seen) => seen.body.ack === undefined)).toBe(true);
+  expect(restart).not.toHaveBeenCalled();
   resume();
   await duty.stop();
 });
@@ -627,7 +668,7 @@ it("runs one more return pass for a loss order before it saves the marker", asyn
   expect(JSON.parse(main.seen[1]!.marker!)).toEqual({ phase: "wiping", setAside: true });
 });
 
-it("runs no extra return pass for an order without a loss", async () => {
+it("runs no extra return pass for an order without a loss whose answer names nothing lacking", async () => {
   const main = await standIn((seen) =>
     signedOrder(seen, { orderId: "order-1", acceptLoss: false }),
   );
@@ -635,6 +676,111 @@ it("runs no extra return pass for an order without a loss", async () => {
   await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
   await duty.stop();
   expect(returnPass).not.toHaveBeenCalled();
+});
+
+it("runs one more return pass for an order whose answer names a lacking chain, before it saves the marker", async () => {
+  const main = await standIn((seen) =>
+    signedOrder(seen, { orderId: "order-1", acceptLoss: false }, { sample: LACKING }),
+  );
+  const markerAtPass: (string | null)[] = [];
+  const sentAtPass: number[] = [];
+  const { duty, restart, returnPass } = start(main.fetch, clock(), {
+    returnPass: async () => {
+      markerAtPass.push(await markerOnDisk());
+      sentAtPass.push(main.seen.length);
+      return "confirmed";
+    },
+  });
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  await duty.stop();
+  expect(returnPass).toHaveBeenCalledTimes(1);
+  expect(markerAtPass).toEqual([null]);
+  expect(sentAtPass).toEqual([1]);
+  expect(main.seen).toHaveLength(3);
+  expect(main.seen[1]).toEqual({
+    body: expect.objectContaining({ sourceNodeId: source, holdings: { sample: HELD } }),
+    marker: null,
+  });
+  expect(main.seen[1]!.body.ack).toBeUndefined();
+  expect(main.seen[2]!.body.ack).toEqual({
+    orderId: "order-1",
+    setAside: true,
+    lacking: { sample: LACKING },
+  });
+  expect(JSON.parse(main.seen[2]!.marker!)).toEqual({ phase: "wiping", setAside: true });
+});
+
+it("deletes rather than sets aside when the answer after that pass names nothing lacking", async () => {
+  const main = await standIn((seen, index) =>
+    signedOrder(
+      seen,
+      { orderId: "order-1", acceptLoss: false },
+      { sample: index === 0 ? LACKING : [] },
+    ),
+  );
+  const { duty, restart, returnPass } = start(main.fetch);
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  await duty.stop();
+  expect(returnPass).toHaveBeenCalledTimes(1);
+  expect(main.seen).toHaveLength(3);
+  expect(main.seen[2]!.body.ack).toEqual({ orderId: "order-1", setAside: false, lacking: {} });
+  expect(JSON.parse(main.seen[2]!.marker!)).toEqual({ phase: "wiping", setAside: false });
+  expect(duty.answer()).toEqual({
+    order: { orderId: "order-1", acceptLoss: false },
+    lacking: { sample: [] },
+  });
+});
+
+it("keeps setting aside when the second question goes unanswered", async () => {
+  const main = await standIn((seen, index) => {
+    if (index === 1) throw Object.assign(new Error("unreachable"), { code: "ECONNREFUSED" });
+    return signedOrder(seen, { orderId: "order-1", acceptLoss: false }, { sample: LACKING });
+  });
+  const { duty, restart, returnPass } = start(main.fetch);
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  await duty.stop();
+  expect(returnPass).toHaveBeenCalledTimes(1);
+  expect(main.seen).toHaveLength(3);
+  expect(main.seen[1]!.body.ack).toBeUndefined();
+  expect(main.seen[2]!.body.ack).toEqual({
+    orderId: "order-1",
+    setAside: true,
+    lacking: { sample: LACKING },
+  });
+  expect(JSON.parse(main.seen[2]!.marker!)).toEqual({ phase: "wiping", setAside: true });
+});
+
+it("keeps the first answer when the second question's answer names another order", async () => {
+  const main = await standIn((seen, index) =>
+    index === 1
+      ? signedOrder(seen, { orderId: "order-2", acceptLoss: false })
+      : signedOrder(seen, { orderId: "order-1", acceptLoss: false }, { sample: LACKING }),
+  );
+  const { duty, restart } = start(main.fetch);
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  await duty.stop();
+  expect(main.seen[2]!.body.ack).toEqual({
+    orderId: "order-1",
+    setAside: true,
+    lacking: { sample: LACKING },
+  });
+  expect(JSON.parse(main.seen[2]!.marker!)).toEqual({ phase: "wiping", setAside: true });
+});
+
+it("asks a loss order no second question after its extra return pass", async () => {
+  const main = await standIn((seen) =>
+    signedOrder(seen, { orderId: "order-1", acceptLoss: true }, { sample: LACKING }),
+  );
+  const { duty, restart, returnPass } = start(main.fetch);
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  await duty.stop();
+  expect(returnPass).toHaveBeenCalledTimes(1);
+  expect(main.seen).toHaveLength(2);
+  expect(main.seen[1]!.body.ack).toEqual({
+    orderId: "order-1",
+    setAside: true,
+    lacking: { sample: LACKING },
+  });
 });
 
 it("saves no marker, sends no acknowledgement and logs once when the set-aside's renames are refused", async () => {
@@ -649,7 +795,7 @@ it("saves no marker, sends no acknowledgement and logs once when the set-aside's
     log: (_level, event, fields) => logs.push({ event, fields }),
   });
   await vi.waitFor(() => expect(parked.sleep).toHaveBeenCalledTimes(3));
-  expect(main.seen).toHaveLength(3);
+  expect(main.seen).toHaveLength(4);
   expect(main.seen.every((seen) => seen.body.ack === undefined && seen.marker === null)).toBe(true);
   expect(await markerOnDisk()).toBeNull();
   expect(parked.time.sleeps).toEqual([30_000, 30_000, 30_000]);

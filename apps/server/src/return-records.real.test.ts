@@ -40,10 +40,13 @@ import { getHeldOrder, listHeldOrders } from "./working-order.js";
 import { ALL_MODULES } from "@waitron/composition";
 import type { WaitronModule } from "@waitron/module";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
-import { endorseKey, signDocumentBody } from "@waitron/membership";
+import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import {
+  seedFixtureSif,
+  withoutIdentityTriggers,
+} from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import {
   altaFor,
   seedNode,
@@ -51,6 +54,7 @@ import {
   type SeededNode,
 } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
+import { queueSubmission } from "@waitron/fiscal-verifactu/src/queue-submission.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu/src/drain.js";
 import {
   readReturnedOriginals,
@@ -67,10 +71,16 @@ import { readRefundableTenders } from "./tender-refund-balance.js";
 import {
   formerMainForReturn,
   returnDigest,
+  returnVenue,
   runReturnRecordsPass,
   startReturnRecordsDuty,
 } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { readHoldings } from "./old-box-holdings.js";
+import { signAsThisBox } from "./handover-signing.js";
+import { orderReset } from "./reset-order.js";
+import { mountResetOrderApi } from "./reset-order-api.js";
+import { recordTakeover } from "@waitron/fiscal-verifactu/test/takeover-fixture.js";
 
 const old = useVenueDb({ migrations: TEST_MIGRATIONS });
 const current = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -683,7 +693,248 @@ async function insertRow(db: Database | Transaction, table: string, row: ReturnR
     )})`);
 }
 
-async function copyBase() {
+it("returns an earlier box's records the main box lacks before the old box's own correction of one, and raises no set-aside alert", async () => {
+  const earlier = await seedNode(old.db, "Earlier");
+  const source = await seedNode(old.db, "Source");
+  const receiver = await seedNode(old.db, "Receiver");
+  const receiverId = receiver.nodeId;
+  const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif, numero_instalacion from verifactu_identities where id = ${earlier.sifId}`,
+  );
+  await withoutIdentityTriggers(old.db, async (tx) => {
+    for (const [node, installation] of [
+      [source, "source"],
+      [receiver, "receiver"],
+    ] as const)
+      await tx.execute(sql`update verifactu_identities
+        set nif = ${identity!.nif}, numero_instalacion = ${installation} where id = ${node.sifId}`);
+  });
+  await stampDeployment(old.db, "preproduction");
+  const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
+  const file = (db: Database, minutes = 0, tax = aeat) =>
+    drain(
+      {
+        db,
+        resolveClient: async () => tax.client(),
+        environment: "preproduction",
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      },
+      new Date(now.getTime() + minutes * 60_000),
+    );
+  const earlierRecords: { saleId: SaleId; recordId: string }[] = [];
+  for (let invoice = 1; invoice <= 3; invoice++) {
+    const saleId = await seedSale(old.db, earlier, invoice);
+    const pending = altaFor(earlier, saleId, invoice, invoice, "preproduction");
+    pending.input.IDEmisorFactura = identity!.nif;
+    pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+    pending.input.NumSerieFactura = `Earlier/${invoice}`;
+    const record = await withTransaction(old.db, async (tx) => {
+      const appended = await appendToChain(tx, earlier.nodeId, pending);
+      await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: now });
+      return appended;
+    });
+    earlierRecords.push({ saleId, recordId: record.id });
+    if (invoice === 2) {
+      expect((await file(old.db)).recordsAccepted).toBe(2);
+      await copyBase(["sales", "verifactu_records", "verifactu_submissions"]);
+    }
+  }
+  const third = earlierRecords[2]!;
+  aeat.reject(`${identity!.nif}|Earlier/3|20-07-2026`, 1161, "Wrong detail");
+  expect((await file(old.db, 2)).recordsHalted).toBe(1);
+  await recordTakeover(old.db, earlier.nodeId, source.nodeId);
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const token = await withTransaction(old.db, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
+  });
+  const remedies = new Hono();
+  mountRecordRemedies(
+    remedies,
+    {
+      db: old.db,
+      recordGeneration: {
+        nodeId: source.nodeId,
+        environment: "preproduction",
+        clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: now }) },
+        requireClockConfirmed: () => {},
+        requireWritable: () => {},
+        returnSource: async () => earlier.nodeId,
+      },
+    },
+    () => {},
+  );
+  const remedy = await remedies.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify(
+      remedyRequestBody({
+        kind: "record-correction",
+        caseRecordId: third.recordId,
+        recordId: third.recordId,
+        actionKey: "return-correction",
+        reason: "Correct the description",
+        facts: { description: "Corrected restaurant service" },
+      }),
+    ),
+  });
+  expect(remedy.status, await remedy.clone().text()).toBe(200);
+  const corrected = { id: ((await remedy.json()) as { registroId: string }).registroId };
+  expect(
+    old.db.all(sql`select node_id, corrects_registro_id from verifactu_records
+      where id = ${corrected.id}`),
+  ).toEqual([{ node_id: source.nodeId, corrects_registro_id: third.recordId }]);
+
+  await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
+  await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
+  const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
+  const receiverKey = await readNodeIdentityKey(current.node, ring, receiverId);
+  await pinMainBoxKey(current.node, receiverId, {
+    nodeId: source.nodeId,
+    publicKey: nodeSigningPublicKey(sourceKey),
+  });
+  const body = {
+    term: 2,
+    nodes: [
+      {
+        nodeId: receiverId,
+        contactUrl: "https://receiver.test",
+        standing: "serving-primary" as const,
+      },
+      { nodeId: source.nodeId, contactUrl: "https://source.test", standing: "sell-only" as const },
+    ],
+  };
+  const chart = {
+    body,
+    signerNodeId: receiverId,
+    signature: signDocumentBody(body, receiverKey),
+    endorsements: [
+      endorseKey(receiverId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
+    ],
+  };
+  await writeNodeMembership(current.db, chart);
+  await writeNodeMembership(old.db, chart);
+  const operationId = "real-takeover";
+  await withNodeTransaction(current.node, (tx) =>
+    beginHandoverOperationTx(tx, {
+      nodeId: receiverId,
+      operationId,
+      role: "destination",
+      scenario: "emergency",
+      sourceNodeId: source.nodeId,
+      destinationNodeId: receiverId,
+      binding: {},
+      fingerprint: operationId,
+      state: "activated",
+      waitingReason: null,
+    }),
+  );
+  await current.db.insert(handoverActivations).values({
+    operationId,
+    scenario: "emergency",
+    sourceNodeId: source.nodeId,
+    destinationNodeId: receiverId,
+    evidence: {
+      purpose: "waitron.handover.declaration.v1",
+      body: {},
+      signerNodeId: receiverId,
+      signature: "signature",
+    },
+    personId: "person",
+    activatedAt: "2026-07-20T10:00:00.000Z",
+  });
+  const app = new Hono();
+  const receiverDeps = {
+    db: current.db,
+    node: current.node,
+    ring,
+    nodeId: receiverId,
+    modules,
+    requireWritable: () => {},
+    wake: () => {},
+    now: () => now,
+  };
+  mountReturnRecordsApi(app, receiverDeps, () => {});
+  mountResetOrderApi(app, { ...receiverDeps, reloadStream: async () => {} }, () => {});
+  const heard = { holdings: await readHoldings(current.db, modules), heardAt: now };
+  expect(heard.holdings).toEqual({
+    "fiscal-verifactu": [
+      expect.objectContaining({ nodeId: earlier.nodeId, sifId: earlier.sifId, count: 2 }),
+    ],
+  });
+
+  expect(
+    await runReturnRecordsPass({
+      db: old.db,
+      node: old.node,
+      ring,
+      nodeId: source.nodeId,
+      modules,
+      mainHoldings: () => heard,
+      stopped: () => false,
+      fetch: async (url, init) => app.request(String(url), init),
+    }),
+  ).toBe("confirmed");
+  const delivery = () =>
+    current.db.all<{ id: string; estado: string }>(sql`select r.id, s.estado
+      from verifactu_records r join verifactu_submissions s on s.registro_id = r.id
+      where r.id in (${third.recordId}, ${corrected.id}) order by r.node_id = ${source.nodeId}`);
+  expect(delivery()).toEqual([
+    { id: third.recordId, estado: "rechazado" },
+    { id: corrected.id, estado: "pendiente" },
+  ]);
+  // The fake refuses a key it was told to refuse for good, so the correction goes to a fresh one.
+  const filed = await file(
+    current.db,
+    4,
+    createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 }),
+  );
+  expect(filed.recordsSubmitted).toBe(1);
+  expect(filed.recordsAccepted).toBe(1);
+  expect(delivery()).toEqual([
+    { id: third.recordId, estado: "rechazado" },
+    { id: corrected.id, estado: "aceptado" },
+  ]);
+
+  const [person] = await withTransaction(current.db, (tx) =>
+    seedPersons(tx, { displayName: "Owner", role: "admin" }),
+  );
+  const order = await orderReset(
+    { db: current.db, node: current.node, nodeId: receiverId },
+    { targetNodeId: source.nodeId, personId: person!.id, acceptLoss: false },
+  );
+  const query = await signAsThisBox(
+    { node: old.node, ring, nodeId: source.nodeId },
+    "reset-query",
+    {
+      venue: (await returnVenue({ db: old.db })) as CanonicalValue,
+      sourceNodeId: source.nodeId,
+      destinationNodeId: receiverId,
+      nonce: "after-return",
+      holdings: await readHoldings(old.db, modules),
+      ack: { orderId: order.orderId, setAside: true, lacking: {} },
+    },
+  );
+  const answer = await app.request("/api/node/reset-order", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(query),
+  });
+  expect(answer.status, await answer.clone().text()).toBe(200);
+  expect(((await answer.json()) as { body: { lacking: unknown } }).body.lacking).toEqual({
+    "fiscal-verifactu": [],
+  });
+  expect(
+    current.db.all(sql`select kind from activity_log where kind = 'handover.reset_acknowledged'`),
+  ).toHaveLength(1);
+  expect(
+    current.db.all(sql`select code from incidents where code = 'chain.set_aside_on_reset'`),
+  ).toEqual([]);
+});
+
+async function copyBase(extra: readonly string[] = []) {
   await withTransaction(current.db, async (tx) => {
     for (const table of [
       "taxpayer",
@@ -695,6 +946,7 @@ async function copyBase() {
       "verifactu_identities",
       "devices",
       "deployment",
+      ...extra,
     ])
       for (const row of old.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`))
         await insertRow(tx, table, row);

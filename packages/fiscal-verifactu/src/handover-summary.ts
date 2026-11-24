@@ -14,7 +14,8 @@ import type { BackupQuery, BackupValue } from "@waitron/store";
 import { ENVIO_STATES, type EnvioState } from "./filing-states.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { chainHeads, fiscalHoldings, fiscalLacking, text } from "./handover-holdings.js";
-import { fiscalUnreturned } from "./handover-unreturned.js";
+import { fiscalUnreturned, otherChainsToReturn } from "./handover-unreturned.js";
+import { liveBackupQuery } from "@waitron/db";
 
 export { ENVIO_STATES, type EnvioState };
 
@@ -100,16 +101,28 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
   returnRecords: {
     read: async (tx, source) =>
       makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],
+    readOthers: async (tx, source, destination, mainHoldings) => {
+      const ranges = await otherChainsToReturn(
+        liveBackupQuery(tx),
+        mainHoldings,
+        source,
+        destination,
+      );
+      if (ranges === null || ranges.length === 0) return ranges;
+      return makeReturnedBatches(
+        await readReturnedOriginals(tx, ranges),
+      ) as unknown as CanonicalValue[];
+    },
     acceptPermission: FISCAL_REMEDY,
     inspect: async (tx, source, batch) =>
       inspectReturnedPayments(tx, source, readReturnedBatch(batch)),
-    receive: async (tx, source, batch, now, accepted) => {
+    receive: async (tx, source, batch, now, owner) => {
       const originals = readReturnedBatch(batch);
       const absent = absentInvoiceIds(
         tx,
         originals.records.map((row) => String(row.id)),
       );
-      const result = await receiveReturnedOriginals(tx, source, originals, now, accepted);
+      const result = await receiveReturnedOriginals(tx, source, originals, now, owner);
       await markReturnedInvoices(tx, absent, now);
       return result.refusal ? { refusal: result.refusal } : result.complete;
     },

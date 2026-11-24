@@ -64,9 +64,10 @@ declare module "@waitron/shared" {
     "handover.reset_not_previous_main": Record<string, never>;
     /**
      * A replaced old main box set aside, on its reset, invoice-record or working-time chains this
-     * box lacks.
+     * box lacks or holds differently. `recordsMissing` says some are missing rather than only
+     * different, which picks the wording.
      */
-    "chain.set_aside_on_reset": { nodeId: string; orderId: string };
+    "chain.set_aside_on_reset": { nodeId: string; orderId: string; recordsMissing: boolean };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };

@@ -37,6 +37,14 @@ export interface UnreturnedChain {
   records: UnreturnedRecord[];
 }
 
+/**
+ * Whose records a returned batch holds: the sending box's own, with the payment clashes a person
+ * accepted, or other boxes' records sent on to the main box named, for which no clash is accepted.
+ */
+export type ReturnedRecordsOwner =
+  | { readonly own: { readonly accepted: readonly string[] }; readonly others?: never }
+  | { readonly others: { readonly destinationNodeId: string }; readonly own?: never };
+
 /** Thrown by a module's `lacking` seat when another box's `holdings` are not in its shape. */
 export class MalformedHoldingsError extends Error {}
 
@@ -54,6 +62,16 @@ export interface ModuleHandoverContribution {
   summarise?(query: BackupQuery): Promise<CanonicalValue>;
   returnRecords?: {
     read(tx: Transaction, sourceNodeId: string): Promise<CanonicalValue[]>;
+    /**
+     * Batches of the records of boxes other than the two named that the main box's holdings do not
+     * cover; `null` when this box holds such a record and no holdings were given.
+     */
+    readOthers?(
+      tx: Transaction,
+      sourceNodeId: string,
+      destinationNodeId: string,
+      mainHoldings: CanonicalValue | undefined,
+    ): Promise<CanonicalValue[] | null>;
     acceptPermission?: string;
     inspect?(
       tx: Transaction,
@@ -65,7 +83,7 @@ export interface ModuleHandoverContribution {
       sourceNodeId: string,
       batch: CanonicalValue,
       now: Date,
-      accepted?: readonly string[],
+      owner: ReturnedRecordsOwner,
     ): Promise<boolean | ReturnRefusal>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
@@ -73,6 +91,7 @@ export interface ModuleHandoverContribution {
   holdings?(query: BackupQuery): Promise<CanonicalValue>;
   /**
    * Which of another box's `holdings` this database does not hold; empty when it holds them all.
+   * An entry with `reason: "hash_differs"` is held here differently rather than missing records.
    * Holdings not in the module's shape throw `MalformedHoldingsError`.
    */
   lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;

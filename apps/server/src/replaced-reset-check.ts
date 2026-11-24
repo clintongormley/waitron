@@ -34,6 +34,13 @@ export type ReplacedResetCheck =
     }
   /** The main box answered `handover.reset_query_refused`. */
   | { outcome: "refused"; reason: unknown }
+  /** A verified order this box may not act on while its own return is unconfirmed. */
+  | {
+      outcome: "failed";
+      check: "unconfirmed";
+      holdings?: Record<string, CanonicalValue>;
+      copy?: HeardCopy;
+    }
   | {
       outcome: "failed";
       check:
@@ -44,8 +51,7 @@ export type ReplacedResetCheck =
         | "signature"
         | "signer"
         | "nonce"
-        | "source"
-        | "unconfirmed";
+        | "source";
     };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -56,8 +62,9 @@ export async function replacedResetCheck(
   deps: Pick<ReturnRecordsDeps, "db" | "node" | "ring" | "nodeId" | "modules">,
   sent: { targetNodeId: string; nonce: string; answer: { status: number; text: string } },
 ): Promise<ReplacedResetCheck> {
-  const failed = (check: Extract<ReplacedResetCheck, { outcome: "failed" }>["check"]) =>
-    ({ outcome: "failed", check }) as const;
+  const failed = (
+    check: Exclude<Extract<ReplacedResetCheck, { outcome: "failed" }>["check"], "unconfirmed">,
+  ) => ({ outcome: "failed", check }) as const;
   const chart = await readNodeMembership(deps.db);
   await assertHeldDocumentTrusted(deps, chart);
   assertHeldDocumentReadable(chart);
@@ -119,7 +126,7 @@ export async function replacedResetCheck(
   if (!acceptLoss) {
     const { inventory } = await readReturnInventory(deps);
     if (!(await returnConfirmed(deps, restriction.operationId, inventory)))
-      return failed("unconfirmed");
+      return { outcome: "failed", check: "unconfirmed", ...heard };
   }
   return {
     outcome: "ordered",

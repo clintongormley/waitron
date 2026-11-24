@@ -114,7 +114,10 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   let heardCopy: HeardCopy | null = null;
   // Stamped with the time the question left: records are only added, so the main box held no
   // less then than the summary it read afterwards.
-  const hear = (asked: Extract<ReplacedResetCheck, { lacking: unknown }>, askedAt: Date) => {
+  const hear = (
+    asked: { holdings?: Record<string, CanonicalValue>; copy?: HeardCopy },
+    askedAt: Date,
+  ) => {
     heard = asked.holdings === undefined ? null : { holdings: asked.holdings, heardAt: askedAt };
     if (asked.copy !== undefined) heardCopy = asked.copy;
   };
@@ -126,7 +129,8 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
     if (cause !== lastCause) deps.log("warn", event, fields);
     lastCause = cause;
   };
-  // A restricted start writes no venue data (`restricted-start.ts`), so one reading lasts it.
+  // A restricted start neither sells nor files (`restricted-start.ts`), so its invoice records stay
+  // as they are and one reading lasts it.
   let holdings: Record<string, CanonicalValue> | undefined;
   const holdingsOf = async () => (holdings ??= await readHoldings(deps.db, deps.modules));
   const attempt = async (ack?: ResetAcknowledgement): Promise<Asked | null> => {
@@ -143,12 +147,22 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
    * sent and the duty keeps asking.
    */
   async function acknowledgeAndRestart(
-    order: Extract<ReplacedResetCheck, { outcome: "ordered" }>,
+    first: Extract<ReplacedResetCheck, { outcome: "ordered" }>,
   ): Promise<boolean> {
+    let order = first;
     // A return that succeeds now loses nothing. Once per order: the duty may ask again for it.
-    if (order.acceptLoss && extraPassFor !== order.orderId) {
+    if (order.setAside && extraPassFor !== order.orderId) {
       await deps.returnPass();
       extraPassFor = order.orderId;
+      // A loss order sets aside whatever the main box answers.
+      if (!order.acceptLoss && !stopping.signal.aborted) {
+        const askedAt = now();
+        const again = await attempt();
+        if (again?.outcome === "ordered" && again.orderId === order.orderId) {
+          order = again;
+          hear(again, askedAt);
+        }
+      }
     }
     if (stopping.signal.aborted) return true;
     if (order.setAside)
@@ -218,9 +232,11 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
       } else if (asked?.outcome === "refused") {
         answer = null;
         note("reset-order.refused", { reason: asked.reason });
-      } else if (asked?.outcome === "failed")
+      } else if (asked?.outcome === "failed") {
+        // The return sender picks earlier boxes' records by this summary.
+        if (asked.check === "unconfirmed") hear(asked, askedAt);
         note("reset-order.check_failed", { check: asked.check });
-      else if (asked?.outcome === "unreachable") note("reset-order.unreachable", asked.fields);
+      } else if (asked?.outcome === "unreachable") note("reset-order.unreachable", asked.fields);
       await sleep(
         asked?.outcome === "refused" ? ASK_AFTER_REFUSAL_MS : ASK_EVERY_MS,
         stopping.signal,

@@ -1253,7 +1253,8 @@ Not in any track until the standalone primary is done.
   without identifying affected invoices or periods. Automatic duplicate identification needs a
   matching rule before it can be planned; acknowledgement, responsibility and resolution remain
   unplanned. A filing result held only by the old box is not applied to a record
-  already on the new main; a late payment on an older box's chain is not included in this return.
+  already on the new main; a late payment on an older box's sale whose invoice record the new main already holds is not
+  included in this return.
   An A802 correction's row and refund links do not travel (`invoice_corrections` and
   `invoice_correction_refunds` are not in the return), so cash an unfinished correction gave back
   arrives as ordinary refunds, and no correction on the new main can cover it.

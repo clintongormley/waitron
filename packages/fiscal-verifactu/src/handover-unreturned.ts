@@ -6,6 +6,7 @@ import {
   readHoldings,
   required,
   text,
+  type ChainHead,
   type ChainHolding,
 } from "./handover-holdings.js";
 
@@ -26,6 +27,32 @@ async function matchesThrough(query: BackupQuery, held: ChainHolding): Promise<b
   return huella === held.huella && records === held.count;
 }
 
+type PastMain = { readonly head: ChainHead; readonly whole: boolean; readonly after: number };
+
+/**
+ * Each chain in this database, other than those of the boxes in `skipped`, with records after the
+ * main box's last matching record. A chain whose summary does not match is yielded whole under
+ * `"whole"`, and left out under `"skip"`.
+ */
+async function* chainsPastMain(
+  query: BackupQuery,
+  held: readonly ChainHolding[],
+  onMismatch: "whole" | "skip",
+  skipped: ReadonlySet<string> = new Set(),
+): AsyncGenerator<PastMain> {
+  const main = new Map(held.map((h) => [`${h.nodeId}\n${h.sifId}`, h]));
+  for await (const head of chainHeads(query)) {
+    if (skipped.has(head.nodeId)) continue;
+    const holding = main.get(`${head.nodeId}\n${head.sifId}`);
+    const mismatch = holding !== undefined && !(await matchesThrough(query, holding));
+    if (mismatch && onMismatch === "skip") continue;
+    const whole = holding === undefined || mismatch;
+    const after = whole ? 0 : holding.secuencia;
+    if (after >= head.secuencia) continue;
+    yield { head, whole, after };
+  }
+}
+
 /**
  * For each chain in this database, the records after the main box's last matching record, or the
  * whole chain when the main box lacks it or its summary does not match. Reads only.
@@ -35,13 +62,8 @@ export async function fiscalUnreturned(
   mainHoldings: CanonicalValue | undefined,
 ): Promise<UnreturnedChain[]> {
   const held = mainHoldings === undefined ? [] : readHoldings(mainHoldings);
-  const main = new Map(held.map((h) => [`${h.nodeId}\n${h.sifId}`, h]));
   const unreturned: UnreturnedChain[] = [];
-  for await (const head of chainHeads(query)) {
-    const held = main.get(`${head.nodeId}\n${head.sifId}`);
-    const whole = held === undefined || !(await matchesThrough(query, held));
-    const after = whole ? 0 : held.secuencia;
-    if (after >= head.secuencia) continue;
+  for await (const { head, whole, after } of chainsPastMain(query, held, "whole")) {
     const records: UnreturnedRecord[] = [];
     for await (const row of query.rows(
       `select r.sale_id, r.secuencia, r.tipo_registro, r.creado_en, s.estado
@@ -68,4 +90,41 @@ export async function fiscalUnreturned(
     });
   }
   return unreturned;
+}
+
+export type ChainRange = {
+  readonly nodeId: string;
+  readonly sifId: string;
+  readonly after: number;
+};
+
+/**
+ * The chains of boxes other than the two named that this database can extend on the main box: from
+ * position 0 when the main box holds none of the chain, or past its matching last record. A chain
+ * the two disagree on is left out. Without the main box's summary: `null` while this database holds
+ * a record of another box, else none. Reads only.
+ */
+export async function otherChainsToReturn(
+  query: BackupQuery,
+  mainHoldings: CanonicalValue | undefined,
+  sourceNodeId: string,
+  destinationNodeId: string,
+): Promise<ChainRange[] | null> {
+  if (mainHoldings === undefined) {
+    for await (const _ of query.rows(
+      `select 1 from verifactu_records where node_id not in (?, ?) limit 1`,
+      [sourceNodeId, destinationNodeId],
+    ))
+      return null;
+    return [];
+  }
+  const ranges: ChainRange[] = [];
+  for await (const { head, after } of chainsPastMain(
+    query,
+    readHoldings(mainHoldings),
+    "skip",
+    new Set([sourceNodeId, destinationNodeId]),
+  ))
+    ranges.push({ nodeId: head.nodeId, sifId: head.sifId, after });
+  return ranges;
 }

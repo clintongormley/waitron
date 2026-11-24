@@ -75,6 +75,7 @@ export async function checkedReturn(
     typeof body.count !== "number" ||
     !Number.isSafeInteger(body.count) ||
     body.count <= body.index ||
+    (body.part !== undefined && body.part !== "others") ||
     Buffer.byteLength(JSON.stringify(body.payload)) > 256 * 1024
   )
     return refuseReturn("batch");

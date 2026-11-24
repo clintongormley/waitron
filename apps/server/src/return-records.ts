@@ -26,6 +26,7 @@ import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import { checkedPeerAnswer, mainBoxToAsk } from "./main-box-answer.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 
 export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   modules: readonly WaitronModule[];
@@ -57,6 +58,10 @@ type PassDeps = ReturnRecordsDeps & {
   fetch?: typeof fetch;
   log?: Logger;
   stopped(): boolean;
+  /** The main box's summary the wipe-order check last heard. */
+  mainHoldings?: () => HeardHoldings | null;
+  /** The earlier boxes' batches the duty last read, and what they were read for. */
+  othersRead?: { key?: string; batches?: Batch[] | null };
 };
 
 export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState> {
@@ -68,13 +73,18 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   const { batches, inventory } = await readReturnInventory(deps);
   if (batches.length === 0) return "waiting";
   const held = await returnConfirmed(deps, operationId, inventory);
-  // Sent even when held: a main box restored from an earlier copy lacks these records.
-  const sent = await sendBatches(deps, chart, restriction, batches, inventory);
-  // An answer about the records themselves is never hidden by a held one.
-  if (sent.state === "waiting" || sent.state === "needs-attention")
-    return held ? "confirmed" : sent.state;
-  if (sent.state !== "confirmed") return sent.state;
-  if (!held)
+  const main = mainBoxToAsk(deps.nodeId, chart, restriction);
+  let link: Promise<Link | null> | undefined;
+  const linkOnce = () => (link ??= returnLink(deps, chart, main));
+  // Sent first: the box's own records may correct one of these.
+  const othersState = await sendOthersPart(deps, linkOnce, main.target?.nodeId);
+  // Confirmed own records go again only once nothing else is left to send: a main box restored from
+  // an earlier copy lacks them, and each batch is a write on the selling main box.
+  const sent: Sent =
+    held && othersState !== "confirmed"
+      ? { state: "waiting" }
+      : await sendBatches(deps, linkOnce, batches, inventory, false);
+  if (sent.state === "confirmed" && !held)
     await withNodeTransaction(deps.node, (tx) =>
       appendHandoverEventTx(tx, {
         nodeId: deps.nodeId,
@@ -84,7 +94,81 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
         envelope: sent.receipt,
       }),
     );
-  return "confirmed";
+  // An answer about the records themselves is never hidden by a held one.
+  const own =
+    held && (sent.state === "waiting" || sent.state === "needs-attention")
+      ? "confirmed"
+      : sent.state;
+  return own === "confirmed" ? othersState : own;
+}
+
+/** Earlier boxes' records; a failure to read them leaves this box's own still to send. */
+async function sendOthersPart(
+  deps: PassDeps,
+  linkOnce: () => Promise<Link | null>,
+  destinationNodeId: string | undefined,
+): Promise<ReturnState> {
+  let others: Batch[] | null;
+  try {
+    others = await readOtherBoxesBatches(deps, destinationNodeId);
+  } catch (error) {
+    deps.log?.("warn", "return-records.others_failed", { errorCode: codeOf(error) });
+    return "needs-attention";
+  }
+  const sent =
+    others === null || others.length === 0
+      ? null
+      : await sendBatches(deps, linkOnce, others, returnDigest(others.map(returnDigest)), true);
+  return othersPartState(others, sent);
+}
+
+/**
+ * The earlier boxes' part is done once each batch was accounted or refused as a record clash. A
+ * batch the main box took but did not account for cannot be accepted as a clash can for this box's
+ * own records, so it needs the person rather than reading as `clash`.
+ */
+function othersPartState(others: Batch[] | null, sent: Sent | null): ReturnState {
+  if (others === null) return "waiting";
+  if (sent === null || sent.state === "confirmed" || sent.state === "record-clash")
+    return "confirmed";
+  return sent.state === "clash" ? "needs-attention" : sent.state;
+}
+
+/** Other boxes' records the main box lacks; `null` when some are held but no summary was heard. */
+async function readOtherBoxesBatches(
+  deps: PassDeps,
+  destinationNodeId: string | undefined,
+): Promise<Batch[] | null> {
+  const heard = destinationNodeId === undefined ? null : (deps.mainHoldings?.() ?? null);
+  // A restricted box neither sells nor files (`restricted-start.ts`), so the same main box and
+  // summary pick the same batches; the summary is heard afresh every 30 seconds, mostly unchanged.
+  const key = canonicalize([destinationNodeId ?? null, heard?.holdings ?? null]);
+  const kept = deps.othersRead;
+  if (kept?.key === key) return kept.batches!;
+  const batches = await packOtherBoxesBatches(deps, destinationNodeId, heard);
+  if (kept) Object.assign(kept, { key, batches });
+  return batches;
+}
+
+async function packOtherBoxesBatches(
+  deps: PassDeps,
+  destinationNodeId: string | undefined,
+  heard: HeardHoldings | null,
+): Promise<Batch[] | null> {
+  const batches: Batch[] = [];
+  for (const module of deps.modules) {
+    const seat = module.handover?.returnRecords;
+    if (!seat?.readOthers) continue;
+    const payloads = await seat.readOthers(
+      deps.db,
+      deps.nodeId,
+      destinationNodeId ?? deps.nodeId,
+      heard?.holdings[module.name],
+    );
+    if (payloads === null) return null;
+    for (const payload of payloads) batches.push({ module: module.name, payload });
+  }
+  return batches;
 }
 
 type Batch = { module: string; payload: CanonicalValue };
@@ -124,20 +208,43 @@ type Sent =
   | { state: Exclude<ReturnState, "confirmed"> }
   | { state: "confirmed"; destinationNodeId: string; receipt: string };
 
-async function sendBatches(
+type Link = {
+  target: NonNullable<ReturnType<typeof mainBoxToAsk>["target"]>;
+  fromRestriction: boolean;
+  venue: NonNullable<Awaited<ReturnType<typeof returnVenue>>>;
+  keyOf: Awaited<ReturnType<typeof peerKeyOf>>;
+  authority: Awaited<ReturnType<typeof readVenueAuthority>> | undefined;
+};
+
+/** What every batch of a pass is sent with; `null` while there is no main box or venue to name. */
+async function returnLink(
   deps: PassDeps,
   chart: Awaited<ReturnType<typeof readNodeMembership>>,
-  restriction: Awaited<ReturnType<typeof readHandoverRestriction>>,
+  { target, fromRestriction }: ReturnType<typeof mainBoxToAsk>,
+): Promise<Link | null> {
+  const venue = await returnVenue(deps);
+  if (!target || !venue) return null;
+  return {
+    target,
+    fromRestriction,
+    venue,
+    keyOf: await peerKeyOf(deps, chart),
+    authority: deps.stateDir === undefined ? undefined : await readVenueAuthority(deps.stateDir),
+  };
+}
+
+async function sendBatches(
+  deps: PassDeps,
+  linkOnce: () => Promise<Link | null>,
   batches: readonly Batch[],
   inventory: string,
+  others: boolean,
 ): Promise<Sent> {
-  const { target, fromRestriction } = mainBoxToAsk(deps.nodeId, chart, restriction);
-  const venue = await returnVenue(deps);
-  if (!target || !venue) return { state: "waiting" };
-  const keyOf = await peerKeyOf(deps, chart);
-  const authority =
-    deps.stateDir === undefined ? undefined : await readVenueAuthority(deps.stateDir);
+  const link = await linkOnce();
+  if (!link) return { state: "waiting" };
+  const { target, fromRestriction, venue, keyOf, authority } = link;
   let lastReceipt = "";
+  let recordClash = false;
   for (let index = 0; index < batches.length; index++) {
     if (deps.stopped()) return { state: "waiting" };
     const nonce = randomUUID();
@@ -150,6 +257,7 @@ async function sendBatches(
       count: batches.length,
       index,
       nonce,
+      ...(others ? { part: "others" } : {}),
       ...batch,
     };
     const signed = JSON.stringify(await signAsThisBox(deps, "return-batch", body));
@@ -173,13 +281,24 @@ async function sendBatches(
       });
       return { state: "waiting" };
     }
-    if (answer.status !== 200) return { state: refusalState(answer.text, fromRestriction) };
+    if (answer.status !== 200) {
+      const refused = refusalState(answer.text, fromRestriction);
+      // The main box takes each earlier box's batch in a transaction of its own, and answers a
+      // record clash for a later batch of a chain whose clash left a gap, so a clash in one leaves
+      // the rest to send.
+      if (others && refused === "record-clash") {
+        recordClash = true;
+        continue;
+      }
+      return { state: refused };
+    }
     const checked = checkedPeerAnswer(answer.text, "return-receipt", keyOf, target.nodeId, nonce);
     if (!checked.ok) return { state: "needs-attention" };
     const receipt = checked.body;
     if (
       receipt.index !== index ||
       receipt.inventory !== inventory ||
+      receipt.part !== (others ? "others" : undefined) ||
       receipt.digest !== returnDigest(batch) ||
       receipt.sourceNodeId !== deps.nodeId ||
       receipt.destinationNodeId !== target.nodeId ||
@@ -191,6 +310,7 @@ async function sendBatches(
     lastReceipt = answer.text;
   }
   if (deps.stopped()) return { state: "waiting" };
+  if (recordClash) return { state: "record-clash" };
   return { state: "confirmed", destinationNodeId: target.nodeId, receipt: lastReceipt };
 }
 
@@ -221,22 +341,26 @@ export function startReturnRecordsDuty(
     stateDir: string;
     fetch?: typeof fetch;
     log: Logger;
+    mainHoldings?: () => HeardHoldings | null;
   },
 ): { state(): ReturnState; passNow(): Promise<ReturnState>; stop(): Promise<void> } {
   const stopping = new AbortController();
   let state: ReturnState = "waiting";
-  // A main box that stays out of reach is logged once, and again only when the cause changes.
-  let lastUnreachable: string | null = null;
+  const othersRead = {};
+  // A main box that stays out of reach, or earlier boxes' records that cannot be read, is logged
+  // once, and again only when the cause changes.
+  let lastRepeated = new Map<string, string>();
   // Every pass waits for the one before it, so two passes never send batches at once.
   let latest: Promise<unknown> = Promise.resolve();
   const pass = (): Promise<ReturnState> => {
     const next = latest.then(async () => {
       state = "sending";
-      let unreachable: string | null = null;
+      const repeated = new Map<string, string>();
       const log: Logger = (level, event, fields) => {
-        if (event === "return-records.unreachable") {
-          unreachable = JSON.stringify(fields);
-          if (unreachable === lastUnreachable) return;
+        if (event === "return-records.unreachable" || event === "return-records.others_failed") {
+          const cause = JSON.stringify(fields);
+          repeated.set(event, cause);
+          if (lastRepeated.get(event) === cause) return;
         }
         deps.log(level, event, fields);
       };
@@ -244,13 +368,14 @@ export function startReturnRecordsDuty(
         state = await runReturnRecordsPass({
           ...deps,
           log,
+          othersRead,
           stopped: () => stopping.signal.aborted,
         });
       } catch (error) {
         state = "needs-attention";
         deps.log("warn", "return-records.failed", { errorCode: codeOf(error) });
       }
-      lastUnreachable = unreachable;
+      lastRepeated = repeated;
       return state;
     });
     latest = next;

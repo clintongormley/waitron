@@ -27,6 +27,11 @@ export function lackingChainOf(chain: ChainHolding, reason: LackingReason): Lack
   };
 }
 
+/** `chain` as listed by a box whose last record at that position is a different one. */
+export function differingAtItsLast(chain: ChainHolding): ChainHolding {
+  return { ...chain, huella: "a".repeat(64) };
+}
+
 /** A one-record chain of identity `sifId`, as a box holding that record lists it. */
 export async function oneRecordChainOf(db: Database, sifId: string): Promise<ChainHolding> {
   const [identity] = await db

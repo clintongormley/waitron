@@ -7,7 +7,9 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { liveBackupQuery } from "@waitron/db";
 import { archiveTo, openBackupQuery, type BackupQuery } from "@waitron/store";
+import { fiscalHoldings, type ChainHolding } from "./handover-holdings.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import {
@@ -17,6 +19,7 @@ import {
   ENVIO_STATES,
 } from "./handover-summary.js";
 import { registerSif } from "../test/sif-fixture.js";
+import type { CanonicalValue } from "@waitron/membership";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -386,6 +389,46 @@ describe("the return seat", () => {
         .map((row) => row.id)
         .sort(),
     );
+  });
+
+  it("readOthers answers null without a summary, [] when the main box holds all, and batches of an earlier box's tail", async () => {
+    const source = await seedNode(suite.db, "Source");
+    const main = await seedNode(suite.db, "Main");
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(source, 1);
+    await append(main, 2);
+    await append(earlier, 3);
+    await append(earlier, 4);
+    const mainHeld = await fiscalHoldings(liveBackupQuery(suite.db));
+    await append(earlier, 5);
+    const allHeld = await fiscalHoldings(liveBackupQuery(suite.db));
+    const readOthers = (holdings: ChainHolding[] | undefined) =>
+      suite.db.transaction((tx) =>
+        seat.readOthers!(tx, source.nodeId, main.nodeId, holdings as CanonicalValue | undefined),
+      );
+
+    expect(await readOthers(undefined)).toBeNull();
+    expect(await readOthers(allHeld)).toEqual([]);
+    const batches = (await readOthers(mainHeld))!;
+    expect(
+      batches.flatMap((batch) =>
+        (batch as { records: { node_id: string; secuencia: number }[] }).records.map((row) => [
+          row.node_id,
+          row.secuencia,
+        ]),
+      ),
+    ).toEqual([[earlier.nodeId, 3]]);
+  });
+
+  it("readOthers answers [] without a summary when the box holds no other box's record", async () => {
+    const source = await seedNode(suite.db, "Source");
+    const main = await seedNode(suite.db, "Main");
+    await append(source, 1);
+    await append(main, 9);
+    const others = await suite.db.transaction((tx) =>
+      seat.readOthers!(tx, source.nodeId, main.nodeId, undefined),
+    );
+    expect(others).toEqual([]);
   });
 
   it("refuses to inspect a batch that is not a returned-records object", async () => {

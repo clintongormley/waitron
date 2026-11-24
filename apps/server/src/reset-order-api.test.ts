@@ -38,10 +38,11 @@ import { returnDigest, returnVenue } from "./return-records.js";
 import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
-import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
+import { insertFiscalRecord, numberedAs, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import {
   earlierBoxChain,
   lackingChainOf,
+  differingAtItsLast,
   oneRecordChainOf,
 } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
@@ -671,7 +672,7 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([]);
   });
 
-  it("raises no alert when the chains the acknowledgement names are held here now, as after a loss order's extra return pass", async () => {
+  it("raises no alert when the chains the acknowledgement names are held here now, as after the old box's extra return pass", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
 
@@ -695,7 +696,65 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId },
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
+      },
+    ]);
+  });
+
+  /** A one-record chain of `nodeId` this box holds, as a box holding that record lists it. */
+  async function heldChain(nodeId = main) {
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId, seriesId },
+      reuseExistingParents: true,
+    });
+    await insertFiscalRecord(suite.db, ids, numberedAs(`A/${nodeId}`));
+    return oneRecordChainOf(suite.db, ids.sifId);
+  }
+
+  const reasonsLacking = async (chains: CanonicalValue[]) =>
+    (
+      (await VERIFACTU_HANDOVER.lacking!(liveBackupQuery(suite.db), chains)) as {
+        reason: string;
+      }[]
+    ).map((chain) => chain.reason);
+
+  it("says no records are missing when every chain this box lacks only differs, even for a loss order", async () => {
+    await completedReturn();
+    const order = await orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: true },
+    );
+    const differing = differingAtItsLast(await heldChain());
+    expect(await reasonsLacking([differing])).toEqual(["hash_differs"]);
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [differing] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: false },
+      },
+    ]);
+  });
+
+  it("says records are missing when a chain this box holds has fewer records, beside one that differs", async () => {
+    const order = await ordered();
+    const differing = differingAtItsLast(await heldChain());
+    const shorter = { ...(await heldChain(oldBox)), count: 2 };
+    expect(await reasonsLacking([differing, shorter])).toEqual(["hash_differs", "fewer_records"]);
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [differing, shorter] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
       },
     ]);
   });
@@ -754,7 +813,7 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId },
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
       },
     ]);
     expect(await offTheList()).toBe(true);

@@ -333,8 +333,11 @@ export const WORKFORCE_HANDOVER: ModuleHandoverContribution = {
   returnRecords: {
     read: async (tx, source) =>
       (await readWorkforceReturn(tx, source)) as unknown as ReturnBatchValue[],
-    receive: (tx, source, batch, now) =>
-      receiveWorkforceBatch(tx, source, readWorkforceBatch(batch), now),
+    // Only the sending box's own entries are returned; this seat reads no other box's.
+    receive: async (tx, source, batch, now, owner) =>
+      owner.others === undefined
+        ? receiveWorkforceBatch(tx, source, readWorkforceBatch(batch), now)
+        : invalid("not the sending box's own entries"),
   },
   holdings: workforceHoldings,
   lacking: workforceLacking,

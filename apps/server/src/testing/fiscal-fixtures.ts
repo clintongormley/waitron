@@ -207,6 +207,9 @@ export async function insertFiscalRegistro(
 /** {@link insertFiscalRegistro} under an English name, for suites the English-only guard reads. */
 export const insertFiscalRecord = insertFiscalRegistro;
 
+/** Options giving a record its own invoice number, so two records of one sale do not clash. */
+export const numberedAs = (invoiceNumber: string): RegistroOptions => ({ numSerie: invoiceNumber });
+
 /** {@link insertFiscalRecord} under its own invoice number, for suites the English-only guard reads. */
 export const insertNumberedFiscalRecord = (db: Database, ids: FiscalIds, invoiceNumber: string) =>
   insertFiscalRegistro(db, ids, { numSerie: invoiceNumber });

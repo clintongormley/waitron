@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ReturnDiscrepancy } from "@waitron/module";
+import type { ReturnDiscrepancy, ReturnedRecordsOwner } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import {
   COVERAGE_REFUSAL,
@@ -12,6 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { checkFiscalChains } from "./handover-chain-check.js";
+import type { ChainRange } from "./handover-unreturned.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS } from "./clock-behind.js";
@@ -51,12 +52,69 @@ function departmentIds(sales: ReturnRow[]) {
   return new Set(sales.map((row) => row.receipt_department_id));
 }
 
+/** The records one box wrote, or the named ranges of other boxes' chains. */
+function selectedRecords(select: string | readonly ChainRange[]) {
+  if (typeof select === "string") return { where: sql`node_id = ${select}`, order: sql`secuencia` };
+  // Each range is a search of the (node_id, secuencia) index; `cross join` pins the ranges as the
+  // outer loop.
+  const where = sql`id in (select picked.id from json_each(${JSON.stringify(select)}) chosen
+    cross join verifactu_records picked
+      on picked.node_id = json_extract(chosen.value, '$.nodeId')
+      and picked.sif_id = json_extract(chosen.value, '$.sifId')
+      and picked.secuencia > json_extract(chosen.value, '$.after'))`;
+  return { where, order: sql`node_id, secuencia` };
+}
+
+/**
+ * Records in the given box-then-position order, except that a correction comes after the record
+ * it corrects when that record is among them. A correction may name a record of a box its writer
+ * took over from, and the receiver checks that reference as each record goes in.
+ */
+function correctionsAfterTargets(records: ReturnRow[]): ReturnRow[] {
+  const byId = new Map(records.map((row) => [row.id, row]));
+  const before = new Map(
+    records.map((row, index) => {
+      const previous = records[index - 1];
+      return [
+        row,
+        [
+          previous?.node_id === row.node_id ? previous : undefined,
+          byId.get(row.corrects_registro_id),
+        ].filter((dependency) => dependency !== undefined),
+      ];
+    }),
+  );
+  const placed = new Set<ReturnRow>();
+  const waiting = new Set<ReturnRow>();
+  const ordered: ReturnRow[] = [];
+  for (const start of records) {
+    const stack = placed.has(start) ? [] : [start];
+    while (stack.length) {
+      const row = stack.at(-1)!;
+      waiting.add(row);
+      const dependencies = before.get(row)!.filter((dependency) => !placed.has(dependency));
+      if (dependencies.some((dependency) => waiting.has(dependency)))
+        throw new AppError("fiscal.return_invalid", { reason: "correction cycle" });
+      if (dependencies.length) {
+        stack.push(dependencies[0]!);
+        continue;
+      }
+      stack.pop();
+      waiting.delete(row);
+      placed.add(row);
+      ordered.push(row);
+    }
+  }
+  return ordered;
+}
+
 export async function readReturnedOriginals(
   tx: Transaction,
-  sourceNodeId: string,
+  select: string | readonly ChainRange[],
 ): Promise<ReturnedOriginals> {
+  const chosen = selectedRecords(select);
   const saleIds = sql`(with recursive parents(id) as (
-    select sale_id from verifactu_records where node_id = ${sourceNodeId}
+    select sale_id from verifactu_records where ${chosen.where}
     union select s.corrects_sale_id from sales s join parents p on p.id = s.id
       where s.corrects_sale_id is not null
     union select s.substituted_sale_id from sale_substitutions s
@@ -73,11 +131,12 @@ export async function readReturnedOriginals(
       on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
     where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
-  const records = tx.all<ReturnRow>(sql`
-    select * from verifactu_records where node_id = ${sourceNodeId} order by secuencia`);
+  const read = tx.all<ReturnRow>(sql`
+    select * from verifactu_records where ${chosen.where} order by ${chosen.order}`);
+  const records = typeof select === "string" ? read : correctionsAfterTargets(read);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
-    select device_id from verifactu_records where node_id = ${sourceNodeId}
+    select device_id from verifactu_records where ${chosen.where}
     union select device_id from sales where id in ${saleIds}
     union select device_id from refunds where sale_id in ${saleIds} and state <> 'failed'
     union select p.device_id from payments p join refunds r
@@ -93,7 +152,7 @@ export async function readReturnedOriginals(
     e.mensaje_error, e.enviado_en, e.confirmado_en, e.reconciled_resubmit_at
     from verifactu_submissions e
     join verifactu_records r on r.id = e.registro_id
-    where r.node_id = ${sourceNodeId} order by e.registro_id`);
+    where ${chosen.where} order by e.registro_id`);
   const tenders = tx.all<ReturnRow>(
     sql`select * from tenders where sale_id in ${saleIds} order by id`,
   );
@@ -249,8 +308,10 @@ export async function receiveReturnedOriginals(
   sourceNodeId: string,
   returned: ReturnedOriginals,
   now: Date,
-  accepted: readonly string[] = [],
+  owner: ReturnedRecordsOwner = { own: { accepted: [] } },
 ): Promise<{ complete: boolean; refusal?: "fiscal.return_record_clash" }> {
+  const others = owner.others;
+  const accepted = owner.own?.accepted ?? [];
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
   if (
@@ -267,8 +328,16 @@ export async function receiveReturnedOriginals(
   }
   for (const record of returned.records) {
     if (
-      record.node_id !== sourceNodeId ||
-      held(tx, "verifactu_identities", record.sif_id)?.node_id !== sourceNodeId
+      others &&
+      (record.node_id === sourceNodeId ||
+        record.node_id === others.destinationNodeId ||
+        held(tx, "verifactu_identities", record.sif_id)?.node_id !== record.node_id)
+    )
+      throw new AppError("fiscal.return_invalid", { reason: "another box's record metadata" });
+    if (
+      !others &&
+      (record.node_id !== sourceNodeId ||
+        held(tx, "verifactu_identities", record.sif_id)?.node_id !== sourceNodeId)
     )
       throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
     const recordAt = String(record.fecha_hora_huso_gen_registro);
@@ -276,11 +345,20 @@ export async function receiveReturnedOriginals(
       throw new AppError("fiscal.return_clock_ahead", { recordAt, clockAt: now.toISOString() });
   }
   const allowed: ReturnRow[] = [];
-  let blocked = false;
-  for (const record of [...returned.records].sort(
-    (a, b) => Number(a.secuencia) - Number(b.secuencia),
-  )) {
-    if (blocked) continue;
+  const allowedIds = new Set<ReturnRow[string]>();
+  const allowedPositions = new Set<string>();
+  const blocked = new Set<ReturnRow[string]>();
+  const withheld = new Set<ReturnRow[string]>();
+  const inBoxOrder = [...returned.records].sort(
+    (a, b) =>
+      (String(a.node_id) < String(b.node_id)
+        ? -1
+        : String(a.node_id) > String(b.node_id)
+          ? 1
+          : 0) || Number(a.secuencia) - Number(b.secuencia),
+  );
+  for (const record of others ? correctionsAfterTargets(inBoxOrder) : inBoxOrder) {
+    if (blocked.has(record.node_id) || withheld.has(record.node_id)) continue;
     const own = held(tx, "verifactu_records", record.id);
     const [collision] = tx.all<ReturnRow>(sql`select * from verifactu_records where
       (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
@@ -294,9 +372,29 @@ export async function receiveReturnedOriginals(
         ? own
         : undefined
       : collision;
-    if (conflict) {
-      blocked = true;
-    } else allowed.push(record);
+    const previous = Number(record.secuencia) - 1;
+    // A record whose previous position is neither held nor in this batch would fail the chain
+    // check below (an earlier batch's clash leaves such a gap), so its box is held back.
+    const gap =
+      others &&
+      previous > 0 &&
+      !allowedPositions.has(`${record.node_id}\n${previous}`) &&
+      tx.all(sql`select 1 from verifactu_records
+        where node_id = ${record.node_id} and secuencia = ${previous}`).length === 0;
+    if (conflict || gap) blocked.add(record.node_id);
+    else if (
+      others &&
+      record.corrects_registro_id !== null &&
+      !allowedIds.has(record.corrects_registro_id) &&
+      !held(tx, "verifactu_records", record.corrects_registro_id)
+    )
+      // Its box's later records wait with it; the batch then reads as incomplete.
+      withheld.add(record.node_id);
+    else {
+      allowed.push(record);
+      allowedIds.add(record.id);
+      allowedPositions.add(`${record.node_id}\n${Number(record.secuencia)}`);
+    }
   }
   const needed = new Set(allowed.map((row) => row.sale_id));
   function includeParent(id: ReturnRow[string]) {
@@ -333,7 +431,9 @@ export async function receiveReturnedOriginals(
       .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
       .map((clash) => clash.saleId),
   );
-  let missing = false;
+  // For another box's batch, a sale or payment row that differs from the receiver's leaves the
+  // receiver's in place without making the batch incomplete; only its records decide that.
+  let saleRowsDiffer = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id)) {
       const createdAt = now.toISOString();
@@ -380,7 +480,7 @@ export async function receiveReturnedOriginals(
         refundClash = true;
     }
     if (refundClash) {
-      missing = true;
+      saleRowsDiffer = true;
       continue;
     }
     try {
@@ -433,7 +533,7 @@ export async function receiveReturnedOriginals(
         !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
       )
         throw error;
-      missing = true;
+      saleRowsDiffer = true;
     }
   }
   let inserted = false;
@@ -501,11 +601,12 @@ export async function receiveReturnedOriginals(
           conflict = true;
         }
       }
-      if (conflict) missing = true;
+      if (conflict) saleRowsDiffer = true;
     }
   }
   if (inserted && (await checkFiscalChains(liveBackupQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
+  let missing = saleRowsDiffer && !others;
   for (const [table, rows] of [
     ["verifactu_records", returned.records],
     ["sales", returned.sales],
@@ -516,6 +617,7 @@ export async function receiveReturnedOriginals(
     ["sale_voids", returned.voids],
     ["sale_substitutions", returned.substitutions],
   ] as const) {
+    if (others && table !== "verifactu_records") continue;
     for (const row of rows) {
       if (
         ["tenders", "refunds", "sale_settlements"].includes(table) &&
@@ -536,7 +638,7 @@ export async function receiveReturnedOriginals(
       missing = true;
     }
   }
-  return blocked
+  return blocked.size
     ? { complete: false, refusal: "fiscal.return_record_clash" }
     : { complete: !missing };
 }

@@ -175,10 +175,12 @@ trabajadas, pueden volver al nuevo servidor principal; esto no repite pedidos, c
 cajón. No borres el servidor anterior mientras necesites sus datos.
 
 Enciende el servidor anterior y mantenlo conectado: devuelve sus registros de facturación y horas
-trabajadas por sí solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servidor
-principal dice **Esperando a que el servidor principal anterior devuelva sus registros de
-facturación y horas trabajadas**, y no se puede volver a
-traspasar el local ni retirar ese servidor.
+trabajadas por sí solo. También envía registros de facturación de servidores principales
+anteriores que el nuevo servidor principal aún no tiene. Hasta que lleguen sus propios registros,
+su fila en **Sistema → Servidores** del nuevo servidor principal dice **Esperando a que el servidor
+principal anterior devuelva sus registros de facturación y horas trabajadas**, y no se puede volver a
+traspasar el local ni retirar ese servidor. La página del propio servidor anterior puede seguir
+diciendo que está enviando después de que esa fila deje de esperar; déjalo encendido.
 
 Una persona añadida en el servidor anterior después de la copia vuelve deshabilitada, con sus
 horas pero sin correo electrónico: añade su nombre, apellidos y correo con **Editar…** y luego
