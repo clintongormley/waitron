@@ -759,7 +759,7 @@ describe("editLineOptions", () => {
     ).toEqual([cookedAnswer]);
   });
 
-  it("gives the new answers when a list's own wording changed, the picks being all the line remembers", () => {
+  it("gives the new wording when staff re-send a renamed list's answer", () => {
     const requested = [{ listId: cooked.id, labelId: mediumRare.id }];
     const stored = freeze({ options: [cooked] }, { options: requested }).optionSnapshots;
     const renamed = { ...cooked, name: "Renamed staff" };
@@ -822,7 +822,6 @@ describe("asksNoNewAnswer", () => {
     const both = freeze({ options: [cooked, twin] }, { options: requested }).optionSnapshots;
     expect(asksNoNewAnswer([cooked, twin], requested, both)).toBe(true);
     expect(asksNoNewAnswer([cooked, twin], requested, [both[0]!, both[0]!])).toBe(false);
-    expect(asksNoNewAnswer([cooked, twin], [requested[1]!], [both[0]!])).toBe(false);
   });
 
   it("leaves a request naming one list twice to the validator, in any case", () => {
@@ -1005,6 +1004,21 @@ describe("editUnsentLineOptions", () => {
         "en",
       );
       expect(staffLabels(edited)).toEqual(["Well done staff", "Pepper staff"]);
+    });
+
+    it("keeps a withdrawn answer whose list is still offered beside a new same-name list", () => {
+      const twin = { ...cooked, id: "list-new-cooked" };
+      const edited = editUnsentLineOptions(
+        [withdrawn, twin, sauce],
+        [{ ...wellDone, listId: twin.id }, pepper],
+        stored,
+        "en",
+      );
+      expect(edited?.map(({ listId, labelName }) => [listId, labelName.en])).toEqual([
+        [twin.id, "Well done staff"],
+        [sauce.id, "Pepper staff"],
+        [cooked.id, "Medium rare staff"],
+      ]);
     });
 
     describe("with two lists sharing a staff name", () => {

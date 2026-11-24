@@ -8535,7 +8535,7 @@ describe("till-app", () => {
       const saved = [
         ...(keepsCooking ? [frozenDoneness] : []),
         sauce,
-        { ...choice, listId: list.id },
+        { ...choice, listId: list.id, labelKitchenName: "Recorded kitchen wording" },
       ];
       const offering = { ...coffee, offeredModifiers: [sauceList, list] };
       const { el } = await mountApp({

@@ -223,7 +223,7 @@ function freezesTo(freeze: AnswerFreezer, held: OptionSnapshot): boolean {
  * `defaultLanguage`.
  *
  * Compared BY VALUE — not by JSON key order, send order or offered order, because the offered
- * order is a stored position a save re-numbers. A RENAMED list still differs, deliberately.
+ * order is a stored position a save re-numbers.
  * Receipt: docs/developers/modifiers.md.
  */
 export function editLineOptions(
