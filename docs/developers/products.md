@@ -21,7 +21,7 @@ You create a product independently of menus. `products` has no menu ownership; `
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest menu. The till's menu search also matches it, but shows the staff name |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and invoice. The till's menu search also matches it, but shows the staff name |
 | **Prep station name** | `products.kitchen_name` — plain text, nullable | Cooks. The station ticket and the prep station display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
@@ -1054,41 +1054,3 @@ An edit keeps the name through later region changes and Review/Back, including
 an edit back to an earlier default. Discard restores that ownership with the
 name. The server repeats automatic-name derivation from validated geography;
 this temporary draft marker is never a venue-table field.
-
-## Guest menu preview
-
-`publicGuestMenu` resolves guest names through the requested enabled content language, the venue
-default, then each identity’s own staff name. Product, variant and extra halves resolve separately;
-prep station names do not enter the projection. The server’s `guest-menu-page.ts` renders that
-allowlisted publication as text-safe HTML; working changes reach the preview only after publication.
-
-The public `/public/menu` page resolves only the opted-in active default publication while the box
-is serving. It uses the same projection and renderer as the protected preview. Sharing is a
-non-transferring menu settings document: configuration imports retain this box’s choice.
-
-On a plain `/public/menu` link, the box reads the phone's `Accept-Language` preferences in
-positive-weight order, preserving header order on ties. It reads only the first 32 entries in the header.
-For each preference it tries the exact tag, then removes trailing tag parts one at a time, then takes a venue language with the same base.
-Matching ties try the main language first, then saved order; visible links keep saved order.
-For example, `ca,es` matches offered `ca-ES-valencia` before `es`. No match uses the main language.
-For `ca-valencia` with both `ca` and `ca-ES-valencia` offered, shortening reaches `ca` first.
-An explicit `?lang=` supplies the sole preference, even when empty or invalid; `?language=` is ignored.
-Success and unavailable responses carry `Vary: Accept-Language` and `Cache-Control: no-store`.
-The page's fixed wording uses the shown language's registered bundle, then the main language's,
-then English, through the same matcher. Authored dish text resolves separately.
-Cloud receives pages in saved order; its phone-language selection is implemented separately.
-
-
-Cloud delivery reuses the existing connection job's one-minute passes. It rereads the opted-in
-publication and content languages, renders each public page with its publication date, and compares
-the exact body's digest with Cloud's confirmation. Sharing Off or an unavailable default withdraws
-the hosted copy; a portal block is preserved. A permanent publish refusal is shown separately
-from pending and retried on the next pass; revocation points to portal takedown. Manager reads compare the current desired pages with
-the last confirmation in memory, without making network calls. Public/mobile-data qualification
-remains separate, so the manager preview does not expose a Cloud guest URL.
-
-Paper uses the same projected publication and prices. The authenticated paper request binds its
-presentation indices to the captured version, checks that version belongs to the menu and embeds
-only the selected library logo's display rendition. A missing logo leaves the masthead text alone.
-Scalar appearance stays in the non-transferring menu settings document; logo, order and breaks
-stay with the preview. Neither changes online or recorded order.

@@ -21,7 +21,6 @@ import {
   MENU_CONFIGURATION_TRANSFER,
   MENU_PROVISIONING,
   MENU_PERSONAL_DATA,
-  GUEST_MENU_SETTINGS,
   MENU_SETTINGS,
 } from "@waitron/menu";
 import {
@@ -206,7 +205,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: MENU_CONFIGURATION_TRANSFER,
     provisioning: MENU_PROVISIONING,
     personalData: MENU_PERSONAL_DATA,
-    settings: [GUEST_MENU_SETTINGS, MENU_SETTINGS],
+    settings: [MENU_SETTINGS],
   },
   {
     name: "venue-service",

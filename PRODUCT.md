@@ -22,8 +22,7 @@ Four groups, and none comes before the others (owner, 2026-11-22):
 - **Whoever installs the box.** The owner or someone acting for them, on the setup page, bringing a
   new box up, restoring one, or joining a spare box to it.
 
-Diners also read what Waitron prints: receipts, invoices and the published guest menu, in their own
-language where the venue offers it.
+Diners read receipts and invoices in their own language where the venue offers it.
 
 ## Product Purpose
 

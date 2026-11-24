@@ -598,7 +598,6 @@ export {
   type GuestMember,
   type GuestChoice,
   type GuestDeclarations,
-  type GuestMenuPaperAppearance,
 } from "./menu-document/guest-menu.js";
 export { guestMenuWords } from "./i18n/guest-menu.js";
 

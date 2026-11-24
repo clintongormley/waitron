@@ -118,8 +118,6 @@ lista eliminada sigue en un pedido aparcado de caja, con su cargo, hasta que el 
 plato que lo lleva y guarde un cambio, lo que lo quita; mientras tanto, + no puede aumentar la
 cantidad de ese plato.
 
-Para quitar también una lista eliminada de la carta para clientes, vuelve a publicar esa carta.
-
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la estación recibe el cambio. Una fila de platos iguales
 cambia entera. Para quitar uno o varios platos enviados de la cuenta, usa **Cancelar…**.
@@ -133,8 +131,7 @@ quítala del grupo Modificadores de ese producto concreto.
 
 Un elemento de extras declara sus alérgenos y su aptitud dietética a través del producto que nombra, así
 que los mantienes en ese producto, en **Productos**, no aquí. Guarda el producto para corregir sus
-declaraciones sin publicar. Abre de nuevo una vista previa para clientes para comprobar las declaraciones guardadas. Una opción no declara ninguno de los dos,
-porque es texto, no algo que se come.
+declaraciones sin publicar. Las opciones son texto y no llevan declaraciones.
 
 ## Qué hace la caja con una lista {#till}
 

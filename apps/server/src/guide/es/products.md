@@ -80,8 +80,8 @@ Dos nombres opcionales están en **Detalles**:
   que lee el comensal: el ticket y la factura. Un ticket y una factura muestran el nombre para el cliente
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
   dejas ese nombre predeterminado en blanco. Un campo regional como **Inglés (Estados Unidos)**
-  es opcional: déjalo vacío para usar el inglés, o escribe solo las palabras que cambian en la carta
-  para clientes. Los nombres regionales no sustituyen al nombre predeterminado en el ticket.
+  es opcional. Déjalo vacío para usar el inglés o escribe solo las palabras que cambian.
+  Los nombres regionales no sustituyen al nombre predeterminado en el ticket.
 - Un **nombre de estación de preparación**, en **Estación de preparación**. Es lo que imprime la comanda de estación y lo que muestran las
   pantallas de estación. Es útil cuando la etiqueta corta que necesita un cocinero no es el nombre con el
   que vendes. Déjalo en blanco y la estación verá el nombre del personal.
@@ -581,51 +581,3 @@ Elige **Volver a poner a la venta** cuando esté listo; el interruptor no se res
 Al recuperar el plato, los tamaños marcados individualmente como agotados siguen sin estar a la venta.
 En una lista de opciones, vuelve a poner otra a la venta antes de marcar su última opción disponible como agotada.
 Esto también se aplica a una lista deshabilitada en el panel que siga en tu carta.
-
-## Revisa la carta como cliente {#guest-preview}
-
-Abre una carta en **Cartas**, entra en **Vista previa** y elige **Vista previa para clientes**. Verás sus platos,
-precios, tamaños y extras publicados, con los alérgenos y etiquetas dietéticas actuales de los productos. Elige el idioma del cliente para revisar
-los nombres y las descripciones; los nombres que falten usan el idioma predeterminado y después
-el nombre interno. Publica los cambios de nombres y precios antes de revisarlos aquí.
-Tras cambiar las declaraciones, abre de nuevo la vista previa. Esta vista previa no comparte
-la carta con los clientes.
-
-## Comparte la carta predeterminada en este servidor {#guest-sharing}
-
-En **Vista previa para clientes**, elige **Compartir carta** para compartir la versión publicada
-de la carta predeterminada. Puede ser distinta de la que estás revisando. Elige
-**Abrir la carta compartida en este servidor** para comprobarla. Publica los cambios de nombres y precios antes de revisarlos ahí. Recarga la página tras cambiar las declaraciones.
-Solo se muestra una carta predeterminada activa y publicada. Elige **Dejar de compartir** para retirarla.
-La elección se conserva en este servidor al importar una configuración; un servidor nuevo empieza sin compartir.
-Cuando este servidor está conectado a Cloud, la vista previa indica si Cloud tiene la publicación actual
-o queda una actualización pendiente. Guarda las declaraciones, o publica otros cambios de la carta, y espera la confirmación. Si el servidor está
-sin conexión, Cloud conserva la última copia enviada. Al dejar de compartir, esa copia se retira
-cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras el servidor
-está sin conexión; vuelve a activarlo allí para reanudar los envíos. Si Cloud rechaza la publicación,
-revisa la carta y sus idiomas de contenido; el servidor vuelve a intentarlo. Tras desconectar el servidor,
-retira cualquier copia enviada desde el portal de Cloud.
-
-Si la vista previa indica que necesitas un plan de Cloud, elige **Abrir Facturación de Cloud**.
-Si llegas a la página de la cuenta tras iniciar sesión, elige **Facturación** si aparece. Selecciona
-tu local si se te pide e inicia una prueba gratuita si está disponible. Si no aparece Facturación,
-elige **Abrir la carta compartida en este servidor** en la vista previa para usar el enlace local.
-
-El enlace para clientes con datos móviles aún se está preparando.
-
-## Imprime una carta publicada {#guest-paper}
-
-En **Vista previa para clientes**, elige el idioma del cliente y usa **Carta impresa A4**.
-Elige **Bistró** para dos columnas equilibradas o **Platos y vinos** para una columna de platos más
-ancha y, cuando hay varias secciones, la última en un panel estrecho. Elige la tipografía, el espaciado, los colores y
-la leyenda de alérgenos. Usa las palabras junto a cada plato si prefieres leer allí las declaraciones.
-
-Elige un logotipo de tu biblioteca de imágenes, sube secciones y añade saltos de página antes de
-ellas. Estas elecciones pertenecen a esta vista previa. **Guardar apariencia en este servidor** conserva
-el diseño, la tipografía, el espaciado, los colores y la leyenda aquí; otro servidor necesita sus propias elecciones.
-
-Elige **Vista previa A4**, revisa todas las páginas y pulsa **Imprimir / Guardar como PDF**.
-Selecciona A4 vertical en el navegador y desactiva sus encabezados y pies de página. Abre de nuevo
-la vista previa para clientes tras publicar otra versión o guardar declaraciones. La impresión conserva
-los platos y precios de la publicación abierta, con los alérgenos y etiquetas dietéticas actuales.
-Imprime una copia nueva tras corregir las declaraciones; imprimir no activa el uso compartido.

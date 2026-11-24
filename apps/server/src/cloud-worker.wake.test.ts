@@ -9,20 +9,20 @@ const elapsed = () => Date.now() - epoch;
 const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 const active = { installation: { state: "active" } };
 let runner: JobRunner;
-let deliveries: number[];
+let refreshes: number[];
 
 function start(refresh: () => Promise<unknown>) {
   const connection = {
-    refresh,
+    refresh: () => {
+      refreshes.push(elapsed());
+      return refresh();
+    },
     status: async () => active,
   } as unknown as CloudConnection;
   runner.add(
     cloudConnectionJob({
       connection,
       isPrimary: () => true,
-      onGuestMenu: () => {
-        deliveries.push(elapsed());
-      },
     }),
   );
 }
@@ -30,7 +30,7 @@ function start(refresh: () => Promise<unknown>) {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(epoch);
-  deliveries = [];
+  refreshes = [];
   runner = createJobRunner({
     now: () => new Date(),
     log: () => {},
@@ -44,24 +44,24 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it("a wake brings the next delivery to two seconds after the pass, not before", async () => {
+it("a wake brings the next refresh to two seconds after the pass, not before", async () => {
   start(async () => active);
   await advance(0);
-  expect(deliveries).toEqual([0]);
+  expect(refreshes).toEqual([0]);
   await advance(1_000);
   runner.wake("cloud.connection");
   await advance(999);
-  expect(deliveries).toEqual([0]);
+  expect(refreshes).toEqual([0]);
   await advance(1);
-  expect(deliveries).toEqual([0, 2_000]);
+  expect(refreshes).toEqual([0, 2_000]);
 });
 
-it("without a wake the next delivery waits the full minute", async () => {
+it("without a wake the next refresh waits the full minute", async () => {
   start(async () => active);
   await advance(59_999);
-  expect(deliveries).toEqual([0]);
+  expect(refreshes).toEqual([0]);
   await advance(1);
-  expect(deliveries).toEqual([0, 60_000]);
+  expect(refreshes).toEqual([0, 60_000]);
 });
 
 it("a wake after a failed pass does not shorten the minute's wait", async () => {
@@ -76,7 +76,7 @@ it("a wake after a failed pass does not shorten the minute's wait", async () => 
   await advance(1_000);
   runner.wake("cloud.connection");
   await advance(58_999);
-  expect(deliveries).toEqual([]);
+  expect(refreshes).toEqual([0]);
   await advance(1);
-  expect(deliveries).toEqual([60_000]);
+  expect(refreshes).toEqual([0, 60_000]);
 });

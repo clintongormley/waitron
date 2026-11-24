@@ -274,8 +274,6 @@ const OPEN_READS: Record<string, Answer> = {
   [`/legal/declaration/${MADE_UP}`]: { status: 404 },
   "/legal/x": { status: 404 },
   "/public/availability": { status: 503 },
-  "/public/menu": { status: 503 },
-  "/public/menu/x": { status: 404 },
   "/api/node": { status: 200 },
   "/api/node/main": { status: 200 },
   [`/api/node/handover/${MADE_UP}`]: { status: 404, code: "handover.operation_unknown" },
@@ -321,9 +319,6 @@ const GATE_PASSES = (path: string) =>
   /^\/handover\/[^/]+$/.test(path);
 
 function mirrorExpected(method: string, path: string): Answer {
-  if (path === "/public/menu")
-    return { status: SAFE.has(method) && method !== "OPTIONS" ? 503 : 405 };
-  if (path === "/public/menu/x") return { status: 404 };
   if (SAFE.has(method)) {
     if (method === "GET" && OPEN_READS[path] !== undefined) return OPEN_READS[path];
     if (method === "OPTIONS" && GATE_PASSES(path)) return { status: 404 };
@@ -353,11 +348,6 @@ const LATCH_ANSWERS: Record<string, Answer> = {
   "GET /help/x": { status: 404 },
   "GET /legal/about": { status: 200 },
   "GET /public/availability": { status: 503 },
-  "GET /public/menu": { status: 503 },
-  "GET /public/menu/x": { status: 404 },
-  "POST /public/menu": { status: 405 },
-  "OPTIONS /public/menu": { status: 405 },
-  "POST /public/menu/x": { status: 404 },
   "GET /setup/trust": { status: 200 },
   "GET /setup/connection": { status: 200 },
   "GET /ca.crt": { status: 200 },

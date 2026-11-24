@@ -7,8 +7,6 @@ export function cloudConnectionJob(options: {
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
   onEmergencyError?: (error: unknown, level: "info" | "warn") => void;
-  onGuestMenu?: (signal: AbortSignal) => unknown;
-  onGuestMenuError?: (error: unknown) => void;
   managementOrigin?: string;
   onStaffCertificate?: (signal: AbortSignal) => unknown;
 }): JobDefinition {
@@ -45,13 +43,6 @@ export function cloudConnectionJob(options: {
                   error,
                   codeOf(error) === "cloud.unavailable" ? "info" : "warn",
                 );
-            }
-          }
-          if (status.installation?.state === "active" && !signal.aborted && options.isPrimary()) {
-            try {
-              await options.onGuestMenu?.(signal);
-            } catch (error) {
-              if (!signal.aborted) options.onGuestMenuError?.(error);
             }
           }
           if (

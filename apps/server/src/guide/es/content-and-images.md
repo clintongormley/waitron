@@ -40,9 +40,8 @@ Para cambiar el predeterminado, elige **Hacer predeterminado** en el menú ⋮ d
 Para usar palabras regionales, elige **Añadir versión regional** en el menú ⋮ de un idioma principal.
 Por ejemplo, conserva **Inglés** para tu carta de Londres y añade **Inglés (Estados Unidos)**.
 Escribe **chips** en inglés y **fries** en el campo estadounidense de un plato. Deja los demás campos
-estadounidenses vacíos para que usen sus nombres en inglés. La carta para clientes usa esas palabras
-solo cuando se elige el inglés estadounidense; el inglés sin región conserva
-**chips**. Edita estos nombres en los editores de productos y cartas. **Editar traducciones** y
+estadounidenses vacíos para que usen sus nombres en inglés. Edita estos nombres en los editores
+de productos y cartas. **Editar traducciones** y
 **Traducir todo** incluyen los idiomas principales.
 
 Un idioma que Waitron mantiene activado para tu región aparece como **Obligatorio** y no tiene

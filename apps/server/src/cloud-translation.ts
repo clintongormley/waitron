@@ -18,9 +18,6 @@ export type MachineServiceAction =
   | "staff-description"
   | "staff-certificate-submit"
   | "staff-certificate-status"
-  | "guest-menu-status"
-  | "guest-menu-publish"
-  | "guest-menu-withdraw"
   | "owner-recovery-read"
   | "owner-recovery-approve"
   | "owner-recovery-refuse";
@@ -107,9 +104,6 @@ const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
   "owner-recovery-read": { reply: 65536, ms: 8000 },
   "owner-recovery-approve": { reply: 65536, ms: 8000 },
   "owner-recovery-refuse": { reply: 65536, ms: 8000 },
-  "guest-menu-status": { reply: 16384, ms: 8000 },
-  "guest-menu-publish": { reply: 16384, ms: 60000 },
-  "guest-menu-withdraw": { reply: 16384, ms: 8000 },
   "staff-certificate-submit": { reply: 32768, ms: 8000 },
   "staff-certificate-status": { reply: 32768, ms: 8000 },
   "translation-submit": { reply: 65536, ms: 60000 },
