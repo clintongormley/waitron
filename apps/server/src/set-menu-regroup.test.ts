@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import {
   adjustmentLines,
   insertInChunks,
+  lineServiceCancellations,
   persons,
   statementChunks,
   workingOrderLines,
@@ -609,6 +610,62 @@ it("leaves a set menu whose dish was cancelled keeping its charge as it is (D15)
     setMenuLineId: daily.id,
     place: 0,
   });
+});
+
+it("leaves a set menu whose dish carries a service cancellation, as a reopened bill's can, as it is (D15)", async () => {
+  const { bill, hake } = await groupedSoupAndHake();
+  await inTx(venue, (tx) =>
+    tx.insert(lineServiceCancellations).values({
+      lineId: hake.id,
+      quantity: 1000,
+      cancelledAt: new Date().toISOString(),
+      wasStarted: false,
+      actorId: venue.operator.personId,
+    }),
+  );
+  const before = await rows(bill.tabId);
+  const aLaCarte = vi.fn((input: SetMenuGroupingInput): SetMenuGrouping => ({
+    exact: true,
+    totalCents: 0,
+    unusedDiscountIds: [],
+    setMenus: [],
+    dishes: input.dishes.map(({ id, aLaCarteCents, extrasCents }) => ({
+      id,
+      place: null,
+      chargeCents: aLaCarteCents,
+      extrasCents,
+    })),
+  }));
+  await inTx(venue, async (tx) =>
+    saveBillGrouping(tx, bill.tabId, await readGroupingCopies(tx, bill.tabId), aLaCarte),
+  );
+  expect(aLaCarte.mock.calls[0]![0].dishes).toEqual([]);
+  expect(await rows(bill.tabId)).toEqual(before);
+});
+
+it("leaves the dishes a whole-bill discount reduced as they are, with their list price cleared (D15)", async () => {
+  const bill = await seated();
+  await send(bill, "Soup", "Hake");
+  await adjust(bill.tabId, null, { action: "discount_percent", percentBp: 1000 });
+  await inTx(venue, (tx) =>
+    tx
+      .update(workingOrderLines)
+      .set({ listUnitPriceGross: null })
+      .where(eq(workingOrderLines.workingOrderId, bill.tabId)),
+  );
+  const reduced = await venue.db
+    .select({ lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      inArray(
+        adjustmentLines.lineId,
+        (await rows(bill.tabId)).map(({ id }) => id),
+      ),
+    );
+  expect(reduced).toHaveLength(2);
+  const before = await rows(bill.tabId);
+  expect(await regroup(bill.tabId)).toEqual(new Set());
+  expect(await rows(bill.tabId)).toEqual(before);
 });
 
 it("leaves a dish stamped with a list price and no adjustment naming it as it is (D15)", async () => {
