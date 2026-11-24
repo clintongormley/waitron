@@ -129,7 +129,9 @@ export function invoiceDiscounts(
         amount: ownAmount,
         comp:
           entry.comp &&
-          (named !== null || wholeFamilyComp || fullAdjustmentAtRate(lines, entry.rate)),
+          (named !== null ||
+            wholeFamilyComp ||
+            fullAdjustmentAtRate(lines, entry.rate, lostVersusOwn === 0)),
         named,
       };
       const rows = under.get(home.at);
@@ -159,10 +161,21 @@ function singleFullAdjustment(entries: readonly ReceiptAdjustment[]): boolean {
   return entries.length === 1 && (entries[0]!.kind === "comp" || entries[0]!.percentBp === 10000);
 }
 
-function fullAdjustmentAtRate(lines: readonly FiguredLine[], rate: string): boolean {
+function fullAdjustmentAtRate(
+  lines: readonly FiguredLine[],
+  rate: string,
+  ownCoversLoss: boolean,
+): boolean {
   const atRate = lines.filter(({ line }) => sameRate(line.net.rate, rate));
-  const entries = atRate.flatMap(({ line }) => line.adjustments ?? []);
-  return singleFullAdjustment(entries) && compareDecimal(lost(atRate), amountOf(entries[0]!)) === 0;
+  const [adjusted, other] = atRate.filter(({ line }) => (line.adjustments?.length ?? 0) > 0);
+  const entries = adjusted?.line.adjustments ?? [];
+  // A dish's comp can cover extras at other rates, so a matching amount alone cannot name its row.
+  return (
+    other === undefined &&
+    singleFullAdjustment(entries) &&
+    (ownCoversLoss || adjusted?.line.parentLineNo != null) &&
+    compareDecimal(lost(atRate), amountOf(entries[0]!)) === 0
+  );
 }
 
 function addByRate(

@@ -152,8 +152,11 @@ describe("tableLines", () => {
       .filter((line) => !line.header)
       .map(({ text }) => text);
 
-  it("uses the full empty price cell while keeping the amount and rate aligned", () => {
-    expect(reductionLines(reduction)).toEqual(["      Regular customer applies   -1,36 10%"]);
+  it.each([
+    ["Regular customer applies", "      Regular customer applies   -1,36 10%"],
+    ["Regular customer offer", "      Regular customer offer     -1,36 10%"],
+  ])("keeps the amount and rate aligned beside %s", (item, expected) => {
+    expect(reductionLines({ ...reduction, item })).toEqual([expected]);
   });
 
   it.each([
@@ -173,14 +176,14 @@ describe("tableLines", () => {
       true,
       ["Regular customer -1,36 10%", "applies!"],
     ],
+    ["without a rate column", {}, 42, false, ["Regular customer -1,36", "applies"]],
     [
-      "without a rate column",
-      { item: "Regular customer discount now" },
-      42,
-      false,
-      ["Regular customer -1,36", "discount now"],
+      "on two lines",
+      { item: "Regular customer applies!" },
+      30,
+      true,
+      ["Regular customer", "applies!", "-1,36 10%"],
     ],
-    ["on two lines", {}, 30, true, ["Regular customer applies", "-1,36 10%"]],
   ] as const)("keeps the normal layout when %s", (_label, changes, columns, withRate, expected) => {
     expect(
       reductionLines({ ...reduction, ...changes }, columns, withRate).map((line) =>

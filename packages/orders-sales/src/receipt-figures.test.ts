@@ -292,6 +292,31 @@ describe("invoiceDiscounts", () => {
     });
   });
 
+  it("keeps 100% on each rate when a separate comp took its whole amount", () => {
+    const extra = { ...free("3.00", "10", comp("3.00")), parentLineNo: 1 };
+    const result = invoiceDiscounts([group(0, 0, free("9.00", "21", comp("9.00")), extra)], []);
+    expect(under(result)).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: true, named: null },
+        { rate: "10", amount: "2.73", comp: true, named: null },
+      ],
+    });
+  });
+
+  it("keeps both rates plain when the bill and a comp share the loss at each rate", () => {
+    const extra = { ...free("3.00", "10"), parentLineNo: 1 };
+    const result = invoiceDiscounts(
+      [group(0, 0, free("9.00", "21", comp("9.00")), extra)],
+      [{ kind: "discount", percentBp: 2500, amount: "3.00" }],
+    );
+    expect(under(result)).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: false, named: null },
+        { rate: "10", amount: "2.73", comp: false, named: null },
+      ],
+    });
+  });
+
   // S5: a whole-bill 10% and nothing of a dish's own.
   const s5Bill = own("3.25");
   const s5 = { groups: [group(0, 0, rioja), group(1, 1, bread)], bill: [s5Bill] };

@@ -809,6 +809,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Receipt layout pass** (size S). Holds A1201. [Detail](backlog/printers.md#bundle-receipt-layout-pass)
 
+- **A full invoice can print `Descuento 100%` on a row that still has a charge.** On a takeaway
+  bill, make the 10% olives on a 21% pizza free and issue a full invoice. The pizza and olives can
+  each say `Descuento 100%` while both still carry filed amounts after sharing the price paid (A445).
+
 - **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
   open:**
   [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
