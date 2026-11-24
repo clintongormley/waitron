@@ -95,6 +95,10 @@ export const fieldStyles = css`
   .field[data-invalid]:focus-within {
     box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-danger);
   }
+  .field[data-invalid]:where(:has(.field-control:focus-visible)) {
+    outline: var(--wt-focus-ring);
+    outline-offset: var(--wt-focus-offset);
+  }
   .field[data-invalid] .field-label,
   .field[data-invalid]:focus-within .field-label {
     color: var(--wt-color-danger);

@@ -3867,8 +3867,8 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   ellipsis is on the label's text, `.field-label-text`, so a required field's `*` after it is
   never the part cut.
 - **Focus** (`:focus-within`): the bottom line becomes `--wt-field-line-width-active` of
-  `--wt-color-primary` and the label `--wt-color-field-label-focus`. That line is the field's focus
-  indicator; the control draws no focus ring of its own. A dropdown whose list is open (`data-open`)
+  `--wt-color-primary` and the label `--wt-color-field-label-focus`. The line marks focus
+  on a valid field. A dropdown whose list is open (`data-open`)
   with a search box (`data-search`) drops this marking, because the search box's own line marks
   focus. `wt-combobox` owns both open-list rules: it drops the marking when a search box is present,
   and keeps it when there is none, wherever focus is; an
@@ -3876,8 +3876,10 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   the marking first.
 - **Invalid** (`data-invalid`, from `invalid` or a non-empty `error`): the line becomes
   `--wt-field-line-width-active` of `--wt-color-danger` and the label `--wt-color-danger`, and both
-  win over the focus marking, so the field `focusFirstInvalid` focuses stays red. The message is a
-  paragraph under the box, read after the hint in the control's `aria-describedby`.
+  stay red when the field receives focus. When the control matches `:focus-visible`, the box
+  draws `--wt-focus-ring` at `--wt-focus-offset` so you can see where Tab landed while you correct
+  the error. The message is a paragraph under the box, read after the hint in the control's
+  `aria-describedby`.
 - **Disabled** (`data-disabled`): the fill is `--wt-color-field-fill-disabled`, the bottom line is
   a dashed `--wt-field-line-width` line of `--wt-color-field-line` drawn by the box's `::after`, so
   a disabled field is as tall as an enabled one, the label and value are `--wt-color-text-muted`
