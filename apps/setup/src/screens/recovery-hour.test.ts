@@ -4,6 +4,9 @@ import type { LitElement } from "lit";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 const preview: RecoveryBackupPreview = {
   sourceId: "selected-copy",
   activationSourceId: "archive-digest",
@@ -109,7 +112,7 @@ async function fill(entry: LitElement) {
   const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   await key.updateComplete;
   for (const [name, value] of [
-    ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
+    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
   ]) {
     const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
     await field.updateComplete;
@@ -148,7 +151,7 @@ it.each(["archive", "bucket", "cloud"] as const)(
       oldBoxGone: true,
       soleRecovery: true,
     });
-    expect(credentials.nodeRecoverySecret).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    expect(credentials.nodeRecoverySecret).toBe(MASTER_KEY);
     expect(credentials.recoveryOperation.binding).toEqual({
       module: "fiscal-verifactu",
       action: "restore",

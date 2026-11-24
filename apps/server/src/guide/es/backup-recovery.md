@@ -140,12 +140,11 @@ vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clav
 archivo con tus otros documentos de recuperación. Abre **Copias de seguridad** desde el aviso del
 panel para configurar tus copias.
 
-Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de
-recuperación, o un PDF de recuperación anterior, que tenga la clave del servidor de esta copia; o
-escribe la clave agrupada impresa en él en **Clave del servidor**. Si el paquete no tiene la
-clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o el
-nombre de la clave que hay que buscar. Un paquete o una hoja con una clave del servidor más nueva
-puede no abrir una copia anterior. Marca «El servidor anterior está apagado y seguirá desconectado.»,
+Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** el paquete de
+recuperación que tenga la clave maestra de esta copia; o escribe la clave maestra impresa en él en
+**Clave del servidor**. Si el paquete no tiene la clave maestra, la página lo dice y, cuando el
+paquete lo registra, indica el paquete que la tiene. Un paquete con una clave maestra más nueva
+no abre una copia anterior. Marca «El servidor anterior está apagado y seguirá desconectado.»,
 «Soy la única persona recuperando este contribuyente, en todos sus locales.» y «Estos datos son
 correctos.».
 

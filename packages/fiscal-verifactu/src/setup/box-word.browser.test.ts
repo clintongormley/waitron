@@ -5,12 +5,12 @@ import { checkVenueStrings } from "./check-venue.js";
 import { clockWaitStrings } from "./clock-wait.js";
 import { firstHourStrings } from "./first-hour.js";
 import { promotionWords, recoveryHourStrings } from "./recovery-hour.js";
-import { keyElsewhere } from "./recovery-key.js";
+import { keyElsewhere, masterKeyElsewhere } from "./recovery-key.js";
 import { fiscalSetupStrings } from "./strings.js";
 
 // The Waitron machine is "the box" in English and "servidor" in Spanish, never "equipo" (owner,
 // 2026-11-22). Weaker than its name: reads only the tables below and the sentences `keyElsewhere`
-// builds, not words written inside a component (the recovery-key field's label among them), the
+// and `masterKeyElsewhere` build, not words written inside a component (the recovery-key field's label among them), the
 // series register PDF's inline sentences, or the emergency record's printout.
 const OTHER_SERVERS = [/\btime[- ]servers?\b/gi];
 
@@ -47,6 +47,9 @@ function texts(): [string, string][] {
         `keyElsewhere(${en},${JSON.stringify(heldBy)},${name})`,
         keyElsewhere(new RecoveryPackWithoutKeyError(name, heldBy), en),
       ]);
+  for (const en of [true, false])
+    for (const heldBy of [2, null])
+      out.push([`masterKeyElsewhere(${en},${heldBy})`, masterKeyElsewhere(heldBy, en)]);
   return out;
 }
 
@@ -66,6 +69,7 @@ it("reads every table", () => {
     "recoveryHour.en.heading",
     "promotion.emergency.en.secondClockDo",
     "keyElsewhere(true,null,null)",
+    "masterKeyElsewhere(false,2)",
   ])
     expect(paths).toContain(expected);
 });

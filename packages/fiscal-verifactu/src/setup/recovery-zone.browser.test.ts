@@ -5,6 +5,9 @@ import { applyTokens } from "@waitron/ui";
 import type { LitElement } from "lit";
 import type { RecoveryHourEntry } from "./recovery-hour.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 
 const hosts: HTMLElement[] = [];
 afterEach(() => hosts.splice(0).forEach((host) => host.remove()));
@@ -83,7 +86,7 @@ for (const [zoneIndex, savedZone] of ["Not/A_Zone", " Europe/Madrid", "Europe/Ma
             )!;
             await keyField.updateComplete;
             const keyInput = keyField.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-            keyInput.value = "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c";
+            keyInput.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
             keyInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
             for (const selector of [
               '[name="recovery-old-box-stopped"]',
@@ -184,7 +187,7 @@ for (const savedZone of ["Not/A_Zone", " Europe/Madrid", "Europe/Madrid "])
     const keyField = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
     await keyField.updateComplete;
     const keyInput = keyField.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    keyInput.value = "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c";
+    keyInput.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
     keyInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     for (const name of [
       "recovery-old-box-stopped",

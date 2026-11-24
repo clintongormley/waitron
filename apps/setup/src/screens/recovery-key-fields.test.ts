@@ -2,6 +2,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 
 afterEach(cleanupWidgets);
 async function mount() {
@@ -58,7 +61,7 @@ async function fillKey(el: SetupRecoveryAllocation) {
   const entry = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   await entry.updateComplete;
   for (const [name, value] of [
-    ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
+    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
   ]) {
     const field = entry.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
     await field.updateComplete;
@@ -74,7 +77,7 @@ it("forwards the decoded secret and clears the real fields with Clear", async ()
   await vi.waitFor(() =>
     expect(el.readCredentials()).toEqual({
       recoveryOperation: operation,
-      nodeRecoverySecret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+      nodeRecoverySecret: MASTER_KEY,
     }),
   );
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="clear"]')!.click();
@@ -90,9 +93,7 @@ it("places the server's named-key refusal under the module's actual fields", asy
   const el = await mount();
   fillOperation(el);
   await fillKey(el);
-  await vi.waitFor(() =>
-    expect(el.readCredentials()?.nodeRecoverySecret).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
-  );
+  await vi.waitFor(() => expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY));
   Object.assign(el, {
     errorMessage: "The backup needs its older key.",
     refusedField: "nodeRecoverySecret",
@@ -104,7 +105,7 @@ it("places the server's named-key refusal under the module's actual fields", asy
     '[name="printed-recovery-key"]',
   )!;
   await vi.waitFor(() => expect(field.error).toBe("The backup needs its older key."));
-  expect(el.readCredentials()?.nodeRecoverySecret).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY);
 });
 it("requires fiscal credentials even before the printed fields have decoded", async () => {
   const el = await mount();

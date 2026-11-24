@@ -5,9 +5,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { MAX_RECOVERY_PDF, RecoveryPackWithoutKeyError } from "../recovery-document.js";
-import { normaliseTypedCode } from "../paper-register-compact.js";
-import { decodeRecoveryKey } from "../recovery-key-code.js";
-import { WAITRON_ID_SISTEMA } from "../software.js";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 
 import type { RecoveryKeySelection } from "@waitron/module/src/setup-contract.js";
 interface Draft {
@@ -38,6 +36,18 @@ export function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): s
     ? "This recovery pack does not hold the box key: choose the pack or sheet that holds it, or type the key from it."
     : "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.";
 }
+export function masterKeyElsewhere(heldBy: number | null, en: boolean): string {
+  if (heldBy !== null)
+    return en
+      ? `This recovery pack does not hold the master key. It is on recovery pack ${heldBy}: choose that pack, or type the key from it.`
+      : `Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación ${heldBy}: elige ese paquete o introduce su clave.`;
+  return en
+    ? "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it."
+    : "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.";
+}
+function normaliseTyped(value: string): string {
+  return value.replace(/[ \t\r\n-]/g, "").toUpperCase();
+}
 @customElement("vf-recovery-key")
 export class RecoveryKeyEntry extends LitElement {
   static override styles = [
@@ -61,7 +71,7 @@ export class RecoveryKeyEntry extends LitElement {
   @property() locale: "en" | "es" = "en";
   @state() private draft = empty();
   @state() private invalid = false;
-  @state() private pdfError?: "manual" | "invalid" | "mismatch" | RecoveryPackWithoutKeyError;
+  @state() private pdfError?: "invalid" | "mismatch" | { heldBy: number | null };
   @state() private loaded = false;
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -116,23 +126,18 @@ export class RecoveryKeyEntry extends LitElement {
     const input = field.shadowRoot?.querySelector<HTMLInputElement>("input");
     const start = input?.selectionStart,
       end = input?.selectionEnd;
-    let caret: number[] | null = null;
-    try {
-      const position = (offset: number) => {
-        const length = normaliseTypedCode(value.slice(0, offset)).length;
-        return length + Math.max(0, Math.floor((length - 1) / 4));
-      };
-      caret = start != null && end != null ? [position(start), position(end)] : null;
-      value =
-        normaliseTypedCode(value)
-          .match(/.{1,4}/g)
-          ?.join(" ") ?? "";
-      if (input && caret) {
-        input.value = value;
-        input.setSelectionRange(caret[0]!, caret[1]!);
-      }
-    } catch {
-      // Keep malformed text visible so the field can explain the refusal.
+    const position = (offset: number) => {
+      const length = normaliseTyped(value.slice(0, offset)).length;
+      return length + Math.max(0, Math.floor((length - 1) / 4));
+    };
+    const caret = start != null && end != null ? [position(start), position(end)] : null;
+    value =
+      normaliseTyped(value)
+        .match(/.{1,4}/g)
+        ?.join(" ") ?? "";
+    if (input && caret) {
+      input.value = value;
+      input.setSelectionRange(caret[0]!, caret[1]!);
     }
     this.draft = { value };
     this.pdfError = undefined;
@@ -151,7 +156,7 @@ export class RecoveryKeyEntry extends LitElement {
       selection?.nodeId === this.selection?.nodeId &&
       selection?.keyName === this.selection?.keyName;
     try {
-      const secret = decodeRecoveryKey(this.draft.value);
+      const secret = encodeMasterKeyCode(decodeMasterKeyCode(this.draft.value));
       if (current()) this.#notify(secret);
     } catch {
       if (current()) this.invalid = true;
@@ -176,33 +181,22 @@ export class RecoveryKeyEntry extends LitElement {
       selection?.keyName === this.selection?.keyName;
     try {
       if (file.size > MAX_RECOVERY_PDF) throw new Error("oversized");
-      const { readRecoveryPdf } = await import("../recovery-reader.js");
+      const { readRecoveryPackPdf } = await import("@waitron/recovery-pack/src/read-pack-pdf.js");
       if (!current()) return;
-      const { document } = await readRecoveryPdf(new Uint8Array(await file.arrayBuffer()));
+      const pack = await readRecoveryPackPdf(new Uint8Array(await file.arrayBuffer()));
       if (!current()) return;
-      if (
-        document.scope.softwareId !== WAITRON_ID_SISTEMA ||
-        (this.selection !== undefined &&
-          (document.scope.taxpayerNif !== this.selection.taxId ||
-            document.scope.environment !== this.selection.environment ||
-            document.nodeKey.nodeId !== this.selection.nodeId ||
-            document.nodeKey.name !== this.selection.keyName))
-      ) {
+      if (pack.masterKey === null) {
+        this.pdfError = { heldBy: pack.masterKeyHeldBy };
+        return;
+      }
+      if (this.selection !== undefined && pack.masterKeyName !== this.selection.keyName) {
         this.pdfError = "mismatch";
         return;
       }
       this.loaded = true;
-      this.#notify(document.nodeKey.secret);
-    } catch (error) {
-      if (current())
-        this.pdfError =
-          error instanceof RecoveryPackWithoutKeyError
-            ? error
-            : error instanceof Error &&
-                error.message ===
-                  "No recovery key attachment; enter the key from the sheet manually"
-              ? "manual"
-              : "invalid";
+      this.#notify(pack.masterKey);
+    } catch {
+      if (current()) this.pdfError = "invalid";
     }
   }
   override render() {
@@ -213,21 +207,17 @@ export class RecoveryKeyEntry extends LitElement {
         : "Revisa la clave de tu paquete de recuperación o de la hoja antigua."
       : (this.errorMessage ?? "");
     const pdfError =
-      this.pdfError instanceof RecoveryPackWithoutKeyError
-        ? keyElsewhere(this.pdfError, en)
-        : this.pdfError === "manual"
+      typeof this.pdfError === "object"
+        ? masterKeyElsewhere(this.pdfError.heldBy, en)
+        : this.pdfError === "mismatch"
           ? en
-            ? "Enter the key from the recovery pack or older sheet below."
-            : "Introduce abajo la clave del paquete de recuperación o de la hoja antigua."
-          : this.pdfError === "mismatch"
+            ? "Choose the recovery PDF for this backup's named key."
+            : "Elige el PDF de la clave indicada en esta copia."
+          : this.pdfError === "invalid"
             ? en
-              ? "Choose the recovery PDF for this backup's named key."
-              : "Elige el PDF de la clave indicada en esta copia."
-            : this.pdfError === "invalid"
-              ? en
-                ? "Choose a valid recovery PDF, or enter the key below."
-                : "Elige un PDF de recuperación válido, o introduce la clave abajo."
-              : "";
+              ? "Choose a valid recovery PDF, or enter the key below."
+              : "Elige un PDF de recuperación válido, o introduce la clave abajo."
+            : "";
     return html` <wt-file-input
         name="recovery-pdf"
         accept="application/pdf,.pdf"
@@ -251,7 +241,7 @@ export class RecoveryKeyEntry extends LitElement {
         autocomplete="off"
         ?required=${!this.loaded}
         label=${en ? "Box key" : "Clave del servidor"}
-        placeholder="XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX X"
+        placeholder="XXXX XXXX XXXX XXXX XXXX XXXX XXXX"
         .value=${this.draft.value}
         .error=${error}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {

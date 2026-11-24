@@ -4,8 +4,41 @@ import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import type { LitElement } from "lit";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import { renderRecoveryPack } from "@waitron/recovery-pack";
+import monoUrl from "../assets/register-noto-sans-mono.ttf?url";
+import fontUrl from "../assets/register-noto-sans.ttf?url";
 import "./recovery-key.js";
-import { renderRecoveryPdf } from "../recovery-pdf.js";
+
+const masterKeyName = "2026-10-17 · K7QX";
+async function pack(locale: "en" | "es", holds: boolean): Promise<Uint8Array<ArrayBuffer>> {
+  const madeAt = "2026-10-17T12:40:00.000Z";
+  return renderRecoveryPack({
+    locale,
+    timeZone: "Europe/Madrid",
+    loadFonts: async () => ({
+      regular: new Uint8Array(await (await fetch(fontUrl)).arrayBuffer()),
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
+    pack: { venueName: "Olivo Centro", madeAt, number: 3 },
+    parts: [],
+    file: {
+      kind: "waitron-recovery-pack",
+      version: 2,
+      number: 3,
+      madeAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      serverKey: null,
+      serverKeyName: null,
+      serverKeyHeldBy: null,
+      masterKey: holds ? encodeMasterKeyCode(new Uint8Array(16).fill(7)) : null,
+      masterKeyName,
+      masterKeyHeldBy: holds ? null : 1,
+    },
+  });
+}
 
 const hosts: HTMLElement[] = [];
 afterEach(() => {
@@ -30,7 +63,7 @@ for (const theme of ["light", "dark"] as const)
             "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
           document.body.style.background = getComputedStyle(host).backgroundColor;
           document.documentElement.style.background = getComputedStyle(host).backgroundColor;
-          for (const state of ["empty", "invalid", "refused", "loaded"] as const) {
+          for (const state of ["empty", "invalid", "refused", "elsewhere", "loaded"] as const) {
             const heading = document.createElement("h2");
             heading.textContent =
               locale === "en"
@@ -38,12 +71,14 @@ for (const theme of ["light", "dark"] as const)
                     empty: "Recovery key",
                     invalid: "Check the printed key",
                     refused: "Choose another PDF",
+                    elsewhere: "Choose the pack that holds the key",
                     loaded: "Saved recovery PDF",
                   }[state]
                 : {
                     empty: "Clave de recuperación",
                     invalid: "Revisa la clave impresa",
                     refused: "Elige otro PDF",
+                    elsewhere: "Elige el paquete que tiene la clave",
                     loaded: "PDF de recuperación guardado",
                   }[state];
             host.append(heading);
@@ -53,7 +88,7 @@ for (const theme of ["light", "dark"] as const)
               taxId: "B12345674",
               environment: "production",
               nodeId: "node-1",
-              keyName: "Caja principal",
+              keyName: masterKeyName,
             };
             host.append(el);
             await el.updateComplete;
@@ -79,31 +114,23 @@ for (const theme of ["light", "dark"] as const)
                 "",
               );
             }
-            if (state === "loaded") {
-              const bytes = await renderRecoveryPdf(
-                {
-                  kind: "waitron-recovery-document",
-                  version: 1,
-                  scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
-                  taxpayerName: "Olivo Restauración SL",
-                  venueName: "Olivo Centro",
-                  createdAt: "2026-10-17T12:30:00.000Z",
-                  nodeKey: {
-                    nodeId: "node-1",
-                    name: "Caja principal",
-                    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-                  },
-                },
-                locale,
-                "Europe/Madrid",
-              );
+            if (state === "elsewhere" || state === "loaded") {
               const reading = vi.spyOn(el, "importFile");
               chooseFiles(
                 el.shadowRoot!.querySelector("wt-file-input")!,
-                new File([bytes], "recovery.pdf"),
+                new File([await pack(locale, state === "loaded")], "recovery.pdf"),
               );
               await reading.mock.results[0]!.value;
               await el.updateComplete;
+              expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!).toContain(
+                state === "loaded"
+                  ? locale === "en"
+                    ? "Key loaded"
+                    : "Clave cargada"
+                  : locale === "en"
+                    ? "recovery pack 1"
+                    : "paquete de recuperación 1",
+              );
             }
           }
           const result = await axe.run(host);
