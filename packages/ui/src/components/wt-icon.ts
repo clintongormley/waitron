@@ -2,14 +2,11 @@ import { registerIcons } from "@waitron/ui-core/components/wt-icon";
 
 export * from "@waitron/ui-core/components/wt-icon";
 
-registerIcons({
+export const MENU_ICONS: Record<string, string> = {
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
-});
-
-// Material Symbols Outlined, Copyright Google, Apache-2.0.
-// Source: google/material-design-icons@10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7.
-registerIcons({
+  // Material Symbols Outlined, Copyright Google, Apache-2.0.
+  // Source: google/material-design-icons@10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7.
   "menu-open":
     "M10.78 8.67H2.67v-1.34h8.11L7.05 3.6l0.95-0.93 5.33 5.33-5.33 5.33-0.95-0.93 3.73-3.73Z",
   "menu-edit":
@@ -112,4 +109,6 @@ registerIcons({
     "M8 10.67L4.67 7.33l0.93-0.96 1.73 1.73v-5.43h1.34v5.43l1.73-1.73 0.93 0.96-3.33 3.34ZM4 13.33q-0.55 0-0.94-0.39T2.67 12v-2h1.33v2h8v-2h1.33v2q0 0.55-0.39 0.94T12 13.33H4Z",
   "menu-equipment-label":
     "M2 7.33v-5.33h5.33v5.33H2Zm1.33-1.33h2.67v-2.67H3.33v2.67Zm-1.33 8v-5.33h5.33v5.33H2Zm1.33-1.33h2.67v-2.67H3.33v2.67Zm5.34-5.34v-5.33h5.33v5.33H8.67Zm1.33-1.33h2.67v-2.67H10v2.67Zm2.67 8v-1.33h1.33v1.33h-1.33ZM8.67 10v-1.33h1.33v1.33h-1.33Zm1.33 1.33v-1.33h1.33v1.33h-1.33Zm-1.33 1.34v-1.34h1.33v1.34h-1.33Zm1.33 1.33v-1.33h1.33v1.33h-1.33Zm1.33-1.33v-1.34h1.34v1.34h-1.34Zm0-2.67v-1.33h1.34v1.33h-1.34Zm1.34 1.33v-1.33h1.33v1.33h-1.33Z",
-});
+};
+
+registerIcons(MENU_ICONS);

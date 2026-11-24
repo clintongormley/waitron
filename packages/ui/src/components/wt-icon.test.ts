@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
-import "./wt-icon.js";
+import { MENU_ICONS } from "./wt-icon.js";
 
 afterEach(cleanup);
 
@@ -59,6 +59,10 @@ const ICONS = [
   "menu-download",
   "menu-equipment-label",
 ];
+
+it("lists every icon it registers", () => {
+  expect(Object.keys(MENU_ICONS)).toEqual(ICONS);
+});
 
 it.each(ICONS)("registers %s", async (name) => {
   const icon = await mount(`<wt-icon name="${name}"></wt-icon>`);
