@@ -25,7 +25,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import type { WaitronModule } from "@waitron/module";
+import type { ReturnRefusal, WaitronModule } from "@waitron/module";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import {
@@ -594,11 +594,11 @@ it("runs one pass on passNow() after the duty has confirmed and stopped", async 
   }
 });
 
-const workforceCodes = [
-  "attendance.return_entry_clash",
-  "attendance.return_entry_invalid",
-] as const;
-let hoursRefusal: (typeof workforceCodes)[number] | null;
+const workforceRefusals: ReturnRefusal[] = [
+  { refusal: "attendance.return_entry_clash" },
+  { refusal: "attendance.return_entry_invalid", params: { reason: "hash mismatch" } },
+];
+let hoursRefusal: ReturnRefusal | null;
 // The working-time stand-in is listed first, so only the fiscal slot can put invoices ahead of it.
 const hoursFirst: WaitronModule[] = [
   {
@@ -610,7 +610,7 @@ const hoursFirst: WaitronModule[] = [
         read: async () => ["hours-1"],
         receive: async (_tx, _source, batch) => {
           received.push(batch);
-          return hoursRefusal === null ? true : { refusal: hoursRefusal };
+          return hoursRefusal ?? true;
         },
       },
     },
@@ -688,10 +688,10 @@ it("sends the fiscal slot's batches before other modules' and takes the inventor
   expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
 });
 
-it.each(workforceCodes)(
-  "reads hours-refused when the main box refuses working hours with %s after every invoice batch",
-  async (code) => {
-    hoursRefusal = code;
+it.each(workforceRefusals)(
+  "reads hours-refused when the main box refuses working hours with $refusal after every invoice batch",
+  async (refusal) => {
+    hoursRefusal = refusal;
     const { sentModules, answers, fetch } = hoursDestination();
     expect(
       await runReturnRecordsPass({
@@ -706,7 +706,9 @@ it.each(workforceCodes)(
     ).toBe("hours-refused");
     expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
     expect(answers.map(({ status }) => status)).toEqual([200, 200, 409]);
-    expect(answers[2]!.body).toMatchObject({ error: { code } });
+    expect(answers[2]!.body).toEqual({
+      error: { code: refusal.refusal, params: refusal.params ?? {} },
+    });
     expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
   },
 );
@@ -747,7 +749,7 @@ it("keeps retrying, never hours-refused, while the main box lacks the working-ho
 });
 
 it("ends the duty on hours-refused, and passNow() still runs one pass", async () => {
-  hoursRefusal = workforceCodes[0];
+  hoursRefusal = workforceRefusals[0]!;
   const { sentModules, fetch } = hoursDestination();
   const pause = vi.spyOn(loop, "realSleep");
   const duty = startReturnRecordsDuty({
@@ -1440,10 +1442,8 @@ it("answers a resend after the takeover closed as before, without checking compl
     expect(
       await send(async (url, init) => {
         const response = await app.request(String(url), init);
-        const { nonce: _nonce, ...body } = (
-          (await response.clone().json()) as { body: Record<string, unknown> }
-        ).body;
-        bodies.push({ status: response.status, body });
+        const { body } = (await response.clone().json()) as { body: Record<string, unknown> };
+        bodies.push({ status: response.status, body: { ...body, nonce: undefined } });
         return response;
       }),
     ).toBe("confirmed");

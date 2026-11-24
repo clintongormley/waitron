@@ -19,7 +19,7 @@ declare module "@waitron/shared" {
      * another entry at its position. */
     "attendance.return_entry_clash": Record<string, never>;
     /** A returned working-time batch, or an entry in it, that this box cannot store as sent. */
-    "attendance.return_entry_invalid": Record<string, never>;
+    "attendance.return_entry_invalid": { reason: string };
     "attendance.state_changed": Record<string, never>;
     "attendance.not_permitted": { personId: string };
     "attendance.not_pending": { entryId: string };

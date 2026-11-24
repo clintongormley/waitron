@@ -605,6 +605,71 @@ it("keeps every returned invoice record and the takeover waiting when the main b
   );
 });
 
+it("leaves the takeover waiting and reads hours-refused when a working-time entry cannot fit a batch", async () => {
+  const withHours = ALL_MODULES.filter(
+    (module) => module.name === "workforce" || module.name === "fiscal-verifactu",
+  );
+  const operationId = "hours-too-large-takeover";
+  const entryBy = (personId: string, minute: number) => ({
+    personId,
+    entryKind: "in" as const,
+    eventAt: `2026-07-20T09:0${minute}:00.000Z`,
+    eventOffsetMinutes: 0,
+    recordedByPersonId: personId,
+    origin: jobOrigin("dashboard"),
+  });
+  let fits = "";
+  const { source, receiverId, app } = await activatedTakeover({
+    operationId,
+    modules: withHours,
+    seedOldBox: async (seeded) => {
+      const ana = await seedPerson(old.db, { displayName: "Ana" });
+      const giant = await seedPerson(old.db, { displayName: "a".repeat(205 * 1024) });
+      const pending = await originalFor(old.db, seeded, await seedSale(old.db, seeded, 1));
+      await withTransaction(old.db, (tx) => appendToChain(tx, seeded.nodeId, pending));
+      [fits] = await appendChainEntries(old.db, seeded.nodeId, [entryBy(ana, 0)]);
+      await appendChainEntries(old.db, seeded.nodeId, [entryBy(giant, 1)]);
+    },
+  });
+  const answers: { module: string; status: number; error?: unknown }[] = [];
+  expect(
+    await runReturnRecordsPass({
+      db: old.db,
+      node: old.node,
+      ring,
+      nodeId: source.nodeId,
+      modules: withHours,
+      stopped: () => false,
+      fetch: async (url, init) => {
+        const response = await app.request(String(url), init);
+        const { module } = (JSON.parse(String(init?.body)) as { body: { module: string } }).body;
+        const answer = (await response.clone().json()) as { error?: unknown };
+        answers.push({ module, status: response.status, error: answer.error });
+        return response;
+      },
+    }),
+  ).toBe("hours-refused");
+  expect(answers).toEqual([
+    { module: "fiscal-verifactu", status: 200, error: undefined },
+    { module: "workforce", status: 200, error: undefined },
+    {
+      module: "workforce",
+      status: 409,
+      error: {
+        code: "attendance.return_entry_invalid",
+        params: { reason: "entry too large to return" },
+      },
+    },
+  ]);
+  expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from verifactu_records`),
+  );
+  expect(current.db.all<{ id: string }>(sql`select id from time_entries`)).toEqual([{ id: fits }]);
+  expect((await readHandoverOperation(current.node, receiverId, operationId))?.state).toBe(
+    "return_pending",
+  );
+});
+
 async function insertRow(db: Database | Transaction, table: string, row: ReturnRow) {
   const entries = Object.entries(row);
   await db.execute(sql`insert into ${sql.identifier(table)}

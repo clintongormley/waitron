@@ -96,6 +96,17 @@ describe("readWorkforceReturn", () => {
       expect(bytes(batch)).toBeLessThanOrEqual(WORKFORCE_RETURN_MAX_BYTES);
   });
 
+  it("ends with a too-large batch after the batches before an entry that cannot fit a batch alone", async () => {
+    const giant = await seedPerson(suite.db, "a".repeat(WORKFORCE_RETURN_MAX_BYTES));
+    const [fits] = await appendChainEntries(suite.db, oldBox, [clockIn(personId, 0)]);
+    await appendChainEntries(suite.db, oldBox, [clockIn(giant, 1), clockIn(personId, 2)]);
+
+    const batches = await readWorkforceReturn(suite.db, oldBox);
+
+    expect(batches.map((batch) => batch.entries.map((row) => row.id))).toEqual([[fits], []]);
+    expect(batches[1]).toEqual({ entries: [], staff: [], devices: [], tooLarge: true });
+  });
+
   it("names exactly the people and devices the batch's entries point at", async () => {
     const manager = await seedPerson(suite.db, "Marta");
     await seedPerson(suite.db, "Unrelated");
@@ -167,6 +178,7 @@ describe("readWorkforceBatch", () => {
     ["not an object", []],
     ["a missing list", { entries: [], staff: [] }],
     ["an extra key", { entries: [], staff: [], devices: [], records: [] }],
+    ["a too-large mark that is not true", { entries: [], staff: [], devices: [], tooLarge: false }],
     ["an entry that is not an object", { entries: ["e1"], staff: [], devices: [] }],
     ["an entry with an unknown column", { entries: [{ nope: 1 }], staff: [], devices: [] }],
     ["an entry holding a list", { entries: [{ id: ["e1"] }], staff: [], devices: [] }],
@@ -177,8 +189,48 @@ describe("readWorkforceBatch", () => {
     ],
   ])("refuses %s", (_, raw) => {
     expect(() => readWorkforceBatch(raw)).toThrow(
-      expect.objectContaining({ code: "attendance.return_entry_invalid" }) as AppError,
+      expect.objectContaining({
+        code: "attendance.return_entry_invalid",
+        params: { reason: "malformed batch" },
+      }) as AppError,
     );
+  });
+
+  const refusedFor = (reason: string) =>
+    expect.objectContaining({
+      code: "attendance.return_entry_invalid",
+      params: { reason },
+    }) as AppError;
+  const entriesOf = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({ ...entry, id: `e${i}`, sequence_no: i + 1 }));
+
+  it("refuses a batch over the row cap and reads one at it", () => {
+    const at = { entries: entriesOf(WORKFORCE_RETURN_ROW_CAP), staff: [], devices: [] };
+    const over = { entries: entriesOf(WORKFORCE_RETURN_ROW_CAP + 1), staff: [], devices: [] };
+
+    expect(readWorkforceBatch(at)).toEqual(at);
+    expect(() => readWorkforceBatch(over)).toThrow(refusedFor("batch exceeds bounds"));
+  });
+
+  it("refuses a batch over the byte limit and reads one at it", () => {
+    const named = (length: number) => ({
+      entries: [],
+      staff: [{ id: "p1", displayName: "a".repeat(length) }],
+      devices: [],
+    });
+    const atLimit = named(WORKFORCE_RETURN_MAX_BYTES - bytes(named(0)));
+
+    expect(bytes(atLimit)).toBe(WORKFORCE_RETURN_MAX_BYTES);
+    expect(readWorkforceBatch(atLimit)).toEqual(atLimit);
+    expect(() =>
+      readWorkforceBatch(named(WORKFORCE_RETURN_MAX_BYTES - bytes(named(0)) + 1)),
+    ).toThrow(refusedFor("batch exceeds bounds"));
+  });
+
+  it("refuses the batch that says an entry was too large to send", () => {
+    expect(() =>
+      readWorkforceBatch({ entries: [], staff: [], devices: [], tooLarge: true }),
+    ).toThrow(refusedFor("entry too large to return"));
   });
 
   it("reads a batch in its shape", () => {
@@ -355,6 +407,10 @@ describe("receiveWorkforceBatch", () => {
   });
 
   type Arrange = (entries: ReturnRow[]) => Promise<ReturnRow[] | void>;
+  const invalid = (reason: string) => ({
+    refusal: "attendance.return_entry_invalid",
+    params: { reason },
+  });
   const holdFirst = async (entries: ReturnRow[]) => {
     await copyRows(main.db, "time_entries", entries.slice(0, 1));
   };
@@ -393,10 +449,10 @@ describe("receiveWorkforceBatch", () => {
     };
   }
 
-  it.each<[string, string, Arrange, number[], ((previous: string) => Promise<TimeEntryAppend>)?]>([
+  it.each<[string, object, Arrange, number[], ((previous: string) => Promise<TimeEntryAppend>)?]>([
     [
       "a held id with different content",
-      "attendance.return_entry_clash",
+      { refusal: "attendance.return_entry_clash" },
       async (entries) => {
         await holdFirst(entries);
         await copyRows(main.db, "time_entries", [
@@ -407,7 +463,7 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "another id at a taken position",
-      "attendance.return_entry_clash",
+      { refusal: "attendance.return_entry_clash" },
       async (entries) => {
         await holdFirst(entries);
         await copyRows(main.db, "time_entries", [{ ...entries[2]!, id: "another" }]);
@@ -416,7 +472,7 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "another box's row",
-      "attendance.return_entry_invalid",
+      invalid("entry from another box"),
       async (entries) => {
         await holdFirst(entries);
         return swapThird({ node_id: otherBox })(entries);
@@ -425,7 +481,7 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "a source whose nodes row is missing",
-      "attendance.return_entry_invalid",
+      invalid("unknown source box"),
       async (entries) => {
         await main.db.run(sql`delete from nodes where id = ${oldBox}`);
         return entries;
@@ -434,7 +490,7 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "a gap before the first new row",
-      "attendance.return_entry_invalid",
+      invalid("chain does not continue"),
       async (entries) => {
         await holdFirst(entries);
         return entries.slice(2);
@@ -443,7 +499,7 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "a wrong hash",
-      "attendance.return_entry_invalid",
+      invalid("hash mismatch"),
       async (entries) => {
         await holdFirst(entries);
         return swapThird({ recorded_at: "2026-01-05T09:30:00.000Z" })(entries);
@@ -452,19 +508,19 @@ describe("receiveWorkforceBatch", () => {
     ],
     [
       "a pay-period closure the main box lacks",
-      "attendance.return_entry_invalid",
+      invalid("missing pay-period closure"),
       holdFirst,
       [1, 2],
       nameAClosure,
     ],
     [
       "a correction of another box's entry the main box lacks",
-      "attendance.return_entry_invalid",
+      invalid("missing earlier entry"),
       holdFirst,
       [1, 2],
       correctAnotherBoxsEntry,
     ],
-  ])("refuses %s with %s, keeping the rows before it", async (_, code, arrange, kept, third) => {
+  ])("refuses %s with %j, keeping the rows before it", async (_, refusal, arrange, kept, third) => {
     const [, second] = await appendChainEntries(suite.db, oldBox, [
       clockIn(personId, 0),
       clockIn(personId, 1),
@@ -477,7 +533,7 @@ describe("receiveWorkforceBatch", () => {
     await copyRows(main.db, "persons", rows(suite.db, "persons", personId));
     const entries = (await arrange(batch.entries)) ?? batch.entries.slice(1);
 
-    expect(await receive({ ...batch, entries })).toEqual({ refusal: code });
+    expect(await receive({ ...batch, entries })).toEqual(refusal);
 
     expect((await heldChain(oldBox)).map((row) => row.sequenceNo)).toEqual(kept);
   });
@@ -488,7 +544,7 @@ describe("receiveWorkforceBatch", () => {
       { ...clockIn(personId, 0), origin: deviceOrigin(deviceId) },
     ]);
     const batch = await readBatch();
-    const refused = { refusal: "attendance.return_entry_invalid" };
+    const refused = invalid("missing staff or device name");
 
     expect(await receive({ ...batch, staff: [] })).toEqual(refused);
     expect(await receive({ ...batch, devices: [] })).toEqual(refused);

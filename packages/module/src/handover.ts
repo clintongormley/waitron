@@ -1,6 +1,6 @@
 import type { Transaction } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
-import { AppError, type ErrorCode } from "@waitron/shared";
+import { AppError, type ErrorCode, type ErrorParams } from "@waitron/shared";
 import type { BackupQuery } from "@waitron/store";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
@@ -40,7 +40,16 @@ export interface UnreturnedChain {
 /** Thrown by a module's `lacking` seat when another box's `holdings` are not in its shape. */
 export class MalformedHoldingsError extends Error {}
 
-/** What a module vouches for, and checks, in a copy of the venue database handed to another box. */
+/** A refusal a return seat answers rather than throws, so the rows it stored before it stay. */
+export interface ReturnRefusal<C extends ErrorCode = ErrorCode> {
+  refusal: C;
+  params?: ErrorParams[C];
+}
+
+/**
+ * What a module vouches for and checks in a copy handed to another box, and the records an old
+ * main box returns to the new one.
+ */
 export interface ModuleHandoverContribution {
   summarise?(query: BackupQuery): Promise<CanonicalValue>;
   returnRecords?: {
@@ -57,7 +66,7 @@ export interface ModuleHandoverContribution {
       batch: CanonicalValue,
       now: Date,
       accepted?: readonly string[],
-    ): Promise<boolean | { refusal: ErrorCode }>;
+    ): Promise<boolean | ReturnRefusal>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
   /** What this box holds of every box's records, as plain JSON, for another box to compare. */

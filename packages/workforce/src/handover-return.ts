@@ -1,8 +1,8 @@
 import "./errors.js";
 import { getTableColumns, sql } from "drizzle-orm";
 import { foldForUniqueness, type Database, type Transaction } from "@waitron/db";
-import type { ModuleHandoverContribution } from "@waitron/module";
-import { AppError, type ErrorCode } from "@waitron/shared";
+import type { ModuleHandoverContribution, ReturnRefusal } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 import { computeEntryHash } from "./chain-hash.js";
 import { workforceHoldings, workforceLacking } from "./handover-holdings.js";
 import { verifiableEntry, type ChainedTimeEntry } from "./chain.js";
@@ -21,6 +21,9 @@ export interface WorkforceReturnBatch {
   entries: ReturnRow[];
   staff: { id: string; displayName: string }[];
   devices: { id: string; label: string }[];
+  /** The next entry cannot fit a batch alone; the main box refuses this batch, so it never counts
+   * the return complete. */
+  tooLarge?: true;
 }
 
 export const WORKFORCE_RETURN_MAX_BYTES = 200 * 1024;
@@ -81,8 +84,8 @@ class BatchBuilder {
 }
 
 /**
- * The sender's own working-time chain, whole, in batches. No batch when it has no entries, and none
- * at all when one entry cannot fit a batch alone: the return then goes ahead without working hours.
+ * The sender's own working-time chain, whole, in batches. No batch when it has no entries. An entry
+ * that cannot fit a batch alone ends the list with a `tooLarge` batch in its place.
  */
 export async function readWorkforceReturn(
   db: Database | Transaction,
@@ -116,7 +119,10 @@ export async function readWorkforceReturn(
     if (current.add(entry)) continue;
     if (current.entries.length > 0) batches.push(current.batch());
     current = new BatchBuilder(staff, devices);
-    if (!current.add(entry)) return [];
+    if (!current.add(entry)) {
+      batches.push({ entries: [], staff: [], devices: [], tooLarge: true });
+      return batches;
+    }
   }
   if (current.entries.length > 0) batches.push(current.batch());
   return batches;
@@ -133,14 +139,21 @@ function hasKeys(row: unknown, keys: readonly string[]): boolean {
   );
 }
 
-/** Refuses a batch not in the shape {@link readWorkforceReturn} sends. */
+const invalid = (reason: string): ReturnRefusal<"attendance.return_entry_invalid"> => ({
+  refusal: "attendance.return_entry_invalid",
+  params: { reason },
+});
+
+/** Refuses a batch not in the shape, or past the limits, {@link readWorkforceReturn} sends. */
 export function readWorkforceBatch(raw: ReturnBatchValue): WorkforceReturnBatch {
-  const refuse = () => {
-    throw new AppError("attendance.return_entry_invalid", {});
+  const refuse = (reason: string) => {
+    throw new AppError("attendance.return_entry_invalid", { reason });
   };
-  if (!isRecord(raw) || Object.keys(raw).length !== 3) refuse();
-  const { entries, staff, devices } = raw as Record<string, unknown>;
+  if (!isRecord(raw)) return refuse("malformed batch");
+  const { entries, staff, devices, tooLarge, ...rest } = raw;
   if (
+    Object.keys(rest).length > 0 ||
+    (tooLarge !== undefined && tooLarge !== true) ||
     !Array.isArray(entries) ||
     !Array.isArray(staff) ||
     !Array.isArray(devices) ||
@@ -156,7 +169,13 @@ export function readWorkforceBatch(raw: ReturnBatchValue): WorkforceReturnBatch 
     staff.some((row) => !hasKeys(row, ["id", "displayName"])) ||
     devices.some((row) => !hasKeys(row, ["id", "label"]))
   )
-    refuse();
+    refuse("malformed batch");
+  if (tooLarge) refuse("entry too large to return");
+  if (
+    (entries as unknown[]).length > WORKFORCE_RETURN_ROW_CAP ||
+    byteSize(raw) > WORKFORCE_RETURN_MAX_BYTES
+  )
+    refuse("batch exceeds bounds");
   return raw as unknown as WorkforceReturnBatch;
 }
 
@@ -245,16 +264,17 @@ function checkEntry(
   tx: Transaction,
   sourceNodeId: string,
   entry: ReturnRow,
-): ErrorCode | "held" | null {
-  if ([...ENTRY_COLUMNS].some((key) => !(key in entry)) || entry.node_id !== sourceNodeId)
-    return "attendance.return_entry_invalid";
+): ReturnRefusal | "held" | null {
+  if ([...ENTRY_COLUMNS].some((key) => !(key in entry))) return invalid("malformed batch");
+  if (entry.node_id !== sourceNodeId) return invalid("entry from another box");
+  const clash: ReturnRefusal = { refusal: "attendance.return_entry_clash" };
   const own = held(tx, "time_entries", entry.id);
-  if (own) return sameRow(own, entry) ? "held" : "attendance.return_entry_clash";
+  if (own) return sameRow(own, entry) ? "held" : clash;
   const position = Number(entry.sequence_no);
   const atPosition = (at: number) =>
     tx.all<ReturnRow>(sql`select * from time_entries
       where node_id = ${sourceNodeId} and sequence_no = ${at}`)[0];
-  if (atPosition(position)) return "attendance.return_entry_clash";
+  if (atPosition(position)) return clash;
   const previous = position > 1 ? atPosition(position - 1) : undefined;
   const continues =
     position === 1
@@ -262,16 +282,18 @@ function checkEntry(
       : entry.is_first_entry === 0 &&
         previous !== undefined &&
         previous.entry_hash === entry.prev_entry_hash;
-  if (!continues || computeEntryHash(verifiableEntry(asStored(entry))) !== entry.entry_hash)
-    return "attendance.return_entry_invalid";
+  if (!continues) return invalid("chain does not continue");
+  if (computeEntryHash(verifiableEntry(asStored(entry))) !== entry.entry_hash)
+    return invalid("hash mismatch");
   const pointsAtHeld = (table: string, key: string) =>
     entry[key] === null || held(tx, table, entry[key]!) !== undefined;
+  if (!pointsAtHeld("pay_period_closures", "pay_period_closure_id"))
+    return invalid("missing pay-period closure");
   if (
-    !pointsAtHeld("pay_period_closures", "pay_period_closure_id") ||
     !pointsAtHeld("time_entries", "corrects_entry_id") ||
     !pointsAtHeld("time_entries", "responds_to_entry_id")
   )
-    return "attendance.return_entry_invalid";
+    return invalid("missing earlier entry");
   return null;
 }
 
@@ -286,15 +308,15 @@ export async function receiveWorkforceBatch(
   sourceNodeId: string,
   batch: WorkforceReturnBatch,
   now: Date,
-): Promise<true | { refusal: ErrorCode }> {
+): Promise<true | ReturnRefusal> {
   if (batch.entries.length > 0 && !held(tx, "nodes", sourceNodeId))
-    return { refusal: "attendance.return_entry_invalid" };
+    return invalid("unknown source box");
   for (const entry of batch.entries) {
     const check = checkEntry(tx, sourceNodeId, entry);
     if (check === "held") continue;
-    if (check) return { refusal: check };
+    if (check) return check;
     const names = missingNames(tx, batch, entry);
-    if (!names) return { refusal: "attendance.return_entry_invalid" };
+    if (!names) return invalid("missing staff or device name");
     await restoreNames(tx, names, now);
     await insertRow(tx, "time_entries", entry);
     await markAttendanceEntry(tx, {

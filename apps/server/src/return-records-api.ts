@@ -123,7 +123,7 @@ export function mountReturnRecordsApi(
       deps.wake();
       // A refusal must not undo facts the venue transaction has already accounted for.
       if (outcome === "before activation") refuseReturn("activating");
-      if (typeof outcome !== "boolean") throw new AppError(outcome.refusal, {});
+      if (typeof outcome !== "boolean") throw new AppError(outcome.refusal, outcome.params ?? {});
       const digest = returnDigest({ module: body.module!, payload: body.payload! });
       c.header("Cache-Control", "no-store");
       return c.json(
