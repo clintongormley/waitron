@@ -233,8 +233,10 @@ the ones whose fixes are on `main`.
   ordering by handling time then id sometimes picked the older alert. A533 (#1606, "Orders:
   same-moment rows keep their writing order, …") breaks such ties with SQLite's `rowid`, the order
   the rows were written in. Order by time, then by something that follows writing order. In the
-  test, use `mockRowIdOrder` in `apps/server/src/testing/descending-ids.ts` to make minted IDs sort
-  against the writing order. For fixture-supplied IDs, use `descendingIds`.
+  test, give both rows the same stored time and make the IDs sort against writing order, so the
+  test fails if the tie-break goes. For minted IDs use `mockRowIdOrder` in
+  `apps/server/src/testing/descending-ids.ts` and set the stored time separately. For
+  fixture-supplied IDs use `descendingIds`.
 - **The edges of the day and the hour.** A test that compares "now" with a stored time can pass
   all day and fail in the minutes around midnight, the venue's business-day change, the hour or a
   summer-time change. A1117 (#2100, "test(server): floor suites keep their till API on a fixed clock
