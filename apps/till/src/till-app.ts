@@ -119,12 +119,8 @@ import {
   type TransferSnapshot,
 } from "./state/department-transfer-monitor.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import {
-  TillApi,
-  isNetworkFailure,
-  type MadeHereItem,
-  type KitchenNoteSnapshot,
-} from "./api/client.js";
+import { MakeNowController } from "./state/make-now-controller.js";
+import { TillApi, isNetworkFailure, type KitchenNoteSnapshot } from "./api/client.js";
 import { MAIN_SILENT_MS, NO_BOX_ANSWERING, type ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
@@ -3454,101 +3450,7 @@ export class TillApp extends LitElement {
   /** From the boot probe: the lock screen's heading, and the key for the remembered-operator default. */
   @state() private deviceName?: string;
   @state() private deviceId?: string;
-  @state() private makeNow: MadeHereItem[] = [];
-
-  #makeNowKey(): string | null {
-    return this.deviceId === undefined ? null : `waitron.makeNow.${this.deviceId}`;
-  }
-
-  #saveMakeNow(): void {
-    const key = this.#makeNowKey();
-    if (key === null) return;
-    try {
-      if (this.makeNow.length === 0) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify(this.makeNow));
-    } catch {
-      /* Site data may be blocked; the on-screen list remains in memory. */
-    }
-  }
-
-  #restoreMakeNow(): void {
-    const key = this.#makeNowKey();
-    if (key === null) return;
-    try {
-      const stored = localStorage.getItem(key);
-      const parsed: unknown = stored === null ? [] : JSON.parse(stored);
-      if (!Array.isArray(parsed)) return;
-      const textMap = (value: unknown): value is Record<string, string> =>
-        typeof value === "object" &&
-        value !== null &&
-        !Array.isArray(value) &&
-        Object.values(value).every((part) => typeof part === "string");
-      const optionSnapshot = (value: unknown): boolean =>
-        typeof value === "object" &&
-        value !== null &&
-        !Array.isArray(value) &&
-        "listName" in value &&
-        textMap(value.listName) &&
-        "listCustomerName" in value &&
-        (value.listCustomerName === null || textMap(value.listCustomerName)) &&
-        "listKitchenName" in value &&
-        (value.listKitchenName === null || typeof value.listKitchenName === "string") &&
-        "labelName" in value &&
-        textMap(value.labelName) &&
-        "labelCustomerName" in value &&
-        (value.labelCustomerName === null || textMap(value.labelCustomerName)) &&
-        "labelKitchenName" in value &&
-        (value.labelKitchenName === null || typeof value.labelKitchenName === "string");
-      this.makeNow = parsed.filter(
-        (item): item is MadeHereItem =>
-          typeof item === "object" &&
-          item !== null &&
-          typeof item.lineId === "string" &&
-          typeof item.name === "string" &&
-          typeof item.quantity === "string" &&
-          typeof item.soldInEach === "boolean" &&
-          (item.unitName === null || textMap(item.unitName)) &&
-          Array.isArray(item.optionSnapshots) &&
-          item.optionSnapshots.every(optionSnapshot) &&
-          Array.isArray(item.extras) &&
-          item.extras.every(
-            (extra: unknown) =>
-              typeof extra === "object" &&
-              extra !== null &&
-              "name" in extra &&
-              typeof extra.name === "string" &&
-              "quantity" in extra &&
-              typeof extra.quantity === "string" &&
-              "unitName" in extra &&
-              (extra.unitName === null || textMap(extra.unitName)) &&
-              "soldInEach" in extra &&
-              typeof extra.soldInEach === "boolean" &&
-              "perDish" in extra &&
-              typeof extra.perDish === "number",
-          ) &&
-          (item.note === null || typeof item.note === "string"),
-      );
-    } catch {
-      /* A blocked or corrupt store leaves the in-memory list available. */
-    }
-  }
-
-  readonly #onMadeHere = (items: MadeHereItem[]): void => {
-    const seen = new Set(this.makeNow.map((item) => item.lineId));
-    const added: MadeHereItem[] = [];
-    for (const item of items) {
-      if (seen.has(item.lineId)) continue;
-      seen.add(item.lineId);
-      added.push(item);
-    }
-    this.makeNow = [...this.makeNow, ...added];
-    this.#saveMakeNow();
-  };
-
-  #dismissMakeNow(): void {
-    this.makeNow = [];
-    this.#saveMakeNow();
-  }
+  readonly #makeNow = new MakeNowController(this, () => this.deviceId);
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
   @state() private initialDeviceStation?: DeviceStationScreen;
   @state() private initialDevicePass?: DevicePassBoard;
@@ -5496,7 +5398,7 @@ export class TillApp extends LitElement {
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) {
-      this.api.onMadeHere?.(this.#onMadeHere);
+      this.api.onMadeHere?.(this.#makeNow.receive);
       const api = this.api;
       api.namePersonFrom?.(
         () => this.#tabPerson,
@@ -5638,7 +5540,7 @@ export class TillApp extends LitElement {
       if (overtaken()) return;
       if (!this.devTab && (await this.#openDevChooser(overtaken, false))) return;
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
-        this.makeNow = [];
+        this.#makeNow.reset();
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
       const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
@@ -5655,7 +5557,7 @@ export class TillApp extends LitElement {
       )
         this.#onKitchenLogout(false);
       this.#holdIdentity(identity);
-      this.#restoreMakeNow();
+      this.#makeNow.restore();
       this.#deviceKind = kind ?? "till";
       if (kind !== undefined && LIVE_STREAM_KINDS.includes(kind)) {
         if (
@@ -10487,7 +10389,7 @@ export class TillApp extends LitElement {
       this.errorKey = "boot.error";
       return;
     }
-    this.makeNow = [];
+    this.#makeNow.reset();
     await this.#boot(undefined, true);
   }
 
@@ -10495,7 +10397,7 @@ export class TillApp extends LitElement {
     this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#pauseLive();
     this.#live = undefined;
-    this.makeNow = [];
+    this.#makeNow.reset();
     await this.#boot();
   }
 
@@ -25539,7 +25441,10 @@ export class TillApp extends LitElement {
                 )
           }
         </wt-toast>
-        <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
+        <till-make-now
+          .items=${this.#makeNow.items}
+          @dismiss=${this.#makeNow.dismiss}
+        ></till-make-now>
         <wt-toast
           class="equipment-toast"
           data-equipment-toast

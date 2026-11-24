@@ -3,6 +3,14 @@
 The open entries are listed in [the backlog](../backlog.md), under "The till, devices and table service". This file holds
 their full text.
 
+## A Make now instruction can disappear or come back while the till checks its device again
+
+If an order response arrives while the till is waiting for its device identity, the till can lose
+the Make now instruction when it reloads that device's saved list. Keep the instruction when the
+same device comes back, and keep each device's list separate when the device changes.
+If you press Done during that wait, the saved list can bring back the instruction you dismissed.
+Keep it dismissed.
+
 ## The table screen's redundant exit configuration was not audited
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: the table screen still needs its
