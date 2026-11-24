@@ -432,7 +432,13 @@ describe("remote print agent pairing retries", () => {
     mountJoinApi(app, { db: suite.db, cfg, pairingMode: mode, deviceAddress: "" }, noopLog);
     const firstHold = mode.open();
     const first = await knock(app, "Kitchen");
-    mode.release(firstHold.holdId);
+    const released = await send(
+      app,
+      "DELETE",
+      `/management-api/pairing-mode/holds/${firstHold.holdId}`,
+      { cookie: managerCookie },
+    );
+    expect(released.status).toBe(204);
     mode.open();
     const accept = (id: string, choice: string) =>
       send(app, "POST", `/management-api/print-agent-join-requests/${id}/accept`, {

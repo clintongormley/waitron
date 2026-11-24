@@ -19,8 +19,8 @@ Write each named check first, see it fail for the expected behavior, implement a
 
 - **Box.** Reuse the shared hold, pending table and manager routes in
   `apps/server/src/{pairing-mode,join-requests,join-api,print-api}.ts`. Check the opening before
-  reading the body and in the write transaction. Keep the opening and display flag with the
-  live request ID in the holder. Discard old requests before join cap, status and manager routes. Each retry gets its
+  reading the body and in the write transaction. Use the shared device discard rule before join cap, status
+  and manager routes. The holder remembers only the display flags and recent denied hashes. Each retry gets its
   own ID and challenge. Keep the last 100 denied token hashes. Record the flag and hash inside their writes so the
   next queued reader sees them. A pending row wins and only a matching token gets `denied: true`. A matching inactive agent gets
   `revoked: true`. Both replies retain `status: "not_approved"`. Test closure, stale approval and
@@ -39,4 +39,4 @@ Write each named check first, see it fail for the expected behavior, implement a
 
 The display flag survives restarts once the agent has received it. Update remote agents with
 the box. The list keeps polling after Scan ends. About 180–270 production lines and 190–300 test
-lines. Claude reviewed the plan and amendment. The watcher cleared the build at 11:49.
+lines. Claude reviewed the plan and amendment. The watcher cleared the build at 11:49 and chose shared discard at 12:11.

@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, gt, gte, inArray, lt, lte, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -58,55 +58,30 @@ async function sweepLapsed(tx: Transaction, cfg: TradingContext): Promise<void> 
     .where(and(ownedBy(cfg), or(lt(joinRequests.createdAt, from), gt(joinRequests.createdAt, to))));
 }
 
-export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
+export type RequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
 
 /**
- * Discard device requests made before the window last shut or whose claim’s hold has ended.
+ * Discard requests made before the window last shut and device requests whose claim has ended.
  *
  * Returns the ids of the claims whose hold has ended. The caller drops those claims only after its
  * transaction commits: dropped here, a rolled-back transaction would bring the row back unclaimed.
  */
-export async function discardLapsedDeviceRequests(
+export async function discardLapsedRequests(
   tx: Transaction,
   cfg: TradingContext,
-  window: DeviceRequestWindow,
+  window: RequestWindow,
 ): Promise<string[]> {
   const since = window.openSince();
-  const device = and(ownedBy(cfg), eq(joinRequests.kind, "device"));
+  const owned = ownedBy(cfg);
   await tx
     .delete(joinRequests)
-    .where(since === null ? device : and(device, lt(joinRequests.createdAt, since)));
+    .where(since === null ? owned : and(owned, lt(joinRequests.createdAt, since)));
   const orphaned = window.orphanedClaims();
   if (orphaned.length > 0)
-    await tx.delete(joinRequests).where(and(device, inArray(joinRequests.id, orphaned)));
+    await tx
+      .delete(joinRequests)
+      .where(and(owned, eq(joinRequests.kind, "device"), inArray(joinRequests.id, orphaned)));
   return orphaned;
-}
-
-/** A fresh opening knows none of the IDs from an earlier one, even at the same wall time. */
-export async function discardLapsedAgentRequests(
-  tx: Transaction,
-  cfg: TradingContext,
-  window: Pick<PairingMode, "agentRequests">,
-): Promise<void> {
-  const { from, to } = lapsedAt();
-  const active = [...window.agentRequests(from, to).keys()];
-  await tx
-    .delete(joinRequests)
-    .where(
-      and(
-        ownedBy(cfg),
-        eq(joinRequests.kind, "print_agent"),
-        active.length === 0 ? undefined : notInArray(joinRequests.id, active),
-      ),
-    );
-}
-
-export function agentWasPreviouslyDenied(
-  window: Pick<PairingMode, "agentRequests">,
-  id: string,
-): boolean {
-  const { from, to } = lapsedAt();
-  return window.agentRequests(from, to).get(id)?.previouslyDenied === true;
 }
 
 /** Every number currently spoken for among this node's requests, EITHER kind, split by role. The
@@ -453,12 +428,12 @@ export async function readJoinStatus(
   cfg: TradingContext,
   joinId: string,
   token: string,
-  window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
+  window: RequestWindow & Pick<PairingMode, "dropClaim">,
 ): Promise<JoinStatus> {
   let dropped: string[] = [];
   const status = await withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
-    dropped = await discardLapsedDeviceRequests(tx, cfg, window);
+    dropped = await discardLapsedRequests(tx, cfg, window);
     const pending = await pendingStatus(tx, cfg, joinId, token);
     if (pending !== undefined) return pending;
     const [accepted] = await tx
@@ -637,33 +612,38 @@ export async function acceptPrintAgentJoinRequest(
 }
 
 /**
- * The mirror of {@link readJoinStatus} for a print agent, resolving the approved fallback against
- * `print_agents`. The pending read is filtered to this node's rows; the approved fallback reads
- * `print_agents` by id and `active`, with no node filter.
+ * Pending requests belong to this node. An approved agent can follow another box, so look it up
+ * by id across nodes. Tell it about revocation or denial only after its token matches.
  */
 export async function readAgentJoinStatus(
   db: Database,
   cfg: TradingContext,
   joinId: string,
   token: string,
-  window?: Pick<PairingMode, "agentRequests" | "deniedAgentHash">,
+  window?: RequestWindow & Pick<PairingMode, "dropClaim" | "deniedAgentHash">,
 ): Promise<JoinStatus | "denied" | "revoked"> {
-  return withTransaction(db, async (tx) => {
-    if (window !== undefined) await discardLapsedAgentRequests(tx, cfg, window);
-    await sweepLapsed(tx, cfg);
-    const pending = await pendingStatus(tx, cfg, joinId, token);
-    if (pending !== undefined) return pending;
-    const [accepted] = await tx
-      .select({ tokenHash: printAgents.tokenHash, active: printAgents.active })
-      .from(printAgents)
-      .where(eq(printAgents.id, joinId));
-    if (accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash))
-      return accepted.active ? "approved" : "revoked";
-    const deniedHash = window?.deniedAgentHash(joinId);
-    return deniedHash !== undefined && deviceTokenMatches(token, deniedHash)
-      ? "denied"
-      : "not_approved";
-  });
+  let dropped: string[] = [];
+  const status = await withTransaction(
+    db,
+    async (tx): Promise<JoinStatus | "denied" | "revoked"> => {
+      if (window !== undefined) dropped = await discardLapsedRequests(tx, cfg, window);
+      await sweepLapsed(tx, cfg);
+      const pending = await pendingStatus(tx, cfg, joinId, token);
+      if (pending !== undefined) return pending;
+      const [accepted] = await tx
+        .select({ tokenHash: printAgents.tokenHash, active: printAgents.active })
+        .from(printAgents)
+        .where(eq(printAgents.id, joinId));
+      if (accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash))
+        return accepted.active ? "approved" : "revoked";
+      const deniedHash = window?.deniedAgentHash(joinId);
+      return deniedHash !== undefined && deviceTokenMatches(token, deniedHash)
+        ? "denied"
+        : "not_approved";
+    },
+  );
+  for (const id of dropped) window?.dropClaim(id);
+  return status;
 }
 
 export async function denyJoinRequest(

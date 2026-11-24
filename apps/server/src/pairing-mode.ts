@@ -7,8 +7,8 @@ import { steadyNow } from "@waitron/shared";
  * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: a restart or a promotion forgets every hold
  * and claim, so the window starts shut. `boot.ts` builds ONE holder for the device, join and print
  * mounts. Holds lapse on the `steady` clock; the times answered, and `openSince`, are wall-clock.
- * `openSince` follows a backward wall step, never a forward one: `discardLapsedDeviceRequests`
- * deletes a device request stamped before it, and the knock route reads it before stamping, so a
+ * `openSince` follows a backward wall step, never a forward one: `discardLapsedRequests`
+ * deletes a request stamped before it, and the knock route reads it before stamping, so a
  * request made after the step is kept. `opening` counts the times the window went from shut to
  * open, so the knock route tells openings apart.
  */
@@ -20,12 +20,6 @@ export interface PairingClaim {
   holdId: string;
   sessionKey: string;
   personName: string;
-}
-
-interface AgentPairingRequest {
-  id: string;
-  createdAt: string;
-  previouslyDenied: boolean;
 }
 
 export interface PairingMode {
@@ -41,8 +35,8 @@ export interface PairingMode {
   claimOf(requestId: string): PairingClaim | undefined;
   orphanedClaims(): string[];
   dropClaim(requestId: string): void;
-  trackAgentRequest(opening: number, request: AgentPairingRequest): void;
-  agentRequests(from: string, to: string): ReadonlyMap<string, AgentPairingRequest>;
+  markPreviouslyDenied(id: string): void;
+  wasPreviouslyDenied(id: string): boolean;
   rememberDeniedAgent(id: string, tokenHash: string): void;
   deniedAgentHash(id: string): string | undefined;
 }
@@ -65,7 +59,7 @@ export function createPairingMode(
   } = opts;
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
-  const agentRequests = new Map<string, AgentPairingRequest>();
+  const previouslyDenied = new Set<string>();
   const deniedAgents = new Map<string, string>();
   let openSinceMs: number | null = null;
   let openings = 0;
@@ -90,7 +84,7 @@ export function createPairingMode(
     for (const [id, until] of holds) if (until <= t) holds.delete(id);
     if (holds.size === 0) {
       openSinceMs = null;
-      agentRequests.clear();
+      previouslyDenied.clear();
     } else if (openSinceMs !== null) {
       openSinceMs = Math.min(openSinceMs, now());
     }
@@ -167,16 +161,13 @@ export function createPairingMode(
     dropClaim(requestId) {
       if (claims.delete(requestId)) changed?.();
     },
-    trackAgentRequest(opening, request) {
-      prune();
-      if (holds.size > 0 && opening === openings) agentRequests.set(request.id, request);
+    markPreviouslyDenied(id) {
+      previouslyDenied.add(id);
+      if (previouslyDenied.size > 100)
+        previouslyDenied.delete(previouslyDenied.values().next().value!);
     },
-    agentRequests(from, to) {
-      prune();
-      for (const [id, { createdAt }] of agentRequests) {
-        if (createdAt < from || createdAt > to) agentRequests.delete(id);
-      }
-      return agentRequests;
+    wasPreviouslyDenied(id) {
+      return previouslyDenied.has(id);
     },
     rememberDeniedAgent(id, tokenHash) {
       deniedAgents.set(id, tokenHash);

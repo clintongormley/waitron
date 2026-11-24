@@ -80,11 +80,7 @@ import {
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
-import {
-  createJoinRequest,
-  discardLapsedAgentRequests,
-  readAgentJoinStatus,
-} from "./join-requests.js";
+import { createJoinRequest, discardLapsedRequests, readAgentJoinStatus } from "./join-requests.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
@@ -827,17 +823,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const name = requireString(body.name, "name");
       if (body.previouslyDenied !== undefined && typeof body.previouslyDenied !== "boolean")
         throw new AppError("management.request_invalid", { field: "previouslyDenied" });
+      let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
         if (deps.pairingMode.opening() !== opening) throw new AppError("device.pairing_closed", {});
-        await discardLapsedAgentRequests(tx, deps.cfg, deps.pairingMode);
+        dropped = await discardLapsedRequests(tx, deps.cfg, deps.pairingMode);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
-        deps.pairingMode.trackAgentRequest(opening, {
-          id: request.joinId,
-          createdAt: request.createdAt,
-          previouslyDenied: body.previouslyDenied === true,
-        });
+        if (body.previouslyDenied === true) deps.pairingMode.markPreviouslyDenied(request.joinId);
         return request;
       });
+      for (const id of dropped) deps.pairingMode.dropClaim(id);
       // The joinId becomes the agent id on accept, so this Bearer works unchanged after approval. The
       // secret leaves the process only here.
       return c.json(
