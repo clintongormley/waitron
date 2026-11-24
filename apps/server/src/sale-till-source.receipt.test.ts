@@ -133,9 +133,9 @@ async function setupVenue(): Promise<{
   });
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Bebidas" });
     const created = await createProduct(tx, {
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
@@ -156,7 +156,7 @@ async function setupVenue(): Promise<{
     // (`packages/db/src/schema/venue-service/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.
     await tx.insert(routingCells).values({
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       stationId: null,
       noPreparation: true,
     });
@@ -274,7 +274,7 @@ async function ringSale(
   expect(res.status).toBe(200);
 }
 
-interface Registro {
+interface FiledRecord {
   deviceId: string | null;
   nodeId: string;
   secuencia: number;
@@ -285,7 +285,7 @@ interface Registro {
 }
 
 /** Every fiscal record filed for the taxpayer, oldest first — one per sale, this taxpayer's alone. */
-async function registrosFor(): Promise<Registro[]> {
+async function recordsFor(): Promise<FiledRecord[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({
@@ -303,7 +303,7 @@ async function registrosFor(): Promise<Registro[]> {
 }
 
 /** Each sale's stored `sales.device_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
- *  lines up with the registros ordered by `secuencia`. */
+ *  lines up with the records ordered by `secuencia`. */
 async function saleDeviceIds(): Promise<(string | null)[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
@@ -352,9 +352,9 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
       product.menuItemId,
     );
 
-    const registros = await registrosFor();
-    expect(registros).toHaveLength(2);
-    const [first, second] = registros;
+    const records = await recordsFor();
+    expect(records).toHaveLength(2);
+    const [first, second] = records;
 
     // Each record names its ringing DEVICE — X then Y.
     expect(first!.deviceId).toBe(deviceIdOf(deviceX));
@@ -437,10 +437,10 @@ describe("a sale names the device it was rung on", () => {
       sql`select source, device_id from sales order by invoice_number`,
     );
     expect(saleRows.rows).toEqual(expected);
-    const registroRows = await suite.db.execute<{
+    const recordRows = await suite.db.execute<{
       source: string | null;
       device_id: string | null;
     }>(sql`select source, device_id from verifactu_records order by secuencia`);
-    expect(registroRows.rows).toEqual(expected);
+    expect(recordRows.rows).toEqual(expected);
   });
 });

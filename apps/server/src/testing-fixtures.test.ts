@@ -36,18 +36,18 @@ describe("the shared fixtures seed a real migrated venue", () => {
     ]);
   });
 
-  it("seeds a fiscal registro with its whole FK closure, chain head and envío", async () => {
+  it("seeds a fiscal record with its whole FK closure, chain head and submission", async () => {
     const seeded = await seedFiscalRegistro(db, { envio: true });
     const { rows } = await db.execute<{
       huella: string;
       entorno: string;
-      fecha: string;
-      creado: string;
-      envio: string;
+      generatedAt: string;
+      createdAt: string;
+      submissionState: string;
     }>(sql`
       select r.huella, r.entorno,
-             r.fecha_hora_huso_gen_registro as fecha, r.creado_en as creado,
-             e.estado as envio
+             r.fecha_hora_huso_gen_registro as generatedAt, r.creado_en as createdAt,
+             e.estado as submissionState
       from verifactu_records r
       join verifactu_submissions e on e.registro_id = r.id
       where r.id = ${seeded.registroId}`);
@@ -55,9 +55,9 @@ describe("the shared fixtures seed a real migrated venue", () => {
     expect(rows[0]).toMatchObject({
       huella: seeded.huella,
       entorno: "production",
-      envio: "pendiente",
+      submissionState: "pendiente",
       // The fixture's `+01:00` literal reaches the column as the UTC instant it names.
-      fecha: "2026-07-20T18:20:30.000Z",
+      generatedAt: "2026-07-20T18:20:30.000Z",
     });
     expect(await withTransaction(db, (tx) => readChainHead(tx, nodeId(seeded.nodeId)))).toEqual({
       secuencia: seeded.secuencia,
@@ -65,10 +65,10 @@ describe("the shared fixtures seed a real migrated venue", () => {
       ultimaHuella: seeded.huella,
     });
     // `creado_en` comes from the column's own generator, which only the insert BUILDER runs.
-    expect(Number.isNaN(Date.parse(rows[0]!.creado))).toBe(false);
+    expect(Number.isNaN(Date.parse(rows[0]!.createdAt))).toBe(false);
   });
 
-  it("plants a second registro on the same chain", async () => {
+  it("plants a second record on the same chain", async () => {
     const first = await seedFiscalRegistro(db);
     const second = await insertFiscalRegistro(db, first, { secuencia: 2, numSerie: "A/2" });
     expect(second.secuencia).toBe(2);

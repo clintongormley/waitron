@@ -264,7 +264,7 @@ function creditsOf(saleId: string) {
   return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
 }
 
-async function registroOf(saleId: string) {
+async function fiscalRecordOf(saleId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
   );
@@ -346,7 +346,7 @@ function fiscalSnapshot() {
       (select count(*) from sales) as sales,
       (select count(*) from sale_lines) as saleLines,
       (select count(*) from sale_settlements) as settlements,
-      (select count(*) from verifactu_records) as registros,
+      (select count(*) from verifactu_records) as recordCount,
       (select count(*) from order_amendments) as amendments,
       (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series,
       (select group_concat(node_id || ':' || secuencia || ':' || huella, ',')
@@ -456,8 +456,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
       })),
     );
 
-    const filed = await registroOf(credit.id);
-    const rectified = await registroOf(original.id);
+    const filed = await fiscalRecordOf(credit.id);
+    const rectified = await fiscalRecordOf(original.id);
     expect(filed).toMatchObject({
       tipoRegistro: "alta",
       tipoFactura: "R5",
@@ -901,13 +901,13 @@ describe("cancelling a placed order whose invoice was issued", () => {
       expect(credit!.total).toBe(-original.total);
       const negated = { rate: "21.00", base: negate(invoiced.base), tax: negate(invoiced.tax) };
       expect(credit!.vatBreakdown).toEqual([negated]);
-      const filed = await registroOf(credit!.id);
+      const filed = await fiscalRecordOf(credit!.id);
       expect(filed).toMatchObject({
         tipoFactura: "R5",
         importeTotal: total,
         cuotaTotal: negated.tax,
       });
-      const [rectified] = (await registroOf(original.id)).desglose;
+      const [rectified] = (await fiscalRecordOf(original.id)).desglose;
       expect(filed.desglose).toEqual([
         {
           ...rectified,

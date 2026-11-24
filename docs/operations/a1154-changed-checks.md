@@ -1,5 +1,7 @@
 # A1154 changed test checks
 
+_2026-11-24, A974: `served-at-huella.test.ts` moved to `served-at-fiscal-hash.test.ts`. The row below keeps the historical name and links to its current location._
+
 _2026-11-07, A1422: `scripts/fiscal-allocation-migration.test.ts` and `scripts/fiscal-certificate-migration.test.ts` were deleted with the frozen migration history on the owner's word; they are readable at commit f519799de0._
 
 _2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
@@ -23,7 +25,7 @@ Historical review inventory, 2026-10-28. The owner authorizes removal of the obs
 | [apps/server/src/restore-email.test.ts](../../apps/server/src/restore-email.test.ts) | Remove unused retired series-setting fixture; email assertions unchanged. |
 | [apps/server/src/restore-fiscal-e2e.test.ts](../../apps/server/src/restore-fiscal-e2e.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/retired-fiscal-operation-entry.test.ts](../../apps/server/src/retired-fiscal-operation-entry.test.ts) | Keep production restore-runner refusal and unchanged row equality; remove the two retired command entries. |
-| [apps/server/src/served-at-huella.test.ts](../../apps/server/src/served-at-huella.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
+| [apps/server/src/served-at-huella.test.ts](../../apps/server/src/served-at-fiscal-hash.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/till-api.test.ts](../../apps/server/src/till-api.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |
 | [apps/server/src/venue-details.test.ts](../../apps/server/src/venue-details.test.ts) | Historical allocation fixture uses the retained restore hook instead of rerunning a seed; retained assertions unchanged. |
 | [packages/db/src/reserved-identity.test.ts](../../packages/db/src/reserved-identity.test.ts) | Fixture/helper identifiers renamed; expected values and retained assertions preserved. |

@@ -816,7 +816,7 @@ async function filed(billIds: string[]) {
   const receipts = [];
   for (const saleId of saleIds) receipts.push(await get(`/api/transactions/${saleId}/receipt`));
   return {
-    registros: await venue.db
+    records: await venue.db
       .select()
       .from(verifactuRecords)
       .where(inArray(verifactuRecords.saleId, saleIds))
@@ -841,7 +841,7 @@ describe("sending a paid bill to the counter changes nothing filed", () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const body = await collect(t.partyId, await bodyFor(t));
     const before = await filed(t.billIds);
-    expect(before.registros.length).toBeGreaterThan(0);
+    expect(before.records.length).toBeGreaterThan(0);
     expect(before.sales.some((sale) => sale.receiptTradingName !== null)).toBe(true);
     expect(before.receipts.every((receipt) => receipt.status === 200)).toBe(true);
 

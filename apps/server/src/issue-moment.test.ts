@@ -23,7 +23,7 @@ vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal)
   };
 });
 
-const cana: PriceableProduct = {
+const smallBeer: PriceableProduct = {
   name: "Caña",
   descriptions: { "es-ES": "Caña" },
   unit: {
@@ -37,7 +37,7 @@ const cana: PriceableProduct = {
   vatClass: "reduced",
   category: null,
 };
-const gross = () => grossBasketWithOptions([{ product: cana, quantity: "1", options: [] }]);
+const gross = () => grossBasketWithOptions([{ product: smallBeer, quantity: "1", options: [] }]);
 
 /** A clock whose every reading is `tickMs` after the one before, starting at `start`. */
 function movingClock(start: string, offsetMinutes: number, tickMs: number) {

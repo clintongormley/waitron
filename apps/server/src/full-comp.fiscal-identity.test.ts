@@ -112,7 +112,7 @@ const SALE_COLUMNS = columnsOf(sales, [
 ]);
 /** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
  * time of the insert rather than the fixed clock's. */
-const REGISTRO_COLUMNS = columnsOf(verifactuRecords, [
+const RECORD_COLUMNS = columnsOf(verifactuRecords, [
   "id",
   "sale_id",
   "node_id",
@@ -224,8 +224,8 @@ async function fileFullComps(db: Database) {
         expect(receipt_department_id).toBe(zone!.departmentId);
         return row;
       });
-    const registros = db.all<Record<string, unknown>>(sql`
-      select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from verifactu_records`);
+    const records = db.all<Record<string, unknown>>(sql`
+      select ${sql.raw(RECORD_COLUMNS.join(", "))} from verifactu_records`);
     const lines = db
       .all<Record<string, unknown>>(
         sql.raw(`select ${LINE_COLUMNS.map((c) => `l.${c}`).join(", ")},
@@ -241,13 +241,13 @@ async function fileFullComps(db: Database) {
         ) as unknown,
       }));
     const [row] = db.all<RegistroRow>(sql`select * from verifactu_records`);
-    const cabecera: Cabecera = {
+    const filingHeader: Cabecera = {
       ObligadoEmision: { NombreRazon: row!.nombre_razon_emisor, NIF: row!.id_emisor_factura },
     };
-    const xml = serializeEnvio(cabecera, [
+    const xml = serializeEnvio(filingHeader, [
       { RegistroAlta: fromRegistroRow(decodeRegistroRow(row!)) as RegistroAlta },
     ]);
-    return { header, registros, lines, xml, printed };
+    return { header, records, lines, xml, printed };
   } finally {
     vi.useRealTimers();
   }
@@ -277,16 +277,16 @@ describe("a full comp's filed record and the receipt's words", () => {
     expect(marked.printed.some((line) => line.startsWith("  MARK-"))).toBe(true);
     expect(shipped.printed.some((line) => line.includes("MARK-"))).toBe(false);
 
-    expect(shipped.registros).toHaveLength(1);
+    expect(shipped.records).toHaveLength(1);
     expect(shipped.header).toHaveLength(1);
     expect(marked.header).toEqual(shipped.header);
-    expect(marked.registros).toEqual(shipped.registros);
+    expect(marked.records).toEqual(shipped.records);
     expect(marked.lines).toEqual(shipped.lines);
     expect(marked.xml).toBe(shipped.xml);
   });
 
   it("files the full comps' sale with these figures", () => {
-    const row = shipped.registros[0]!;
+    const row = shipped.records[0]!;
     expect({
       tipo_factura: row.tipo_factura,
       num_serie_factura: row.num_serie_factura,

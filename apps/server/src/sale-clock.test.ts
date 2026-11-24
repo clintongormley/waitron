@@ -54,7 +54,7 @@ function ledger() {
   );
   return {
     sales: count("sales"),
-    registros: count("verifactu_records"),
+    recordCount: count("verifactu_records"),
     nextNumber: series!.next,
   };
 }

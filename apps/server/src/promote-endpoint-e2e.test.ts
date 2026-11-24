@@ -363,7 +363,7 @@ function mirrorEnv(
   };
 }
 
-async function readEnvios(
+async function readSubmissions(
   admin: Database,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }[]> {
   // A raw read, so `incidencia` arrives as the stored 0/1.
@@ -525,16 +525,16 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       const reservedSif = await db.main.execute<{ id: string }>(
         sql`select id from verifactu_identities where node_id = ${seed.nodeId} and revocado_en is null`,
       );
-      const registros = await db.main.execute<{
+      const records = await db.main.execute<{
         huella: string;
         node_id: string;
         sif_id: string;
       }>(sql`select huella, node_id, sif_id from verifactu_records where node_id = ${seed.nodeId}`);
-      expect(registros.rows).toHaveLength(1);
-      expect(registros.rows[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
-      expect(registros.rows[0]!.sif_id).toBe(reservedSif.rows[0]!.id);
+      expect(records.rows).toHaveLength(1);
+      expect(records.rows[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
+      expect(records.rows[0]!.sif_id).toBe(reservedSif.rows[0]!.id);
 
-      // With no `fiscal.aeat` certificate the pass skips the due envío and box-status reports it.
+      // With no `fiscal.aeat` certificate the pass skips the due submission and box-status reports it.
       const mgmtLogin = await fetch(`${primaryBase}/management-api/session`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -550,7 +550,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       }, POLL_TRIES_15S);
       expect(awaiting.awaitingFiscalCertificate).toBe(true);
 
-      expect(await readEnvios(db.main)).toEqual([
+      expect(await readSubmissions(db.main)).toEqual([
         { estado: "pendiente", intentos: 0, incidencia: false },
       ]);
     } finally {

@@ -83,7 +83,7 @@ const OTHER_LINE_COLUMNS = columnsOf(saleLines, [...MINTED_ID_COLUMNS, "list_uni
 const SALE_COLUMNS = columnsOf(sales, ["id", "node_id", "device_id", "series_id"]);
 /** The fiscal record's columns but the ids minted per database, and `creado_en`, the wall-clock
  * time of the insert rather than the fixed clock's. */
-const REGISTRO_COLUMNS = columnsOf(verifactuRecords, [
+const RECORD_COLUMNS = columnsOf(verifactuRecords, [
   "id",
   "sale_id",
   "node_id",
@@ -133,12 +133,12 @@ async function fileOneSale(db: Database) {
     const menu = await createMenu(tx, {
       name: `List unit price fiscal identity menu ${cfg.nodeId}`,
     });
-    const bebidas = await createCategory(tx, { name: "Drinks" });
-    const cocteles = await createCategory(tx, {
+    const drinks = await createCategory(tx, { name: "Drinks" });
+    const cocktails = await createCategory(tx, {
       name: "Cocktails",
-      parentId: bebidas.id,
+      parentId: drinks.id,
     });
-    const anadidos = await createCategory(tx, { name: "Extras" });
+    const extrasCategory = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string, unitPrice: string) =>
       createProduct(tx, {
         categoryId,
@@ -149,8 +149,8 @@ async function fileOneSale(db: Database) {
         unitPrice,
         vatClass: "general",
       });
-    const negroni = await product("Negroni", cocteles.id, "9.00");
-    const hielo = await product("Hielo", anadidos.id, "1.00");
+    const negroni = await product("Negroni", cocktails.id, "9.00");
+    const ice = await product("Hielo", extrasCategory.id, "1.00");
     const extras = await createExtraList(
       tx,
       {
@@ -160,13 +160,13 @@ async function fileOneSale(db: Database) {
         minPicks: 0,
         maxPicks: 1,
         active: true,
-        items: [{ productId: hielo.id, maxQuantity: 1, preselected: false, price: "0.35" }],
+        items: [{ productId: ice.id, maxQuantity: 1, preselected: false, price: "0.35" }],
       },
       LOCALE,
     );
     await writeProductModifiers(tx, negroni.id, [{ kind: "extras", id: extras.id }]);
     await assignMenuToVenue(tx, menu.id);
-    return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
+    return { negroni: negroni.id, ice: ice.id, extrasListId: extras.id };
   });
   const offers = await withTransaction(db, (tx) => offerProducts(tx));
   const backend = new VerifactuBackend({
@@ -193,7 +193,7 @@ async function fileOneSale(db: Database) {
           menuItemId: offers.offerFor(seeded.negroni),
           quantity: "2",
           extras: [
-            { listId: seeded.extrasListId, picks: [{ productId: seeded.hielo, quantity: 1 }] },
+            { listId: seeded.extrasListId, picks: [{ productId: seeded.ice, quantity: 1 }] },
           ],
         },
       ],
@@ -216,9 +216,9 @@ async function fileOneSale(db: Database) {
       from sale_lines l left join sale_lines p on p.id = l.parent_line_id
       order by l.line_no`),
   );
-  const registros = db.all<Record<string, unknown>>(sql`
-    select ${sql.raw(REGISTRO_COLUMNS.join(", "))} from verifactu_records`);
-  return { header, lines, registros };
+  const records = db.all<Record<string, unknown>>(sql`
+    select ${sql.raw(RECORD_COLUMNS.join(", "))} from verifactu_records`);
+  return { header, lines, records };
 }
 
 describe("the unit price before any discount and the fiscal record", () => {
@@ -243,8 +243,8 @@ describe("the unit price before any discount and the fiscal record", () => {
         ) as unknown,
         list_unit_price_gross: undefined,
       }));
-    expect(before.registros).toHaveLength(1);
-    expect(after.registros).toEqual(before.registros);
+    expect(before.records).toHaveLength(1);
+    expect(after.records).toEqual(before.records);
     expect(after.header).toEqual(before.header);
     expect(withoutStoredPrice(after.lines)).toEqual(withoutStoredPrice(before.lines));
   });

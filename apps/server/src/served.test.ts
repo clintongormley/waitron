@@ -392,7 +392,7 @@ async function snapshot(partyId: string) {
         ),
       )
       .orderBy(saleLines.id),
-    registros: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.id),
+    records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.id),
   };
 }
 
@@ -994,7 +994,7 @@ describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
 });
 
 describe("served on a settled bill (D18)", () => {
-  it("marks the Flan served after its bill is paid, leaving the filed sale and its registro as they were", async () => {
+  it("marks the Flan served after its bill is paid, leaving the filed sale and its record as they were", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await groupedGroup(v, s, "fire", [line(v, "croquetas", "2")]);
@@ -1011,7 +1011,7 @@ describe("served on a settled bill (D18)", () => {
     const before = await snapshot(s.partyId);
     expect(before.sales).toHaveLength(1);
     expect(before.saleLines.length).toBeGreaterThan(0);
-    expect(before.registros).toHaveLength(1);
+    expect(before.records).toHaveLength(1);
 
     await serve(v, s.partyId, [{ lineId: flan.id, quantity: "1" }]);
 
@@ -1022,7 +1022,7 @@ describe("served on a settled bill (D18)", () => {
     const after = await snapshot(s.partyId);
     expect(after.sales).toEqual(before.sales);
     expect(after.saleLines).toEqual(before.saleLines);
-    expect(after.registros).toEqual(before.registros);
+    expect(after.records).toEqual(before.records);
     expect(await billRevision(s.tabId)).toBe(bill!.revision);
 
     await serveGroup(v, s.partyId, desserts);
@@ -1037,7 +1037,7 @@ describe("served on a settled bill (D18)", () => {
     const last = await snapshot(s.partyId);
     expect(last.sales).toEqual(before.sales);
     expect(last.saleLines).toEqual(before.saleLines);
-    expect(last.registros).toEqual(before.registros);
+    expect(last.records).toEqual(before.records);
   });
 });
 
@@ -1080,7 +1080,7 @@ describe("served on a bill paid before its group was fired (D18)", () => {
     const after = await snapshot(s.partyId);
     expect(after.sales).toEqual(before.sales);
     expect(after.saleLines).toEqual(before.saleLines);
-    expect(after.registros).toEqual(before.registros);
+    expect(after.records).toEqual(before.records);
   });
 });
 

@@ -35,7 +35,7 @@ const F = {
 const HUELLA = "F".repeat(64);
 
 /** Exactly the foreign-key closure `verifactu_records` needs, plus the record itself. */
-async function seedFiscalRegistro(db: Database): Promise<void> {
+async function seedFiscalRecord(db: Database): Promise<void> {
   await db
     .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
@@ -100,7 +100,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
-    await seedFiscalRegistro(db);
+    await seedFiscalRecord(db);
   },
   timeoutMs: 120_000,
 });

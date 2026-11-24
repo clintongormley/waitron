@@ -159,7 +159,7 @@ describe("seedSales", () => {
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
         .from(sales);
-      const registros = await tx
+      const recordRows = await tx
         .select({ entorno: verifactuRecords.entorno })
         .from(verifactuRecords);
       const sampled = saleRows[0]!;
@@ -187,11 +187,11 @@ describe("seedSales", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
       });
-      return { saleRows, registros, coverage: coverage[0]!, close };
+      return { saleRows, recordRows, coverage: coverage[0]!, close };
     });
 
     expect(read.saleRows.length).toBe(count);
-    expect(read.registros.length).toBe(count);
+    expect(read.recordRows.length).toBe(count);
 
     for (const row of read.saleRows) {
       const t = new Date(row.issuedAt).getTime();
@@ -199,8 +199,8 @@ describe("seedSales", () => {
       expect(t).toBeGreaterThan(start - 3.5 * DAY_MS);
     }
 
-    expect(read.registros.length).toBeGreaterThan(0);
-    for (const r of read.registros) {
+    expect(read.recordRows.length).toBeGreaterThan(0);
+    for (const r of read.recordRows) {
       expect(r.entorno).toBe("preproduction");
     }
 
@@ -490,10 +490,10 @@ describe("seedSales", () => {
 
     const read = await withTransaction(suite.db, async (tx) => ({
       sales: await tx.select({ id: sales.id }).from(sales),
-      registros: await tx.select({ entorno: verifactuRecords.entorno }).from(verifactuRecords),
+      recordRows: await tx.select({ entorno: verifactuRecords.entorno }).from(verifactuRecords),
     }));
     expect(read.sales.length).toBe(0);
-    expect(read.registros.length).toBe(0);
+    expect(read.recordRows.length).toBe(0);
   });
 
   it("writes nothing when days is 0 (guard by deletion)", async () => {
@@ -532,15 +532,15 @@ describe("seedSales", () => {
       sql`select fiscal_backend from sales`,
     );
     const { rows: fiscalRows } = await suite.db.execute<{
-      registros: number;
+      recordCount: number;
       verifactu_submissions: number;
     }>(
-      sql`select (select count(*) from verifactu_records) as registros,
+      sql`select (select count(*) from verifactu_records) as recordCount,
                  (select count(*) from verifactu_submissions) as verifactu_submissions`,
     );
     expect(count).toBeGreaterThan(0);
     expect(backends.length).toBe(count);
     expect(new Set(backends.map((row) => row.fiscal_backend))).toEqual(new Set(["none"]));
-    expect(fiscalRows[0]).toEqual({ registros: 0, verifactu_submissions: 0 });
+    expect(fiscalRows[0]).toEqual({ recordCount: 0, verifactu_submissions: 0 });
   });
 });

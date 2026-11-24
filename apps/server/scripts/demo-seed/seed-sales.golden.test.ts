@@ -84,7 +84,7 @@ const TENDERS_COLUMNS = [
   "bill_payment_id",
 ];
 
-const REGISTROS_COLUMNS = [
+const RECORD_COLUMNS = [
   "source",
   "device_id",
   "secuencia",
@@ -117,7 +117,7 @@ const REGISTROS_COLUMNS = [
   "creado_en",
 ];
 
-const ENVIOS_COLUMNS = [
+const SUBMISSION_COLUMNS = [
   "estado",
   "intentos",
   "proximo_intento_en",
@@ -204,12 +204,12 @@ async function readPracticeSales() {
         join sales s on s.id = t.sale_id
         order by s.invoice_number, t.method`,
   );
-  const { rows: registroRows } = await db.execute(
-    sql`select ${columns("r", REGISTROS_COLUMNS)} from verifactu_records r
+  const { rows: recordRows } = await db.execute(
+    sql`select ${columns("r", RECORD_COLUMNS)} from verifactu_records r
         order by r.secuencia`,
   );
-  const { rows: envioRows } = await db.execute(
-    sql`select ${columns("e", ENVIOS_COLUMNS)} from verifactu_submissions e
+  const { rows: submissionRows } = await db.execute(
+    sql`select ${columns("e", SUBMISSION_COLUMNS)} from verifactu_submissions e
         join verifactu_records r on r.id = e.registro_id
         order by r.secuencia`,
   );
@@ -217,8 +217,8 @@ async function readPracticeSales() {
     sales: saleRows,
     sale_lines: lineRows,
     tenders: tenderRows,
-    verifactu_records: registroRows,
-    verifactu_submissions: envioRows,
+    verifactu_records: recordRows,
+    verifactu_submissions: submissionRows,
   };
 }
 

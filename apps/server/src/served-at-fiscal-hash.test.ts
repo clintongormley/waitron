@@ -51,7 +51,7 @@ import type { TradingContext } from "./trading-context.js";
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: bill payment files from the tab's
 // STORED locked lines. Two tabs built from the IDENTICAL basket, one with every line served and one
-// with none, must file registros with the IDENTICAL huella — each a genuine chained record filed
+// with none, must file records with the IDENTICAL huella — each a genuine chained record filed
 // through the real pay path.
 const LOCALE = "es-ES";
 
@@ -81,7 +81,7 @@ function frozenClock(): TrustedClock {
       anchorAgeSeconds: 0,
     }),
     anchor: () => {
-      throw new Error("served-at-huella.test: anchor() is not used by recordSale");
+      throw new Error("served-at-fiscal-hash.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -144,26 +144,26 @@ interface Shop {
   db: Database;
   backend: FiscalBackend;
   cfg: DeviceRequestConfig;
-  aguaId: string;
-  cafeId: string;
-  aguaMenuItemId: string;
-  cafeMenuItemId: string;
+  waterId: string;
+  coffeeId: string;
+  waterMenuItemId: string;
+  coffeeMenuItemId: string;
   menuId: string;
   categoryId: string;
   tableId: string;
 }
 
 /**
- * Provision a shop in ITS OWN database, register its node's SIF under the SHARED emisor NIF,
+ * Provision a shop in ITS OWN database, register its node's SIF under the SHARED issuer NIF,
  * seed an IDENTICAL two-product menu, and create one dining table.
  *
  * The huella hashes the AEAT identity fields that `verifactu_records_identidad_uq` makes unique, so the two
- * records a test compares must share them — which only separate databases allow. The shared emisor
+ * records a test compares must share them — which only separate databases allow. The shared issuer
  * NIF keeps `IDEmisorFactura` identical; restoring (`registerSif` revokes the old identity,
  * mints a fresh installation number and resets the chain) makes each shop file a first record under
  * it. The NumeroInstalacion is not hashed, so it cannot move the huella.
  */
-async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
+async function seedShop(db: Database, issuerNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
     db,
     modules: ALL_MODULES,
@@ -173,36 +173,36 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,
-      nif: emisorNif,
+      nif: issuerNif,
       idSistemaInformatico: "W1",
     }),
   );
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const agua = await createProduct(tx, {
-      categoryId: bebidas.id,
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const water = await createProduct(tx, {
+      categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const cafe = await createProduct(tx, {
-      categoryId: bebidas.id,
+    const coffee = await createProduct(tx, {
+      categoryId: drinks.id,
       name: "Café solo",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const aguaMenuItem = await addProductToMenu(tx, {
+    const waterMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: agua.id,
+      productId: water.id,
       grossPrice: "1.50",
     });
-    const cafeMenuItem = await addProductToMenu(tx, {
+    const coffeeMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
-      productId: cafe.id,
+      productId: coffee.id,
       grossPrice: "2.00",
     });
     // The table sits in a table_tab zone offering this menu, with a route per product to the
@@ -212,12 +212,12 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     await publishWorkingMenu(tx, cat.id);
     const table = await createTable(tx, { label: "T1", zoneId });
     return {
-      aguaId: agua.id,
-      cafeId: cafe.id,
-      aguaMenuItemId: aguaMenuItem.id,
-      cafeMenuItemId: cafeMenuItem.id,
+      waterId: water.id,
+      coffeeId: coffee.id,
+      waterMenuItemId: waterMenuItem.id,
+      coffeeMenuItemId: coffeeMenuItem.id,
       menuId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       tableId: table.id,
     };
   });
@@ -226,20 +226,20 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
 
 /**
  * Open the identical two-line tab, optionally serve EVERY line, then pay it through the real pay
- * path with the FROZEN clock, returning the filed huella (registro #1 at secuencia 1).
+ * path with the FROZEN clock, returning the filed huella (record #1 at sequence 1).
  */
 async function openServeAndPay(
   shop: Shop,
   serveEveryLine: boolean,
   options: { fire?: boolean } = {},
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, {
       tableId,
       lines: [
-        { menuItemId: aguaMenuItemId, quantity: "1" },
-        { menuItemId: cafeMenuItemId, quantity: "1" },
+        { menuItemId: waterMenuItemId, quantity: "1" },
+        { menuItemId: coffeeMenuItemId, quantity: "1" },
       ],
     });
   });
@@ -269,7 +269,7 @@ async function openServeAndPay(
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });
@@ -290,10 +290,10 @@ async function servedAtByLine(shop: Shop, tabId: string): Promise<(string | null
 
 describe("served_at is not part of the huella", () => {
   it("files an IDENTICAL huella whether every line was served or none — served_at never enters the fiscal record", async () => {
-    // Same emisor NIF, basket, chain position and frozen clock: `served_at` is the ONLY difference.
-    const emisorNif = nextNif();
-    const shopServed = await seedShop(suite.db, emisorNif);
-    const shopUnserved = await seedShop(suiteB.db, emisorNif);
+    // Same issuer NIF, basket, chain position and frozen clock: `served_at` is the ONLY difference.
+    const issuerNif = nextNif();
+    const shopServed = await seedShop(suite.db, issuerNif);
+    const shopUnserved = await seedShop(suiteB.db, issuerNif);
 
     const served = await openServeAndPay(shopServed, true, { fire: true }); // every line served
     const unserved = await openServeAndPay(shopUnserved, false, { fire: true }); // no line served
@@ -317,19 +317,19 @@ describe("served_at is not part of the huella", () => {
 /**
  * Open the identical two-line tab, fire its lines to the kitchen, advance every item to `ready`,
  * stamp the order's `collected_at`, then pay it through the real pay path with the FROZEN clock,
- * returning the filed huella (registro #1 at secuencia 1).
+ * returning the filed huella (record #1 at sequence 1).
  *
  * `collected_at` is stamped by a direct UPDATE. This case files through bill payment, as in the
  * sibling tests.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, {
       tableId,
       lines: [
-        { menuItemId: aguaMenuItemId, quantity: "1" },
-        { menuItemId: cafeMenuItemId, quantity: "1" },
+        { menuItemId: waterMenuItemId, quantity: "1" },
+        { menuItemId: coffeeMenuItemId, quantity: "1" },
       ],
     });
   });
@@ -379,7 +379,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });
@@ -413,11 +413,11 @@ async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
 // huella.
 describe("KDS state (ticket items + collected_at) is not part of the huella", () => {
   it("files an IDENTICAL huella whether the order ran the full kitchen lifecycle or was filed plain — no KDS field enters the fiscal record", async () => {
-    // Same emisor NIF, basket, chain position and frozen clock: the order's KDS state is the ONLY
+    // Same issuer NIF, basket, chain position and frozen clock: the order's KDS state is the ONLY
     // difference.
-    const emisorNif = nextNif();
-    const shopKitchen = await seedShop(suite.db, emisorNif);
-    const shopPlain = await seedShop(suiteB.db, emisorNif);
+    const issuerNif = nextNif();
+    const shopKitchen = await seedShop(suite.db, issuerNif);
+    const shopPlain = await seedShop(suiteB.db, issuerNif);
 
     const kitchen = await openKitchenLifecycleAndPay(shopKitchen); // fired → ready → collected
     const plain = await openServeAndPay(shopPlain, false); // never fired; not collected
@@ -444,7 +444,7 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
 });
 
 /**
- * Offer a ONE-item extras list on this shop's `agua` product and return the list's id with the
+ * Offer a ONE-item extras list on this shop's `water` product and return the list's id with the
  * offered product's. The picked product's fiscal-bearing fields — names, the offer's price and the
  * VAT class — are the constants below, so only `overlay`'s allergen declaration varies between
  * shops.
@@ -460,7 +460,7 @@ async function attachExtra(
   overlay: { allergens: OverlayAllergens | null },
 ): Promise<{ listId: string; productId: string }> {
   return withTransaction(shop.db, async (tx) => {
-    const panecillo = await createProduct(tx, {
+    const breadRoll = await createProduct(tx, {
       categoryId: null,
       name: EXTRA_PRODUCT_NAME,
       pricingUnit: "each",
@@ -478,28 +478,28 @@ async function attachExtra(
         maxPicks: 1,
         active: true,
         items: [
-          { productId: panecillo.id, maxQuantity: 1, preselected: false, price: EXTRA_PRICE },
+          { productId: breadRoll.id, maxQuantity: 1, preselected: false, price: EXTRA_PRICE },
         ],
       },
       shop.cfg.locale,
     );
-    await writeProductModifiers(tx, shop.aguaId, [{ kind: "extras", id: list.id }]);
+    await writeProductModifiers(tx, shop.waterId, [{ kind: "extras", id: list.id }]);
 
     await publishWorkingMenu(tx, shop.menuId);
-    return { productId: panecillo.id, listId: list.id };
+    return { productId: breadRoll.id, listId: list.id };
   });
 }
 
 /**
- * Open a two-line tab — `agua` WITH the extra picked (a parent row + one child row) plus a plain
- * `cafe` — then pay it through the real pay path with the FROZEN clock, returning the filed huella
- * (registro #1 at secuencia 1).
+ * Open a two-line tab — `water` WITH the extra picked (a parent row + one child row) plus a plain
+ * `coffee` — then pay it through the real pay path with the FROZEN clock, returning the filed huella
+ * (record #1 at sequence 1).
  */
 async function openWithExtraAndPay(
   shop: Shop,
   extra: { listId: string; productId: string },
 ): Promise<{ tabId: string; huella: string }> {
-  const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { db, backend, cfg, waterMenuItemId, coffeeMenuItemId, tableId } = shop;
   // `openTab` takes only plain lines; `addTabRound` is the path that accepts `extras`.
   const { tabId } = await withTransaction(db, async (tx) => {
     return openPartyTab(tx, cfg, { tableId });
@@ -507,11 +507,11 @@ async function openWithExtraAndPay(
   await withTransaction(db, async (tx) => {
     await addTabRound(tx, cfg, tabId, [
       {
-        menuItemId: aguaMenuItemId,
+        menuItemId: waterMenuItemId,
         quantity: "1",
         extras: [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }],
       },
-      { menuItemId: cafeMenuItemId, quantity: "1" },
+      { menuItemId: coffeeMenuItemId, quantity: "1" },
     ]);
   });
 
@@ -528,7 +528,7 @@ async function openWithExtraAndPay(
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });
@@ -561,11 +561,11 @@ async function overlayOf(shop: Shop, productId: string): Promise<OverlayAllergen
 // IDENTICAL huella.
 describe("an extra's allergen declaration is not part of the huella", () => {
   it("files an IDENTICAL huella whether the picked extra declares an allergen or none — the declaration never enters the fiscal record", async () => {
-    // Same emisor NIF, basket, picked extra (name/price/vat), chain position and frozen clock: the
+    // Same issuer NIF, basket, picked extra (name/price/vat), chain position and frozen clock: the
     // extra's allergen DECLARATION is the ONLY difference.
-    const emisorNif = nextNif();
-    const shopOverlay = await seedShop(suite.db, emisorNif);
-    const shopPlain = await seedShop(suiteB.db, emisorNif);
+    const issuerNif = nextNif();
+    const shopOverlay = await seedShop(suite.db, issuerNif);
+    const shopPlain = await seedShop(suiteB.db, issuerNif);
 
     // Only the menu allergen declaration differs; the child sale lines are identical.
     const overlayExtra = await attachExtra(shopOverlay, {

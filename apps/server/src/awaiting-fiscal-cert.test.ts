@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { verifactuSubmissions, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
-// Seeds a due `verifactu_submissions` row and its registro WITHOUT a `fiscal.aeat` credential.
+// Seeds a due `verifactu_submissions` row and its record WITHOUT a `fiscal.aeat` credential.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { createHealthState } from "./health.js";
 import { createLogger } from "./logger.js";
@@ -103,8 +103,8 @@ async function login(app: Hono): Promise<string> {
 }
 
 // Through the table, not raw SQL: `incidencia` is a `flag` column, and a raw read answers 0/1.
-async function readEnvio(
-  registroId: string,
+async function readSubmission(
+  recordId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
   const rows = await db
     .select({
@@ -113,19 +113,19 @@ async function readEnvio(
       incidencia: verifactuSubmissions.incidencia,
     })
     .from(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, registroId));
+    .where(eq(verifactuSubmissions.registroId, recordId));
   return rows[0]!;
 }
 
-async function readRegistro(
-  registroId: string,
+async function readRecord(
+  recordId: string,
 ): Promise<{ secuencia: number; huella: string; num_serie_factura: string }> {
   const rows = await db.execute<{
     secuencia: number;
     huella: string;
     num_serie_factura: string;
   }>(
-    sql`select secuencia, huella, num_serie_factura from verifactu_records where id = ${registroId}`,
+    sql`select secuencia, huella, num_serie_factura from verifactu_records where id = ${recordId}`,
   );
   return rows.rows[0]!;
 }
@@ -134,8 +134,8 @@ describe("promoted primary awaiting the fiscal certificate", () => {
   it("surfaces awaiting-cert on box-status, does not crash the drain, does not submit, leaves the chain untouched", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1 });
     await seedManager();
-    const registroId = seeded.registroIds[0]!;
-    const registroBefore = await readRegistro(registroId);
+    const recordId = seeded.registroIds[0]!;
+    const recordBefore = await readRecord(recordId);
 
     const awaitingCert = { current: false };
     const lines: string[] = [];
@@ -166,12 +166,12 @@ describe("promoted primary awaiting the fiscal certificate", () => {
       lines.some((line) => line.includes("drain.skipped") && line.includes("credentials.missing")),
     ).toBe(true);
 
-    expect(await readEnvio(registroId)).toEqual({
+    expect(await readSubmission(recordId)).toEqual({
       estado: "pendiente",
       intentos: 0,
       incidencia: false,
     });
-    expect(await readRegistro(registroId)).toEqual(registroBefore);
+    expect(await readRecord(recordId)).toEqual(recordBefore);
 
     const app = buildApp(seeded.nodeId, awaitingCert);
     const cookie = await login(app);

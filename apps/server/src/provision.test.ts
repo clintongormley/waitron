@@ -93,11 +93,11 @@ interface FiscalCounts {
   sif: number;
   series: number;
   nodes: number;
-  registros: number;
+  recordCount: number;
 }
 
 async function fiscalCounts(db: Database): Promise<FiscalCounts> {
-  const [sif, series, nodes, registros] = await Promise.all([
+  const [sif, series, nodes, recordCountResult] = await Promise.all([
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from verifactu_identities`),
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from invoice_series`),
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from nodes`),
@@ -107,7 +107,7 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
     sif: sif.rows[0]!.n,
     series: series.rows[0]!.n,
     nodes: nodes.rows[0]!.n,
-    registros: registros.rows[0]!.n,
+    recordCount: recordCountResult.rows[0]!.n,
   };
 }
 
@@ -143,7 +143,7 @@ describe("provisionVenue", () => {
       expect(
         (await db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`)).rows,
       ).toEqual([{ n: 0 }]);
-      expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
+      expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, recordCount: 0 });
     } finally {
       await db.execute(sql`drop trigger refuse_module_selection`);
     }
@@ -164,7 +164,7 @@ describe("provisionVenue", () => {
       ["fiscal-verifactu", true],
       ["fiscal-none", false],
     ]);
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, recordCount: 0 });
   });
 
   it("leaves holiday storage empty, while the stored address reads its shipped holidays at once", async () => {
@@ -224,7 +224,7 @@ describe("provisionVenue", () => {
 
   it("stamps the environment and mints one venue with three ids, exactly one SIF + series set, and no till", async () => {
     const db = ownerDb();
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, recordCount: 0 });
 
     const result = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -261,7 +261,7 @@ describe("provisionVenue", () => {
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, recordCount: 0 });
 
     const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-none")).toBe(false);
@@ -279,7 +279,7 @@ describe("provisionVenue", () => {
 
     expect(result.seeded.map((s) => s.module)).toEqual(["menu", "venue-service", "adjustments"]);
     expect(result.seriesIds).toHaveLength(4);
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 4, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 4, nodes: 1, recordCount: 0 });
 
     const written = await readModuleConfig(suite.db);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
@@ -317,7 +317,7 @@ describe("provisionVenue", () => {
       request,
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, recordCount: 0 });
 
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -513,7 +513,7 @@ describe("provisionVenue", () => {
       seriesIds: minted.seriesIds,
       seeded: [],
     });
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 4, nodes: 1, recordCount: 0 });
   });
 
   it("refuses recovery when the submitted full invoice series differs from the committed one", async () => {
@@ -571,7 +571,7 @@ describe("provisionVenue", () => {
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 4, nodes: 1, recordCount: 0 });
 
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
@@ -599,7 +599,7 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("deployment.already_stamped");
 
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, recordCount: 0 });
   });
 });
 

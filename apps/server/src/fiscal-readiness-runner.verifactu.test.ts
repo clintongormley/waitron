@@ -42,21 +42,21 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
   dirs.push(stateDir);
   const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
   const modules = enabledModules(ALL_MODULES, selected.config);
-  // The sale and its envío take the wall clock; a minute later the envío is due.
+  // The sale and its submission take the wall clock; a minute later the submission is due.
   const now = new Date(Date.now() + 60_000);
   const aeat = createFakeAeat({ serverNow: now });
   const real = aeat.client();
-  // Every record this envío carries is refused, whatever its invoice number turns out to be.
+  // Every record this submission carries is refused, whatever its invoice number turns out to be.
   let sent = 0;
   const refusesEverything: VerifactuClient = {
-    submit: (cabecera, registros) => {
-      sent += registros.length;
-      for (const registro of registros) {
+    submit: (header, records) => {
+      sent += records.length;
+      for (const entry of records) {
         const record: RegistroAlta | RegistroAnulacion =
-          "RegistroAlta" in registro ? registro.RegistroAlta : registro.RegistroAnulacion;
+          "RegistroAlta" in entry ? entry.RegistroAlta : entry.RegistroAnulacion;
         aeat.reject(keyOf(record), 1161, "Valor incorrecto");
       }
-      return real.submit(cabecera, registros);
+      return real.submit(header, records);
     },
     consultar: (...args) => real.consultar(...args),
   };

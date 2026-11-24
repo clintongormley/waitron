@@ -86,8 +86,8 @@ function count(table: string): number {
 function counts() {
   return {
     sales: count("sales"),
-    registros: count("verifactu_records"),
-    envios: count("verifactu_submissions"),
+    recordCount: count("verifactu_records"),
+    submissionCount: count("verifactu_submissions"),
     workingOrders: count("working_orders"),
   };
 }
@@ -115,8 +115,8 @@ describe("a full database", () => {
       expect(answer.status).toBe(200);
       const after = counts();
       expect(after.sales).toBe(before.sales + 1);
-      expect(after.registros).toBe(before.registros + 1);
-      expect(after.envios).toBe(before.envios + 1);
+      expect(after.recordCount).toBe(before.recordCount + 1);
+      expect(after.submissionCount).toBe(before.submissionCount + 1);
     } finally {
       liftLimit();
     }

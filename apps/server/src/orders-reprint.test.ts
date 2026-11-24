@@ -392,7 +392,7 @@ describe("a receipt copy printed on a printer later deleted", () => {
         drawers: await tx.select().from(drawerOpens),
         kitchenLinks: await tx.select().from(kitchenPrintJobs),
         sales: await tx.select().from(sales),
-        registros: await tx.all(sql`select * from verifactu_records`),
+        records: await tx.all(sql`select * from verifactu_records`),
       }));
     const before = await history();
 
