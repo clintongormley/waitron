@@ -285,6 +285,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["working_orders", ["delivery_table_id"], "dining_tables"],
   ["working_orders", ["department_id"], "departments"],
   ["working_orders", ["device_id"], "devices"],
+  ["working_orders", ["items_paid_from"], "working_orders"],
   ["working_orders", ["node_id"], "nodes"],
   ["working_orders", ["party_id"], "parties"],
   ["working_orders", ["zone_id"], "floor_zones"],

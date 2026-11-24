@@ -535,6 +535,90 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(row).toEqual({ state: "received", applied: 900, tip: 25 });
     });
 
+    describe("a received payment's excess kept as a tip", () => {
+      async function amounts(id: string) {
+        const [row] = await inTx((tx) =>
+          tx
+            .select({ applied: billPayments.applied, tip: billPayments.tip })
+            .from(billPayments)
+            .where(eq(billPayments.id, id)),
+        );
+        return row;
+      }
+
+      it("a received payment on an open bill may move money from applied to tip", async () => {
+        const id = await receivedPayment({ applied: 1500, tip: 0 });
+        await updatePayment(id, `applied = 1000, tip = 500`);
+        expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+      });
+
+      it("a received payment on a placed bill may move it too", async () => {
+        const placed = await seedWorkingOrder(suite.db, {
+          ...DASHBOARD,
+          nodeId,
+          status: "open",
+          openedAt: AT,
+        });
+        const id = await receivedPayment({ workingOrderId: placed.id, applied: 1500, tip: 0 });
+        await run(sql`update working_orders set status = 'placed' where id = ${placed.id}`);
+        await updatePayment(id, `applied = 1000, tip = 500`);
+        expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+      });
+
+      it.each([
+        [
+          "the move keeps the payment's total",
+          { applied: 1500, tip: 0 },
+          `applied = 1000, tip = 400`,
+        ],
+        [
+          "a tip may not move back to applied",
+          { applied: 1000, tip: 500 },
+          `applied = 1500, tip = 0`,
+        ],
+        [
+          "the move changes no other column",
+          { applied: 1500, tip: 0 },
+          `applied = 1000, tip = 500, own_receipt = 1`,
+        ],
+      ] as const)("%s", async (_name, start, set) => {
+        const id = await receivedPayment(start);
+        const before = await amounts(id);
+        const error = await captureError(() => updatePayment(id, set));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual(before);
+      });
+
+      it("a payment that is a tender may not move it", async () => {
+        const id = await receivedPayment({ applied: 1500, tip: 0 });
+        await tenderFor(id, 1500);
+        const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+      });
+
+      it("a pending payment may not move it", async () => {
+        const id = await insertPayment({ method: "cash", tendered: 2000, applied: 1500, tip: 0 });
+        const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+      });
+
+      it("a payment on an abandoned bill may not move it", async () => {
+        const abandoned = await seedWorkingOrder(suite.db, {
+          ...DASHBOARD,
+          nodeId,
+          status: "open",
+          openedAt: AT,
+        });
+        const id = await receivedPayment({ workingOrderId: abandoned.id, applied: 1500, tip: 0 });
+        await run(sql`update working_orders set status = 'abandoned' where id = ${abandoned.id}`);
+        const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+      });
+    });
+
     describe.each(["applied", "tip"] as const)(
       "%s stays fixed outside card confirmation",
       (column) => {

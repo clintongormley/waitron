@@ -48,6 +48,10 @@ afterEach(async () => {
     }
     await tx.execute(sql`drop trigger working_order_lines_require_open_parent_delete`);
     await tx.execute(sql`delete from working_order_lines`);
+    // `items_paid_from` restricts deleting the bill it names, row by row within one statement.
+    await tx.execute(
+      sql`update working_orders set items_paid_from = null where items_paid_from is not null`,
+    );
     await tx.execute(sql`delete from working_orders`);
     await tx.execute(sql`delete from menus`);
     await tx.execute(sql`delete from products`);
@@ -617,6 +621,39 @@ describe("working_orders", () => {
     );
     // SQLite names neither the constraint nor the column, so the CLASS is all there is to assert.
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("items_paid_from names a bill", async () => {
+    const error = await captureError(() =>
+      db.insert(workingOrders).values({
+        ...DASHBOARD_ORDER,
+        orderNumber: ++orderNumberSeq,
+        status: "open",
+        openedAt: AT,
+        itemsPaidFrom: "99999999-9999-4999-8999-999999999999",
+      }),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    const source = await openOrder(db);
+    const [paid] = await db
+      .insert(workingOrders)
+      .values({
+        ...DASHBOARD_ORDER,
+        orderNumber: ++orderNumberSeq,
+        status: "open",
+        openedAt: AT,
+        itemsPaidFrom: source,
+      })
+      .returning({ itemsPaidFrom: workingOrders.itemsPaidFrom });
+    expect(paid).toEqual({ itemsPaidFrom: source });
+    const { rows: indexed } = await db.execute<{ name: string; column: string }>(sql`
+      select il.name as name, ii.name as "column"
+      from pragma_index_list('working_orders') il, pragma_index_info(il.name) ii`);
+    expect(indexed).toContainEqual({
+      name: "working_orders_items_paid_from_idx",
+      column: "items_paid_from",
+    });
   });
 
   it("has no till column", async () => {

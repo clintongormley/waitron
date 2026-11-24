@@ -225,11 +225,13 @@ CREATE TABLE `working_orders` (
 	`zone_id` text,
 	`department_id` text,
 	`service_mode` text,
+	`items_paid_from` text,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`editor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`items_paid_from`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_orders_bill_number_ck" CHECK("working_orders"."bill_number" is null or ("working_orders"."party_id" is not null and typeof("working_orders"."bill_number") = 'integer' and "working_orders"."bill_number" >= 1)),
@@ -253,6 +255,7 @@ CREATE INDEX `working_orders_status_idx` ON `working_orders` (`status`);--> stat
 CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_trusted_opened_at_idx` ON `working_orders` (`trusted_opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);--> statement-breakpoint
+CREATE INDEX `working_orders_items_paid_from_idx` ON `working_orders` (`items_paid_from`);--> statement-breakpoint
 CREATE TABLE `bill_set_menu_copies` (
 	`working_order_id` text NOT NULL,
 	`set_menu_id` text NOT NULL,
@@ -2933,7 +2936,13 @@ BEGIN
     AND new.share_of IS old.share_of
     AND new.method IS old.method
     AND ((new.applied IS old.applied AND new.tip IS old.tip)
-      OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card'))
+      OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card')
+      OR (old.state = 'received' AND new.state = 'received'
+        AND new.applied + new.tip = old.applied + old.tip
+        AND new.tip > old.tip
+        AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)
+        AND (SELECT status FROM working_orders WHERE id = old.working_order_id)
+          IN ('open', 'placed')))
     AND (new.remaining_after IS old.remaining_after
       OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card'))
     AND new.tendered IS old.tendered
@@ -3590,6 +3599,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
@@ -3604,6 +3614,7 @@ BEGIN
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.dining IS old.dining
+        AND new.items_paid_from IS old.items_paid_from
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -3640,6 +3651,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3673,6 +3685,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3717,6 +3730,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
@@ -3742,6 +3756,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3775,6 +3790,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -3808,6 +3824,7 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
+        AND new.items_paid_from IS old.items_paid_from
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
