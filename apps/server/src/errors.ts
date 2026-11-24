@@ -914,9 +914,9 @@ declare module "@waitron/shared" {
      * Paying for chosen items would leave the bill owing less than the payments on account it
      * took off with their own receipts; `advances` is what they credit.
      */
-    "bill.below_advances": { advances: string };
+    "bill.below_advances": { workingOrderId: string; advances: string };
     /** Paying for chosen items chose every dish on the bill: that is paying the whole bill. */
-    "bill.all_items_chosen": Record<string, never>;
+    "bill.all_items_chosen": { workingOrderId: string };
     /** Keep as tip on a bill that holds nothing paid over its total. */
     "bill.not_overpaid": { workingOrderId: string };
     /** Keep as tip while the venue takes no tips: what the bill is paid over its total can only be

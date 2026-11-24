@@ -202,7 +202,8 @@ async function refuseEveryDish(
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
     );
-  if (transfers.length === row!.dishes) throw new AppError("bill.all_items_chosen", {});
+  if (transfers.length === row!.dishes)
+    throw new AppError("bill.all_items_chosen", { workingOrderId: billId });
 }
 
 /** Refuse (D4) a bill the move left owing less than its advances credit, read as it was left. */
@@ -210,7 +211,10 @@ async function refuseBelowAdvances(tx: Transaction, billId: string): Promise<voi
   const advances = await readBillAdvances(tx, [billId]);
   const credited = sumDecimals((advances.credits.get(billId) ?? []).map((credit) => credit.gross));
   if (compareDecimal(await storedOrderTotal(tx, billId), credited) < 0)
-    throw new AppError("bill.below_advances", { advances: money(credited) });
+    throw new AppError("bill.below_advances", {
+      workingOrderId: billId,
+      advances: money(credited),
+    });
 }
 
 /**

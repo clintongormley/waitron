@@ -393,7 +393,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
 
     await expect(
       payFor(partyId, billId, [{ lineId: await lineOf(billId, "salad") }]),
-    ).rejects.toMatchObject({ code: "bill.below_advances", params: { advances: "15.00" } });
+    ).rejects.toMatchObject({
+      code: "bill.below_advances",
+      params: { workingOrderId: billId, advances: "15.00" },
+    });
     expect(await billsNaming(billId)).toEqual([]);
   });
 
@@ -403,6 +406,7 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
 
     await expect(payFor(partyId, billId, [{ lineId: menuLineId }])).rejects.toMatchObject({
       code: "bill.all_items_chosen",
+      params: { workingOrderId: billId },
     });
     expect(await billsNaming(billId)).toEqual([]);
     expect(await rowsOf(billId)).toEqual(before);
@@ -500,7 +504,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
         { lineId: await lineOf(billId, "soup") },
         { lineId: await lineOf(billId, "beer"), quantity: "3" },
       ]),
-    ).rejects.toMatchObject({ code: "bill.all_items_chosen" });
+    ).rejects.toMatchObject({
+      code: "bill.all_items_chosen",
+      params: { workingOrderId: billId },
+    });
     expect(await billsNaming(billId)).toEqual([]);
   });
 
@@ -517,7 +524,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
         { lineId: await lineOf(billId, "soup") },
         { lineId: await lineOf(billId, "beer") },
       ]),
-    ).rejects.toMatchObject({ code: "bill.all_items_chosen" });
+    ).rejects.toMatchObject({
+      code: "bill.all_items_chosen",
+      params: { workingOrderId: billId },
+    });
     expect(await billsNaming(billId)).toEqual([]);
     expect(await rowsOf(billId)).toEqual(before);
   });
