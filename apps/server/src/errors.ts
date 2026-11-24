@@ -754,6 +754,8 @@ declare module "@waitron/shared" {
     "submission.id_reused": { submissionId: string };
     /** What giving money back on the receipt would do now is not what its preview showed. */
     "give_back.changed": { saleId: string };
+    /** A give-back's card refund was not made, so nothing went back on that part. */
+    "give_back.refund_failed": { refundId: string; tenderId: string };
     "invoice_correction.not_settled": { saleId: string };
     /** The cash a correction's cash request asks for is more than the invoice's cash payments still
      * hold for the sale, tips not counted. */

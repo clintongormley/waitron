@@ -5,6 +5,7 @@ import { correctionTargetFor } from "@waitron/core";
 import {
   adjustments,
   invoiceCorrections,
+  withTransaction,
   refunds as refundRows,
   saleLines,
   sales,
@@ -22,6 +23,7 @@ import {
   type SecretCheck,
 } from "@waitron/identity";
 import { payments } from "@waitron/payments";
+import { codeOf } from "@waitron/server-kit";
 import {
   addDecimal,
   AppError,
@@ -46,6 +48,7 @@ import {
   openCorrectionOf,
   readCorrectionLegs,
 } from "./invoice-correction-legs.js";
+import { closeInvoiceCorrection } from "./invoice-corrections.js";
 import {
   openInvoiceCorrection,
   previewInvoiceCorrection,
@@ -70,7 +73,15 @@ import {
   reserveTenderRefund,
 } from "./tender-refund-reservation.js";
 import type { RefundableTender } from "./tender-refund-types.js";
-import { captureFor, sendsRefunds } from "./tender-refunds.js";
+import {
+  captureFor,
+  refuseUnlessProviderRefunds,
+  sendsRefunds,
+  type TenderRefundDeps,
+} from "./tender-refunds.js";
+import { claimTenderRefund, resolveClaimedTenderRefund } from "./tender-refund-sends.js";
+import type { TenderRefundRequest } from "./tender-refund-types.js";
+import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import "./errors.js";
@@ -958,18 +969,44 @@ function refundsState(rows: readonly RefundRow[]): GiveBackPartState {
   return rows.every((row) => row.state === "completed") ? "completed" : "pending";
 }
 
-/** The answer for the press whose rows are `stored`, the same on its first send and any resend. */
+/** What `ask` gives back of the parts not started, as a request the till sends with fresh ids. */
+function restOf(ask: GiveBackWrite, answer: GiveBackOutcome["parts"]): GiveBackRequest | null {
+  const left = ask.expected.filter((_, index) => answer[index]!.state === "not_started");
+  if (left.length === 0) return null;
+  const sum = (kinds: readonly string[]) =>
+    left
+      .filter((part) => kinds.includes(part.kind))
+      .reduce((total, part) => total + part.amount, 0);
+  const amount = sum(["refund", "correction"]);
+  const extra = sum(["extra"]);
+  const { purpose, lineIds, way } = ask.request;
+  if (amount === 0) return { purpose: "extra", amount: centsToDecimal(extra), extra: "0.00", way };
+  return {
+    purpose,
+    ...(lineIds === undefined ? {} : { lineIds }),
+    amount: centsToDecimal(amount),
+    extra: centsToDecimal(extra),
+    way,
+  };
+}
+
+/** The answer for the press `ask` whose rows are `stored` and whose correction's legs are `legs`,
+ * the same on its first send and any resend; `refusal` is what refused a part after an earlier one
+ * moved money, which only the first send knows. A card refund that was not made refuses by itself. */
 async function outcomeOf(
   tx: Transaction,
   deps: GiveBackWriteDeps,
   cfg: DeviceRequestConfig,
   stored: StoredGiveBack,
-  parts: readonly ComparablePart[],
+  ask: GiveBackWrite,
+  legs: readonly RefundRow[],
+  refusal: WaitReason | null = null,
 ): Promise<GiveBackOutcome> {
-  const answer: GiveBackOutcome["parts"] = parts.map((part) => {
+  const answer: GiveBackOutcome["parts"] = ask.expected.map((part) => {
     const amount = centsToDecimal(part.amount);
     if (part.kind === "correction") {
-      const row = stored.correction!;
+      const row = stored.correction;
+      if (row === undefined) return { kind: "correction", amount, state: "not_started" };
       return {
         kind: "correction",
         amount,
@@ -977,24 +1014,36 @@ async function outcomeOf(
         correctionId: row.id,
       };
     }
-    const rows = part.kind === "extra" ? stored.extra : stored.refund;
-    return {
-      kind: part.kind as "refund" | "extra",
-      amount,
-      state: refundsState(rows),
-      refundId: rows[0]!.id,
-    };
+    const kind = part.kind as "refund" | "extra";
+    const rows = kind === "extra" ? stored.extra : stored.refund;
+    if (rows.length === 0) return { kind, amount, state: "not_started" };
+    return { kind, amount, state: refundsState(rows), refundId: rows[0]!.id };
   });
+  const failed = [...stored.refund, ...stored.extra, ...legs].find((row) => row.state === "failed");
+  const declined =
+    failed === undefined
+      ? null
+      : reasonOf(
+          new AppError("give_back.refund_failed", {
+            refundId: failed.id,
+            tenderId: failed.tenderId!,
+          }),
+        );
+  const refused = refusal ?? declined;
   return {
     parts: answer,
-    refusal: null,
+    refusal: refused === null ? null : { code: refused.code, params: refused.params ?? {} },
     underWay:
       stored.correction?.state === "open"
         ? await readInvoiceCorrection(tx, deps.backend, cfg, stored.correction.id)
         : null,
-    rest: null,
+    rest: restOf(ask, answer),
   };
 }
+
+/** Whether any of `rows` is a reader card's refund, whose press writes its parts one at a time. */
+const onReader = (rows: readonly RefundRow[]) =>
+  rows.some((row) => row.method === "card" && !row.manual);
 
 /**
  * Checks a resend of the press `ask` against the rows its first send wrote, as each write's own
@@ -1009,6 +1058,7 @@ async function checkResend(
   saleId: SaleId,
   ask: GiveBackWrite,
   stored: StoredGiveBack,
+  legs: readonly RefundRow[],
   personId: string,
 ): Promise<void> {
   const reused = () => new AppError("submission.id_reused", { submissionId: ask.ids.refund });
@@ -1025,12 +1075,26 @@ async function checkResend(
   const reason = await reasonTextOf(tx, ask);
   const kinds = new Set(ask.expected.map((part) => part.kind));
   if (
-    stored.refund.length > 0 !== kinds.has("refund") ||
-    stored.extra.length > 0 !== kinds.has("extra") ||
-    (stored.correction !== undefined) !== kinds.has("correction")
+    (stored.refund.length > 0 && !kinds.has("refund")) ||
+    (stored.extra.length > 0 && !kinds.has("extra")) ||
+    (stored.correction !== undefined && !kinds.has("correction"))
   )
     throw reused();
-  for (const part of ask.expected) {
+  const present = ask.expected.map((part) =>
+    part.kind === "correction"
+      ? stored.correction !== undefined
+      : (part.kind === "extra" ? stored.extra : stored.refund).length > 0,
+  );
+  // Only a reader's press stops between parts, and only ever before all the later ones.
+  const missing = present.indexOf(false);
+  if (
+    missing !== -1 &&
+    (!onReader([...stored.refund, ...stored.extra, ...legs]) ||
+      present.slice(missing).some(Boolean))
+  )
+    throw reused();
+  for (const [index, part] of ask.expected.entries()) {
+    if (!present[index]) continue;
     if (part.kind === "correction") {
       const row = stored.correction!;
       if (
@@ -1094,11 +1158,12 @@ export interface GiveBackActor {
 }
 
 /** What the write answers, and the correction the route files once it has committed: a separate
- * terminal's money is already gone, so a refused filing must not undo its record. */
-export interface GiveBackResult {
-  outcome: GiveBackOutcome;
-  fileAfter: string | null;
-}
+ * terminal's money is already gone, so a refused filing must not undo its record. On a card
+ * reader, once the caller's transaction has committed, `onReader` gives every part back and
+ * answers. */
+export type GiveBackResult =
+  | { outcome: GiveBackOutcome; fileAfter: string | null }
+  | { onReader: (deps: TenderRefundDeps) => Promise<GiveBackOutcome> };
 
 /** Each of `rights` granted to the signed-in person or the supervisor whose PIN `who` carries,
  * refusing the first neither holds. On a separate terminal the refund also needs a fresh PIN
@@ -1223,9 +1288,9 @@ export async function giveBack(
     const manual = [...earlier.refund, ...earlier.extra, ...legs].some((row) => row.manual);
     const rights = await resendRights(tx, ask, earlier, legs, manual);
     await authorizeRights(tx, who, rights, manualFor(manual));
-    await checkResend(tx, deps, cfg, reading, saleId, ask, earlier, who.personId);
+    await checkResend(tx, deps, cfg, reading, saleId, ask, earlier, legs, who.personId);
     return {
-      outcome: await outcomeOf(tx, deps, cfg, earlier, ask.expected),
+      outcome: await outcomeOf(tx, deps, cfg, earlier, ask, legs),
       fileAfter: manual && earlier.correction?.state === "open" ? earlier.correction.id : null,
     };
   }
@@ -1241,7 +1306,6 @@ export async function giveBack(
   );
   if (partsKey(comparablePartsOf(plan.parts)) !== partsKey(ask.expected))
     throw new AppError("give_back.changed", { saleId });
-  if (!plan.manual && plan.parts.some((part) => part.way !== "cash")) throw invalid("way");
   const manual = manualFor(plan.manual);
   const reason = await reasonTextOf(tx, ask);
   const granted = await authorizeRights(tx, who, rights, manual);
@@ -1258,16 +1322,66 @@ export async function giveBack(
     return fromPayments(cents(part.amount), payments, (payment) =>
       cents(isExtra ? payment.tipRemaining : payment.appliedRemaining),
     ).map((share, index) => ({
-      submissionId: partSubmissionId(submissionId, index),
-      tenderId: share.tenderId,
-      appliedAmount: centsToDecimal(isExtra ? 0 : share.cents),
-      tipAmount: centsToDecimal(isExtra ? share.cents : 0),
-      ...(manual === null ? {} : { manualConfirmed: true }),
-      ...(part.kind === "refund" && part.cancellationIds !== undefined
-        ? { cancellationIds: part.cancellationIds }
-        : {}),
+      kind: part.kind,
+      request: {
+        submissionId: partSubmissionId(submissionId, index),
+        tenderId: share.tenderId,
+        appliedAmount: centsToDecimal(isExtra ? 0 : share.cents),
+        tipAmount: centsToDecimal(isExtra ? share.cents : 0),
+        reason,
+        ...(manual === null ? {} : { manualConfirmed: true }),
+        ...(part.kind === "refund" && part.cancellationIds !== undefined
+          ? { cancellationIds: part.cancellationIds }
+          : {}),
+      } satisfies TenderRefundRequest,
     }));
   });
+  const refundActor =
+    granted.refund === undefined
+      ? { requestedBy: who.personId, authorize: coveredRefundActor(who) }
+      : { requestedBy: who.personId, authorizedBy: granted.refund.authorizedBy };
+  const legRequest = (correctionId: string): TenderRefundRequest => ({
+    submissionId: ask.ids.leg,
+    tenderId: ask.request.way,
+    appliedAmount: centsToDecimal(leg),
+    tipAmount: "0.00",
+    reason,
+    ...(manual === null ? {} : { manualConfirmed: true }),
+    invoiceCorrection: { id: correctionId, requestId: ask.ids.leg },
+  });
+  const open = (into: Transaction, reading: TrustedReading, part: GiveBackPart) =>
+    openCorrectionPart(into, deps, cfg, reading, saleId, ask, part, {
+      personId: who.personId,
+      authorization: granted.rectify!,
+    });
+
+  if (!plan.manual && ask.request.way !== "cash")
+    return {
+      onReader: (refundDeps) =>
+        giveBackOnReader(refundDeps, cfg, saleId, ask, {
+          personId: who.personId,
+          parts: plan.parts.map((part) => ({
+            part,
+            refund:
+              part.kind === "correction"
+                ? leg > 0
+                  ? (correctionId: string) => ({
+                      request: legRequest(correctionId),
+                      actor: {
+                        requestedBy: who.personId,
+                        authorizedBy: granted.refund!.authorizedBy,
+                      },
+                    })
+                  : null
+                : () => ({
+                    request: writes.find((write) => write.kind === part.kind)!.request,
+                    actor: refundActor,
+                  }),
+          })),
+          open,
+        }),
+    };
+
   const createdAt = reading.instant.toISOString();
   const manualPaymentRef = async (reserved: RefundRow) =>
     (await captureFor(tx, reserved))!.paymentRef;
@@ -1302,10 +1416,8 @@ export async function giveBack(
       tx,
       cfg,
       saleId,
-      { ...write, reason },
-      granted.refund === undefined
-        ? { requestedBy: who.personId, authorize: coveredRefundActor(who) }
-        : { requestedBy: who.personId, authorizedBy: granted.refund.authorizedBy },
+      write.request,
+      refundActor,
       createdAt,
       { backend: deps.backend, reading },
     );
@@ -1313,27 +1425,7 @@ export async function giveBack(
   }
   let fileAfter: string | null = null;
   if (correction !== undefined) {
-    const lineIds = correction.kind === "correction" ? correction.lineIds : [];
-    const selection = {
-      gross: correction.amount,
-      ...(lineIds.length === 0 ? {} : { lineIds }),
-    };
-    const split = await previewInvoiceCorrection(tx, deps.backend, cfg, reading, saleId, selection);
-    const opened = await openInvoiceCorrection(
-      tx,
-      deps,
-      cfg,
-      saleId,
-      {
-        submissionId: ask.ids.correction,
-        gross: decimal(correction.amount),
-        ...(lineIds.length === 0 ? {} : { lineIds }),
-        reasonId: ask.reasonId,
-        note: ask.note,
-        expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
-      },
-      { personId: who.personId, authorization: granted.rectify! },
-    );
+    const opened = await open(tx, reading, correction);
     if (leg > 0 && manual === null)
       await giveCorrectionCash(
         tx,
@@ -1352,15 +1444,7 @@ export async function giveBack(
         tx,
         cfg,
         saleId,
-        {
-          submissionId: ask.ids.leg,
-          tenderId: manual.tenderId,
-          appliedAmount: centsToDecimal(leg),
-          tipAmount: "0.00",
-          reason,
-          manualConfirmed: true,
-          invoiceCorrection: { id: opened.correction.id, requestId: ask.ids.leg },
-        },
+        legRequest(opened.correction.id),
         { requestedBy: who.personId, authorizedBy: granted.refund!.authorizedBy },
         createdAt,
         { backend: deps.backend, reading },
@@ -1375,14 +1459,176 @@ export async function giveBack(
   };
 }
 
+/** Opens the correction `part` of the press `ask`, with the VAT split its preview works out now. */
+async function openCorrectionPart(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  reading: TrustedReading,
+  saleId: SaleId,
+  ask: GiveBackWrite,
+  part: GiveBackPart,
+  actor: { personId: string; authorization: Authorization },
+) {
+  const lineIds = part.kind === "correction" ? part.lineIds : [];
+  const selection = { gross: part.amount, ...(lineIds.length === 0 ? {} : { lineIds }) };
+  const split = await previewInvoiceCorrection(tx, deps.backend, cfg, reading, saleId, selection);
+  return openInvoiceCorrection(
+    tx,
+    deps,
+    cfg,
+    saleId,
+    {
+      submissionId: ask.ids.correction,
+      gross: decimal(part.amount),
+      ...(lineIds.length === 0 ? {} : { lineIds }),
+      reasonId: ask.reasonId,
+      note: ask.note,
+      expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
+    },
+    actor,
+  );
+}
+
+/** One reader part's refund: what it asks for, and who asks and authorizes it. */
+type ReaderRefund = {
+  request: TenderRefundRequest;
+  actor: Parameters<typeof reserveTenderRefund>[4];
+};
+
+interface ReaderSequence {
+  /** Who gives back; a correction whose leg fails is discarded under their name. */
+  personId: string;
+  /** In order; a correction's `refund` takes the correction's id, and is null when its leg holds
+   * nothing on this card. */
+  parts: {
+    part: GiveBackPart;
+    refund: ((correctionId: string) => ReaderRefund) | null;
+  }[];
+  open: (
+    tx: Transaction,
+    reading: TrustedReading,
+    part: GiveBackPart,
+  ) => ReturnType<typeof openCorrectionPart>;
+}
+
+/**
+ * Gives the press `ask` back on a card reader (5.3), each part in its own transaction followed by
+ * the card company's answer. Splitting the press across transactions is a deliberate decision
+ * (CLAUDE.md §3): the card company is asked between parts, and no transaction stays open across its
+ * answer. A correction opens in the same transaction as its leg's reservation and is discarded if
+ * that leg fails, so a refused card refund never leaves a correction open. A part left pending
+ * stops the press, the answer's `rest` naming what was not sent. A part refused after an earlier
+ * one moved money answers `refusal` and undoes nothing: that money is already back on the card.
+ * A part another send of the same ids already wrote is never carried again (I1).
+ */
+async function giveBackOnReader(
+  deps: TenderRefundDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  ask: GiveBackWrite,
+  sequence: ReaderSequence,
+): Promise<GiveBackOutcome> {
+  let refusal: WaitReason | null = null;
+  for (const [index, step] of sequence.parts.entries()) {
+    let settled: { id: string; state: string; correctionId?: string } | null;
+    try {
+      settled = await readerPart(deps, cfg, saleId, sequence, step);
+    } catch (error) {
+      if (index === 0 || !(error instanceof AppError)) throw error;
+      refusal = reasonOf(error);
+      break;
+    }
+    if (settled === null) break;
+    if (settled.correctionId !== undefined && settled.state === "completed")
+      await fileCorrectionAutomatically(deps, settled.correctionId).catch((error: unknown) => {
+        deps.log?.("error", "invoice_correction.automatic_filing_failed", {
+          correctionId: settled.correctionId,
+          refundId: settled.id,
+          errorCode: codeOf(error),
+        });
+      });
+    if (settled.correctionId !== undefined && settled.state === "failed") {
+      const correctionId = settled.correctionId;
+      await withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, cfg, deps.admission);
+        await closeInvoiceCorrection(tx, deps, cfg, correctionId, {
+          personId: sequence.personId,
+        });
+      });
+    }
+    if (settled.state !== "completed") break;
+  }
+  return withTransaction(deps.db, (tx) =>
+    readGiveBackOutcomeOf(tx, deps, cfg, saleId, ask, refusal),
+  );
+}
+
+/** Writes one reader part in its own transaction, then waits for the card company's answer as
+ * Refund a payment does; null when nothing was sent: another send of these ids wrote the part, or
+ * the correction's leg holds nothing on this card. */
+async function readerPart(
+  deps: TenderRefundDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  sequence: ReaderSequence,
+  step: ReaderSequence["parts"][number],
+): Promise<{ id: string; state: string; correctionId?: string } | null> {
+  let release: (() => void) | undefined;
+  try {
+    const reserved = await withTransaction(deps.db, async (tx) => {
+      await requireEconomicWrite(tx, cfg, deps.admission);
+      const reading = deps.clock.now();
+      await refuseUntilRefundable(tx, deps.backend, cfg.nodeId, reading);
+      let correctionId: string | undefined;
+      if (step.part.kind === "correction") {
+        const opened = await sequence.open(tx, reading, step.part);
+        if (opened.replayed) return null;
+        correctionId = opened.correction.id;
+      }
+      if (step.refund === null) return null;
+      const { request, actor } = step.refund(correctionId ?? "");
+      const begun = await reserveTenderRefund(
+        tx,
+        cfg,
+        saleId,
+        request,
+        actor,
+        reading.instant.toISOString(),
+        { backend: deps.backend, reading },
+      );
+      if (begun.replayed) return null;
+      const carried = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {
+        beforeCompletion: (refund) => refuseUnlessProviderRefunds(tx, deps, refund),
+      });
+      release = claimTenderRefund(deps.db, carried.id);
+      return { id: carried.id, correctionId };
+    });
+    if (reserved === null) return null;
+    const held = release!;
+    release = undefined;
+    const settled = await resolveClaimedTenderRefund(deps, reserved.id, "retry", held);
+    return {
+      id: settled.id,
+      state: settled.state,
+      ...(reserved.correctionId === undefined ? {} : { correctionId: reserved.correctionId }),
+    };
+  } catch (error) {
+    release?.();
+    throw error;
+  }
+}
+
 async function readGiveBackOutcomeOf(
   tx: Transaction,
   deps: GiveBackWriteDeps,
   cfg: DeviceRequestConfig,
   saleId: SaleId,
   ask: GiveBackWrite,
+  refusal: WaitReason | null = null,
 ): Promise<GiveBackOutcome> {
-  return outcomeOf(tx, deps, cfg, (await readStoredGiveBack(tx, saleId, ask.ids))!, ask.expected);
+  const stored = (await readStoredGiveBack(tx, saleId, ask.ids))!;
+  return outcomeOf(tx, deps, cfg, stored, ask, await legsOf(tx, stored, ask), refusal);
 }
 
 /** What the press `body` wrote on `saleId` answers now, as its write answered it. Writes nothing. */

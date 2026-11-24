@@ -129,31 +129,29 @@ export function mountGiveBackApi(
         override,
         true,
       );
-      const { outcome, fileAfter } = await withPinCheckAhead(
-        deps.db,
-        toCheck,
-        attempts,
-        (checked) =>
-          withTransaction(deps.db, async (tx) => {
-            const device = await checkAccess(tx, session, id);
-            const authority = await readPersonAuthority(tx, session.personId);
-            return giveBack(
-              tx,
-              giveBackDeps,
-              cfg,
-              id,
-              {
-                device,
-                authority,
-                personId: session.personId,
-                sessionId: session.sessionId,
-                override: withCheck(override, checked),
-                attempts,
-              },
-              body,
-            );
-          }),
+      const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
+        withTransaction(deps.db, async (tx) => {
+          const device = await checkAccess(tx, session, id);
+          const authority = await readPersonAuthority(tx, session.personId);
+          return giveBack(
+            tx,
+            giveBackDeps,
+            cfg,
+            id,
+            {
+              device,
+              authority,
+              personId: session.personId,
+              sessionId: session.sessionId,
+              override: withCheck(override, checked),
+              attempts,
+            },
+            body,
+          );
+        }),
       );
+      if ("onReader" in result) return c.json(await result.onReader(filingDeps));
+      const { outcome, fileAfter } = result;
       if (fileAfter === null) return c.json(outcome);
       await fileCorrectionAutomatically(filingDeps, fileAfter).catch((error: unknown) => {
         log("error", "invoice_correction.automatic_filing_failed", {

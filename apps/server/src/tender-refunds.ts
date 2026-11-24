@@ -70,6 +70,24 @@ export function sendsRefunds(
   return provider?.provider === captureProvider && provider.sendRefund !== undefined;
 }
 
+/** Refuses `tender.refund_unavailable` when `reserved` is a reader card's refund its capture's
+ * provider cannot send, or a part refund it cannot take. */
+export async function refuseUnlessProviderRefunds(
+  tx: Transaction,
+  deps: Pick<TenderRefundDeps, "refundProviderFor">,
+  reserved: RefundRow,
+): Promise<void> {
+  if (reserved.method !== "card" || reserved.manual) return;
+  const capture = (await captureFor(tx, reserved))!;
+  const provider = await deps.refundProviderFor?.(capture.provider);
+  if (
+    !sendsRefunds(provider, capture.provider) ||
+    (!provider!.capabilities.partialRefund &&
+      reserved.appliedAmount + reserved.tipAmount !== capture.amount)
+  )
+    throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
+}
+
 // Connected refunds commit their reservation here; provider I/O belongs to the resolver afterwards.
 export async function beginSettledTenderRefund(
   deps: TenderRefundDeps,
@@ -108,17 +126,7 @@ export async function beginSettledTenderRefund(
       }
       const refund = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {
         manualPaymentRef: async (reserved) => (await captureFor(tx, reserved))!.paymentRef,
-        beforeCompletion: async (reserved) => {
-          if (reserved.method !== "card" || reserved.manual) return;
-          const capture = (await captureFor(tx, reserved))!;
-          const provider = await deps.refundProviderFor?.(capture.provider);
-          if (
-            !sendsRefunds(provider, capture.provider) ||
-            (!provider!.capabilities.partialRefund &&
-              reserved.appliedAmount + reserved.tipAmount !== capture.amount)
-          )
-            throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
-        },
+        beforeCompletion: (reserved) => refuseUnlessProviderRefunds(tx, deps, reserved),
         openDrawer: (reserved, printers) =>
           enqueueRefundDrawer(
             tx,
