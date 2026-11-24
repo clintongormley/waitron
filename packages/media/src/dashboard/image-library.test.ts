@@ -1352,7 +1352,7 @@ it("confirms the image asked about last when an earlier usage lookup fails late"
 });
 
 it.each([
-  ["en-GB", "Old toast (Archived product)"],
+  ["en-GB", "Old toast (Deleted product)"],
   ["es-ES", `Old toast (${ES["image.archived_product"]})`],
 ])("in %s, marks an archived product among an image's blocking uses", async (locale, marked) => {
   setLocale(locale);
@@ -1373,8 +1373,8 @@ it.each([
 });
 
 it.each([
-  ["en-GB", "Toast · Large (Archived variant)", "Old toast · Small (Archived product)"],
-  ["es-ES", "Toast · Large (Variante archivada)", "Old toast · Small (Producto archivado)"],
+  ["en-GB", "Toast · Large (Deleted variant)", "Old toast · Small (Deleted product)"],
+  ["es-ES", "Toast · Large (Variante eliminada)", "Old toast · Small (Producto eliminado)"],
 ])(
   "in %s, marks an archived variant of an active product apart from a variant whose product is archived",
   async (locale, archivedVariant, archivedProduct) => {
@@ -1929,7 +1929,7 @@ it("lists every place the image is used under a heading, each linked to the plac
   await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
   expect(usesShown()).toEqual([
     ["Toast", "/products/product/toast"],
-    ["Old toast (Archived product)", "/products/product/old"],
+    ["Old toast (Deleted product)", "/products/product/old"],
     ["Large toast", "/products/product/large"],
     ["Drinks (internal)", "/menus/menu/drinks-menu/view/structure"],
     ["Lunch Menu (Published menu)", "/menus/menu/lunch"],

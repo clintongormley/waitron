@@ -228,11 +228,8 @@ products.
 
 To remove the photograph itself, choose **Delete** in its **⋮** menu and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products
-and variants, including archived ones, which the list marks **(Archived product)** or **(Archived
-variant)**, and to those sections, a section shown by its internal name. Remove the photograph
-from each editable record before trying deletion again. An archived product or variant opens
-read-only details and cannot have its picture removed through the product editor, so a picture
-that it still uses remains blocked from deletion. A section's link opens its menu's
+and variants and to the sections by their internal names. Remove the photograph from each
+record before trying deletion again. A section's link opens its menu's
 **Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
 editor clears it when you save the section. A menu's own photograph is removed the same way
 through **Rename** on the menu's row in **Products and menus**, **Menus**. A menu included in

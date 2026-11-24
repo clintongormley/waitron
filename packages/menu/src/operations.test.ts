@@ -732,14 +732,15 @@ describe("menu operations", () => {
       });
       expect(p.active).toBe(true);
       await updateProduct(tx, p.id, { active: false });
-      expect((await listProducts(tx)).find((x) => x.id === p.id)!.active).toBe(false);
+      expect((await listProducts(tx)).find((x) => x.id === p.id)).toBeUndefined();
       return { cat, p };
     });
     await expect(asVenue((tx) => updateProduct(tx, p.id, { active: true }))).rejects.toMatchObject({
       code: "product.archived",
       params: { productId: p.id },
     });
-    expect((await asVenue((tx) => listProducts(tx))).find((x) => x.id === p.id)!.active).toBe(
+    expect((await asVenue((tx) => listProducts(tx))).find((x) => x.id === p.id)).toBeUndefined();
+    expect((await fx.db.select().from(products).where(eq(products.id, p.id)))[0]!.active).toBe(
       false,
     );
   });
@@ -765,9 +766,8 @@ describe("menu operations", () => {
         vatClass: "general",
       });
       expect(shown.active).toBe(true);
-      // Both round-trip through listProducts.
       const listed = await listProducts(tx);
-      expect(listed.find((p) => p.id === hidden.id)!.active).toBe(false);
+      expect(listed.find((p) => p.id === hidden.id)).toBeUndefined();
       expect(listed.find((p) => p.id === shown.id)!.active).toBe(true);
     });
   });
@@ -1661,7 +1661,7 @@ describe("menu offers nest a product's variants", () => {
     expect((await nested()).map(({ available }) => available)).toEqual([false, false]);
   });
 
-  it("lists only top-level products, each with every variant nested in order, the removed ones last", async () => {
+  it("lists top-level products with their active variants nested in order", async () => {
     const [w125, w175] = await run((tx) =>
       setProductVariants(
         tx,
@@ -1678,7 +1678,6 @@ describe("menu offers nest a product's variants", () => {
     ).toEqual([
       { name: "175 ml", unitPrice: "5.50", active: true },
       { name: "125 ml", unitPrice: null, active: true },
-      { name: "250 ml", unitPrice: "7.00", active: false },
     ]);
   });
 });

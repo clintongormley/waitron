@@ -10,13 +10,6 @@ import type { Product } from "../api/client.js";
 
 registerIcons(DASHBOARD_ICONS);
 
-async function showArchived(el: ProductList): Promise<void> {
-  const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
-  toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
-  await el.updateComplete;
-  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-}
-
 const products: Product[] = [
   {
     id: "p1",
@@ -336,7 +329,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     }
   });
 
-  it("renders accessibly with every status shown", async () => {
+  it("renders accessibly with available and sold-out products", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
       { products, takeawayVat: true },
@@ -344,18 +337,17 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    await showArchived(el);
     table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(
       [...table.shadowRoot!.querySelectorAll("[data-test=availability-badge]")]
         .map((badge) => badge.getAttribute("data-state"))
         .sort(),
-    ).toEqual(["archived", "archived", "unavailable", "unavailable"]);
+    ).toEqual(["unavailable", "unavailable"]);
     expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).toBeNull();
     expect(table.shadowRoot!.querySelector("[data-test=takeaway-vat-note]")).not.toBeNull();
     expect(
-      table.shadowRoot!.querySelector('[data-test="color-v2"] [data-test="thumb-placeholder"]'),
+      table.shadowRoot!.querySelector('[data-test="color-p4"] [data-test="thumb-placeholder"]'),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -398,7 +390,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with the Filters panel open and Show archived on", async () => {
+  it("renders accessibly with the Filters panel open", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
       { products },
@@ -408,9 +400,6 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await table.updateComplete;
     table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
-    await showArchived(el);
-    const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
-    expect(toggle.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
     await expectNoA11yViolations(host);
   });
@@ -428,25 +417,6 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     expect(table.shadowRoot!.querySelector('tr[data-row-key="p4:v1"].joined')).not.toBeNull();
     expect(table.shadowRoot!.querySelector('[data-test="variant-count"]')).not.toBeNull();
     expect(table.shadowRoot!.querySelector('[data-test="color-v1"] img')).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders accessibly with a removed variant shown under its Active product", async () => {
-    const { el, host } = await mountWidget<ProductList>(
-      "dashboard-product-list",
-      { products },
-      theme,
-    );
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    await table.updateComplete;
-    await showArchived(el);
-    table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p4"] .tree-toggle')!.click();
-    await table.updateComplete;
-    expect(
-      table.shadowRoot!.querySelector(
-        'tr[data-row-key="p4:v2"] [data-test=availability-badge][data-state="archived"]',
-      ),
-    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -667,9 +637,9 @@ describe.each(["light", "dark"] as const)("product media link a11y (%s)", (theme
   );
 });
 
-describe.each(["light", "dark"] as const)("archive row actions a11y (%s)", (theme) => {
+describe.each(["light", "dark"] as const)("delete row actions a11y (%s)", (theme) => {
   it.each(["en", "es"])(
-    "renders Archive and View popovers in %s at desktop and phone width",
+    "renders the Delete popover in %s at desktop and phone width",
     async (locale) => {
       const before = { locale: currentLocale(), width: innerWidth, height: innerHeight };
       setLocale(locale);
@@ -689,14 +659,13 @@ describe.each(["light", "dark"] as const)("archive row actions a11y (%s)", (them
           );
           const table = el.shadowRoot!.querySelector("wt-data-table")!;
           await table.updateComplete;
-          await showArchived(el);
-          for (const id of ["p1", "archived"]) {
+          for (const id of ["p1"]) {
             const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
               `[data-test="actions-${id}"]`,
             )!;
             expect(
               [...menu.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-            ).toEqual(id === "p1" ? [t("action.edit"), t("product.archive")] : [t("product.view")]);
+            ).toEqual([t("action.edit"), t("action.delete")]);
             const icon = menu.shadowRoot!.querySelector("wt-icon")!;
             await icon.updateComplete;
             expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();

@@ -843,7 +843,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Set menus are to have a page of their own beside Menus, approved by the owner: [spec](../superpowers/specs/2026-11-24-menus-list-tabs-design.md)._
 
-_2026-11-24: Menus and set menus use permanent Delete. Products and variants still need their own Delete slice before the Set menus page. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
+_2026-11-24: Menus, set menus, products and variants use permanent Delete. The remaining code-only product deletion renames follow in their own pull request. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
 _2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 

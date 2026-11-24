@@ -575,19 +575,16 @@ export const en = {
   "folders.move_heading_one": "Move 1 item",
   "folders.destination": "Destination",
   "folders.cancel_selection": "Cancel",
-  "folders.archive_products_heading": "Archive {count} products?",
-  "folders.archive_products_heading_one": "Archive 1 product?",
+  "folders.archive_products_heading": "Delete {count} products?",
+  "folders.archive_products_heading_one": "Delete 1 product?",
   "folders.archive_products_body":
     "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.",
   "folders.off_menus": "They come off the {count} menus they are on.",
   "folders.off_menus_one": "They come off the one menu they are on.",
   "folders.off_menus_unknown": "They come off every menu they are on.",
-  "folders.delete_off_menus":
-    "Products archived by this deletion come off the {count} menus they are on.",
-  "folders.delete_off_menus_one":
-    "Products archived by this deletion come off the one menu they are on.",
-  "folders.delete_off_menus_unknown":
-    "Products archived by this deletion come off every menu they are on.",
+  "folders.delete_off_menus": "Deleted products come off the {count} menus they are on.",
+  "folders.delete_off_menus_one": "Deleted products come off the one menu they are on.",
+  "folders.delete_off_menus_unknown": "Deleted products come off every menu they are on.",
   "folders.delete_heading": "Delete {count} items?",
   "folders.delete_heading_one": "Delete 1 item?",
   "folders.deleting": "Categories to delete:",
@@ -597,9 +594,6 @@ export const en = {
   "folders.contents_keep_one": "{items} moves to {parent}",
   "folders.contents_also": "Also: {actions}.",
   "folders.also_deletes": "deletes {items}",
-  "folders.also_archives": "archives {products}",
-  "folders.products_move": "They move to {parent}.",
-  "folders.products_move_one": "It moves to {parent}.",
   "folders.each_parent": "each category's parent",
   "folders.route_count": "{count} station routing rules",
   "folders.route_count_one": "1 station routing rule",
@@ -1234,7 +1228,7 @@ export const en = {
   "help.guide_link": "Read more in the guide",
   "help.account.settings": "Change your personal details and how you sign in.",
   "help.products.keep_variant":
-    "Cancels archiving this variant. Archiving happens only when you save the product.",
+    "Keeps this variant. Deletion takes effect when you save the product.",
   "help.products.dine_in_vat":
     "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set.",
   "help.products.dine_in_vat_takeaway":
@@ -1246,7 +1240,7 @@ export const en = {
   "help.products.variants":
     "Versions of this product, such as sizes, each with its own name. A variant without a price sells at the product's. Once a menu with an active variant is published, the till sells only the variants.",
   "help.products.availability":
-    "Unavailable: its Available switch is off, so the tills stop selling it within seconds, without publishing. Archived: no longer sold, for good.",
+    "Unavailable: its Available switch is off, so the tills stop selling it within seconds, without publishing.",
   // Theme choice. light/dark/device also name the icon-only buttons in the account menu.
   "theme.label": "Theme",
   "theme.light": "Light",
@@ -2906,7 +2900,7 @@ export const en = {
   "editor.base_price": "Base price",
   "editor.base_price_unit": "Base price per {unit}",
   "editor.open_variant": "Open",
-  "editor.variants_all_archived": "Every variant is archived.",
+  "editor.variants_all_archived": "No variants.",
   "editor.open_variant_blocked": "Save your changes before opening a variant's own page.",
   "editor.ordered_on_own": "Standalone ordering by",
   "editor.section_kitchen": "Prep station",
@@ -2989,19 +2983,15 @@ export const en = {
   "product.course": "Course",
   "product.search": "Search products",
   "product.archive_extra_lists": "Removed from these extras lists:",
-  "product.archive": "Archive",
-  "product.view": "View",
-  "product.archive_named": "Archive {name}",
-  "product.archive_variant_named": "Archive {name}",
+  "product.archive_named": "Delete {name}",
+  "product.archive_variant_named": "Delete {name}",
   "product.archive_warning":
     "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
   "product.archive_variant_warning":
     "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
-  "product.archived_badge": "Archived",
-  "product.variant_archive_pending_badge": "Archived when saved",
+  "product.archived_badge": "Deleted",
+  "product.variant_archive_pending_badge": "Deleted when saved",
   "product.keep_variant": "Keep",
-  "product.variant_archived_badge": "Archived",
-  "product.archived_notice": "This product is archived. You can look at it but not change it.",
   "product.refusal_menus": "Menus",
   "product.refusal_products": "Products",
   "product.off_menus": "It comes off the {count} menus it is on.",
@@ -3010,7 +3000,6 @@ export const en = {
   "product.availability": "Availability",
   "product.allergens": "Allergens",
   "product.dietary_info": "Dietary info",
-  "product.show_archived": "Show archived",
   "product.filter_any": "Any",
   "product.filter_course_all": "Any course",
   "product.filter_course_count": "{count} courses",
@@ -5413,19 +5402,18 @@ export const es: Record<StringKey, string> = {
   "folders.move_heading_one": "Mover 1 elemento",
   "folders.destination": "Destino",
   "folders.cancel_selection": "Cancelar",
-  "folders.archive_products_heading": "¿Archivar {count} productos?",
-  "folders.archive_products_heading_one": "¿Archivar 1 producto?",
+  "folders.archive_products_heading": "¿Eliminar {count} productos?",
+  "folders.archive_products_heading_one": "¿Eliminar 1 producto?",
   "folders.archive_products_body":
     "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan.",
   "folders.off_menus": "Salen de las {count} cartas en las que están.",
   "folders.off_menus_one": "Salen de la carta en la que están.",
   "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
   "folders.delete_off_menus":
-    "Los productos archivados por esta eliminación salen de las {count} cartas en las que están.",
-  "folders.delete_off_menus_one":
-    "Los productos archivados por esta eliminación salen de la carta en la que están.",
+    "Los productos eliminados salen de las {count} cartas en las que están.",
+  "folders.delete_off_menus_one": "Los productos eliminados salen de la carta en la que están.",
   "folders.delete_off_menus_unknown":
-    "Los productos archivados por esta eliminación salen de todas las cartas en las que están.",
+    "Los productos eliminados salen de todas las cartas en las que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
   "folders.deleting": "Categorías a eliminar:",
@@ -5435,9 +5423,6 @@ export const es: Record<StringKey, string> = {
   "folders.contents_keep_one": "{items} pasa a {parent}",
   "folders.contents_also": "También: {actions}.",
   "folders.also_deletes": "elimina {items}",
-  "folders.also_archives": "archiva {products}",
-  "folders.products_move": "Pasan a {parent}.",
-  "folders.products_move_one": "Pasa a {parent}.",
   "folders.each_parent": "la categoría superior de cada una",
   "folders.route_count": "{count} reglas de envío a la estación",
   "folders.route_count_one": "1 regla de envío a la estación",
@@ -6087,8 +6072,7 @@ export const es: Record<StringKey, string> = {
   "help.badge_label": "Ayuda: {part}",
   "help.guide_link": "Más información en la guía",
   "help.account.settings": "Cambia tus datos personales y cómo inicias sesión.",
-  "help.products.keep_variant":
-    "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
+  "help.products.keep_variant": "Conserva esta variante. Solo se elimina al guardar el producto.",
   "help.products.dine_in_vat":
     "Todo lo que se come o se bebe aquí paga este único tipo, sea cual sea el producto. Waitron lo actualiza cuando cambia la ley; no hay nada que configurar.",
   "help.products.dine_in_vat_takeaway":
@@ -6100,7 +6084,7 @@ export const es: Record<StringKey, string> = {
   "help.products.variants":
     "Versiones de este producto, como tamaños, cada una con su nombre. Una variante sin precio se vende al del producto. Al publicar una carta con una variante activa, la caja solo vende las variantes.",
   "help.products.availability":
-    "No disponible: su interruptor Disponible está apagado, así que la caja deja de venderlo en segundos, sin publicar. Archivado: ya no se vende, de forma definitiva.",
+    "No disponible: su interruptor Disponible está apagado, así que la caja deja de venderlo en segundos, sin publicar.",
   "theme.label": "Tema",
   "theme.light": "Claro",
   "theme.dark": "Oscuro",
@@ -7808,7 +7792,7 @@ export const es: Record<StringKey, string> = {
   "editor.base_price": "Precio base",
   "editor.base_price_unit": "Precio base por {unit}",
   "editor.open_variant": "Abrir",
-  "editor.variants_all_archived": "Todas las variantes están archivadas.",
+  "editor.variants_all_archived": "No hay variantes.",
   "editor.open_variant_blocked": "Guarda los cambios antes de abrir la página de una variante.",
   "editor.ordered_on_own": "Pedir por separado",
   "editor.section_kitchen": "Estación de preparación",
@@ -7892,20 +7876,15 @@ export const es: Record<StringKey, string> = {
   "product.course": "Curso",
   "product.search": "Buscar productos",
   "product.archive_extra_lists": "Sale de estas listas de extras:",
-  "product.archive": "Archivar",
-  "product.view": "Ver",
-  "product.archive_named": "Archivar {name}",
-  "product.archive_variant_named": "Archivar {name}",
+  "product.archive_named": "Eliminar {name}",
+  "product.archive_variant_named": "Eliminar {name}",
   "product.archive_warning":
     "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
   "product.archive_variant_warning":
     "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
-  "product.archived_badge": "Archivado",
-  "product.variant_archive_pending_badge": "Se archiva al guardar",
+  "product.archived_badge": "Eliminado",
+  "product.variant_archive_pending_badge": "Se elimina al guardar",
   "product.keep_variant": "Conservar",
-  "product.variant_archived_badge": "Archivada",
-  "product.archived_notice":
-    "Este producto está archivado. Puedes consultarlo, pero no modificarlo.",
   "product.refusal_menus": "Cartas",
   "product.refusal_products": "Productos",
   "product.off_menus": "Sale de las {count} cartas en las que está.",
@@ -7914,7 +7893,6 @@ export const es: Record<StringKey, string> = {
   "product.availability": "Disponibilidad",
   "product.allergens": "Alérgenos",
   "product.dietary_info": "Info dietética",
-  "product.show_archived": "Mostrar archivados",
   "product.filter_any": "Cualquiera",
   "product.filter_course_all": "Cualquier curso",
   "product.filter_course_count": "{count} cursos",

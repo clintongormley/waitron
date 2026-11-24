@@ -462,19 +462,19 @@ it("shows a variant with no price of its own as the base price it sells at", asy
 it.each([
   {
     locale: "en-GB",
-    archive: "Archive",
+    archive: "Delete",
     keep: "Keep",
     remove: "Remove",
-    badge: "Archived when saved",
-    none: "Every variant is archived.",
+    badge: "Deleted when saved",
+    none: "No variants.",
   },
   {
     locale: "es-ES",
-    archive: "Archivar",
+    archive: "Eliminar",
     keep: "Conservar",
     remove: "Eliminar",
-    badge: "Se archiva al guardar",
-    none: "Todas las variantes están archivadas.",
+    badge: "Se elimina al guardar",
+    none: "No hay variantes.",
   },
 ])(
   "in $locale, archives and keeps a saved variant, and removes one never saved",

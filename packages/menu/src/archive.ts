@@ -181,7 +181,7 @@ export async function markInactive(tx: Transaction, ids: readonly string[]): Pro
   for (const batch of batches(ids))
     await tx
       .update(products)
-      .set({ active: false, updatedAt: now() })
+      .set({ active: false, image: null, unitId: null, updatedAt: now() })
       .where(inArray(products.id, batch));
 }
 

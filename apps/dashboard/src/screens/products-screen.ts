@@ -45,7 +45,6 @@ import {
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
-import "../widgets/product-details.js";
 import "../widgets/product-browser.js";
 import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
@@ -97,7 +96,6 @@ export class ProductsScreen extends LitElement {
   @state() private routingFailed = false;
   @state() private courses: Course[] = [];
   @state() private editorOpen = false;
-  @state() private detailsOpen = false;
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
@@ -107,7 +105,7 @@ export class ProductsScreen extends LitElement {
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
   @state() private deleteErrorKey: string | null = null;
   @state() private deleteErrorParams: unknown = null;
-  /** Null while the archive dialog's menu count is unread or unreadable. */
+  /** Null while the Delete dialog's menu count is unread or unreadable. */
   @state() private deletingMenus: number | null = null;
   #deletingRead = 0;
   /** The list the nested form is EDITING, or null while it is creating one: this decides which write
@@ -322,7 +320,6 @@ export class ProductsScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
-    this.detailsOpen = false;
     this.#showError(null);
     this.editorOpen = true;
   }
@@ -331,8 +328,10 @@ export class ProductsScreen extends LitElement {
    * page, and the list read carries it only under its parent. */
   #knows(productId: string): boolean {
     return this.products.some(
-      ({ id, variants }) =>
-        id === productId || variants.some((variant) => variant.id === productId),
+      ({ id, active, variants }) =>
+        active &&
+        (id === productId ||
+          variants.some((variant) => variant.active && variant.id === productId)),
     );
   }
 
@@ -340,17 +339,15 @@ export class ProductsScreen extends LitElement {
     if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
-    this.detailsOpen = false;
     this.editorValue = null;
     this.editorInitialField = field === "image" ? "image" : "";
     this.#showError(null);
     const generation = ++this.#editorGeneration;
     try {
       const value = await (this.api.background ?? this.api).getProductEditor(productId);
-      if (generation !== this.#editorGeneration) return;
+      if (generation !== this.#editorGeneration || !value.active) return;
       this.editorValue = value;
-      this.detailsOpen = !value.active;
-      this.editorOpen = value.active;
+      this.editorOpen = true;
       this.#writeProductWord(productId);
     } catch (error) {
       if (generation === this.#editorGeneration) this.#showReadError(error);
@@ -428,7 +425,6 @@ export class ProductsScreen extends LitElement {
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorOpen = false;
-    this.detailsOpen = false;
     this.editorValue = null;
     this.#linkedProduct = null;
     if (writeUrl) {
@@ -715,29 +711,12 @@ export class ProductsScreen extends LitElement {
           event.stopPropagation();
           void this.#openProduct(event.detail.productId, event.detail.field);
         }}
-        @view-product=${(event: CustomEvent<{ productId: string }>) => {
-          event.stopPropagation();
-          void this.#openProduct(event.detail.productId);
-        }}
         @delete-product=${(event: CustomEvent<{ productId: string }>) => {
           event.stopPropagation();
           this.#openDelete(event.detail.productId);
         }}
       ></dashboard-product-browser>
       ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
-      <dashboard-product-details
-        .open=${this.detailsOpen}
-        .value=${this.detailsOpen ? this.editorValue : null}
-        .categories=${this.categories}
-        .units=${this.units}
-        .extraLists=${this.extraLists}
-        .optionLists=${this.optionLists}
-        .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
-        @wt-close=${(event: Event) => {
-          event.stopPropagation();
-          this.#closeEditor();
-        }}
-      ></dashboard-product-details>
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();
@@ -828,7 +807,7 @@ export class ProductsScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t("product.archive")}</wt-button
+            >${t("action.delete")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

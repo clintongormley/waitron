@@ -4781,7 +4781,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
   expect(persisted.rows[0]!.count).toBe(0);
 });
 
-it("leaves the hidden products behind a custom item and their takeaway rates out of an export, which imports", async () => {
+it("leaves deleted and custom-item products and their takeaway rates out of an export, which imports", async () => {
   const source = await applyVenue(planVenue(venue("B42424241"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -4793,7 +4793,15 @@ it("leaves the hidden products behind a custom item and their takeaway rates out
       unitId: null,
       unitPrice: "1.00",
     });
+    const deleted = await createProduct(tx, {
+      categoryId: null,
+      name: "Old dish",
+      unitId: null,
+      unitPrice: "2.00",
+    });
+    await updateProduct(tx, deleted.id, { active: false });
     return {
+      deleted: deleted.id,
       water: water.id,
       hidden: [await customItemProduct(tx, 2100), await customItemProduct(tx, null)],
     };
@@ -4810,7 +4818,8 @@ it("leaves the hidden products behind a custom item and their takeaway rates out
   expect(transferred.tables.product_takeaway_vat_rates!.map((row) => row.product_id)).toEqual([
     ids.water,
   ]);
-  for (const id of ids.hidden) expect(JSON.stringify(transferred)).not.toContain(id);
+  for (const id of [ids.deleted, ...ids.hidden])
+    expect(JSON.stringify(transferred)).not.toContain(id);
 
   await applyVenue(planVenue(venue("B42424242"), ALL_MODULES), {
     db: targetSuite.db,
@@ -7864,7 +7873,7 @@ it("refuses an absent leaveBehindWhenFalse column before exporting", async () =>
   });
 });
 
-it("round-trips deleted kitchen configuration and preserves archived products and empty profile bounds", async () => {
+it("round-trips kitchen configuration without deleted rows and keeps empty profile bounds", async () => {
   const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -7925,10 +7934,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     })),
   ).toEqual([{ id: ids.live, name: "Live starters", active: 1, starter_key: "mains" }]);
   expect(transferred.tables.kitchen_stations!.some((row) => row.id === ids.station)).toBe(false);
-  const archived = transferred.tables.products!.find((row) => row.id === ids.product)!;
-  expect(archived).toBeDefined();
-  expect(archived.active).toBe(0);
-  expect(archived.course_id).toBeNull();
+  expect(transferred.tables.products!.some((row) => row.id === ids.product)).toBe(false);
   expect(
     JSON.parse(
       String(
@@ -7988,10 +7994,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   ]);
   expect(imported.courses[0]!.id).not.toBe(ids.live);
   expect(imported.stations.some((row) => row.name === "Retired pastry")).toBe(false);
-  expect(imported.products).toEqual([
-    { id: imported.products[0]!.id, name: "Archived flan", active: false, courseId: null },
-  ]);
-  expect(imported.products[0]!.id).not.toBe(ids.product);
+  expect(imported.products).toEqual([]);
   const [bound] = imported.screens;
   expect(bound).toBeDefined();
   expect(bound!.profileId).not.toBe(ids.profile);

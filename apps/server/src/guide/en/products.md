@@ -178,7 +178,7 @@ as the unit link in the price field.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
-offers **Open**, **Edit** and **Archive** (**Remove** for a variant not yet saved). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
+offers **Open**, **Edit** and **Delete** (**Remove** for a variant not yet saved). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
 in the table, including the Available switch, are saved when you save the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT when taken away, allergens and the other
@@ -195,15 +195,11 @@ The page has no Variants or Modifiers, because a variant always uses its product
 and options lists. **Open** appears once the variant has been saved, and it waits while the product
 has unsaved changes, because leaving the product would lose them: save the product first.
 
-**Archive** on a saved variant stages a permanent archive. The row stays visible with
-**Archived when saved** and **Keep** until you save the product. Choose Keep to cancel that
-staged change. Once saved, the till stops offering the variant, its menu prices are deleted,
-and its past sales stay. You cannot bring it back. A variant already archived is hidden from the
-editor. Turn on **Show archived** in the Products list to see it. **Remove** drops a variant you
-have not saved yet.
+Choose **Delete** on a saved variant to mark it **Deleted when saved**. Choose **Keep** to
+undo the choice before saving. **Remove** drops a variant you have yet to save.
 
 If a live or scheduled menu includes the variant, the save is refused and names the menus.
-Take the variant out of those menus and publish before archiving it. You cannot add an Active
+Take the variant out of those menus and publish before deleting it. You cannot add an Active
 variant to a product that an extras list offers, because a product with Active variants cannot
 be an extra. That refusal names the extras lists to take the product off first.
 
@@ -216,10 +212,8 @@ Each variant's row shows its photo, its own name, the price it sells at, its ava
 row menu. A variant with no photo of its own shows its product's or, when neither has one, the same
 square as its product's row. Choose the photo or square to open the variant's own page at its photo.
 On a phone the photo is hidden. If a variant's VAT when taken away differs from its product's, the list notes it
-under the variant's price. A variant's row menu offers **Archive** there too, as a product's own row
-does. Turn on **Show archived** to list archived products and variants, then choose **View** for
-one's plain-text details. View has no Save or availability switch; it keeps the retained record
-available without allowing edits.
+under the variant's price. Choose **Delete** in a product or variant's row menu to remove it permanently from
+Products. Its past sales stay on record.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 On the menu you can give it a price of its own, or let it follow the menus it comes from. A price

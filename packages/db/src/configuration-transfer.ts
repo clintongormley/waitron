@@ -198,7 +198,12 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
-    { name: "products", leaveBehindWhenSet: "custom_item_key", omit: ["custom_item_key"] },
+    {
+      name: "products",
+      leaveBehindWhenFalse: "active",
+      leaveBehindWhenSet: "custom_item_key",
+      omit: ["custom_item_key"],
+    },
     { name: "product_takeaway_vat_rates" },
     {
       name: "device_profiles",

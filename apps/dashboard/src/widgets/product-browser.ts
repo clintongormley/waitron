@@ -702,23 +702,11 @@ export class ProductBrowser extends LitElement {
     const deleted = [
       ...(totals.folders ? [folderCount] : []),
       ...(innerRoutes ? [countOf("folders.route_count", innerRoutes)] : []),
+      ...(totals.active ? [productCount] : []),
     ];
-    const actions = [
-      ...(deleted.length
-        ? [fill("folders.also_deletes", { items: conjunctionList(deleted) })]
-        : []),
-      ...(totals.active ? [fill("folders.also_archives", { products: productCount })] : []),
-    ];
-    const deleteLabel = [
-      fill("folders.contents_also", { actions: conjunctionList(actions) }),
-      ...(totals.active
-        ? [
-            fill(totals.active === 1 ? "folders.products_move_one" : "folders.products_move", {
-              parent,
-            }),
-          ]
-        : []),
-    ].join(" ");
+    const deleteLabel = fill("folders.contents_also", {
+      actions: fill("folders.also_deletes", { items: conjunctionList(deleted) }),
+    });
     const heading = countOf(
       this.operation === "move"
         ? "folders.move_heading"
@@ -906,20 +894,13 @@ export class ProductBrowser extends LitElement {
               if (!(event.currentTarget as HTMLElement).isConnected) return;
               void this.#confirm(this.operation, true);
             }}
-            >${this.operation === "delete" ? this.#deleteLabel(selection) : t("folders.move")}</wt-button
+            >${this.operation === "delete" ? t("action.delete") : t("folders.move")}</wt-button
           >
         </wt-form-actions>
       </div>
     </wt-modal>`;
   }
 
-  #deleteLabel(selection: ProductSelection): string {
-    return t(
-      selection.productIds.length && !selection.categoryIds.length
-        ? "product.archive"
-        : "action.delete",
-    );
-  }
   #allDisabled({ productIds, categoryIds }: ProductSelection): boolean {
     if (!productIds.length || categoryIds.length) return false;
     const disabled = new Set(this.products.filter(({ active }) => !active).map(({ id }) => id));
@@ -1018,9 +999,6 @@ export class ProductBrowser extends LitElement {
           this.selected = event.detail.selected;
         }}
         @wt-filter-change=${(event: Event) => {
-          event.stopPropagation();
-        }}
-        @show-archived-change=${(event: Event) => {
           event.stopPropagation();
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
@@ -1138,7 +1116,7 @@ export class ProductBrowser extends LitElement {
                                 variant=${this.#deleteWaiting ? "secondary" : "danger"}
                                 .disabled=${this.#deleteWaiting || this.operationBusy}
                                 @click=${() => void this.#openDelete()}
-                                >${this.#deleteLabel(selection)}</wt-button
+                                >${t("action.delete")}</wt-button
                               >`
                         }
                         <wt-button

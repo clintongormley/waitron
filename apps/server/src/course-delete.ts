@@ -54,7 +54,7 @@ async function courseDeleteRules(
   const [defaults] = await tx
     .select({ count: count() })
     .from(products)
-    .where(eq(products.courseId, id));
+    .where(and(eq(products.courseId, id), eq(products.active, true)));
   const [lines] = await tx
     .select({ count: count() })
     .from(setMenuLineCourses)

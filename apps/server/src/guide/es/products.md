@@ -188,8 +188,7 @@ campo de precio.
 
 Arrastra una fila por el asa de su inicio para reordenarla, o enfoca el asa y usa las flechas arriba y
 abajo. El interruptor **Disponible** de cada fila marca la variante como agotada o de nuevo a la venta.
-El menú de la fila ofrece **Abrir**, **Editar** y **Archivar** (**Eliminar** para una variante aún sin
-guardar). **Editar**, o un clic en la fila de la variante, vuelve a abrir la ventana pequeña. Los
+El menú de la fila ofrece **Abrir**, **Editar** y **Eliminar**. **Editar**, o un clic en la fila de la variante, vuelve a abrir la ventana pequeña. Los
 cambios que haces en la tabla, incluido el interruptor Disponible, se guardan cuando guardas el
 producto.
 
@@ -208,15 +207,12 @@ Variantes ni Modificadores, porque una variante siempre usa las listas de extras
 producto. **Abrir** aparece cuando la variante se ha guardado, y espera mientras el producto tiene
 cambios sin guardar, porque salir del producto los perdería: guarda primero el producto.
 
-**Archivar** en una variante guardada deja preparado un archivado permanente. La fila sigue visible
-con **Se archiva al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
-cancelar ese cambio preparado. Una vez guardado, la caja deja de ofrecer la variante, se borran sus
-precios en las cartas y se conservan sus ventas pasadas. No puedes recuperarla. Una variante ya
-archivada no aparece en el editor. Para verla, activa **Mostrar archivados** en la lista de
-Productos. **Eliminar** quita una variante que aún no has guardado.
+Elige **Eliminar** en una variante guardada para marcarla como **Se elimina al guardar**.
+Elige **Conservar** para deshacer la elección antes de guardar. En una variante sin guardar,
+**Eliminar** la quita de la lista directamente.
 
 Si una carta publicada o programada incluye la variante, el guardado se rechaza y nombra las cartas.
-Quita la variante de esas cartas y publica antes de archivarla. No puedes añadir una variante activa a
+Quita la variante de esas cartas y publica antes de eliminarla. No puedes añadir una variante activa a
 un producto que ofrece una lista de extras, porque un producto con variantes activas no puede ser un
 extra. Ese rechazo nombra las listas de extras de las que debes quitar primero el producto.
 
@@ -230,10 +226,8 @@ nombre, el precio al que se vende, su disponibilidad y su menú de fila. Una var
 muestra la de su producto o, si ninguno tiene, el mismo cuadrado que la fila de su producto. Elige la
 foto o el cuadrado para abrir la página propia de la variante en su foto. En un teléfono la foto no se
 muestra. Si el IVA para llevar de una variante es distinto del de su producto, la lista lo indica bajo el precio de
-la variante. El menú de fila de una variante también ofrece ahí **Archivar**, como la fila del propio
-producto. Activa **Mostrar archivados** para ver los productos y las variantes archivados, y después
-elige **Ver** en uno para ver sus datos como texto. Ver no tiene Guardar ni interruptor de
-disponibilidad; mantiene disponible el registro conservado sin permitir cambios.
+la variante. Elige **Eliminar** en el menú de un producto o una variante para quitarlo de
+Productos de forma permanente. Sus ventas pasadas se conservan.
 
 Una variante sigue a su producto en todas las cartas en las que está el producto, también una variante
 que añadas más tarde. En la carta puedes darle un precio propio o dejar que siga a las cartas de las

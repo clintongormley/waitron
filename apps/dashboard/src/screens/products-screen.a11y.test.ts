@@ -342,7 +342,7 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
             t("product.archive_named").replace("{name}", "Ham croquettes"),
           );
           const confirm = modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-          expect(confirm.textContent!.trim()).toBe(t("product.archive"));
+          expect(confirm.textContent!.trim()).toBe(t("action.delete"));
           for (const state of ["confirm", "refusal"]) {
             if (state === "refusal") {
               confirm.click();

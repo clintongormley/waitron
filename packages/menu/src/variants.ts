@@ -275,7 +275,8 @@ async function writeProductVariants(
           ? input.customerName
           : null,
       kitchenName: input.kitchenName,
-      image: input.image,
+      image: input.active ? input.image : null,
+      ...(input.active ? {} : { unitId: null }),
       unitPrice: input.cents,
       ...(input.available === undefined ? {} : { available: input.available }),
       active: input.active,
@@ -303,6 +304,8 @@ async function writeProductVariants(
       .update(products)
       .set({
         active: false,
+        image: null,
+        unitId: null,
         variantOrder: normalized.length + index,
         updatedAt: now(),
       })

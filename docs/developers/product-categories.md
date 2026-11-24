@@ -14,7 +14,7 @@ that browser. Search finds a product by its name or a variant's name, and a cate
 name. While you search, only those own matches appear in a flat list, closest first, each followed
 by its category path. A matching category starts collapsed; open it to see its contents while
 matching products also keep their flat result. Clearing search keeps the branches you opened
-and opens their parents too. Column filters and Show archived affect
+and opens their parents too. Column filters affect
 products; categories stay. The address names the category last opened, as
 `/products/category/<id>`; closing that category, or one above it, names the closed
 category's parent.
@@ -418,41 +418,18 @@ the Move dialog with its destination selected. Choose **Move to…** to save or 
 the dialog. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
-With only products selected, the toolbar's action reads **Archive**, and its dialog asks
-"Archive N products?". This cannot be undone. The rows and past sales remain, but the products
-cannot be brought back. The warning names the extras lists they come off. The dialog also reads
-how many menus hold them from `POST /management-api/products/menus` (below); if that read fails,
-it says "They come off every menu they are on."
+Take a product or variant out of its live and scheduled menus and publish before deleting it.
+This also applies when the menu uses it as an extras item or a Home shortcut. The refusal
+`product.on_live_menu` names the products and menus. It leaves the whole selection in place.
 
-A product or variant cannot be archived while a live or scheduled menu includes it, whether as a
-dish, variant, extras item or home-screen shortcut. Take it out of the menu and publish, then
-archive. The refusal `product.on_live_menu` names the products and menus, and the whole bulk
-archive or category deletion is refused before writing any of it. Already archived products are
-not archived again and do not block a category deletion.
+The toolbar offers **Delete** for products, categories or both. Products selected directly are
+deleted. For the contents of a selected category, choose whether to delete them or move them to its
+parent. The window names extras lists losing selected products or variants and counts the affected
+menus once across the selection.
 
-When every selected product is archived already, the toolbar offers no Archive. A mixed selection
-archives only its active products. With a category selected the action reads **Delete**, because
-the category itself is deleted. Products selected directly are archived in either case. Products
-inside the category, including its subcategories, are archived only with the dialog's "Also: …"
-answer. The other answer moves them without changing their active state. The count includes each
-active menu once across all products that will be archived. While the count is pending or
-unavailable, the dialog says those products come off every menu they are on.
-
-Archiving a product archives its variants, removes its places in menu drafts and extras lists,
-and clears its variants' menu prices in the same transaction (`archiveProducts`,
-`packages/menu/src/archive.ts`). A Device Home Page shortcut in a draft becomes a missing
-tile. View opens retained details instead of the editor. Archiving a variant on its own clears its
-menu prices and removes it from extras lists, without archiving its parent. Neither archive has
-an Enable action.
-
-The confirmation names each extras list losing an active product or variant. Choosing to move a
-category's contents up shows no such list for those products, because that choice archives none
-of them. An archived product can still move through the selection toolbar, on its own or with
-other products; that move changes its main reporting category.
-
-A configuration import refuses a bundle that puts an archived product in a list or shortcut
-(`setup.request_invalid`, `field: "section_members.product_id"`) or gives an archived size a menu
-price (`field: "menu_item_variant_overrides.variant_id"`).
+Deleting a product deletes its variants, removes draft placements and extras memberships, and
+clears variant prices in the same transaction. A Device Home shortcut becomes a missing tile at
+its saved position. Configuration export leaves deleted rows and their dependent rows behind.
 
 Before deleting a category that holds active products or subcategories, the compact dialog asks
 "What happens to what is inside?". Each answer names what it does, counting only active products
@@ -464,11 +441,10 @@ sit under different parents.
   direct products and subcategories to its parent. The counts include what sits inside those
   subcategories, which moves with them. Its subcategories that are not selected keep
   their routing rules.
-- "Also: deletes 1 category and 2 kitchen routing rules and archives 3 products. They move to
-  Drinks." removes the subtree and archives its products. A routing rule here is a cell on a
-  category's row in the routing grid, and the rules it lists are the cells on the rows of
-  subcategories that are not themselves selected. Every product in the subtree,
-  archived ones included, is moved to the parent of the outermost selected category that holds it.
+- "Also: deletes 1 category, 2 kitchen routing rules and 3 products." removes the subtree and
+  deletes its products. A routing rule here is a cell on a category's row in the routing grid.
+  The count covers subcategories outside the selection. Retained product rows move to the
+  parent of the outermost selected category that held them.
 
 When there are any, a paragraph below the question counts the routing rules on a selected
 category's own row, which go whichever answer is chosen.

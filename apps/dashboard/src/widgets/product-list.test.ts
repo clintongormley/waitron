@@ -139,15 +139,6 @@ async function choose(el: ProductList, column: string, value: string | string[])
   await table.updateComplete;
 }
 
-/** Turns the Show archived switch at the top of the Filters panel on or off. */
-async function showArchived(el: ProductList, on = true): Promise<void> {
-  const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
-  const input = toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  if (input.checked !== on) input.click();
-  await el.updateComplete;
-  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-}
-
 /** A Spanish price, which the suite's default language writes with a no-break space before the
  * sign. */
 const euros = (amount: string) => `${amount}\u00a0€`;
@@ -284,7 +275,7 @@ describe("product-list", () => {
     expect(await searchFor("drinks")).toEqual(["folder:beb"]);
   });
 
-  it("hands the table the same rows until the products, categories, draft or Show archived change", async () => {
+  it("hands the table the same rows until the products, categories or draft change", async () => {
     const { el, table } = await mountTree({
       products: [...treeProducts(), product({ id: "gone", name: "Anchovies", active: false })],
     });
@@ -306,8 +297,7 @@ describe("product-list", () => {
     );
     expect((table.rows as readonly { key: string }[]).map(({ key }) => key)).toContain("draft:new");
     expect(await redraw(() => void (el.nameDraft = null))).toBe(false);
-    expect(await redraw(() => showArchived(el))).toBe(false);
-    expect((table.rows as readonly { key: string }[]).map(({ key }) => key)).toContain("gone");
+    expect((table.rows as readonly { key: string }[]).map(({ key }) => key)).not.toContain("gone");
   });
 
   it("redraws a cell from a renamed modifier list while the rows stay the same", async () => {
@@ -557,7 +547,7 @@ describe("product-list", () => {
     expect(headerLabels()).not.toContain(t("product.dietary_info"));
   });
 
-  it("uses a named kebab menu containing Edit and Archive", async () => {
+  it("uses a named kebab menu containing Edit and Delete", async () => {
     const products = [product({ id: "p7", name: "Cheesecake" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const actions = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="actions-p7"]')!;
@@ -565,7 +555,7 @@ describe("product-list", () => {
     expect(actions.getAttribute("label")).toContain("Cheesecake");
     expect(actions.querySelector('[data-test="edit-p7"]')?.textContent).toContain(t("action.edit"));
     expect(actions.querySelector('[data-test="delete-p7"]')?.textContent).toContain(
-      t("product.archive"),
+      t("action.delete"),
     );
   });
 
@@ -1006,7 +996,7 @@ describe("product-list", () => {
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
   });
 
-  it("shows an unavailable/archived badge carrying text, not colour alone", async () => {
+  it("shows an Unavailable badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "a-on", name: "A", active: true }),
@@ -1015,66 +1005,17 @@ describe("product-list", () => {
       ],
     });
     el.style.setProperty("--wt-color-text-muted", "rgb(16, 17, 18)");
-    // An archived product is hidden until Show archived is on.
-    await showArchived(el);
+
     const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>(
       "[data-test=availability-badge]",
     );
-    expect(badges.length).toBe(2);
+    expect(badges.length).toBe(1);
     expect(getComputedStyle(badges[0]!).borderTopColor).toBe("rgb(16, 17, 18)");
     expect(badges[0]!.getAttribute("data-state")).toBe("unavailable");
     expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
-    expect(badges[1]!.getAttribute("data-state")).toBe("archived");
-    expect(badges[1]!.textContent!.trim().length).toBeGreaterThan(0);
-    expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
   });
 
-  // The fixtures give Active and Available DIFFERENT values, so a column or filter reading the wrong
-  // flag fails.
-  it("starts with Show archived off, so an archived product is hidden until it is turned on", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "gone", name: "Anchovies", active: false, available: true }),
-        product({ id: "sold-out", name: "White anchovies", active: true, available: false }),
-      ],
-    });
-    const root = await tableRoot(el);
-    expect(root.querySelector('wt-combobox[data-filter="active"]')).toBeNull();
-    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-      'wt-switch[name="show-archived"]',
-    )!;
-    expect(toggle.label).toBe(t("product.show_archived"));
-    expect(toggle.checked).toBe(false);
-    expect(rowKeys(root)).toEqual(["sold-out"]);
-    await showArchived(el);
-    expect(rowKeys(root)).toEqual(["gone", "sold-out"]);
-    await showArchived(el, false);
-    expect(rowKeys(root)).toEqual(["sold-out"]);
-  });
-
-  it("reads Availability's Archived from active and Unavailable from available, keeping an Unavailable product listed", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "gone", name: "Anchovies", active: false, available: true }),
-        product({ id: "sold-out", name: "White anchovies", active: true, available: false }),
-      ],
-    });
-    await showArchived(el);
-    const root = await tableRoot(el);
-    const gone = cellUnder(root, "gone", t("product.availability"));
-    const soldOut = cellUnder(root, "sold-out", t("product.availability"));
-    expect(gone.querySelectorAll("[data-test=availability-badge]")).toHaveLength(1);
-    expect(gone.querySelector("[data-test=availability-badge]")!.getAttribute("data-state")).toBe(
-      "archived",
-    );
-    expect(soldOut.querySelectorAll("[data-test=availability-badge]")).toHaveLength(1);
-    expect(
-      soldOut.querySelector("[data-test=availability-badge]")!.getAttribute("data-state"),
-    ).toBe("unavailable");
-    expect(soldOut.textContent!.trim()).toBe(t("product.unavailable_badge"));
-  });
-
-  it("applies Show archived to variant rows, and reads each variant's own Availability", async () => {
+  it("hides deleted parents and variants and reads each listed variant's own Availability", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -1101,31 +1042,7 @@ describe("product-list", () => {
       "unavailable",
     );
 
-    await showArchived(el);
-    expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium", "bun:large", "roll"]);
-    expect(
-      cellUnder(root, "bun:large", t("product.availability"))
-        .querySelector("[data-test=availability-badge]")!
-        .getAttribute("data-state"),
-    ).toBe("archived");
-    root.querySelector<HTMLElement>(`tr[data-row-key="roll"] .tree-toggle`)!.click();
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual([
-      "bun",
-      "bun:small",
-      "bun:medium",
-      "bun:large",
-      "roll",
-      "roll:r1",
-    ]);
-    expect(
-      cellUnder(root, "roll:r1", t("product.availability"))
-        .querySelector("[data-test=availability-badge]")!
-        .getAttribute("data-state"),
-    ).toBe("archived");
-
-    await showArchived(el, false);
-    expect(rowKeys(root)).toEqual(["bun", "bun:small", "bun:medium"]);
+    expect(el.shadowRoot!.querySelector('wt-switch[name="show-archived"]')).toBeNull();
   });
 
   it("prices a product across its Active variants only, or at its own price when it has none", async () => {
@@ -1337,156 +1254,6 @@ describe("product-list", () => {
     },
   );
 
-  it.each([
-    [
-      "en-GB",
-      {
-        disable: "Archive",
-        enable: "View",
-        products: ["", "Archived"],
-        variants: ["", "Archived"],
-        toggle: "Show archived",
-      },
-    ],
-    [
-      "es-ES",
-      {
-        disable: "Archivar",
-        enable: "Ver",
-        products: ["", "Archivado"],
-        variants: ["", "Archivada"],
-        toggle: "Mostrar archivados",
-      },
-    ],
-  ])(
-    "in %s, offers Archive and View and shows Archived, agreeing with the noun",
-    async (locale, words) => {
-      setLocale(locale);
-      const removed = { ...bunVariant, id: "large", name: "Large", active: false };
-      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-        products: [
-          product({ id: "bun", variants: [bunVariant, removed] }),
-          product({ id: "off", name: "Anchovies", active: false }),
-        ],
-      });
-      await showArchived(el);
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      const root = await tableRoot(el);
-      root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
-      await table.updateComplete;
-      const label = (test: string) =>
-        root.querySelector<HTMLElement>(`[data-test="${test}"]`)!.textContent!.trim();
-      expect(label("delete-bun")).toBe(words.disable);
-      expect(label("delete-small")).toBe(words.disable);
-      expect(label("view-large")).toBe(words.enable);
-      expect(label("view-off")).toBe(words.enable);
-      const badge = (key: string) =>
-        cellUnder(root, key, t("product.availability")).textContent!.trim();
-      expect([badge("bun"), badge("off")]).toEqual(words.products);
-      expect([badge("bun:small"), badge("bun:large")]).toEqual(words.variants);
-      expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-          'wt-switch[name="show-archived"]',
-        )!.label,
-      ).toBe(words.toggle);
-    },
-  );
-
-  it("gives an active variant Edit and Archive, and an archived variant only View", async () => {
-    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "bun", variants: [bunVariant, removed] })],
-    });
-    await showArchived(el);
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
-    await table.updateComplete;
-    const actions = root.querySelector<HTMLElement>('[data-test="actions-small"]')!;
-    expect(actions.tagName).toBe("WT-ROW-ACTIONS");
-    expect(actions.getAttribute("label")).toBe(`${t("staff.actions")}: Small`);
-    expect(actions.querySelector('[data-test="edit-small"]')!.textContent).toContain(
-      t("action.edit"),
-    );
-    expect(actions.querySelector('[data-test="delete-small"]')!.textContent).toContain(
-      t("product.archive"),
-    );
-    expect(actions.querySelector('[data-test="view-small"]')).toBeNull();
-    const large = root.querySelector<HTMLElement>('[data-test="actions-large"]')!;
-    expect(large.querySelector('[data-test="delete-large"]')).toBeNull();
-    expect(large.querySelectorAll("wt-button")).toHaveLength(1);
-    expect(large.querySelector('[data-test="view-large"]')!.textContent).toContain(
-      t("product.view"),
-    );
-
-    const seen: [string, string][] = [];
-    for (const name of ["edit-product", "delete-product", "view-product"])
-      el.addEventListener(name, (event) =>
-        seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
-      );
-    actions.querySelector<HTMLElement>('[data-test="edit-small"]')!.click();
-    actions.querySelector<HTMLElement>('[data-test="delete-small"]')!.click();
-    large.querySelector<HTMLElement>('[data-test="view-large"]')!.click();
-    expect(seen).toEqual([
-      ["edit-product", "small"],
-      ["delete-product", "small"],
-      ["view-product", "large"],
-    ]);
-  });
-
-  it("under an archived product, every variant offers View only", async () => {
-    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "off", name: "Anchovies", active: false, variants: [bunVariant, removed] }),
-      ],
-    });
-    await showArchived(el);
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    root.querySelector<HTMLElement>('tr[data-row-key="off"] .tree-toggle')!.click();
-    await table.updateComplete;
-    for (const id of ["off", "large", "small"]) {
-      const actions = root.querySelector<HTMLElement>(`[data-test="actions-${id}"]`)!;
-      expect(
-        [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-      ).toEqual([t("product.view")]);
-      expect(actions.querySelector(`[data-test="view-${id}"]`)).not.toBeNull();
-      expect(
-        root
-          .querySelector(
-            `tr[data-row-key="${id === "off" ? id : `off:${id}`}"] [data-test=availability-badge]`,
-          )
-          ?.getAttribute("data-state"),
-      ).toBe("archived");
-    }
-  });
-
-  it("offers only View on an archived product and Edit and Archive on an active one", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "bun" }), product({ id: "off", name: "Anchovies", active: false })],
-    });
-    await showArchived(el);
-    const root = await tableRoot(el);
-    const off = root.querySelector<HTMLElement>('[data-test="actions-off"]')!;
-    expect(off.querySelector('[data-test="delete-off"]')).toBeNull();
-    expect(off.querySelectorAll("wt-button")).toHaveLength(1);
-    expect(off.querySelector('[data-test="view-off"]')!.textContent).toContain(t("product.view"));
-    const bun = root.querySelector<HTMLElement>('[data-test="actions-bun"]')!;
-    expect(bun.querySelector('[data-test="restore-bun"]')).toBeNull();
-    expect(bun.querySelector('[data-test="delete-bun"]')!.textContent).toContain(
-      t("product.archive"),
-    );
-
-    const seen: [string, string][] = [];
-    for (const name of ["delete-product", "view-product"])
-      el.addEventListener(name, (event) =>
-        seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
-      );
-    off.querySelector<HTMLElement>('[data-test="view-off"]')!.click();
-    expect(seen).toEqual([["view-product", "off"]]);
-  });
-
   // The three-state allergen invariant: null=PENDING, {}=none, {…}=declared. PENDING and none MUST
   // be distinguishable — fourteen blank cells must never silently claim "allergen-free".
   it("renders a PENDING allergen pill when allergens is null", async () => {
@@ -1577,7 +1344,7 @@ describe("product-list", () => {
         product({ id: "off", name: "Anchovies", active: false }),
       ],
     });
-    await showArchived(el);
+
     const root = await tableRoot(el);
     const frame = getComputedStyle(
       root.querySelector<HTMLElement>("[data-test=thumb-placeholder]")!,
@@ -1588,7 +1355,6 @@ describe("product-list", () => {
     expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
     for (const test of [
       '[data-test=availability-badge][data-state="unavailable"]',
-      '[data-test=availability-badge][data-state="archived"]',
       "[data-test=ordering-badge]",
       "[data-test=allergen-state]",
     ]) {
@@ -3440,8 +3206,7 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-small", "edit-product", "small"],
-    ["Archive", "delete-small", "delete-product", "small"],
-    ["View", "view-large", "view-product", "large"],
+    ["Delete", "delete-small", "delete-product", "small"],
   ])(
     "closes a product row's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request, productId) => {
@@ -3449,13 +3214,13 @@ describe("the product list as a tree", () => {
       const { el } = await mountWidget<ProductList>("dashboard-product-list", {
         products: [product({ id: "bun", variants: [bunVariant, removed] })],
       });
-      await showArchived(el);
+
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       const root = await tableRoot(el);
       root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
       await table.updateComplete;
       const seen: [string, string][] = [];
-      for (const name of ["edit-product", "delete-product", "view-product"])
+      for (const name of ["edit-product", "delete-product"])
         el.addEventListener(name, (event) =>
           seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
         );
@@ -3473,8 +3238,7 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-bread", "edit-product", "bread"],
-    ["Archive", "delete-bread", "delete-product", "bread"],
-    ["View", "view-stale", "view-product", "stale"],
+    ["Delete", "delete-bread", "delete-product", "bread"],
   ])(
     "closes a top-level product's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request, productId) => {
@@ -3484,9 +3248,9 @@ describe("the product list as a tree", () => {
           product({ id: "stale", name: "Stale", primaryCategoryId: null, active: false }),
         ],
       });
-      await showArchived(el);
+
       const seen: [string, string][] = [];
-      for (const name of ["edit-product", "delete-product", "view-product"])
+      for (const name of ["edit-product", "delete-product"])
         el.addEventListener(name, (event) =>
           seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
         );
@@ -5996,7 +5760,7 @@ describe("product-list filters (A463)", () => {
       expect(count(root, "f")).toBe("0 products");
     });
 
-    it("counts a product once when only its variants match Course, and adds archived matches when shown", async () => {
+    it("counts a product once when only its variants match Course", async () => {
       const { el, root } = await mountTree({
         courses: [starters, mains],
         products: [
@@ -6015,8 +5779,6 @@ describe("product-list filters (A463)", () => {
       });
       await choose(el, "course", ["starters"]);
       expect(count(root, "d")).toBe("1 of 2 products");
-      await showArchived(el);
-      expect(count(root, "d")).toBe("2 of 3 products");
     });
 
     it("drops a category when its products satisfy the two filters only separately", async () => {
@@ -6139,43 +5901,7 @@ describe("product-list filters (A463)", () => {
     expect(cellUnder(root, "b-override", "Dietary info").textContent!.trim()).toBe("Halal: No");
   });
 
-  it("offers no Status filter: Show archived, off at first, lists archived products and variants read-only", async () => {
-    setLocale("en");
-    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "a-bun", name: "A bun", variants: [bunVariant, removed] }),
-        product({ id: "b-gone", name: "B gone", active: false, available: true }),
-      ],
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    expect(root.querySelector('wt-combobox[data-filter="active"]')).toBeNull();
-    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-      'wt-switch[name="show-archived"]',
-    )!;
-    expect(toggle.label).toBe("Show archived");
-    expect(toggle.checked).toBe(false);
-    expect(toggle.assignedSlot).toBe(
-      root.querySelector('.filters-panel slot[name="filters-start"]'),
-    );
-    root.querySelector<HTMLElement>('tr[data-row-key="a-bun"] .tree-toggle')!.click();
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small"]);
-    await showArchived(el);
-    expect(toggle.checked).toBe(true);
-    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small", "a-bun:large", "b-gone"]);
-    for (const id of ["large", "b-gone"])
-      expect(
-        [...root.querySelectorAll<HTMLElement>(`[data-test="actions-${id}"] wt-button`)].map(
-          (button) => button.textContent!.trim(),
-        ),
-      ).toEqual([t("product.view")]);
-    await showArchived(el, false);
-    expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small"]);
-  });
-
-  it("sorts Availability as ordinary, then Unavailable, then Archived", async () => {
+  it("sorts Availability as ordinary, then Unavailable", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "a-gone", name: "A", active: false }),
@@ -6183,48 +5909,42 @@ describe("product-list filters (A463)", () => {
         product({ id: "c-ok", name: "C" }),
       ],
     });
-    await showArchived(el);
+
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>('button[data-sort="availability"]')!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["c-ok", "b-sold-out", "a-gone"]);
+    expect(rowKeys(root)).toEqual(["c-ok", "b-sold-out"]);
   });
 
   it.each([
-    ["en", { unavailable: "Unavailable", archived: "Archived", variantArchived: "Archived" }],
-    ["es", { unavailable: "No disponible", archived: "Archivado", variantArchived: "Archivada" }],
-  ])(
-    "in %s, shows Availability blank, Unavailable or Archived, Archived winning",
-    async (locale, words) => {
-      setLocale(locale);
-      const removed = { ...bunVariant, id: "large", name: "Large", active: false };
-      const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
-      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-        products: [
-          product({ id: "a-ok", name: "A ok", variants: [bunVariant, soldOut, removed] }),
-          product({ id: "b-sold-out", name: "B sold out", available: false }),
-          product({ id: "c-gone", name: "C gone", active: false, available: true }),
-          product({ id: "d-both", name: "D both", active: false, available: false }),
-        ],
-      });
-      await showArchived(el);
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      const root = await tableRoot(el);
-      root.querySelector<HTMLElement>('tr[data-row-key="a-ok"] .tree-toggle')!.click();
-      await table.updateComplete;
-      const heading = t("product.availability");
-      expect(heading).toBe(locale === "en" ? "Availability" : "Disponibilidad");
-      const shown = (key: string) => cellUnder(root, key, heading).textContent!.trim();
-      expect(shown("a-ok")).toBe("");
-      expect(shown("a-ok:small")).toBe("");
-      expect(shown("a-ok:medium")).toBe(words.unavailable);
-      expect(shown("a-ok:large")).toBe(words.variantArchived);
-      expect(shown("b-sold-out")).toBe(words.unavailable);
-      expect(shown("c-gone")).toBe(words.archived);
-      expect(shown("d-both")).toBe(words.archived);
-    },
-  );
+    ["en", "Unavailable"],
+    ["es", "No disponible"],
+  ])("in %s, shows Availability blank or Unavailable", async (locale, words) => {
+    setLocale(locale);
+    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+    const soldOut = { ...bunVariant, id: "medium", name: "Medium", available: false };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-ok", name: "A ok", variants: [bunVariant, soldOut, removed] }),
+        product({ id: "b-sold-out", name: "B sold out", available: false }),
+        product({ id: "c-gone", name: "C gone", active: false, available: true }),
+        product({ id: "d-both", name: "D both", active: false, available: false }),
+      ],
+    });
+
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('tr[data-row-key="a-ok"] .tree-toggle')!.click();
+    await table.updateComplete;
+    const heading = t("product.availability");
+    expect(heading).toBe(locale === "en" ? "Availability" : "Disponibilidad");
+    const shown = (key: string) => cellUnder(root, key, heading).textContent!.trim();
+    expect(shown("a-ok")).toBe("");
+    expect(shown("a-ok:small")).toBe("");
+    expect(shown("a-ok:medium")).toBe(words);
+    expect(shown("b-sold-out")).toBe(words);
+  });
 });
 
 it("A461 pointer drop carries visible ticks and preserves hidden ticks", async () => {

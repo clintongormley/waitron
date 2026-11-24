@@ -1,4 +1,4 @@
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
@@ -6,6 +6,7 @@ import {
   categories,
   extraListItems,
   extraLists,
+  mediaImages,
   menuItems,
   menuItemVariantOverrides,
   menuReleases,
@@ -87,6 +88,30 @@ async function queue(menuId: string, activatesAt: Date) {
 }
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
 const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
+
+it.each(["dish", "variant", "variant omitted from the save"])(
+  "lets the photo be deleted separately after deleting a %s",
+  async (kind) => {
+    const f = await menusFixture(fx.db);
+    const photo = `${"b".repeat(64)}.png`;
+    const id = kind === "dish" ? f.lemonade : f.large;
+    await seedPhotoMetadata(fx.db, { filename: photo, names: {} });
+    await app((tx) => updateProduct(tx, id, { image: photo }));
+    const deletePhoto = () =>
+      app((tx) => tx.delete(mediaImages).where(eq(mediaImages.filename, photo)).returning());
+    await expect(deletePhoto()).rejects.toThrow("products_media_image_fk");
+
+    if (kind === "dish") await app((tx) => archiveProducts(tx, [id], "person-1"));
+    else if (kind === "variant omitted from the save")
+      await app((tx) => setProductVariants(tx, f.lemonade, [], "en"));
+    else {
+      const [variant] = await app((tx) => listProductVariants(tx, f.lemonade));
+      await app((tx) => setProductVariants(tx, f.lemonade, [{ ...variant!, active: false }], "en"));
+    }
+
+    expect(await deletePhoto()).toEqual([expect.objectContaining({ filename: photo })]);
+  },
+);
 
 it.each(["published", "queued"])(
   "names a %s parent after its draft drops the include",
@@ -514,7 +539,7 @@ describe("archiving", () => {
     ).rejects.toMatchObject(archived(f.burger));
     expect(await app((tx) => readProductEditor(tx, f.burger))).toEqual(value);
   });
-  it("an archiving editor save leaves the other fields it carries unchanged", async () => {
+  it("a deleting editor save releases photos without saving the other draft changes", async () => {
     const f = await menusFixture(fx.db);
     const value = await app((tx) => readProductEditor(tx, f.lemonade));
     await app((tx) =>
@@ -534,7 +559,8 @@ describe("archiving", () => {
     expect(after).toEqual({
       ...value,
       active: false,
-      variants: value.variants.map((v) => ({ ...v, active: false })),
+      image: null,
+      variants: value.variants.map((v) => ({ ...v, active: false, image: null })),
     });
   });
   it("refuses a bulk folder deletion atomically when one contained family is live", async () => {

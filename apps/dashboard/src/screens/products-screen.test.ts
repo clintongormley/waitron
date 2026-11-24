@@ -574,17 +574,17 @@ describe("menu-screen", () => {
   it.each([
     [
       "en-GB",
-      "Archive Croquettes",
+      "Delete Croquettes",
       "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
-      "Archive",
+      "Delete",
     ],
     [
       "es",
-      "Archivar Croquettes",
+      "Eliminar Croquettes",
       "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
-      "Archivar",
+      "Eliminar",
     ],
-  ])("in %s, asks to archive a product permanently", async (locale, heading, body, action) => {
+  ])("in %s, asks to delete a product permanently", async (locale, heading, body, action) => {
     const before = currentLocale();
     setLocale(locale);
     try {
@@ -703,7 +703,7 @@ describe("menu-screen", () => {
       expect(editor(el).open).toBe(true);
     }
     expect(message?.textContent?.trim()).toBe(
-      "It is on a live or scheduled menu. Take it off the menu and publish, then archive it. Menus: Dinner, Lunch Menu.",
+      "It is on a live or scheduled menu. Take it off the menu and publish, then delete it. Menus: Dinner, Lunch Menu.",
     );
   });
 
@@ -827,55 +827,6 @@ describe("menu-screen", () => {
       expect(api.countProductMenus).toHaveBeenLastCalledWith(["p2"]);
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
     });
-  });
-
-  async function archivedRowOffersView(api: DashboardApi, productId = "p1") {
-    const archived = { ...(await api.getProductEditor(productId)), active: false };
-    vi.mocked(api.getProductEditor).mockReset().mockResolvedValue(archived);
-    const original = vi.mocked(api.listProducts).getMockImplementation()!;
-    vi.mocked(api.listProducts).mockImplementation(async () =>
-      (await original()).map((product) => ({
-        ...product,
-        active: product.id === productId ? false : product.active,
-        variants: product.variants.map((variant) => ({
-          ...variant,
-          active: variant.id === productId ? false : variant.active,
-        })),
-      })),
-    );
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-    await flush(el);
-    const table = await productTable(el);
-    const products = list(el).shadowRoot!.querySelector("dashboard-product-list")!;
-    products
-      .shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!
-      .shadowRoot!.querySelector<HTMLInputElement>("input")!
-      .click();
-    await products.updateComplete;
-    table.setExpanded("folder:c1", true);
-    table.setExpanded("p1", true);
-    await table.updateComplete;
-    const actions = table.shadowRoot!.querySelector<HTMLElement>(
-      `[data-test="actions-${productId}"]`,
-    )!;
-    expect(
-      [...actions.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
-    ).toEqual([t("product.view")]);
-    const seen: unknown[] = [];
-    list(el).addEventListener("view-product", (event) => seen.push((event as CustomEvent).detail));
-    actions.querySelector<HTMLElement>(`[data-test="view-${productId}"]`)!.click();
-    expect(seen).toEqual([{ productId }]);
-    expect(api.getProductEditor).toHaveBeenCalledExactlyOnceWith(productId);
-    await flush(el);
-    const details = el.shadowRoot!.querySelector("dashboard-product-details")!;
-    expect(details.open).toBe(true);
-    expect(details.value).toEqual(archived);
-    expect(api.updateProductEditor).not.toHaveBeenCalled();
-    expect(editor(el).open).toBe(false);
-    return el;
-  }
-  it("an archived product row offers View only", async () => {
-    await archivedRowOffersView(stubApi());
   });
 
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {
@@ -2019,18 +1970,6 @@ describe("menu-screen", () => {
         name: "Ya hay otro producto o variante activo con este nombre.",
       });
     });
-
-    it("an archived row offers View only even when a write would refuse its name", async () => {
-      await archivedRowOffersView(
-        stubApi({
-          updateProductEditor: vi.fn().mockRejectedValue({
-            code: "product.name_taken",
-            params: { field: "name", name: "Croquettes" },
-            status: 409,
-          }),
-        }),
-      );
-    });
   });
 
   it("puts a refusal to give an offered product an Active variant beside that variant, naming the lists", async () => {
@@ -3022,7 +2961,7 @@ describe("menu-screen", () => {
       el.requestUpdate();
       await el.updateComplete;
       try {
-        expect(dialog.getAttribute("heading")).toBe("Archive Half portion");
+        expect(dialog.getAttribute("heading")).toBe("Delete Half portion");
         expect(dialog.textContent).toContain(
           "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
         );
@@ -3030,11 +2969,11 @@ describe("menu-screen", () => {
           el
             .shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!
             .textContent!.trim(),
-        ).toBe("Archive");
+        ).toBe("Delete");
         setLocale("es");
         el.requestUpdate();
         await el.updateComplete;
-        expect(dialog.getAttribute("heading")).toBe("Archivar Half portion");
+        expect(dialog.getAttribute("heading")).toBe("Eliminar Half portion");
         expect(dialog.textContent).toContain(
           "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
         );
@@ -3044,7 +2983,7 @@ describe("menu-screen", () => {
         await el.updateComplete;
       }
       const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-      expect(confirm.textContent!.trim()).toBe(t("product.archive"));
+      expect(confirm.textContent!.trim()).toBe(t("action.delete"));
       confirm.click();
       await flush(el);
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");
@@ -3075,10 +3014,6 @@ describe("menu-screen", () => {
       );
     });
 
-    it("an archived variant row offers View only", async () => {
-      await archivedRowOffersView(variantApi(), "v1");
-    });
-
     it("reports a failed reload after a written archive as a load failure", async () => {
       history.replaceState(null, "", "/products");
       const api = variantApi();
@@ -3101,16 +3036,6 @@ describe("menu-screen", () => {
         false,
       );
       expect((el as unknown as { busy: boolean }).busy).toBe(false);
-    });
-
-    it("an archived variant offers View only even when a write would be refused by extras", async () => {
-      const api = variantApi();
-      vi.mocked(api.updateProductEditor).mockRejectedValue({
-        code: "product.offered_as_extra",
-        params: { field: "active", extraLists: [{ id: "ex-1", name: "Sauces" }] },
-        status: 409,
-      });
-      await archivedRowOffersView(api, "v1");
     });
 
     it("names the extras lists that refuse a save inside the variant's own editor", async () => {
@@ -3143,12 +3068,6 @@ describe("menu-screen", () => {
       );
       expect((el as unknown as { busy: boolean }).busy).toBe(false);
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-    });
-
-    it("an archived variant offers View only even when a write would fail", async () => {
-      const api = variantApi();
-      vi.mocked(api.updateProductEditor).mockRejectedValue({ code: "server.internal" });
-      await archivedRowOffersView(api, "v1");
     });
   });
 
@@ -3738,88 +3657,14 @@ it.each([true, false])(
   },
 );
 
-describe("archived product entry", () => {
-  it("reads archived details passively from the existing background client", async () => {
-    history.replaceState(null, "", "/products");
-    const background = stubApi({
-      getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
-    });
-    const api = { ...stubApi(), background } as DashboardApi;
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-    await flush(el);
-    emit(list(el), "view-product", { productId: "p1" });
-    await flush(el);
-    expect(background.getProductEditor).toHaveBeenCalledExactlyOnceWith("p1");
-    expect(api.getProductEditor).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("dashboard-product-details")!.open).toBe(true);
-    expect(api.updateProductEditor).not.toHaveBeenCalled();
-  });
-
-  it.each(["row", "variant", "link"])(
-    "opens details through %s without opening the editor",
-    async (entry) => {
-      history.replaceState(null, "", "/products");
-      const archived = { ...value, active: false, id: entry === "variant" ? "v1" : "p1" };
-      const api = stubApi({
-        getProductEditor: vi.fn().mockResolvedValue(archived),
-        listProducts: vi.fn().mockResolvedValue([
-          {
-            ...products[0]!,
-            active: false,
-            variants: [
-              {
-                id: "v1",
-                name: "Small",
-                customerName: null,
-                kitchenName: null,
-                image: null,
-                unitPrice: null,
-                available: true,
-                active: false,
-                allergensInherited: true,
-                effective: {
-                  allergens: null,
-                  unitPrice: "8.50",
-                  vatClass: "reduced",
-                  takeawayVatRate: "10.00",
-                  primaryCategoryId: "c1",
-                },
-              },
-            ],
-          },
-        ]),
-      });
-      if (entry === "link") history.replaceState(null, "", "/products/product/p1");
-      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-      await flush(el);
-      if (entry !== "link") emit(list(el), "view-product", { productId: archived.id });
-      await flush(el);
-      const details = el.shadowRoot!.querySelector<
-        HTMLElement & { open: boolean; value: ProductEditorValue }
-      >("dashboard-product-details");
-      expect(details?.open).toBe(true);
-      expect(details?.value.id).toBe(archived.id);
-      expect(editor(el).open).toBe(false);
-      emit(details!, "wt-close", {});
-      await flush(el);
-      expect(details?.open).toBe(false);
-      expect(location.pathname).toBe("/products");
-    },
-  );
-
-  it("keeps active products in the editor", async () => {
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    expect(editor(el).open).toBe(true);
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("dashboard-product-details")
-        ?.open ?? false,
-    ).toBe(false);
-  });
+it.each(["p1", "v1"])("leaves the Products list open at the address of deleted %s", async (id) => {
+  history.replaceState(null, "", `/products/product/${id}`);
+  const api = stubApi({ listProducts: vi.fn().mockResolvedValue([]) });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+  await flush(el);
+  expect(api.getProductEditor).not.toHaveBeenCalled();
+  expect(editor(el).open).toBe(false);
+  expect(el.shadowRoot!.querySelector("dashboard-product-details")).toBeNull();
 });
 
 it("A462 Products root closure clears category URL through native tree events", async () => {
@@ -3894,7 +3739,7 @@ it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
   },
 );
 
-it("tells the product list, details and editor whether the region charges a takeaway class", async () => {
+it("tells the product list and editor whether the region charges a takeaway class", async () => {
   const api = stubApi({
     getMenuSettings: vi.fn().mockResolvedValue({
       defaultProductVatClass: "reduced",
@@ -3905,15 +3750,8 @@ it("tells the product list, details and editor whether the region charges a take
   const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
   await flush(el);
   await list(el).updateComplete;
-  const details = el.shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
-    "dashboard-product-details",
-  )!;
   const productList = list(el).shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
     "dashboard-product-list",
   )!;
-  expect([productList.takeawayVat, details.takeawayVat, editor(el).takeawayVat]).toEqual([
-    true,
-    true,
-    true,
-  ]);
+  expect([productList.takeawayVat, editor(el).takeawayVat]).toEqual([true, true]);
 });

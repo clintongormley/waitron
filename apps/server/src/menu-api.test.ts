@@ -144,22 +144,16 @@ describe("folder selection routes", () => {
           })
         ).status,
       ).toBe(204);
-      const products = async () =>
-        (
-          (await (await send(app, "GET", "/management-api/products")).json()) as {
-            id: string;
-            active: boolean;
-            primaryCategoryId: string | null;
-          }[]
-        )
-          .filter(({ id }) => id === steak || id === stew)
-          .map(({ id, active, primaryCategoryId }) => ({ id, active, primaryCategoryId }))
-          .sort((a, b) => a.id.localeCompare(b.id));
-      const before = await products();
+      const storedProducts = () =>
+        suite.db.all<{ id: string; active: number; primaryCategoryId: string }>(sql`
+          select id, active, category_id as primaryCategoryId
+          from products where id in (${steak}, ${stew}) order by id
+        `);
+      const before = storedProducts();
       expect(before).toEqual(
         [
-          { id: steak, active: true, primaryCategoryId: withActive },
-          { id: stew, active: false, primaryCategoryId: withInactive },
+          { id: steak, active: 1, primaryCategoryId: withActive },
+          { id: stew, active: 0, primaryCategoryId: withInactive },
         ].sort((a, b) => a.id.localeCompare(b.id)),
       );
 
@@ -194,7 +188,7 @@ describe("folder selection routes", () => {
         ]),
       );
       expect(left.some(({ id }) => id === empty)).toBe(false);
-      expect(await products()).toEqual(before);
+      expect(storedProducts()).toEqual(before);
     },
   );
 
@@ -270,15 +264,9 @@ describe("folder selection routes", () => {
         error: { code: "category.contents_changed", params: { categoryId: empty } },
       });
       expect((await send(app, "GET", `/management-api/categories/${empty}`)).status).toBe(200);
-      const listed = (await (await send(app, "GET", "/management-api/products")).json()) as {
-        id: string;
-        active: boolean;
-        primaryCategoryId: string | null;
-      }[];
-      expect(listed.find(({ id }) => id === flan)).toMatchObject({
-        active: false,
-        primaryCategoryId: empty,
-      });
+      expect(
+        suite.db.all(sql`select active, category_id from products where id = ${flan}`),
+      ).toEqual([{ active: 0, category_id: empty }]);
     });
 
     it("deletes when the counts shown still hold", async () => {
@@ -1781,12 +1769,12 @@ describe("mountMenuApi — labels", () => {
 });
 
 describe("mountMenuApi — products", () => {
-  it("GET /management-api/products lists all top-level products", async () => {
+  it("GET /management-api/products lists active top-level products", async () => {
     const app = mountApp();
     const res = await send(app, "GET", `/management-api/products`);
     expect(res.status).toBe(200);
     const stored = suite.db.all<{ id: string }>(
-      sql`select id from products where parent_id is null order by id`,
+      sql`select id from products where parent_id is null and active order by id`,
     );
     expect(((await res.json()) as { id: string }[]).map(({ id }) => id).sort()).toEqual(
       stored.map(({ id }) => id),
@@ -2732,7 +2720,7 @@ describe("mountMenuApi — products", () => {
     expect(await editor(id)).toEqual(own);
   });
 
-  it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
+  it("lists each active variant with its own price and its effective price, VAT and category", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
     // ES double coffee sets its own price (2.40, where the parent's is 2.00) and here its own takeaway
@@ -2791,20 +2779,6 @@ describe("mountMenuApi — products", () => {
           unitPrice: "2.40",
           vatClass: "general",
           takeawayVatRate: "4.00",
-          primaryCategoryId: categoryId,
-          courseId: null,
-        },
-      }),
-      expect.objectContaining({
-        name: "Short ES coffee",
-        active: false,
-        unitPrice: null,
-        allergensInherited: true,
-        effective: {
-          allergens: { milk: {} },
-          unitPrice: "2.00",
-          vatClass: "general",
-          takeawayVatRate: "21.00",
           primaryCategoryId: categoryId,
           courseId: null,
         },
@@ -2976,9 +2950,7 @@ describe("mountMenuApi — products", () => {
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(await read.json()).toMatchObject({ active: false, available: true });
     const listed = await send(app, "GET", `/management-api/products`);
-    expect(await listed.json()).toContainEqual(
-      expect.objectContaining({ id: saved.id, active: false, available: true }),
-    );
+    expect(await listed.json()).not.toContainEqual(expect.objectContaining({ id: saved.id }));
   });
 
   it("keeps an Unavailable product on the menu's price list, and takes an Inactive one off it", async () => {

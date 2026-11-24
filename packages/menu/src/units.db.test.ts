@@ -13,6 +13,7 @@ import {
   reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
+import { updateProduct } from "./operations.js";
 import { plantStoredUnit, racePair, storedUnitId } from "../test/fixtures.js";
 
 /**
@@ -525,6 +526,24 @@ it("retains an archived product's unit and refuses deletion or reassignment with
   }
   await app((tx) => deleteUnit(tx, target.id));
   expect(await app((tx) => listUnits(tx))).toEqual([source]);
+});
+
+it("lets a manager delete the unit separately after deleting its last product", async () => {
+  await seedTaxpayer(suite.db);
+  const id = await product();
+  const unit = await kg();
+  await app((tx) => assignProductUnit(tx, id, unit.id));
+  await expect(app((tx) => deleteUnit(tx, unit.id))).rejects.toMatchObject({ code: "unit.in_use" });
+
+  await app((tx) => updateProduct(tx, id, { active: false, unitId: unit.id }));
+  expect(await app((tx) => listUnits(tx))).toContainEqual(unit);
+  await app((tx) => deleteUnit(tx, unit.id));
+  expect(await app((tx) => listUnits(tx))).not.toContainEqual(unit);
+  const [retained] = await suite.db
+    .select({ name: products.name, active: products.active })
+    .from(products)
+    .where(eq(products.id, id));
+  expect(retained).toEqual({ name: "Soup", active: false });
 });
 
 it("stores the unit on the product and refuses deleting a unit in use", async () => {
