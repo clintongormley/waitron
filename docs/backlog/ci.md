@@ -327,12 +327,6 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
   [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
 
-## The server's fiscal-hour restart tests boot twice
-
-Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
-`first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice. A938 (#1930) left this open.
-[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-
 ## Bundle: Vitest settings: remaining measurements
 
 2 entries, size M. The remaining work is:

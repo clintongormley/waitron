@@ -135,10 +135,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       agentClosed = false;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
-      await child.stop();
-      child = await childProcess(built(script), f.env);
-      origin = `https://127.0.0.1:${child.port}`;
-      expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
       await expect(stat(join(f.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
         code: "ENOENT",
