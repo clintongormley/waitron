@@ -152,22 +152,51 @@ it("discards a late response after leaving the screen", async () => {
   await preview.updateComplete;
   expect(preview.shadowRoot!.textContent).not.toContain("Amber Hill");
 });
-it("keeps an unnamed old key explicit and updates its warnings after a language change", async () => {
+it("refuses a filing backup that holds no master key beside the review action, offering no key entry, in both languages", async () => {
+  const { el } = await mount(
+    async () =>
+      new Response(
+        JSON.stringify({
+          ...saved,
+          nodeRecoveryKeyName: null,
+          fiscalSelection: {
+            module: "fiscal-verifactu",
+            country: "ES",
+            fiscalTerritory: "common",
+            timeZone: "Europe/Madrid",
+          },
+        }),
+      ),
+  );
+  await fill(el);
+  review(el);
+  const actions = () =>
+    child(el)!.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent;
+  await vi.waitFor(() =>
+    expect(actions()).toContain(
+      "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
+    ),
+  );
+  expect(child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();
+  expect(child(el)!.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();
+  setLocale("es-ES");
+  await child(el)!.updateComplete;
+  expect(actions()).toContain(
+    "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",
+  );
+});
+it("shows a backup that files nothing and holds no master key without a key row", async () => {
   const { el } = await mount(
     async () => new Response(JSON.stringify({ ...saved, nodeRecoveryKeyName: null })),
   );
   await fill(el);
   review(el);
-  await vi.waitFor(() =>
-    expect(child(el)!.shadowRoot!.textContent).toContain(
-      "This backup's box key has no stored name.",
-    ),
+  await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Saved venue"));
+  const copy = child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")!;
+  expect([...copy.querySelectorAll("dt")].map((term) => term.textContent)).not.toContain(
+    t("restore.preview_node_key"),
   );
-  setLocale("es-ES");
-  await child(el)!.updateComplete;
-  expect(child(el)!.shadowRoot!.textContent).toContain(
-    "La clave del servidor de esta copia no tiene nombre guardado.",
-  );
+  expect(copy.textContent).not.toContain("master key");
 });
 it("shows a refusal beside the review action and allows another attempt", async () => {
   const transport = vi

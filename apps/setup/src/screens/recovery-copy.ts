@@ -91,6 +91,7 @@ export class SetupRecoveryCopy extends LitElement {
     | "manifest"
     | "unsupported"
     | "version"
+    | "noMasterKey"
     | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
@@ -305,7 +306,10 @@ export class SetupRecoveryCopy extends LitElement {
           : cloudPointId !== undefined
             ? await api.previewCloudRestore(cloudPointId)
             : await api.previewRestore(artifact!, recoveryKey, environment);
-      if (current()) {
+      if (current() && preview.fiscalSelection !== undefined && !preview.nodeRecoveryKeyName) {
+        this.error = "noMasterKey";
+        this.#notifyRefusal();
+      } else if (current()) {
         this.preview = preview;
         this.#previewCurrent = current;
         this.#notifyPreview();
@@ -386,6 +390,7 @@ export class SetupRecoveryCopy extends LitElement {
       file: "restore.preview_file_error",
       kit: "restore.preview_kit_error",
       failed: "restore.preview_failed",
+      noMasterKey: "restore.preview_no_master_key",
       capacity: "shell.restore.archive_resource_limit",
       interrupted: "shell.restore.upload_interrupted",
       version:
@@ -411,8 +416,12 @@ export class SetupRecoveryCopy extends LitElement {
                 <dd><time datetime=${preview.createdAt}>${preview.createdAt}</time></dd>
                 <dt>${t("restore.preview_node")}</dt>
                 <dd>${shortNodeId(preview.nodeId)}</dd>
-                <dt>${t("restore.preview_node_key")}</dt>
-                <dd>${preview.nodeRecoveryKeyName ?? t("restore.preview_unnamed")}</dd>
+                ${
+                  preview.nodeRecoveryKeyName
+                    ? html`<dt>${t("restore.preview_node_key")}</dt>
+                        <dd>${preview.nodeRecoveryKeyName}</dd>`
+                    : nothing
+                }
               </dl>
               <p>${t("restore.preview_older_key")}</p>
               <p>${t("restore.preview_keep_keys")}</p>
