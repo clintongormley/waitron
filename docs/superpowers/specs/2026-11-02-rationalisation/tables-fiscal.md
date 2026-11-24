@@ -291,6 +291,12 @@ the schema: a promotion whose old box gave up filing stores a version 2 approval
     list is empty and goes, and the identity's no-delete trigger is never reached by Start again.
 - **Rows:** 1, plus one per restore or promotion.
 
+**2026-11-24, as built in Fi9.** The seven allocation columns are empty together for fixture
+identities and set together when activation records an approval. The owner chose to drop
+`fiscal_allocations_identity_uq` on 2026-11-09 because the existing installation-name unique index
+already covers all environments. Start again still needs the certificate exemption added by
+A1379 part 2. Fi9 removes only the allocation table from that list.
+
 Why the fold is sound:
 
 - In product code, every identity row is written by `activate` (`allocation.ts:437-473`), together
