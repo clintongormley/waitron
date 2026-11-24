@@ -1,8 +1,8 @@
 # Split kitchen printing
 
 Developers can find ticket routing, corrections, reprints and their tests by filename. The
-watcher’s 17:51 Lane F note assigns the plan now and the build after Lane H’s working-order
-split lands. Build after watcher clearance. Aim for one PR and an hour of build time. Move
+watcher cleared this plan with three edits at 18:08 on 24 November. Build after Lane H’s
+working-order split lands. Aim for one PR and an hour of build time. Move
 about 3,157 product lines and 3,743 test lines. Allow about 450 more lines for product imports
 and path edits, 250 for test imports and setup, and 130 for the move map.
 
@@ -33,10 +33,13 @@ The queue’s mount-function rule covers both other files. At `e81b714793`, `mou
 
 Move whole test blocks to `kitchen-print.{fire,extras,portions,corrections,reprint}.test.ts`
 for fire and routing, extras and units, A803 portions, corrections and moves, and full reprints.
-Keep names, table labels and course headings in `kitchen-print.test.ts` with its one English
-exception. `kitchen-print.test-support.ts` holds the shared helpers and a database binding
-initialised in each isolated suite by `useVenueDb`. Retain `useSplitExtrasDb` where called and
-both `afterEach` hooks in their original order. Compare block bytes and all 104 original cases.
+Put “show the rest of the order” and “a station printer that was deleted” in `fire`. Put the
+table-driven measured-extra label cases in `extras`. Keep the piece-unit group with the English
+exception, the stored-option answers, the frozen-name cases, table labels and course headings in
+`kitchen-print.test.ts`. `kitchen-print.test-support.ts` holds the shared helpers and a database
+binding initialised in each isolated suite by `useVenueDb`. Every suite that uses helpers from
+`split-extras-venue.ts` calls `useSplitExtrasDb` in its own `beforeAll`. Keep both `afterEach`
+hooks in their original order. Compare block bytes and all 104 original cases.
 
 Run the split suites and the five existing `kitchen-print.*.test.ts` suites. The six originals
 passed 164 cases at `e81b714793`. Also run `print-problems.test.ts`, `till-api.reprint.test.ts`,
