@@ -2552,7 +2552,8 @@ async function itemsPaymentSource(tx: Transaction, payment: PaymentRow): Promise
 
 /** A card bill payment that charged nothing becomes `failed`, releasing its reservation, and the
  * items it was paying for go back to their bill ({@link putItemsBack}). Its callers have read it
- * pending, as {@link completeBillPayment}'s have. */
+ * pending, as {@link completeBillPayment}'s have. `issueSource: false` leaves a source the items
+ * stay off unissued, for a caller that may write no invoice now. */
 export async function failBillPayment(
   tx: Transaction,
   deps: TillSaleDeps,
@@ -2560,6 +2561,7 @@ export async function failBillPayment(
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
+  options: { issueSource?: false } = {},
 ): Promise<PaymentRow> {
   const [payment] = await tx
     .update(billPayments)
@@ -2570,7 +2572,7 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
-  await putItemsBack(tx, deps, cfg, payment!);
+  await putItemsBack(tx, deps, cfg, payment!, options.issueSource !== false);
   return payment!;
 }
 
@@ -2587,10 +2589,11 @@ async function putItemsBack(
   deps: TillSaleDeps,
   cfg: TradingContext,
   failed: PaymentRow,
+  issueSource: boolean,
 ) {
   const sourceId = await itemsPaymentSource(tx, failed);
   if (sourceId === null) return;
-  if (!(await movedItemsBack(tx, cfg, failed, sourceId)))
+  if (!(await movedItemsBack(tx, cfg, failed, sourceId)) && issueSource)
     await issueHeldSource(tx, deps, cfg, failed, sourceId);
 }
 
@@ -2861,10 +2864,16 @@ export async function collectBegunReaderPayment(
   const { workingOrderId, req, operator, payment } = begun;
   const slip = { frozen: begun.slip, log: deps.log };
   if (deps.disk?.noted() === true) {
-    // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
-    // disk stops the till's writes").
-    await withTransaction(deps.db, (tx) =>
-      failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined),
+    // No slip, and no invoice for a source the items stay off, while the full-disk stop refuses
+    // the till's writes (conventions-data.md, "A full disk stops the till's writes"); that source
+    // stays open for a later action on it that issues a paid bill.
+    await withIssuanceTransaction(
+      deps.db,
+      (tx) =>
+        failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined, {
+          issueSource: false,
+        }),
+      deps.log,
     );
     refuseForDiskStop(deps.log, workingOrderId);
   }
@@ -2888,11 +2897,15 @@ export async function collectBegunReaderPayment(
     if (isAppError(error) && REFUSED_START.has(error.code)) {
       await withSettledSlip(
         (print) =>
-          withTransaction(deps.db, async (tx) => {
-            await requireEconomicWrite(tx, cfg, deps.admission);
-            await failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined);
-            await print(tx, payment.id);
-          }),
+          withIssuanceTransaction(
+            deps.db,
+            async (tx) => {
+              await requireEconomicWrite(tx, cfg, deps.admission);
+              await failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined);
+              await print(tx, payment.id);
+            },
+            deps.log,
+          ),
         slip,
       );
     }
@@ -2930,31 +2943,35 @@ export async function collectBegunReaderPayment(
   }
   return await withSettledSlip(
     (print) =>
-      withTransaction(deps.db, async (tx) => {
-        await requireEconomicWrite(tx, cfg, deps.admission);
-        if (!NO_RETAINED_CHARGE.has(result.state)) {
-          const answer = await resultOf(tx, deps, cfg, payment, null);
-          return { ...answer, outcome: "timeout" };
-        }
-        const failed = await failBillPayment(
-          tx,
-          deps,
-          cfg,
-          payment.id,
-          deps.clock.now().instant,
-          undefined,
-        );
-        // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
-        // could not print." (`payment_slip.capture_failed`).
-        await print(tx, payment.id);
-        return {
-          ...(await resultOf(tx, deps, cfg, failed, null)),
-          outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
-          ...(result.state === "failed" && result.failureReason !== undefined
-            ? { failureReason: result.failureReason }
-            : {}),
-        };
-      }),
+      withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await requireEconomicWrite(tx, cfg, deps.admission);
+          if (!NO_RETAINED_CHARGE.has(result.state)) {
+            const answer = await resultOf(tx, deps, cfg, payment, null);
+            return { ...answer, outcome: "timeout" };
+          }
+          const failed = await failBillPayment(
+            tx,
+            deps,
+            cfg,
+            payment.id,
+            deps.clock.now().instant,
+            undefined,
+          );
+          // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
+          // could not print." (`payment_slip.capture_failed`).
+          await print(tx, payment.id);
+          return {
+            ...(await resultOf(tx, deps, cfg, failed, null)),
+            outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+            ...(result.state === "failed" && result.failureReason !== undefined
+              ? { failureReason: result.failureReason }
+              : {}),
+          };
+        },
+        deps.log,
+      ),
     slip,
   );
 }

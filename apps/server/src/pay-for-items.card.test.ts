@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
@@ -13,15 +13,18 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
+import { tillSessions } from "@waitron/identity";
 import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider, payments } from "@waitron/payments";
-import { AppError, centsToDecimal, decimal } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal, deviceId as brandDeviceId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { failBillPayment } from "./bill-payments.js";
 import { closeInvoiceCorrection } from "./invoice-corrections.js";
+import type { DiskFullState } from "./disk-full-state.js";
+import { payForItems, type PayForItemsRequest } from "./pay-for-items.js";
 import {
   cashPayment,
   inTx,
@@ -786,6 +789,66 @@ describe("A1515 pay for items on the card reader", () => {
       state: "pending",
     });
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
+  });
+
+  it("a full disk noted before the card is asked issues no invoice for a source its own payments cover", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const body = (await tartaByReaderBody(sourceId)) as PayForItemsRequest;
+    const [session] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: tillSessions.id })
+        .from(tillSessions)
+        .where(
+          and(
+            eq(tillSessions.deviceId, venue.deviceId),
+            eq(tillSessions.personId, venue.operatorId),
+            isNull(tillSessions.endedAt),
+          ),
+        ),
+    );
+    // Noted once the payment is written, as a refusal elsewhere would note it before `collect`.
+    let full = false;
+    const disk: DiskFullState = {
+      noteRefused: () => {},
+      noted: () => full,
+      full: () => Promise.resolve(full),
+      since: () => null,
+    };
+    const calls = venue.card.collectCalls.length;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // Putting the Tarta back would take the table's bill past 20.00, so it stays where it is.
+    const paid = payForItems(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: venue.card,
+        disk,
+        attendance: () => {
+          full = true;
+          return Promise.resolve();
+        },
+      },
+      {
+        ...venue.cfg,
+        origin: { ...venue.cfg.origin, deviceId: brandDeviceId(venue.deviceId) },
+        simplifiedInvoiceLimit: decimal("20.00"),
+      },
+      sourceId,
+      body,
+      { personId: venue.operatorId, sessionId: session!.id },
+    ).finally(() => warn.mockRestore());
+
+    await expect(paid).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect(venue.card.collectCalls.length).toBe(calls);
+    const newBill = await billNaming(sourceId);
+    expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "failed" }]);
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+    expect(await invoiceCount(sourceId)).toBe(0);
+    expect(await statusOf(venue, sourceId)).toBe("open");
   });
 
   it("charges the reader the request names when it names one", async () => {
