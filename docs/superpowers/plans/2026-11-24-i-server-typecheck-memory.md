@@ -1,49 +1,55 @@
-# Keep the Server typecheck within the CI runner's memory
+# Diagnose the Server typecheck kills and reduce their risk
 
-Give the native TypeScript compiler enough room to finish the existing full typecheck on ordinary
-pull requests and main pushes. The Lane I queue records five kills in one day without a compiler
-diagnostic.
+Collect memory evidence from a disposable CI guest for the previously failed #4258 merge. Use it
+to choose the smallest change that lets the existing full typecheck finish with usable headroom.
 
-## Measurements
-
-- The jobs API and logs identify all five kills as disposable server jobs on attempt 1 of
+- Five first attempts on 24 November killed the Server compiler with exit 137. The runs were
   [45455114871](https://github.com/clintongormley/waitron/actions/runs/45455114871),
   [45468324299](https://github.com/clintongormley/waitron/actions/runs/45468324299),
-  [45474194511](https://github.com/clintongormley/waitron/actions/runs/45474194511),
+  [45474194511](https://github.com/clintongormley/waitron/actions/runs/45474194511) (#4258's PR),
   [45478090008](https://github.com/clintongormley/waitron/actions/runs/45478090008) and
-  [45479529468](https://github.com/clintongormley/waitron/actions/runs/45479529468).
-  Four exact heads passed a hosted retry. The installed controller at `f4c9c3c82fc6` assigns
-  typecheck guests 16,384 MiB and four CPUs. In all five logs the other package compilers had
-  finished before the Server compiler began. The original guest kernel evidence is unavailable
-  in these job logs. A separate checkout on the same guest pool passed at `c5e7ee392417`.
+  [45479529468](https://github.com/clintongormley/waitron/actions/runs/45479529468) (#4258's main
+  merge, `01ec75f7e065`). Four exact heads passed on hosted retries. In every failed job, the
+  other package compilers finished before Server started. The current disposable controller at
+  `f4c9c3c82fc6` allocates 16,384 MiB and four CPUs to typecheck. GitHub lists 16 GB and four CPUs
+  for public Ubuntu runners. The failed jobs did not record guest memory.
+  [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
 - On macOS, `/usr/bin/time -l pnpm --filter @waitron/server typecheck --extendedDiagnostics`
-  reported peak resident memory of 7.80 GiB at `eee4006f8362` (1 November), 7.55 GiB at
-  `53bb877a5e15` (10 November), and 11.38 GiB at `c5e7ee392417` (24 November). All used
-  TypeScript 7.0.2, were installed with the checkout's lockfile, and passed.
-- On current main, `--generateTrace` showed four checker workers each creating types from
-  TypeScript's standard library, Hono, Drizzle and Vitest. The longest file accounted for 1.6%
-  of traced file-check time. The matching heap profile attributed memory to compiler data
-  structures, including about 1.1 GiB across the symbol-table instantiation call tree. The
-  profiles identify repeated work on shared types and do not assign the peak to one Waitron file.
-- A four-CPU Linux arm64 container checked the failed #4258 merge `01ec75f7e065`. With a 12 GiB
-  container limit, the default check passed and the container peaked at 10.76 GiB. Under 9 GiB
-  with swap disabled, the same check hit exit 137 and the kernel's `oom_kill` counter rose to 1.
-  With only `GOMEMLIMIT=6GiB` added, it passed at the 9 GiB limit with zero kills and the same
-  6,327 files and 13,107,016 type instantiations. This is a memory-pressure control on Linux arm64.
+  with TypeScript 7.0.2 and frozen installs passed at all three commits.
 
-## Change and proof
+  | Commit | Peak resident memory | Files | Type instantiations |
+  | --- | ---: | ---: | ---: |
+  | 1 Nov `eee4006f8362` | 7.80 GiB | 5,234 | 10,792,009 |
+  | 10 Nov `53bb877a5e15` | 7.55 GiB | 5,546 | 11,598,795 |
+  | 24 Nov `c5e7ee392417` | 11.38 GiB | 6,342 | 13,271,509 |
 
-Set `GOMEMLIMIT: 6GiB` on the `pnpm typecheck` step in `.github/workflows/ci.yml`. Go uses a
-soft memory limit to decide when to collect garbage. The setting leaves headroom for the rest of
-the job and the measured peak can exceed it. Keep the existing command, job, routing, compiler,
-file selection and time limit. The evidence points to reducing the compiler's peak inside its
-existing job. A job split would repeat the observed compiler order. [Go's garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
+  On current main, `--generateTrace` showed four workers each creating types from shared
+  libraries. The heap profile includes about 1.1 GiB under symbol-table instantiation.
+  Sample intervening commits and narrow any step change before proposing a source rewrite.
+- In a four-CPU Linux arm64 container at the failed merge, default compiler settings passed
+  at a 12 GiB limit with a 10.76 GiB peak and exited 137 at a 9 GiB limit with one kernel memory
+  kill. `GOMEMLIMIT=6GiB` passed both limits, peaking at 8.37 GiB in the 12 GiB container and
+  reaching the ceiling without a kill in the 9 GiB container. Both successful settings checked
+  6,327 files. Full measurements and trace summaries are in Lane I's
+  `receipts/typecheck-memory-20261124/`.
 
-Use the captured failed run and the 9 GiB control as the failing cases. Repeat the constrained
-check with the final setting and verify a deliberately mistyped Server test file still produces
-TS2322 in a disposable copy. Run the existing whole-workspace typecheck guard in
-`scripts/ci-workflow.test.mjs`. Use the exact pull request head and merge run to check that the
-normal typecheck passes, and confirm a disposable job used the candidate before calling that
-route qualified. Record the test, runner and measured peaks in the CI guide and link the receipt
-from the existing CI incident summary. Expected size is two workflow lines, about 20–30
-documentation lines and zero committed test lines.
+Use one unmerged scratch ref. Reuse `ci.yml`'s manual `server_probe` route and copy its normal
+bounded checkout, Node and pnpm setup into that job on the scratch ref. Check out `01ec75f7e065`
+and run the full `pnpm typecheck` on fresh disposable guests, once per setting first. Capture
+guest RAM and swap, mount types, the job's cgroup limit, peak and memory events, the kernel's
+kill log if available, and compiler and job elapsed time. Log before and after the run, including
+failure. Repeat a comparison only to resolve a conflicting result. Delete the probe branch after
+retaining the job IDs and logs.
+
+If the guest's effective limit is below its configured allowance, bring the evidence to the
+watcher under the A1454 memory-kill decision. If the compiler is the pressure source and the
+controlled guest comparisons show margin inside the existing five-minute job, set the measured
+`GOMEMLIMIT` on the existing typecheck step as a stopgap. Keep the cause of growth open whenever
+the measurements leave it unresolved. Go treats this as a soft limit.
+[Go's garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
+
+Verify the constrained run and a deliberately mistyped test file in a disposable copy. Run the
+existing whole-workspace check guard. A workflow-only PR and merge use root scope and skip
+typecheck. Record their exact-head checks, then follow the first code-selected disposable main
+run with the change. The committed patch would add two workflow lines and about 20–30 lines
+to the CI guide and backlog, with zero committed test lines.
