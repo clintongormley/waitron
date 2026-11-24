@@ -24,8 +24,7 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
-/** `wrongMasterKey`: the box refused the key sent as not the selected backup's. */
-export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret" | "wrongMasterKey";
+export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
 
 const readPack = () =>
   import("@waitron/recovery-pack/src/read-pack-pdf.js").then((m) => m.readRecoveryPackPdf);
@@ -190,13 +189,7 @@ export class SetupRecoveryAllocation extends LitElement {
       [key]: value,
     };
     const field =
-      key === "record"
-        ? "recoveryOperation"
-        : key === "nodeKey" && this.refusedField === "wrongMasterKey"
-          ? "wrongMasterKey"
-          : key === "nodeKey"
-            ? "nodeRecoverySecret"
-            : undefined;
+      key === "record" ? "recoveryOperation" : key === "nodeKey" ? "nodeRecoverySecret" : undefined;
     if (field !== undefined && field === this.refusedField) {
       this.refusalDismissed = true;
       this.dispatchEvent(
@@ -299,11 +292,8 @@ export class SetupRecoveryAllocation extends LitElement {
   get #keyInvalid(): boolean {
     return this.draft.nodeKey === "";
   }
-  #refused(field: RecoveryEntryField): boolean {
-    return !this.refusalDismissed && this.refusedField === field;
-  }
   #refusal(field: RecoveryEntryField): string {
-    return this.#refused(field) ? (this.errorMessage ?? "") : "";
+    return !this.refusalDismissed && this.refusedField === field ? (this.errorMessage ?? "") : "";
   }
   override render() {
     if (this.#recoveryEntry) return this.#recoveryEntry;
@@ -337,10 +327,9 @@ export class SetupRecoveryAllocation extends LitElement {
         .copy=${copy}
         .readPack=${readPack}
         .maxPdfBytes=${MAX_PACK_PDF}
-        .wrongKey=${this.#refused("wrongMasterKey")}
         .attempted=${this.attempted}
-        .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret") || this.#refusal("wrongMasterKey")}
-        @wt-master-key-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+        .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
+        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
           event.stopPropagation();
           this.#edit("nodeKey", event.detail.masterKey ?? "");
         }}

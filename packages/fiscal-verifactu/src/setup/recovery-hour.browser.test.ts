@@ -344,8 +344,14 @@ it("the page says new series will be made only while the button reads Proceed, n
     vi.useRealTimers();
   }
 });
-const REFUSED_KEY = { code: "promotion.break_glass_invalid", params: {}, status: 403 };
-const WRONG_KEY = "Wrong master key. Use the one dated 2026-10-17 · K7QX.";
+/** The key the box names, which is not the previewed backup's (`2026-10-17 · K7QX`). */
+const REFUSED_NAME = "2026-11-02 · QZJV";
+const REFUSED_KEY = {
+  code: "promotion.break_glass_invalid",
+  params: { keyName: REFUSED_NAME },
+  status: 403,
+};
+const WRONG_KEY = `Wrong master key. Use the one dated ${REFUSED_NAME}.`;
 /** The words under the printed key's own field. */
 async function keyFieldError(el: Entry) {
   await el.updateComplete;
@@ -726,7 +732,7 @@ it("places the recovery authenticator's real refusal beside the key and leaves P
     ).not.toBe(""),
   );
   const field = await keyInput(el);
-  expect(field.error).toBe(WRONG_KEY);
+  expect(field.error).toBe("Check the key for this backup.");
   expect(button(el, "compare").disabled).toBe(false);
 });
 it.each([
@@ -3565,16 +3571,21 @@ it.each([
   expect(el.readCredentials()).toBeNull();
   expect(prepare).not.toHaveBeenCalled();
 });
-it("a refused key shows 'Wrong master key. Use the one dated {name}.' with the backup's key name", async () => {
+it.each([
+  ["names another key than the preview's", REFUSED_KEY, WRONG_KEY],
+  [
+    "names no key",
+    { code: "promotion.break_glass_invalid", params: {}, status: 403 },
+    "Check the key for this backup.",
+  ],
+])("a refusal that %s says so under the field until the key changes", async (_, refusal, line) => {
   const { prepare } = scripted();
   prepare.mockImplementation(async () => {
-    throw REFUSED_KEY;
+    throw refusal;
   });
   const { el } = await mount(prepare);
   await ready(el);
-  await vi.waitFor(async () =>
-    expect(await keyFieldError(el)).toBe("Wrong master key. Use the one dated 2026-10-17 · K7QX."),
-  );
+  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(line));
   await typeKey(el, "q");
   expect(await keyFieldError(el)).toBe("");
 });
@@ -3603,7 +3614,7 @@ it.each(["controlled", "emergency"] as const)(
     expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
   },
 );
-it("a restore request refused for the wrong master key names the backup's key under the field, and twice", async () => {
+it("the parent's refusal of the master key shows under the field, and twice", async () => {
   const { el } = await mount();
   await fill(el);
   const edited: string[] = [];
@@ -3611,18 +3622,18 @@ it("a restore request refused for the wrong master key names the backup's key un
     edited.push((event as CustomEvent).detail.field),
   );
   const refuse = async () => {
-    el.errorMessage = "Enter the selected backup’s master key.";
-    el.refusedField = "wrongMasterKey";
+    el.errorMessage = WRONG_KEY;
+    el.refusedField = "nodeRecoverySecret";
     await el.updateComplete;
   };
   await refuse();
   expect(await keyFieldError(el)).toBe(WRONG_KEY);
   expect(
     (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
-  ).not.toContain("Enter the selected backup’s master key.");
+  ).toBe("Could not complete this step.");
   await enterKey(el);
   expect(await keyFieldError(el)).toBe("");
-  expect(edited).toEqual(["wrongMasterKey"]);
+  expect(edited).toEqual(["nodeRecoverySecret"]);
   el.refusedField = undefined;
   await el.updateComplete;
   await refuse();

@@ -65,9 +65,9 @@ function notAPack(error: unknown): boolean {
 }
 
 /**
- * A master key, typed or read from a recovery pack PDF. It fires `wt-master-key-change` on every
- * change, carrying the key as printed only while the field holds a whole one, and says in the
- * field's own line why a typed key or a chosen PDF gave none.
+ * A master key, typed or read from a recovery pack PDF. It fires `wt-change` on every change,
+ * carrying the key as printed only while the field holds a whole one, and says in the field's own
+ * line why a typed key or a chosen PDF gave none.
  */
 @customElement("wt-master-key-input")
 export class WtMasterKeyInput extends LitElement {
@@ -103,19 +103,9 @@ export class WtMasterKeyInput extends LitElement {
   @property({ attribute: false }) copy?: MasterKeyInputCopy;
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /**
-   * Set by the host when the key it sent was refused as not the expected one. The field clears it
-   * when the person types or chooses a PDF, on `clear()`, and when `keyName` changes unless the host
-   * set it in that same update. A host binding it (`.wrongKey=${flag}`) clears its own flag on every
-   * `wt-master-key-change` and sets it on each refusal: Lit writes a binding only when its value
-   * changes, so a flag left set would hide the next refusal. A new `keyName` empties the field and
-   * sends `wt-master-key-change` only if the field held a key, a PDF or an older refusal; a host that
-   * sets a new name and the flag together calls `clear()` first, or that change clears its flag.
-   */
-  @property({ type: Boolean }) wrongKey = false;
   /** Set by the host once the person tried to carry on: a partly typed key is then not whole. */
   @property({ type: Boolean }) attempted = false;
-  /** The host's own line, shown when the field has none of its own. */
+  /** The host's own line, such as the server's refusal, shown when the field has none of its own. */
   @property() error = "";
 
   @state() private value = "";
@@ -150,11 +140,8 @@ export class WtMasterKeyInput extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (!this.hasUpdated || !changed.has("keyName")) return;
     const held = this.value !== "" || this.#file !== undefined;
-    const refusedNow = changed.has("wrongKey") && this.wrongKey;
-    const tell = held || (this.wrongKey && !refusedNow);
     this.#empty();
-    if (!refusedNow) this.wrongKey = false;
-    if (tell) this.#notify();
+    if (held) this.#notify();
   }
 
   /**
@@ -166,10 +153,9 @@ export class WtMasterKeyInput extends LitElement {
     return this.#pdfRead;
   }
 
-  /** Empties the field and forgets any chosen PDF and any refusal. */
+  /** Empties the field and forgets any chosen PDF. */
   clear(): void {
     this.#empty();
-    this.wrongKey = false;
     this.#notify();
   }
 
@@ -183,7 +169,7 @@ export class WtMasterKeyInput extends LitElement {
 
   #notify(masterKey?: string): void {
     this.dispatchEvent(
-      new CustomEvent<MasterKeyChangeDetail>("wt-master-key-change", {
+      new CustomEvent<MasterKeyChangeDetail>("wt-change", {
         detail: masterKey === undefined ? {} : { masterKey },
         bubbles: true,
         composed: true,
@@ -193,7 +179,6 @@ export class WtMasterKeyInput extends LitElement {
 
   #start(): object {
     this.problem = undefined;
-    this.wrongKey = false;
     return (this.#reading = {});
   }
 
@@ -248,8 +233,8 @@ export class WtMasterKeyInput extends LitElement {
 
   #line(copy: MasterKeyInputCopy): string {
     const { problem, value } = this;
-    if (this.wrongKey || problem === "wrongKey")
-      return this.keyName === undefined ? this.error : copy.wrongKey(this.keyName);
+    // A pack is refused as another key's only while `keyName` is set, and a new one empties the field.
+    if (problem === "wrongKey") return copy.wrongKey(this.keyName!);
     if (typeof problem === "object") return copy.elsewhere(problem.heldBy);
     if (problem !== undefined) return copy[problem];
     if (this.attempted && value !== "" && printed(value) === undefined) return copy.notWhole;

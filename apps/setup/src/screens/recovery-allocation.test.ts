@@ -292,45 +292,37 @@ it("allocation draws the master-key field labelled Master key with no hint, and 
     nodeRecoverySecret: nodeKey,
   });
 });
-it("a refused key names the backup's key", async () => {
+const WRONG_KEY = "Wrong master key. Use the one dated 2026-11-02 · QZJV.";
+it("a refused key shows the refusal's line under the field until the key changes", async () => {
   const { el, entry } = await selected();
   await fill(entry);
-  Object.assign(el, {
-    invalidField: "wrongMasterKey",
-    errorMessage: "Enter the selected backup’s master key.",
-  });
+  Object.assign(el, { invalidField: "nodeRecoverySecret", errorMessage: WRONG_KEY });
   await el.updateComplete;
   const field = await keyField(entry);
-  await vi.waitFor(() =>
-    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
-  );
+  await vi.waitFor(() => expect(field.error).toBe(WRONG_KEY));
   await typeMasterKey(entry, "q");
   await field.updateComplete;
   expect(field.error).toBe("");
 });
-it("a key refused twice names the backup's key both times", async () => {
+it("a key refused twice shows the refusal's line both times", async () => {
   const { el, entry } = await selected();
   await fill(entry);
   const refuse = async () => {
     Object.assign(el, {
-      invalidField: "wrongMasterKey",
-      errorMessage: "Enter the selected backup’s master key.",
+      invalidField: "nodeRecoverySecret",
+      errorMessage: WRONG_KEY,
       refusal: {},
     });
     await el.updateComplete;
   };
   await refuse();
   const field = await keyField(entry);
-  await vi.waitFor(() =>
-    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
-  );
+  await vi.waitFor(() => expect(field.error).toBe(WRONG_KEY));
   await typeMasterKey(entry, nodeKey);
   await field.updateComplete;
   expect(field.error).toBe("");
   Object.assign(el, { invalidField: undefined });
   await el.updateComplete;
   await refuse();
-  await vi.waitFor(() =>
-    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
-  );
+  await vi.waitFor(() => expect(field.error).toBe(WRONG_KEY));
 });

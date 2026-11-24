@@ -84,8 +84,8 @@ export class ConflictRecovery extends LitElement {
   @property() locale: "en" | "es" = "en";
   /** The field's printed key, present only while it holds a whole one. */
   @state() private key = "";
-  @state() private keyRefused = false;
-  @state() private refusedKeyName?: string;
+  /** The box refused the key sent; `keyName` is the key it named, when it named one. */
+  @state() private keyRefusal: { keyName?: string } | null = null;
   @state() private attempted = false;
   @state() private busy = false;
   @state() private refusal = "";
@@ -178,11 +178,6 @@ export class ConflictRecovery extends LitElement {
   private keyField(): WtMasterKeyInput | null {
     return this.shadowRoot?.querySelector("wt-master-key-input") ?? null;
   }
-  private refuseKey(keyName: string | undefined): void {
-    this.keyField()?.clear();
-    this.refusedKeyName = keyName;
-    this.keyRefused = true;
-  }
   private t(key: ConflictRecoveryString): string {
     return CONFLICT_RECOVERY_STRINGS[this.locale][key];
   }
@@ -193,8 +188,7 @@ export class ConflictRecovery extends LitElement {
     this.cancelWait();
     this.keyField()?.clear();
     this.key = "";
-    this.keyRefused = false;
-    this.refusedKeyName = undefined;
+    this.keyRefusal = null;
     this.busy = false;
     this.attempted = false;
     this.refusal = "";
@@ -257,7 +251,8 @@ export class ConflictRecovery extends LitElement {
         this.active = null;
         this.selection = null;
         this.toConfirm = null;
-        this.refuseKey(typeof params?.keyName === "string" ? params.keyName : undefined);
+        this.keyField()?.clear();
+        this.keyRefusal = typeof params?.keyName === "string" ? { keyName: params.keyName } : {};
       } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
         this.selection = null;
         this.toConfirm = null;
@@ -448,13 +443,12 @@ export class ConflictRecovery extends LitElement {
                   .copy=${keyWords}
                   .readPack=${readPack}
                   .maxPdfBytes=${MAX_PACK_PDF}
-                  .wrongKey=${this.keyRefused}
                   .attempted=${this.attempted}
                   .disabled=${this.busy}
-                  .error=${this.keyRefused && this.refusedKeyName !== undefined ? keyWords.wrongKey(this.refusedKeyName) : invalid || this.keyRefused ? this.t("conflict_recovery.key_required") : ""}
-                  @wt-master-key-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+                  .error=${this.keyRefusal?.keyName !== undefined ? keyWords.wrongKey(this.keyRefusal.keyName) : this.keyRefusal !== null ? this.t("conflict_recovery.key_refused") : invalid ? this.t("conflict_recovery.key_required") : ""}
+                  @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
                     this.key = event.detail.masterKey ?? "";
-                    this.keyRefused = false;
+                    this.keyRefusal = null;
                     this.#scope?.changed();
                   }}
                 ></wt-master-key-input>
@@ -501,7 +495,7 @@ export class ConflictRecovery extends LitElement {
                 ${this.uncertain ? html`<p role="status">${this.t("conflict_recovery.uncertain")}</p>` : nothing}
                 ${this.restart ? html`<p role="status">${this.t("conflict_recovery.restart")}</p>` : nothing}
                 <wt-form-actions
-                  .error=${[invalid || isolationInvalid || this.keyRefused ? this.t("conflict_recovery.invalid") : "", this.refusal].filter(Boolean).join(" ")}
+                  .error=${[invalid || isolationInvalid || this.keyRefusal !== null ? this.t("conflict_recovery.invalid") : "", this.refusal].filter(Boolean).join(" ")}
                 >
                   <wt-button
                     slot="cancel"

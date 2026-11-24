@@ -348,7 +348,7 @@ it.each(["en", "es"] as const)(
           await allocation.updateComplete;
           allocation
             .shadowRoot!.querySelector("wt-master-key-input")!
-            .addEventListener("wt-master-key-change", (event) => {
+            .addEventListener("wt-change", (event) => {
               (window as unknown as { recovered?: string }).recovered = (
                 event as CustomEvent<{ masterKey?: string }>
               ).detail.masterKey;

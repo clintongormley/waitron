@@ -78,6 +78,7 @@ import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -505,7 +506,7 @@ function recoveryCredentials({
 }
 
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
-  "promotion.break_glass_invalid": "wrongMasterKey",
+  "promotion.break_glass_invalid": "nodeRecoverySecret",
   "recovery.passphrase_invalid": "recoveryKey",
   "restore.environment_mismatch": "environment",
 };
@@ -519,7 +520,7 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
 };
 
 const BUCKET_FIELD_CODES: Record<string, BucketField> = {
-  "promotion.break_glass_invalid": "wrongMasterKey",
+  "promotion.break_glass_invalid": "nodeRecoverySecret",
   "backup.stream_kit_invalid": "kit",
   "restore.environment_mismatch": "environment",
 };
@@ -542,7 +543,6 @@ const CLOUD_FIELD_PATHS: Record<string, CloudField> = {
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
-  wrongMasterKey: "restore.allocation_key_missing",
   artifact: "restore.check.backup_file",
   recoveryKey: "restore.check.recovery_key",
   environment: "restore.check.environment",
@@ -551,7 +551,6 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
 const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
-  wrongMasterKey: "restore.allocation_key_missing",
   kit: "restore_bucket.check.kit",
   environment: "restore_bucket.check.environment",
   oldBoxGone: "restore_bucket.check.old_box",
@@ -562,7 +561,6 @@ const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
 const CLOUD_FIELD_CHECKS: Record<CloudField | "pointId", StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
-  wrongMasterKey: "restore.allocation_key_missing",
   pointId: "cloud_restore.check.point",
   oldBoxGone: "cloud_restore.check.old_box",
 };
@@ -622,6 +620,17 @@ function manifestRefusalKey(
     ? params?.reason === "unsupported"
       ? "shell.restore.manifest_unsupported"
       : "shell.restore.manifest_invalid"
+    : undefined;
+}
+
+/** A master key refused by a box that named the key to use: the field's own line, naming it. */
+function keyNamedInRefusal(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+): Message | undefined {
+  const keyName = params?.keyName;
+  return code === "promotion.break_glass_invalid" && typeof keyName === "string"
+    ? () => MASTER_KEY_FIELD_WORDS[setupLocale()].wrongKey(keyName)
     : undefined;
 }
 
@@ -2326,7 +2335,8 @@ export class SetupApp extends LitElement {
         const finishKey =
           manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =
-          finishKey !== undefined
+          keyNamedInRefusal(code, params) ??
+          (finishKey !== undefined
             ? say(finishKey)
             : code === "restore.administrator_password_missing"
               ? say("shell.restore.administrator_password_missing")
@@ -2342,7 +2352,7 @@ export class SetupApp extends LitElement {
                         ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
                         : typeof code === "string"
                           ? sayWith("shell.restore.staging_failed_code", { code })
-                          : say("shell.restore.staging_failed");
+                          : say("shell.restore.staging_failed"));
       }
       this.screen = "restore";
     }
@@ -2410,9 +2420,10 @@ export class SetupApp extends LitElement {
         );
         // The kit's and environment's own refusals already say what is wrong with that field.
         this.bucketRestoreError =
-          code === "setup.request_invalid" && this.bucketInvalidField !== undefined
+          keyNamedInRefusal(code, params) ??
+          (code === "setup.request_invalid" && this.bucketInvalidField !== undefined
             ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
-            : describeBucketRefusal(code, params);
+            : describeBucketRefusal(code, params));
       }
       this.screen = "restore-bucket";
     }
@@ -2489,8 +2500,9 @@ export class SetupApp extends LitElement {
           this.cloudLiveSince = undefined;
           this.cloudLiveUnknown = true;
         } else if (code === "promotion.break_glass_invalid") {
-          this.cloudInvalidField = "wrongMasterKey";
-          this.cloudRecoveryError = say(CLOUD_FIELD_CHECKS.wrongMasterKey);
+          this.cloudInvalidField = "nodeRecoverySecret";
+          this.cloudRecoveryError =
+            keyNamedInRefusal(code, params) ?? say(CLOUD_FIELD_CHECKS.nodeRecoverySecret);
         } else if (code === "setup.request_invalid") {
           this.cloudInvalidField = refusedField(code, params, {}, CLOUD_FIELD_PATHS);
           this.cloudRecoveryError = say(

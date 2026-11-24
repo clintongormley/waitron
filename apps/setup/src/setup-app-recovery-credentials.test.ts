@@ -301,14 +301,27 @@ it.each(["archive", "bucket"])(
     expect(kept()!.recoveryContext).toBeUndefined();
   },
 );
-it.each(["archive", "bucket", "cloud"])(
-  "the %s screen identifies the real named-key authentication refusal",
-  async (kind) => {
+const KEY_MISSING = "Enter the selected backup’s master key.";
+const WRONG_KEY = "Wrong master key. Use the one dated 2026-11-02 · QZJV.";
+it.each([
+  ["archive", {}, KEY_MISSING],
+  [
+    "bucket",
+    {},
+    "The copy could not be restored. (promotion.break_glass_invalid) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
+  ],
+  ["cloud", {}, KEY_MISSING],
+  ["archive", { keyName: "2026-11-02 · QZJV" }, WRONG_KEY],
+  ["bucket", { keyName: "2026-11-02 · QZJV" }, WRONG_KEY],
+  ["cloud", { keyName: "2026-11-02 · QZJV" }, WRONG_KEY],
+] as const)(
+  "the %s screen puts the master key refusal with params %o under the key: %s",
+  async (kind, params, line) => {
     const api = new SetupApi("https://box.example.test", async (input, init) => {
       const request = new Request(input, init);
       return request.method === "POST"
         ? Response.json(
-            { error: { code: "promotion.break_glass_invalid", params: {} } },
+            { error: { code: "promotion.break_glass_invalid", params } },
             { status: 403 },
           )
         : Response.json(
@@ -373,12 +386,11 @@ it.each(["archive", "bucket", "cloud"])(
         },
       ),
     );
-    await vi.waitFor(() =>
-      expect(
-        (el.shadowRoot!.querySelector(selector) as HTMLElement & { invalidField?: string })
-          ?.invalidField,
-      ).toBe("wrongMasterKey"),
-    );
+    const screen = () =>
+      el.shadowRoot!.querySelector(selector) as
+        (HTMLElement & { invalidField?: string; errorMessage?: string }) | null;
+    await vi.waitFor(() => expect(screen()?.invalidField).toBe("nodeRecoverySecret"));
+    expect(screen()!.errorMessage).toBe(line);
   },
 );
 it.each(["archive", "bucket", "cloud"])(

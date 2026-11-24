@@ -61,7 +61,7 @@ async function field(extra: Partial<WtMasterKeyInput> = {}) {
   });
   await el.updateComplete;
   const seen: MasterKeyChangeDetail[] = [];
-  el.addEventListener("wt-master-key-change", (event) =>
+  el.addEventListener("wt-change", (event) =>
     seen.push((event as CustomEvent<MasterKeyChangeDetail>).detail),
   );
   return { el, seen, loader, read };
@@ -319,16 +319,6 @@ test("with no expected key, any pack's key is taken", async () => {
   await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }));
 });
 
-test("wrongKey shows the same line, and typing again clears it", async () => {
-  const { el } = await field({ error: "Enter the key." });
-  await type(el, KEY);
-  el.wrongKey = true;
-  await settled(el, EN.wrongKey(KEY_NAME));
-  await type(el, KEY.slice(0, 8));
-  expect(el.wrongKey).toBe(false);
-  expect(message(el)).toBe("Enter the key.");
-});
-
 test("a read that finishes after the person typed again is dropped", async () => {
   let finish!: (value: RecoveryPackReading) => void;
   const { el, seen } = await field();
@@ -396,26 +386,26 @@ test("draws nothing until it has its words", async () => {
   expect(el.shadowRoot!.childElementCount).toBe(0);
 });
 
-test("the event bubbles, is composed, and the inner wt-change does not escape", async () => {
+test("one edit sends the host exactly one wt-change, from the field, bubbling and composed", async () => {
   const el = (await mountInShadowRoot(
     "<wt-master-key-input></wt-master-key-input>",
   )) as WtMasterKeyInput;
   Object.assign(el, { copy: EN, keyName: KEY_NAME });
   await el.updateComplete;
-  const changes = vi.fn();
-  const keys: Event[] = [];
-  const key = (event: Event) => keys.push(event);
-  document.addEventListener("wt-change", changes);
-  document.addEventListener("wt-master-key-change", key);
+  const changes: Event[] = [];
+  const origins: EventTarget[] = [];
+  const change = (event: Event) => {
+    changes.push(event);
+    origins.push(event.composedPath()[0]!);
+  };
+  document.addEventListener("wt-change", change);
   try {
     await type(el, KEY);
   } finally {
-    document.removeEventListener("wt-change", changes);
-    document.removeEventListener("wt-master-key-change", key);
+    document.removeEventListener("wt-change", change);
   }
-  expect(changes).not.toHaveBeenCalled();
-  expect(keys).toHaveLength(1);
-  expect(keys[0]).toMatchObject({ bubbles: true, composed: true, detail: { masterKey: KEY } });
+  expect(origins).toStrictEqual([el]);
+  expect(changes[0]).toMatchObject({ bubbles: true, composed: true, detail: { masterKey: KEY } });
 });
 
 /** True while the page would ask before closing, as it does once a scope reports a change. */
@@ -442,7 +432,7 @@ test("typing marks the draft scope changed, and clear() restores it empty", asyn
   await el.updateComplete;
   expect(shell.leave.coordinator.isDirty([el])).toBe(false);
   const seen: MasterKeyChangeDetail[] = [];
-  el.addEventListener("wt-master-key-change", (event) =>
+  el.addEventListener("wt-change", (event) =>
     seen.push((event as CustomEvent<MasterKeyChangeDetail>).detail),
   );
   await type(el, "not-a-key");
@@ -540,7 +530,7 @@ test("a field nobody configured is named master-key and is neither required nor 
 test("clear() before the field is on the page empties it without a scope", () => {
   const el = document.createElement("wt-master-key-input");
   const seen: MasterKeyChangeDetail[] = [];
-  el.addEventListener("wt-master-key-change", (event) =>
+  el.addEventListener("wt-change", (event) =>
     seen.push((event as CustomEvent<MasterKeyChangeDetail>).detail),
   );
   el.clear();
@@ -573,15 +563,6 @@ test("once attempted, a whole key still shows no line", async () => {
   const { el } = await field({ attempted: true });
   await type(el, KEY);
   expect(message(el)).toBeUndefined();
-});
-
-test("wrongKey without an expected key's name shows the host's own line", async () => {
-  const { el } = await field({
-    keyName: undefined,
-    error: "Enter the venue's current master key.",
-  });
-  el.wrongKey = true;
-  await settled(el, "Enter the venue's current master key.");
 });
 
 test("the hidden status says a PDF's line, never a typed key's or the host's", async () => {
@@ -633,73 +614,42 @@ test("the PDF chooser's own click stays inside the field", async () => {
   expect(clicks).not.toHaveBeenCalled();
 });
 
-test("clear() also forgets a refusal", async () => {
-  const { el } = await field();
-  el.wrongKey = true;
-  await settled(el, EN.wrongKey(KEY_NAME));
-  el.clear();
-  expect(el.wrongKey).toBe(false);
-  await settled(el, undefined);
-});
-
 class RefusingHost extends LitElement {
-  @state() refused = false;
-  clearsOnChange = true;
+  @state() refusal = "";
   override render() {
     return html`<wt-master-key-input
       .copy=${EN}
       .keyName=${KEY_NAME}
-      .wrongKey=${this.refused}
-      @wt-master-key-change=${() => {
-        if (this.clearsOnChange) this.refused = false;
-      }}
+      .error=${this.refusal}
+      @wt-change=${() => (this.refusal = "")}
     ></wt-master-key-input>`;
   }
 }
 customElements.define("master-key-input-test-refusing-host", RefusingHost);
 
-async function refusingHost(clearsOnChange: boolean) {
+test("a host that sets its refusal as the error and clears it on wt-change shows each refusal", async () => {
   const shell = (await mount(
     "<master-key-input-test-refusing-host></master-key-input-test-refusing-host>",
   )) as RefusingHost;
-  shell.clearsOnChange = clearsOnChange;
   const el = shell.shadowRoot!.querySelector("wt-master-key-input")!;
   await el.updateComplete;
-  const refuse = async () => {
-    shell.refused = true;
-    await shell.updateComplete;
-  };
+  const refused = EN.wrongKey("2026-01-02 · AAAA");
   const typeKey = async (text: string) => {
     await type(el, text);
     await shell.updateComplete;
   };
-  return { el, refuse, typeKey };
-}
-
-test("a host that clears its bound flag on every change shows each refusal", async () => {
-  const { el, refuse, typeKey } = await refusingHost(true);
+  const refuse = async () => {
+    shell.refusal = refused;
+    await shell.updateComplete;
+  };
   await typeKey(KEY);
   await refuse();
-  await settled(el, EN.wrongKey(KEY_NAME));
+  await settled(el, refused);
   await typeKey(KEY.slice(0, 8));
   expect(message(el)).toBeUndefined();
   await typeKey(KEY);
   await refuse();
-  await settled(el, EN.wrongKey(KEY_NAME));
-});
-
-test("a host that keeps its bound flag set loses the second refusal", async () => {
-  const { el, refuse, typeKey } = await refusingHost(false);
-  await typeKey(KEY);
-  await refuse();
-  await settled(el, EN.wrongKey(KEY_NAME));
-  await typeKey(KEY.slice(0, 8));
-  await typeKey(KEY);
-  await refuse();
-  await el.updateComplete;
-  await inner(el).updateComplete;
-  expect(el.wrongKey).toBe(false);
-  expect(message(el)).toBeUndefined();
+  await settled(el, refused);
 });
 
 test("pdfRead is null before any choice and settles once the PDF's line shows", async () => {
@@ -744,81 +694,11 @@ test("a second choice replaces pdfRead with its own read", async () => {
   expect(message(el)).toBeUndefined();
 });
 
-class NamingHost extends LitElement {
-  @state() keyName?: string;
-  @state() refused = false;
-  events = 0;
-  override render() {
-    return html`<wt-master-key-input
-      .copy=${EN}
-      .keyName=${this.keyName}
-      .wrongKey=${this.refused}
-      @wt-master-key-change=${() => {
-        this.events += 1;
-        this.refused = false;
-      }}
-    ></wt-master-key-input>`;
-  }
-}
-customElements.define("master-key-input-test-naming-host", NamingHost);
-
-async function namingHost() {
-  const shell = (await mount(
-    "<master-key-input-test-naming-host></master-key-input-test-naming-host>",
-  )) as NamingHost;
-  const el = shell.shadowRoot!.querySelector("wt-master-key-input")!;
+test("a new key name on an empty field sends no change", async () => {
+  const { el, seen } = await field();
+  el.keyName = "2026-01-02 · AAAA";
   await el.updateComplete;
-  const refuse = async (name: string) => {
-    el.clear();
-    shell.keyName = name;
-    shell.refused = true;
-    await shell.updateComplete;
-    await el.updateComplete;
-    await shell.updateComplete;
-  };
-  return { shell, el, refuse };
-}
-
-test("a host that sets a new key name and the refusal together shows the wrong-key line", async () => {
-  const { shell, el, refuse } = await namingHost();
-  shell.keyName = "2026-01-02 · AAAA";
-  shell.refused = true;
-  await shell.updateComplete;
-  await el.updateComplete;
-  await shell.updateComplete;
-  expect(shell.events).toBe(0);
-  expect(el.wrongKey).toBe(true);
-  await settled(el, EN.wrongKey("2026-01-02 · AAAA"));
-  await type(el, KEY);
-  await shell.updateComplete;
-  await refuse(KEY_NAME);
-  expect(el.wrongKey).toBe(true);
-  await settled(el, EN.wrongKey(KEY_NAME));
-});
-
-test("a new key name alone clears an older refusal and tells the host", async () => {
-  const { shell, el } = await namingHost();
-  shell.keyName = KEY_NAME;
-  shell.refused = true;
-  await shell.updateComplete;
-  await settled(el, EN.wrongKey(KEY_NAME));
-  const before = shell.events;
-  shell.keyName = "2026-01-02 · AAAA";
-  await shell.updateComplete;
-  await el.updateComplete;
-  await shell.updateComplete;
-  expect(shell.events).toBe(before + 1);
-  expect(shell.refused).toBe(false);
-  expect(el.wrongKey).toBe(false);
-  await settled(el, undefined);
-});
-
-test("a new key name on an empty field with no refusal sends no change", async () => {
-  const { shell, el } = await namingHost();
-  shell.keyName = "2026-01-02 · AAAA";
-  await shell.updateComplete;
-  await el.updateComplete;
-  expect(shell.events).toBe(0);
+  expect(seen).toStrictEqual([]);
 });
 
 test("a new key name forgets a chosen PDF and tells the host", async () => {
@@ -858,19 +738,9 @@ test("a new key name after a refused PDF forgets the PDF and tells the host", as
   await settled(el, undefined);
 });
 
-test("a new key name alone clears a refusal set directly on the field", async () => {
-  const { el, seen } = await field();
-  el.wrongKey = true;
-  await settled(el, EN.wrongKey(KEY_NAME));
-  el.keyName = "2026-01-02 · AAAA";
-  await el.updateComplete;
-  expect(el.wrongKey).toBe(false);
-  expect(seen).toStrictEqual([{}]);
-  await settled(el, undefined);
-});
-
-test("a field starts with no refusal", async () => {
+test("the host's line shows while the field has none of its own", async () => {
   const { el } = await field({ keyName: undefined, error: "Host line" });
-  expect(el.wrongKey).toBe(false);
   expect(message(el)).toBe("Host line");
+  await type(el, `${KEY}2`);
+  expect(message(el)).toBe(EN.notWhole);
 });

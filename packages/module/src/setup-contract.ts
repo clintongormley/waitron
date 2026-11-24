@@ -71,12 +71,6 @@ export interface ModuleRecoveryPreparationRequest {
 export interface ModuleRecoveryEntry extends HTMLElement {
   locale: "en" | "es";
   errorMessage?: string;
-  /**
-   * What the host's last refusal was about: a request field's name, or `"wrongMasterKey"` when the
-   * box refused the key as not this backup's. The fiscal module matches `"nodeRecoverySecret"`,
-   * `"wrongMasterKey"` and `"recoveryOperation"`, and sends `recovery-field-edited` naming the one
-   * the person edits away.
-   */
   refusedField?: string;
   clear(): void;
   readCredentials(): ModuleRecoveryCredentials | null;

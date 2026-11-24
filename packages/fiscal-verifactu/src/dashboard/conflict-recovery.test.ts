@@ -274,6 +274,25 @@ for (const [locale, line, invalid] of [
     expect(calls).toHaveLength(1);
   });
 
+for (const [locale, line] of [
+  ["en", "The master key was refused. Enter the current master key and try again."],
+  [
+    "es",
+    "La clave maestra se ha rechazado. Introduce la clave maestra actual e inténtalo de nuevo.",
+  ],
+] as const)
+  it(`a refusal that names no key says the master key was refused (${locale})`, async () => {
+    const { screen } = await mount(async () => {
+      throw { code: "promotion.break_glass_invalid", params: {}, status: 401 };
+    }, locale);
+    await key(screen, "replaced-key");
+    await click(screen, "inspect");
+    await vi.waitFor(() =>
+      expect((keyInput(screen) as unknown as { error: string }).error).toBe(line),
+    );
+    expect(nativeKey(screen).value).toBe("");
+  });
+
 it("a key refused twice shows the wrong-key line both times", async () => {
   const { screen, calls } = await mount(async () => {
     throw { code: "promotion.break_glass_invalid", params: { keyName: REFUSED_NAME }, status: 401 };
@@ -367,7 +386,6 @@ it("Stop forgets the refused key's name and its line", async () => {
   await click(screen, "stop");
   await keyField(screen).updateComplete;
   expect(keyField(screen).keyName).toBeUndefined();
-  expect(keyField(screen).wrongKey).toBe(false);
   expect(keyInput(screen).shadowRoot!.textContent).not.toContain(REFUSED_NAME);
 });
 

@@ -5,6 +5,8 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.stop": "Stop",
     "conflict_recovery.key_required": "Enter the venue's current master key.",
     "conflict_recovery.invalid": "Correct the highlighted fields to continue.",
+    "conflict_recovery.key_refused":
+      "The master key was refused. Enter the current master key and try again.",
     "conflict_recovery.failed": "The request could not be completed. Try again or choose Stop.",
     "conflict_recovery.connection_refused":
       "Recovery needs a direct secure connection to this box. Open this box's HTTPS recovery address directly in your browser, then try again or choose Stop.",
@@ -49,6 +51,8 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.stop": "Detener",
     "conflict_recovery.key_required": "Introduce la clave maestra actual del local.",
     "conflict_recovery.invalid": "Corrige los campos señalados para continuar.",
+    "conflict_recovery.key_refused":
+      "La clave maestra se ha rechazado. Introduce la clave maestra actual e inténtalo de nuevo.",
     "conflict_recovery.failed":
       "No se ha podido completar la solicitud. Inténtalo de nuevo o elige Detener.",
     "conflict_recovery.connection_refused":
