@@ -14,12 +14,7 @@ import {
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  readNodeMode,
-  readPinnedPrimaryKey,
-  readRecoveryKeyVerifier,
-  setNodeMode,
-} from "@waitron/node-db";
+import { readNodeMode, readPinnedPrimaryKey, setNodeMode } from "@waitron/node-db";
 import {
   loadKeyRing,
   nodeSigningPublicKey,
@@ -33,13 +28,11 @@ import {
   type MembershipDocumentBody,
   type NodeStanding,
 } from "@waitron/membership";
-import { verifySecretAsync } from "@waitron/identity";
 import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { spareStoreUrl } from "./box-name.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
 
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -91,11 +84,10 @@ async function close(store: VenueDatabase): Promise<void> {
   await store.close();
 }
 
-let a: { id: string; publicKey: string; secret: string; dir: string };
+let a: { id: string; publicKey: string; dir: string };
 let b: {
   id: string;
   joinedPublicKey: string;
-  secret: string;
   dir: string;
   ring: KeyRing;
   nodeBytes: Buffer;
@@ -123,7 +115,6 @@ beforeAll(async () => {
   const aId = await seedNode(aStore.venue);
   await establishNodeIdentity({ ownerDb: aStore.venue, node: aStore.node, ring: RING_A }, aId);
   await setNodeMode({ venue: aStore.venue, node: aStore.node }, aId, "primary", "promote");
-  const aSecret = await mintBreakGlassSecret({ venue: aStore.venue, node: aStore.node }, aId);
   const aKey = (await readNodeSigningKey(aStore.node, RING_A, aId))!;
 
   // Box B: joined to A through the real bundle A assembles.
@@ -147,7 +138,7 @@ beforeAll(async () => {
     designated: { nodeId: aId },
     standby: identity,
   });
-  const joined = await adoptFromPrimary(
+  await adoptFromPrimary(
     {
       ownerDb: bStore.venue,
       ownerNode: bStore.node,
@@ -187,11 +178,10 @@ beforeAll(async () => {
 
   await close(aStore);
   await close(bStore);
-  a = { id: aId, publicKey: nodeSigningPublicKey(aKey), secret: aSecret, dir: aDir };
+  a = { id: aId, publicKey: nodeSigningPublicKey(aKey), dir: aDir };
   b = {
     id: bId!,
     joinedPublicKey: bJoinedPublicKey,
-    secret: joined.breakGlassSecret,
     dir: bDir,
     ring: loadKeyRing(keyRingEnv(persisted!)),
     nodeBytes: await readFile(join(bDir, NODE_FILE)),
@@ -225,7 +215,7 @@ function recordingLog() {
 }
 
 describe("a spare whose venue.db is replaced by the main box's", () => {
-  it("still reads its own role, signing key, recovery key and pinned main-box key", async () => {
+  it("still reads its own role, signing key and pinned main-box key", async () => {
     const box = await bHoldingAsVenue();
 
     expect(await readNodeMode(box.node, b.id)).toEqual({
@@ -243,10 +233,6 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
     expect(nodeSigningPublicKey(bKey!)).not.toBe(a.publicKey);
     expect(nodeSigningPublicKey(bKey!)).toBe(b.joinedPublicKey);
     expect(await readNodeSigningKey(box.node, b.ring, a.id)).toBeNull();
-
-    const verifier = (await readRecoveryKeyVerifier(box.node, b.id))!;
-    expect(await verifySecretAsync(b.secret, verifier)).toBe(true);
-    expect(await verifySecretAsync(a.secret, verifier)).toBe(false);
 
     expect(await readPinnedPrimaryKey(box.node, b.id)).toEqual({
       primaryNodeId: a.id,

@@ -2,9 +2,12 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { X509Certificate } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { readDeploymentEnvironment, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -15,7 +18,7 @@ import {
   readNodeMode,
   readPairLink,
   readPinnedPrimaryKey,
-  readRecoveryKeyName,
+  readRecoveryKey,
 } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
@@ -40,7 +43,6 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { StandbyIdentity } from "./reserved-identity.js";
 import type { PendingAdoption } from "./finish-adoption.js";
-import { boxKeyStored } from "./testing/box-key.js";
 
 import { writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
@@ -54,6 +56,9 @@ import { readBackupSettings } from "./backup-env-writer.js";
 import { readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mountPromoteApi } from "./promote-api.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -184,11 +189,11 @@ function deps(
 }
 
 describe("adoptFromPrimary (mirror adopt)", () => {
-  it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
+  it("stamps the mirror and writes its config", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];
 
-    const result = await adoptFromPrimary(
+    await adoptFromPrimary(
       deps({
         persistTrading: async (a) => {
           persistedTrading.push(a);
@@ -238,8 +243,62 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
-    expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
+  });
+
+  it("a spare with no key of its own promotes with the venue's master key", async () => {
+    let ownNodeId = "";
+    const answer = await adoptFromPrimary(
+      deps({
+        persistTrading: async (args) => {
+          ownNodeId = args.nodeId;
+        },
+      }),
+      joined(),
+      NO_HOOKS,
+    );
+    expect(answer).toBeUndefined();
+    expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
+
+    // Stands for the master key row the spare's copy of venue.db carries.
+    const { secret: key } = await mintMasterKey(suite.db);
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeDb: suite.node,
+      nodeId: ownNodeId,
+      run,
+      credentialKeyRing: TOTP_KEY_RING,
+      requestFromBox: () => false,
+    });
+    const socket = new TLSSocket(new Socket());
+    const promote = async (breakGlass: string) =>
+      app.request(
+        "https://box.test/management-api/promote",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ oldNodeNeutralised: true, breakGlass }),
+        },
+        { incoming: { socket } },
+      );
+    try {
+      const refused = await promote(WRONG_MASTER_KEY);
+      expect([refused.status, await refused.json()]).toEqual([
+        401,
+        { error: { code: "promotion.break_glass_invalid", params: {} } },
+      ]);
+      expect(run).not.toHaveBeenCalled();
+
+      const promoted = await promote(key);
+      expect([promoted.status, await promoted.json()]).toEqual([
+        200,
+        { alreadyPrimary: false, restarting: true },
+      ]);
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      socket.destroy();
+    }
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
@@ -268,27 +327,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     } finally {
       await suite.node.execute(sql`drop trigger if exists refuse_signing_key`);
     }
-  });
-
-  it("hands over the stored name with the recovery key", async () => {
-    let ownNodeId = "";
-    const result = await adoptFromPrimary(
-      deps({
-        persistTrading: async (args) => {
-          ownNodeId = args.nodeId;
-        },
-      }),
-      joined(),
-      NO_HOOKS,
-    );
-    expect(result).toHaveProperty(
-      "breakGlassKeyName",
-      await readRecoveryKeyName(suite.node, ownNodeId),
-    );
-    expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
-      /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
-    );
-    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {

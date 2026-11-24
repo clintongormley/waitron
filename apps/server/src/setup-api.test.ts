@@ -2232,7 +2232,6 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
 });
 
 const PRIMARY_URL = "https://primary.example";
-const BREAK_GLASS_SECRET = "break-glass-secret-abc123DEF456";
 const JOINED = {
   identity: { nodeId: "55555555-5555-4555-8555-555555555555", publicKey: "P", privateKey: "K" },
   bundle: {},
@@ -2252,7 +2251,7 @@ function makeAdoptDeps(overrides: Partial<SetupDeps> & { adopt?: AdoptJoined | u
   adopt: ReturnType<typeof vi.fn>;
   requestRestart: ReturnType<typeof vi.fn>;
 } {
-  const defaultAdopt = vi.fn(async () => ({ breakGlassSecret: BREAK_GLASS_SECRET }));
+  const defaultAdopt = vi.fn(async () => undefined);
   const { adopt = "adopt" in overrides ? undefined : defaultAdopt, ...rest } = overrides;
   const requestRestart = vi.fn();
   const deps: SetupDeps = {
@@ -3238,14 +3237,14 @@ describe("the restore routes restart only once their reply has been written", ()
 });
 
 describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing provision's latch", () => {
-  it("persists adoption completion without retaining the break-glass secret", async () => {
+  it("persists adoption completion and answers no key", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
     try {
       const operations = createSetupOperationStore(dir);
       const first = new Hono();
       mountSetup(first, makeAdoptDeps({ operations }).deps, noopLog);
       const response = await postAdopt(first);
-      expect(await response.json()).toMatchObject({ breakGlassSecret: BREAK_GLASS_SECRET });
+      expect(await response.json()).not.toHaveProperty("breakGlassSecret");
       expect((await operations.read())?.data).toEqual({
         adopted: true,
         restarting: true,
@@ -3307,7 +3306,6 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     expect(await response.json()).toEqual({
       adopted: true,
       restarting: true,
-      breakGlassSecret: BREAK_GLASS_SECRET,
       contactUrl,
     });
   });
@@ -3321,26 +3319,6 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     expect(await response.json()).toEqual({
       adopted: true,
       restarting: true,
-      breakGlassSecret: BREAK_GLASS_SECRET,
-    });
-  });
-
-  it("returns the minted recovery key name with its handover secret", async () => {
-    const app = new Hono();
-    const { deps } = makeAdoptDeps({
-      adopt: async () => ({
-        breakGlassSecret: BREAK_GLASS_SECRET,
-        breakGlassKeyName: "2026-10-15 · K7QF",
-      }),
-    });
-    mountSetup(app, deps, noopLog);
-    const response = await postAdopt(app);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      adopted: true,
-      restarting: true,
-      breakGlassSecret: BREAK_GLASS_SECRET,
-      breakGlassKeyName: "2026-10-15 · K7QF",
     });
   });
 
@@ -3353,7 +3331,6 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       adopted: true,
-      breakGlassSecret: BREAK_GLASS_SECRET,
       restarting: true,
     });
 
@@ -3363,20 +3340,6 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     expect(requestRestart).not.toHaveBeenCalled();
     await tick();
     expect(requestRestart).toHaveBeenCalledTimes(1);
-  });
-
-  it("surfaces the break-glass secret in the response but NEVER logs it", async () => {
-    const app = new Hono();
-    const { deps } = makeAdoptDeps();
-    const { log, lines } = capturingLog();
-    mountSetup(app, deps, log);
-
-    const res = await postAdopt(app);
-    expect(res.status).toBe(200);
-    expect((await res.json()).breakGlassSecret).toBe(BREAK_GLASS_SECRET);
-    await tick();
-    const logged = JSON.stringify(lines);
-    expect(logged).not.toContain(BREAK_GLASS_SECRET);
   });
 
   it("maps a mirror.bundle_fetch_failed from adopt to HTTP 502", async () => {
@@ -3460,8 +3423,8 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
 
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();
-    let release!: (v: { breakGlassSecret: string }) => void;
-    const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
     const adopt = vi.fn(() => pending);
@@ -3478,7 +3441,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     });
     expect(adopt).toHaveBeenCalledTimes(1); // the second never reached adopt
 
-    release({ breakGlassSecret: BREAK_GLASS_SECRET });
+    release();
     expect((await first).status).toBe(200);
     await tick();
   });
@@ -3488,7 +3451,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     const adopt = vi
       .fn()
       .mockRejectedValueOnce(new Error("transient boom"))
-      .mockResolvedValueOnce({ breakGlassSecret: BREAK_GLASS_SECRET });
+      .mockResolvedValueOnce(undefined);
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
@@ -3531,9 +3494,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
         release = resolve;
       });
       const provision = vi.fn(() => pending);
-      const adopt = vi.fn(async () => ({
-        breakGlassSecret: BREAK_GLASS_SECRET,
-      }));
+      const adopt = vi.fn(async () => undefined);
       const { deps } = makeDeps({ provision, ...joinedDeps(adopt) });
       mountSetup(app, deps, noopLog);
 
@@ -3554,8 +3515,8 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     // adopt in flight → a concurrent provision is refused 409 (the reverse direction)
     {
       const app = new Hono();
-      let release!: (v: { breakGlassSecret: string }) => void;
-      const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
         release = resolve;
       });
       const adopt = vi.fn(() => pending);
@@ -3571,7 +3532,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
       });
       expect(provision).not.toHaveBeenCalled(); // the shared latch refused it synchronously
 
-      release({ breakGlassSecret: BREAK_GLASS_SECRET });
+      release();
       expect((await first).status).toBe(200);
       await tick();
     }
@@ -3610,7 +3571,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
         const adopt = vi
           .fn<AdoptJoined>()
           .mockRejectedValueOnce(new AppError("mirror.bundle_fetch_failed", {}))
-          .mockResolvedValueOnce({ breakGlassSecret: BREAK_GLASS_SECRET });
+          .mockResolvedValueOnce(undefined);
         const app = new Hono();
         const { deps, requestRestart } = makeAdoptDeps({
           adopt,
@@ -3702,7 +3663,6 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
           calls += 1;
           await hooks.beforeFirstWrite("preproduction");
           if (calls === 1) throw new AppError("mirror.bundle_fetch_failed", {});
-          return { breakGlassSecret: BREAK_GLASS_SECRET };
         });
         const app = new Hono();
         const { deps, requestRestart } = makeAdoptDeps({ adopt, operations });
@@ -4639,8 +4599,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   it("shares the setup latch: refused while an adopt is in flight, and a refused reset releases it", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-latch-"));
     try {
-      let release!: (v: { breakGlassSecret: string }) => void;
-      const pending = new Promise<{ breakGlassSecret: string }>((resolve) => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
         release = resolve;
       });
       const adopt = vi.fn(() => pending);
@@ -4658,7 +4618,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       expect(await blocked.json()).toEqual({
         error: { code: "setup.already_provisioning", params: {} },
       });
-      release({ breakGlassSecret: BREAK_GLASS_SECRET });
+      release();
       expect((await inFlight).status).toBe(200);
       await tick();
       expect(stageReset).not.toHaveBeenCalled();
