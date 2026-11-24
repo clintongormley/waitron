@@ -1416,6 +1416,51 @@ describe("staff-screen — row actions, filters and edit races", () => {
     );
   });
 
+  it.each([
+    {
+      locale: "en-GB",
+      words:
+        "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address with Edit…, then try again.",
+    },
+    {
+      locale: "es-ES",
+      words:
+        "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo con Editar… y vuelve a intentarlo.",
+    },
+  ])(
+    "keeps enabling's dialog open and says to add a missing email first ($locale)",
+    async ({ locale, words }) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          reactivatePerson: vi
+            .fn()
+            .mockRejectedValue({ code: "person.email_missing", params: { personId: "p2" } }),
+        });
+        const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+          ...allStatuses,
+          canAdminister: true,
+          api,
+        });
+        await flush(el);
+        rowAction(el, "p2", "reactivate");
+        await flush(el);
+        confirmRow(el);
+        await flush(el);
+        expect(rowDialog(el).open).toBe(true);
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            "wt-dialog wt-form-actions",
+          )!.error,
+        ).toBe(words);
+        expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")).toBeNull();
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
   it("confirms a row's resend-invitation and reports delivery", async () => {
     const api = stubApi();
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {

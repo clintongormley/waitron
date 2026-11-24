@@ -75,6 +75,7 @@ import {
   reactivatePersonForInvitation,
   readPasskeySignals,
   resetPersonLogin,
+  requireLoginEmail,
   shouldOfferPasskey,
   queueAccountRecovery,
   readOwnProfile,
@@ -219,6 +220,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.email_invalid": 400,
   "person.telephone_invalid": 400,
   "person.email_taken": 409,
+  "person.email_missing": 409,
   "profile.invalid": 400,
   "person.display_name_taken": 409,
   "person.last_admin": 409,
@@ -1292,6 +1294,7 @@ export function mountManagementApi(
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
+        await requireLoginEmail(tx, personId);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         if (!acceptInvitation(personId)) return { invitationSent: false };
         return queueInvitationAnswer(tx, deps, {
@@ -1312,6 +1315,7 @@ export function mountManagementApi(
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
+        await requireLoginEmail(tx, personId);
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });

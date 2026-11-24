@@ -29,6 +29,7 @@ import {
   invitePerson,
   listPersons,
   reactivatePersonForInvitation,
+  requireLoginEmail,
   resetPersonLogin,
   updatePersonDetails,
 } from "./staff.js";
@@ -826,6 +827,23 @@ describe("reactivatePersonForInvitation refusals", () => {
       ),
     ).toBe("person.transition_invalid");
     expect(await statusOf(target)).toBe("active");
+  });
+});
+
+describe("requireLoginEmail", () => {
+  it("refuses a person with no login email, and passes one with an email or no row", async () => {
+    const withoutEmail = await seedPerson(suite.db, "staff", "suspended");
+    const withEmail = await seedPerson(suite.db, "staff", "suspended");
+    await suite.db.run(
+      sql`update persons set email = 'kept@example.com', email_folded = 'kept@example.com'
+          where id = ${withEmail}`,
+    );
+    await expect(run((tx) => requireLoginEmail(tx, withoutEmail))).rejects.toMatchObject({
+      code: "person.email_missing",
+      params: { personId: withoutEmail },
+    });
+    await expect(run((tx) => requireLoginEmail(tx, withEmail))).resolves.toBeUndefined();
+    await expect(run((tx) => requireLoginEmail(tx, MISSING_ID))).resolves.toBeUndefined();
   });
 });
 

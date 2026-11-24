@@ -380,6 +380,16 @@ export async function clearPersonPin(
     .where(and(eq(tillSessions.personId, settleId(input.personId)), isNull(tillSessions.endedAt)));
 }
 
+/** Refuses before an invitation is promised that `issueAccountAction` could never send. */
+export async function requireLoginEmail(tx: Transaction, personId: string): Promise<void> {
+  const [person] = await tx
+    .select({ email: persons.email })
+    .from(persons)
+    .where(eq(persons.id, settleId(personId)));
+  if (person !== undefined && person.email === null)
+    throw new AppError("person.email_missing", { personId });
+}
+
 export async function resetPersonLogin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
