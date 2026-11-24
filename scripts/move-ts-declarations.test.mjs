@@ -60,7 +60,10 @@ describe("move-ts-declarations", () => {
       "original.ts",
       "export function read() {\n  return branchAmount;\n}\n\nconst branchAmount = 75;\n\nexport const keepHere = 1;\n",
     );
-    write("consumer.ts", 'export { read, keepHere as retained } from "./original.js";\n');
+    write(
+      "consumer.ts",
+      'export { read as renamed, keepHere as retained } from "./original.js";\n',
+    );
 
     await move("original.ts", { "reading.ts": ["read"], "branch.ts": ["branchAmount"] }, [
       "keepHere",
@@ -72,7 +75,7 @@ describe("move-ts-declarations", () => {
     );
     expect(read("branch.ts")).toBe("export const branchAmount = 75;\n");
     expect(read("consumer.ts")).toBe(
-      'export { keepHere as retained } from "./original.js";\nexport { read } from "./reading.js";\n',
+      'export { keepHere as retained } from "./original.js";\nexport { read as renamed } from "./reading.js";\n',
     );
   });
 
@@ -149,9 +152,9 @@ describe("move-ts-declarations", () => {
 
     await move("original.ts", { "amounts.ts": ["total", "base"] }, ["stay"]);
 
-    expect(read("amounts.ts")).not.toContain('from "./amounts.js"');
-    expect(read("amounts.ts")).not.toContain('from "./original.js"');
-    expect(read("amounts.ts")).toContain("const base = 7;");
+    expect(read("amounts.ts")).toBe(
+      "const base = 7;\n\nexport function total() {\n  return base + 20;\n}\n",
+    );
     expect(read("consumer.ts")).toContain('import { total } from "./amounts.js";');
   });
 
@@ -237,8 +240,9 @@ describe("move-ts-declarations", () => {
     await move("original.ts", { "amounts.ts": ["fired"] }, ["ticket"]);
 
     expect(read("amounts.ts")).toBe("export const fired = 7;\n");
-    expect(read("original.ts")).toContain('import { fired } from "./amounts.js";');
-    expect(read("original.ts")).toContain("return { fired };");
+    expect(read("original.ts")).toBe(
+      'import { fired } from "./amounts.js";\n\nexport function ticket() {\n  return { fired };\n}\n',
+    );
   });
 
   it("refuses a declaration assigned to both the source and a destination", async () => {
@@ -252,7 +256,7 @@ describe("move-ts-declarations", () => {
     expect(() => read("amounts.ts")).toThrow(/ENOENT/);
   });
 
-  it("keeps type and value imports valid with the Server's compiler settings", async () => {
+  it("compiles a split with the Server's module settings", async () => {
     const compilerOptions = {
       module: "ESNext",
       moduleResolution: "Bundler",
