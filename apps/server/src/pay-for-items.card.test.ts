@@ -501,6 +501,42 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await lineTotals(sourceId)).toEqual(["3.00"]);
   });
 
+  it("a later payment on the items' own bill that fails moves nothing back", async () => {
+    const sourceId = await coffeeAndTarta();
+    const { newBill } = await stuckThenFailed(sourceId);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await settle({ ...venue.cfg, simplifiedInvoiceLimit: decimal("20.00") }).finally(() =>
+      warn.mockRestore(),
+    );
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+    await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, newBill, [{ menuItemId: coffee, quantity: "1" }]),
+    );
+    const path = `/api/working-orders/${newBill}/payments`;
+    venue.card.failNextCollect();
+
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      path,
+      await observedPaymentBody(venue.db, path, {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        applied: "21.00",
+        tip: "0.00",
+      }),
+    );
+
+    expect(paid.json).toMatchObject({ outcome: "declined" });
+    expect(await statusOf(venue, newBill)).toBe("open");
+    expect(await lineTotals(newBill)).toEqual(["18.00", "3.00"]);
+    expect(await lineTotals(sourceId)).toEqual(["3.00"]);
+  });
+
   it("a full disk during the put-back escapes, never absorbed as a refusal", async () => {
     const sourceId = await coffeeAndTarta();
     const { newBill, paymentId } = await stuckThenFailed(sourceId);

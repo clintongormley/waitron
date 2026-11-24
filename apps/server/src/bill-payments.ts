@@ -2521,31 +2521,20 @@ export async function failBillPayment(
 }
 
 /**
- * Every line of a Pay for items bill whose only payment just failed goes back to the bill it came
- * from, and the emptied bill is abandoned. Its own savepoint: a refusal leaves the items on their
- * own open bill, to be paid there, and the payment's failure stands. A source no longer open is
- * the same case.
+ * Every line of a Pay for items bill goes back to the bill it came from when the payment Pay for
+ * items took there fails ({@link itemsPaymentSource}), and the emptied bill is abandoned. Its own
+ * savepoint: a refusal leaves the items on their own open bill, to be paid there, and the
+ * payment's failure stands. A source no longer open is the same case.
  */
 async function putItemsBack(tx: Transaction, cfg: TradingContext, failed: PaymentRow) {
   const billId = failed.workingOrderId;
+  const sourceId = await itemsPaymentSource(tx, failed);
+  if (sourceId === null) return;
   const [bill] = await tx
-    .select({ itemsPaidFrom: workingOrders.itemsPaidFrom, status: workingOrders.status })
+    .select({ status: workingOrders.status })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  const sourceId = bill?.itemsPaidFrom ?? null;
-  if (sourceId === null || bill!.status !== "open") return;
-  const [other] = await tx
-    .select({ id: billPayments.id })
-    .from(billPayments)
-    .where(
-      and(
-        eq(billPayments.workingOrderId, billId),
-        sql`${billPayments.id} <> ${failed.id}`,
-        sql`${billPayments.state} <> 'failed'`,
-      ),
-    )
-    .limit(1);
-  if (other !== undefined) return;
+  if (bill!.status !== "open") return;
   let bodyError: unknown;
   try {
     await tx.transaction(async () => {
