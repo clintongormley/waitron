@@ -82,14 +82,15 @@ export async function withRecoveryKeyAuthority<T>(
   );
 }
 
-const stagedAuthorityKeys = new WeakSet<object>();
+// The bytes live here, not on the handle, so no holder of a handle can read or change them.
+const stagedAuthorityKeys = new WeakMap<object, Uint8Array>();
 declare const staged: unique symbol;
-export type StagedAuthorityKey = { readonly bytes: Uint8Array; readonly [staged]: true };
+export type StagedAuthorityKey = { readonly [staged]: true };
 
 /** An authority key a restore staged from its master key; a request body cannot make one. */
 export function stagedAuthorityKey(bytes: Uint8Array): StagedAuthorityKey {
-  const key = Object.freeze({ bytes: Uint8Array.from(bytes) });
-  stagedAuthorityKeys.add(key);
+  const key = Object.freeze({});
+  stagedAuthorityKeys.set(key, Uint8Array.from(bytes));
   return key as StagedAuthorityKey;
 }
 
@@ -98,7 +99,7 @@ export function isStagedAuthorityKey(value: unknown): value is StagedAuthorityKe
 }
 
 function authorityFrom(secret: unknown): Uint8Array | null {
-  if (isStagedAuthorityKey(secret)) return secret.bytes;
+  if (typeof secret === "object" && secret !== null) return stagedAuthorityKeys.get(secret) ?? null;
   if (typeof secret !== "string") return null;
   try {
     return authorityKey(decodeMasterKeyCode(secret));

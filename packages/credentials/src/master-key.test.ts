@@ -127,6 +127,7 @@ describe("checking a staged authority key", () => {
   it.each([
     ["upper-case hex", stored.toUpperCase()],
     ["a short value", stored.slice(2)],
+    ["a long value", `${stored}0`],
     ["a non-hex value", `${stored.slice(1)}g`],
     ["empty text", ""],
   ])("does not match %s", (_label, checkValue) => {

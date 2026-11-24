@@ -13,7 +13,7 @@ import { readOperationAuthority, type OperationAuthority } from "@waitron/module
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
+import { encodeRecoveryKey } from "@waitron/fiscal-verifactu";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
 import {
@@ -372,6 +372,7 @@ describe("a recovery key's authority", () => {
     const own = await mintMasterKey(suite.db);
     const authority = authorityKey(decodeMasterKeyCode(own.secret));
     const staged = stagedAuthorityKey(authority);
+    expect(Reflect.ownKeys(staged)).toEqual([]);
     authority.fill(0);
     expect(await authorised(staged)).toEqual({ result: "committed" });
   });

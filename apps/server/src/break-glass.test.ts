@@ -105,18 +105,16 @@ describe("break-glass mint + verify", () => {
 
 describe("verifyBreakGlass", () => {
   it("verifyBreakGlass answers the venue's current master key true, an older one false, and false with no row", async () => {
+    const bytes = makeMasterKey();
+    expect(await verifyBreakGlass(suite.db, encodeMasterKeyCode(bytes))).toBe(false);
     const boxKey = await mintBreakGlassSecret(handles(), NODE);
-    expect(await verifyBreakGlass(suite.db, boxKey)).toBe(false);
-    const older = await mintMasterKey(suite.db);
+    const older = await mintMasterKey(suite.db, { bytes });
+    expect(older.secret).toBe(encodeMasterKeyCode(bytes));
     expect(await verifyBreakGlass(suite.db, older.secret)).toBe(true);
     const newer = await mintMasterKey(suite.db);
     expect(await verifyBreakGlass(suite.db, older.secret)).toBe(false);
     expect(await verifyBreakGlass(suite.db, newer.secret)).toBe(true);
     for (const garbage of [undefined, null, "", "wrong", { secret: newer.secret }, boxKey])
       expect(await verifyBreakGlass(suite.db, garbage)).toBe(false);
-  });
-
-  it("answers false, never a throw, before the venue has a master key", async () => {
-    expect(await verifyBreakGlass(suite.db, encodeMasterKeyCode(makeMasterKey()))).toBe(false);
   });
 });
