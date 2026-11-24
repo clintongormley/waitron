@@ -10,7 +10,6 @@ import {
   readVenueSettings,
   withNodeTransaction,
   withTransaction,
-  writeNodeMembershipTx,
   type Database,
   type NodeDatabase,
   type Transaction,
@@ -48,10 +47,6 @@ export interface FenceAttestation {
   readonly oldNodeNeutralised: boolean;
 }
 
-export interface PromotionResult {
-  readonly alreadyPrimary: boolean;
-}
-
 export interface PromoteDeps {
   readonly db: Database;
   readonly node: NodeDatabase;
@@ -85,9 +80,8 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 
 /**
  * Writes this node's primary role to node.db after the venue save has committed. The role follows
- * the venue save rather than sharing its transaction because the two live in different files; a
- * failure here is logged and rethrown, and each caller decides what it means. A role left behind is
- * finished from the committed chart by `finishPromotedRole`, at the next call or the next start.
+ * the venue save rather than sharing its transaction because the two live in different files.
+ * `finishPromotedRole` can repair a failed role write from the committed chart at the next call or start.
  */
 async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {
@@ -120,65 +114,8 @@ function repairReads(deps: PromoteDeps, held: SignedMembershipDocument | null): 
   return { axes, held };
 }
 
-/**
- * Local secondary to primary: the node already sells, so this claims the singleton duties only.
- * Idempotent: an already-primary node is a no-op. The checks and the mint run before the venue
- * transaction that writes the new membership document; the role in node.db follows it. A failed
- * role write rejects, because this runs in-process with no restart, so returning normally would
- * report a promotion the running box does not act on; a second call finishes that role without
- * minting another term.
- */
-export async function promoteLocalSecondaryToPrimary(
-  deps: PromoteDeps,
-  attestation: FenceAttestation,
-): Promise<PromotionResult> {
-  assertFenced(attestation);
-
-  // One read for the repair check and the mint; the save below is not term-guarded.
-  const held = await readNodeMembership(deps.db);
-  // Fresh state, so a re-run after a half-completed promote sees what landed.
-  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-  if ((await finishPromotedRole(roleRepairDeps(deps), repairReads(deps, held))) === "finished") {
-    await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-    deps.log("info", "promotion.completed", { target: "local_secondary" });
-    return { alreadyPrimary: false };
-  }
-
-  if (deps.holders.mode.current === "mirror") {
-    // Refused with a clean code; the `(mirror, primary)` CHECK is only the backstop.
-    throw new AppError("promotion.not_a_local_secondary", { mode: deps.holders.mode.current });
-  }
-  if (deps.holders.singletonRole.current === "primary") {
-    return { alreadyPrimary: true };
-  }
-
-  assertNotFenced(held, deps.nodeId);
-  const document = await mintNextMembershipDocument(
-    { db: deps.db, node: deps.node, ring: deps.ring },
-    {
-      heldDocument: held,
-      nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
-      signerNodeId: deps.nodeId,
-      verifyHeld: "stored-keys",
-    },
-  );
-
-  // venue.db is saved first and node.db follows, as two transactions: the role lives in its own file.
-  await withTransaction(deps.db, async (tx) => {
-    await requireStamp(tx);
-    await writeNodeMembershipTx(tx, document);
-  });
-  await writePrimaryRole(deps);
-
-  // If this refresh throws after the commit, the process keeps the stale holder until a re-run or a
-  // restart; a re-run takes the already-primary return, so the term is never bumped twice.
-  await refreshDeploymentHolders(deps.node, deps.nodeId, deps.holders);
-
-  deps.log("info", "promotion.completed", { target: "local_secondary" });
-  return { alreadyPrimary: false };
-}
-
-export interface MirrorPromotionResult extends PromotionResult {
+export interface MirrorPromotionResult {
+  readonly alreadyPrimary: boolean;
   /** The standard series validated for this node. */
   readonly seriesId: string;
 }

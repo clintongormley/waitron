@@ -674,9 +674,8 @@ Closing refreshes that copy once more before closing the node database.
 Services appear in the same map with `kind: "service"`. The bucket copy is `stream`:
 `running` means its host has started a copy, `waiting` means it applies but cannot run
 (the reason is in `detail`), and `not_applicable` means it is inactive on this box.
-Jobs have `detail: null`. Automatic role notifications wait for a production live-promotion
-path. The service rechecks its applicability once a minute; `roleChanged()` has no production
-caller. A1279 owns the immediate wiring and promotion test if that path gains a caller. When the duty table
+Jobs have `detail: null`. Role-dependent jobs recheck the role on each turn. Services recheck
+whether they apply once a minute. A mirror that takes over also restarts. When the duty table
 closes, runner jobs stop together first and services stop last, so the bucket copy can finish
 copying writes made during close.
 A commit that queues a new local fiscal record wakes `fiscal.drain`. A manager's retry and the

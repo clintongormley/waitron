@@ -190,17 +190,12 @@ import {
 import { refuseUnreleasedBuild } from "./release-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import {
-  assertNotFenced,
-  promoteLocalSecondaryToPrimary,
-  promoteMirrorToPrimary,
-} from "./promote.js";
+import { assertNotFenced, promoteMirrorToPrimary } from "./promote.js";
 import type {
   FenceAttestation,
   MirrorPromotionResult,
   PromotionOperationRunner,
   PromoteDeps,
-  PromotionResult,
 } from "./promote.js";
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
@@ -567,11 +562,6 @@ import "./errors.js";
 export interface StartedServer {
   health: HealthState;
   /**
-   * Promote a local secondary to primary in-process, with no restart. Present only on a non-mirror
-   * trading box. Refuses without a fence attestation (`promotion.fence_not_attested`).
-   */
-  promoteLocalSecondaryToPrimary?: (attestation: FenceAttestation) => Promise<PromotionResult>;
-  /**
    * Promote a read-only mirror to the venue's primary in-process, then restart into `mode=primary`.
    * Present only in mirror mode. Refuses without a fence attestation (`promotion.fence_not_attested`).
    */
@@ -836,20 +826,14 @@ function makeStartedServer(
   teardown: BootTeardown,
   mdns: Pick<MdnsResponder, "stop">,
   landing: { close(): Promise<void> } | undefined,
-  promote?:
-    | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
-    | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
+  promoteMirrorToPrimary?: StartedServer["promoteMirrorToPrimary"],
 ): StartedServer {
   // Checked and set before the first `await`, so a second concurrent `close()` returns at once
   // rather than repeating the sequence; it does not wait for the first to finish.
   let closed = false;
   return {
     health,
-    ...(promote === undefined
-      ? {}
-      : promote.kind === "mirror"
-        ? { promoteMirrorToPrimary: promote.run }
-        : { promoteLocalSecondaryToPrimary: promote.run }),
+    ...(promoteMirrorToPrimary === undefined ? {} : { promoteMirrorToPrimary }),
     close: async () => {
       if (closed) return;
       closed = true;
@@ -4498,8 +4482,7 @@ async function bootServer(
     return result;
   };
 
-  // The promote endpoint's delegate. On a non-mirror it only reports status; it NEVER calls
-  // `promoteLocalSecondaryToPrimary` (shelved active-active).
+  // After it restarts as primary, a former mirror can still finish recording its handover.
   const promoteRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
@@ -4946,14 +4929,7 @@ async function bootServer(
     },
     mdns,
     startLandingListener(landingHostFor(config, isMirror), log, declarationPages),
-    // Decided once at boot: a box exposes one in-process promote, never both.
-    isMirror
-      ? { kind: "mirror" as const, run: promoteMirrorRun }
-      : {
-          kind: "local-secondary" as const,
-          run: (attestation: FenceAttestation) =>
-            promoteLocalSecondaryToPrimary(promoteDeps, attestation),
-        },
+    isMirror ? promoteMirrorRun : undefined,
   );
   const stepDownDeps: StepDownDeps = {
     node: store.node,

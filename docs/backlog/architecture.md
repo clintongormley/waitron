@@ -693,7 +693,7 @@ also qualifies the historical operation-description references in this section.
   in Backups and see its backup outcome there. Waitron Cloud receives the same scheduled backup
   as the box-key destinations, using its own encryption key. The bucket copy runs as a service.
   Close stops runner jobs first and the bucket copy last.
-  [A1279](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself) owns immediate role wiring and the real promotion test, including a mirror, if its live-promotion path gains a production caller. Codex attached this to A1279 after the watcher deferred immediate wiring on 2026-11-11 at 05:18.
+  Role-dependent jobs recheck the role on each turn. A mirror that takes over also restarts.
   The six watches (append-only protections, clock, free space, Cloud connection, translation
   suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
