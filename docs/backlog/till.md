@@ -3,6 +3,25 @@
 The open entries are listed in [the backlog](../backlog.md), under "The till, devices and table service". This file holds
 their full text.
 
+## A1569. The till's sold-out window needs a design with the owner
+
+Owner, 2026-11-24, shown the window during the Products list design: "let's add this to designs we
+need to sort out". The owner had seen a picture of it and could not find it on the till. The owner
+approved the feature itself on 2026-11-11 (A1516); this is about how it looks and is found.
+
+Opened on a private copy of main that day by holding House coffee on Counter. To settle:
+
+- **No visible way in.** Holding a dish's tile opens it. Nothing on the tile says so; the products
+  guide does.
+- **Two words for one switch.** The till says "Mark sold out" and "Sold out"; the dashboard says
+  "Available" and "Unavailable".
+- **"Changes every menu in this venue."** stands above the buttons with nothing saying what it refers
+  to.
+- **Layout.** Each button follows its name, so the buttons do not line up, and the product, its
+  variants and the rest of the information run together.
+- **Each press closes the window** (read in `apps/till/src/widgets/product-info.ts`, not tried), so
+  marking two sizes means holding the tile twice.
+
 ## A Make now instruction can disappear or come back while the till checks its device again
 
 If an order response arrives while the till is waiting for its device identity, the till can lose

@@ -609,6 +609,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   keyboard. The owner opens the bill name window, the Counter's search and Find a bill's search on
   the tablet in landscape. Safari is untested: there is no Apple device.
 
+- **A1569. The till's sold-out window needs a design with the owner (owner, 2026-11-24).** Nothing on
+  a tile shows that holding it opens the window, and the till says "sold out" where the dashboard
+  says "unavailable". [Detail](backlog/till.md#a1569-the-tills-sold-out-window-needs-a-design-with-the-owner)
+
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
 - **Small till and floor wording fixes** (bundle of 4, size M, 3 wait for the owner's table-screen redesign). Holds A470, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
