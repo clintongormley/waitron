@@ -485,7 +485,7 @@ it("links the set menus of a sent dish raised on its bill", async () => {
   );
 });
 
-it("links set menus a live published menu still holds after every set menu is archived", async () => {
+it("links set menus a live published menu still holds after every set menu is made inactive", async () => {
   const { venue, copy } = fixture;
   const versionId = await currentVersion();
   await inTx(venue, async (tx) => {

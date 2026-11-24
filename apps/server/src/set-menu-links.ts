@@ -51,7 +51,7 @@ function listingAny(copies: readonly SetMenuCopy[], dishes: readonly ListedDish[
 }
 
 // No product path deletes a `menus` row or changes its kind, so a published document can hold a set
-// menu only while a `set_menu` row exists, archived or not.
+// menu only while a `set_menu` row exists, active or not.
 async function venueHasSetMenus(tx: Transaction): Promise<boolean> {
   const [row] = await tx
     .select({ id: menus.id })
