@@ -578,7 +578,7 @@ interface PaymentBody {
   tendered?: string;
   addedTip?: string;
   choice?: "full_with_tip" | "use_pool";
-  externalRef?: string;
+  externalRef?: unknown;
   externalProvider?: unknown;
   externalMachine?: unknown;
   applied: string;
@@ -1125,6 +1125,39 @@ describe("a contribution (design §8 test 2)", () => {
         amount: "40.00",
         method: "card",
         entry,
+        applied: "40.00",
+        tip: "0.00",
+        ...extra,
+      });
+      expect(result.status).toBe(400);
+      expect(result.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+    },
+  );
+
+  it.each([
+    { method: "card", entry: "reader", extra: { externalRef: "OP-1" }, field: "externalRef" },
+    { method: "card", entry: "manual", extra: { externalRef: 17 }, field: "externalRef" },
+    { method: "cash", extra: { readerId: "reader-1", tendered: "40.00" }, field: "readerId" },
+    {
+      method: "card",
+      entry: "manual",
+      extra: { simulationOutcome: "captured" },
+      field: "simulationOutcome",
+    },
+    {
+      method: "card",
+      entry: "reader",
+      extra: { simulationOutcome: "lost" },
+      field: "simulationOutcome",
+    },
+  ] as const)(
+    "refuses $extra on a $method payment the field does not belong to",
+    async ({ method, extra, field, ...rest }) => {
+      const result = await pay(await bill120(), {
+        kind: "contribution",
+        amount: "40.00",
+        method,
+        ...rest,
         applied: "40.00",
         tip: "0.00",
         ...extra,
