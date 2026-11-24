@@ -359,13 +359,13 @@ describe("vf-fiscal-filing-screen", () => {
       "Invoices AEAT holds that this box did not issue None found.",
     );
     expect(text(screen, "[data-test=identity-changes]")).toBe(
-      "Identity changes without a handover The fiscal identity has not changed without a handover.",
+      "Identity changes without a handover None found.",
     );
 
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
     expect(text(spanish.screen, "[data-test=identity-changes]")).toBe(
-      "Cambios de identidad sin traspaso La identidad fiscal no ha cambiado sin un traspaso.",
+      "Cambios de identidad sin traspaso No se ha encontrado ninguno.",
     );
   });
 
