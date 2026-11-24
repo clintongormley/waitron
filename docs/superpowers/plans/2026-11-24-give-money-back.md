@@ -536,8 +536,9 @@ invoice naming a customer"). **Listed for the accountant** (the column is mine):
 no corrective invoice" (`apps/server/src/accountant-export.ts:413`, columns at
 `apps/server/src/i18n/accountant-export.ts:32-46`) names each refund's invoice number but not whether
 that invoice named a customer, so the accountant would have to cross-check every refund against the
-invoices sheet. It gains one column, **Customer on the invoice** (ES **Cliente de la factura**): the
-customer's name and tax number from the sale, empty for a simplified ticket, read at export time from
+invoices sheet. It gains two columns with the invoices sheet's headings, **Customer** and **Customer
+tax number** (ES **Cliente** and **NIF del cliente**): the customer's name and tax number from the
+sale, each empty where the sale has none (both, for a simplified ticket), read at export time from
 the immutable sale. CORRECT-FULL-INVOICE replaces this when it lands.
 
 ## 6. Fiscal boundary, and the checks every task runs
@@ -562,7 +563,7 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
 lists: `apps/server/src/till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts` (the
 three routes' refusing cases and inventory rows, CLAUDE.md §3); `till-api.session-person.test.ts`
 (the two POST routes in `BODIES`); `adjustments-api.test.ts` (two permissions). One changed check:
-`accountant-export.test.ts` pins the refunds sheet's columns, which gain one.
+`accountant-export.test.ts` pins the refunds sheet's columns, which gain two.
 
 **Till and dashboard (PR 2), each with its decision:**
 
