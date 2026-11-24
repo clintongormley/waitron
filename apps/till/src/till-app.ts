@@ -548,8 +548,8 @@ type SettlementDocument = {
   surface: "counter" | "table";
   cashChange: string | null;
   slipPaymentId?: string;
-  /** The table's bill to show again on close, when the document is another bill's. */
-  returnTo?: string;
+  /** The document is a bill of items paid from the bill on screen, which stays on screen at close. */
+  staysOnBill?: true;
 };
 
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
@@ -12784,10 +12784,15 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
-  /** A printed bill's items are still paid where they are (PR2-D13). */
-  #billPlaced(open: BillPaying): boolean {
+  /** Items still paid where they are: on a printed bill (PR2-D13), and at the Counter until it
+   * handles the new bill's receipt. */
+  #itemsStayOnBill(open: BillPaying): boolean {
     const row = this.partyBills.find((bill) => bill.workingOrderId === open.billId);
-    return open.printed === true || (open.balance?.status ?? row?.status) === "placed";
+    return (
+      open.surface === "counter" ||
+      open.printed === true ||
+      (open.balance?.status ?? row?.status) === "placed"
+    );
   }
 
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
@@ -23313,12 +23318,7 @@ export class TillApp extends LitElement {
           : open.surface === "counter"
             ? this.#counterExpectedEdit(open.billId)
             : this.#draftSync?.expectedEditFor(open.billId);
-      const placed = this.#billPlaced(open);
-      const newBill = asked.choice.kind === "items" && !placed;
-      if (
-        expectedEdit === undefined ||
-        (expectedEdit === null && (open.surface === "table" || newBill))
-      )
+      if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
         throw { code: "draft.out_of_date" };
       const api = this.api;
       const session = this.#operatorSession;
@@ -23337,7 +23337,13 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const preview = await previewPayment(api, open.billId, asked, expectedEdit, placed);
+      const preview = await previewPayment(
+        api,
+        open.billId,
+        asked,
+        expectedEdit,
+        this.#itemsStayOnBill(open),
+      );
       const now = this.#billPayingNow(open.id);
       if (now !== null) this.billPaying = { ...now, asked, preview, expectedEdit, busy: false };
     } catch (error) {
@@ -23396,7 +23402,7 @@ export class TillApp extends LitElement {
       asked,
       open.expectedEdit,
       open.surface === "table" ? this.#billRevisions() : {},
-      this.#billPlaced(open),
+      open.preview?.kind !== "allocated" || open.preview.total === undefined,
     );
     // Named now: a tap while the card is out may change the phone's reader before the answer.
     const ready = this.handheldMode
@@ -23639,7 +23645,7 @@ export class TillApp extends LitElement {
       surface: open.surface,
       cashChange,
       slipPaymentId,
-      ...(paidOn === undefined ? {} : { returnTo: open.billId }),
+      ...(paidOn === undefined ? {} : { staysOnBill: true }),
     });
     // The paid order drops off the held list.
     if (open.surface === "counter")
@@ -24230,9 +24236,9 @@ export class TillApp extends LitElement {
   /** Move to the next bill before reading its balance, and read its lines beside the floor. */
   async #onBackToTable(): Promise<void> {
     if (this.settlementDocument?.surface !== "table") return;
-    const { returnTo } = this.settlementDocument;
+    const { staysOnBill } = this.settlementDocument;
     this.settlementDocument = null;
-    const next = returnTo === undefined ? this.#otherBillsToPay()[0] : undefined;
+    const next = staysOnBill === true ? undefined : this.#otherBillsToPay()[0];
     const visit = this.#orderVisit;
     if (
       !this.#draftSync?.ownEditWaiting ||

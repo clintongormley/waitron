@@ -240,6 +240,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
       expect.objectContaining({
         method: "card",
         externalRef: "OP-73",
+        externalProvider: "other",
         externalMachine: "Bank",
         applied: "30.00",
       }),
