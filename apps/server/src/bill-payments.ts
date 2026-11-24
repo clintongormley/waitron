@@ -1652,7 +1652,8 @@ export async function closeZeroBill(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<SettledBill> {
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
@@ -2479,174 +2480,234 @@ export async function takeReaderBillPayment(
   operator: { personId: string; sessionId: string },
   basket?: CounterPayment,
 ): Promise<BillPaymentResult | SettledBill> {
-  let release = (): void => {};
-  let capturedReplay = false;
+  const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
   try {
     // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
     // Awaited only while `since()` names a refusal: otherwise payment preparation enters the write
     // queue in this turn.
-    const preRead =
-      deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+    const pending = diskFullBeforePayment(deps);
+    const preRead = pending !== false && (await pending);
     const begun = await withSettledSlip((print) =>
       withIssuanceTransaction(
         deps.db,
-        async (tx) => {
-          const started = await beginBillPayment(
-            tx,
-            deps,
-            cfg,
-            workingOrderId,
-            req,
-            operator,
-            "pending",
-            () => deps.clock.now(),
-            { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-            deps.attendance,
+        (tx) =>
+          beginReaderBillPayment(tx, deps, cfg, workingOrderId, req, operator, {
+            preRead,
             basket,
-          );
-          if ("settled" in started) return { kind: "replay" as const, result: started.settled };
-          if ("replay" in started) {
-            let payment = started.replay;
-            let invoice: TillSaleResult | null = null;
-            if (
-              payment.state === "pending" &&
-              req.kind === "share" &&
-              req.shareOf === 1 &&
-              deps.settleCapturedReplay !== undefined &&
-              !billPaymentIsLive(deps.db, payment.id) &&
-              (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
-            ) {
-              capturedReplay = true;
-              const reading = deps.clock.now();
-              await deps.backend.refuseUntilRecordable(tx, reading);
-              invoice = await deps.settleCapturedReplay(
-                tx,
-                payment.id,
-                reading.instant,
-                print,
-                req.guestCount,
-              );
-              const [recorded] = await tx
-                .select()
-                .from(billPayments)
-                .where(eq(billPayments.id, payment.id));
-              payment = recorded!;
-            }
-            return {
-              kind: "replay" as const,
-              result: await resultOf(tx, deps, cfg, payment, invoice),
-            };
-          }
-          // Inside the transaction, so no loop pass runs between the insert and its registration.
-          release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
-          return {
-            kind: "collect" as const,
-            payment: started.payment,
-            slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
-          };
-        },
+            print,
+            hold,
+          }),
         deps.log,
       ),
     );
     if (begun.kind === "replay") return begun.result;
-    const { payment } = begun;
-    const slip = { frozen: begun.slip, log: deps.log };
-    if (deps.disk?.noted() === true) {
-      // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
-      // disk stops the till's writes"); only the reservation is released.
-      await withTransaction(deps.db, (tx) =>
-        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
-      );
-      refuseForDiskStop(deps.log, workingOrderId);
-    }
-
-    let result: PaymentResult;
-    try {
-      result = await deps.provider.collect({
-        origin: cfg.origin,
-        workingOrderId: brandWorkingOrderId(workingOrderId),
-        nodeId: cfg.nodeId,
-        amount: centsToDecimal(payment.applied + payment.tip),
-        ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
-        ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
-        simulationOutcome: req.simulationOutcome,
-        billPaymentId: payment.id,
-        requestedBy: operator.personId,
-        onReaderCheckout: deps.onReaderCheckout,
-      });
-    } catch (error) {
-      if (isAppError(error) && REFUSED_START.has(error.code)) {
-        await withSettledSlip(
-          (print) =>
-            withTransaction(deps.db, async (tx) => {
-              await requireEconomicWrite(tx, cfg, deps.admission);
-              await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
-              await print(tx, payment.id);
-            }),
-          slip,
-        );
-      }
-      throw collectFailure(deps, workingOrderId, error);
-    }
-
-    if (result.state === "partially_refunded")
-      throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "partial_refund" });
-
-    if (result.state === "captured") {
-      // A captured result carries its time (`PaymentResult`, provider.ts).
-      const settledAt = result.settledAt!;
-      // Wrapped outside the transaction: when a full disk ended it or refused its commit,
-      // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
-      return await afterCardCharged(deps, workingOrderId, () =>
-        withSettledSlip(
-          (print) =>
-            withIssuanceTransaction(
-              deps.db,
-              async (tx) => {
-                const done = await completeBillPayment(tx, deps, cfg, payment.id, settledAt, {
-                  guestCount: req.guestCount,
-                });
-                const printed = await print(tx, payment.id);
-                return {
-                  ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.meal)),
-                  ...printed,
-                };
-              },
-              deps.log,
-            ),
-          slip,
-        ),
-      );
-    }
-    return await withSettledSlip(
-      (print) =>
-        withTransaction(deps.db, async (tx) => {
-          await requireEconomicWrite(tx, cfg, deps.admission);
-          if (!NO_RETAINED_CHARGE.has(result.state)) {
-            const answer = await resultOf(tx, deps, cfg, payment, null);
-            return { ...answer, outcome: "timeout" };
-          }
-          const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
-          // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
-          // could not print." (`payment_slip.capture_failed`).
-          await print(tx, payment.id);
-          return {
-            ...(await resultOf(tx, deps, cfg, failed, null)),
-            outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
-            ...(result.state === "failed" && result.failureReason !== undefined
-              ? { failureReason: result.failureReason }
-              : {}),
-          };
-        }),
-      slip,
-    );
+    return await collectBegunReaderPayment(deps, cfg, begun);
   } catch (error) {
-    if (!capturedReplay) throw error;
+    if (!hold.capturedReplay) throw error;
     return afterCardCharged(deps, workingOrderId, () => Promise.reject(error));
   } finally {
-    release();
+    hold.release();
   }
+}
+
+/**
+ * What {@link beginReaderBillPayment} leaves its caller, set even when it throws: `release` frees
+ * the live claim on the payment it inserted, once the collect step is over or the transaction
+ * failed; `capturedReplay` says a failure is reported as a card charged but not recorded.
+ */
+export interface ReaderPaymentHold {
+  release: () => void;
+  capturedReplay: boolean;
+}
+
+/** A reader payment begun in its caller's transaction: a replay's answer, or a charge to collect. */
+export type BegunReaderPayment =
+  | { kind: "replay"; result: BillPaymentResult | SettledBill }
+  | {
+      kind: "collect";
+      workingOrderId: string;
+      req: BillPaymentRequest;
+      operator: { personId: string };
+      payment: PaymentRow;
+      slip: Awaited<ReturnType<typeof freezeWantedSlip>>;
+    };
+
+/**
+ * The first transaction of {@link takeReaderBillPayment}: inserts the pending payment, or answers
+ * a retry. It calls no provider; {@link collectBegunReaderPayment} does, after `tx` commits.
+ */
+export async function beginReaderBillPayment(
+  tx: Transaction,
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  options: {
+    /** The full-disk refusal read before the transaction opened ({@link diskFullBeforePayment}). */
+    preRead: boolean;
+    basket?: CounterPayment;
+    print: SettledSlipPrinter;
+    hold: ReaderPaymentHold;
+  },
+): Promise<BegunReaderPayment> {
+  const { preRead, basket, print, hold } = options;
+  const started = await beginBillPayment(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    "pending",
+    () => deps.clock.now(),
+    { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+    deps.attendance,
+    basket,
+  );
+  if ("settled" in started) return { kind: "replay", result: started.settled };
+  if ("replay" in started) {
+    let payment = started.replay;
+    let invoice: TillSaleResult | null = null;
+    if (
+      payment.state === "pending" &&
+      req.kind === "share" &&
+      req.shareOf === 1 &&
+      deps.settleCapturedReplay !== undefined &&
+      !billPaymentIsLive(deps.db, payment.id) &&
+      (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
+    ) {
+      hold.capturedReplay = true;
+      const reading = deps.clock.now();
+      await deps.backend.refuseUntilRecordable(tx, reading);
+      invoice = await deps.settleCapturedReplay(
+        tx,
+        payment.id,
+        reading.instant,
+        print,
+        req.guestCount,
+      );
+      const [recorded] = await tx
+        .select()
+        .from(billPayments)
+        .where(eq(billPayments.id, payment.id));
+      payment = recorded!;
+    }
+    return { kind: "replay", result: await resultOf(tx, deps, cfg, payment, invoice) };
+  }
+  // Inside the transaction, so no loop pass runs between the insert and its registration.
+  hold.release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
+  return {
+    kind: "collect",
+    workingOrderId,
+    req,
+    operator,
+    payment: started.payment,
+    slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
+  };
+}
+
+/**
+ * Asks the provider to collect a payment {@link beginReaderBillPayment} inserted, once its
+ * transaction has committed, and records the outcome. Its caller still holds the live claim.
+ */
+export async function collectBegunReaderPayment(
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  begun: Extract<BegunReaderPayment, { kind: "collect" }>,
+): Promise<BillPaymentResult> {
+  const { workingOrderId, req, operator, payment } = begun;
+  const slip = { frozen: begun.slip, log: deps.log };
+  if (deps.disk?.noted() === true) {
+    // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
+    // disk stops the till's writes"); only the reservation is released.
+    await withTransaction(deps.db, (tx) =>
+      failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
+    );
+    refuseForDiskStop(deps.log, workingOrderId);
+  }
+
+  let result: PaymentResult;
+  try {
+    result = await deps.provider.collect({
+      origin: cfg.origin,
+      workingOrderId: brandWorkingOrderId(workingOrderId),
+      nodeId: cfg.nodeId,
+      amount: centsToDecimal(payment.applied + payment.tip),
+      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
+      ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
+      simulationOutcome: req.simulationOutcome,
+      billPaymentId: payment.id,
+      requestedBy: operator.personId,
+      onReaderCheckout: deps.onReaderCheckout,
+    });
+  } catch (error) {
+    if (isAppError(error) && REFUSED_START.has(error.code)) {
+      await withSettledSlip(
+        (print) =>
+          withTransaction(deps.db, async (tx) => {
+            await requireEconomicWrite(tx, cfg, deps.admission);
+            await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+            await print(tx, payment.id);
+          }),
+        slip,
+      );
+    }
+    throw collectFailure(deps, workingOrderId, error);
+  }
+
+  if (result.state === "partially_refunded")
+    throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "partial_refund" });
+
+  if (result.state === "captured") {
+    // A captured result carries its time (`PaymentResult`, provider.ts).
+    const settledAt = result.settledAt!;
+    // Wrapped outside the transaction: when a full disk ended it or refused its commit,
+    // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
+    return await afterCardCharged(deps, workingOrderId, () =>
+      withSettledSlip(
+        (print) =>
+          withIssuanceTransaction(
+            deps.db,
+            async (tx) => {
+              const done = await completeBillPayment(tx, deps, cfg, payment.id, settledAt, {
+                guestCount: req.guestCount,
+              });
+              const printed = await print(tx, payment.id);
+              return {
+                ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.meal)),
+                ...printed,
+              };
+            },
+            deps.log,
+          ),
+        slip,
+      ),
+    );
+  }
+  return await withSettledSlip(
+    (print) =>
+      withTransaction(deps.db, async (tx) => {
+        await requireEconomicWrite(tx, cfg, deps.admission);
+        if (!NO_RETAINED_CHARGE.has(result.state)) {
+          const answer = await resultOf(tx, deps, cfg, payment, null);
+          return { ...answer, outcome: "timeout" };
+        }
+        const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+        // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
+        // could not print." (`payment_slip.capture_failed`).
+        await print(tx, payment.id);
+        return {
+          ...(await resultOf(tx, deps, cfg, failed, null)),
+          outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+          ...(result.state === "failed" && result.failureReason !== undefined
+            ? { failureReason: result.failureReason }
+            : {}),
+        };
+      }),
+    slip,
+  );
 }
 
 /** Reads a bill's balance in its own transaction. */
