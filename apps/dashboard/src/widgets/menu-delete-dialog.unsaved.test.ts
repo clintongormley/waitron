@@ -148,8 +148,8 @@ it.each([false, true])(
 );
 
 it.each([
-  ["menu", "dejarán de incluirla"],
-  ["set_menu", "dejarán de incluirlo"],
+  ["menu", "incluirla"],
+  ["set_menu", "incluirlo"],
 ] as const)("uses the Spanish dependant warning for %s", async (kind, wording) => {
   const locale = currentLocale();
   setLocale("es-ES");
