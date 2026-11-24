@@ -181,10 +181,17 @@ export async function listFreeItems(
     )
     .orderBy(asc(workingOrderLines.lineNo));
   // Each line's rates as read now, taken on the adjustment's day below. A takeaway product line's
-  // are its product's current rows, which may differ from those it was invoiced at.
+  // are its product's current rows, which may differ from those it was invoiced at. A takeaway set
+  // menu is read apart from its dishes, so it always takes the highest rate its recorded copy can
+  // hold (S12), whichever of its dishes were reduced too.
   const ratesOf = new Map<(typeof reduced)[number], readonly DatedRate[]>();
-  for (const dining of ["eat_in", "takeaway"] as const satisfies readonly Dining[]) {
-    const lines = reduced.filter((line) => line.dining === dining);
+  const takeaway = reduced.filter((line) => line.dining === "takeaway");
+  const readings: [Dining, typeof reduced][] = [
+    ["eat_in", reduced.filter((line) => line.dining === "eat_in")],
+    ["takeaway", takeaway.filter((line) => line.setMenuRole === "set_menu")],
+    ["takeaway", takeaway.filter((line) => line.setMenuRole !== "set_menu")],
+  ];
+  for (const [dining, lines] of readings) {
     const { rates } = await readLineVatRates(
       tx,
       dining,

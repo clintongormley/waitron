@@ -44,7 +44,12 @@ import {
 } from "./invoice-corrections.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
-import { GIVE_AWAY_REASON, reasonIdOf, refundableCancel } from "./testing/cancel-line.js";
+import {
+  COMP_BILL_REASON,
+  GIVE_AWAY_REASON,
+  reasonIdOf,
+  refundableCancel,
+} from "./testing/cancel-line.js";
 import { inTx, cashContribution, type PartyVenue } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
@@ -437,39 +442,46 @@ it("a replacement after an AEAT refusal repeats the divided rows and their parts
   expect(await figuresOf(replacementId)).toEqual(await figuresOf(saleId));
 });
 
-it("the Given free sheet values a comped takeaway set menu at the highest rate its copy holds", async () => {
-  const bill = await lunchBill(spec, lunch);
-  const menu = (await specRows(spec, bill.tabId)).find(({ name }) => name === "Lunch menu")!;
-  await inTx(venue, async (tx) =>
+/** Comps the bill's row named `name`, or takes 100% off the whole bill for null; answers the adjustment's ids. */
+async function compRow(tabId: string, name: string | null) {
+  const row =
+    name === null ? null : (await specRows(spec, tabId)).find((line) => line.name === name)!;
+  const { adjustmentIds } = await inTx(venue, async (tx) =>
     applyAdjustment(
       tx,
       venue.cfg,
       {
         admission: testTradingAdmission(),
-        orderId: bill.tabId,
-        expectedEdit: await readBillEditState(tx, bill.tabId),
+        orderId: tabId,
+        expectedEdit: await readBillEditState(tx, tabId),
         submissionId: crypto.randomUUID(),
-        expectedRevision: await readOrderRevision(tx, bill.tabId),
-        lineId: menu.id,
-        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
-        action: "comp",
+        expectedRevision: await readOrderRevision(tx, tabId),
+        reasonId: await reasonIdOf(tx, row === null ? COMP_BILL_REASON : GIVE_AWAY_REASON),
+        ...(row === null
+          ? { lineId: null, action: "discount_percent" as const, percentBp: 10000 }
+          : { lineId: row.id, action: "comp" as const }),
         note: null,
         operatorId: venue.operator.personId,
       },
       venue.cfg.locale,
     ),
   );
+  return adjustmentIds;
+}
+
+/** This month's Given free sheet, with the bill's department at a 30% margin. */
+async function givenFreeAt30Percent(tabId: string) {
   const [{ departmentId }] = await venue.db
     .select({ departmentId: workingOrders.departmentId })
     .from(workingOrders)
-    .where(eq(workingOrders.id, bill.tabId));
+    .where(eq(workingOrders.id, tabId));
   expect(departmentId).not.toBeNull();
   await venue.db
     .update(departments)
     .set({ estimatedMarginBp: 3000 })
     .where(eq(departments.id, departmentId!));
   try {
-    const listed = await inTx(venue, async (tx) => {
+    return await inTx(venue, async (tx) => {
       const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
       const day = currentBusinessDay(clock);
       return listFreeItems(tx, clock, {
@@ -477,7 +489,20 @@ it("the Given free sheet values a comped takeaway set menu at the highest rate i
         period: { kind: "month", month: Number(day.slice(5, 7)) },
       });
     });
-    expect(listed.filter(({ item }) => item === "Lunch menu")).toMatchObject([
+  } finally {
+    await venue.db
+      .update(departments)
+      .set({ estimatedMarginBp: null })
+      .where(eq(departments.id, departmentId!));
+  }
+}
+
+describe("the Given free sheet", () => {
+  it("values a comped takeaway set menu at the highest rate its copy holds", async () => {
+    const bill = await lunchBill(spec, lunch);
+    const comped = await compRow(bill.tabId, "Lunch menu");
+    const listed = await givenFreeAt30Percent(bill.tabId);
+    expect(listed.filter(({ adjustmentId }) => comped.includes(adjustmentId))).toMatchObject([
       {
         item: "Lunch menu",
         menuPrice: "14.00",
@@ -486,10 +511,63 @@ it("the Given free sheet values a comped takeaway set menu at the highest rate i
         estimatedCost: "8.10",
       },
     ]);
-  } finally {
-    await venue.db
-      .update(departments)
-      .set({ estimatedMarginBp: null })
-      .where(eq(departments.id, departmentId!));
-  }
+  });
+
+  it("keeps the set menu's rate when a bill with a dish's supplement is given free", async () => {
+    const [before] = await venue.db
+      .select({ grossPrice: menuItems.grossPrice })
+      .from(menuItems)
+      .where(eq(menuItems.id, lunch.items.Hake));
+    const versionId = await hakeSupplement(200);
+    try {
+      const bill = await lunchBill(spec, lunch, versionId);
+      const comped = await compRow(bill.tabId, null);
+      const listed = await givenFreeAt30Percent(bill.tabId);
+      expect(listed.filter(({ adjustmentId }) => comped.includes(adjustmentId))).toMatchObject([
+        {
+          item: null,
+          kind: "discount",
+          menuPrice: "16.00",
+          amountTakenOff: "16.00",
+          // (14.00 ÷ 1.21 + 2.00 ÷ 1.10) × 0.70 = 9.37; with the menu at 10% it would be 10.18.
+          estimatedCost: "9.37",
+        },
+      ]);
+    } finally {
+      lunch.versionId = await hakeSupplement(before!.grossPrice);
+    }
+  });
+
+  it("keeps the set menu's rate when a dish's supplement on the bill is comped too", async () => {
+    const [before] = await venue.db
+      .select({ grossPrice: menuItems.grossPrice })
+      .from(menuItems)
+      .where(eq(menuItems.id, lunch.items.Hake));
+    const versionId = await hakeSupplement(200);
+    try {
+      const bill = await lunchBill(spec, lunch, versionId);
+      const menuComp = await compRow(bill.tabId, "Lunch menu");
+      const hakeComp = await compRow(bill.tabId, "Hake");
+      const listed = await givenFreeAt30Percent(bill.tabId);
+      expect(
+        listed.filter(({ adjustmentId }) => [...menuComp, ...hakeComp].includes(adjustmentId)),
+      ).toMatchObject([
+        {
+          item: "Lunch menu",
+          menuPrice: "14.00",
+          amountTakenOff: "14.00",
+          estimatedCost: "8.10",
+        },
+        {
+          item: "Hake",
+          menuPrice: "2.00",
+          amountTakenOff: "2.00",
+          // 2.00 ÷ 1.10 × 0.70 = 1.27.
+          estimatedCost: "1.27",
+        },
+      ]);
+    } finally {
+      lunch.versionId = await hakeSupplement(before!.grossPrice);
+    }
+  });
 });
