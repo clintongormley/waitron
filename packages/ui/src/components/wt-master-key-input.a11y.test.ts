@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { RecoveryPackReading, WtMasterKeyInput } from "./wt-master-key-input.js";
@@ -54,11 +54,10 @@ async function choose(el: WtMasterKeyInput, line: string): Promise<void> {
   transfer.items.add(new File(["%PDF-1.7"], "pack.pdf"));
   control.files = transfer.files;
   control.dispatchEvent(new Event("change"));
-  await vi.waitFor(async () => {
-    await el.updateComplete;
-    await inner(el).updateComplete;
-    expect(inner(el).error).toBe(line);
-  });
+  await el.pdfRead;
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(inner(el).error).toBe(line);
 }
 
 const refusal = (reason: string) =>
@@ -102,6 +101,16 @@ describe.each(["light", "dark"] as const)("wt-master-key-input a11y (%s theme)",
       masterKeyHeldBy: null,
     }));
     await choose(el, COPY.wrongKey(KEY_NAME));
+    await expectNoA11yViolations(host);
+  });
+
+  test("without the master key", async () => {
+    const el = await field(theme, async () => ({
+      masterKey: null,
+      masterKeyName: null,
+      masterKeyHeldBy: 2,
+    }));
+    await choose(el, COPY.elsewhere());
     await expectNoA11yViolations(host);
   });
 
