@@ -57,18 +57,25 @@ describe("set menu storage on a bill", () => {
        ${product}, 1000, 1800, 1800, 'reduced', 'reduced', 'set_menu', ${MENU}, ${versionId})`);
   }
 
-  function addDish() {
+  function addDish({
+    id = DISH,
+    role = "dish" as string | null,
+    menu = MENU as string | null,
+    setLine = SET_LINE as string | null,
+    place = 1 as number | null,
+    course = COURSE as string | null,
+  } = {}) {
     return suite.db.execute(sql`insert into working_order_lines
       (id, working_order_id, line_no, name, descriptions, product_id, quantity,
        unit_price_gross, line_total, vat_class, takeaway_vat_class,
        menu_item_id, menu_id, menu_name, offer_department_id, department_name, unit_id,
        sold_in_each, offer_unit_name, offer_unit_precision, offer_vat_class, offer_category_name,
        set_menu_role, set_menu_id, set_menu_line_id, set_menu_place, set_menu_counts_as_course_id)
-      values (${DISH}, ${billId}, 2, 'Soup', '{"en":"Soup"}', ${productId}, 1000,
+      values (${id}, ${billId}, ${id === DISH ? 2 : 3}, 'Soup', '{"en":"Soup"}', ${productId}, 1000,
        250, 250, 'reduced', 'reduced',
        ${menuItemId}, ${fullMenuId}, 'Lunch', 'dining-room', 'Dining room', 'each',
        1, '{"en":"portion"}', 0, 'reduced', 'Starters',
-       'dish', ${MENU}, ${SET_LINE}, 1, ${COURSE})`);
+       ${role}, ${menu}, ${setLine}, ${place}, ${course})`);
   }
 
   function updateLine(lineId: string, column: string, value: string | number | null) {
@@ -93,14 +100,40 @@ describe("set menu storage on a bill", () => {
     ).toEqual([{ product_id: null, set_menu_id: MENU, set_menu_version_id: VERSION }]);
   });
 
-  it("requires the set menu, place and counts-as course on a placed dish", async () => {
+  it("requires the place and counts-as course on a placed dish", async () => {
     await addSetMenu();
     await addDish();
-    for (const column of ["set_menu_id", "set_menu_place", "set_menu_counts_as_course_id"]) {
+    for (const column of ["set_menu_place", "set_menu_counts_as_course_id"]) {
       await expectCheck(() => updateLine(DISH, column, null));
     }
     await expectCheck(() => updateLine(DISH, "set_menu_version_id", VERSION));
     await expectCheck(() => updateLine(DISH, "parent_line_id", SET_LINE));
+  });
+
+  it("keeps where a dish was ordered from when it is in no set menu, and groups a dish tapped a la carte", async () => {
+    await addSetMenu();
+    await addDish({ role: null, setLine: null, place: null, course: null });
+    await addDish({ id: "a-la-carte-dish", menu: null });
+    expect(
+      await suite.db.all(sql`select id, set_menu_role, set_menu_id from working_order_lines
+      where id in (${DISH}, 'a-la-carte-dish') order by id`),
+    ).toEqual([
+      { id: "a-la-carte-dish", set_menu_role: "dish", set_menu_id: null },
+      { id: DISH, set_menu_role: null, set_menu_id: MENU },
+    ]);
+  });
+
+  it("refuses a line in no set menu that keeps a set menu's line, place, course or copy", async () => {
+    await addSetMenu();
+    for (const values of [
+      { setLine: SET_LINE, place: null, course: null },
+      { setLine: null, place: 1, course: null },
+      { setLine: null, place: null, course: COURSE },
+    ]) {
+      await expectCheck(() => addDish({ role: null, ...values }));
+    }
+    await addDish({ role: null, setLine: null, place: null, course: null });
+    await expectCheck(() => updateLine(DISH, "set_menu_version_id", VERSION));
   });
 
   it("lets an ordinary extra belong to a set-menu dish without carrying its own set-menu values", async () => {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4b4906cc-ed50-493b-94a2-977665adfbbd",
+  "id": "2d1b9d7c-e947-4d6a-8815-dee051cabc7c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -684,6 +684,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "counts_as_course_id": {
+          "name": "counts_as_course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "menu_item_id": {
           "name": "menu_item_id",
           "type": "text",
@@ -1150,7 +1157,7 @@
         },
         "working_order_lines_set_menu_ck": {
           "name": "working_order_lines_set_menu_ck",
-          "value": "(\"working_order_lines\".\"set_menu_role\" is null\n          and \"working_order_lines\".\"set_menu_id\" is null and \"working_order_lines\".\"set_menu_version_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'set_menu'\n          and \"working_order_lines\".\"set_menu_id\" is not null and \"working_order_lines\".\"set_menu_version_id\" is not null\n          and \"working_order_lines\".\"product_id\" is null and \"working_order_lines\".\"menu_item_id\" is null and \"working_order_lines\".\"parent_line_id\" is null\n          and \"working_order_lines\".\"course_id\" is null and \"working_order_lines\".\"group_id\" is null and \"working_order_lines\".\"cohort_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'dish'\n          and \"working_order_lines\".\"set_menu_id\" is not null and \"working_order_lines\".\"menu_item_id\" is not null\n          and \"working_order_lines\".\"set_menu_place\" is not null and \"working_order_lines\".\"set_menu_counts_as_course_id\" is not null\n          and \"working_order_lines\".\"parent_line_id\" is null and \"working_order_lines\".\"set_menu_version_id\" is null)"
+          "value": "(\"working_order_lines\".\"set_menu_role\" is null\n          and (\"working_order_lines\".\"set_menu_id\" is null or \"working_order_lines\".\"parent_line_id\" is null)\n          and \"working_order_lines\".\"set_menu_version_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'set_menu'\n          and \"working_order_lines\".\"set_menu_id\" is not null and \"working_order_lines\".\"set_menu_version_id\" is not null\n          and \"working_order_lines\".\"product_id\" is null and \"working_order_lines\".\"menu_item_id\" is null and \"working_order_lines\".\"parent_line_id\" is null\n          and \"working_order_lines\".\"course_id\" is null and \"working_order_lines\".\"group_id\" is null and \"working_order_lines\".\"cohort_id\" is null\n          and \"working_order_lines\".\"set_menu_line_id\" is null and \"working_order_lines\".\"set_menu_place\" is null\n          and \"working_order_lines\".\"set_menu_counts_as_course_id\" is null)\n        or (\"working_order_lines\".\"set_menu_role\" is 'dish'\n          and \"working_order_lines\".\"menu_item_id\" is not null\n          and \"working_order_lines\".\"set_menu_place\" is not null and \"working_order_lines\".\"set_menu_counts_as_course_id\" is not null\n          and \"working_order_lines\".\"parent_line_id\" is null and \"working_order_lines\".\"set_menu_version_id\" is null)"
         },
         "working_order_lines_cohort_ck": {
           "name": "working_order_lines_cohort_ck",
@@ -1419,6 +1426,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "set_menus_exact": {
+          "name": "set_menus_exact",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         }
       },
       "indexes": {

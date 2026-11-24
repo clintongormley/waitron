@@ -119,6 +119,9 @@ export const workingOrders = table(
     serviceMode: label("service_mode").$type<"table_tab" | "prepay" | "ticket_then_pay">(),
     // On a bill made by Pay for items: the bill its items came from.
     itemsPaidFrom: id("items_paid_from"),
+    // Whether the bill's saved set menus were proven the cheapest; false when the calculation
+    // stopped at its search limit.
+    setMenusExact: flag("set_menus_exact").notNull().default(true),
   },
   (t) => [
     uniqueIndex("working_orders_party_bill_number_key")
@@ -276,6 +279,9 @@ export const workingOrderLines = table(
     // What the dish costs a la carte, written when it is added; null on an extras pick and on a
     // set menu's own row.
     aLaCarteUnitPrice: money("a_la_carte_unit_price"),
+    // The course the dish counts as in a set menu, its product's when it was added; null on an
+    // extras pick and a set menu's own row. No key, as for `set_menu_counts_as_course_id`.
+    countsAsCourseId: id("counts_as_course_id"),
     menuItemId: id("menu_item_id"),
     menuId: id("menu_id"),
     menuName: label("menu_name"),
@@ -408,7 +414,8 @@ export const workingOrderLines = table(
     check(
       "working_order_lines_set_menu_ck",
       sql`(${t.setMenuRole} is null
-          and ${t.setMenuId} is null and ${t.setMenuVersionId} is null
+          and (${t.setMenuId} is null or ${t.parentLineId} is null)
+          and ${t.setMenuVersionId} is null
           and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
           and ${t.setMenuCountsAsCourseId} is null)
         or (${t.setMenuRole} is 'set_menu'
@@ -418,7 +425,7 @@ export const workingOrderLines = table(
           and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
           and ${t.setMenuCountsAsCourseId} is null)
         or (${t.setMenuRole} is 'dish'
-          and ${t.setMenuId} is not null and ${t.menuItemId} is not null
+          and ${t.menuItemId} is not null
           and ${t.setMenuPlace} is not null and ${t.setMenuCountsAsCourseId} is not null
           and ${t.parentLineId} is null and ${t.setMenuVersionId} is null)`,
     ),

@@ -379,6 +379,20 @@ describe("working_orders", () => {
     expect(row.settledAt).toBeNull();
   });
 
+  it("opens a bill whose set menus count as proven cheapest, stores false, and fixes it once placed", async () => {
+    const id = await openOrder(db);
+    const exact = async () =>
+      (await db.select().from(workingOrders).where(eq(workingOrders.id, id)))[0].setMenusExact;
+    expect(await exact()).toBe(true);
+    await db.update(workingOrders).set({ setMenusExact: false }).where(eq(workingOrders.id, id));
+    expect(await exact()).toBe(false);
+    await db.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+    const error = await captureError(() =>
+      db.update(workingOrders).set({ setMenusExact: true }).where(eq(workingOrders.id, id)),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
   it("rejects a status outside the allowed set", async () => {
     const error = await captureError(() =>
       db.execute(
@@ -777,6 +791,33 @@ describe("working_order_lines", () => {
           .returning({ aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice });
         expect(line.aLaCarteUnitPrice).toBe(price);
       }
+    });
+  });
+
+  describe("the course a dish counts as", () => {
+    it("stores and reads it back, and keeps it fixed while service is recorded on a placed bill", async () => {
+      const bill = await openOrder(db);
+      const [line] = await db
+        .insert(workingOrderLines)
+        .values({ ...LINE, workingOrderId: bill, countsAsCourseId: "starter" })
+        .returning({
+          id: workingOrderLines.id,
+          countsAsCourseId: workingOrderLines.countsAsCourseId,
+        });
+      expect(line.countsAsCourseId).toBe("starter");
+      await db.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, bill));
+      const serve = (change: ReturnType<typeof sql>) =>
+        db.execute(
+          sql`update working_order_lines set served_quantity = 1000${change} where id = ${line.id}`,
+        );
+      const error = await captureError(() => serve(sql`, counts_as_course_id = 'main'`));
+      expect(triggerRaised(error, "lines may only be written while the order is open")).toBe(true);
+      await serve(sql``);
+      const [read] = await db
+        .select({ countsAsCourseId: workingOrderLines.countsAsCourseId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, line.id));
+      expect(read.countsAsCourseId).toBe("starter");
     });
   });
 

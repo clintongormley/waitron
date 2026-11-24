@@ -1543,6 +1543,13 @@ for (const locale of ["en", "es"] as const) {
       );
       for (const name of ["zone_id", "department_id", "service_mode", "items_paid_from"])
         orders.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+      orders.columns.push({
+        name: "set_menus_exact",
+        type: "INTEGER",
+        notnull: 1,
+        dflt_value: "true",
+        pk: 0,
+      });
       orders.columns.splice(
         orders.columns.findIndex((column) => column.name === "opened_at") + 1,
         0,
@@ -1560,6 +1567,7 @@ for (const locale of ["en", "es"] as const) {
           department_id: null,
           service_mode: null,
           items_paid_from: null,
+          set_menus_exact: 1,
         });
       orders.foreignKeys = [
         ...orders.foreignKeys.map((key) => ({ ...key, id: key.id + (key.id >= 2 ? 4 : 3) })),
@@ -1619,6 +1627,12 @@ for (const locale of ["en", "es"] as const) {
       );
       for (const row of Object.values(orderLines.rows))
         row.a_la_carte_unit_price = row.unit_price_gross;
+      orderLines.columns.splice(
+        orderLines.columns.findIndex((column) => column.name === "a_la_carte_unit_price") + 1,
+        0,
+        { name: "counts_as_course_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(orderLines.rows)) row.counts_as_course_id = null;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );
