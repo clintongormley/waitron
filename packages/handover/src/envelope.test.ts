@@ -79,6 +79,8 @@ describe("signEnvelope", () => {
       "agent-enrol",
       "reset-query",
       "reset-order",
+      "old-box-data-query",
+      "old-box-data",
     ]);
   });
 

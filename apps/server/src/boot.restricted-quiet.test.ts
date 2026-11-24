@@ -151,6 +151,8 @@ interface Observed {
   download?: Download;
   /** The same download after a passkey sign-in: the options request, then the signed answer. */
   passkeyDownload?: Download;
+  /** An unsigned request to the main box's route for the same file, on a restricted start. */
+  peerRequest?: { status: number; body: unknown };
   mailStatus: string;
 }
 
@@ -305,6 +307,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     const pageStatus = (await fetch(`https://127.0.0.1:${httpPort()}/`, via)).status;
     let download: Observed["download"];
     let passkeyDownload: Observed["passkeyDownload"];
+    let peerRequest: Observed["peerRequest"];
     if (options.restricted) {
       const downloadWith = async (fields: Record<string, string>) =>
         downloadOf(
@@ -324,6 +327,13 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       passkeyDownload = await downloadWith({
         passkey: JSON.stringify(passkey.assert(challenge, MANAGEMENT_ORIGIN)),
       });
+      const peer = await fetch(`https://127.0.0.1:${httpPort()}/api/node/old-box-data`, {
+        ...via,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: {}, purpose: "x", signature: "x", signerNodeId: "x" }),
+      });
+      peerRequest = { status: peer.status, body: await peer.json() };
     }
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
     observed = {
@@ -333,6 +343,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       pageStatus,
       download,
       passkeyDownload,
+      peerRequest,
       mailStatus: suite.db.get<{ status: string }>(
         sql`select status from outgoing_mail where dedupe_key = 'quiet-mail'`,
       )!.status,
@@ -373,6 +384,15 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
   it("writes nothing to venue.db and sets no cookie for a download after a passkey sign-in", () => {
     expect(observed().passkeyDownload).toEqual(workbook);
     expect(observed().hashAfter).toBe(observed().hashBefore);
+  });
+
+  it("mounts the main box's route for the old box's data, which refuses an unsigned request", () => {
+    expect(observed().peerRequest).toEqual({
+      status: 409,
+      body: {
+        error: { code: "handover.old_box_data_query_refused", params: { reason: "signature" } },
+      },
+    });
   });
 
   it("leaves a queued mail as it was", () => {

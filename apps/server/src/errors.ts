@@ -47,6 +47,7 @@ declare module "@waitron/shared" {
     /** A reset was ordered without accepting the loss, and this venue holds no completed return from that box. */
     "handover.reset_loss_unaccepted": Record<string, never>;
     "handover.reset_query_refused": { reason: string };
+    "handover.old_box_data_query_refused": { reason: string };
     /**
      * A reset was ordered for a former main box other than the one whose key this box pinned when
      * it joined: the peer route answers no other old box's questions, so it would never collect it.

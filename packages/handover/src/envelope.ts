@@ -20,6 +20,8 @@ export const HANDOVER_KINDS = [
   "agent-enrol",
   "reset-query",
   "reset-order",
+  "old-box-data-query",
+  "old-box-data",
 ] as const satisfies readonly HandoverKind[];
 
 export type { HandoverKind, HandoverPurpose, SignedHandoverEnvelope };

@@ -17,7 +17,9 @@ export type HandoverKind =
   | "switch-proof"
   | "agent-enrol"
   | "reset-query"
-  | "reset-order";
+  | "reset-order"
+  | "old-box-data-query"
+  | "old-box-data";
 
 export type HandoverPurpose = `waitron.handover.${HandoverKind}.v1`;
 

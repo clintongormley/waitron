@@ -270,6 +270,8 @@ import {
   type RestrictedPageDeps,
 } from "./restricted-page.js";
 import { oldBoxDataRoute } from "./old-box-data-page.js";
+import { mountOldBoxDataPeerApi } from "./old-box-data-peer-api.js";
+import { oneBuildAtATime } from "./old-box-data-turn.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { startRestricted } from "./restricted-start.js";
@@ -2060,6 +2062,7 @@ async function bootServer(
       resetOrdered: () => resetOrder.answer()?.order != null,
       resetPhase: () => readReplacedResetPhase(config.stateDir),
     };
+    const oldBoxDataTurn = oneBuildAtATime();
     return startRestricted({
       app,
       returnRecords,
@@ -2081,7 +2084,22 @@ async function bootServer(
           },
           mainHoldings: () => resetOrder.mainHoldings(),
           mainCopy: () => resetOrder.mainCopy(),
+          turn: oldBoxDataTurn,
         }),
+        (restrictedApp) =>
+          mountOldBoxDataPeerApi(
+            restrictedApp,
+            {
+              db,
+              node: store.node,
+              ring,
+              nodeId: node.nodeId,
+              modules: enabledAtStart,
+              resetOrdered: restrictedPage.resetOrdered,
+              turn: oldBoxDataTurn,
+            },
+            log,
+          ),
         (restrictedApp) =>
           mountPeerStatusApi(
             restrictedApp,

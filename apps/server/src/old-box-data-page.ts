@@ -17,6 +17,7 @@ import { challengeOf, createSwitchChallenges } from "./handover-switch-proof.js"
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
+import { oneBuildAtATime, type BuildTurn } from "./old-box-data-turn.js";
 import { makeOldBoxWorkbook, type OldBoxWorkbook } from "./old-box-data-workbook.js";
 import type { HeardCopy, HeardHoldings } from "./old-box-holdings.js";
 import { sentFromThisOrigin } from "./own-page.js";
@@ -56,6 +57,8 @@ export interface OldBoxDataDeps {
   mainCopy?: () => HeardCopy | null;
   /** Whether this box handed over in a planned handover, which leaves out the "since" tabs. */
   planned: () => Promise<boolean>;
+  /** Shared with the peer route, so one workbook is made at a time. */
+  turn?: BuildTurn;
 }
 
 /**
@@ -114,7 +117,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
           ]),
         ];
   const { log } = deps;
-  let making = false;
+  const turn = deps.turn ?? oneBuildAtATime();
 
   const checkPasswordSignIn = async (
     email: string,
@@ -234,8 +237,8 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
         return refuse(refusal.status, refusal.refusal, refusal.retryAfterSeconds);
       }
       if (deps.resetOrdered?.() === true) return refuse(409, "wipeUnderWay");
-      if (making) return refuse(409, "busy");
-      making = true;
+      const release = turn.take();
+      if (release === null) return refuse(409, "busy");
       try {
         const madeAt = new Date();
         const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
@@ -269,7 +272,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
           workbookDownloadHeaders(`waitron-old-main-box-${made.madeOn}.xlsx`),
         );
       } finally {
-        making = false;
+        release();
       }
     });
   };
