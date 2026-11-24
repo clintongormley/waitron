@@ -47,20 +47,6 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
   },
   {
     method: "POST",
-    path: "/management-api/promote",
-    boxes: ["mirror", "fenced"],
-    authenticates:
-      "in the body, either the box's break-glass secret or the password (and code when enrolled) of a person holding `node.manage`; a promote module operation for this box takes the same choice, or, with `noParallelRecovery` on a box that prepares operations, the HTTPS and sign-in checks `node-operation-preparation.ts` makes; a fenced box answers `promotion.node_fenced`; a mirror answers `promotion.from_box_only` to a request not from the box itself, before reading the body",
-  },
-  {
-    method: "POST",
-    path: "/management-api/promote/preparation",
-    boxes: ["mirror", "fenced"],
-    authenticates:
-      "on a mirror, a request from the box itself (otherwise `promotion.from_box_only`, before reading the body); then HTTPS, a promote module operation, and the sign-in `node-operation-preparation.ts` checks",
-  },
-  {
-    method: "POST",
     path: "/api/node/peer-status",
     boxes: ["mirror", "fenced"],
     authenticates:

@@ -47,6 +47,11 @@ export interface FenceAttestation {
   readonly oldNodeNeutralised: boolean;
 }
 
+export interface PromoteRunResult {
+  alreadyPrimary: boolean;
+  restarting: boolean;
+}
+
 export interface PromoteDeps {
   readonly db: Database;
   readonly node: NodeDatabase;
@@ -70,7 +75,7 @@ export function assertFenced(attestation: FenceAttestation): void {
  * `assertFenced`, which checks the operator's attestation about the OLD node. A held document too
  * broken to read is refused `membership.held_untrusted` first.
  */
-export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
+function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
   assertHeldDocumentReadable(held);
   const standing = held === null ? undefined : standingOf(held, nodeId);
   if (isFencedStanding(standing)) {

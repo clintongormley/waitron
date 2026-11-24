@@ -63,7 +63,6 @@ import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { mintBoxAuthority } from "./testing/box-authority.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { imageMigrationsDigest, readOfferCopyBytes } from "./handover-manifest.js";
-import { promotionTurn } from "./handover-promotion-turn.js";
 import {
   mountHandoverSourceStartApi,
   type HandoverSourceStartDeps,
@@ -970,17 +969,6 @@ describe("an offer the spare refuses", () => {
         [NEXT_OP, "prepared"],
       ]),
     );
-  });
-
-  it("a spare being promoted, on a real spare", async () => {
-    const turn = promotionTurn(spareBox.node);
-    turn.claim();
-    try {
-      expect(await start()).toEqual(refusal(409, "handover.promotion_running"));
-    } finally {
-      turn.release();
-    }
-    await expectAbandoned("handover.promotion_running");
   });
 
   it("a spare holding another chart, on a real spare", async () => {

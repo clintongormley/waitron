@@ -296,7 +296,7 @@ describe("a box killed while activating, then a real start with its old box swit
     expect(operationStateOnDisk()).toBe("activated");
   }, 180_000);
 
-  it("a primary without a committed activation refuses a repeat and stays unactivated", async () => {
+  it("a box started as primary refuses a new activation and stays unactivated", async () => {
     await killedActivating("venue-commit");
     const venue = new DatabaseSync(join(dirs().spareVenue, "venue.db"));
     try {
@@ -313,7 +313,7 @@ describe("a box killed while activating, then a real start with its old box swit
 
     await startAfterTheKill();
     const repeat = await post("activate", fresh());
-    expect([repeat.status, codeOf(repeat)]).toEqual([409, "handover.source_no_longer_main"]);
+    expect([repeat.status, codeOf(repeat)]).toEqual([409, "handover.step_out_of_order"]);
     await started!.close();
     started = undefined;
 

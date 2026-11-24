@@ -1740,10 +1740,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This handover was already started with different details, so nothing was changed. Start a new handover.",
     es: "Este traspaso ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un traspaso nuevo.",
   },
-  "promotion.from_box_only": {
-    en: "In this version a standby box cannot be switched on from another device. Nothing was changed.",
-    es: "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
-  },
   "handover.operation_in_progress": {
     en: "A handover is already in progress. Keep both boxes connected, and wait for it to finish before starting another handover or removing a box.",
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",

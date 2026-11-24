@@ -47,6 +47,17 @@ it("permits only a host-declared live action with key attribution and no account
   expect(readOperationAuthority(escaped, binding)).toBeUndefined();
 });
 
+it("does not grant a master key authority to promote", async () => {
+  await expect(
+    withRecoveryKeyAuthority(
+      deps,
+      { ...binding, action: "promote" },
+      secret,
+      async () => "unexpected",
+    ),
+  ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+});
+
 it.each([undefined, [], ["other-action"]])(
   "does not expand the default action list from request data: %j",
   async (allowed) => {

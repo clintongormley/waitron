@@ -47,7 +47,7 @@ export async function withRecoveryKeyAuthority<T>(
     authority: OperationAuthority,
     commit: <R>(body: (tx: Transaction) => Promise<R>) => Promise<R>,
   ) => Promise<T>,
-  allowedActions: readonly string[] = ["restore", "promote"],
+  allowedActions: readonly string[] = ["restore"],
 ): Promise<T> {
   const binding = { ...operation };
   const targetNodeId = deps.nodeId;

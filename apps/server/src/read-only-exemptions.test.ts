@@ -43,7 +43,6 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { mintMasterKey } from "./testing/master-key.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -74,8 +73,6 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/box/restart", ["fenced"]],
       ["POST", "/management-api/session/me/fresh-sign-in", ["fenced"]],
       ["POST", "/management-api/session/me/fresh-sign-in/passkey-options", ["fenced"]],
-      ["POST", "/management-api/promote", ["mirror", "fenced"]],
-      ["POST", "/management-api/promote/preparation", ["mirror", "fenced"]],
       ["POST", "/api/node/peer-status", ["mirror", "fenced"]],
       ["POST", "/api/node/membership", ["mirror", "fenced"]],
       ["POST", "/api/node/handover/offer", ["mirror"]],
@@ -113,7 +110,7 @@ describe("the read-only exemption list", () => {
     }
     expect(
       isReadOnlyExempt(
-        { method: "POST", path: "/management-api/promote" },
+        { method: "POST", path: "/api/node/peer-status" },
         { mirror: false, fenced: false },
       ),
     ).toBe(false);
@@ -205,7 +202,7 @@ const venueDirs: string[] = [];
 let mirror: { dir: string; nodeId: string };
 let fenced: { dir: string; nodeId: string };
 let fencedProof: { dir: string; nodeId: string; token: string; db: Database };
-let midHandover: { dir: string; nodeId: string; node: NodeDatabase; breakGlass: string };
+let midHandover: { dir: string; nodeId: string; node: NodeDatabase };
 let spare: { dir: string; nodeId: string; node: NodeDatabase; offer: unknown };
 
 async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> {
@@ -301,8 +298,7 @@ beforeAll(async () => {
       envelope: null,
     }),
   );
-  const breakGlass = (await mintMasterKey(hDb)).secret;
-  midHandover = { dir: hDir, nodeId: hId, node: hNode, breakGlass };
+  midHandover = { dir: hDir, nodeId: hId, node: hNode };
 
   // A second mirror with no open operation, holding a chart that names the main box.
   const [sDir, sId, sDb, sNode] = await seededVenue();
@@ -470,8 +466,6 @@ describe("each listed route is reached on a real read-only start, and nothing el
     try {
       await waitForFirstPass(server);
       expect({
-        promote: await post(base, "/management-api/promote"),
-        preparation: await post(base, "/management-api/promote/preparation"),
         handoverPreparation: await post(
           base,
           `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
@@ -489,8 +483,6 @@ describe("each listed route is reached on a real read-only start, and nothing el
         // A GET: the gate never refuses it, and this box's own id finds this box's row.
         statusRead: await readStatus(base, MIRROR_OPERATION_ID),
       }).toEqual({
-        promote: { status: 401, code: "password.invalid" },
-        preparation: PREPARATION_REFUSAL,
         handoverPreparation: PREPARATION_REFUSAL,
         handoverActivate: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
@@ -548,7 +540,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
     }
   }, 60_000);
 
-  it("a mirror partway through a handover refuses an ordinary promote, and it stays a mirror", async () => {
+  it("a mirror serves its signed handover status partway through a handover", async () => {
     const server = await startServer(
       {
         ...KEY_ENV,
@@ -568,33 +560,12 @@ describe("each listed route is reached on a real read-only start, and nothing el
         midHandover.nodeId,
         MIRROR_OPERATION_ID,
       );
-      const response = await fetch(`${base}/management-api/promote`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ oldNodeNeutralised: true, breakGlass: midHandover.breakGlass }),
-      });
-      expect([response.status, await response.json()]).toEqual([
-        409,
-        {
-          error: {
-            code: "handover.operation_in_progress",
-            params: { operationId: MIRROR_OPERATION_ID },
-          },
-        },
-      ]);
-      // No credentials over plain HTTP: the usual refusal, naming no operation.
-      expect(await post(base, "/management-api/promote")).toEqual({
-        status: 401,
-        code: "password.invalid",
-      });
       // The real shape of M2: a real start's status read serves a destination's operation.
       expect(await readStatus(base, MIRROR_OPERATION_ID)).toEqual({
         status: 200,
         signerNodeId: midHandover.nodeId,
         state: "filing_assumed",
       });
-      // A plain-HTTP preparation is still turned away first, and learns no operation's id.
-      expect(await post(base, "/management-api/promote/preparation")).toEqual(PREPARATION_REFUSAL);
       expect(before).toMatchObject({ state: "filing_assumed" });
       expect(
         await readHandoverOperation(midHandover.node, midHandover.nodeId, MIRROR_OPERATION_ID),
@@ -661,8 +632,6 @@ describe("each listed route is reached on a real read-only start, and nothing el
       expect({
         retire: await post(base, "/api/box/retire"),
         restart: await post(base, "/api/box/restart"),
-        promote: await post(base, "/management-api/promote"),
-        preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
         // Listed for a mirror only.
@@ -678,8 +647,6 @@ describe("each listed route is reached on a real read-only start, and nothing el
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },
         restart: { status: 401, code: "management_session.required" },
-        promote: { status: 401, code: "password.invalid" },
-        preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
         offer: GATED,

@@ -1,11 +1,10 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   nodes,
@@ -19,7 +18,6 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type {
   Endorsement,
@@ -42,13 +40,6 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { startServer, httpPort } = ephemeralServerFixture();
-
-// `POST /management-api/promote` is mounted on both deployment modes and its path is exempt from
-// the read-only gate, so a mirror and a fenced node both reach the handler: a mirror's
-// credential-less POST gets the handler's 401, and a fenced node gets `promotion.node_fenced` (409),
-// not a gate 403.
-//
-// Every seeding write happens while no server is running.
 
 // `undici`'s `fetch` rejects, so no background dial reaches a real host; Node's global `fetch`, a
 // separate module identity, still serves the probes.
@@ -90,10 +81,6 @@ const RING = loadKeyRing({
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
-
-// The admin the endpoint authenticates by password in the primary and fenced cases.
-const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
-const ADMIN_PW = "correct-horse-battery-staple";
 
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
@@ -142,15 +129,6 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();
-  if (!(await db.select({ id: persons.id }).from(persons).where(eq(persons.id, ADMIN_ID)))[0]) {
-    await seedPersons(db, {
-      id: ADMIN_ID,
-      displayName: "Promote Admin",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(ADMIN_PW),
-      role: "admin",
-    });
-  }
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
@@ -257,16 +235,23 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-async function postPromote(base: string, body: unknown): Promise<Response> {
-  return fetch(`${base}/management-api/promote`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+async function retiredPosts(base: string) {
+  const answers = [];
+  for (const path of ["/management-api/promote", "/management-api/promote/preparation"]) {
+    const response = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    answers.push({ path, status: response.status, body: await response.text() });
+  }
+  return answers;
 }
 
-describe("boot promote endpoint: mounted on both modes, exempt from the read-only gate", () => {
-  it("a MIRROR serves the endpoint: a credential-less POST reaches the handler (401), not a gated 403 or 404", async () => {
+const refused = JSON.stringify({ error: { code: "node.read_only", params: {} } });
+
+describe("retired promotion routes", () => {
+  it("the mirror read-only gate refuses both old routes", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
     const port = await freePort();
 
@@ -291,9 +276,10 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     try {
       await pollOrThrow(async () => server.health.lastPassAt ?? undefined);
 
-      const res = await postPromote(base, { oldNodeNeutralised: true });
-      expect(res.status).toBe(401);
-      expect((await res.json()).error.code).toBe("password.invalid");
+      expect(await retiredPosts(base)).toEqual([
+        { path: "/management-api/promote", status: 403, body: refused },
+        { path: "/management-api/promote/preparation", status: 403, body: refused },
+      ]);
 
       // Control on the same boot: the gate still refuses an ordinary write.
       const write = await fetch(`${base}/management-api/menus`, {
@@ -308,7 +294,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     }
   }, 60_000);
 
-  it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
+  it("the primary has neither old route", async () => {
     await setSingletonRole(
       { venue: appDb, node: appNode },
       TILL_ENV.WAITRON_NODE_ID,
@@ -323,19 +309,16 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     try {
       await pollOrThrow(async () => server.health.lastPassAt ?? undefined);
 
-      const res = await postPromote(base, {
-        oldNodeNeutralised: true,
-        personId: ADMIN_ID,
-        password: ADMIN_PW,
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ alreadyPrimary: true, restarting: false });
+      expect(await retiredPosts(base)).toMatchObject([
+        { path: "/management-api/promote", status: 404 },
+        { path: "/management-api/promote/preparation", status: 404 },
+      ]);
     } finally {
       await server.close();
     }
   }, 60_000);
 
-  it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
+  it("the fenced box read-only gate refuses both old routes", async () => {
     // A held document marking this node sell-only: boot demotes it and mounts the read-only gate.
     await setSingletonRole(
       { venue: appDb, node: appNode },
@@ -369,13 +352,10 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       expect(pageClaim.status).toBe(403);
       expect(await pageClaim.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      const res = await postPromote(base, {
-        oldNodeNeutralised: true,
-        personId: ADMIN_ID,
-        password: ADMIN_PW,
-      });
-      expect(res.status).toBe(409);
-      expect((await res.json()).error.code).toBe("promotion.node_fenced");
+      expect(await retiredPosts(base)).toEqual([
+        { path: "/management-api/promote", status: 403, body: refused },
+        { path: "/management-api/promote/preparation", status: 403, body: refused },
+      ]);
     } finally {
       await server.close();
     }

@@ -392,7 +392,7 @@ also qualifies the historical operation-description references in this section.
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
-  The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
+  The provision, setup-api.throwaway, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
   The setup-api and setup-api.throwaway suites use Anna Mary and Smith Green for their administrator real-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.

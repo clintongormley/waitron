@@ -157,8 +157,7 @@ export function createNodeOperationPreparation(options: {
           // Before any await: a step made meanwhile makes the device's offset stale.
           const stepsSeen = correction.steps();
           await authorize(binding);
-          // Only a mirror, which does not trade: the promote preparation route reaches this seat
-          // on any box.
+          // Only a mirror can move its clock through handover preparation.
           if ((await readNodeMode(options.nodeDb, node.nodeId)).mode !== "mirror")
             return { status: "refused", reason: "not_mirror" };
           const { operatorId } = readOperationAuthority(scopes.getStore()!.authority, binding)!;
@@ -219,27 +218,9 @@ export function createNodeOperationPreparation(options: {
       binding.action === "promote"
         ? Object.freeze({ oldMachineRelinquished: heldContext.oldMachineRelinquished === true })
         : undefined;
-    const key =
-      typeof heldCredentials === "object" &&
-      heldCredentials !== null &&
-      "breakGlass" in heldCredentials;
-    const keyNumber = key ? await currentKeyNumber() : undefined;
-    const authenticated = async (authority: OperationAuthority, commit: Commit) => {
-      return scopes.run({ binding, authority, keyNumber, promotion }, () => run(authority, commit));
-    };
-    if (
-      typeof heldCredentials === "object" &&
-      heldCredentials !== null &&
-      "breakGlass" in heldCredentials
-    )
-      return withRecoveryKeyAuthority(
-        { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
-        binding,
-        heldCredentials.breakGlass,
-        async (authority, commit) => {
-          await afterSignIn?.();
-          return authenticated(authority, commit);
-        },
+    const authenticated = (authority: OperationAuthority, commit: Commit) =>
+      scopes.run({ binding, authority, keyNumber: undefined, promotion }, () =>
+        run(authority, commit),
       );
     if (options.credentialKeyRing === undefined) return invalid(binding);
     const commit: Commit = (body) => withTransaction(options.db, body);
@@ -321,30 +302,6 @@ export function createNodeOperationPreparation(options: {
     if (contribution?.recovery === undefined) return invalid(binding);
     return contribution.recovery({ binding: { ...binding }, authority }, proposal, client);
   };
-  const prepareWith =
-    (before?: (binding: OperationBinding, authority: OperationAuthority) => Promise<void>) =>
-    async (
-      suppliedBinding: OperationBinding,
-      credentials: unknown,
-      context: Context,
-      proposal: unknown,
-      client: OperationClient,
-      afterSignIn?: () => Promise<void>,
-    ): Promise<unknown> => {
-      const binding = Object.freeze({ ...suppliedBinding });
-      if (binding.action !== "promote") return invalid(binding);
-      const held = structuredClone(proposal);
-      return invoke(
-        binding,
-        credentials,
-        context,
-        async (authority) => {
-          await before?.(binding, authority);
-          return prepareStep(binding, authority, held, client);
-        },
-        afterSignIn,
-      );
-    };
   return {
     // Read from the configured modules: a module's `recovery` can exist only once configured.
     hasRecoveryOperation: modules.some((module) => module.operations?.recovery !== undefined),
@@ -388,9 +345,28 @@ export function createNodeOperationPreparation(options: {
         actions,
       );
     },
-    prepare: prepareWith(),
-    /** `prepare`, after making sure the setup a promotion reads exists, on the one sign-in. */
-    prepareWithDormantSetup: prepareWith(writeDormantSetup),
+    async prepareWithDormantSetup(
+      suppliedBinding: OperationBinding,
+      credentials: unknown,
+      context: Context,
+      proposal: unknown,
+      client: OperationClient,
+      afterSignIn?: () => Promise<void>,
+    ): Promise<unknown> {
+      const binding = Object.freeze({ ...suppliedBinding });
+      if (binding.action !== "promote") return invalid(binding);
+      const held = structuredClone(proposal);
+      return invoke(
+        binding,
+        credentials,
+        context,
+        async (authority) => {
+          await writeDormantSetup(binding, authority);
+          return prepareStep(binding, authority, held, client);
+        },
+        afterSignIn,
+      );
+    },
     async withOperation<T>(
       operation: RecoveryOperationInput,
       credentials: unknown,

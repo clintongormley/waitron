@@ -18,7 +18,7 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { withRecoveryKeyOperation } from "./operation-authentication.js";
+import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { commitMirrorPromotionTx, promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
@@ -151,30 +151,32 @@ const document = signedMembershipDoc(2, { signerNodeId: target.nodeId });
 
 let recoveryKey: string;
 async function promote(overrides: Partial<AllocationContext> = {}) {
-  const result = await withRecoveryKeyOperation(
+  const result = await withRecoveryKeyAuthority(
     { db: suite.db, node: suite.node, nodeId: target.nodeId },
     binding,
     recoveryKey,
-    async (tx, authority) => {
-      const operation = {
-        binding,
-        authority,
-        input: {
-          ...input,
-          approval: { ...input.approval, operatorId: overrides.operatorId ?? recoveryOperator },
-        },
-      };
-      const result = await withHourAdmission(
-        operation,
-        {
-          requiredBases: bases,
-          priorActivation: overrides.priorActivation ?? "none",
-        },
-        (evidence) => activateModuleAllocation(tx, target, operation, evidence),
-      );
-      if (overrides.priorActivation !== "committed") await commitMirrorPromotionTx(tx, document);
-      return result;
-    },
+    (authority, commit) =>
+      commit(async (tx) => {
+        const operation = {
+          binding,
+          authority,
+          input: {
+            ...input,
+            approval: { ...input.approval, operatorId: overrides.operatorId ?? recoveryOperator },
+          },
+        };
+        const result = await withHourAdmission(
+          operation,
+          {
+            requiredBases: bases,
+            priorActivation: overrides.priorActivation ?? "none",
+          },
+          (evidence) => activateModuleAllocation(tx, target, operation, evidence),
+        );
+        if (overrides.priorActivation !== "committed") await commitMirrorPromotionTx(tx, document);
+        return result;
+      }),
+    ["promote"],
   );
   if (overrides.priorActivation !== "committed")
     await withNodeTransaction(suite.node, async (tx) => {
@@ -312,18 +314,20 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
         log: () => {},
         modules: [module],
         withModuleOperations: ({ db, nodeDb, node }, run) =>
-          withRecoveryKeyOperation(
+          withRecoveryKeyAuthority(
             { db, node: nodeDb, nodeId: node.nodeId },
             binding,
             recoveryKey,
-            (tx, authority) => run(tx, new Map([[module.name, { input, binding, authority }]])),
+            (authority, commit) =>
+              commit((tx) => run(tx, new Map([[module.name, { input, binding, authority }]]))),
+            ["promote"],
           ),
       },
       { oldNodeNeutralised: true },
     );
   }
 
-  it("promotes a seriesless standby through hour allocation and key-only authority", async () => {
+  it("promotes a seriesless standby through hour allocation with recovery-key attribution", async () => {
     const result = await realPromotion();
     expect(result.alreadyPrimary).toBe(false);
     expect(

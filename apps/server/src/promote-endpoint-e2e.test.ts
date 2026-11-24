@@ -11,7 +11,6 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -19,8 +18,6 @@ import {
   devices,
   kitchenStations,
   openVenueDatabase,
-  readNodeMembership,
-  readTaxpayer,
   stampDeployment,
   taxpayer,
   withTransaction,
@@ -29,37 +26,21 @@ import {
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { sha256Hex, signEnvelope } from "@waitron/handover";
-import {
-  readHandoverOperation,
-  readNodeMode,
-  setNodeMode,
-  writeMirrorLink,
-} from "@waitron/node-db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashDeviceToken, dashboardSessions, persons } from "@waitron/identity";
+import { hashDeviceToken, persons } from "@waitron/identity";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import {
-  canonicalize,
-  generateNodeKeyPair,
-  type CanonicalValue,
-  type Endorsement,
-} from "@waitron/membership";
+import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { mintMasterKey } from "./testing/master-key.js";
-import { mountPromoteApi } from "./promote-api.js";
-import { readOnlyGate } from "./read-only-gate.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
 import { POLL_INTERVAL_MS, pollOrThrow } from "./testing/boot-harness.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
@@ -85,23 +66,6 @@ vi.mock("undici", async (importOriginal) => {
     fetch: vi.fn(() =>
       Promise.reject(new Error("undici fetch disabled in promote-endpoint-e2e.test.ts")),
     ),
-  };
-});
-
-// Holds a real promotion after the route's own checks and before it changes anything.
-const promotionHold = vi.hoisted(() => ({
-  wait: undefined as undefined | (() => Promise<void>),
-}));
-vi.mock("./promote.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./promote.js")>();
-  return {
-    ...actual,
-    promoteMirrorToPrimary: async (
-      ...args: Parameters<typeof actual.promoteMirrorToPrimary>
-    ): ReturnType<typeof actual.promoteMirrorToPrimary> => {
-      await promotionHold.wait?.();
-      return actual.promoteMirrorToPrimary(...args);
-    },
   };
 });
 
@@ -145,7 +109,7 @@ const DEVICE_PROFILE_ID = "66666666-6666-4666-8666-666666666666";
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
 
 // One directory per promoting case, so one case's deployment flip never leaks into another.
-const VENUES = ["main", "breakGlass", "overlap", "failedPromotion"] as const;
+const VENUES = ["main"] as const;
 type VenueName = (typeof VENUES)[number];
 const venueDir = {} as Record<VenueName, string>;
 const stores = {} as Record<VenueName, VenueDatabase>;
@@ -159,7 +123,6 @@ async function seedMirror(
 ): Promise<{
   nodeId: string;
   fixture: Awaited<ReturnType<typeof establishDormantContract>>;
-  origin: ReturnType<typeof generateNodeKeyPair>;
 }> {
   await seedModuleSettings(admin, { "fiscal-none": false });
   await admin
@@ -229,7 +192,7 @@ async function seedMirror(
 
   await stampDeployment(admin, "production");
   await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror", "adopt");
-  return { nodeId: standby.nodeId, fixture, origin };
+  return { nodeId: standby.nodeId, fixture };
 }
 
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
@@ -321,14 +284,6 @@ afterAll(async () => {
 
 const POLL_TRIES_15S = 15_000 / POLL_INTERVAL_MS;
 
-async function postPromote(base: string, body: unknown): Promise<Response> {
-  return fetch(`${base}/management-api/promote`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 function mirrorEnv(
   dir: string,
   port: number,
@@ -355,7 +310,7 @@ async function readSubmissions(
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("a spare promoted through the signed-in runner or the old HTTP route", () => {
+describe("a promotion through the signed-in runner", () => {
   it("leaves a new primary submission waiting for a certificate", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main);
@@ -458,299 +413,6 @@ describe("a spare promoted through the signed-in runner or the old HTTP route", 
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 120_000);
-
-  it("break-glass secret → 200 promoted (no login)", async () => {
-    const seed = await seedMirror(db.breakGlass, stores.breakGlass.node);
-    const breakGlass = (await mintMasterKey(db.breakGlass)).secret;
-    const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
-
-    const server = await startServer(
-      {
-        ...mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
-      },
-      {},
-      { timings: TIMINGS },
-    ).catch(async (err: unknown) => {
-      await rm(stateDir, { recursive: true, force: true });
-      throw err;
-    });
-    const base = `http://127.0.0.1:${httpPort()}`;
-    try {
-      await pollOrThrow(async () => server.health.lastPassAt ?? undefined, POLL_TRIES_15S);
-
-      const operation = seed.fixture(true);
-      const res = await postPromote(base, {
-        oldNodeNeutralised: true,
-        breakGlass,
-        moduleOperation: { binding: operation.binding, input: operation.input },
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-      expect((await readNodeMode(stores.breakGlass.node, seed.nodeId)).mode).toBe("primary");
-      expect((await readNodeMode(stores.breakGlass.node, seed.nodeId)).singletonRole).toBe(
-        "primary",
-      );
-    } finally {
-      await server.close();
-      vi.unstubAllEnvs();
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  }, 90_000);
-});
-
-describe("a real offer beside a real promotion on a real start", () => {
-  const OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-
-  /** The offer the main box would send, built before anything changes the held chart. */
-  async function mainBoxOffer(
-    venue: "overlap" | "failedPromotion",
-    seed: Awaited<ReturnType<typeof seedMirror>>,
-  ): Promise<string> {
-    const held = await readNodeMembership(db[venue]);
-    const taxpayer = await readTaxpayer(db[venue]);
-    return JSON.stringify(
-      signEnvelope(
-        "stepdown",
-        {
-          binding: {
-            operationId: OPERATION_ID,
-            scenario: "controlled",
-            venue: {
-              country: taxpayer!.country,
-              taxId: taxpayer!.taxId,
-              environment: "production",
-            },
-            sourceNodeId: MIRROR_ORIGIN_NODE_ID,
-            destinationNodeId: seed.nodeId,
-            membership: {
-              term: held!.body.term,
-              digest: sha256Hex(canonicalize(held as unknown as CanonicalValue)),
-            },
-          },
-          authorisedBy: ADMIN_ID,
-          settings: await readOfferSettings(
-            STATE_ROOT,
-            RING,
-            "handover.settings_unreadable",
-            db[venue],
-          ),
-          imageMigrations: imageMigrationsDigest(null),
-          copyBytes: 1024,
-        } as unknown as CanonicalValue,
-        { nodeId: MIRROR_ORIGIN_NODE_ID, privateKey: seed.origin.privateKey },
-      ),
-    );
-  }
-
-  async function sendOffer(
-    base: string,
-    offer: string,
-  ): Promise<{ status: number; code: unknown; state: unknown }> {
-    const response = await fetch(`${base}/api/node/handover/offer`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: offer,
-    });
-    const answer = (await response.json()) as {
-      error?: { code?: unknown };
-      body?: { state?: unknown };
-    };
-    return { status: response.status, code: answer.error?.code, state: answer.body?.state };
-  }
-
-  /** Starts a promotion that stops just past the route's checks; `resolve` lets it go on. */
-  function holdThePromotion(): { reached: Promise<void>; resolve: () => void } {
-    let reached = (): void => undefined;
-    let resolve = (): void => undefined;
-    const reachedPromise = new Promise<void>((done) => {
-      reached = done;
-    });
-    const gate = new Promise<void>((done) => {
-      resolve = done;
-    });
-    promotionHold.wait = async () => {
-      reached();
-      await gate;
-    };
-    return { reached: reachedPromise, resolve };
-  }
-
-  async function withStartedMirror(
-    venue: "overlap" | "failedPromotion",
-    body: (context: {
-      base: string;
-      seed: Awaited<ReturnType<typeof seedMirror>>;
-      offer: string;
-    }) => Promise<void>,
-  ): Promise<void> {
-    const seed = await seedMirror(db[venue], stores[venue].node);
-    await mintMasterKey(db[venue]);
-    const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-${venue}-state-`));
-
-    const server = await startServer(
-      {
-        ...mirrorEnv(venueDir[venue], port, seed.nodeId, stateDir),
-      },
-      {},
-      { timings: TIMINGS },
-    );
-    try {
-      await pollOrThrow(async () => server.health.lastPassAt ?? undefined, POLL_TRIES_15S);
-      await body({
-        base: `http://127.0.0.1:${httpPort()}`,
-        seed,
-        offer: await mainBoxOffer(venue, seed),
-      });
-    } finally {
-      promotionHold.wait = undefined;
-      await server.close();
-      vi.unstubAllEnvs();
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  }
-
-  it("an offer arriving just past the promote's check records nothing, and the box promotes with no operation left behind", async () => {
-    await withStartedMirror("overlap", async ({ base, seed, offer }) => {
-      const hold = holdThePromotion();
-      const operation = seed.fixture();
-      const promoting = postPromote(base, {
-        moduleOperation: { binding: operation.binding, input: operation.input },
-        oldNodeNeutralised: true,
-        personId: ADMIN_ID,
-        password: ADMIN_PW,
-      });
-      // The race: a promote refused before the hold must print, not hang.
-      await Promise.race([hold.reached, promoting]);
-
-      const offered = await sendOffer(base, offer);
-      hold.resolve();
-      const promoted = await promoting;
-
-      expect({
-        offered,
-        promote: { status: promoted.status, body: await promoted.json() },
-        operation: await readHandoverOperation(stores.overlap.node, seed.nodeId, OPERATION_ID),
-        mode: (await readNodeMode(stores.overlap.node, seed.nodeId)).mode,
-      }).toEqual({
-        offered: { status: 409, code: "handover.promotion_running", state: undefined },
-        promote: { status: 200, body: { alreadyPrimary: false, restarting: true } },
-        operation: null,
-        mode: "primary",
-      });
-
-      expect(await sendOffer(base, offer)).toEqual({
-        status: 409,
-        code: "handover.not_a_spare",
-        state: undefined,
-      });
-      expect(
-        await readHandoverOperation(stores.overlap.node, seed.nodeId, OPERATION_ID),
-      ).toBeNull();
-    });
-  }, 90_000);
-
-  it("a promotion that fails lets a later offer through, and a promote after that is refused and writes no session", async () => {
-    await withStartedMirror("failedPromotion", async ({ base, seed, offer }) => {
-      const hold = holdThePromotion();
-      const credentials = { personId: ADMIN_ID, password: ADMIN_PW };
-      const promoting = postPromote(base, { oldNodeNeutralised: false, ...credentials });
-      await Promise.race([hold.reached, promoting]);
-
-      const offered = await sendOffer(base, offer);
-      hold.resolve();
-      const failed = await promoting;
-      promotionHold.wait = undefined;
-      expect({
-        offered,
-        failed: { status: failed.status, code: (await failed.json()).error.code },
-      }).toEqual({
-        offered: { status: 409, code: "handover.promotion_running", state: undefined },
-        failed: { status: 400, code: "promotion.fence_not_attested" },
-      });
-
-      expect(await sendOffer(base, offer)).toEqual({
-        status: 200,
-        code: undefined,
-        state: "prepared",
-      });
-      expect(
-        await readHandoverOperation(stores.failedPromotion.node, seed.nodeId, OPERATION_ID),
-      ).toMatchObject({ role: "destination", state: "prepared" });
-
-      const sessionsBefore = await db.failedPromotion.select().from(dashboardSessions);
-      const refused = await postPromote(base, { oldNodeNeutralised: true, ...credentials });
-      expect([refused.status, await refused.json()]).toEqual([
-        409,
-        {
-          error: {
-            code: "handover.operation_in_progress",
-            params: { operationId: OPERATION_ID },
-          },
-        },
-      ]);
-      expect(await db.failedPromotion.select().from(dashboardSessions)).toEqual(sessionsBefore);
-      expect((await readNodeMode(stores.failedPromotion.node, seed.nodeId)).mode).toBe("mirror");
-    });
-  }, 90_000);
-});
-
-// The negative control for the gate exemption: without the clause, the same promote POST is a 403.
-describe("read-only-gate exemption for the promote POST — proven by deletion", () => {
-  // Would always promote if reached, so a 403 can only be the gate.
-  const alwaysRun = () => Promise.resolve({ alreadyPrimary: false, restarting: true });
-  // The promote half of the exemption boot.ts passes to `readOnlyGate`.
-  const promoteExempt = (c: { req: { method: string; path: string } }) =>
-    c.req.method === "POST" && c.req.path === "/management-api/promote";
-
-  function appWith(
-    exempt: ((c: { req: { method: string; path: string } }) => boolean) | undefined,
-  ): Hono {
-    const app = new Hono();
-    app.use(
-      "*",
-      readOnlyGate(() => true, exempt),
-    );
-    // No case here reaches the break-glass check, so the node id is a placeholder.
-    mountPromoteApi(app, {
-      appDb: db.main,
-      nodeDb: stores.main.node,
-      nodeId: "gate-only",
-      run: alwaysRun,
-      credentialKeyRing: TOTP_KEY_RING,
-    });
-    return app;
-  }
-
-  it("WITH the exemption clause: an ordinary write POST is 403 but the promote POST reaches the handler", async () => {
-    const app = appWith(promoteExempt);
-
-    const write = await app.request("/management-api/menus", { method: "POST", body: "{}" });
-    expect(write.status).toBe(403);
-    expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
-
-    // The handler's own credential screen answers 401, not the gate's 403.
-    const promote = await app.request("/management-api/promote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ oldNodeNeutralised: true }),
-    });
-    expect(promote.status).toBe(401);
-    expect((await promote.json()).error.code).toBe("password.invalid");
-  });
-
-  it("WITHOUT the exemption clause (deletion): the SAME promote POST is blocked 403 node.read_only", async () => {
-    const app = appWith(undefined);
-
-    const promote = await app.request("/management-api/promote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ oldNodeNeutralised: true }),
-    });
-    expect(promote.status).toBe(403);
-    expect(await promote.json()).toEqual({ error: { code: "node.read_only", params: {} } });
-  });
 });
 
 vi.mock("./modules.js", async (importOriginal) => {

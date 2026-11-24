@@ -358,8 +358,6 @@ that design).
 - **Fiscal-certificate distribution.** The old distribution design was reverted. The spare gets
   the shared ring at join, but later ring changes, restore onto Cloud and the dormant certificate's
   protection still need the [distribution work](#fiscal-certificate-distribution).
-- **Remaining operator surfaces.** A dashboard promote UI and a break-glass-panel accessibility
-  test remain open.
 - **Split-brain and payments.** Examine selling, the fiscal chain, pending card payments and
   printing together (owner, 2026-08-26), including the till's timed-out-card choices. Settle
   [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
@@ -649,13 +647,6 @@ Slice 3.
   Measured at the helper, not end to end.
   [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
 
-## Retire the old promote route
-
-After a plain promote nobody sweeps the old box's open card payments. That route writes no
-activation row, and a fenced box no longer sweeps, so a payment stays `attempting` until a person
-resolves it on the new box. A text search found no screen calling the route. Left open by A1018
-Slice 5 (Rulings R47, R48).
-
 ## Bundle: Address search provider, province names, guide lines
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -715,9 +706,8 @@ download). On a box in setup mode, the guide leaves it out while the box's lates
 
 **`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice, not the owner's): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
 
-**A spare's server key is shown ungrouped, unlike fresh setup's (A1558 PR 8, lane B's choice,
-2026-11-21).** The conflict switch and the promote route check the key exactly as typed
-(`apps/server/src/operation-authentication.ts`); only restore reads the grouped form.
+**Restore and conflict recovery use the venue master key.** The key reader in
+`apps/server/src/operation-authentication.ts` decodes the printed code.
 
 ### Integrity waits and waiting reasons
 

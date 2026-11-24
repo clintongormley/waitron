@@ -1125,15 +1125,6 @@ it.each([
   expect(codeMessage(code, "es")).toBe(spanish);
 });
 
-it("says a standby box cannot be switched on from another device, in English and Spanish", () => {
-  expect(codeMessage("promotion.from_box_only", "en")).toBe(
-    "In this version a standby box cannot be switched on from another device. Nothing was changed.",
-  );
-  expect(codeMessage("promotion.from_box_only", "es")).toBe(
-    "En esta versión, un servidor en espera no se puede activar desde otro dispositivo. No se ha cambiado nada.",
-  );
-});
-
 it("the backup-settings refusal says this box keeps selling and to try again in a minute", () => {
   expect(codeMessage("handover.backup_settings_differ", "en")).toBe(
     "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",

@@ -190,7 +190,7 @@ import {
 import { refuseUnreleasedBuild } from "./release-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { assertNotFenced, promoteMirrorToPrimary } from "./promote.js";
+import { promoteMirrorToPrimary, type PromoteRunResult } from "./promote.js";
 import type {
   FenceAttestation,
   MirrorPromotionResult,
@@ -400,7 +400,6 @@ import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountOldBoxDataDownloadApi } from "./old-box-data-download-api.js";
-import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 import { createBoxJoinAttempt } from "./box-join-attempt.js";
@@ -4451,7 +4450,6 @@ async function bootServer(
     }
   };
 
-  // Shared by the in-process `StartedServer.promoteMirrorToPrimary` and the endpoint's `promoteRun`.
   // An already-primary re-run is a no-op that skips the restart.
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
@@ -4486,37 +4484,15 @@ async function bootServer(
     return result;
   };
 
-  // After it restarts as primary, a former mirror can still finish recording its handover.
   const promoteRun = async (
     attestation: FenceAttestation,
-    withModuleOperations?: PromotionOperationRunner,
-    beforeRestart?: () => Promise<void>,
+    withModuleOperations: PromotionOperationRunner,
+    beforeRestart: () => Promise<void>,
   ): Promise<PromoteRunResult> => {
-    if (isMirror) {
-      const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
-      return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
-    }
-    const held = await readNodeMembership(db);
-    assertNotFenced(held, tradingContext.nodeId);
-    return { alreadyPrimary: true, restarting: false };
+    const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
+    return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
   };
 
-  mountPromoteApi(
-    app,
-    {
-      appDb: db,
-      nodeDb: store.node,
-      nodeId: tradingContext.nodeId,
-      credentialKeyRing: ring,
-      modules: enabledAtStart,
-      run: promoteRun,
-      requestFromBox: seams.requestFromBox,
-      requestProvenFromBox: seams.requestProvenFromBox,
-      isMirror,
-      nodePreparation,
-    },
-    log,
-  );
   const handoverPasswordThrottle = createPasswordThrottle();
   const emergencyHandover = mountHandoverEmergencyApi(
     app,
@@ -4572,7 +4548,7 @@ async function bootServer(
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,
       switchSignIn: emergencyHandover.switchSignIn,
-      run: promoteRun,
+      run: isMirror ? promoteRun : null,
       emergency: emergencyHandover,
     },
     log,

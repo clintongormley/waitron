@@ -1,11 +1,10 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -19,9 +18,6 @@ import { authorityKey } from "@waitron/credentials";
 import { decodeMasterKeyCode } from "@waitron/shared";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
-import { withPromotionModuleOperation } from "./promotion-operation.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { hashPassword } from "@waitron/identity";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -83,9 +79,6 @@ it("production restore runner refuses a signed paper input with its correct reco
   expect(await rows()).toEqual(before);
 });
 
-const ADMIN = "e1000000-0000-4000-8000-000000000009";
-const PASSWORD = "synthetic-retired-promotion-password";
-const passwordHash = hashPassword(PASSWORD);
 it.each(["archive", "stream"] as const)(
   "the production staged %s restore refuses retired emergency input and keeps the destination intact",
   async (kind) => {
@@ -198,47 +191,5 @@ it.each(["archive", "stream"] as const)(
       expect(await readdir(outside)).toEqual(["current.json"]);
       expect(await rows()).toEqual(before);
     }
-  },
-);
-
-it.each(["recovery key", "administrator"])(
-  "the production promotion adapter refuses a signed paper input authenticated by %s before its activation callback",
-  async (authentication) => {
-    const recoveryKey = authentication === "recovery key";
-    await seedPersons(suite.db, {
-      id: ADMIN,
-      displayName: "Administrator",
-      role: "admin",
-      passwordHash,
-    });
-    const fixture = allocationFixture({
-      node,
-      bases,
-      identity: "P000042",
-      recoveryKey,
-      operatorId: ADMIN,
-    });
-    const { binding, input } = fixture.request("promote");
-    const before = await rows();
-    const activate = vi.fn(async () => "unexpected-series");
-    await expect(
-      withPromotionModuleOperation(
-        {
-          db: suite.db,
-          node: suite.node,
-          nodeId: node.nodeId,
-          credentialKeyRing: TOTP_KEY_RING,
-          modules: ALL_MODULES,
-        },
-        { binding, input },
-        recoveryKey ? { breakGlass: secret } : { personId: ADMIN, password: PASSWORD },
-        (runner) => runner({ db: suite.db, nodeDb: suite.node, node }, activate),
-      ),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
-    });
-    expect(activate).not.toHaveBeenCalled();
-    expect(await rows()).toEqual(before);
   },
 );
