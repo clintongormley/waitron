@@ -106,16 +106,31 @@ function tokens(text) {
 
 function snapshot(source, node) {
   const { start, end } = span(source, node);
-  const body = ts.isFunctionDeclaration(node) ? node.body : undefined;
-  const signature = body
-    ? source.text.slice(start, body.getStart(source)) + source.text.slice(body.end, end)
-    : source.text.slice(start, end);
+  const functions = ts.isVariableStatement(node)
+    ? node.declarationList.declarations.map(({ initializer }) => initializer)
+    : [node];
+  const bodies = functions.flatMap((fn) =>
+    fn &&
+    (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn) || ts.isArrowFunction(fn)) &&
+    fn.body
+      ? [fn.body]
+      : [],
+  );
+  const signature = replace(
+    source.text.slice(start, end),
+    bodies.map((body) => {
+      const bodyStart = body.getStart(source);
+      return { span: { start: bodyStart - start, length: body.end - bodyStart }, newText: "" };
+    }),
+  );
   const exportAt = node.getStart(source) - start;
   const withoutExport = isExported(node)
     ? signature.slice(0, exportAt) + signature.slice(exportAt + "export".length)
     : signature;
   return {
-    body: body?.getText(source) ?? (ts.isExpressionStatement(node) ? signature : undefined),
+    body: ts.isExpressionStatement(node)
+      ? signature
+      : JSON.stringify(bodies.map((body) => body.getText(source))),
     signature: JSON.stringify(tokens(withoutExport)),
   };
 }

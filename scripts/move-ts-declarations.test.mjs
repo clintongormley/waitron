@@ -187,4 +187,13 @@ describe("move-ts-declarations", () => {
     expect(read("ticket.ts")).not.toContain("import { advance");
     expect(read("original.ts")).toBe("export const limit = 7;\n");
   });
+
+  it("checks the body bytes of a function stored in a const", async () => {
+    const source = "export const bump = (step: number) => {  return step; };\n";
+    write("original.ts", source);
+
+    await expect(move("original.ts", { "bump.ts": ["bump"] })).rejects.toThrow(/bump.*body/i);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("bump.ts")).toThrow(/ENOENT/);
+  });
 });
