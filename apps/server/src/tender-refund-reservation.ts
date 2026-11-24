@@ -43,7 +43,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import type { RefundableTender, TenderRefundRequest } from "./tender-refund-types.js";
 import "./errors.js";
 
-function moneyCents(value: unknown, field: string): number {
+export function moneyCents(value: unknown, field: string): number {
   if (typeof value !== "string" || !/^\d{1,12}(\.\d{1,2})?$/.test(value)) throw invalid(field);
   return decimalToCents(decimal(value.replace(/^0+(?=\d)/, "")));
 }
@@ -85,7 +85,7 @@ async function cancelsForSale(tx: Transaction, saleId: string, ids: readonly str
   });
 }
 
-async function allocateToCancels(
+export async function allocateToCancels(
   tx: Transaction,
   saleId: string,
   ids: readonly string[],
@@ -223,7 +223,7 @@ export interface RefundFiscal {
   reading: TrustedReading;
 }
 
-async function cancelsStillOwedBy(tx: Transaction, saleId: string): Promise<string[]> {
+export async function cancelsStillOwedBy(tx: Transaction, saleId: string): Promise<string[]> {
   const [sale] = await tx
     .select({ workingOrderId: sales.workingOrderId })
     .from(sales)
@@ -260,7 +260,7 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
-async function isPartPayment(tx: Transaction, saleId: string): Promise<boolean> {
+export async function isPartPayment(tx: Transaction, saleId: string): Promise<boolean> {
   const [advance] = await tx
     .select({ saleId: billAdvances.advanceSaleId })
     .from(billAdvances)

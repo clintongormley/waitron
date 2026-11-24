@@ -5,7 +5,9 @@ import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@wai
 import {
   deviceProfiles,
   devices,
+  invoiceCorrections,
   parties,
+  refunds,
   readLiveSeriesIdTx,
   saleLines,
   sales,
@@ -21,7 +23,7 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loginWithPin } from "@waitron/identity";
+import { authorityForRoles, loginWithPin, type PersonAuthority } from "@waitron/identity";
 import { recordReplacement } from "@waitron/core";
 import {
   AppError,
@@ -41,7 +43,13 @@ import {
   toDeviceBinding,
   type DeviceBinding,
 } from "./device-session.js";
-import { readGiveBack, type GiveBackView } from "./give-back.js";
+import {
+  planGiveBack,
+  readGiveBack,
+  type GiveBackPlan,
+  type GiveBackRequest,
+  type GiveBackView,
+} from "./give-back.js";
 import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -313,26 +321,27 @@ async function plainRefund(
   });
 }
 
-function read(
-  saleId: string,
-  options: {
-    device?: DeviceBinding | null;
-    backend?: BillVenue["backend"];
-    admission?: TradingAdmission;
-    refundProviderFor?: RefundProviderFor;
-  } = {},
-): Promise<GiveBackView> {
+interface ReadOptions {
+  device?: DeviceBinding | null;
+  backend?: BillVenue["backend"];
+  admission?: TradingAdmission;
+  refundProviderFor?: RefundProviderFor;
+}
+
+const depsOf = (options: ReadOptions) => ({
+  backend: options.backend ?? venue.backend,
+  admission: options.admission ?? testTradingAdmission(),
+  refundProviderFor:
+    "refundProviderFor" in options
+      ? options.refundProviderFor
+      : refundProvidersOf({ pool: venue.pool }),
+});
+
+function read(saleId: string, options: ReadOptions = {}): Promise<GiveBackView> {
   return inTx(venue, (tx) =>
     readGiveBack(
       tx,
-      {
-        backend: options.backend ?? venue.backend,
-        admission: options.admission ?? testTradingAdmission(),
-        refundProviderFor:
-          "refundProviderFor" in options
-            ? options.refundProviderFor
-            : refundProvidersOf({ pool: venue.pool }),
-      },
+      depsOf(options),
       venue.cfg,
       venue.clock.now(),
       brandSaleId(saleId),
@@ -340,6 +349,68 @@ function read(
     ),
   );
 }
+
+/** Every right, as the administrator holds them. */
+const everyRight = () =>
+  authorityForRoles(venue.adminId, [{ id: "admin", builtInKey: "admin", permissions: [] }]);
+const holding = (...permissions: string[]) =>
+  authorityForRoles(venue.operatorId, [{ id: "custom", builtInKey: null, permissions }]);
+
+/** Rows a give-back could write: refunds, corrections and sales. */
+async function rowCount(): Promise<number> {
+  return inTx(venue, async (tx) => {
+    const counts = await Promise.all([
+      tx.select({ id: refunds.id }).from(refunds),
+      tx.select({ id: invoiceCorrections.id }).from(invoiceCorrections),
+      tx.select({ id: sales.id }).from(sales),
+    ]);
+    return counts.reduce((total, rows) => total + rows.length, 0);
+  });
+}
+
+type Previewed =
+  | { plan: GiveBackPlan; written: number }
+  | { refusal: { code: string; params: unknown }; written: number };
+
+/** `planGiveBack`'s answer or refusal for `request`, and how many rows it wrote. */
+async function preview(
+  saleId: string,
+  request: GiveBackRequest,
+  options: ReadOptions & { authority?: PersonAuthority } = {},
+): Promise<Previewed> {
+  const before = await rowCount();
+  const answer = await inTx(venue, (tx) =>
+    planGiveBack(
+      tx,
+      depsOf(options),
+      venue.cfg,
+      venue.clock.now(),
+      brandSaleId(saleId),
+      {
+        device: options.device === undefined ? till : options.device,
+        authority: options.authority ?? everyRight(),
+      },
+      request,
+    ),
+  ).then(
+    (plan) => ({ plan }),
+    (error: unknown) => {
+      if (!(error instanceof AppError)) throw error;
+      return { refusal: { code: error.code, params: { ...error.params } } };
+    },
+  );
+  return { ...answer, written: (await rowCount()) - before };
+}
+
+const planned = (
+  parts: GiveBackPlan["parts"],
+  more: Partial<Omit<GiveBackPlan, "parts">> = {},
+) => ({
+  plan: { parts, leftUnderWay: "0.00", needs: [], manual: false, ...more },
+  written: 0,
+});
+const refused = (code: string, params: unknown) => ({ refusal: { code, params }, written: 0 });
+const invalidField = (field: string) => refused("management.request_invalid", { field });
 
 const lineOf = (view: GiveBackView, name: Dish) =>
   view.lines.find((line) => Object.values(line.descriptions).includes(customerOf(name)))!;
@@ -762,5 +833,278 @@ describe("readGiveBack: a receipt replaced after AEAT refused it", () => {
       cancelled: { quantity: "1.000", owed: "18.50", back: "0.00" },
     });
     expect(view.choices.goodwill).toEqual({ available: true, reason: null });
+  });
+});
+
+const ask = (
+  purpose: GiveBackRequest["purpose"],
+  amount: string,
+  more: Partial<GiveBackRequest> = {},
+): GiveBackRequest => ({ purpose, amount, extra: "0.00", way: "cash", ...more });
+
+describe("planGiveBack: cancelled and served dishes", () => {
+  it("pays the paella's cancel back first, then corrects the cheesecake, naming no lines past what the ticked lines hold (I2)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const ticked = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    expect(await preview(saleId, ask("dishes", "24.50", { lineIds: ticked }))).toEqual(
+      planned([
+        { kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] },
+        { kind: "correction", amount: "6.00", way: "cash", lineIds: [ticked[1]!] },
+      ]),
+    );
+    expect(await preview(saleId, ask("dishes", "30.00", { lineIds: ticked }))).toEqual(
+      planned([
+        { kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] },
+        { kind: "correction", amount: "11.50", way: "cash", lineIds: [] },
+      ]),
+    );
+  });
+
+  it("gives the paella alone back as a refund up to what its cancel owes, then corrects once it owes nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella }))).toEqual(
+      planned([{ kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] }]),
+    );
+    expect(await preview(saleId, ask("dishes", "10.00", { lineIds: paella }))).toEqual(
+      planned([{ kind: "refund", amount: "10.00", way: "cash", cancellationIds: [cancelId] }]),
+    );
+    const cash = await tenderOf(saleId, "cash");
+    expect((await plainRefund(saleId, cash, { applied: "18.50" }, [cancelId])).status).toBe(200);
+    expect(await preview(saleId, ask("dishes", "5.00", { lineIds: paella }))).toEqual(
+      planned([{ kind: "correction", amount: "5.00", way: "cash", lineIds: [] }]),
+    );
+  });
+});
+
+describe("planGiveBack: goodwill and the extra", () => {
+  it("corrects goodwill, paying a cancel still owed first, the extra between", async () => {
+    const plain = await tab(FIVE);
+    const plainSale = await pay(plain, [{ cash: "34.00" }]);
+    expect(await preview(plainSale, ask("goodwill", "10.00"))).toEqual(
+      planned([{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }]),
+    );
+
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    await cancel(b, "Paella", "1", true);
+    expect(await preview(saleId, ask("goodwill", "25.00"))).toEqual(
+      planned([
+        { kind: "refund", amount: "18.50", way: "cash" },
+        { kind: "correction", amount: "6.50", way: "cash", lineIds: [] },
+      ]),
+    );
+    expect(await preview(saleId, ask("goodwill", "25.00", { extra: "3.00" }))).toEqual(
+      planned([
+        { kind: "refund", amount: "18.50", way: "cash" },
+        { kind: "extra", amount: "3.00", way: "cash" },
+        { kind: "correction", amount: "6.50", way: "cash", lineIds: [] },
+      ]),
+    );
+  });
+
+  it("gives the extra alone back, never more than was paid on top", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
+    expect(await preview(saleId, ask("extra", "2.00"))).toEqual(
+      planned([{ kind: "extra", amount: "2.00", way: "cash" }]),
+    );
+    expect(await preview(saleId, ask("extra", "4.00"))).toEqual(
+      refused("tender.refund_exceeds_payment", {
+        tenderId: await tenderOf(saleId, "cash"),
+        applied: "34.00",
+        tip: "3.00",
+      }),
+    );
+  });
+
+  it.each(["wrong_node", "not_simplified"])(
+    "gives goodwill back as a plain refund where Correct invoice can never act (%s)",
+    async (reason) => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ cash: "34.00" }]);
+      admittingNot(reason);
+      expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
+        planned([{ kind: "refund", amount: "10.00", way: "cash" }]),
+      );
+    },
+  );
+
+  it("gives goodwill back as a plain refund while the records need checking", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+      ok: false,
+      checked: 1,
+      issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+    } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+    onTestFinished(() => unsound.mockRestore());
+    expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
+      planned([{ kind: "refund", amount: "10.00", way: "cash" }]),
+    );
+  });
+});
+
+describe("planGiveBack: waits answer what the read shows", () => {
+  it("on a receipt AEAT refused: goodwill waits; the extra and the cancelled paella go back", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "2.00");
+    const cancelId = await cancel(b, "Paella", "1", true);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    const view = await read(saleId);
+    expect(await preview(saleId, ask("goodwill", "5.00"))).toEqual(
+      refused("sale.correction_not_admitted", view.choices.goodwill.reason!.params),
+    );
+    expect(view.choices.goodwill.reason).toMatchObject({ params: { reason: "filing_refused" } });
+    expect(await preview(saleId, ask("extra", "2.00"))).toEqual(
+      planned([{ kind: "extra", amount: "2.00", way: "cash" }]),
+    );
+    const paella = [lineOf(view, "Paella").id];
+    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella }))).toEqual(
+      planned([{ kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] }]),
+    );
+    expect(await preview(saleId, ask("dishes", "19.00", { lineIds: paella }))).toEqual(
+      refused("sale.correction_not_admitted", view.choices.goodwill.reason!.params),
+    );
+    expect(
+      await preview(saleId, ask("dishes", "1.00", { lineIds: [lineOf(view, "Bread").id] })),
+    ).toEqual(refused(lineOf(view, "Bread").reason!.code, lineOf(view, "Bread").reason!.params));
+  });
+
+  it("goodwill waits while another payment's refund is pending", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ reader: "12.50" }, { cash: "12.50" }], "1.00");
+    const card = await tenderOf(saleId, "card");
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+    expect((await plainRefund(saleId, card, { tip: "1.00" })).status).toBe(200);
+    const reason = (await read(saleId)).choices.goodwill.reason!;
+    expect(reason.code).toBe("invoice_correction.refund_pending");
+    expect(await preview(saleId, ask("goodwill", "5.00"))).toEqual(
+      refused(reason.code, reason.params),
+    );
+  });
+
+  it("every choice waits while a correction is open", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "25.00" }], "2.00");
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "5.00",
+        reasonId: correctionReasonId,
+        note: "Cold",
+        expectedSplit: [{ rate: "10.00", base: "4.55", tax: "0.45" }],
+        override: supervisor(),
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const view = await read(saleId);
+    const reason = view.choices.dishes.reason!;
+    expect(reason.code).toBe("invoice_correction.already_open");
+    const lineIds = [lineOf(view, "Cheesecake").id];
+    for (const request of [
+      ask("goodwill", "5.00"),
+      ask("dishes", "5.00", { lineIds }),
+      ask("extra", "1.00"),
+    ])
+      expect(await preview(saleId, request)).toEqual(refused(reason.code, reason.params));
+  });
+
+  it("every choice waits while the box's time is unconfirmed", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "25.00" }], "2.00");
+    const backend = gateSeatOnStartClock(venue.backend, () => true);
+    const reason = (await read(saleId, { backend })).choices.goodwill.reason!;
+    expect(reason.code).toBe("clock.unconfirmed");
+    expect(await preview(saleId, ask("extra", "1.00"), { backend })).toEqual(
+      refused(reason.code, reason.params),
+    );
+  });
+
+  it("dishes and goodwill wait with the reason of the only way holding money (a card that cannot refund)", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ reader: "25.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const options = { refundProviderFor: async () => undefined };
+    const view = await read(saleId, options);
+    const reason = { code: "tender.refund_unavailable", params: { tenderId: card } };
+    expect(view.choices.dishes).toEqual({ available: false, reason });
+    expect(view.choices.goodwill).toEqual({ available: false, reason });
+    expect(lineOf(view, "Paella")).toMatchObject({ available: false, reason });
+    expect(await preview(saleId, ask("goodwill", "5.00", { way: card }), options)).toEqual(
+      refused(reason.code, reason.params),
+    );
+  });
+
+  it("refuses a part refund on a card whose company takes none (case 8)", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ reader: "25.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const card = await tenderOf(saleId, "card");
+    const whole = Object.assign(Object.create(venue.card) as typeof venue.card, {
+      capabilities: { partialRefund: false },
+    });
+    const options = { refundProviderFor: async () => whole };
+    const paella = [lineOf(await read(saleId, options), "Paella").id];
+    expect(
+      await preview(saleId, ask("dishes", "18.50", { lineIds: paella, way: card }), options),
+    ).toEqual(refused("tender.refund_unavailable", { tenderId: card }));
+    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella, way: card }))).toEqual(
+      planned([{ kind: "refund", amount: "18.50", way: card, cancellationIds: [cancelId] }]),
+    );
+  });
+});
+
+describe("planGiveBack: more than one payment (D10)", () => {
+  it("opens one correction for the whole goodwill, leaving on it what the chosen way cannot hold, and refuses a refund the way cannot hold", async () => {
+    const b = await tab(["Paella", "Cheesecake", ["Croquetas", "4"], ["Bread", "3"]]);
+    const saleId = await pay(b, [{ cash: "30.00" }, { card: "17.00" }]);
+    expect(await preview(saleId, ask("goodwill", "45.00"))).toEqual(
+      planned([{ kind: "correction", amount: "45.00", way: "cash", lineIds: [] }], {
+        leftUnderWay: "15.00",
+      }),
+    );
+    await cancel(b, "Paella", "1", true);
+    const card = await tenderOf(saleId, "card");
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella, way: card }))).toEqual(
+      invalidField("amount"),
+    );
+  });
+});
+
+describe("planGiveBack: the rights it needs (D9)", () => {
+  it("names the rights this person lacks; a cancel's approval covers its money only from the filled window", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    expect(
+      await preview(saleId, ask("goodwill", "10.00"), { authority: holding("sale.refund") }),
+    ).toEqual(
+      planned([{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }], {
+        needs: ["sale.rectify"],
+      }),
+    );
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const refund = [
+      { kind: "refund" as const, amount: "18.50", way: "cash", cancellationIds: [cancelId] },
+    ];
+    expect(
+      await preview(saleId, ask("dishes", "18.50", { lineIds: paella, fromCancel: [cancelId] }), {
+        authority: holding(),
+      }),
+    ).toEqual(planned(refund));
+    expect(
+      await preview(saleId, ask("dishes", "18.50", { lineIds: paella }), { authority: holding() }),
+    ).toEqual(planned(refund, { needs: ["sale.refund"] }));
   });
 });

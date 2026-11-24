@@ -9,6 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
+import { holds, type PersonAuthority } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   addDecimal,
@@ -17,11 +18,14 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  isUuid,
   sumDecimals,
   thousandthsToDecimal,
   type Decimal,
   type SaleId,
 } from "@waitron/shared";
+import { refusePlainRefundOfAdvance } from "./advance-taken-off.js";
+import { invalid } from "./bill-allocation.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
@@ -29,10 +33,17 @@ import { correctionOpenRefusal, openCorrectionOf } from "./invoice-correction-le
 import {
   readCorrectableNow,
   readInvoiceCorrection,
+  recordsNeedChecking,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { refuseUntilRefundable } from "./tender-refund-completion.js";
+import {
+  allocateToCancels,
+  cancelsStillOwedBy,
+  isPartPayment,
+  moneyCents,
+} from "./tender-refund-reservation.js";
 import type { RefundableTender } from "./tender-refund-types.js";
 import { sendsRefunds } from "./tender-refunds.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -141,15 +152,27 @@ export async function giveBackWaits(
   };
 }
 
-/** Whether `line` can be ticked now: never with no money left to give back, and while a
- * corrective waits only for what its cancel still owes. */
+type WayMoney = Pick<GiveBackWay, "moneyLeft" | "extraLeft" | "pending" | "reason">;
+
+/** Whether any payment money can go back now: only a way with no `reason` gives it; with none,
+ * the reason of the first way still holding money, or none where no money is left at all. */
+export function moneyAvailability(ways: readonly WayMoney[]): Availability {
+  const usable = ways.filter((way) => way.reason === null);
+  if (positive(sumDecimals(usable.map((way) => decimal(way.moneyLeft)))))
+    return { available: true, reason: null };
+  const held = ways.find((way) => way.reason !== null && positive(decimal(way.moneyLeft)));
+  return { available: false, reason: held?.reason ?? null };
+}
+
+/** Whether `line` can be ticked now: never while no payment money can go back
+ * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes. */
 export function lineAvailability(
   line: Pick<GiveBackLine, "left" | "cancelled">,
   waits: GiveBackWaits,
-  moneyLeft: boolean,
+  money: Availability,
 ): Availability {
   if (waits.all !== null) return { available: false, reason: waits.all };
-  if (!moneyLeft) return { available: false, reason: null };
+  if (!money.available) return money;
   const open = waits.correction === null ? line.left : (line.cancelled?.owed ?? "0.00");
   if (positive(decimal(open))) return { available: true, reason: null };
   return { available: false, reason: waits.correction };
@@ -158,22 +181,21 @@ export function lineAvailability(
 /** Whether each choice can be used now, from the lines and ways already worked out. */
 export function choiceAvailability(
   lines: readonly Availability[],
-  ways: readonly Pick<GiveBackWay, "moneyLeft" | "extraLeft" | "pending" | "reason">[],
+  ways: readonly WayMoney[],
   waits: GiveBackWaits,
 ): Record<GiveBackPurpose, Availability> {
   if (waits.all !== null) {
     const closed = { available: false, reason: waits.all };
     return { dishes: closed, goodwill: closed, extra: closed };
   }
-  const moneyLeft = positive(sumDecimals(ways.map((way) => decimal(way.moneyLeft))));
-  const nothing = { available: false, reason: null };
+  const money = moneyAvailability(ways);
   const dishes = lines.some((line) => line.available)
     ? { available: true, reason: null }
-    : moneyLeft
+    : money.available
       ? { available: false, reason: waits.correction }
-      : nothing;
-  const goodwill = !moneyLeft
-    ? nothing
+      : money;
+  const goodwill = !money.available
+    ? money
     : waits.correction !== null
       ? { available: false, reason: waits.correction }
       : { available: true, reason: null };
@@ -225,12 +247,13 @@ async function cancelsAndFreeByLine(
   toLine: (filedRowId: string) => string | undefined,
 ) {
   const cancelled = new Map<string, CancelShare>();
+  const cancelIds = new Map<string, string[]>();
   const free = new Set<string>();
   const [sale] = await tx
     .select({ workingOrderId: sales.workingOrderId })
     .from(sales)
     .where(eq(sales.id, saleId));
-  if (sale?.workingOrderId == null) return { cancelled, free };
+  if (sale?.workingOrderId == null) return { cancelled, cancelIds, free };
   const filing = await readBillFiling(tx, sale.workingOrderId, saleId);
   const pairs = pairFiling(filing);
   for (const line of filing.stored.filter(isFree)) {
@@ -256,9 +279,10 @@ async function cancelsAndFreeByLine(
         owed: addDecimal(before.owed, centsToDecimal(Math.max(0, values[i]! - backs[i]!))),
         back: addDecimal(before.back, centsToDecimal(backs[i]!)),
       });
+      cancelIds.set(id, [...(cancelIds.get(id) ?? []), cancel.id]);
     }
   }
-  return { cancelled, free };
+  return { cancelled, cancelIds, free };
 }
 
 const filedLines = (tx: Transaction, saleId: string) =>
@@ -307,16 +331,25 @@ function takesHere(device: DeviceBinding | null, tender: RefundableTender): bool
   }
 }
 
-/** The reader-card tenders of `refundable` whose capture's provider cannot send a refund (case 8),
- * as the refund write finds the capture and asks the provider. */
-async function readersThatCannotRefund(
+/** What the refund write will ask of a reader card's capture: whether its provider sends refunds
+ * at all, takes part refunds, and the capture's amount in cents (case 8). */
+interface ReaderCapture {
+  sends: boolean;
+  partialRefund: boolean;
+  amount: number;
+}
+
+/** {@link ReaderCapture} for each reader-card tender of `refundable`, as the refund write finds
+ * the capture and asks the provider. */
+async function readerCaptures(
   tx: Transaction,
   deps: GiveBackDeps,
   saleId: SaleId,
   refundable: readonly RefundableTender[],
-): Promise<Set<string>> {
+): Promise<Map<string, ReaderCapture>> {
+  const found = new Map<string, ReaderCapture>();
   const readers = refundable.filter((row) => row.method === "card" && !row.manual);
-  if (readers.length === 0) return new Set();
+  if (readers.length === 0) return found;
   const originals = await tx.select().from(tenderRows).where(eq(tenderRows.saleId, saleId));
   const billIds = originals.flatMap((row) =>
     row.billPaymentId === null ? [] : [row.billPaymentId],
@@ -333,7 +366,6 @@ async function readersThatCannotRefund(
   const directCards = originals.filter(
     (row) => row.method === "card" && row.billPaymentId === null,
   ).length;
-  const refused = new Set<string>();
   for (const reader of readers) {
     const tender = originals.find((row) => row.id === reader.tenderId)!;
     const capture = matchTenderRefundCapture(
@@ -343,16 +375,19 @@ async function readersThatCannotRefund(
     );
     const provider =
       capture === undefined ? undefined : await deps.refundProviderFor?.(capture.provider);
-    if (capture === undefined || !sendsRefunds(provider, capture.provider))
-      refused.add(reader.tenderId);
+    found.set(reader.tenderId, {
+      sends: capture !== undefined && sendsRefunds(provider, capture.provider),
+      partialRefund: provider?.capabilities.partialRefund === true,
+      amount: capture?.amount ?? 0,
+    });
   }
-  return refused;
+  return found;
 }
 
 function waysOf(
   refundable: readonly RefundableTender[],
   device: DeviceBinding | null,
-  cannotRefund: ReadonlySet<string>,
+  readers: ReadonlyMap<string, ReaderCapture>,
 ): GiveBackWay[] {
   const cash = refundable.filter((tender) => tender.method === "cash");
   const groups = [
@@ -375,40 +410,44 @@ function waysOf(
       reason:
         pending !== undefined
           ? { code: "tender.refund_in_progress", params: { tenderId: pending.tenderId } }
-          : cannotRefund.has(first.tenderId)
+          : readers.get(first.tenderId)?.sends === false
             ? { code: "tender.refund_unavailable", params: { tenderId: first.tenderId } }
             : null,
     };
   });
 }
 
-/**
- * What the Give money back window lists for the receipt `saleId`: its lines, the ways money can go
- * back, the give-back under way, and whether each choice can be used now and, when not, why.
- * Writes nothing.
- */
-export async function readGiveBack(
+/** The read, with what the routing works from beside it. */
+interface GiveBackFacts {
+  view: GiveBackView;
+  waits: GiveBackWaits;
+  tenders: RefundableTender[];
+  /** What Correct invoice could give back now, in cents, before the records are checked. */
+  correctable: number;
+  /** The cancels with Refund ticked on each line. */
+  cancelIds: ReadonlyMap<string, readonly string[]>;
+  readers: ReadonlyMap<string, ReaderCapture>;
+}
+
+async function readFacts(
   tx: Transaction,
   deps: GiveBackDeps,
   cfg: DeviceRequestConfig,
   reading: TrustedReading,
   saleId: SaleId,
   device: DeviceBinding | null,
-): Promise<GiveBackView> {
+): Promise<GiveBackFacts> {
   const correctable = await readCorrectableNow(tx, deps.backend, cfg, reading, saleId, () => false);
   const openCorrectionId = await openCorrectionOf(tx, saleId);
   const waits = await giveBackWaits(tx, deps, cfg, reading, saleId, {
     openCorrectionId,
     correctionWaiting: correctable.waiting,
   });
-  const ways = waysOf(
-    correctable.tenders,
-    device,
-    await readersThatCannotRefund(tx, deps, saleId, correctable.tenders),
-  );
-  const moneyLeft = ways.some((way) => positive(decimal(way.moneyLeft)));
+  const readers = await readerCaptures(tx, deps, saleId, correctable.tenders);
+  const ways = waysOf(correctable.tenders, device, readers);
+  const money = moneyAvailability(ways);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
-  const { cancelled, free } = await cancelsAndFreeByLine(tx, saleId, toLine);
+  const { cancelled, cancelIds, free } = await cancelsAndFreeByLine(tx, saleId, toLine);
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
   const lines = filed.map((line) => {
     const gross = centsToDecimal(line.lineGross ?? 0);
@@ -425,15 +464,267 @@ export async function readGiveBack(
       cancelled: cancel ?? null,
       givenFree: free.has(line.id),
     };
-    return { ...view, ...lineAvailability(view, waits, moneyLeft) };
+    return { ...view, ...lineAvailability(view, waits, money) };
   });
   return {
-    lines,
-    ways,
-    underWay:
-      openCorrectionId === undefined
-        ? null
-        : await readInvoiceCorrection(tx, deps.backend, cfg, openCorrectionId),
-    choices: choiceAvailability(lines, ways, waits),
+    view: {
+      lines,
+      ways,
+      underWay:
+        openCorrectionId === undefined
+          ? null
+          : await readInvoiceCorrection(tx, deps.backend, cfg, openCorrectionId),
+      choices: choiceAvailability(lines, ways, waits),
+    },
+    waits,
+    tenders: correctable.tenders,
+    correctable: correctable.amounts.correctable,
+    cancelIds,
+    readers,
+  };
+}
+
+/**
+ * What the Give money back window lists for the receipt `saleId`: its lines, the ways money can go
+ * back, the give-back under way, and whether each choice can be used now and, when not, why.
+ * Writes nothing.
+ */
+export async function readGiveBack(
+  tx: Transaction,
+  deps: GiveBackDeps,
+  cfg: DeviceRequestConfig,
+  reading: TrustedReading,
+  saleId: SaleId,
+  device: DeviceBinding | null,
+): Promise<GiveBackView> {
+  return (await readFacts(tx, deps, cfg, reading, saleId, device)).view;
+}
+
+export interface GiveBackRequest {
+  purpose: GiveBackPurpose;
+  /** The ticked lines, for `dishes`. */
+  lineIds?: string[];
+  /** The money to give back; for `extra`, the extra itself. */
+  amount: string;
+  /** The extra given back beside dishes or goodwill; "0.00" for `extra`. */
+  extra: string;
+  /** `"cash"` or a card's tender id, as the read's `ways` name them. */
+  way: string;
+  /** The cancels the window filled in after Cancel and refund or Finish table was opened with. */
+  fromCancel?: string[];
+}
+
+export type GiveBackPart =
+  | { kind: "refund"; amount: string; way: string; cancellationIds?: string[] }
+  | { kind: "extra"; amount: string; way: string }
+  | { kind: "correction"; amount: string; way: string; lineIds: string[] };
+
+export type GiveBackRight = "sale.refund" | "sale.rectify";
+
+export interface GiveBackPlan {
+  parts: GiveBackPart[];
+  /** What the chosen way cannot hold of the correction, left on it for the other payments. */
+  leftUnderWay: string;
+  /** The rights the parts need that this person lacks. */
+  needs: GiveBackRight[];
+  manual: boolean;
+}
+
+const PURPOSES: readonly string[] = ["dishes", "goodwill", "extra"] satisfies GiveBackPurpose[];
+
+function idsOf(value: unknown, field: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 100 ||
+    value.some((id) => typeof id !== "string" || !isUuid(id))
+  )
+    throw invalid(field);
+  const ids = value.map((id: string) => id.toLowerCase());
+  if (new Set(ids).size !== ids.length) throw invalid(field);
+  return ids;
+}
+
+/** `body` as a {@link GiveBackRequest}, refusing the first field that is not one. */
+export function parseGiveBackRequest(body: Record<string, unknown>): GiveBackRequest {
+  if (typeof body.purpose !== "string" || !PURPOSES.includes(body.purpose))
+    throw invalid("purpose");
+  const purpose = body.purpose as GiveBackPurpose;
+  if (moneyCents(body.amount, "amount") === 0) throw invalid("amount");
+  const extra = moneyCents(body.extra, "extra");
+  if (purpose === "extra" && extra !== 0) throw invalid("extra");
+  if (typeof body.way !== "string" || body.way === "") throw invalid("way");
+  if (purpose === "dishes" ? body.lineIds === undefined : body.lineIds !== undefined)
+    throw invalid("lineIds");
+  return {
+    purpose,
+    amount: body.amount as string,
+    extra: body.extra as string,
+    way: body.way.toLowerCase(),
+    ...(body.lineIds === undefined ? {} : { lineIds: idsOf(body.lineIds, "lineIds") }),
+    ...(body.fromCancel === undefined ? {} : { fromCancel: idsOf(body.fromCancel, "fromCancel") }),
+  };
+}
+
+function refusal(reason: WaitReason): AppError {
+  return new AppError(reason.code as never, (reason.params ?? {}) as never);
+}
+
+function refuseUnless(availability: Availability, field: string): void {
+  if (availability.available) return;
+  throw availability.reason === null ? invalid(field) : refusal(availability.reason);
+}
+
+const cents = (value: string) => decimalToCents(decimal(value));
+const sumCents = (values: readonly string[]) =>
+  values.reduce((total, value) => total + cents(value), 0);
+const owedOf = (line: Pick<GiveBackLine, "cancelled">) => cents(line.cancelled?.owed ?? "0.00");
+const sameIds = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((id) => b.includes(id));
+
+/** Whether the cancels' approval covers a refund of `refund` cents naming `cancellationIds`, as
+ * the refund write decides it (D9): only from the window filled in after the cancel, with no extra,
+ * never on a hand-keyed card. */
+async function coveredByCancel(
+  tx: Transaction,
+  saleId: SaleId,
+  request: GiveBackRequest,
+  cancellationIds: readonly string[] | undefined,
+  refund: number,
+  way: GiveBackWay,
+): Promise<boolean> {
+  if (
+    request.fromCancel === undefined ||
+    cancellationIds === undefined ||
+    !sameIds(request.fromCancel, cancellationIds) ||
+    cents(request.extra) > 0 ||
+    way.manual
+  )
+    return false;
+  const allocation = await allocateToCancels(tx, saleId, cancellationIds, refund);
+  return allocation.cancelledBy !== undefined && refund <= allocation.canStillTake;
+}
+
+/**
+ * What giving back `request` on the receipt `saleId` would do (5.2), writing nothing: the plain
+ * refunds of what cancels still owe, the extra, then one correction of the rest, each from the
+ * chosen way; a refusal the write would answer is thrown. Every choice the read shows unavailable
+ * answers the read's reason.
+ */
+export async function planGiveBack(
+  tx: Transaction,
+  deps: GiveBackDeps,
+  cfg: DeviceRequestConfig,
+  reading: TrustedReading,
+  saleId: SaleId,
+  who: { device: DeviceBinding | null; authority: PersonAuthority },
+  body: object,
+): Promise<GiveBackPlan> {
+  const request = parseGiveBackRequest(body as Record<string, unknown>);
+  const facts = await readFacts(tx, deps, cfg, reading, saleId, who.device);
+  const { view, waits } = facts;
+  refuseUnless(view.choices[request.purpose], "amount");
+  const ticked = (request.lineIds ?? []).map((id) => {
+    const line = view.lines.find((row) => row.id === id);
+    if (line === undefined) throw invalid("lineIds");
+    if (line.reason !== null) throw refusal(line.reason);
+    return line;
+  });
+  const way = view.ways.find((row) => row.way === request.way);
+  if (way === undefined) throw invalid("way");
+  if (way.reason !== null) throw refusal(way.reason);
+  const tenders = facts.tenders.filter((row) =>
+    way.way === "cash" ? row.method === "cash" : row.tenderId === way.way,
+  );
+  assertTakesTender(who.device, tenderKind(tenders[0]!));
+  const amount = cents(request.amount);
+  const extra = request.purpose === "extra" ? amount : cents(request.extra);
+  const wayMoney = cents(way.moneyLeft);
+
+  let owed = 0;
+  let cancellationIds: string[] | undefined;
+  if (request.purpose === "dishes") {
+    owed = ticked.reduce((total, line) => total + owedOf(line), 0);
+    const ids = new Set(
+      ticked
+        .filter((line) => owedOf(line) > 0)
+        .flatMap((line) => facts.cancelIds.get(line.id) ?? []),
+    );
+    if (ids.size > 0) cancellationIds = [...ids];
+  } else if (request.purpose === "goodwill") {
+    const owedIds = await cancelsStillOwedBy(tx, saleId);
+    owed =
+      owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
+  }
+  let refund = request.purpose === "extra" ? 0 : Math.min(amount, owed);
+  let rest = request.purpose === "extra" ? 0 : amount - refund;
+  if (extra > cents(way.extraLeft))
+    throw new AppError("tender.refund_exceeds_payment", {
+      tenderId: tenders[0]!.tenderId,
+      applied: way.moneyLeft,
+      tip: way.extraLeft,
+    });
+
+  let correction: GiveBackPart | undefined;
+  let leftUnderWay = 0;
+  if (rest > 0) {
+    if (waits.correction !== null) throw refusal(waits.correction);
+    const correctable =
+      facts.correctable > 0 && !(await recordsNeedChecking(tx, deps.backend, cfg.nodeId))
+        ? facts.correctable
+        : 0;
+    if (correctable === 0) {
+      refund += rest;
+      rest = 0;
+    } else {
+      const usable = view.ways.filter((row) => row.reason === null);
+      if (rest > sumCents(usable.map((row) => row.moneyLeft)) - refund) throw invalid("amount");
+      const named = ticked.filter((line) => cents(line.left) - owedOf(line) > 0);
+      const linesHold =
+        named.reduce((total, line) => total + cents(line.left) - owedOf(line), 0) >= rest;
+      correction = {
+        kind: "correction",
+        amount: centsToDecimal(rest),
+        way: way.way,
+        lineIds: linesHold ? named.map((line) => line.id) : [],
+      };
+      leftUnderWay = Math.max(0, rest - (wayMoney - refund));
+    }
+  }
+  if (refund > wayMoney) throw invalid("amount");
+  if (refund > 0 && (await isPartPayment(tx, saleId)))
+    await refusePlainRefundOfAdvance(tx, saleId, { tenderId: tenders[0]!.tenderId });
+
+  const legs = [refund, extra, rest - leftUnderWay].filter((part) => part > 0);
+  const reader = facts.readers.get(tenders[0]!.tenderId);
+  if (reader !== undefined && !reader.partialRefund && legs.some((part) => part !== reader.amount))
+    throw new AppError("tender.refund_unavailable", { tenderId: tenders[0]!.tenderId });
+
+  const parts: GiveBackPart[] = [];
+  if (refund > 0)
+    parts.push({
+      kind: "refund",
+      amount: centsToDecimal(refund),
+      way: way.way,
+      ...(cancellationIds === undefined ? {} : { cancellationIds }),
+    });
+  if (extra > 0) parts.push({ kind: "extra", amount: centsToDecimal(extra), way: way.way });
+  if (correction !== undefined) parts.push(correction);
+
+  const needed = new Set<GiveBackRight>();
+  if (refund > 0 && !(await coveredByCancel(tx, saleId, request, cancellationIds, refund, way)))
+    needed.add("sale.refund");
+  if (extra > 0) needed.add("sale.refund");
+  if (correction !== undefined) {
+    needed.add("sale.rectify");
+    if (rest - leftUnderWay > 0) needed.add("sale.refund");
+  }
+  return {
+    parts,
+    leftUnderWay: centsToDecimal(leftUnderWay),
+    needs: (["sale.refund", "sale.rectify"] as const).filter(
+      (right) => needed.has(right) && !holds(who.authority, right),
+    ),
+    manual: way.manual,
   };
 }

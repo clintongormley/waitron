@@ -298,7 +298,7 @@ mounted beside `mountInvoiceCorrectionApi`).
   choices: Record<"dishes" | "goodwill" | "extra", { available: boolean; reason: WaitReason | null }>;
 }
 /** the code (and params) the write would answer, from section 4's cases */
-type WaitReason = { code: string; params?: Record<string, string> };
+type WaitReason = { code: string; params?: Record<string, unknown> };
 ```
 
 Each line also carries `available: boolean` and `reason: WaitReason | null`; `ways` each carry

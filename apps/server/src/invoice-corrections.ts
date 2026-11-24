@@ -203,6 +203,16 @@ export async function correctableNow(
   return read.amounts;
 }
 
+/** Whether the box's invoice records need checking, which leaves Correct invoice nothing it can
+ * give back ({@link readCorrectableNow}). */
+export async function recordsNeedChecking(
+  tx: Transaction,
+  backend: FiscalBackend,
+  nodeId: DeviceRequestConfig["nodeId"],
+): Promise<boolean> {
+  return (await backend.checkIntegrity(tx, nodeId)).issues.length > 0;
+}
+
 /**
  * {@link correctableNow}'s reads, answered rather than thrown where Correct invoice waits
  * (`waiting`), with the payments and the lines it read: `lines` is null where it refused them,
@@ -252,7 +262,7 @@ export async function readCorrectableNow(
       }),
     };
   if (!stillRefused(amounts)) return { tenders, lines, amounts, waiting: null };
-  if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
+  if (await recordsNeedChecking(tx, backend, cfg.nodeId))
     return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null };
   await backend.refuseUntilRecordable(tx, reading);
   return { tenders, lines, amounts, waiting: null };
