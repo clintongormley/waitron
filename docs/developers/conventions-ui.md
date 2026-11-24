@@ -2736,7 +2736,7 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 ### Help tooltips
 
-> Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text; what it misses is in [conventions-ui.md](../developers/conventions-ui.md).
+> Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text
 
 ### Dashboard draft scopes
 

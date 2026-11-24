@@ -7398,7 +7398,7 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 ### Optional request fields
 
-> an extras list's `maxPicks`, an extras item's `maxQuantity`, the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
+> A field whose null is itself a value is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`, the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
 
 ### Personal data in logs
 
@@ -7425,6 +7425,8 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 > Guard: `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule: covers only named routes.
 
 ### Full-disk refusal codes
+
+See the [named test and its limits](#a-full-disk-is-not-one-error-code).
 
 > Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
 

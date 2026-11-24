@@ -6033,7 +6033,7 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 ### CI scope overview
 
-> scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
+> Let the normal pre-push hook run the local checks once; scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
 
 ### Server shard packing
 

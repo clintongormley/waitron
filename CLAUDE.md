@@ -410,7 +410,7 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
   is deliberately outside the rule.
-  [Examples](docs/developers/conventions-data.md#optional-request-fields).
+  [Examples](docs/developers/conventions-data.md#default-optional-input-only-when-it-is-absent).
 - **Error codes name the domain concept, never the throwing package; `server.*` names process facts.**
   Every throwing file imports its registry. Before a venue is live, rename/delete freely; afterwards
   either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
