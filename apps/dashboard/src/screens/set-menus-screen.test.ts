@@ -55,6 +55,28 @@ it("sorts prices numerically and searches its own menu names", async () => {
   await vi.waitFor(() => expect(rows()).toEqual(["Daily menu"]));
 });
 
+it("remembers a hidden price column for the Set menus list", async () => {
+  const frame = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1280, 900);
+  const choice = "waitron.set-menus.list.table:columns";
+  onTestFinished(async () => {
+    localStorage.removeItem(choice);
+    await page.viewport(frame.width, frame.height);
+  });
+  const { table } = await mount([daily, budget]);
+  const chooser = table.shadowRoot!.querySelector<HTMLButtonElement>(".columns-trigger");
+  expect(chooser).not.toBeNull();
+  chooser!.click();
+  await table.updateComplete;
+  const hidePrice = table.shadowRoot!.querySelector<HTMLInputElement>('[data-column="price"]');
+  expect(hidePrice).not.toBeNull();
+  hidePrice!.click();
+  await expect.poll(() => table.shadowRoot!.querySelector('[data-sort="price"]')).toBeNull();
+  cleanupWidgets();
+  const reopened = await mount([daily, budget]);
+  expect(reopened.table.shadowRoot!.querySelector('[data-sort="price"]')).toBeNull();
+});
+
 it("refreshes offering links when a placement is added and removed", async () => {
   const { live, listMenus } = await mount([daily]);
   const unused = page.getByText("Not on any menu", { exact: true });

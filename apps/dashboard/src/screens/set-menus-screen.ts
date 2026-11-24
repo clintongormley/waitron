@@ -244,6 +244,7 @@ export class SetMenusScreen extends LitElement {
             {
               key: "price",
               label: t("set_menus.price"),
+              choosable: "shown" as const,
               sortValue: (menu: DashboardMenuSummary) =>
                 menu.setPrice === null ? null : Number(menu.setPrice),
               cell: (menu: DashboardMenuSummary) => this.#price(menu),
@@ -251,6 +252,7 @@ export class SetMenusScreen extends LitElement {
             {
               key: "offered-on",
               label: t("set_menus.offered_on"),
+              choosable: "shown" as const,
               activatesRow: false as const,
               cell: (menu: DashboardMenuSummary) => this.#offeredOn(menu),
             },

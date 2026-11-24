@@ -2424,6 +2424,7 @@ export class MenusScreen extends LitElement {
         ? (["starts", "staff"] as const).map((role) => ({
             key: role,
             label: t(PERIOD_LABELS[role]),
+            choosable: "shown" as const,
             activatesRow: false as const,
             cell: (menu: MenuRow) => this.#periodCell(menu, role),
           }))

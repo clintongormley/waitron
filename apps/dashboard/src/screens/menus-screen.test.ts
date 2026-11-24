@@ -10142,6 +10142,7 @@ describe("publishing", () => {
           expect(headings().includes(mainHeading)).toBe(!stacked);
           expect(headings().includes(staffHeading)).toBe(!stacked);
           expect(headings()).not.toContain(kindHeading);
+          expect(table(el).shadowRoot.querySelector(".columns-trigger") !== null).toBe(!stacked);
           expect(text(row("menu-dinner"))).toContain(periodName);
           expect(text(row("menu-dinner"))).not.toContain(t("menus.period_unused"));
           expect(text(row("unused"))).toContain(t("menus.period_unused"));

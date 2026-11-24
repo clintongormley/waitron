@@ -1647,7 +1647,7 @@ it, starts under the Name heading's text; the button keeps its tap size.
 Names, status and time are checked at 390/600/700/1280 px in English and Spanish by the "fits
 menu names, status and live time before Actions" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`, and the name's line-up by the "under the Name
-heading's text" cases there. The list keeps its column choices under `waitron.menus.list.table`. A
+heading's text" cases there. The list keeps its column choices under `waitron.menus.list.table`. You can hide or move the period columns when they appear. A
 choice saved while the list had a Changes column names a column it no longer has, and the table
 ignores it.
 
