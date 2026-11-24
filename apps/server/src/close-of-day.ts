@@ -112,7 +112,7 @@ export async function issueBillAtClose(
   }
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
-  if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
+  if (decimalToCents(owed) < 0 || (decimalToCents(total) !== 0 && decimalToCents(owed) === 0))
     return { kind: "left_open", reason: "owes_nothing" };
   // Unlike Print the bill, a staged delivery that fails or cannot be reserved does not stop the
   // close: nobody is there to hand it to.

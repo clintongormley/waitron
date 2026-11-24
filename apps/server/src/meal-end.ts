@@ -122,7 +122,9 @@ export async function endMeal(
       );
       const total = invoice.priced.total;
       const owed = await stillOwedOnIssuedBill(tx, req.billId, total);
-      if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
+      if (decimalToCents(owed) < 0)
+        throw new AppError("bill.overpaid", { workingOrderId: req.billId });
+      if (decimalToCents(total) !== 0 && decimalToCents(owed) === 0)
         throw new AppError("bill.nothing_outstanding", { workingOrderId: req.billId });
       const { saleId } = await issueUnpaidInvoice(
         tx,

@@ -407,6 +407,7 @@ describe("till-app: Print the bill", () => {
     "meal_end.already_issued",
     "bill.unsent_dishes",
     "bill.nothing_outstanding",
+    "bill.overpaid",
     "device.forbidden_action",
   ])("shows %s's own sentence and reads the bills again", async (code) => {
     const { el } = await openBill({

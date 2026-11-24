@@ -783,6 +783,7 @@ const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "meal_end.delivery_unavailable",
   "bill.unsent_dishes",
   "bill.nothing_outstanding",
+  "bill.overpaid",
   "device.forbidden_action",
   "service_zone.not_allowed",
   "handover.stepping_down",

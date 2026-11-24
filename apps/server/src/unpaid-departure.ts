@@ -131,7 +131,8 @@ export async function recordUnpaidDeparture(
       await markOrderPlaced(tx, deps.clock, cfg, req.billId, operator.personId, deps.attendance);
   }
   const owed = await stillOwedOnIssuedBill(tx, req.billId, due!);
-  if (decimalToCents(due!) !== 0 && decimalToCents(owed) <= 0)
+  if (decimalToCents(owed) < 0) throw new AppError("bill.overpaid", { workingOrderId: req.billId });
+  if (decimalToCents(due!) !== 0 && decimalToCents(owed) === 0)
     throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
   const departures =
     decimalToCents(due!) === 0

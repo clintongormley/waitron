@@ -44,6 +44,7 @@ import {
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { zeroBillHoldingMoney } from "./testing/zero-bill-holding-money.js";
 import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
@@ -592,6 +593,15 @@ describe("issueBillAtClose", () => {
 
       expect(await leftAlone(party, () => close(party.tabId))).toEqual({
         kind: "not_due",
+      });
+    });
+
+    it("a bill whose total is zero but which holds money", async () => {
+      const { partyId, billId } = await zeroBillHoldingMoney(venue);
+
+      expect(await leftAlone({ partyId, tabId: billId }, () => close(billId))).toEqual({
+        kind: "left_open",
+        reason: "owes_nothing",
       });
     });
 
