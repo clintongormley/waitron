@@ -80,9 +80,8 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 
 /**
  * Writes this node's primary role to node.db after the venue save has committed. The role follows
- * the venue save rather than sharing its transaction because the two live in different files; a
- * failure here is logged and rethrown, and each caller decides what it means. A role left behind is
- * finished from the committed chart by `finishPromotedRole`, at the next call or the next start.
+ * the venue save rather than sharing its transaction because the two live in different files.
+ * `finishPromotedRole` can repair a failed role write from the committed chart at the next call or start.
  */
 async function writePrimaryRole(deps: PromoteDeps): Promise<void> {
   try {

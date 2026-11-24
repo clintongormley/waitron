@@ -693,7 +693,7 @@ also qualifies the historical operation-description references in this section.
   in Backups and see its backup outcome there. Waitron Cloud receives the same scheduled backup
   as the box-key destinations, using its own encryption key. The bucket copy runs as a service.
   Close stops runner jobs first and the bucket copy last.
-  The job runner reads the box’s role at startup. A mirror that takes over restarts in its new role.
+  Role-dependent jobs recheck the role on each turn. A mirror that takes over also restarts.
   The six watches (append-only protections, clock, free space, Cloud connection, translation
   suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
   alert per job after ten minutes and three failures; the manager’s box-status read includes the

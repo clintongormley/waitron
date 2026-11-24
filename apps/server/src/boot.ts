@@ -4469,6 +4469,7 @@ async function bootServer(
     return result;
   };
 
+  // After it restarts as primary, a former mirror can still finish recording its handover.
   const promoteRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,

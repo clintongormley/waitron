@@ -63,7 +63,7 @@ beforeEach(() => {
   restartAsked.mockReset();
 });
 
-// Refuse outbound filing requests during the secondary test.
+// Keep the filing control local: a primary records a failed attempt without calling AEAT.
 vi.mock("undici", async (importOriginal) => {
   const actual = await importOriginal<typeof import("undici")>();
   return {
@@ -222,18 +222,14 @@ const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 describe("boot as a local secondary", () => {
   it("does not file or reconcile and still serves the till", async () => {
     const { recordIds } = await seedFiscalWork();
-    const port = await freePort();
+    const env = {
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: appVenueDir,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    };
 
-    const server = await startServer(
-      {
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: appVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      },
-      {},
-      { timings: TIMINGS },
-    );
+    const server = await startServer(env, {}, { timings: TIMINGS });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       // A secondary keeps a filing heartbeat but starts no payment or fiscal lookup.
@@ -243,7 +239,6 @@ describe("boot as a local secondary", () => {
         "fiscal.reconciliation": { state: "not_applicable", lastRunAt: null },
       });
 
-      expect(server).not.toHaveProperty("promoteLocalSecondaryToPrimary");
       expect(server.promoteMirrorToPrimary).toBeUndefined();
       expect(await readSubmission(recordIds[0]!)).toEqual({
         estado: "pendiente",
@@ -255,6 +250,25 @@ describe("boot as a local secondary", () => {
       expect(await staffA.json()).toEqual([]);
     } finally {
       await server.close();
+    }
+
+    // A primary must attempt the same record to prove it was eligible to file.
+    await setSingletonRole(
+      { venue: appDb, node: appNode },
+      TILL_ENV.WAITRON_NODE_ID,
+      "primary",
+      "promote",
+    );
+    const primary = await startServer(env, {}, { timings: TIMINGS });
+    try {
+      await waitForPass(primary.health);
+      expect(await readSubmission(recordIds[0]!)).toEqual({
+        estado: "pendiente",
+        intentos: 1,
+        incidencia: true,
+      });
+    } finally {
+      await primary.close();
     }
   }, 60_000);
 });

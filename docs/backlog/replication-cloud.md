@@ -670,10 +670,12 @@ Slice 5 (Rulings R47, R48).
 
 ## Decisions and deliberate limits
 
-### A1279: a local secondary promotes only over a chart it signed itself
+<a id="a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself"></a>
 
-On 24 November 2026 the watcher cleared removal of the unused in-process promotion and closed
-A1279. The 11 November decision to defer immediate job-runner role notifications still stands.
+**In-process promotion of a local secondary was retired (A1279, watcher, 2026-11-24).**
+The job runner has no immediate notification from a live role change. Its jobs check eligibility
+on each turn and its services recheck periodically. Revisit notification wiring if a change needs
+jobs to wake sooner when the role changes.
 
 **Setup keeps offering to join as a spare (owner, 2026-11-22), settling the question open since
 #443.** Setup's first page offers joining, and leads with **Join it as a spare** when another box

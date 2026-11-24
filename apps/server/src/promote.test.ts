@@ -1,10 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   captureError,
   deployment,
-  nodes,
   stampDeployment,
   readNodeMembership,
   readStandardSeriesId,
@@ -13,7 +12,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode } from "@waitron/node-db";
+import { readHandoverEvents, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -24,7 +23,6 @@ import {
   signDocumentBody,
   type Endorsement,
   type MembershipDocumentBody,
-  type MembershipNode,
   type NodeKeyPair,
   type SignedMembershipDocument,
 } from "@waitron/membership";
@@ -124,17 +122,12 @@ async function holdChart(
   });
 }
 
-function heldTermThreeDoc(
-  nodeId: string,
-  oldNodeId: string,
-  extra: MembershipNode[] = [],
-): SignedMembershipDocument {
+function heldTermThreeDoc(nodeId: string, oldNodeId: string): SignedMembershipDocument {
   return signedBy(oldNodeId, {
     term: 3,
     nodes: [
       { nodeId: oldNodeId, contactUrl: "https://old", standing: "serving-primary" },
       { nodeId, contactUrl: "", standing: "serving-secondary" },
-      ...extra,
     ],
   });
 }
@@ -145,8 +138,6 @@ function unreadableChart(nodeId: string, signerNodeId: string): SignedMembership
   return { ...doc, body: { term: 3 } } as unknown as SignedMembershipDocument;
 }
 
-// A fenced node has the same `(primary, secondary)` axis pair as a healthy local secondary, so only
-// the fence check can refuse it.
 function heldFencedDoc(
   nodeId: string,
   standing: "sell-only" | "evicted",
@@ -254,7 +245,7 @@ describe("promoteMirrorToPrimary", () => {
 
   it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the validated standard seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
-    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary", []));
+    await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
 
     const result = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
@@ -270,6 +261,11 @@ describe("promoteMirrorToPrimary", () => {
     expect(standings["old-primary"]).toBe("sell-only");
     expect(held!.signerNodeId).toBe(nodeId);
     expect(held!.endorsements).toEqual([endorsement]);
+    const events = await readHandoverEvents(suite.node, nodeId, null, "box.role_changed");
+    expect(events.map(({ detail }) => detail)).toEqual([
+      { mode: "mirror", singletonRole: "secondary", cause: "adopt" },
+      { mode: "primary", singletonRole: "primary", cause: "promote" },
+    ]);
   });
 
   it("refuses promotion before changing roles when the mirror has no full invoice series", async () => {
@@ -302,11 +298,13 @@ describe("promoteMirrorToPrimary", () => {
     await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
 
     const first = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
+    const events = await readHandoverEvents(suite.node, nodeId, null, "box.role_changed");
     const second = await promoteMirrorToPrimary(deps(noopLog), { oldNodeNeutralised: true });
 
     expect(second.alreadyPrimary).toBe(true);
     expect(first.seriesId).toBe(second.seriesId);
     expect((await readNodeMembership(db))?.body.term).toBe(4);
+    expect(await readHandoverEvents(suite.node, nodeId, null, "box.role_changed")).toEqual(events);
   });
 
   it("refuses a fenced node with promotion.node_fenced, leaving it a mirror", async () => {
