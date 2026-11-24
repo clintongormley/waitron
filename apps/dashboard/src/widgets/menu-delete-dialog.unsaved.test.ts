@@ -35,7 +35,7 @@ class DeleteLeaveApp extends LitElement {
   deleted = false;
   override render() {
     return html`<dashboard-menu-delete-dialog
-        .menu=${{ id: "winter", name: "Winter" }}
+        .menu=${{ id: "winter", name: "Winter", kind: "menu" }}
         .api=${this.api}
         @menu-deleted=${() => {
           this.deleted = true;
@@ -120,7 +120,7 @@ it.each([false, true])(
     const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-delete-dialog"]>(
       "dashboard-menu-delete-dialog",
       {
-        menu: { id: "winter", name: "Winter" },
+        menu: { id: "winter", name: "Winter", kind: "menu" },
         api: {
           deleteMenu,
           getMenuDeleteImpact: async () => ({
@@ -146,6 +146,31 @@ it.each([false, true])(
     expect(deleteMenu).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  ["menu", "dejarán de incluirla"],
+  ["set_menu", "dejarán de incluirlo"],
+] as const)("uses the Spanish dependant warning for %s", async (kind, wording) => {
+  const locale = currentLocale();
+  setLocale("es-ES");
+  onTestFinished(() => setLocale(locale));
+  const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-delete-dialog"]>(
+    "dashboard-menu-delete-dialog",
+    {
+      menu: { id: "winter", name: "Winter", kind },
+      api: {
+        deleteMenu: vi.fn(),
+        getMenuDeleteImpact: async () => ({
+          productCount: 3,
+          periods: [],
+          dependants: [{ id: "spring", name: "Spring" }],
+          defaultChoices: null,
+        }),
+      },
+    },
+  );
+  await vi.waitFor(() => expect(form.shadowRoot!.textContent).toContain(wording));
+});
 
 it.each(["cancel", "escape"] as const)("discards the staged choice on %s", async (reason) => {
   const { el: app } = await mountWidget<DeleteLeaveApp>("menu-delete-leave-test-app", {});

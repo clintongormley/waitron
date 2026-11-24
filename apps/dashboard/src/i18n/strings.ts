@@ -3789,6 +3789,8 @@ export const en = {
   "menus.delete_default_blocked": "Publish another full menu, then delete this one.",
   "menus.delete_default_choice": "New venue default menu",
   "menus.delete_dependants": "These menus will drop this menu the next time you publish them:",
+  "menus.delete_set_menu_dependants":
+    "These menus will drop this set menu the next time you publish them:",
   "menus.delete_permission":
     "Sign in with permission to manage menus and their periods to continue.",
   "menus.actions": "Actions",
@@ -8697,6 +8699,8 @@ export const es: Record<StringKey, string> = {
   "menus.delete_default_blocked": "Publica otra carta completa y luego elimina esta.",
   "menus.delete_default_choice": "Nueva carta predeterminada del local",
   "menus.delete_dependants": "Estas cartas dejarán de incluirla la próxima vez que las publiques:",
+  "menus.delete_set_menu_dependants":
+    "Estas cartas dejarán de incluirlo la próxima vez que las publiques:",
   "menus.delete_permission":
     "Para continuar, identifícate con permiso para gestionar las cartas y sus periodos.",
   "menus.actions": "Acciones",

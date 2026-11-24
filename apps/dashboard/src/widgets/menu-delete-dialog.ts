@@ -36,7 +36,7 @@ export class MenuDeleteDialog extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) menu!: Pick<MenuSummary, "id" | "name">;
+  @property({ attribute: false }) menu!: Pick<MenuSummary, "id" | "name" | "kind">;
   @property({ attribute: false }) api!: Pick<DashboardApi, "getMenuDeleteImpact" | "deleteMenu">;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
   @state() private impact?: MenuDeleteImpact;
@@ -236,7 +236,13 @@ export class MenuDeleteDialog extends LitElement {
         }
         ${
           impact?.dependants.length
-            ? html`<p>${t("menus.delete_dependants")}</p>
+            ? html`<p>
+                  ${t(
+                    this.menu.kind === "set_menu"
+                      ? "menus.delete_set_menu_dependants"
+                      : "menus.delete_dependants",
+                  )}
+                </p>
                 <ul>
                   ${impact.dependants.map(({ name }) => html`<li>${name}</li>`)}
                 </ul>`
