@@ -1504,7 +1504,6 @@ describe("the waiting start", () => {
         );
         expect(await page(false)).not.toContain("old-box-data-passkey");
 
-        // A carry-on without a passkey setting offers the password form alone.
         await h.waiting.server.close();
         h = harness(() => new Promise(() => {}), {
           node: suite.node,
@@ -1567,8 +1566,9 @@ describe("the waiting start", () => {
           await stillWaiting();
         });
 
-        /** The passkey form's hidden fields, as its script's `form.submit()` posts them (values as
-         * drawn: the destinations here hold nothing `escapeHtml` changes). */
+        /** The passkey form's hidden fields as drawn; its script fills `passkey` and posts them with
+         * `form.submit()` (values not unescaped: the destinations here hold nothing `escapeHtml`
+         * changes). */
         const passkeyFormFields = (html: string): Record<string, string> => {
           const start = html.indexOf('id="old-box-data-passkey-form"');
           expect(start).toBeGreaterThan(-1);
