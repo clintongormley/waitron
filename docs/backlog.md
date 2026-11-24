@@ -854,7 +854,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 
 - **A1570. Inherited values shown quietly** (owner, 2026-11-24; four pull requests to come). An empty
   field shows "↳ value", a dropdown's first row is "↳ Inherit: value", settings tables show only
-  custom values, and italics and "Same as…" wording go. Queued (lane D).
+  custom values, and italics and "Same as…" wording go. Queued (lane K).
   [Design](superpowers/specs/2026-11-24-inherited-values-design.md).
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
