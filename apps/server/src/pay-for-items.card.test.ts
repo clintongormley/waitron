@@ -575,6 +575,22 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await lineTotals(sourceId)).toEqual(["3.00"]);
   });
 
+  it("a refused put-back issues a source its own payments already cover", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { newBill } = await stuckThenFailed(sourceId);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await settle({ ...venue.cfg, simplifiedInvoiceLimit: decimal("20.00") }).finally(() =>
+      warn.mockRestore(),
+    );
+
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await invoiceCount(newBill)).toBe(0);
+  });
+
   it("a later payment on the items' own bill that fails moves nothing back", async () => {
     const sourceId = await coffeeAndTarta();
     const { newBill } = await stuckThenFailed(sourceId);
@@ -632,7 +648,18 @@ describe("A1515 pay for items on the card reader", () => {
           return typeof value === "function" ? value.bind(target) : value;
         },
       });
-      return failBillPayment(full, venue.cfg, paymentId, venue.clock.now().instant);
+      return failBillPayment(
+        full,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        paymentId,
+        venue.clock.now().instant,
+      );
     });
 
     await expect(failing).rejects.toMatchObject({ code: "storage.disk_full" });

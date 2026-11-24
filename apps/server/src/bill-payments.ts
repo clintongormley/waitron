@@ -2542,6 +2542,7 @@ async function itemsPaymentSource(tx: Transaction, payment: PaymentRow): Promise
  * pending, as {@link completeBillPayment}'s have. */
 export async function failBillPayment(
   tx: Transaction,
+  deps: TillSaleDeps,
   cfg: TradingContext,
   billPaymentId: string,
   failedAt: Date,
@@ -2556,7 +2557,7 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
-  await putItemsBack(tx, cfg, payment!);
+  await putItemsBack(tx, deps, cfg, payment!);
   return payment!;
 }
 
@@ -2564,17 +2565,41 @@ export async function failBillPayment(
  * Every line of a Pay for items bill goes back to the bill it came from when the payment Pay for
  * items took there fails ({@link itemsPaymentSource}), and the emptied bill is abandoned. Its own
  * savepoint: a refusal leaves the items on their own open bill, to be paid there, and the
- * payment's failure stands. A source no longer open is the same case.
+ * payment's failure stands. A source no longer open is the same case. Pay for items held the
+ * source's invoice back for this payment, so where the items stay, the source is issued if its
+ * own payments now cover it ({@link issueHeldBill}).
  */
-async function putItemsBack(tx: Transaction, cfg: TradingContext, failed: PaymentRow) {
-  const billId = failed.workingOrderId;
+async function putItemsBack(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TradingContext,
+  failed: PaymentRow,
+) {
   const sourceId = await itemsPaymentSource(tx, failed);
   if (sourceId === null) return;
+  if (!(await movedItemsBack(tx, cfg, failed, sourceId)))
+    await issueHeldBill(
+      tx,
+      deps,
+      { ...cfg, origin: storedDeviceOrigin(failed) },
+      sourceId,
+      failed.requestedBy,
+    );
+}
+
+/** {@link putItemsBack}'s move, true when it moved the items. */
+async function movedItemsBack(
+  tx: Transaction,
+  cfg: TradingContext,
+  failed: PaymentRow,
+  sourceId: string,
+): Promise<boolean> {
+  const billId = failed.workingOrderId;
   const [bill] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  if (bill!.status !== "open") return;
+  if (bill!.status !== "open") return false;
   let bodyError: unknown;
   try {
     await tx.transaction(async () => {
@@ -2617,7 +2642,9 @@ async function putItemsBack(tx: Transaction, cfg: TradingContext, failed: Paymen
     } catch {
       // Reporting must not undo the payment's failure.
     }
+    return false;
   }
+  return true;
 }
 
 /** These outcomes leave no retained charge to allocate to the bill. */
@@ -2807,7 +2834,7 @@ export async function collectBegunReaderPayment(
     // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
     // disk stops the till's writes").
     await withTransaction(deps.db, (tx) =>
-      failBillPayment(tx, cfg, payment.id, deps.clock.now().instant, undefined),
+      failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined),
     );
     refuseForDiskStop(deps.log, workingOrderId);
   }
@@ -2833,7 +2860,7 @@ export async function collectBegunReaderPayment(
         (print) =>
           withTransaction(deps.db, async (tx) => {
             await requireEconomicWrite(tx, cfg, deps.admission);
-            await failBillPayment(tx, cfg, payment.id, deps.clock.now().instant, undefined);
+            await failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined);
             await print(tx, payment.id);
           }),
         slip,
@@ -2881,6 +2908,7 @@ export async function collectBegunReaderPayment(
         }
         const failed = await failBillPayment(
           tx,
+          deps,
           cfg,
           payment.id,
           deps.clock.now().instant,
