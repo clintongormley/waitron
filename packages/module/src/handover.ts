@@ -54,6 +54,16 @@ export interface ModuleHandoverContribution {
   summarise?(query: BackupQuery): Promise<CanonicalValue>;
   returnRecords?: {
     read(tx: Transaction, sourceNodeId: string): Promise<CanonicalValue[]>;
+    /**
+     * Batches of the records of boxes other than the two named that the main box's holdings do not
+     * cover; `null` when this box holds such a record and no holdings were given.
+     */
+    readOthers?(
+      tx: Transaction,
+      sourceNodeId: string,
+      destinationNodeId: string,
+      mainHoldings: CanonicalValue | undefined,
+    ): Promise<CanonicalValue[] | null>;
     acceptPermission?: string;
     inspect?(
       tx: Transaction,
@@ -66,6 +76,7 @@ export interface ModuleHandoverContribution {
       batch: CanonicalValue,
       now: Date,
       accepted?: readonly string[],
+      others?: { destinationNodeId: string },
     ): Promise<boolean | ReturnRefusal>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
