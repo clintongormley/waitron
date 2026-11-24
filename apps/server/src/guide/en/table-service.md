@@ -960,11 +960,21 @@ and **Still to pay**. Start with what is still to pay, rather than the bill's or
 Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
 particular dishes. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-A printed bill offers these choices for what it still owes. If the bill is presented for collection
-and its invoice has yet to be issued, choose **Pay in parts** to see the same choices.
+The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
+on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
+**Cancel payment**, the dishes go back to this bill. While their card is still out, the till that
+took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
+On a printed bill, items are still paid on that bill. A printed bill offers these choices for what
+it still owes. If the bill is presented for collection and its invoice has yet to be issued,
+choose **Pay in parts** to see the same choices.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.
+
+**A bill paid more than it comes to.** A bill can take more than it comes to, for example a
+contribution followed by dishes paid on a bill of their own. It then says how much more and
+offers no **Pay**. Choose **Give back** to refund the extra; no manager's PIN is needed for that
+amount. If the venue takes tips, **Keep as tip** keeps it as a tip instead.
 
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
 for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket

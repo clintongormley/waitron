@@ -1028,12 +1028,22 @@ total original de la cuenta.
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Una cuenta impresa ofrece estas opciones para cobrar lo que queda. Si la
-cuenta está presentada para su cobro y aún no se ha emitido su factura, elige **Cobrar por partes**
-para ver las mismas opciones.
+si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
+tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
+toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
+cuenta. Mientras su tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
+y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, los artículos se
+siguen cobrando en esa misma cuenta. Una cuenta impresa ofrece estas opciones para cobrar lo que
+queda. Si la cuenta está presentada para su cobro y aún no se ha emitido su factura, elige
+**Cobrar por partes** para ver las mismas opciones.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
+
+**Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
+aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
+ofrece **Cobrar**. Elige **Devolver** para devolver lo que sobra; para ese importe no hace falta el
+PIN de un encargado. Si el local acepta propinas, **Dejar de propina** lo guarda como propina.
 
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
 va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
