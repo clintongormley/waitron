@@ -1,5 +1,8 @@
 # Adviser questions: the curated list
 
+> **2026-11-24:** the tax half is replaced by the [19 November sheet](2026-11-19-adviser-meeting.md);
+> the labour and privacy questions still stand.
+
 6 November 2026. **This English text is the base version.** It replaces the Spanish
 [batch of 5 November](2026-11-05-consultas-para-asesores.md), which must not be sent. Once the owner
 approves this list, the Spanish is rebuilt from it. Nothing has been sent to anyone.

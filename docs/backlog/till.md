@@ -930,8 +930,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   [Detail](till.md#an-unpaid-table-bill-showed-two-full-invoice-buttons)
 - **A292's look is the owner's to judge** (#1310's "Looks for the owner to judge"; screenshots in
   lane C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter
-  than a sold-out one, and in the light theme a pale stripe shows mostly through the dark line
-  beside it.
+  than a sold-out one. The owner kept the light theme's look on 23 November.
 - **A856. A table that needs moving looks like one that needs clearing on the till's map
   (2026-10-18).** It takes the `clearing` fill; its words are on the list card, the Mark moved
   question and its accessible name. A marker of its own needs a new token pair or badge in

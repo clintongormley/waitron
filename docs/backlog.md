@@ -1012,10 +1012,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
-- **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. The owner folded the disk key into the A1323 master key on 2026-11-21, so the pack gets no separate disk-key page ([A1323](backlog/box.md#a1323-one-master-key-for-the-venue)). A pack
-  that cannot carry the disk key is refused rather than drawn without it.
-  [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
-
 - **Recovery pack defaults and the Backups card's receipts** (bundle of 3, size S, needs the owner). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
 - **Backups screen leftovers** (bundle of 1, size S, needs the owner). [Detail](backlog/box.md#bundle-backups-screen-leftovers)

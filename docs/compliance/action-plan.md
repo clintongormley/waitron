@@ -3,9 +3,9 @@
 Written **2026-07-26**. Plain action list; the reasoning and sources are in
 [getting-to-production.md](getting-to-production.md).
 
-> **Advisers, the plan from 2026-11-09 (owner).** The tax adviser has questions the owner already
-> sent and is answering them. When his answers arrive: go through them together, see which of the
-> [6 November list](2026-11-06-adviser-questions.md) are still needed, meet him, and add those then.
+> **Advisers, the plan from 2026-11-09 (owner).** The tax adviser answered on 15 November
+> ([answers](2026-11-15-adviser-answers.md)) and met the owner on 18 November; what is still open
+> is in the [19 November sheet](2026-11-19-adviser-meeting.md).
 > The labour and privacy questions (L1–L7, P1 and their confirmations) need a different adviser,
 > not yet found. Until then A664 (retention, Q48) stays parked. Two outside answers on L1 (tips) and L2 (overtime) were checked against
 > the statute text on 2026-11-09 and change neither question; see

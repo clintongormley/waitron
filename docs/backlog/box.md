@@ -428,7 +428,7 @@ and Join or recover; the rehearsal opens Prepare’s administrator form.
 This remains an unsigned, disposable development image, with no theft-protection or release-readiness
 claim. Signed boot/Secure Boot, parent experiments (b) and (i), failure/recovery screens, key sheets,
 update resealing and real stick/box/Android checks remain release gates. B3 remains 0/6 parent slices
-complete. A1187 part 3 and A950 cuts 4+ can reassess their startup dependency once this cut lands;
+complete. A950 cuts 4+ can reassess their startup dependency once this cut lands;
 other prerequisites still apply. [Startup plan](https://github.com/clintongormley/waitron/blob/eca67e9dcd4b89ccc3aecb0bdb946eda5f8a4aba/docs/superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
 
 The [11 November firmware measurement](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
@@ -1946,7 +1946,7 @@ Design revision 7 (2026-10-24); every owner question answered except one the sli
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
   [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md).
 
-Of the two slices from those answers, 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331. 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](https://github.com/clintongormley/waitron/blob/c32dca8d56/docs/superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)), is not built: the owner decided against it on 2026-11-21 (Decisions and deliberate limits, "A798 slice 9c is not built"). Asesor questions; of these, question 8 of the
+Of the two slices from those answers, 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built (#2331). 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](https://github.com/clintongormley/waitron/blob/c32dca8d56/docs/superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)), is not built: the owner decided against it on 2026-11-21 (Decisions and deliberate limits, "A798 slice 9c is not built"). Asesor questions; of these, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) covers the dating ones; the owner's answers
   (owner, 2026-11-18; the adviser is still to confirm the details): only a sale AEAT refused as dated in the future is corrected, since the owner kept A1420 D8 (a wrong date AEAT accepts is not corrected) on 2026-11-18, as A1407 in the backlog describes;
   a wrong time on the right day is not corrected, "yes probably, tbc". Q61 was not on that sheet:

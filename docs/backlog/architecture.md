@@ -327,7 +327,7 @@ On go-live day, make these changes together (owner, 2026-10-21 about 15:35–15:
    Check permanent docs for links to the deleted files and keep any instructions still needed.
 3. Rewrite the **Pre-release** line under _Evidence on Hand_ in `PRODUCT.md`.
 
-Keep the current `CLAUDE.md` rule, planning files and ignore settings until go-live day.
+Keep the current `CLAUDE.md` rule and ignore settings until go-live day. Finished specs and plans are deleted as they stop being needed (owner, 2026-11-01).
 The separate [A760 procedure](../operations/a760-migration-squash.md) retains its own freeze,
 reset and operator gates; this entry does not start that job.
 
