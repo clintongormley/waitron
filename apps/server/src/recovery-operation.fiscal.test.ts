@@ -19,7 +19,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { commitMirrorPromotionTx, promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -205,7 +205,7 @@ beforeEach(async () => {
   await withNodeTransaction(suite.node, (tx) =>
     setNodeModeTx(tx, target.nodeId, "mirror", "adopt"),
   );
-  recoveryKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
+  recoveryKey = (await mintMasterKey(suite.db)).secret;
 });
 
 describe("recovery-key fiscal attribution", () => {

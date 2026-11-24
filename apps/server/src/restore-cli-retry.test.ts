@@ -13,7 +13,7 @@ import { ALL_MODULES } from "./modules.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestore } from "./restore-command.js";
 
@@ -40,7 +40,7 @@ it("runs the command-line restore again over a pending first start", async () =>
     }),
   );
   await stampDeployment(suite.db, "preproduction");
-  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  const secret = (await mintMasterKey(suite.db)).secret;
   const source = join(dir, "source.db");
   const sourceNode = join(dir, "source-node.db");
   await suite.db.archiveTo(source);

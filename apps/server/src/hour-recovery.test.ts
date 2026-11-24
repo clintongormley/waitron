@@ -18,7 +18,7 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 
@@ -50,7 +50,7 @@ beforeEach(async () => {
   });
   await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
   await suite.db.insert(nodes).values({ id: NODE, name: "Selected box" });
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  await mintMasterKey(suite.db);
 });
 afterEach(async () => {
   if (scratch) await rm(scratch, { recursive: true, force: true });

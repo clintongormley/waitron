@@ -2,15 +2,15 @@ import { beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   deployment,
-  withNodeTransaction,
+  readCurrentMasterKey,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret, dashboardSessions, persons } from "@waitron/identity";
+import { dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({
@@ -28,7 +28,7 @@ let secret: string;
 
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  secret = (await mintMasterKey(suite.db)).secret;
 });
 
 it("collects with scoped key authority before the local transaction and still creates no account", async () => {
@@ -80,9 +80,7 @@ it("refuses a changed key after outside collection and before entering the local
       },
       async (_authority, commit) => {
         consumedOutside = true;
-        await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "replacement", null),
-        );
+        await mintMasterKey(suite.db);
         return commit();
       },
     ),
@@ -94,7 +92,7 @@ it("refuses a changed key after outside collection and before entering the local
 it("outside collection failure enters no local operation and revokes its authority", async () => {
   let entered = false;
   let captured: OperationAuthority | undefined;
-  const verifier = await readRecoveryKeyVerifier(suite.node, NODE);
+  const current = (await readCurrentMasterKey(suite.db))?.number;
   const failure = new Error("outside evidence unavailable");
   await expect(
     withRecoveryKeyOperation(
@@ -112,7 +110,7 @@ it("outside collection failure enters no local operation and revokes its authori
   ).rejects.toBe(failure);
   expect(entered).toBe(false);
   expect(readOperationAuthority(captured, binding)).toBeUndefined();
-  expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe(verifier);
+  expect((await readCurrentMasterKey(suite.db))?.number).toBe(current);
 });
 
 it("a captured commit cannot write after the collection callback returns", async () => {

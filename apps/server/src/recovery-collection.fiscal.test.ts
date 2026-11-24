@@ -10,7 +10,7 @@ import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/all
 import { drawEmergencyIdentity } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
 import { type ActivationResult } from "@waitron/fiscal-verifactu/src/allocation-types.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -33,7 +33,7 @@ beforeEach(async () => {
     { nodeId: node.nodeId, code: "FF", purpose: "full" },
     { nodeId: node.nodeId, code: "R", purpose: "corrective" },
   ]);
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  secret = (await mintMasterKey(suite.db)).secret;
 });
 
 it("authenticates the real node key, collects outside the write lock and activates all purposes in the host transaction", async () => {

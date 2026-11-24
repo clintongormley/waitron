@@ -1,15 +1,15 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
-import { NODE_MIGRATIONS, readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+import { CORE_MIGRATIONS, readCurrentMasterKey, stampDeployment } from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret, dashboardSessions, persons } from "@waitron/identity";
+import { dashboardSessions, persons } from "@waitron/identity";
 import {
   readOperationAuthority,
   type OperationAuthority,
   type OperationBinding,
 } from "@waitron/module";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import * as operations from "./operation-authentication.js";
 import {
   venueAndNodeWritersBesideRequest,
@@ -39,7 +39,7 @@ let key: string;
 
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  key = (await mintMasterKey(suite.db)).secret;
 });
 
 function perform<T>(
@@ -61,7 +61,7 @@ describe("scoped recovery-key authority", () => {
     async (action) => {
       const scope = { ...binding, action };
       let held: unknown;
-      const verifier = await readRecoveryKeyVerifier(suite.node, NODE);
+      const current = (await readCurrentMasterKey(suite.db))?.number;
       const result = await perform(
         async (authority) => {
           held = authority;
@@ -77,7 +77,7 @@ describe("scoped recovery-key authority", () => {
       );
       expect(result).toBe("committed");
       expect(readOperationAuthority(held, scope)).toBeUndefined();
-      expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe(verifier);
+      expect((await readCurrentMasterKey(suite.db))?.number).toBe(current);
     },
   );
 
@@ -122,8 +122,8 @@ describe("scoped recovery-key authority", () => {
     await expect(
       whileChangingNodeOnLockRequest(
         suite.node,
-        async (tx) => {
-          await setRecoveryKeyTx(tx, NODE, hashSecret("replacement"), "Replacement", null);
+        async () => {
+          await mintMasterKey(suite.db);
         },
         () =>
           perform(async () => {
@@ -136,16 +136,16 @@ describe("scoped recovery-key authority", () => {
 
   it("derives outside the write lock and rolls back a refused operation", async () => {
     await perform(async () => {});
-    const original = await readRecoveryKeyVerifier(suite.node, NODE);
+    const original = (await readCurrentMasterKey(suite.db))?.number;
     let held: unknown;
     const observed = await venueAndNodeWritersBesideRequest(suite.db, suite.node, () =>
       operations.withRecoveryKeyOperation(
         { db: suite.db, node: suite.node, nodeId: NODE },
         binding,
         key,
-        async (_tx, authority) => {
+        async (tx, authority) => {
           held = authority;
-          expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBe(original);
+          expect((await readCurrentMasterKey(tx))?.number).toBe(original);
           return "committed";
         },
       ),
