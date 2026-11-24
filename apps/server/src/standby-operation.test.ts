@@ -1,4 +1,5 @@
-import { readVenue } from "@waitron/db";
+import { Hono } from "hono";
+import { readNodeMembership, readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -33,6 +34,7 @@ import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { promoteMirrorToPrimary } from "./promote.js";
+import { mountPromoteApi } from "./promote-api.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { mintMasterKey } from "./testing/master-key.js";
@@ -1070,3 +1072,57 @@ it.each(["reserve", "establish"])(
     }
   },
 );
+
+describe("the promote route's master key, with no module operation", () => {
+  async function promoteThroughRoute(replaceKeyBeforeWrite: boolean): Promise<Response> {
+    const deps = await mirror(activateSeries);
+    const key = (await mintMasterKey(suite.db)).secret;
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeDb: suite.node,
+      nodeId: TARGET,
+      credentialKeyRing: RING,
+      run: async (attestation, runner) => {
+        if (replaceKeyBeforeWrite) await mintMasterKey(suite.db);
+        const result = await promoteMirrorToPrimary(
+          runner === undefined ? deps : { ...deps, withModuleOperations: runner },
+          attestation,
+        );
+        return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
+      },
+    });
+    return app.request("/management-api/promote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ oldNodeNeutralised: true, breakGlass: key }),
+    });
+  }
+
+  it("refuses a master key replaced after the route checked it, leaving the chart and the role unchanged", async () => {
+    const response = await promoteThroughRoute(true);
+    expect([response.status, (await response.json()).error?.code]).toEqual([
+      401,
+      "promotion.break_glass_invalid",
+    ]);
+    expect(await readNodeMembership(suite.db)).toBeNull();
+    expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+    expect(await readNodeMode(suite.node, TARGET)).toMatchObject({
+      mode: "mirror",
+      singletonRole: "secondary",
+    });
+  });
+
+  it("promotes when the master key it checked is still the venue's", async () => {
+    const response = await promoteThroughRoute(false);
+    expect([response.status, await response.json()]).toEqual([
+      200,
+      { alreadyPrimary: false, restarting: true },
+    ]);
+    expect(await readNodeMembership(suite.db)).not.toBeNull();
+    expect(await readNodeMode(suite.node, TARGET)).toMatchObject({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+  });
+});

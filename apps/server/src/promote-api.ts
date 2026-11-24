@@ -19,7 +19,7 @@ import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import { promotionTurn } from "./handover-promotion-turn.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
 import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
-import { verifyBreakGlass } from "./break-glass.js";
+import { masterKeyAuthorising, withMasterKeyStillCurrent } from "./operation-authentication.js";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
@@ -228,13 +228,17 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
             return c.json(result);
           }
 
+          let runner: PromotionOperationRunner | undefined;
           // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
           // to the login path.
           if (typeof body.breakGlass === "string") {
-            if (!(await verifyBreakGlass(deps.appDb, body.breakGlass))) {
-              throw new AppError("promotion.break_glass_invalid", {});
-            }
+            const checked = await masterKeyAuthorising(deps.appDb, body.breakGlass);
+            if (checked === null) throw new AppError("promotion.break_glass_invalid", {});
             await afterSignIn();
+            runner = (_context, commit) =>
+              withMasterKeyStillCurrent({ db: deps.appDb, node: deps.nodeDb }, checked, (tx) =>
+                commit(tx, new Map()),
+              );
           } else if (
             typeof body.personId === "string" &&
             isUuid(body.personId) &&
@@ -266,7 +270,10 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
             throw new AppError("password.invalid", {}, { reason: "malformed" });
           }
 
-          const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
+          const attestation = { oldNodeNeutralised: body.oldNodeNeutralised === true };
+          const result = await (runner === undefined
+            ? deps.run(attestation)
+            : deps.run(attestation, runner));
           return c.json(result);
         });
       } finally {

@@ -67,11 +67,8 @@ export async function withRecoveryKeyAuthority<T>(
       };
       const commit = async <R>(body: (tx: Transaction) => Promise<R>): Promise<R> => {
         authorise();
-        // A new master key is a venue.db write, so it cannot land between this re-read and the
-        // commit that holds the venue write turn.
-        return withVenueAndNodeTransaction(deps.db, deps.node, async (tx) => {
+        return withMasterKeyStillCurrent(deps, checked, async (tx) => {
           authorise();
-          if ((await readCurrentMasterKey(tx))?.number !== checked.number) return refuse();
           const result = await body(tx);
           authorise();
           return result;
@@ -80,6 +77,21 @@ export async function withRecoveryKeyAuthority<T>(
       return run(authority, commit);
     },
   );
+}
+
+/** Runs `body` in one venue-and-node transaction, refusing `promotion.break_glass_invalid` unless
+ * `checked` is still the venue's current master key. A new master key is a venue.db write, so it
+ * cannot land between this re-read and the commit that holds the venue write turn. */
+export async function withMasterKeyStillCurrent<R>(
+  deps: { readonly db: Database; readonly node: NodeDatabase },
+  checked: MasterKeyRecord,
+  body: (tx: Transaction) => Promise<R>,
+): Promise<R> {
+  return withVenueAndNodeTransaction(deps.db, deps.node, async (tx) => {
+    if ((await readCurrentMasterKey(tx))?.number !== checked.number)
+      throw new AppError("promotion.break_glass_invalid", {});
+    return body(tx);
+  });
 }
 
 // The bytes live here, not on the handle, so no holder of a handle can read or change them.

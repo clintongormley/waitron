@@ -14,7 +14,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { NODE_MIGRATIONS, nodeHandoverEvents, nodeHandoverOperations } from "@waitron/node-db";
 import type { PromoteApiDeps, PromoteRunResult } from "./promote-api.js";
 
-// Login, authorisation, `verifyBreakGlass` and `run` are doubled, so this pins only the endpoint's own
+// Login, authorisation, `masterKeyAuthorising` and `run` are doubled, so this pins only the endpoint's own
 // logic, never the promote functions. Only the handover cases hold a real node.db.
 
 const PERSON = "22222222-2222-2222-2222-222222222222";
@@ -27,7 +27,7 @@ const {
   loginManagerById,
   authorizeManager,
   endManagementSession,
-  verifyBreakGlass,
+  masterKeyAuthorising,
   accepted,
 } = vi.hoisted(() => ({
   accepted: { secret: "correct-break-glass-secret" },
@@ -36,7 +36,9 @@ const {
   loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
   authorizeManager: vi.fn(async () => {}),
   endManagementSession: vi.fn(async () => {}),
-  verifyBreakGlass: vi.fn(async (_db: unknown, secret: unknown) => secret === accepted.secret),
+  masterKeyAuthorising: vi.fn(async (_db: unknown, secret: unknown) =>
+    secret === accepted.secret ? { number: 1 } : null,
+  ),
 }));
 vi.mock("@waitron/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/db")>();
@@ -59,7 +61,10 @@ vi.mock("@waitron/identity", async (importOriginal) => {
   };
 });
 
-vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
+vi.mock("./operation-authentication.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./operation-authentication.js")>()),
+  masterKeyAuthorising,
+}));
 
 import { mountPromoteApi } from "./promote-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -130,15 +135,16 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       SESSION_ID,
       "operation_finished",
     );
-    expect(verifyBreakGlass).not.toHaveBeenCalled();
+    expect(masterKeyAuthorising).not.toHaveBeenCalled();
   });
 
   it("break-glass secret authorizes and promotes", async () => {
     const { app, run } = appWith();
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
-    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
-    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeDb, GOOD_SECRET);
+    // The runner re-checks the master key in the transaction that writes the promotion.
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true }, expect.any(Function));
+    expect(masterKeyAuthorising).toHaveBeenCalledWith(fakeDb, GOOD_SECRET);
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
   });
@@ -617,7 +623,7 @@ describe("on a mirror, promotion answers only the box itself", () => {
     const { app, run } = mirrorApp(false);
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
-    expect(verifyBreakGlass).not.toHaveBeenCalled();
+    expect(masterKeyAuthorising).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
   });
 
