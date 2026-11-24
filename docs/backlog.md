@@ -1512,7 +1512,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `bill.allocation_changed` or `order.payment_in_flight`, search the server for that error code
   with `git grep -F '<error code>' -- apps/server/src` and run the affected tests.
   Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
-  Further slices move server callers with the shared code and error declarations they use.
+  Future order and sale changes follow the [package convention](developers/conventions-data.md#order-and-sale-code-belongs-in-packagesorders-sales).
   [Receipt helpers](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
   [Invoice selection](superpowers/plans/2026-11-23-a1308-invoice-selection.md)
   [Find a bill query](superpowers/plans/2026-11-24-a1308-find-bill-query.md)

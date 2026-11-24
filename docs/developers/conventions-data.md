@@ -281,6 +281,10 @@ and code too), any file named `strings.ts`, and a package's `src/starter-content
 
 **Module and package boundaries**
 
+## Order and sale code belongs in `packages/orders-sales`
+
+Write new order and sale code in `packages/orders-sales`. Move existing code only when a change touches it. [Owner decision and CI replay](../superpowers/plans/2026-11-08-a1308-build-order.md#batch-2--area-slices).
+
 ## The composition list lives in `@waitron/composition`, and it is the only place that names every module
 
 Generic provisioning code imports neither that list nor a REGIME package (`@waitron/fiscal-verifactu`,
