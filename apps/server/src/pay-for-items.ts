@@ -261,6 +261,8 @@ export async function moveItemsToNewBill(
     .where(eq(workingOrders.id, billId));
   await refuseBelowAdvances(tx, fromBillId);
   if (options.holdSourceInvoice === true) {
+    // Another action on the source can still issue it while the card is collected; a declined card
+    // then leaves the items on their own bill (`putItemsBack`), which keeps the money consistent.
     await refuseCoveredWhileAdvanceCorrectionOpen(tx, fromBillId);
     return { billId };
   }
