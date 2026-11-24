@@ -109,6 +109,9 @@ export interface GiveBackWaits {
   all: WaitReason | null;
   /** Stops money that needs a corrective (cases 1 and 2); null while `all` holds. */
   correction: WaitReason | null;
+  /** Stops all payment money: a part payment's ticket Correct invoice can never take, whose plain
+   * refund the write refuses (cases 9 and 10); null while `all` holds. */
+  money: WaitReason | null;
 }
 
 const ZERO = decimal("0.00");
@@ -130,14 +133,20 @@ async function waitOf(check: () => Promise<unknown>): Promise<WaitReason | null>
 
 /** What makes a give-back on `saleId` wait now, from the checks the write runs, in its order;
  * `openCorrectionId` and `correctionWaiting` are what `openCorrectionOf` and
- * `readCorrectableNow` answered. */
+ * `readCorrectableNow` answered, `correctable` its correctable cents and `tenderId` a payment
+ * still holding money. */
 export async function giveBackWaits(
   tx: Transaction,
   deps: GiveBackDeps,
   cfg: DeviceRequestConfig,
   reading: TrustedReading,
   saleId: SaleId,
-  read: { openCorrectionId: string | undefined; correctionWaiting: AppError | null },
+  read: {
+    openCorrectionId: string | undefined;
+    correctionWaiting: AppError | null;
+    correctable: number;
+    tenderId: string | undefined;
+  },
 ): Promise<GiveBackWaits> {
   const all = await waitOf(async () => {
     await requireEconomicWrite(tx, cfg, deps.admission);
@@ -145,10 +154,19 @@ export async function giveBackWaits(
       throw correctionOpenRefusal(saleId, read.openCorrectionId);
     await refuseUntilRefundable(tx, deps.backend, cfg.nodeId, reading);
   });
-  if (all !== null) return { all, correction: null };
+  if (all !== null) return { all, correction: null, money: null };
+  const { tenderId } = read;
+  const money =
+    read.correctable === 0 &&
+    read.correctionWaiting === null &&
+    tenderId !== undefined &&
+    (await isPartPayment(tx, saleId))
+      ? await waitOf(() => refusePlainRefundOfAdvance(tx, saleId, { tenderId }))
+      : null;
   return {
     all,
     correction: read.correctionWaiting === null ? null : reasonOf(read.correctionWaiting),
+    money,
   };
 }
 
@@ -173,6 +191,7 @@ export function lineAvailability(
 ): Availability {
   if (waits.all !== null) return { available: false, reason: waits.all };
   if (!money.available) return money;
+  if (waits.money !== null) return { available: false, reason: waits.money };
   const open = waits.correction === null ? line.left : (line.cancelled?.owed ?? "0.00");
   if (positive(decimal(open))) return { available: true, reason: null };
   return { available: false, reason: waits.correction };
@@ -189,15 +208,16 @@ export function choiceAvailability(
     return { dishes: closed, goodwill: closed, extra: closed };
   }
   const money = moneyAvailability(ways);
+  const waiting = waits.money ?? waits.correction;
   const dishes = lines.some((line) => line.available)
     ? { available: true, reason: null }
     : money.available
-      ? { available: false, reason: waits.correction }
+      ? { available: false, reason: waiting }
       : money;
   const goodwill = !money.available
     ? money
-    : waits.correction !== null
-      ? { available: false, reason: waits.correction }
+    : waiting !== null
+      ? { available: false, reason: waiting }
       : { available: true, reason: null };
   const withExtra = ways.filter((way) => positive(decimal(way.extraLeft)));
   const extra = withExtra.some((way) => !way.pending)
@@ -442,6 +462,8 @@ async function readFacts(
   const waits = await giveBackWaits(tx, deps, cfg, reading, saleId, {
     openCorrectionId,
     correctionWaiting: correctable.waiting,
+    correctable: correctable.amounts.correctable,
+    tenderId: correctable.tenders.find((row) => positive(decimal(row.appliedRemaining)))?.tenderId,
   });
   const readers = await readerCaptures(tx, deps, saleId, correctable.tenders);
   const ways = waysOf(correctable.tenders, device, readers);
@@ -679,6 +701,8 @@ export async function planGiveBack(
     } else {
       const usable = view.ways.filter((row) => row.reason === null);
       if (rest > sumCents(usable.map((row) => row.moneyLeft)) - refund) throw invalid("amount");
+      // Opening it shares the rest over the lines, which refuse more than they hold.
+      if (rest > correctable) throw new AppError("sale.correction_amount_invalid", {});
       const named = ticked.filter((line) => cents(line.left) - owedOf(line) > 0);
       const linesHold =
         named.reduce((total, line) => total + cents(line.left) - owedOf(line), 0) >= rest;

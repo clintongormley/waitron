@@ -12,6 +12,7 @@ import {
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
+import type { GiveBackView } from "./give-back.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -168,12 +169,18 @@ describe("POST …/give-back/preview on a part payment's ticket", () => {
     });
     await payRest(billId, "90.00");
     const finalSaleId = await restId(billId);
-    expect(await preview(advanceId, { purpose: "goodwill", amount: "10.00" })).toMatchObject({
+    const view = (await read(advanceId)).json as unknown as GiveBackView;
+    const reason = view.choices.goodwill.reason!;
+    expect(reason).toMatchObject({
+      code: "advance.taken_off_final_invoice",
+      params: { saleId: advanceId, finalSaleId, finalMoneyLeft: "90.00" },
+    });
+    expect(view.choices.dishes).toEqual({ available: false, reason });
+    expect(view.choices.goodwill.available).toBe(false);
+    expect(view.lines.map((line) => line.reason)).toEqual(view.lines.map(() => reason));
+    expect(await preview(advanceId, { purpose: "goodwill", amount: "10.00" })).toEqual({
       status: 409,
-      json: {
-        code: "advance.taken_off_final_invoice",
-        params: { saleId: advanceId, finalSaleId, finalMoneyLeft: "90.00" },
-      },
+      json: reason,
     });
   });
 });
