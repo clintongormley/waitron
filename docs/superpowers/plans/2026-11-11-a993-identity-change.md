@@ -506,6 +506,12 @@ The findings:
    - **Who deletes it:** the server, after the opening commits, and at a start that finds the head
      already under the running producer (a crash between the two). A plain reset deletes it too: its
      name is a `state-layout.ts` entry whose fate is `deleted`.
+   - **As built 2026-11-24:** only a box that files records (`filesRecords`) reads the note; any
+     other is refused as today, because the gate that keeps a waiting box from selling holds only on
+     one that files. The seat's `checkFilingIdentity` answers `leftover` when the note names the
+     running release and producer and nothing is left to open: the head is already under the running
+     producer, the open installation holds no record yet (a crash between the opening and the first
+     record), or the box is not production. So a preproduction box that files records deletes it too.
    - **Disclosed limit:** root on the box can write the note by hand, as root can edit the database.
 7. ★ **New words are unavoidable on three screens; the upgrade's report gets none.**
    - **The upgrade's report: no new words.** A refused opening on a copy leaves the copy's start

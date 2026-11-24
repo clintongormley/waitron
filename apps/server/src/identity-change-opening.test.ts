@@ -155,6 +155,41 @@ describe("attemptIdentityChange", () => {
   });
 
   it.each([
+    ["an error with no code", new TypeError("text of a record"), "unknown", "TypeError", null],
+    [
+      "a database error wrapped by the query layer",
+      new Error("insert into sales", {
+        cause: Object.assign(new Error("text of a record"), { code: "ERR_SQLITE_ERROR" }),
+      }),
+      "unknown",
+      "Error",
+      "ERR_SQLITE_ERROR",
+    ],
+    ["a file error", Object.assign(new Error("/state/x"), { code: "EIO" }), "EIO", "Error", "EIO"],
+    [
+      "another refusal",
+      new AppError("sif.producer_changed", {}),
+      "sif.producer_changed",
+      "AppError",
+      null,
+    ],
+    ["a thrown text", "text of a record", "unknown", "string", null],
+  ])(
+    "logs %s by its class and code, and none of its text",
+    async (_label, error, reason, errorClass, errno) => {
+      const o = opening(() => Promise.reject(error));
+      await o.attemptIdentityChange();
+      expect(o.log).toHaveBeenCalledExactlyOnceWith("warn", "identity_change.refused", {
+        kind: "blocked",
+        reason,
+        errorClass,
+        errno,
+      });
+      expect(o.latestRefusal()).toEqual({ kind: "blocked", reason });
+    },
+  );
+
+  it.each([
     ["the seat does not find the change named", async () => "not-named" as const],
     ["the seat opens none", null],
   ])("never ends the wait when %s", async (_label, open) => {
@@ -181,62 +216,24 @@ describe("attemptIdentityChange", () => {
 });
 
 describe("deleteLeftoverIdentityChangeNote", () => {
-  function leftover(open: Open | null, deleteNote: () => Promise<void> = async () => {}) {
-    const deps = {
-      backend: open === null ? {} : { openIdentityChange: open },
-      nodeId: NODE,
-      note: NOTE,
-      deleteNote: vi.fn(deleteNote),
-      log: vi.fn(),
-    };
-    return { ...deps, run: () => deleteLeftoverIdentityChangeNote(deps) };
-  }
-
-  it("deletes a note that names the running change when nothing is left to open", async () => {
-    const l = leftover(async () => "nothing-to-open");
-    await l.run();
-    expect(l.deleteNote).toHaveBeenCalledOnce();
-    expect(l.log).toHaveBeenCalledWith("info", "identity_change.leftover_note_deleted", {
+  it("deletes the note and logs it", async () => {
+    const deleteNote = vi.fn(async () => {});
+    const log = vi.fn();
+    await deleteLeftoverIdentityChangeNote({ note: NOTE, deleteNote, log });
+    expect(deleteNote).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledExactlyOnceWith("info", "identity_change.leftover_note_deleted", {
       release: "1.4.0",
     });
   });
 
-  it("asks with a clock that vouches for nothing and a mayOpen that refuses", async () => {
-    let answers: unknown;
-    const l = leftover(async (_node, _note, clock, mayOpen) => {
-      answers = [
-        clock.kind === "time-service" && (await clock.read()),
-        await mayOpen(undefined as never),
-      ];
-      return "nothing-to-open";
+  it("logs and throws nothing when the note cannot be deleted", async () => {
+    const log = vi.fn();
+    await deleteLeftoverIdentityChangeNote({
+      note: NOTE,
+      deleteNote: () => Promise.reject(Object.assign(new Error("folder"), { code: "EISDIR" })),
+      log,
     });
-    await l.run();
-    expect(answers).toEqual([false, false]);
-  });
-
-  it.each([
-    ["names another change", async () => "not-named" as const],
-    ["is for a seat that opens none", null],
-  ])("leaves a note that %s", async (_label, open) => {
-    const l = leftover(open);
-    await l.run();
-    expect(l.deleteNote).not.toHaveBeenCalled();
-  });
-
-  it("logs and throws nothing when the seat refuses, or the note cannot be deleted", async () => {
-    const refused = leftover(() => Promise.reject(refusedFor("second_clock_missing")));
-    await refused.run();
-    expect(refused.deleteNote).not.toHaveBeenCalled();
-    expect(refused.log).toHaveBeenCalledWith("warn", "identity_change.note_not_deleted", {
-      errorCode: "sif.identity_change_waiting",
-    });
-
-    const stuck = leftover(
-      async () => "nothing-to-open",
-      () => Promise.reject(Object.assign(new Error("folder"), { code: "EISDIR" })),
-    );
-    await stuck.run();
-    expect(stuck.log).toHaveBeenCalledExactlyOnceWith("warn", "identity_change.note_not_deleted", {
+    expect(log).toHaveBeenCalledExactlyOnceWith("warn", "identity_change.note_not_deleted", {
       errorCode: "EISDIR",
     });
   });

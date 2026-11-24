@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readTaxpayer, withTransaction, type Database, type Transaction } from "@waitron/db";
-import type { IdentityChangeNote, IdentityChangeOutcome, SecondClock } from "@waitron/fiscal";
+import type {
+  IdentityChangeNote,
+  IdentityChangeOutcome,
+  IdentityChangeRefusalReason,
+  SecondClock,
+} from "@waitron/fiscal";
 import { AppError, type NodeId } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import {
@@ -42,7 +47,7 @@ type IdentityChangePlan =
       sampledAt: { wallMs: number; monotonicMs: number };
     };
 
-function waiting(reason: string): never {
+function waiting(reason: IdentityChangeRefusalReason): never {
   throw new AppError("sif.identity_change_waiting", { reason });
 }
 

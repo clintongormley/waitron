@@ -1097,6 +1097,46 @@ describe("a set at the start", () => {
     });
   });
 
+  it.each([
+    ["a step the host verified", "start", "sets", {}, true],
+    ["a step the host verified", "unusable", "sets", {}, true],
+    ["a step that missed its target", "start", "sets", { missByMs: 10 * S }, true],
+    ["a step the host moved but did not answer for", "start", "times-out-after-moving", {}, true],
+    [
+      "a step the host moved but did not answer for",
+      "unusable",
+      "times-out-after-moving",
+      {},
+      true,
+    ],
+    ["a step the host refused", "start", "refuses", {}, false],
+    ["a set the host did not answer, the clock unmoved", "unusable", "times-out", {}, false],
+  ] as const)(
+    "%s, asked for at reason %s (host %s), drops a held confirmation before re-anchoring only when the clock moved",
+    async (_label, reason, host, options, dropped) => {
+      const state = startClockState();
+      state.holdForIdentityChange();
+      state.confirm("by_internet", { "node-1": 7 });
+      const heldAtAnchor: boolean[] = [];
+      const h = harness({
+        ...options,
+        host,
+        start: { state, heads: () => ({ "node-1": 8 }) },
+        anchors: [
+          { reanchor: async () => void heldAtAnchor.push(state.heldConfirmation !== null) },
+        ],
+      });
+      await h.correction.set(reason === "start" ? byStaff(h, { reason }) : byAdmin(h));
+      expect(h.hostSets).toHaveLength(1);
+      expect(heldAtAnchor).toEqual([!dropped]);
+      expect(state).toMatchObject({
+        status: "waiting",
+        cause: "identity_change",
+        heldConfirmation: dropped ? null : { by: "by_internet", heads: { "node-1": 7 } },
+      });
+    },
+  );
+
   it("refuses not_stopped once the start is confirmed by the internet, asking the host nothing", async () => {
     const start = waitingStart(() => 0);
     start.state.confirm("by_internet", { "node-1": 3 });

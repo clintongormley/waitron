@@ -2492,16 +2492,16 @@ async function bootServer(
   // before it handed over, made under the producer it ran then.
   if (!fencedOrMirror && nodeBackend.checkFilingIdentity !== undefined) {
     const checkFilingIdentity = nodeBackend.checkFilingIdentity.bind(nodeBackend);
-    const note = await readIdentityChangeNote(config.stateDir);
+    // The gate that keeps a waiting box from selling holds only on a box that files records, so any
+    // other is refused, note or none.
+    const note = filesRecords() ? await readIdentityChangeNote(config.stateDir) : null;
     const answer = await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId, note));
     if (note !== null && answer?.pending) {
       waitingIdentityChange = note;
       startClock.holdForIdentityChange();
       log("warn", "identity_change.waiting", { release: note.release });
-    } else if (note !== null) {
+    } else if (note !== null && answer?.leftover) {
       await deleteLeftoverIdentityChangeNote({
-        backend: nodeBackend,
-        nodeId: node.nodeId,
         note,
         deleteNote: () => deleteIdentityChangeNote(config.stateDir),
         log,

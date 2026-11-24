@@ -281,6 +281,76 @@ describe("refuseProducerChange with an upgrade's note", () => {
   });
 });
 
+describe("VerifactuBackend.checkFilingIdentity with a note that has nothing left to open", () => {
+  const NEW = "11111111H";
+  const answer = (
+    node: SeededNode,
+    overrides: Partial<IdentityChangeNote> | null = {},
+    options: {
+      producer?: SoftwareIdentity["producer"];
+      environment?: "production" | "preproduction";
+    } = {},
+  ) => {
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: options.environment ?? "production",
+      clock: steadyClock,
+      db: suite.db,
+      identity: running(options.producer ?? { name: "PRODUCER PERSON", nif: NEW }),
+    });
+    const note = overrides && {
+      release: softwareVersion(),
+      producerTaxId: NEW,
+      fromProducerTaxId: FILED_UNDER.NIF,
+      ...overrides,
+    };
+    return suite.db.transaction((tx) => backend.checkFilingIdentity(tx, node.nodeId, note));
+  };
+  const filedUnderNew = async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1, { NombreRazon: "PRODUCER PERSON", NIF: NEW });
+    return node;
+  };
+
+  it("answers leftover once the head names the running producer", async () => {
+    await expect(answer(await filedUnderNew())).resolves.toEqual({ leftover: true });
+  });
+
+  it("answers leftover while the installation it opened holds no record", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+    await expect(answer(node)).resolves.toEqual({ pending: true });
+    const [sif] = suite.db.all<{ nif: string }>(
+      sql`select nif from verifactu_identities where node_id = ${node.nodeId} and revocado_en is null`,
+    );
+    await suite.db.transaction((tx) =>
+      registerSif(tx, {
+        nodeId: node.nodeId,
+        nif: sif!.nif,
+        idSistemaInformatico: "WT",
+        numeroInstalacion: "second",
+      }),
+    );
+    await expect(answer(node)).resolves.toEqual({ leftover: true });
+  });
+
+  it("answers leftover outside production, where nothing is ever opened", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+    await expect(answer(node, {}, { environment: "preproduction" })).resolves.toEqual({
+      leftover: true,
+    });
+  });
+
+  it.each([
+    ["for a note naming another release", { release: "9.9.9" }, undefined],
+    ["for a note naming another producer", { producerTaxId: "22222222J" }, undefined],
+    ["with no note", null, undefined],
+    ["while no producer is set", {}, PRODUCER_PENDING],
+  ] as const)("answers nothing %s", async (_label, overrides, producer) => {
+    await expect(answer(await filedUnderNew(), overrides, { producer })).resolves.toBeUndefined();
+  });
+});
+
 describe("VerifactuBackend.checkFilingIdentity", () => {
   function backend(environment: "production" | "preproduction") {
     return new VerifactuBackend({

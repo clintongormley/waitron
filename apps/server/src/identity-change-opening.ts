@@ -1,39 +1,56 @@
 import type { Transaction } from "@waitron/db";
-import type { FiscalBackend, IdentityChangeNote } from "@waitron/fiscal";
+import type {
+  FiscalBackend,
+  IdentityChangeNote,
+  IdentityChangeRefusalReason,
+} from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
-import { isAppError, type NodeId } from "@waitron/shared";
+import { firstCodeInCauseChain, isAppError, type NodeId } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 import type { StartClockState } from "./start-clock-check.js";
 
 /** `clock` takes the held confirmation back; `retry` passes by itself; `blocked` is anything else. */
+type RefusalKind = "clock" | "retry" | "blocked";
+
 export interface IdentityChangeRefusal {
-  readonly kind: "clock" | "retry" | "blocked";
+  readonly kind: RefusalKind;
   readonly reason: string;
 }
 
-/** `sif.identity_change_waiting`'s reasons that mean the clock: `clockRefusal`'s answers in the
- * fiscal module, and what that module's opening finds of the confirmation and the clock since. */
-const CLOCK_REASONS: ReadonlySet<string> = new Set([
-  "clock_unconfirmed",
-  "second_clock_missing",
-  "clock_disagreement",
-  "confirmation_stale",
-  "clock_corrected",
-]);
-const RETRY_REASONS: ReadonlySet<string> = new Set(["head_moved", "minute_in_use"]);
+const REFUSAL_KINDS: Readonly<Record<IdentityChangeRefusalReason, RefusalKind>> = {
+  clock_unconfirmed: "clock",
+  second_clock_missing: "clock",
+  clock_disagreement: "clock",
+  confirmation_stale: "clock",
+  clock_corrected: "clock",
+  head_moved: "retry",
+  minute_in_use: "retry",
+  history_invalid: "blocked",
+  not_sole_primary: "blocked",
+};
 
-function refusalOf(error: unknown): IdentityChangeRefusal {
-  if (!isAppError(error) || error.code !== "sif.identity_change_waiting")
-    return { kind: "blocked", reason: errnoOf(error) ?? codeOf(error) };
-  const { reason } = error.params as { reason: string };
-  if (CLOCK_REASONS.has(reason)) return { kind: "clock", reason };
-  return { kind: RETRY_REASONS.has(reason) ? "retry" : "blocked", reason };
+/** An error other than the opening's own refusal is logged by its class and code, never its text,
+ * which may hold a record's. */
+function refusalOf(error: unknown): {
+  refusal: IdentityChangeRefusal;
+  logged?: { errorClass: string; errno: string | null };
+} {
+  if (isAppError(error) && error.code === "sif.identity_change_waiting") {
+    const { reason } = error.params as { reason: string };
+    const kinds: Readonly<Record<string, RefusalKind | undefined>> = REFUSAL_KINDS;
+    return { refusal: { kind: kinds[reason] ?? "blocked", reason } };
+  }
+  return {
+    refusal: { kind: "blocked", reason: errnoOf(error) ?? codeOf(error) },
+    logged: {
+      errorClass: error instanceof Error ? error.constructor.name : typeof error,
+      errno: firstCodeInCauseChain(error, (code) => /^[A-Z][A-Z0-9_]*$/.test(code)),
+    },
+  };
 }
 
 interface NoteDeps {
-  readonly backend: Pick<FiscalBackend, "openIdentityChange">;
-  readonly nodeId: NodeId;
   readonly note: IdentityChangeNote;
   readonly deleteNote: () => Promise<void>;
   readonly log: Logger;
@@ -54,6 +71,8 @@ async function deleteNote(deps: Pick<NoteDeps, "deleteNote" | "log">): Promise<b
 /** Opens the installation a note names once a confirmation of the box's time is held. */
 export function identityChangeOpening(
   deps: NoteDeps & {
+    readonly backend: Pick<FiscalBackend, "openIdentityChange">;
+    readonly nodeId: NodeId;
     readonly state: StartClockState;
     /** Asks the box's time service itself at each call. */
     readonly synchronised: () => Promise<boolean>;
@@ -66,10 +85,10 @@ export function identityChangeOpening(
 } {
   let latest: IdentityChangeRefusal | null = null;
 
-  function refuse(refusal: IdentityChangeRefusal): void {
+  function refuse({ refusal, logged }: ReturnType<typeof refusalOf>): void {
     latest = refusal;
     if (refusal.kind === "clock") deps.state.dropHeldConfirmation();
-    deps.log("warn", "identity_change.refused", { ...refusal });
+    deps.log("warn", "identity_change.refused", { ...refusal, ...logged });
   }
 
   return {
@@ -84,7 +103,7 @@ export function identityChangeOpening(
           deps.mayOpen,
         );
         if (outcome === undefined || outcome === "not-named") {
-          refuse({ kind: "blocked", reason: "not_named" });
+          refuse({ refusal: { kind: "blocked", reason: "not_named" } });
           return;
         }
         latest = null;
@@ -99,21 +118,8 @@ export function identityChangeOpening(
 }
 
 /** Deletes the note of a change that has nothing left to open, as after a stop between the opening
- * and the note's deletion. It can open nothing: its clock vouches for nothing and its `mayOpen`
- * refuses. Never throws. */
+ * and the note's deletion. Never throws. */
 export async function deleteLeftoverIdentityChangeNote(deps: NoteDeps): Promise<void> {
-  try {
-    const outcome = await deps.backend.openIdentityChange?.(
-      deps.nodeId,
-      deps.note,
-      { kind: "time-service", read: async () => false },
-      async () => false,
-    );
-    if (outcome !== "nothing-to-open") return;
-  } catch (error) {
-    deps.log("warn", "identity_change.note_not_deleted", { errorCode: codeOf(error) });
-    return;
-  }
   if (await deleteNote(deps))
     deps.log("info", "identity_change.leftover_note_deleted", { release: deps.note.release });
 }

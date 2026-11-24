@@ -12,6 +12,7 @@ import { softwareVersion } from "@waitron/fiscal-verifactu/src/software-identity
 import { startManagementSession } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setSingletonRole } from "@waitron/node-db";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { isAppError } from "@waitron/shared";
 import type { BoxHostClient } from "./box-host-client.js";
@@ -263,6 +264,30 @@ describe("a production start whose chain is filed under another producer", () =>
     expect(await noteExists(stateDir)).toBe(overrides !== null);
   });
 
+  it("refuses sif.producer_changed with a matching note on a box that files no records, and leaves the note", async () => {
+    const stateDir = await newStateDir();
+    await writeNote(stateDir);
+    const records = fiscalRecordCount(venue);
+    const handles = { venue: suite.db, node: suite.node };
+    const { nodeId } = venue.cfg;
+    await setSingletonRole(handles, nodeId, "secondary", "fenced");
+    let outcome: unknown;
+    try {
+      outcome = await serving(
+        { producer: SECOND, host: unsynchronisedHost(), stateDir },
+        async () => {
+          const { status, workingOrderId } = await sell();
+          return { sale: status, record: recordOf(workingOrderId) };
+        },
+      ).catch((error: unknown) => isAppError(error) && error.code);
+    } finally {
+      await setSingletonRole(handles, nodeId, "primary", "promote");
+    }
+    expect(outcome).toBe("sif.producer_changed");
+    expect(fiscalRecordCount(venue)).toBe(records);
+    expect(await noteExists(stateDir)).toBe(true);
+  });
+
   it("with a note and the time service unsynchronised, stays up and waits, selling and opening nothing", async () => {
     const stateDir = await newStateDir();
     await writeNote(stateDir);
@@ -341,6 +366,16 @@ describe("a production start whose chain is filed under another producer", () =>
     expect(sale.status, sale.body).toBe(200);
     expect(await noteExists(stateDir)).toBe(false);
     expect(installations()).toBe(before);
+  });
+
+  it("deletes a left-over note with the time service unsynchronised too, waiting for the time alone", async () => {
+    const stateDir = await newStateDir();
+    await writeNote(stateDir);
+    const seen = await serving(
+      { producer: SECOND, host: unsynchronisedHost(), stateDir },
+      async () => ({ note: await noteExists(stateDir), cause: built.start!.cause }),
+    );
+    expect(seen).toEqual({ note: false, cause: "start" });
   });
 
   it.each([

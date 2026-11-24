@@ -26,6 +26,7 @@ import type {
   FiscalRecordRef,
   IntegrityReport,
   NodeRegistration,
+  NotedIdentityChange,
   ReceiptQrText,
   SaleForFiscalRecord,
   SecondClock,
@@ -67,7 +68,7 @@ import {
   softwareVersion,
 } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
-import { refuseProducerChange } from "./producer-change.js";
+import { notedForRunning, refuseProducerChange } from "./producer-change.js";
 import { openIdentityChange } from "./identity-change.js";
 
 /** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
@@ -804,7 +805,7 @@ export class VerifactuBackend implements FiscalBackend {
     tx: Transaction,
     nodeId: NodeId,
     note?: IdentityChangeNote | null,
-  ): Promise<{ pending: true } | undefined> {
+  ): Promise<NotedIdentityChange | undefined> {
     const answer = await refuseProducerChange(
       tx,
       nodeId,
@@ -812,7 +813,15 @@ export class VerifactuBackend implements FiscalBackend {
       this.deploymentEnvironment,
       note,
     );
-    return answer === "pending" ? { pending: true } : undefined;
+    if (answer === "pending") return { pending: true };
+    // Neither refused nor pending, so nothing is left to open.
+    const { producer } = this.identity;
+    const named =
+      note &&
+      typeof producer === "object" &&
+      "nif" in producer &&
+      notedForRunning(note, producer.nif);
+    return named ? { leftover: true } : undefined;
   }
 
   /** Opens its own transactions: see `openIdentityChange`. */

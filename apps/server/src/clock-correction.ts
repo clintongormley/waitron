@@ -293,6 +293,8 @@ export function clockCorrection(deps: {
       const verified =
         answer.available && Math.abs(wallAfter - (targetMs + bootElapsed)) <= VERIFY_MS;
       const moved = Math.abs(stepMs) > MOVED_MS;
+      // A held confirmation was of the clock before the step.
+      if (verified || moved) deps.start?.state.dropHeldConfirmation();
       if (!verified && moved) unverifiedStep(stepMs);
 
       unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
