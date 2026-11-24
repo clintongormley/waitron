@@ -15,6 +15,7 @@ import {
 } from "@waitron/ui";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -25,9 +26,6 @@ import { t, currentLocale } from "../i18n/t.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
-
-const readPack = () =>
-  import("@waitron/recovery-pack/src/read-pack-pdf.js").then((m) => m.readRecoveryPackPdf);
 
 interface Draft {
   record: string;
@@ -326,7 +324,7 @@ export class SetupRecoveryAllocation extends LitElement {
         ?required=${this.#hasDraft}
         .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
         .copy=${copy}
-        .readPack=${readPack}
+        .readPack=${loadRecoveryPackReader}
         .maxPdfBytes=${MAX_PACK_PDF}
         .attempted=${this.attempted}
         .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}

@@ -18,6 +18,7 @@ import type {
 import { isMinuteIdentity } from "../hour-identity.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -38,9 +39,6 @@ import {
   regionName,
 } from "./check-venue.js";
 import { fiscalSetupStrings, seriesPurposes } from "./strings.js";
-
-const readPack = () =>
-  import("@waitron/recovery-pack/src/read-pack-pdf.js").then((m) => m.readRecoveryPackPdf);
 
 type RecoveryContext = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotion"]>>[0] & {
@@ -759,7 +757,7 @@ export class RecoveryHourEntry extends LitElement {
                   required
                   .keyName=${context.selection.keyName}
                   .copy=${keyWords}
-                  .readPack=${readPack}
+                  .readPack=${loadRecoveryPackReader}
                   .maxPdfBytes=${MAX_PACK_PDF}
                   .attempted=${this.attempted}
                   .error=${this.keyError && this.#refusedKeyName !== undefined ? keyWords.wrongKey(this.#refusedKeyName) : this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? (this.errorMessage ?? "") : ""}

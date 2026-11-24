@@ -35,9 +35,7 @@ import { clockWaitStrings, renderClockRows } from "../setup/clock-wait.js";
 import { checkVenueStyles } from "../setup/check-venue.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
-
-const readPack = () =>
-  import("@waitron/recovery-pack/src/read-pack-pdf.js").then((m) => m.readRecoveryPackPdf);
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 
 @customElement("vf-conflict-recovery")
 export class ConflictRecovery extends LitElement {
@@ -442,7 +440,7 @@ export class ConflictRecovery extends LitElement {
                   required
                   .draftParent=${this}
                   .copy=${keyWords}
-                  .readPack=${readPack}
+                  .readPack=${loadRecoveryPackReader}
                   .maxPdfBytes=${MAX_PACK_PDF}
                   .attempted=${this.attempted}
                   .disabled=${this.busy}

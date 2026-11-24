@@ -1,4 +1,5 @@
 import { looksLikePdf, RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 
 export type PackFileRefusal = "no_code" | "not_a_pack" | "damaged";
 
@@ -12,7 +13,7 @@ export async function bucketCodeFromFile(
 ): Promise<{ text: string } | { refused: PackFileRefusal }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!looksLikePdf(bytes)) return { text: new TextDecoder().decode(bytes) };
-  const { readRecoveryPackPdf } = await import("@waitron/recovery-pack/src/read-pack-pdf.js");
+  const readRecoveryPackPdf = await loadRecoveryPackReader();
   try {
     const { bucketCode } = await readRecoveryPackPdf(bytes);
     return bucketCode === null ? { refused: "no_code" } : { text: bucketCode };
