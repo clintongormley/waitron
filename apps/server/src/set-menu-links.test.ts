@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   billSetMenuCopies,
@@ -23,12 +23,14 @@ import {
   updateMenuDetails,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import type { ExtraSelection } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
   setDepartmentSalePolicyField,
 } from "@waitron/venue-service";
 import { insertPartyBill } from "./parties.js";
+import { switchOrderDining } from "./order-dining.js";
 import { parkOrder } from "./working-order-open.js";
 import { addTabRound, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -47,6 +49,7 @@ import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { addExtraList } from "./testing/working-order.test-support.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
 let special: typeof fixture.copy;
@@ -279,6 +282,53 @@ it("brings the source's recorded set menus with a dish moved to a bill without l
   expect(byMenu(await links(target))).toEqual(recorded);
 });
 
+it("brings no set menus with a dish moved off a takeaway order switched to eaten in", async () => {
+  const { venue, copy } = fixture;
+  const choice = await inTx(venue, async (tx) => {
+    const shop = await createDepartment(tx, { name: "Choice shop", orderStart: "counter" });
+    await setDepartmentSalePolicyField(tx, shop.id, "dining", "till_choice");
+    const zone = await createServiceZone(tx, { name: "Choice shop", departmentId: shop.id });
+    return offerProducts(tx, { zone: { zoneId: zone.id } });
+  });
+  const id = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id,
+    zoneId: choice.zoneId,
+    lines: [
+      { menuItemId: choice.offerFor(copy.productId), quantity: "1" },
+      { menuItemId: choice.offerFor(venue.productId("Burger")), quantity: "1" },
+    ],
+    operatorId: OPERATOR,
+    dining: "takeaway",
+  });
+  expect((await links(id)).map(({ menuId }) => menuId).sort()).toEqual(
+    [copy.menuId, special.menuId].sort(),
+  );
+  const { revision } = await billRow(venue, id);
+  await inTx(venue, (tx) =>
+    switchOrderDining(tx, id, "eat_in", revision, { operatorId: OPERATOR, expectedEdit: null }),
+  );
+  const [dish] = await venue.db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, id),
+        eq(workingOrderLines.productId, copy.productId),
+      ),
+    );
+  const { billId } = await inTx(venue, (tx) =>
+    moveDishes(tx, venue.cfg, id, null, [dish!.id], { operatorId: OPERATOR }),
+  );
+  const moved = await venue.db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, billId));
+  expect(moved).toEqual([{ id: dish!.id }]);
+  expect((await billRow(venue, billId)).dining).toBe("eat_in");
+  expect(await links(billId)).toEqual([]);
+});
+
 async function parkTakeaway(...menuItemIds: string[]) {
   const { venue } = fixture;
   const id = randomUUID();
@@ -292,7 +342,10 @@ async function parkTakeaway(...menuItemIds: string[]) {
   return id;
 }
 
-async function saveAgain(id: string, lines: { menuItemId: string; quantity: string }[]) {
+async function saveAgain(
+  id: string,
+  lines: { menuItemId: string; quantity: string; extras?: ExtraSelection[] }[],
+) {
   const { venue } = fixture;
   const stored = await venue.db
     .select({ id: workingOrderLines.id, menuItemId: workingOrderLines.menuItemId })
@@ -352,6 +405,50 @@ it("links the set menus of a dish whose quantity a saved-again parked order rais
     [copy.menuId]: versionId,
     [special.menuId]: versionId,
   });
+});
+
+it("links nothing when a saved-again parked order lowers a dish's quantity", async () => {
+  const { venue } = fixture;
+  const id = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id,
+    zoneId: takeaway.zoneId,
+    lines: [{ menuItemId: takeaway.flanItem, quantity: "2" }],
+    operatorId: OPERATOR,
+    dining: "takeaway",
+  });
+  await venue.db.delete(billSetMenuCopies).where(eq(billSetMenuCopies.workingOrderId, id));
+  await saveAgain(id, [{ menuItemId: takeaway.flanItem, quantity: "1" }]);
+  const dishes = await venue.db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id));
+  expect(dishes).toHaveLength(1);
+  expect(await links(id)).toEqual([]);
+});
+
+it("links nothing when a saved-again parked order adds an extra to a dish it holds", async () => {
+  const { venue } = fixture;
+  const cream = await inTx(venue, (tx) => addExtraList(tx, venue.productId("Flan"), "Cream"));
+  await currentVersion();
+  const id = await parkTakeaway(takeaway.flanItem);
+  await venue.db.delete(billSetMenuCopies).where(eq(billSetMenuCopies.workingOrderId, id));
+  await saveAgain(id, [
+    {
+      menuItemId: takeaway.flanItem,
+      quantity: "1",
+      extras: [{ listId: cream.listId, picks: [{ productId: cream.productId, quantity: 1 }] }],
+    },
+  ]);
+  const rows = await venue.db
+    .select({
+      parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id));
+  expect(rows).toContainEqual({ parentLineId: expect.any(String), productId: cream.productId });
+  expect(await links(id)).toEqual([]);
 });
 
 it("links the set menus of a sent dish raised on its bill", async () => {
