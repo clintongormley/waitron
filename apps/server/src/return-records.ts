@@ -26,6 +26,7 @@ import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import { checkedPeerAnswer, mainBoxToAsk } from "./main-box-answer.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 
 export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   modules: readonly WaitronModule[];
@@ -57,6 +58,8 @@ type PassDeps = ReturnRecordsDeps & {
   fetch?: typeof fetch;
   log?: Logger;
   stopped(): boolean;
+  /** The main box's summary the wipe-order check last heard. */
+  mainHoldings?: () => HeardHoldings | null;
 };
 
 export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState> {
@@ -68,13 +71,16 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   const { batches, inventory } = await readReturnInventory(deps);
   if (batches.length === 0) return "waiting";
   const held = await returnConfirmed(deps, operationId, inventory);
+  const main = mainBoxToAsk(deps.nodeId, chart, restriction);
+  // Sent first: the box's own records may correct one of these.
+  const others = await readOtherBoxesBatches(deps, main.target?.nodeId);
+  const sentOthers =
+    others === null || others.length === 0
+      ? null
+      : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
   // Sent even when held: a main box restored from an earlier copy lacks these records.
-  const sent = await sendBatches(deps, chart, restriction, batches, inventory);
-  // An answer about the records themselves is never hidden by a held one.
-  if (sent.state === "waiting" || sent.state === "needs-attention")
-    return held ? "confirmed" : sent.state;
-  if (sent.state !== "confirmed") return sent.state;
-  if (!held)
+  const sent = await sendBatches(deps, chart, main, batches, inventory, false);
+  if (sent.state === "confirmed" && !held)
     await withNodeTransaction(deps.node, (tx) =>
       appendHandoverEventTx(tx, {
         nodeId: deps.nodeId,
@@ -84,7 +90,42 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
         envelope: sent.receipt,
       }),
     );
-  return "confirmed";
+  // An answer about the records themselves is never hidden by a held one.
+  const own =
+    held && (sent.state === "waiting" || sent.state === "needs-attention")
+      ? "confirmed"
+      : sent.state;
+  if (own !== "confirmed") return own;
+  if (others === null) return "waiting";
+  if (
+    sentOthers === null ||
+    sentOthers.state === "confirmed" ||
+    sentOthers.state === "record-clash"
+  )
+    return "confirmed";
+  return sentOthers.state === "clash" ? "needs-attention" : sentOthers.state;
+}
+
+/** Other boxes' records the main box lacks; `null` when some are held but no summary was heard. */
+async function readOtherBoxesBatches(
+  deps: PassDeps,
+  destinationNodeId: string | undefined,
+): Promise<Batch[] | null> {
+  const heard = destinationNodeId === undefined ? null : (deps.mainHoldings?.() ?? null);
+  const batches: Batch[] = [];
+  for (const module of deps.modules) {
+    const seat = module.handover?.returnRecords;
+    if (!seat?.readOthers) continue;
+    const payloads = await seat.readOthers(
+      deps.db,
+      deps.nodeId,
+      destinationNodeId ?? deps.nodeId,
+      heard?.holdings[module.name],
+    );
+    if (payloads === null) return null;
+    for (const payload of payloads) batches.push({ module: module.name, payload });
+  }
+  return batches;
 }
 
 type Batch = { module: string; payload: CanonicalValue };
@@ -127,11 +168,11 @@ type Sent =
 async function sendBatches(
   deps: PassDeps,
   chart: Awaited<ReturnType<typeof readNodeMembership>>,
-  restriction: Awaited<ReturnType<typeof readHandoverRestriction>>,
+  { target, fromRestriction }: ReturnType<typeof mainBoxToAsk>,
   batches: readonly Batch[],
   inventory: string,
+  others: boolean,
 ): Promise<Sent> {
-  const { target, fromRestriction } = mainBoxToAsk(deps.nodeId, chart, restriction);
   const venue = await returnVenue(deps);
   if (!target || !venue) return { state: "waiting" };
   const keyOf = await peerKeyOf(deps, chart);
@@ -150,6 +191,7 @@ async function sendBatches(
       count: batches.length,
       index,
       nonce,
+      ...(others ? { part: "others" } : {}),
       ...batch,
     };
     const signed = JSON.stringify(await signAsThisBox(deps, "return-batch", body));
@@ -180,6 +222,7 @@ async function sendBatches(
     if (
       receipt.index !== index ||
       receipt.inventory !== inventory ||
+      receipt.part !== (others ? "others" : undefined) ||
       receipt.digest !== returnDigest(batch) ||
       receipt.sourceNodeId !== deps.nodeId ||
       receipt.destinationNodeId !== target.nodeId ||
@@ -221,6 +264,7 @@ export function startReturnRecordsDuty(
     stateDir: string;
     fetch?: typeof fetch;
     log: Logger;
+    mainHoldings?: () => HeardHoldings | null;
   },
 ): { state(): ReturnState; passNow(): Promise<ReturnState>; stop(): Promise<void> } {
   const stopping = new AbortController();

@@ -64,6 +64,14 @@ export function mountReturnRecordsApi(
             canonicalize(chart as unknown as CanonicalValue)
           )
             return refuseReturn("membership changed");
+          // Another box's records: no clash is asked or kept, and no takeover step moves.
+          if (body.part === "others") {
+            const now = deps.now?.() ?? new Date();
+            const complete = await seat.receive(tx, source, body.payload!, now, [], {
+              destinationNodeId: deps.nodeId,
+            });
+            return typeof complete === "boolean" ? { others: complete } : complete;
+          }
           const accepted = await acceptedReturnFingerprints(deps, body, tx);
           const complete = await seat.receive(
             tx,
@@ -105,6 +113,7 @@ export function mountReturnRecordsApi(
           };
         });
         if ("refusal" in result) return result;
+        if (result.others !== undefined) return result.others;
         // Venue facts commit first; an unanswered batch is resent if retaining its evidence fails.
         await retainReturnClashes(deps, node, raw, body, result.clashes);
         const state = operation?.state;
@@ -134,6 +143,7 @@ export function mountReturnRecordsApi(
           inventory: body.inventory,
           index: body.index,
           nonce: body.nonce,
+          ...(body.part === undefined ? {} : { part: body.part }),
           digest,
           accounted: outcome,
         }),

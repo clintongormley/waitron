@@ -1986,3 +1986,221 @@ it("refuses a batch the old main box signed once it is removed after Will not re
   expect(received).toEqual([]);
   expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
 });
+
+type Holdings = { holdings: Record<string, CanonicalValue>; heardAt: Date } | null;
+const twoParts = (readOthers: (held: CanonicalValue | undefined) => CanonicalValue[] | null) => [
+  {
+    ...modules[0]!,
+    handover: {
+      ...modules[0]!.handover!,
+      returnRecords: {
+        ...modules[0]!.handover!.returnRecords!,
+        readOthers: async (
+          _tx: database.Transaction,
+          _source: string,
+          _destination: string,
+          held: CanonicalValue | undefined,
+        ) => readOthers(held),
+      },
+    },
+  },
+];
+const heard = (sample: CanonicalValue): Holdings => ({
+  holdings: { sample },
+  heardAt: new Date(),
+});
+function sendBoth(
+  fetch: typeof globalThis.fetch,
+  readOthers: (held: CanonicalValue | undefined) => CanonicalValue[] | null,
+  mainHoldings: Holdings = heard("summary"),
+) {
+  return runReturnRecordsPass({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: twoParts(readOthers),
+    mainHoldings: () => mainHoldings,
+    fetch,
+    stopped: () => false,
+  });
+}
+const earlierTail = (held: CanonicalValue | undefined) =>
+  held === undefined ? null : held === "holds" ? [] : ["earlier"];
+const confirmations = () =>
+  nodeDatabase.readHandoverEvents(suite.node, source, null, "return_confirmed");
+function receiveByPart(
+  others: (batch: CanonicalValue) => Promise<boolean | { refusal: "fiscal.return_record_clash" }>,
+) {
+  const seat = modules[0]!.handover!.returnRecords!;
+  const calls: { batch: CanonicalValue; others: unknown }[] = [];
+  const spy = vi
+    .spyOn(seat, "receive")
+    .mockImplementation(async (_tx, _source, batch, _now, _accepted, part) => {
+      calls.push({ batch, others: part });
+      received.push(batch);
+      return part === undefined ? true : others(batch);
+    });
+  return { calls, restore: () => spy.mockRestore() };
+}
+
+it("sends an earlier box's tail before its own correction of it", async () => {
+  const seat = modules[0]!.handover!.returnRecords!;
+  const calls: unknown[] = [];
+  const receive = vi
+    .spyOn(seat, "receive")
+    .mockImplementation(async (_tx, _source, batch, _now, _accepted, others) => {
+      if (others === undefined && !received.includes("earlier"))
+        throw new Error("FOREIGN KEY constraint failed");
+      calls.push(others ?? null);
+      received.push(batch);
+      return true;
+    });
+  try {
+    const app = destination();
+    expect(await sendBoth(async (url, init) => app.request(String(url), init), earlierTail)).toBe(
+      "confirmed",
+    );
+    expect(received).toEqual(["earlier", "first", "second"]);
+    expect(calls).toEqual([{ destinationNodeId: receiver }, null, null]);
+  } finally {
+    receive.mockRestore();
+  }
+});
+
+it("sends its own records and answers waiting when it holds another box's records but heard no summary", async () => {
+  const app = destination();
+  expect(
+    await sendBoth(async (url, init) => app.request(String(url), init), earlierTail, null),
+  ).toBe("waiting");
+  expect(received).toEqual(["first", "second"]);
+  expect(await confirmations()).toEqual([
+    expect.objectContaining({
+      detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+    }),
+  ]);
+});
+
+it("appends return_confirmed for its own inventory even when the second part needs attention", async () => {
+  const receive = receiveByPart(async () => false);
+  try {
+    const app = destination();
+    expect(await sendBoth(async (url, init) => app.request(String(url), init), earlierTail)).toBe(
+      "needs-attention",
+    );
+    expect(received).toEqual(["earlier", "first", "second"]);
+    expect(await confirmations()).toEqual([
+      expect.objectContaining({
+        detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+      }),
+    ]);
+  } finally {
+    receive.restore();
+  }
+});
+
+it("after a restart with its own records confirmed, an unreachable main box answers waiting while another box's records are unsent, and confirmed when the summary shows the main box holds them", async () => {
+  const app = destination();
+  expect(
+    await sendBoth(
+      async (url, init) => app.request(String(url), init),
+      earlierTail,
+      heard("holds"),
+    ),
+  ).toBe("confirmed");
+  const unreachable = async () => {
+    throw Object.assign(new Error("unreachable"), { code: "ECONNREFUSED" });
+  };
+  expect(await sendBoth(unreachable, earlierTail, heard("lacks"))).toBe("waiting");
+  expect(await sendBoth(unreachable, earlierTail, null)).toBe("waiting");
+  expect(await sendBoth(unreachable, earlierTail, heard("holds"))).toBe("confirmed");
+});
+
+it("a second-part payment difference stores no clash, answers accounted, and the pass confirms", async () => {
+  const seat = modules[0]!.handover!.returnRecords!;
+  const inspect = vi.spyOn(seat, "inspect");
+  const receive = receiveByPart(async () => true);
+  try {
+    const app = destination();
+    const receipts: unknown[] = [];
+    expect(
+      await sendBoth(async (url, init) => {
+        const response = await app.request(String(url), init);
+        receipts.push(((await response.clone().json()) as { body: unknown }).body);
+        return response;
+      }, earlierTail),
+    ).toBe("confirmed");
+    expect(receipts[0]).toMatchObject({ part: "others", accounted: true });
+    expect(receipts.slice(1)).toEqual([
+      expect.not.objectContaining({ part: expect.anything() }),
+      expect.not.objectContaining({ part: expect.anything() }),
+    ]);
+    expect(inspect).not.toHaveBeenCalled();
+    expect(
+      suite.node.all(sql`select * from node_handover_events where kind = 'return-clash-evidence'`),
+    ).toEqual([]);
+  } finally {
+    receive.restore();
+    inspect.mockRestore();
+  }
+});
+
+it("a second-part record clash counts as done and the pass confirms", async () => {
+  const receive = receiveByPart(async () => ({ refusal: "fiscal.return_record_clash" }));
+  try {
+    const app = destination();
+    expect(await sendBoth(async (url, init) => app.request(String(url), init), earlierTail)).toBe(
+      "confirmed",
+    );
+    expect(receive.calls.map((call) => call.others)).toEqual([
+      { destinationNodeId: receiver },
+      undefined,
+      undefined,
+    ]);
+  } finally {
+    receive.restore();
+  }
+});
+
+it("a second-part batch is not recorded as a return batch and moves no handover step", async () => {
+  await completionBinding();
+  const app = destination();
+  const states: unknown[] = [];
+  expect(
+    await sendBoth(async (url, init) => {
+      const response = await app.request(String(url), init);
+      states.push(await takeoverState());
+      return response;
+    }, earlierTail),
+  ).toBe("confirmed");
+  expect(received).toEqual(["earlier", "first", "second"]);
+  expect(states).toEqual(["activated", "return_pending", "return_complete"]);
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("receiver-emergency"),
+  );
+});
+
+it("refuses a batch whose part is neither absent nor others", async () => {
+  const app = destination();
+  const answers: unknown[] = [];
+  expect(
+    await send(async (url, init) => {
+      const raw = JSON.parse(String(init?.body)) as { body: Record<string, CanonicalValue> };
+      const response = await app.request(String(url), {
+        ...init,
+        body: JSON.stringify(
+          await signAsThisBox({ node: suite.node, ring, nodeId: source }, "return-batch", {
+            ...raw.body,
+            part: "own",
+          }),
+        ),
+      });
+      answers.push(await response.clone().json());
+      return response;
+    }),
+  ).toBe("needs-attention");
+  expect(answers).toEqual([
+    { error: { code: "handover.return_refused", params: { reason: "batch" } } },
+  ]);
+  expect(received).toEqual([]);
+});

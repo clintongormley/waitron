@@ -4,6 +4,7 @@ import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 import { startResetOrderDuty } from "./reset-order-duty.js";
 import { readReplacedResetPhase } from "./replaced-reset.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
@@ -2028,6 +2029,7 @@ async function bootServer(
   await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
   // Restricted starts run only the return sender and the reset-order duty, which read this venue's data.
   const restrictedStart = () => {
+    let heardHoldings: () => HeardHoldings | null = () => null;
     const returnRecords = startReturnRecordsDuty({
       db,
       node: store.node,
@@ -2037,6 +2039,7 @@ async function bootServer(
       stateDir: config.stateDir,
       lookup: seams.boxLookup,
       log,
+      mainHoldings: () => heardHoldings(),
     });
     undoOnFailure.push(() => returnRecords.stop());
     const resetOrder = startResetOrderDuty({
@@ -2053,6 +2056,7 @@ async function bootServer(
       restart: signalRestart,
     });
     undoOnFailure.push(() => resetOrder.stop());
+    heardHoldings = () => resetOrder.mainHoldings();
     health.takesNoSales = true;
     const restrictedPage: RestrictedPageDeps = {
       venue: db,
