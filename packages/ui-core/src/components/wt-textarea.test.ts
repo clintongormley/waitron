@@ -469,7 +469,7 @@ test("typed text has a scalable minimum and respects larger inherited text", asy
 
 test("shows the inherited note in the native placeholder with its arrow and description", async () => {
   const el = (await mount(
-    '<wt-textarea label="Note" placeholder="Example" error="Check the note"></wt-textarea>',
+    '<wt-textarea label="Note" error="Check the note"></wt-textarea>',
   )) as HTMLElementTagNameMap["wt-textarea"];
   el.inherited = { value: "Kitchen note", suffix: "inherited" };
   await el.updateComplete;
@@ -481,6 +481,8 @@ test("shows the inherited note in the native placeholder with its arrow and desc
       .split(" ")
       .map((id) => el.shadowRoot!.getElementById(id)!.textContent!.trim());
   expect(field.dataset.label).toBe("float");
+  el.placeholder = "Example";
+  await el.updateComplete;
   expect(textarea.placeholder).toBe("Kitchen note");
   expect(arrow()?.checkVisibility()).toBe(true);
   expect(description()).toEqual(["Kitchen note inherited", "Check the note"]);
@@ -497,4 +499,25 @@ test("shows the inherited note in the native placeholder with its arrow and desc
   expect(textarea.placeholder).toBe("Kitchen note");
   expect(arrow()?.checkVisibility() ?? false).toBe(false);
   expect(description()).toEqual(["Kitchen note", "Check the note"]);
+
+  el.inherited = { value: "" };
+  await el.updateComplete;
+  expect(textarea.placeholder).toBe("Example");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Check the note"]);
+});
+
+test("the inherited arrow sits beside the first line with a hidden label", async () => {
+  const el = (await mount(
+    '<wt-textarea label="Note" hide-label rows="5"></wt-textarea>',
+  )) as HTMLElementTagNameMap["wt-textarea"];
+  el.inherited = { value: "Kitchen note" };
+  await el.updateComplete;
+  const { textarea } = parts(el);
+  const arrow = el.shadowRoot!.querySelector('wt-icon[name="inherit"]')!;
+  const box = arrow.getBoundingClientRect();
+  const style = getComputedStyle(textarea);
+  const firstLineTop = textarea.getBoundingClientRect().top + parseFloat(style.paddingTop);
+  expect(box.height).toBeGreaterThan(0);
+  expect(box.top + box.height / 2).toBeLessThan(firstLineTop + parseFloat(style.fontSize));
 });

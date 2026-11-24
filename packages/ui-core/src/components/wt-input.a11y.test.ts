@@ -38,6 +38,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     const arrow = getComputedStyle(root.querySelector('wt-icon[name="inherit"]')!).color;
     const fill = getComputedStyle(root.querySelector(".field")!).backgroundColor;
     expect(contrastRatio(text, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(arrow).toBe(text);
     expect(contrastRatio(arrow, fill)).toBeGreaterThanOrEqual(3);
     await expectNoA11yViolations(host);
   });

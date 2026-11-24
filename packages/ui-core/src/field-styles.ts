@@ -116,7 +116,7 @@ export const fieldStyles = css`
     flex: none;
     color: inherit;
   }
-  .field[data-compact] .inherit-cue {
+  .field:where([data-compact]) .inherit-cue {
     inset-block: var(--wt-space-2);
   }
   .field-control:placeholder-shown + .inherit-cue {

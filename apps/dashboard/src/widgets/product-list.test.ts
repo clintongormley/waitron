@@ -6415,7 +6415,6 @@ describe("A668 effective allergen cells", () => {
       const name = cellUnder(root, "dish", "Name").querySelector<HTMLElement>(
         '[part~="product-cell"]',
       )!;
-      expect(getComputedStyle(name).fontStyle).toBe("normal");
       expect(getComputedStyle(name).display).toBe("block");
       const badge = (key: string) =>
         cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
@@ -6426,6 +6425,7 @@ describe("A668 effective allergen cells", () => {
         allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
       );
       el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+      expect(getComputedStyle(name).color).not.toBe("rgb(7, 8, 9)");
       expect(getComputedStyle(badge("dish:small")!).color).toBe("rgb(7, 8, 9)");
       expect(badge("dish:own")!.textContent!.trim()).toBe("None");
       expect(getComputedStyle(badge("dish:own")!).color).not.toBe("rgb(7, 8, 9)");

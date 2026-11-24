@@ -1114,12 +1114,15 @@ test("a plain field leaves autocorrect, capitals and spellcheck to the browser",
 });
 
 test("an inherited value floats the label and comes back when the same explicit value is cleared", async () => {
-  const el = (await mount(
-    '<wt-input label="Name" placeholder="Example" hint="Staff name"></wt-input>',
-  )) as WtInput;
+  const el = (await mount('<wt-input label="Name"></wt-input>')) as WtInput;
+  const { field, input } = parts(el);
+  expect(field.dataset.label).toBe("rest");
   el.inherited = { value: "Kitchen", suffix: "inherited" };
   await el.updateComplete;
-  const { field, input } = parts(el);
+  expect(field.dataset.label).toBe("float");
+  el.placeholder = "Example";
+  el.hint = "Staff name";
+  await el.updateComplete;
   const description = () =>
     input
       .getAttribute("aria-describedby")!
@@ -1128,7 +1131,6 @@ test("an inherited value floats the label and comes back when the same explicit 
   const arrow = () => el.shadowRoot!.querySelector('wt-icon[name="inherit"]');
   expect(input.value).toBe("");
   expect(input.placeholder).toBe("Kitchen");
-  expect(field.dataset.label).toBe("float");
   expect(arrow()?.checkVisibility()).toBe(true);
   expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
   expect(description()).toEqual(["Staff name", "Kitchen inherited"]);
@@ -1149,6 +1151,12 @@ test("an inherited value floats the label and comes back when the same explicit 
   expect(input.placeholder).toBe("Kitchen");
   expect(arrow()?.checkVisibility() ?? false).toBe(false);
   expect(description()).toEqual(["Staff name", "Kitchen inherited"]);
+
+  el.inherited = { value: "", suffix: "inherited" };
+  await el.updateComplete;
+  expect(input.placeholder).toBe("Example");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Staff name"]);
 });
 
 test("an inheritance arrow leaves a partially typed native number clear", async () => {

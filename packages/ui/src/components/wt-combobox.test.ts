@@ -4365,6 +4365,8 @@ test.each(["field", "link"] as const)(
     expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
     expect(arrow()?.checkVisibility()).toBe(true);
     expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(arrow()!).color).toBe(mutedTokenColour());
+    expect(getComputedStyle(trigger.querySelector(".value")!).color).toBe(mutedTokenColour());
     expect(description()).toEqual(["heredado"]);
 
     el.inTable = true;
@@ -4372,6 +4374,13 @@ test.each(["field", "link"] as const)(
     expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
     expect(arrow()?.checkVisibility() ?? false).toBe(false);
     expect(description()).toEqual(["heredado"]);
+    await userEvent.click(trigger);
+    const inheritRow = optionRows(el)[0]!;
+    const rowArrow = inheritRow.querySelector('wt-icon[name="inherit"]')!;
+    expect(rowArrow.checkVisibility()).toBe(true);
+    expect(getComputedStyle(rowArrow).color).toBe(mutedTokenColour());
+    expect(getComputedStyle(inheritRow).color).toBe(mutedTokenColour());
+    await userEvent.keyboard("{Escape}");
     el.inTable = false;
     el.value = "none";
     await el.updateComplete;
@@ -4427,3 +4436,22 @@ test("keeps the add action active after an unmatched search with an inherit row"
   expect(add).toHaveBeenCalledOnce();
   expect(add.mock.calls[0]![0].detail).toEqual({ text: "z" });
 });
+
+test.each([false, true])(
+  "a search refresh chooses the next match if present (%s)",
+  async (hasMatch) => {
+    const { el, trigger, popup } = await mountCombobox();
+    el.options = [inheritNone, { value: "mains", label: "Mains" }];
+    await el.updateComplete;
+    trigger.focus();
+    await userEvent.keyboard("mai");
+    el.options = [
+      inheritNone,
+      hasMatch ? { value: "main-courses", label: "Main courses" } : explicitNone,
+    ];
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    expect(el.value).toBe(hasMatch ? "main-courses" : "");
+    expect(popup.matches(":popover-open")).toBe(!hasMatch);
+  },
+);

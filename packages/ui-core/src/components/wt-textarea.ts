@@ -93,7 +93,7 @@ export class WtTextarea extends LitElement {
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
-    const inherited = this.inherited;
+    const inherited = this.inherited?.value ? this.inherited : undefined;
     const inherits = inherited !== undefined && this.value === "";
     const describedBy = [
       ...(hasHint ? [this.hintId] : []),

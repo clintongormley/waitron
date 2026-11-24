@@ -923,15 +923,18 @@ export class WtCombobox extends LitElement {
     const previousOrder = this.order?.rows;
     const nextOrder = this.orderedOptions;
     if (previousOrder !== undefined && previousOrder !== nextOrder && this.activeIndex >= 0) {
-      // The active row follows its option by value, and the add row stays active while it is shown;
-      // failing that, the chosen row, else the first.
+      // Keep the active option or add action across a refresh. During a search the inherit row
+      // stays available, but becomes active only when someone navigates to it.
       const previous = this.filter(previousOrder)[this.activeIndex];
+      const options = this.filteredOptions;
       const kept = previous
-        ? this.filteredOptions.findIndex((option) => option.value === previous.value)
+        ? options.findIndex((option) => option.value === previous.value)
         : this.showAddRow
-          ? this.filteredOptions.length
+          ? options.length
           : -1;
-      this.activeIndex = kept >= 0 ? kept : this.chosenIndex;
+      const searchingWithInheritance = this.trimmedSearch && this.isInheritedOption(options[0]);
+      this.activeIndex =
+        kept >= 0 ? kept : searchingWithInheritance ? this.firstRowIndex : this.chosenIndex;
     }
   }
 

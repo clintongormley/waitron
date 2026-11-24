@@ -1477,6 +1477,9 @@ test.each([
     expect(input.value).toBe("");
     expect(arrow?.checkVisibility()).toBe(true);
     const cue = arrow!.getBoundingClientRect();
+    const widthCopy = root.querySelector(".inherit-width");
+    if (fixed) expect(getComputedStyle(widthCopy!).visibility).toBe("hidden");
+    else expect(widthCopy).toBeNull();
     const amount = typedTextBox(input, shown);
     const sign = currency!.getBoundingClientRect();
     expect(cue.right).toBeLessThanOrEqual(amount.left);
@@ -1497,6 +1500,11 @@ test.each([
     el.inherited = { value: "12.50", inTable: true };
     await el.updateComplete;
     expect(input.placeholder).toBe(shown);
+    expect(root.querySelector('wt-icon[name="inherit"]')?.checkVisibility() ?? false).toBe(false);
+
+    el.inherited = { value: "" };
+    await el.updateComplete;
+    expect(input.placeholder).toBe("Example");
     expect(root.querySelector('wt-icon[name="inherit"]')?.checkVisibility() ?? false).toBe(false);
   },
 );

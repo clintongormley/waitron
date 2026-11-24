@@ -344,7 +344,7 @@ export class WtPriceInput extends WtInput {
       autocomplete: "off",
       placeholder:
         formatDecimalInput(
-          this.inherited?.value ?? (this.placeholder || this.hint),
+          this.inherited?.value || this.placeholder || this.hint,
           this.inputLocale,
         ) || nothing,
       extraDescriptionIds: [
