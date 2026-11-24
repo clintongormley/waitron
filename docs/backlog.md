@@ -1560,6 +1560,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a974-review-assertion-gaps).
 
 - **A976. Finish the server's English test-venue defaults.**
+  The detail also lists private staff, dish and record names still to check.
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
   Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.
   Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;

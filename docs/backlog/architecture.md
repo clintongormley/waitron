@@ -465,11 +465,10 @@ also qualifies the historical operation-description references in this section.
   other shared-helper samples and their consumers' dish selectors also remain. Keep those selectors
   with their fixture text. Triage menu, seasonal venue and zone, printer, counter, station,
   kitchen-ticket grouping, payment and queue widget, variant media, and device and printer deletion
-  samples, plus the table-action suite's beer and cake names. Triage private staff and dish names
+  samples, plus the beer and cake names in `bill-editing.table-actions.test.ts`. Triage private staff and dish names
   in `old-box-data-since.test.ts`, `split-after-print.test.ts`,
   `clock-unconfirmed-gate.test.ts` and `set-menu-edits.test.ts`. Keep the accented search cases.
-  Triage private record bindings and projections in the recipient builder, boot, restart reset and
-  venue-apply tests. Triage
+  Triage private record bindings and projections in the recipient builder, boot and restart reset tests. Triage
   `receipt-document.test.ts` fixture descriptions and test titles while preserving
   Spanish receipt output and deliberate locale checks. Fiscal-sale descriptions also retain
   Spanish words. Bookings’ native suites use English
@@ -912,9 +911,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Decisions and deliberate limits
 
-**English names in general fiscal tests.** The fiscal table rename kept private test names,
-including `registros` and `envios`, separate from the schema and wire names. Private bindings and
-snapshot aliases use English under the general-code rule. Keep schema and wire names as declared.
+**English names in general fiscal tests (2026-11-24, A974).** The A1308 fi1 rename map (#4087) keeps
+this wording about private test names, including `registros` and `envios`, when its document check
+reads this file. Private bindings and aliases use English. Keep schema and wire names as declared.
 
 **Adjustment splits stay on the adjustment record (A1308 pa5).** A partial pizza comp with a free
 extra split off a row without creating a matching `adjustment_lines` row. Receipts still need that

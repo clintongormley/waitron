@@ -41,12 +41,12 @@ describe("the shared fixtures seed a real migrated venue", () => {
     const { rows } = await db.execute<{
       huella: string;
       entorno: string;
-      fecha: string;
-      creado: string;
+      generatedAt: string;
+      createdAt: string;
       submissionState: string;
     }>(sql`
       select r.huella, r.entorno,
-             r.fecha_hora_huso_gen_registro as fecha, r.creado_en as creado,
+             r.fecha_hora_huso_gen_registro as generatedAt, r.creado_en as createdAt,
              e.estado as submissionState
       from verifactu_records r
       join verifactu_submissions e on e.registro_id = r.id
@@ -57,7 +57,7 @@ describe("the shared fixtures seed a real migrated venue", () => {
       entorno: "production",
       submissionState: "pendiente",
       // The fixture's `+01:00` literal reaches the column as the UTC instant it names.
-      fecha: "2026-07-20T18:20:30.000Z",
+      generatedAt: "2026-07-20T18:20:30.000Z",
     });
     expect(await withTransaction(db, (tx) => readChainHead(tx, nodeId(seeded.nodeId)))).toEqual({
       secuencia: seeded.secuencia,
@@ -65,7 +65,7 @@ describe("the shared fixtures seed a real migrated venue", () => {
       ultimaHuella: seeded.huella,
     });
     // `creado_en` comes from the column's own generator, which only the insert BUILDER runs.
-    expect(Number.isNaN(Date.parse(rows[0]!.creado))).toBe(false);
+    expect(Number.isNaN(Date.parse(rows[0]!.createdAt))).toBe(false);
   });
 
   it("plants a second record on the same chain", async () => {

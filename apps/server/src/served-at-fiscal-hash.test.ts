@@ -154,16 +154,16 @@ interface Shop {
 }
 
 /**
- * Provision a shop in ITS OWN database, register its node's SIF under the SHARED emisor NIF,
+ * Provision a shop in ITS OWN database, register its node's SIF under the SHARED issuer NIF,
  * seed an IDENTICAL two-product menu, and create one dining table.
  *
  * The huella hashes the AEAT identity fields that `verifactu_records_identidad_uq` makes unique, so the two
- * records a test compares must share them — which only separate databases allow. The shared emisor
+ * records a test compares must share them — which only separate databases allow. The shared issuer
  * NIF keeps `IDEmisorFactura` identical; restoring (`registerSif` revokes the old identity,
  * mints a fresh installation number and resets the chain) makes each shop file a first record under
  * it. The NumeroInstalacion is not hashed, so it cannot move the huella.
  */
-async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
+async function seedShop(db: Database, issuerNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
     db,
     modules: ALL_MODULES,
@@ -173,7 +173,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   await withTransaction(db, (tx) =>
     registerSif(tx, {
       nodeId: cfg.nodeId,
-      nif: emisorNif,
+      nif: issuerNif,
       idSistemaInformatico: "W1",
     }),
   );
@@ -290,10 +290,10 @@ async function servedAtByLine(shop: Shop, tabId: string): Promise<(string | null
 
 describe("served_at is not part of the huella", () => {
   it("files an IDENTICAL huella whether every line was served or none — served_at never enters the fiscal record", async () => {
-    // Same emisor NIF, basket, chain position and frozen clock: `served_at` is the ONLY difference.
-    const emisorNif = nextNif();
-    const shopServed = await seedShop(suite.db, emisorNif);
-    const shopUnserved = await seedShop(suiteB.db, emisorNif);
+    // Same issuer NIF, basket, chain position and frozen clock: `served_at` is the ONLY difference.
+    const issuerNif = nextNif();
+    const shopServed = await seedShop(suite.db, issuerNif);
+    const shopUnserved = await seedShop(suiteB.db, issuerNif);
 
     const served = await openServeAndPay(shopServed, true, { fire: true }); // every line served
     const unserved = await openServeAndPay(shopUnserved, false, { fire: true }); // no line served
@@ -413,11 +413,11 @@ async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
 // huella.
 describe("KDS state (ticket items + collected_at) is not part of the huella", () => {
   it("files an IDENTICAL huella whether the order ran the full kitchen lifecycle or was filed plain — no KDS field enters the fiscal record", async () => {
-    // Same emisor NIF, basket, chain position and frozen clock: the order's KDS state is the ONLY
+    // Same issuer NIF, basket, chain position and frozen clock: the order's KDS state is the ONLY
     // difference.
-    const emisorNif = nextNif();
-    const shopKitchen = await seedShop(suite.db, emisorNif);
-    const shopPlain = await seedShop(suiteB.db, emisorNif);
+    const issuerNif = nextNif();
+    const shopKitchen = await seedShop(suite.db, issuerNif);
+    const shopPlain = await seedShop(suiteB.db, issuerNif);
 
     const kitchen = await openKitchenLifecycleAndPay(shopKitchen); // fired → ready → collected
     const plain = await openServeAndPay(shopPlain, false); // never fired; not collected
@@ -561,11 +561,11 @@ async function overlayOf(shop: Shop, productId: string): Promise<OverlayAllergen
 // IDENTICAL huella.
 describe("an extra's allergen declaration is not part of the huella", () => {
   it("files an IDENTICAL huella whether the picked extra declares an allergen or none — the declaration never enters the fiscal record", async () => {
-    // Same emisor NIF, basket, picked extra (name/price/vat), chain position and frozen clock: the
+    // Same issuer NIF, basket, picked extra (name/price/vat), chain position and frozen clock: the
     // extra's allergen DECLARATION is the ONLY difference.
-    const emisorNif = nextNif();
-    const shopOverlay = await seedShop(suite.db, emisorNif);
-    const shopPlain = await seedShop(suiteB.db, emisorNif);
+    const issuerNif = nextNif();
+    const shopOverlay = await seedShop(suite.db, issuerNif);
+    const shopPlain = await seedShop(suiteB.db, issuerNif);
 
     // Only the menu allergen declaration differs; the child sale lines are identical.
     const overlayExtra = await attachExtra(shopOverlay, {
