@@ -8,6 +8,8 @@ their full text.
 If an order response arrives while the till is waiting for its device identity, the till can lose
 the Make now instruction when it reloads that device's saved list. Keep the instruction when the
 same device comes back, and keep each device's list separate when the device changes.
+If you press Done during that wait, the saved list can bring back the instruction you dismissed.
+Keep it dismissed.
 
 ## The table screen's redundant exit configuration was not audited
 
