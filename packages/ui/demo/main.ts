@@ -45,6 +45,7 @@ import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
 import "../src/components/wt-master-key-box.js";
+import "../src/components/wt-master-key-input.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 import "../src/components/wt-theme-chooser.js";
@@ -121,6 +122,19 @@ const panel = (theme: "light" | "dark") => `
         printFailed: "Your browser blocked printing. Use Download instead.",
       }}
     ></wt-master-key-box>
+    <wt-master-key-input
+      required
+      .keyName=${"2026-11-23 · QZJV"}
+      .copy=${{
+        label: "Master key",
+        button: "Choose the recovery pack PDF",
+        notPack: "This PDF is not a recovery pack.",
+        damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+        notWhole: "Not a whole master key. Check it against the recovery pack.",
+        wrongKey: (name: string) => `Wrong master key. Use the one dated ${name}.`,
+        elsewhere: () => "This recovery pack does not hold the master key.",
+      }}
+    ></wt-master-key-input>
     <p>
       Updated
       <wt-relative-time

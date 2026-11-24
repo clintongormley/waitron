@@ -209,6 +209,13 @@ export {
   type MasterKeyBoxCopy,
   type MasterKeyUsedDetail,
 } from "./components/wt-master-key-box.js";
+export {
+  WtMasterKeyInput,
+  type MasterKeyChangeDetail,
+  type MasterKeyInputCopy,
+  type RecoveryPackReaderLoader,
+  type RecoveryPackReading,
+} from "./components/wt-master-key-input.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 export { WtThemeChooser, type WtThemeLabels } from "./components/wt-theme-chooser.js";
 export {
