@@ -6463,8 +6463,8 @@ unverifiable under the other environment.
 
 **Restore and promotion start a new chain under a new installation name.** A working box keeps its
 identity and chain except through a [producer change by upgrade](#a-change-of-producer-opens-a-new-installation)
-or the [conflict switch](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict);
-there is no operator chain-reset path. A setup, restore or promotion names
+or the [conflict switch](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict).
+A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after the box's
 internet time service says it is synchronised, or a clock on another machine agrees within 30
 seconds and the person on that page confirms both times or sets the box's clock from that machine;

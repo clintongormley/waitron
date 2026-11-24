@@ -80,8 +80,8 @@ async function record(directory, marker) {
   return marker;
 }
 
-// packages/store/src/state-layout.ts's IDENTITY_CHANGE_FILE, the name the server reads;
-// candidate.test.mjs reads it from there.
+// packages/store/src/state-layout.ts's IDENTITY_CHANGE_FILE; apps/server/src/identity-change-note.ts
+// reads this name and the note's shape.
 export const IDENTITY_CHANGE_FILE = "identity-change.json";
 
 /** The note saved with an attempt that changes the producer; `null` for any other attempt. */
