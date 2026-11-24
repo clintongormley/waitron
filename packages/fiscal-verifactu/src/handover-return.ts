@@ -55,10 +55,13 @@ function departmentIds(sales: ReturnRow[]) {
 /** The records one box wrote, or the named ranges of other boxes' chains. */
 function selectedRecords(select: string | readonly ChainRange[]) {
   if (typeof select === "string") return { where: sql`node_id = ${select}`, order: sql`secuencia` };
-  const where = sql`exists (select 1 from json_each(${JSON.stringify(select)}) chosen
-    where node_id = json_extract(chosen.value, '$.nodeId')
-      and sif_id = json_extract(chosen.value, '$.sifId')
-      and secuencia > json_extract(chosen.value, '$.after'))`;
+  // `cross join` keeps the ranges as the outer loop, so each is a search of
+  // (node_id, secuencia) rather than a scan of every record.
+  const where = sql`id in (select picked.id from json_each(${JSON.stringify(select)}) chosen
+    cross join verifactu_records picked
+      on picked.node_id = json_extract(chosen.value, '$.nodeId')
+      and picked.sif_id = json_extract(chosen.value, '$.sifId')
+      and picked.secuencia > json_extract(chosen.value, '$.after'))`;
   return { where, order: sql`node_id, secuencia` };
 }
 
