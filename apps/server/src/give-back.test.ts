@@ -1162,6 +1162,76 @@ describe("planGiveBack: more than one payment (D10)", () => {
   });
 });
 
+describe("readGiveBack and planGiveBack: payments this device's profile does not take", () => {
+  it("on a till taking no cards, a receipt paid on a separate terminal offers nothing, with the code the preview answers", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ card: "25.00" }], "1.00");
+    await cancel(b, "Paella", "1", true);
+    const card = await tenderOf(saleId, "card");
+    const device = {
+      ...till,
+      capabilities: till.capabilities.filter((c) => !c.endsWith("card-payment")),
+    };
+    const view = await read(saleId, { device });
+    const reason = {
+      code: "device.forbidden_action",
+      params: { action: "hand-keyed-card-payment" },
+    };
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason },
+      goodwill: { available: false, reason },
+      extra: { available: false, reason },
+    });
+    expect(lineOf(view, "Paella")).toMatchObject({ available: false, reason });
+    expect(lineOf(view, "Cheesecake")).toMatchObject({ available: false, reason });
+    const paella = [lineOf(view, "Paella").id];
+    for (const request of [
+      ask("goodwill", "5.00", { way: card }),
+      ask("dishes", "18.50", { lineIds: paella, way: card }),
+      ask("extra", "1.00", { way: card }),
+    ])
+      expect(await preview(saleId, request, { device })).toEqual(
+        refused(reason.code, reason.params),
+      );
+  });
+
+  it("on a till taking no cash, a cash receipt answers device.cash_not_allowed in the read and the preview", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "25.00" }], "1.00");
+    const device = {
+      ...till,
+      capabilities: till.capabilities.filter((c) => c !== "take-cash"),
+    };
+    const view = await read(saleId, { device });
+    const reason = { code: "device.cash_not_allowed", params: {} };
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason },
+      goodwill: { available: false, reason },
+      extra: { available: false, reason },
+    });
+    expect(view.ways).toMatchObject([{ way: "cash", allowedHere: false, reason: null }]);
+    for (const request of [ask("goodwill", "5.00"), ask("extra", "1.00")])
+      expect(await preview(saleId, request, { device })).toEqual(
+        refused(reason.code, reason.params),
+      );
+  });
+
+  it("still offers what another payment holds, and refuses only the way this device cannot use", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "15.00" }, { card: "10.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const device = {
+      ...till,
+      capabilities: till.capabilities.filter((c) => !c.endsWith("card-payment")),
+    };
+    const view = await read(saleId, { device });
+    expect(view.choices.goodwill).toEqual({ available: true, reason: null });
+    expect(await preview(saleId, ask("goodwill", "5.00", { way: card }), { device })).toEqual(
+      refused("device.forbidden_action", { action: "hand-keyed-card-payment" }),
+    );
+  });
+});
+
 describe("planGiveBack: the rights it needs (D9)", () => {
   it("names the rights this person lacks; a cancel's approval covers its money only from the filled window", async () => {
     const b = await tab(FIVE);

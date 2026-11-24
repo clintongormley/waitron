@@ -334,13 +334,14 @@ export function tenderKind(tender: RefundableTender) {
   return tender.method === "cash" ? "cash" : tender.manual ? "hand-keyed-card" : "reader-card";
 }
 
-function takesHere(device: DeviceBinding | null, tender: RefundableTender): boolean {
+/** The refusal the preview answers for giving back `tender` on `device`, or null where it takes it. */
+function refusedHere(device: DeviceBinding | null, tender: RefundableTender): WaitReason | null {
   try {
     assertTakesTender(device, tenderKind(tender));
-    return true;
+    return null;
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
-    return false;
+    return reasonOf(error);
   }
 }
 
@@ -386,11 +387,13 @@ async function readersThatCannotRefund(
   return refused;
 }
 
+/** Each way, and the reason it cannot be used on this device: its own `reason`, else the device's
+ * refusal, as the preview checks them in that order. */
 function waysOf(
   refundable: readonly RefundableTender[],
   device: DeviceBinding | null,
   cannotRefund: ReadonlySet<string>,
-): GiveBackWay[] {
+): { way: GiveBackWay; here: WaitReason | null }[] {
   const cash = refundable.filter((tender) => tender.method === "cash");
   const groups = [
     ...(cash.length === 0 ? [] : [{ way: "cash", group: cash }]),
@@ -401,21 +404,24 @@ function waysOf(
   return groups.map(({ way, group }) => {
     const pending = group.find((tender) => tender.pendingRefundId !== null);
     const first = group[0]!;
-    return {
+    const refused = refusedHere(device, first);
+    const reason =
+      pending !== undefined
+        ? { code: "tender.refund_in_progress", params: { tenderId: pending.tenderId } }
+        : cannotRefund.has(first.tenderId)
+          ? { code: "tender.refund_unavailable", params: { tenderId: first.tenderId } }
+          : null;
+    const view = {
       way,
       last4: first.last4,
       manual: first.manual,
       moneyLeft: sumDecimals(group.map((tender) => decimal(tender.appliedRemaining))),
       extraLeft: sumDecimals(group.map((tender) => decimal(tender.tipRemaining))),
       pending: pending !== undefined,
-      allowedHere: takesHere(device, first),
-      reason:
-        pending !== undefined
-          ? { code: "tender.refund_in_progress", params: { tenderId: pending.tenderId } }
-          : cannotRefund.has(first.tenderId)
-            ? { code: "tender.refund_unavailable", params: { tenderId: first.tenderId } }
-            : null,
+      allowedHere: refused === null,
+      reason,
     };
+    return { way: view, here: reason ?? refused };
   });
 }
 
@@ -450,12 +456,15 @@ export async function readFacts(
     correctable: correctable.amounts.correctable,
     tenderId: correctable.tenders.find((row) => positive(decimal(row.appliedRemaining)))?.tenderId,
   });
-  const ways = waysOf(
+  const waysHere = waysOf(
     correctable.tenders,
     device,
     await readersThatCannotRefund(tx, deps, saleId, correctable.tenders),
   );
-  const money = moneyAvailability(ways);
+  const ways = waysHere.map(({ way }) => way);
+  // What this device can give back: a way it cannot use counts as held, with the preview's code.
+  const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
+  const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
   const { cancelled, cancelIds, free } = await cancelsAndFreeByLine(tx, saleId, toLine);
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
@@ -484,7 +493,7 @@ export async function readFacts(
         openCorrectionId === undefined
           ? null
           : await readInvoiceCorrection(tx, deps.backend, cfg, openCorrectionId),
-      choices: choiceAvailability(lines, ways, waits),
+      choices: choiceAvailability(lines, usableHere, waits),
     },
     waits,
     tenders: correctable.tenders,
