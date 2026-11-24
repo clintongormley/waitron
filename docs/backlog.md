@@ -1475,11 +1475,15 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Fiscal history retains verified clock steps and replaces the three old clock-stop tables.
   Fiscal history also retains conflicts found in AEAT replies and lookups.
   Orders and Sales can run the receipt helper, receipt line, VAT table, invoice selection,
-  Find a bill search and date, and bill allocation suites independently. When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`, `invoice-document.set-menus`,
-  `receipt-ticket`, `receipt-facts`, `invoice-layout`, `receipt-adjustments`,
+  Find a bill search and date, bill allocation, and receipt figures suites independently.
+  When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,
+  `invoice-document.set-menus`, `receipt-ticket`, `receipt-facts`, `invoice-layout`, `receipt-adjustments`,
   `list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-groups`,
   `working-order`, `issuance-pass` and `free-item-share` suites. When changing the VAT table,
-  also run `receipt-ticket`. Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
+  also run `receipt-ticket`. When changing receipt figures, also run the server's `receipt-facts`,
+  `receipt-adjustments`, `invoice-document`, `invoice-layout`, `receipt-document`,
+  `invoice-document.set-menus`, `receipt-document.set-menus`, `receipt-ticket`, `invoice-language`
+  and `free-item-share` suites. Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
   The Find a bill routes and readers remain in the server. When changing the parser, also run
   the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
   and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
@@ -1498,6 +1502,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Find a bill query](superpowers/plans/2026-11-24-a1308-find-bill-query.md)
   [Receipt lines and VAT table](superpowers/plans/2026-11-24-a1308-receipt-lines.md)
   [Bill allocation](superpowers/plans/2026-11-24-a1308-bill-allocation.md)
+  [Receipt figures](superpowers/plans/2026-11-24-a1308-receipt-figures.md)
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 

@@ -922,7 +922,6 @@
   "src/receipt-adjustments.test.ts": 5.3,
   "src/receipt-device-evidence.test.ts": 2.4,
   "src/receipt-document.test.ts": 1.8,
-  "src/receipt-figures.test.ts": 0.8,
   "src/receipt-guests.routes.test.ts": 21.5,
   "src/receipt-guests.test.ts": 3.3,
   "src/receipt-issuer.test.ts": 4.2,

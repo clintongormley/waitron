@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   beforeVatFigures,
   invoiceDiscounts,
+  isFiled,
   quantityText,
   type FiguredGroup,
   type FiguredLine,
   type FiledLine,
   type InvoiceDiscounts,
 } from "./receipt-figures.js";
-import type { ReceiptAdjustment, TillSaleLine } from "./till-sale.js";
+import type { ReceiptAdjustment, TillSaleLine } from "./receipt-lines.js";
 
 type Net = NonNullable<TillSaleLine["net"]>;
 const filed = (over: Partial<TillSaleLine> & { net: Net }): FiledLine => ({
@@ -27,6 +28,11 @@ const net = (unitPrice: string, base: string, rate: string, priceQuantity = "1.0
 const figured = (...lines: FiledLine[]): FiguredLine[] =>
   lines.map((line) => ({ line, figures: beforeVatFigures(line) }));
 const TEN: ReceiptAdjustment = { kind: "discount", percentBp: 1000, amount: "1.00" };
+
+it("distinguishes a filed line from one without filed figures", () => {
+  expect(isFiled(filed({ net: net("4.00", "4.00", "10.00") }))).toBe(true);
+  expect(isFiled({ descriptions: {}, quantity: "1", gross: "4.40" })).toBe(false);
+});
 
 describe("beforeVatFigures", () => {
   it("works the owner's menu: 10,00 at 10% VAT less 10% is 9,09 less 0,91", () => {
