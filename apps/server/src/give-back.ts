@@ -70,9 +70,9 @@ async function reasonTextOf(tx: Transaction, ask: GiveBackWrite): Promise<string
 /**
  * The reason text the press's rows were stored under, once `ask`'s reason and note are found to
  * have written it; otherwise refuses `reused`. The rows hold only the text, so a reason renamed
- * since is matched by the text alone: the note must be the one the text ends with and no reason
- * may still bear the name before it, and then which reason it was is not checked. A name or a
- * note holding ": " cannot be split from the text, so such a press is matched only while its
+ * since is matched by the text alone: the note must be the one the text ends with, and then which
+ * reason it was is not checked. A name holding ": ", or a text 500 characters long (which may have
+ * been cut short), cannot be split from the stored text, so such a press is matched only while its
  * reason keeps its name.
  */
 async function storedReasonOf(
@@ -92,13 +92,7 @@ async function storedReasonOf(
   }
   const suffix = ask.note === null ? "" : `: ${ask.note}`;
   const name = text.slice(0, text.length - suffix.length);
-  if (
-    text.length >= 500 ||
-    !text.endsWith(suffix) ||
-    name.includes(": ") ||
-    reasons.some((reason) => reason.name === name)
-  )
-    throw reused();
+  if (text.length >= 500 || !text.endsWith(suffix) || name.includes(": ")) throw reused();
   return text;
 }
 

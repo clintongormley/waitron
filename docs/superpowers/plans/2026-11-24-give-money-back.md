@@ -304,15 +304,17 @@ In `apps/server/src/give-back-read.ts` (the read), `give-back-plan.ts` (routing 
   choices: Record<"dishes" | "goodwill" | "extra", { available: boolean; reason: WaitReason | null }>;
 }
 /** the code (and params) the write would answer, from section 4's cases */
-type WaitReason = { code: string; params?: Record<string, unknown> };
+type WaitReason = { code: ErrorCode; params?: Record<string, unknown> };
 ```
 
 Each line also carries `available: boolean` and `reason: WaitReason | null`; `ways` each carry
 `reason` too (case 3's `tender.refund_in_progress`, case 8's `tender.refund_unavailable`).
 `choices` and the lines' `available` are worked out by the same functions the preview and the write
-call (`correctableNow`, `refuseUntilRefundable`, the pending-refund reads, `requireEconomicWrite`'s
-check), never a second copy of the rules: an unavailable choice is exactly one whose preview would
-answer that code. `dishes` is available when at least one line is; in cases 1 and 2 a line is
+call (`readCorrectableNow`, `refuseUntilRefundable`, the pending-refund reads, `requireEconomicWrite`'s
+check, `assertTakesTender`), never a second copy of the rules: an unavailable choice is exactly one
+whose preview would answer that code. A payment this device's profile does not take counts as held,
+with the code the preview answers (`device.cash_not_allowed`, `device.forbidden_action`); a
+correction may still leave money under way on it for another device. `dishes` is available when at least one line is; in cases 1 and 2 a line is
 available only while its cancel still owes money, and only up to `owed`. A choice with nothing left
 to give back (no extra paid, every line's `left` 0) is `available: false` with `reason: null`; the
 till shows it quiet with no sentence. Case 4 (`invoice_correction.already_open`) makes all three
@@ -398,16 +400,17 @@ tests. The till stops calling `…/corrections` and the plain form of `…/refun
 3. **The extra** (purpose `extra`, or the switch on): a plain refund of the extra alone (payment
    money 0). #4192: a tip alone needs no correction (`tenderRefundAmountsFit`, `:277-284`).
 4. **The rest** (served dishes, goodwill, more than the ticked dishes): one correction. For
-   `dishes`, it names the ticked lines whose `left` is above 0. When the rest is more than those lines'
-   `left` together, or no such line is ticked, it names **no** lines: Correct invoice refuses more
+   `dishes`, it names the ticked lines with money beyond what their cancels owe, and each ticked
+   cancelled dish's extras' lines that Correct invoice still holds money on. When the rest is more
+   than those lines hold beyond what their cancels owe, or no such line is ticked, it names **no** lines: Correct invoice refuses more
    than the named lines hold (`packages/core/src/correction-allocation.ts:66-70`; the read's probe:
    ticked lines with too much answered `sale.correction_amount_invalid`, unticked answered none), and
    with none named it shares the amount over the receipt by menu price (#4192's O1). For `goodwill`
    it names no lines.
-5. **Where Correct invoice can never act** (`correctableNow` answers nothing correctable), the rest
+5. **Where Correct invoice can never act** (`readCorrectableNow` answers nothing correctable), the rest
    goes as a plain refund instead, as Refund a payment does today.
-6. **Where Correct invoice would only wait** (`correctableNow` throws: cases 1, 2, the clock), the
-   route refuses with that code. Steps 1–3 never reach `correctableNow` (case 1's probe).
+6. **Where Correct invoice would only wait** (`readCorrectableNow` answers `waiting`: cases 1, 2, the
+   clock), the route refuses with that code. Steps 1–3 never reach `readCorrectableNow` (case 1's probe).
 7. **More than one payment holds (D10):** steps 1–3 come from the chosen way only (cash: every cash
    payment, oldest first, as `giveCorrectionCash` takes it, `invoice-correction-cash.ts:50-56`); if
    they need more, the preview refuses on the amount field; the till shows what that way holds from the read's `ways`. The correction
@@ -501,7 +504,8 @@ stored rows, so it may need more than its first send (`resendRights`, `apps/serv
   `apps/till/src/state/give-back.ts` (the saved attempt: the request, its submission ids and any
   `rest`, kept as `state/tender-refund.ts` keeps a refund's, so a lost answer is sent again with the
   same ids; a `rest` gets fresh ids when first sent). Steps: the choice (`wt-choice-row`), the form,
-  the outcome; the under-way view is a fourth state.
+  the outcome; the under-way view is a fourth state. A line with `partOf` is drawn under its dish,
+  never tickable; a cancelled dish's `left` counts its extras, so it can exceed its own `gross`.
 - **The form** follows design-system.md → Forms: required fields marked; inline errors; one bottom
   message; **Give back** disabled until valid. The amount starts at the ticked lines' `left` (a
   cancelled line's starts at its `owed`) and may be raised up to all the money left on the receipt;

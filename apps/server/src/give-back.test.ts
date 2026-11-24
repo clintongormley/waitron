@@ -1597,7 +1597,7 @@ describe("POST …/give-back in cash", () => {
     );
   });
 
-  it("refuses a request whose device is not the session's, as assertRequestDevice refuses", async () => {
+  it("refuses a press and a preview whose device is not the session's, as assertRequestDevice refuses", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     const body = await giveBody(saleId, ask("goodwill", "10.00"));
@@ -1605,6 +1605,14 @@ describe("POST …/give-back in cash", () => {
     const before = effects();
     const answer = await give(saleId, body, otherDevice);
     expect(answer).toEqual({ status: 401, json: { code: "device.unauthorized", params: {} } });
+    const previewed = await send(
+      venue.app,
+      otherDevice,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      ask("goodwill", "10.00"),
+    );
+    expect(previewed).toEqual({ status: 401, json: { code: "device.unauthorized", params: {} } });
     expect(effects()).toEqual(before);
   });
 
