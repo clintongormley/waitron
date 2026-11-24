@@ -9,11 +9,9 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isNull, sql } from "drizzle-orm";
-import * as identity from "@waitron/identity";
-import * as nodeApi from "@waitron/node-db";
+import * as db from "@waitron/db";
+import * as shared from "@waitron/shared";
 import { invoiceSeries, withTransaction } from "@waitron/db";
-import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
@@ -32,6 +30,7 @@ import { parseConflictResult } from "@waitron/fiscal-verifactu/src/conflict-reco
 import { ALL_MODULES } from "./modules.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
@@ -43,8 +42,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const node = { nodeId: TAXPAYER_A.nodeId };
 const PATH = "https://box.test/api/module-recovery/fiscal-verifactu/conflict";
-const SECRET = "synthetic-current-node-key";
-const verifier = identity.hashSecret(SECRET);
+let SECRET: string;
 let root: string | undefined;
 let monotonic = 0;
 let conflict: ConflictRef;
@@ -69,9 +67,7 @@ beforeEach(async () => {
       vi.setSystemTime(Date.now() + ms);
     },
   });
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, verifier, "key-1", null),
-  );
+  ({ secret: SECRET } = await mintMasterKey(suite.db));
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   monotonic = 0;
 });
@@ -291,7 +287,7 @@ it.each([
   "a refused %s transport does not spend the shared request budget",
   async (_name, options) => {
     const m = mounted();
-    const hash = vi.spyOn(identity, "verifySecretAsync");
+    const hash = vi.spyOn(shared, "decodeMasterKeyCode");
     for (let i = 0; i < 60; i++) {
       expect((await m.send(request(), options)).status).toBe(403);
     }
@@ -303,10 +299,10 @@ it.each([
   },
 );
 
-it("the real admission gate bounds wrong-key work before parsing, verifier reads and hashing", async () => {
+it("the real admission gate bounds wrong-key work before parsing, master-key reads and decoding", async () => {
   const m = mounted();
-  const hashes = vi.spyOn(identity, "verifySecretAsync");
-  const reads = vi.spyOn(nodeApi, "readRecoveryKeyVerifier");
+  const hashes = vi.spyOn(shared, "decodeMasterKeyCode");
+  const reads = vi.spyOn(db, "readCurrentMasterKey");
   for (let i = 0; i < 60; i++)
     expect((await m.send(request({ recoveryKey: "wrong-key" }))).status).toBe(401);
   expect(hashes).toHaveBeenCalledTimes(60);
@@ -347,23 +343,21 @@ it("a management cookie cannot authorise without the current key", async () => {
       })
     ).status,
   ).toBe(401);
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2", null),
-  );
+  await mintMasterKey(suite.db);
   expect((await m.send(request())).status).toBe(401);
   expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("refuses a third in-flight handler before parsing and releases slots after successful and refused keys", async () => {
   const m = mounted();
-  const verify = identity.verifySecretAsync;
+  const read = db.readCurrentMasterKey;
   const entered = deferred();
   const release = deferred();
   let calls = 0;
-  vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
+  vi.spyOn(db, "readCurrentMasterKey").mockImplementation(async (...args) => {
     if (++calls === 2) entered.resolve();
     await release.promise;
-    return verify(...args);
+    return read(...args);
   });
   const first = m.send(request());
   const second = m.send(request({ recoveryKey: "wrong" }));
@@ -408,9 +402,7 @@ it("refuses a key replaced while comparing clocks and writes no activation", asy
     }),
   );
   await entered.promise;
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2", null),
-  );
+  await mintMasterKey(suite.db);
   release.resolve();
   const refused = await pending;
   expect(refused.status).toBe(401);
@@ -431,16 +423,7 @@ it("rechecks the current key in the activation commit after preparation", async 
           body({
             ...scope,
             commit: async (run) => {
-              if (rotate && ++commits === 3)
-                await withNodeTransaction(suite.node, (tx) =>
-                  setRecoveryKeyTx(
-                    tx,
-                    node.nodeId,
-                    identity.hashSecret("replacement"),
-                    "key-2",
-                    null,
-                  ),
-                );
+              if (rotate && ++commits === 3) await mintMasterKey(suite.db);
               return scope.commit(run);
             },
           }),

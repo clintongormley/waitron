@@ -9,11 +9,8 @@ import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { stampDeployment, withTransaction } from "@waitron/db";
-import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSecret } from "@waitron/identity";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { withOperationAuthority, type ModuleRouteContext } from "@waitron/module";
 import { applyVenue } from "@waitron/provisioning";
@@ -30,6 +27,7 @@ import { ALL_MODULES } from "./modules.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
@@ -183,11 +181,8 @@ it("finalises an already captured bill once after the actual administrator switc
   );
   const orders = suite.db.all(sql`select * from working_orders`);
   const node = { nodeId: venue.cfg.nodeId };
-  const key = "synthetic-conflict-current-key";
   await stampDeployment(suite.db, "preproduction");
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, hashSecret(key), "key-1", null),
-  );
+  const { secret: key } = await mintMasterKey(suite.db);
   scratch = await mkdtemp(join(tmpdir(), "conflict-payment-"));
   const preparation = createNodeOperationPreparation({
     stateDir: join(scratch, "state"),

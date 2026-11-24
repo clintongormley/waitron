@@ -4,9 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, stampDeployment, type Transaction } from "@waitron/db";
 import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx, setSingletonRoleTx, NODE_MIGRATIONS } from "@waitron/node-db";
+import { setSingletonRoleTx, NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret } from "@waitron/identity";
 import {
   readOperationAuthority,
   type ModuleOperationHost,
@@ -17,6 +16,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
@@ -30,16 +30,13 @@ const binding = {
   targetNodeId: node.nodeId,
 };
 const isolation = { oldMachineOffline: true, noParallelRecovery: true };
-const secret = "paper-key";
-const verifier = hashSecret(secret);
+let secret: string;
 let root: string | undefined;
 let writable = true;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "live-module-operation-"));
   await stampDeployment(suite.db, "preproduction");
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, verifier, "paper-1", null),
-  );
+  ({ secret } = await mintMasterKey(suite.db));
   writable = true;
 });
 afterEach(async () => {
@@ -162,10 +159,7 @@ it.each(["key", "role", "writable"])(
   "rechecks %s after an awaited preparation read",
   async (changed) => {
     const s = service(async () => {
-      if (changed === "key")
-        await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2", null),
-        );
+      if (changed === "key") await mintMasterKey(suite.db);
       if (changed === "role")
         await withNodeTransaction(suite.node, (tx) =>
           setSingletonRoleTx(tx, node.nodeId, "secondary", "fenced"),
@@ -189,10 +183,7 @@ it.each(["key", "role", "writable"])(
     let entered = false;
     await expect(
       s.withLiveRecovery(binding, secret, isolation, async (scope) => {
-        if (changed === "key")
-          await withNodeTransaction(suite.node, (tx) =>
-            setRecoveryKeyTx(tx, node.nodeId, hashSecret("new-key"), "paper-2", null),
-          );
+        if (changed === "key") await mintMasterKey(suite.db);
         if (changed === "role")
           await withNodeTransaction(suite.node, (tx) =>
             setSingletonRoleTx(tx, node.nodeId, "secondary", "fenced"),
