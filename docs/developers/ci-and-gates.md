@@ -2821,6 +2821,34 @@ On a disposable-runner probe, add `GODEBUG=gctrace=1` to `pnpm typecheck`. To ca
 memory alongside the compiler trace, read `memory.peak` and `memory.events` for the group named by
 `/proc/self/cgroup`, and keep the kernel memory-kill log.
 
+#### Where Server's typecheck spends time
+
+The first code-selected main run after the setting landed used `GOMEMLIMIT=6GiB` on a disposable
+runner. The full typecheck passed in 101 seconds, including Server's 35 seconds.
+[CI job on `b12dd975fa`](https://github.com/clintongormley/waitron/actions/runs/45500205679/job/138821864840).
+
+On 24 November, a Mac checkout at `2cade3db07` ran
+`pnpm --filter @waitron/server typecheck --extendedDiagnostics --generateTrace <trace-dir>`
+with heap profiling enabled. The check passed and reported 13,276,566 type instantiations, when
+the compiler fills in a generic type's parameters. Its four checker dumps contained 648,313
+type records with declarations from Drizzle's database schema and query types, 270,987 from Hono's HTTP handler and
+response types, and 122,060 from Vitest's assertion types. These counts include repeated records
+across checkers.
+
+The summed file-check time was 123.38 seconds across 4,107 files. The busiest individual file
+was `apps/server/src/setup-api.test.ts` at 1.55%, followed by the shared HTTP error boundary
+at 1.47% and the database backup evidence check at 1.32%. The setup tests spent time building
+typed error fixtures, the error boundary on the JSON response with error parameters and the
+backup check on reading table definitions. The earlier trace also put the error boundary and backup check
+near the top, while different Server test files led that run.
+
+The shared error boundary's disk-full response was an expensive expression in both traces.
+An `object` annotation on its error parameters kept the exact same instantiation count in
+three alternating baseline and changed runs with four Go processors. Peak resident memory
+changed from 15.00 to 11.20, 14.60 to 14.67, and 12.11 to 12.92 GiB.
+The peak reduction fell short of 20% in two of the three comparisons, so the error boundary
+keeps its existing types.
+
 ### A job far over its usual time on unchanged code: read the runner's setup times first
 
 Use the [failure rule above](#what-to-do-when-ci-fails) to decide whether to re-run. The two
