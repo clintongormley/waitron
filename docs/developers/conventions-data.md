@@ -4774,7 +4774,10 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   `clock_start.confirmation_unused` while the internet's is held. The start, then each clock-watch
   look, which a person's held confirmation wakes, tries to open the installation in the correction's
   turn while a confirmation is held. Opening it ends the wait by the held confirmation. A set that
-  moved the clock by more than a second, a return to waiting, or a refusal for the clock drops it.
+  moved the clock by more than a second, a clock jump while the time service is not synchronised, or
+  a refusal for the clock drops it. While a confirmation is held and the opening is refused for
+  something that does not pass by itself, the bell shows `sif.identity_change_blocked` instead of
+  `clock.unconfirmed`. Tests: `identity-change-opening.test.ts`, `boot.identity-change.test.ts`.
 - **A future-date refusal** (`lookForRefusal` in `apps/server/src/clock-watch.ts`, A1420 PR 2,
   task 10). Each look, whatever the status, asks the seat's optional
   `latestFutureDateRefusal?(tx, nodeId, abovePosition)` for the highest sale on this box's chain
@@ -4830,7 +4833,8 @@ staff signed in on a till see `clock.unconfirmed`, "Payments wait: the box is wa
 devices to connect and agree with its time (… of 2 so far)" (after a jump, "Payments wait: the
 box's clock jumped …"; after AEAT refuses a sale as dated in the future, "The tax agency refused
 a sale because the box's date was ahead. Payments wait until someone checks the time.", with no
-count), with “Check the time”, whatever the
+count; while a new fiscal installation waits, "Payments wait: the box must open new invoice
+numbering first, once its time is confirmed", with no count), with “Check the time”, whatever the
 start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and does not ask the start-up window; it
 answers `keepOffered: true` unless the clock reads before 28-10-2024. The

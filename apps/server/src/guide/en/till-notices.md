@@ -72,13 +72,13 @@ The dialog shows the box's time and this till's time. Nobody types a time: the t
 what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
-  if the till's time is right: the box's clock is set to it and payments start again. Press **The
+  if the till's time is right: the box's clock is set to it. Press **The
   box** if the box's time is right: when a red clock line says payments wait and **Sales
-  can't be recorded** is not shown, the box keeps its time and payments start again; otherwise the dialog asks you to correct the
+  can't be recorded** is not shown, the box keeps its time; otherwise the dialog asks you to correct the
   till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither
   is.
-- When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start
-  again. Press **No** if it is not.
+- When they agree, it asks whether the time is correct. Press **Yes** if it is. Press **No**
+  if it is not.
 
 If the dialog asks you to correct the time on the till, correct it in the till's own settings, then
 open **Check the time** again: the dialog reads the till's time afresh each time it opens.

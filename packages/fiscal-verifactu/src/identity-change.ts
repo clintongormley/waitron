@@ -108,7 +108,8 @@ export async function planIdentityChange(
 
 /**
  * Opens the installation `planIdentityChange` plans, on the planned minute, closing the open one
- * and its series. `mayOpen` is the host's check that this box alone serves as primary.
+ * and its series. The transaction first asks the host's `mayOpen`; a false answer refuses
+ * `not_sole_primary`.
  */
 export async function openIdentityChange(
   db: Database,
