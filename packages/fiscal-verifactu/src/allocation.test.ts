@@ -943,6 +943,11 @@ describe("activation over retained fiscal rows", () => {
       entorno: "preproduction",
     });
     const before = (await suite.db.execute(sql`select * from verifactu_records`)).rows;
+    const [oldSif] = await suite.db
+      .select()
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.id, old.id));
+    expect(oldSif).toMatchObject(old);
     const oldSeries = await suite.db.select().from(invoiceSeries);
     const input = signed({
       ...candidate,
@@ -954,7 +959,7 @@ describe("activation over retained fiscal rows", () => {
     const oldRow = (
       await suite.db.select().from(verifactuIdentities).where(eq(verifactuIdentities.id, old.id))
     )[0]!;
-    expect(oldRow).toEqual({ ...old, revocadoEn: expect.any(Date) });
+    expect(oldRow).toEqual({ ...oldSif, revocadoEn: expect.any(Date) });
     const afterSeries = await suite.db.select().from(invoiceSeries);
     for (const retained of oldSeries)
       expect(afterSeries.find((s) => s.id === retained.id)).toEqual({

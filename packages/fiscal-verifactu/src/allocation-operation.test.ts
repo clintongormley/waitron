@@ -7,7 +7,7 @@ import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
-import { sql } from "drizzle-orm";
+import { isNull, sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -650,7 +650,10 @@ it.each([
   if (field === "software")
     await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
   if (field === "sif-retired")
-    await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
+    await suite.db
+      .update(verifactuIdentities)
+      .set({ revocadoEn: new Date() })
+      .where(isNull(verifactuIdentities.revocadoEn));
   const before = await snapshot();
   await expect(readAllocated()).rejects.toMatchObject({
     code: "sif.allocation_invalid",

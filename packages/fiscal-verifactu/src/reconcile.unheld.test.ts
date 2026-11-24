@@ -175,7 +175,7 @@ it.each(["taxpayer", "retired-series", "retired-sif", "other-node", "known-numbe
       await suite.db.execute(sql`update invoice_series set retired_at = ${NOW.toISOString()}`);
     if (change === "retired-sif")
       await suite.db.execute(
-        sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`,
+        sql`update verifactu_identities set revocado_en = ${NOW.toISOString()} where revocado_en is null`,
       );
     if (change === "other-node") f.seeded.nodeId = "other-node" as typeof f.seeded.nodeId;
     if (change === "known-number") f.returned.registros = f.real.registros;
@@ -213,7 +213,7 @@ it.each(["series", "identity"] as const)(
         await suite.db.execute(
           retired === "series"
             ? sql`update invoice_series set retired_at = ${NOW.toISOString()}`
-            : sql`update verifactu_identities set revocado_en = ${NOW.toISOString()}`,
+            : sql`update verifactu_identities set revocado_en = ${NOW.toISOString()} where revocado_en is null`,
         );
         return f.returned;
       },

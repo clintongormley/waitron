@@ -1,6 +1,6 @@
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
@@ -137,7 +137,10 @@ it("combines snapshots taken before and after retirement without inventing confl
   const earlier = await read();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date() });
-  await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date() });
+  await suite.db
+    .update(verifactuIdentities)
+    .set({ revocadoEn: new Date() })
+    .where(isNull(verifactuIdentities.revocadoEn));
   const later = await read();
   expect(projectHourHistory({ scope, sources: [...earlier, ...later] })).toMatchObject({
     greatestSpentMinute: 415420,

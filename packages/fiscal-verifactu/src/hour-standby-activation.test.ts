@@ -1,6 +1,6 @@
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
@@ -164,7 +164,10 @@ it("refuses a new event for an already active standby without retiring its serie
 });
 
 it("also refuses reuse after the original SIF and every original series are retired", async () => {
-  await suite.db.update(verifactuIdentities).set({ revocadoEn: new Date("2026-10-16T11:45:00Z") });
+  await suite.db
+    .update(verifactuIdentities)
+    .set({ revocadoEn: new Date("2026-10-16T11:45:00Z") })
+    .where(isNull(verifactuIdentities.revocadoEn));
   await suite.db.update(invoiceSeries).set({ retiredAt: new Date("2026-10-16T11:45:00Z") });
   const before = await snapshot();
   await expect(activate(fixture("promote", "0CNNW"))).rejects.toMatchObject({
