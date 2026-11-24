@@ -1,15 +1,12 @@
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { mkdtemp, rm } from "node:fs/promises";
-import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TLSSocket } from "node:tls";
-import { eq, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
-import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
-import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { invoiceSeries, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { withPreparedModuleOperations } from "@waitron/module";
@@ -18,7 +15,6 @@ import { createFirstSetupCoordinator, readModulePreparationHistory } from "@wait
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { promoteMirrorToPrimary, type PromotionOperationRunner } from "./promote.js";
-import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { fiscalRows, preparationIn } from "./testing/fiscal-rows.js";
 import {
@@ -91,7 +87,6 @@ describe("a Veri*Factu venue's spare joins", () => {
 describe("a spare holding a copy of a Veri*Factu venue", () => {
   let root: string;
   let placed: PlacedSpare | undefined;
-  const sockets: TLSSocket[] = [];
   const dirs = () => ({
     mainState: join(root, "main-state"),
     spareState: join(root, "spare-state"),
@@ -119,13 +114,12 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
   afterEach(async () => {
     vi.useRealTimers();
     external.internet.mockReset();
-    while (sockets.length > 0) sockets.pop()?.destroy();
     await placed?.close();
     placed = undefined;
     await rm(root, { recursive: true, force: true });
   });
 
-  /** The spare's own preparation service and its promotion route, on the copy it holds. */
+  /** The spare's own preparation service on the copy it holds. */
   function spareSide(store: PlacedSpare) {
     const service = createNodeOperationPreparation({
       stateDir: dirs().spareState,
@@ -152,51 +146,11 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
         },
         { oldNodeNeutralised: true },
       );
-    const app = new Hono();
-    mountPromoteApi(app, {
-      appDb: store.venue,
-      nodeDb: store.node,
-      nodeId: standby.nodeId,
-      credentialKeyRing: TOTP_KEY_RING,
-      modules: fiscalModules,
-      nodePreparation: service,
-      run: async () => {
-        throw new Error("the legacy fixture tests preparation only");
-      },
-    });
-    const send = async (path: string, body: Record<string, unknown>) => {
-      const socket = new TLSSocket(new Socket());
-      sockets.push(socket);
-      const response = await app.request(
-        `https://box.test/management-api/promote${path}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...context, ...credentials, ...body }),
-        },
-        { incoming: { socket } },
-      );
-      return { status: response.status, body: (await response.json()) as Record<string, unknown> };
-    };
-    const prepare = (proposal: unknown) =>
-      send("/preparation", { moduleOperation: { binding, input: null }, proposal });
-    return { service, prepare, promote };
+    return { service, promote };
   }
 
   const preparationHistory = () =>
     readModulePreparationHistory({ stateDir: dirs().spareState, venueDir: "" }, MODULE);
-  function allRows(db: Database): Map<string, string> {
-    return new Map(
-      migratedTableNames(db).map((table) => [
-        table,
-        JSON.stringify(db.all(sql.raw(`select * from "${table}" order by rowid`))),
-      ]),
-    );
-  }
-
-  function changedTables(before: Map<string, string>, after: Map<string, string>): string[] {
-    return [...after.keys()].filter((table) => before.get(table) !== after.get(table)).sort();
-  }
 
   /** Reserve then establish, on the spare, under the administrator's sign-in. */
   async function admit(store: PlacedSpare, service: ReturnType<typeof spareSide>["service"]) {
@@ -228,35 +182,6 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
     );
     return admission;
   }
-
-  it("the promotion preparation route refuses a spare with no dormant setup and writes nothing", async () => {
-    const store = (placed = await fixture.placeSpareEmergencyCopy());
-    vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
-    expect(await preparationHistory()).toEqual([]);
-    const venueBefore = allRows(store.venue);
-    const nodeBefore = allRows(store.node as unknown as Database);
-
-    const answer = await spareSide(store).prepare({ action: "clock-challenge" });
-
-    expect(answer).toEqual({
-      status: 400,
-      body: {
-        error: { code: "sif.allocation_invalid", params: { reason: "reservation_mismatch" } },
-      },
-    });
-    expect(changedTables(venueBefore, allRows(store.venue))).toEqual(["activity_log"]);
-    const history = await store.venue.execute<{ kind: string; data: string }>(
-      sql`select kind, data from activity_log order by rowid desc limit 2`,
-    );
-    expect(
-      history.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
-    ).toEqual([
-      { kind: "dashboard.signed_in", data: { method: "password" } },
-      { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
-    ]);
-    expect(changedTables(nodeBefore, allRows(store.node as unknown as Database))).toEqual([]);
-    expect(await preparationHistory()).toEqual([]);
-  }, 60_000);
 
   it("on the spare, under a person's sign-in, reserve then establish writes a dormant setup that a promotion then reads", async () => {
     const store = (placed = await fixture.placeSpareEmergencyCopy());

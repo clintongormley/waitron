@@ -109,7 +109,6 @@ it("keeps reads closed after promotion opens the original write gate until resta
 it("preserves the read-only write refusals and the existing mirror POST exemptions", async () => {
   const app = fixture();
   for (const path of [
-    "/management-api/promote/preparation",
     "/api/node/peer-status",
     "/api/node/membership",
     "/api/node/handover/offer",

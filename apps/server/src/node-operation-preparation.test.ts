@@ -49,7 +49,6 @@ function service(
   hooks: {
     readState?(): Promise<void>;
     facts?(): void;
-    beforeFacts?(): Promise<void>;
     clockCorrection?: Parameters<typeof createNodeOperationPreparation>[0]["clockCorrection"];
     signIn?: boolean;
   } = {},
@@ -67,7 +66,6 @@ function service(
             measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
             reading: { boxAt: "2026-10-16T12:40:00.000Z", witnessAt: "", uncertaintyMs: 0 },
           });
-        await hooks.beforeFacts?.();
         const facts = await host.readRecoveryFacts!(operation.binding);
         hooks.facts?.();
         return facts;
@@ -138,20 +136,6 @@ it("hands a promotion that does not mention relinquishment to the module as offl
     oldMachineOffline: true,
     oldMachineRelinquished: false,
   });
-});
-
-it("refuses to set the clock under the recovery key, which names no person, and never asks the setter", async () => {
-  await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, node.nodeId, "mirror", "adopt"));
-  const set = vi.fn();
-  const answer = await service({ clockCorrection: { set, steps: () => 0 } }).prepare(
-    promote,
-    { breakGlass: secret },
-    { oldNodeNeutralised: true, noParallelRecovery: true },
-    "set-clock",
-    { onBox: false },
-  );
-  expect(answer).toEqual({ status: "refused", reason: "not_admitted" });
-  expect(set).not.toHaveBeenCalled();
 });
 
 it("hands boot's setter the agreement limit the module sent, as the signed-in person", async () => {
@@ -280,25 +264,6 @@ it.each([
     await expect(result).rejects.toHaveProperty("params", {});
   }
   expect(seen).toEqual(steps);
-});
-
-it("a new master key made between preparation and run refuses the run", async () => {
-  const delivered = vi.fn();
-  const preparation = service({
-    beforeFacts: async () => {
-      await mintMasterKey(suite.db);
-    },
-    facts: delivered,
-  });
-  const result = preparation.prepare(
-    promote,
-    { breakGlass: secret },
-    { oldNodeNeutralised: true, noParallelRecovery: true },
-    {},
-    { onBox: false },
-  );
-  await expect(result).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-  expect(delivered).not.toHaveBeenCalled();
 });
 
 it.each([

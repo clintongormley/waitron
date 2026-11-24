@@ -27,8 +27,6 @@ export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] 
   ["POST", "/api/node/handover/emergency/followed", 65536],
   ["POST", "/api/node/handover/emergency/passkey-challenge", null],
   ["POST", "/management-api/handover", 1048576],
-  ["POST", "/management-api/promote/preparation", 1048576],
-  ["POST", "/management-api/promote", 1048576],
   ["POST", "/management-api/box-joins/:id/check", null],
   ["POST", "/management-api/box-joins/:id/approve", 1048576],
   ["POST", "/management-api/box-joins/:id/dismiss", null],

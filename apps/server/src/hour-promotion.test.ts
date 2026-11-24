@@ -1,3 +1,4 @@
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
@@ -33,7 +34,7 @@ import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifa
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -76,7 +77,6 @@ const context = { oldNodeNeutralised: true, noParallelRecovery: true };
 let root: string;
 /** The last clock comparison taken, which the next select names. */
 let comparisonId = "";
-let key: { name: string; secret: string };
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-promotion-"));
   await mkdir(join(root, "state"));
@@ -174,7 +174,7 @@ beforeEach(async () => {
   await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
-  key = await mintMasterKey(suite.db);
+  await mintMasterKey(suite.db);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -225,10 +225,10 @@ async function admit(s: Awaited<ReturnType<typeof service>>) {
   );
   return state;
 }
-async function compare(s: Awaited<ReturnType<typeof service>>, auth: unknown = credentials) {
+async function compare(s: Awaited<ReturnType<typeof service>>) {
   const challenge = (await s.prepareWithDormantSetup(
     binding,
-    auth,
+    credentials,
     context,
     { action: "clock-challenge" },
     { onBox: true },
@@ -237,7 +237,7 @@ async function compare(s: Awaited<ReturnType<typeof service>>, auth: unknown = c
   };
   const compared = (await s.prepareWithDormantSetup(
     binding,
-    auth,
+    credentials,
     context,
     {
       action: "compare-clocks",
@@ -315,7 +315,7 @@ it("a signed-in manager selects and activates a promotion after dormant admissio
   ).not.toContain(PASSWORD);
 });
 
-it.each(["key", "isolation", "parallel", "node"])(
+it.each(["isolation", "parallel", "node"])(
   "refuses changed %s before selection writes",
   async (fault) => {
     const s = await service();
@@ -325,11 +325,10 @@ it.each(["key", "isolation", "parallel", "node"])(
       ...(fault === "node" ? { targetNodeId: primary.nodeId } : {}),
     };
     const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
-    const prepare = fault === "key" ? s.prepare : s.prepareWithDormantSetup;
     await expect(
-      prepare(
+      s.prepareWithDormantSetup(
         held,
-        fault === "key" ? { breakGlass: WRONG_MASTER_KEY } : credentials,
+        credentials,
         {
           ...context,
           ...(fault === "isolation" ? { oldNodeNeutralised: false } : {}),
@@ -339,12 +338,7 @@ it.each(["key", "isolation", "parallel", "node"])(
         { onBox: true },
       ),
     ).rejects.toMatchObject({
-      code:
-        fault === "key"
-          ? "promotion.break_glass_invalid"
-          : fault === "isolation"
-            ? "promotion.fence_not_attested"
-            : "module.operation_invalid",
+      code: fault === "isolation" ? "promotion.fence_not_attested" : "module.operation_invalid",
     });
     expect(await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8")).toBe(
       before,
@@ -491,7 +485,7 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   const s = await service();
   await admit(s);
   await compare(s);
-  key = await mintMasterKey(suite.db);
+  await mintMasterKey(suite.db);
   await expect(
     s.prepareWithDormantSetup(
       binding,
@@ -628,25 +622,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   expect(await spare.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(baseline.series);
 });
 
-it("refuses promotion preparation without retained dormant admission", async () => {
-  const s = await service();
-  const before = await rows();
-  await expect(
-    s.prepare(binding, credentials, context, { action: "clock-challenge" }, { onBox: true }),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "reservation_mismatch" },
-  });
-  expect(await rows()).toEqual(before);
-  expect(
-    await readModulePreparationHistory(
-      { stateDir: join(root, "state"), venueDir: join(root, "venue") },
-      binding.module,
-    ),
-  ).toEqual([]);
-});
-
-it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"])(
+it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding", "retired paper"])(
   "refuses altered selected %s before promotion commits",
   async (fault) => {
     const s = await service();
@@ -677,6 +653,14 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
     if (fault === "bases") input.allocation.series.pop();
     if (fault === "purpose") input.allocation.series[0]!.purpose = "full";
     if (fault === "approval") input.approval.oldMachineOffline = false;
+    if (fault === "retired paper") {
+      input.allocation = allocationFixture({
+        node: standby,
+        bases,
+        identity: "P000042",
+        operatorId: ADMIN,
+      }).request("promote").input.allocation;
+    }
     const before = await rows();
     await expect(
       fault === "binding"
@@ -700,7 +684,10 @@ it.each(["identity", "allocation-id", "bases", "purpose", "approval", "binding"]
               ),
           )
         : promote(s, input),
-    ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      ...(fault === "retired paper" ? { params: { reason: "event_mismatch" } } : {}),
+    });
     expect(await rows()).toEqual(before);
     expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("mirror");
   },
@@ -806,32 +793,4 @@ it("refuses a recovery module that cannot read the current database state", asyn
   }));
   const s = await service(modules);
   await expect(compare(s)).rejects.toMatchObject({ code: "module.operation_invalid" });
-});
-
-it("refuses a recovery key rotated while a comparison is in flight", async () => {
-  const s = await service();
-  await admit(s);
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let entered!: () => void;
-  const started = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  external.internet.mockImplementationOnce(async () => {
-    entered();
-    await gate;
-    return { source: "internet", result: "unavailable", reason: "offline" };
-  });
-  const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
-  const pending = compare(s, { breakGlass: key.secret });
-  await started;
-  key = await mintMasterKey(suite.db);
-  const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-  release();
-  await refused;
-  expect(await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8")).toBe(
-    before,
-  );
 });

@@ -2647,7 +2647,7 @@ export const en = {
   "backup.key.too_short":
     "The backup encryption key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
-    "Save this key now. It opens encrypted backups. Keep your master key too. You need it to authorise a restore or takeover.",
+    "Save this key now. It opens encrypted backups. Keep your master key too. You need it to authorise a restore.",
   "backup.key.copy": "Copy",
   "backup.key.download": "Download key file",
   "backup.key.paste_label": "Your own backup encryption key",
@@ -7523,7 +7523,7 @@ export const es: Record<StringKey, string> = {
   "backup.key.too_short":
     "La clave de cifrado de copias que tiene este servidor es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
-    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también tu clave maestra. La necesitas para autorizar la restauración o el traspaso a otro servidor.",
+    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también tu clave maestra. La necesitas para autorizar la restauración.",
   "backup.key.copy": "Copiar",
   "backup.key.download": "Descargar archivo de clave",
   "backup.key.paste_label": "Tu propia clave de cifrado de copias",

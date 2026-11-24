@@ -47,6 +47,11 @@ export interface FenceAttestation {
   readonly oldNodeNeutralised: boolean;
 }
 
+export interface PromoteRunResult {
+  alreadyPrimary: boolean;
+  restarting: boolean;
+}
+
 export interface PromoteDeps {
   readonly db: Database;
   readonly node: NodeDatabase;

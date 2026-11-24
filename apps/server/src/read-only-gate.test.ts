@@ -56,14 +56,15 @@ describe("readOnlyGate", () => {
   it("passes an exempt path through even on a write verb when read-only", async () => {
     const gate = readOnlyGate(
       () => true,
-      (c) => c.req.path === "/management-api/promote",
+      (c) => c.req.path === "/api/node/handover/operation-one/activate",
     );
     const app = new Hono();
     app.use("*", gate);
-    app.post("/management-api/promote", (c) => c.body(null, 200));
+    app.post("/api/node/handover/operation-one/activate", (c) => c.body(null, 200));
     app.post("/api/working-orders/bill-1/payments", (c) => c.body(null, 200));
-    // Exempt: the promote trigger is allowed through the fence (its own auth gates it).
-    expect((await app.request("/management-api/promote", { method: "POST" })).status).toBe(200);
+    expect(
+      (await app.request("/api/node/handover/operation-one/activate", { method: "POST" })).status,
+    ).toBe(200);
     // Non-exempt: an ordinary client write is still refused.
     const refused = await app.request("/api/working-orders/bill-1/payments", { method: "POST" });
     expect(refused.status).toBe(403);

@@ -41,8 +41,7 @@ import { assertHeldDocumentReadable, HELD_DOCUMENT_REFUSALS } from "./membership
 import { boxExchange } from "./mirror-bundle-fetch.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
-import type { PromoteRunResult } from "./promote-api.js";
+import type { FenceAttestation, PromoteRunResult, PromotionOperationRunner } from "./promote.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 

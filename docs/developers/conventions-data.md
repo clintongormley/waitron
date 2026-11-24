@@ -2397,7 +2397,7 @@ before. A wrong-PIN or wrong-password limit that sat inside the transaction stay
 reuse. The server's early halves include `withPinCheckAhead` (`apps/server/src/pin-check-ahead.ts`),
 `ownPasswordChanges` (`apps/server/src/own-password-ahead.ts`), `pinGated`
 (`apps/server/src/payments-api.ts`) and direct `checkManagerPassword` calls in the dashboard
-sign-in and promote routes.
+sign-in route and the signed-in operation helper.
 `grep -rn 'withPinCheckAhead\|ownPasswordChanges\|pinGated\|checkPin(\|checkManagerPassword(' apps/server/src --exclude='*.test.ts'`
 lists the two helpers' own files and every route file with an early check. Each runs the early check when what the route can read before the transaction says the
 secret will be checked, so a request the transaction refuses before its own check (an order already
@@ -4675,8 +4675,8 @@ has restore cases (refused at a minute in use, and selected beside later names) 
 no setup case, and a reference clock more
 than 15 seconds wrong can still repeat a name (its ±45.5 s control).
 
-Cold restore checks the master key recorded in the selected backup's venue.db; live takeover checks
-the live venue.db's current master key. Keep older named paper keys while their backups remain. The archive password is
+Cold restore checks the master key recorded in the selected backup's venue.db. Live conflict
+recovery checks the current master key in the live venue.db. Keep older named paper keys while their backups remain. The archive password is
 separate. Name selection does not discover names made after the backup or by a box this one
 never saw, and does not stop a returning old seller. Archive and bucket input remain mutually
 exclusive.
@@ -5061,10 +5061,8 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   the page's event was issued (`chosenHourIssuedAtMs`), before the host is asked; it sends `AGREEMENT_MS` (30 seconds) as
   the set's `agreesWithinMs`, so a device within 30 seconds answers `agrees`, not a minute. The set
   is at reason `start`. On handover it is boot's own correction, source `admin`, and only while the
-  spare is still a mirror: the older promote preparation route reaches the same seat on any box, and
-  on a box that is now primary it answers `not_mirror` (`apps/server/src/node-operation-preparation.ts`);
-  on a mirror that route answers only a request from the box itself
-  (`apps/server/src/read-only-exemptions.ts`), so it reaches `same_machine`. On first setup and
+  spare is still a mirror. On a box that is now primary, the clock setter answers `not_mirror`
+  (`apps/server/src/node-operation-preparation.ts`). On first setup and
   restore there is no venue database, so setup mode builds a second correction
   (`createSetupClockSet`, `apps/server/src/setup-clock-set.ts`), source `setup`, naming the
   administrator on first setup and nobody on restore, whose step goes into the note

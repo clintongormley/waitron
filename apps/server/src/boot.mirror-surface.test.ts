@@ -294,8 +294,6 @@ const OPEN_READS: Record<string, Answer> = {
 const MIRROR_WRITES: Record<string, Answer> = {
   "/api/node/peer-status": { status: 400, code: "handover.request_invalid" },
   "/api/node/membership": { status: 200 },
-  "/management-api/promote": { status: 403, code: "promotion.from_box_only" },
-  "/management-api/promote/preparation": { status: 403, code: "promotion.from_box_only" },
   "/api/node/handover/offer": { status: 400, code: "handover.request_invalid" },
   [`/api/node/handover/${MADE_UP}/preparation`]: {
     status: 403,

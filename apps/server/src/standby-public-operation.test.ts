@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { beforeAll, afterAll, beforeEach, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
@@ -16,7 +15,7 @@ import {
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, readNodeMode, readPairLink, setNodeMode } from "@waitron/node-db";
+import { NODE_MIGRATIONS, readPairLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
@@ -30,10 +29,6 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { createDeploymentHolders } from "./deployment-holders.js";
-import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
-import { promoteMirrorToPrimary } from "./promote.js";
-import { mountPromoteApi } from "./promote-api.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import {
   joinAsBundleAnswer,
@@ -43,7 +38,6 @@ import {
   type PersonSent,
 } from "./testing/box-join.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
-import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", async () => {
@@ -73,9 +67,7 @@ const scope = (action: string) => ({
 });
 let stateDir: string | undefined;
 let retained: ModuleOperationInput | undefined;
-let observedOperator: unknown;
 let collected: string[];
-let replaceKey: boolean;
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-standby-public-"));
   await mkdir(join(stateDir, "tls"));
@@ -89,8 +81,6 @@ afterAll(async () => {
 beforeEach(async () => {
   collected = [];
   retained = undefined;
-  observedOperator = undefined;
-  replaceKey = false;
   await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],
@@ -123,7 +113,6 @@ beforeEach(async () => {
           await withTransaction(suite.db, (tx) =>
             seedVenueSettings(tx, { name: "Source collected" }),
           );
-          if (replaceKey) await mintMasterKey(suite.db);
           return run({ ...operation, input: { current: "independent" } });
         },
       },
@@ -144,57 +133,11 @@ beforeEach(async () => {
             return { state: { identity: "P000042", eventId: "public-event", operatorId: ADMIN } };
           },
           async establish() {},
-          async activate(tx, node, operation) {
-            if (operation === undefined)
-              throw new AppError("module.operation_invalid", { module: "test-regime" });
-            retained = operation;
-            expect(operation.binding).toEqual(scope("promote"));
-            observedOperator = readOperationAuthority(
-              operation.authority,
-              operation.binding,
-            )?.operatorId;
-            expect(operation.input).toEqual({ current: "independent" });
-            await tx.insert(invoiceSeries).values([
-              { nodeId: node.nodeId, purpose: "standard", code: "A-P000042" },
-              { nodeId: node.nodeId, purpose: "full", code: "FF-P000042" },
-              { nodeId: node.nodeId, purpose: "corrective", code: "R-P000042" },
-            ]);
-          },
         },
       },
     }),
   );
 });
-async function promotionApp() {
-  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
-  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, TARGET);
-  const holders = createDeploymentHolders("mirror", "secondary");
-  const app = new Hono();
-  mountPromoteApi(app, {
-    appDb: suite.db,
-    nodeDb: suite.node,
-    nodeId: TARGET,
-    credentialKeyRing: TOTP_KEY_RING,
-    modules,
-    async run(attestation, withModuleOperations) {
-      const result = await promoteMirrorToPrimary(
-        {
-          db: suite.db,
-          node: suite.node,
-          ring: RING,
-          nodeId: TARGET,
-          holders,
-          modules,
-          withModuleOperations,
-          log: () => {},
-        },
-        attestation,
-      );
-      return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
-    },
-  });
-  return app;
-}
 async function bundleApp() {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const app = new Hono();
@@ -227,60 +170,9 @@ async function approvedJoin(
     moduleOperation: body.moduleOperation,
   });
 }
-function post(app: Hono, path: string, body: unknown) {
-  return app.request(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-function promoteBody(credentials: Record<string, unknown>) {
-  return {
-    ...credentials,
-    oldNodeNeutralised: true,
-    moduleOperation: { binding: scope("promote"), input },
-  };
-}
 function bundleBody() {
   return { moduleOperation: { binding: scope("reserve"), input } };
 }
-async function untouched() {
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
-  expect((await readNodeMode(suite.node, TARGET)).mode).toBe("mirror");
-  expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("secondary");
-}
-it.each(["account", "key"])(
-  "activates all purposes through the public promotion route with %s authentication",
-  async (method) => {
-    const app = await promotionApp();
-    const credentials =
-      method === "account"
-        ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: (await mintMasterKey(suite.db)).secret };
-    const response = await post(app, "/management-api/promote", promoteBody(credentials));
-    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
-    expect(await response.json()).toEqual({ alreadyPrimary: false, restarting: true });
-    expect(
-      (await suite.db.select().from(invoiceSeries))
-        .map(({ code, purpose }) => ({ code, purpose }))
-        .sort((a, b) => a.code.localeCompare(b.code)),
-    ).toEqual([
-      { code: "A-P000042", purpose: "standard" },
-      { code: "FF-P000042", purpose: "full" },
-      { code: "R-P000042", purpose: "corrective" },
-    ]);
-    expect((await readNodeMode(suite.node, TARGET)).singletonRole).toBe("primary");
-    expect(collected).toEqual(["promote"]);
-    const expectedOperator =
-      method === "account"
-        ? ADMIN
-        : { kind: "recovery-key", nodeId: TARGET, eventId: "public-event" };
-    // Save the authenticated identity during activation: the token is already expired here.
-    expect(retained?.binding).toEqual(scope("promote"));
-    expect(readOperationAuthority(retained!.authority, retained!.binding)).toBeUndefined();
-    expect(observedOperator).toEqual(expectedOperator);
-  },
-);
 it("reserves an opaque dormant identity through the approved join of a freshly signed-in administrator", async () => {
   const response = await approvedJoin(await bundleApp(), bundleBody());
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
@@ -330,87 +222,6 @@ it("admits with the module operation over the streaming link of a spare the char
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   expect((await readPairLink(suite.node, PRIMARY))?.peerNodeId).toBe(TARGET);
 });
-it("refuses a node key replaced during outside collection without activating or changing role", async () => {
-  const app = await promotionApp();
-  const key = (await mintMasterKey(suite.db)).secret;
-  replaceKey = true;
-  const response = await post(app, "/management-api/promote", promoteBody({ breakGlass: key }));
-  expect(response.status).toBe(401);
-  expect((await response.json()).error.code).toBe("promotion.break_glass_invalid");
-  expect(collected).toEqual(["promote"]);
-  await untouched();
-});
-it("rolls back all activated series and role when the chart write refuses", async () => {
-  const app = await promotionApp();
-  await suite.db.execute(
-    sql`create trigger public_chart_refusal before insert on node_membership begin select raise(abort, 'test public chart refusal'); end`,
-  );
-  try {
-    const response = await post(
-      app,
-      "/management-api/promote",
-      promoteBody({ personId: ADMIN, password: PASSWORD }),
-    );
-    expect(response.status).toBe(500);
-    expect(collected).toEqual(["promote"]);
-    await untouched();
-  } finally {
-    await suite.db.execute(sql`drop trigger public_chart_refusal`);
-  }
-});
-it("does not consult outside evidence when the account password is wrong", async () => {
-  const app = await promotionApp();
-  const response = await post(
-    app,
-    "/management-api/promote",
-    promoteBody({ personId: ADMIN, password: "wrong" }),
-  );
-  expect(response.status).toBe(401);
-  expect((await response.json()).error.code).toBe("password.invalid");
-  expect(collected).toEqual([]);
-  await untouched();
-});
-it("does not consult outside evidence when the master key is wrong, even with valid account credentials", async () => {
-  const app = await promotionApp();
-  await mintMasterKey(suite.db);
-  const response = await post(
-    app,
-    "/management-api/promote",
-    promoteBody({ breakGlass: WRONG_MASTER_KEY, personId: ADMIN, password: PASSWORD }),
-  );
-  expect(response.status).toBe(401);
-  expect((await response.json()).error.code).toBe("promotion.break_glass_invalid");
-  expect(collected).toEqual([]);
-  await untouched();
-});
-it("requires the administrator's current authenticator code before outside collection", async () => {
-  const app = await promotionApp();
-  const secret = await enrolAuthenticator(suite.db, ADMIN, TOTP_KEY_RING);
-  const response = await post(
-    app,
-    "/management-api/promote",
-    promoteBody({ personId: ADMIN, password: PASSWORD, totp: wrongTotpCode(secret) }),
-  );
-  expect(response.status).toBe(401);
-  expect((await response.json()).error.code).toBe("password.invalid");
-  expect(collected).toEqual([]);
-  await untouched();
-});
-it.each(["module", "action", "targetNodeId"])(
-  "refuses a promotion operation with a mismatched %s",
-  async (field) => {
-    const app = await promotionApp();
-    const body = promoteBody({ personId: ADMIN, password: PASSWORD });
-    Object.assign(body.moduleOperation.binding, {
-      [field]: field === "targetNodeId" ? PRIMARY : "wrong",
-    });
-    const response = await post(app, "/management-api/promote", body);
-    expect(response.status).toBe(400);
-    expect((await response.json()).error.code).toBe("module.operation_invalid");
-    expect(collected).toEqual([]);
-    await untouched();
-  },
-);
 it.each(["action", "sourceId", "targetNodeId"])(
   "refuses a reserve operation with a mismatched %s",
   async (field) => {
@@ -437,64 +248,6 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
     params: { module: "disabled-regime" },
   });
   expect(collected).toEqual([]);
-});
-it("returns the committed promotion result after a lost response without consulting outside evidence again", async () => {
-  const app = await promotionApp();
-  const key = (await mintMasterKey(suite.db)).secret;
-  const body = promoteBody({ breakGlass: key });
-  const first = await post(app, "/management-api/promote", body);
-  expect(first.status).toBe(200);
-  const before = await suite.db.select().from(invoiceSeries);
-  modules[0] = {
-    ...modules[0]!,
-    operations: {
-      async prepare() {
-        throw new Error("outside receipt is no longer available");
-      },
-    },
-  };
-  const repeated = await post(app, "/management-api/promote", body);
-  expect(repeated.status, JSON.stringify(await repeated.clone().json())).toBe(200);
-  expect(await repeated.json()).toEqual({ alreadyPrimary: true, restarting: false });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
-  expect(collected).toEqual(["promote"]);
-});
-it("refuses a promotion runner redirected to another node before collecting evidence", async () => {
-  await setNodeMode({ venue: suite.db, node: suite.node }, TARGET, "mirror", "adopt");
-  const app = new Hono();
-  mountPromoteApi(app, {
-    appDb: suite.db,
-    nodeDb: suite.node,
-    nodeId: TARGET,
-    modules,
-    credentialKeyRing: TOTP_KEY_RING,
-    async run(_attestation, runner) {
-      expect(runner).toBeDefined();
-      await runner!(
-        {
-          db: suite.db,
-          nodeDb: suite.node,
-          node: { nodeId: PRIMARY as never },
-        },
-        async (tx) => {
-          await tx
-            .insert(invoiceSeries)
-            .values({ nodeId: PRIMARY, code: "incorrect", purpose: "standard" });
-          return "incorrect";
-        },
-      );
-      return { alreadyPrimary: false, restarting: true };
-    },
-  });
-  const response = await post(
-    app,
-    "/management-api/promote",
-    promoteBody({ personId: ADMIN, password: PASSWORD }),
-  );
-  expect(response.status).toBe(400);
-  expect((await response.json()).error.code).toBe("module.operation_invalid");
-  expect(collected).toEqual([]);
-  await untouched();
 });
 it("refuses an approver without node.manage before collecting reservation evidence", async () => {
   const app = await bundleApp();

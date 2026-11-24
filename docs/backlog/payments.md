@@ -436,8 +436,7 @@ Remaining Stripe qualification and maintenance.
   box stay open, as they do on a restricted box. Only sale recovery and bill completion check for primary. Coordination between two boxes collecting at the same time is not
   built. The manager's stuck-payment lists, resolve routes and bill-payment attestations apply the
   same collection ownership. The primary named in the held chart also recovers payments from boxes
-  the chart fences or revokes, so plain promotion retains a manager fallback
-  (`apps/server/src/payments-api.ts`).
+  the chart fences or revokes (`apps/server/src/payments-api.ts`).
   [Implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

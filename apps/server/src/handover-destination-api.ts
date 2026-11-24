@@ -23,7 +23,6 @@ import {
 } from "./handover-manifest.js";
 import { currentBinding, peerKeyOf } from "./handover-signing.js";
 import { signedHandoverStatus } from "./handover-status-api.js";
-import { recordOfferInTurn } from "./handover-promotion-turn.js";
 import { beginHandoverFromOffer } from "./handover-store.js";
 import type { Statfs } from "./free-bytes.js";
 import { lowestFreeBytes, START_FREE_SPACE_FLOOR } from "./start-space.js";
@@ -35,7 +34,6 @@ const STATUS = {
   "handover.request_invalid": 400,
   "handover.peer_unknown": 403,
   "handover.not_a_spare": 409,
-  "handover.promotion_running": 409,
   "handover.membership_mismatch": 409,
   "handover.operation_in_progress": 409,
   "handover.operation_conflict": 409,
@@ -149,31 +147,29 @@ export function mountHandoverDestinationApi(
       if (stored?.fingerprint === bindingFingerprint(binding)) {
         return c.json(await signedHandoverStatus(deps, stored), 200);
       }
-      await recordOfferInTurn(deps.node, operationId, async () => {
-        const { mode } = await readNodeMode(deps.node, deps.nodeId);
-        if (mode !== "mirror") throw new AppError("handover.not_a_spare", {});
-        if (!(await matchesThisBox(deps, binding))) {
-          throw new AppError("handover.membership_mismatch", { operationId });
-        }
-        if (imageMigrations !== imageMigrationsDigest(deps.migrationsRoot)) {
-          throw new AppError("handover.modules_differ", {});
-        }
-        const own = await readOfferSettings(
-          deps.stateDir,
-          deps.ring,
-          "handover.destination_settings_unreadable",
-          deps.db,
-        );
-        const difference = offerSettingsDifference(settings, own);
-        if (difference !== null) throw new AppError(difference, {});
-        const neededBytes = 2 * copyBytes + START_FREE_SPACE_FLOOR;
-        const availableBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
-        if (availableBytes === null || availableBytes < neededBytes) {
-          log("warn", "handover.offer_space_refused", { operationId, neededBytes, availableBytes });
-          throw new AppError("handover.no_room_at_offer", {});
-        }
-        await beginHandoverFromOffer(deps, binding, "destination", envelope);
-      });
+      const { mode } = await readNodeMode(deps.node, deps.nodeId);
+      if (mode !== "mirror") throw new AppError("handover.not_a_spare", {});
+      if (!(await matchesThisBox(deps, binding))) {
+        throw new AppError("handover.membership_mismatch", { operationId });
+      }
+      if (imageMigrations !== imageMigrationsDigest(deps.migrationsRoot)) {
+        throw new AppError("handover.modules_differ", {});
+      }
+      const own = await readOfferSettings(
+        deps.stateDir,
+        deps.ring,
+        "handover.destination_settings_unreadable",
+        deps.db,
+      );
+      const difference = offerSettingsDifference(settings, own);
+      if (difference !== null) throw new AppError(difference, {});
+      const neededBytes = 2 * copyBytes + START_FREE_SPACE_FLOOR;
+      const availableBytes = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+      if (availableBytes === null || availableBytes < neededBytes) {
+        log("warn", "handover.offer_space_refused", { operationId, neededBytes, availableBytes });
+        throw new AppError("handover.no_room_at_offer", {});
+      }
+      await beginHandoverFromOffer(deps, binding, "destination", envelope);
       const recorded = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // A fault in Waitron: the transaction above recorded this row or found it recorded.
       if (recorded === null) throw new Error(`no handover operation ${operationId} after begin`);

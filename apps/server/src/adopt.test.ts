@@ -62,9 +62,7 @@ import { readBackupSettings } from "./backup-env-writer.js";
 import { readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
-import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mountPromoteApi } from "./promote-api.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
@@ -257,7 +255,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
   });
 
-  it("a spare with no key of its own promotes with the venue's master key, then makes a new master key", async () => {
+  it("the recovery pack can replace the master key without a box key", async () => {
     let ownNodeId = "";
     const answer = await adoptFromPrimary(
       deps({
@@ -272,45 +270,9 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
 
     // Stands for the master key row the spare's copy of venue.db carries.
-    const { secret: key, name: firstMasterKey } = await mintMasterKey(suite.db);
-    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
-    const app = new Hono();
-    mountPromoteApi(app, {
-      appDb: suite.db,
-      nodeDb: suite.node,
-      nodeId: ownNodeId,
-      run,
-      credentialKeyRing: TOTP_KEY_RING,
-      requestFromBox: () => false,
-    });
+    const { name: firstMasterKey } = await mintMasterKey(suite.db);
     const socket = new TLSSocket(new Socket());
-    const promote = async (breakGlass: string) =>
-      app.request(
-        "https://box.test/management-api/promote",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ oldNodeNeutralised: true, breakGlass }),
-        },
-        { incoming: { socket } },
-      );
     try {
-      const refused = await promote(WRONG_MASTER_KEY);
-      expect([refused.status, await refused.json()]).toEqual([
-        401,
-        { error: { code: "promotion.break_glass_invalid", params: {} } },
-      ]);
-      expect(run).not.toHaveBeenCalled();
-
-      const promoted = await promote(key);
-      expect([promoted.status, await promoted.json()]).toEqual([
-        200,
-        { alreadyPrimary: false, restarting: true },
-      ]);
-      expect(run).toHaveBeenCalledTimes(1);
-
-      // Backups' Make a new master key on the promoted box, which still holds no box key.
-      expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
       await seedVenue(suite.db, { name: "Sala" });
       const admin = await openManagementSession(suite.db, "admin");
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));

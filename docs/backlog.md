@@ -884,9 +884,9 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   Backups, recovery material, exports, people, your own sign-in, connections, handover and fiscal/box
   changes use the fifteen-minute session window. Handover requires a confirmation without a recovery
   code and an account with a password for the spare’s sign-in. The [ask-again plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md)
-  retains current authenticator codes for own-account changes; sessionless promotion keeps body
-  credentials, and approving a box join needs a signed-in session with `node.manage` and a fresh
-  sign-in. A Google-only account needs a password from password reset
+  retains current authenticator codes for own-account changes. The spare’s handover signs in with
+  credentials sent in the request. Approving a box join needs a signed-in session with `node.manage`
+  and a fresh sign-in. A Google-only account needs a password from password reset
   to open the window. Google proof and the later sign-in steps remain in the
   [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
 
@@ -1000,7 +1000,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-backup-read-limits) to reduce bucket requests.
 
-- **A1323. One master key for the venue (owner, 2026-11-04; designed with the owner 2026-11-21 and 2026-11-23; every setup kind now makes the master key, records it in venue.db's `master_keys` table and shows it at setup's last step and on the first page of the recovery pack, and the Backups card can make a new one; restore, promotion and the invoice identity conflict switch are authorised by it, and backups are not yet encrypted with keys calculated from it).**
+- **A1323. One master key for the venue (owner, 2026-11-04; designed with the owner 2026-11-21 and 2026-11-23; every setup kind now makes the master key, records it in venue.db's `master_keys` table and shows it at setup's last step and on the first page of the recovery pack, and the Backups card can make a new one; restore and the invoice identity conflict switch are authorised by it, and backups are not yet encrypted with keys calculated from it).**
   The owner keeps one key, printed in the recovery pack, in place of the backup key, the server key, the Cloud emergency code and the disk key; the box keeps only a check value and numbered backup keys calculated from it. The emergency start in Cloud needs the master key typed in, and the pack no longer holds the storage password.
   Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
@@ -1262,7 +1262,6 @@ Not in any track until the standalone primary is done.
 
 - **Series and module-preparation gaps at handover** (bundle of 2, at least 1 go-live, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
-- **Retire the old promote route** (important, size S). The owner cleared its removal. Until then, the route leaves open card payments for manual recovery. [Detail](backlog/replication-cloud.md#retire-the-old-promote-route)
 
 - **Two safe handover states stay open for good.** A box handed a fencing chart between the role and
   its record, then killed, stays restricted at `filing_assumed`; one handed it between the venue save
