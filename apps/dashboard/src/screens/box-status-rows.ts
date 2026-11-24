@@ -167,7 +167,7 @@ export function boxStatusRows(
     for (const id of on) noticesOn.get(id)!.push(notice);
   }
   for (const alert of alerts) {
-    // The row's line says what the box waits for, from the box's read; the bell's list can lag it.
+    // The Clock row's line already says what the box waits for.
     if (alert.code === "clock.unconfirmed") continue;
     const part = partOfAlert(alert);
     const id =

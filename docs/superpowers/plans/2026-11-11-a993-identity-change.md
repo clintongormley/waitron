@@ -447,7 +447,8 @@ The findings:
      stands. A person's confirmation wakes the clock watch (`jobRunner.wake`, `job-runner.ts:325`)
      so it does not wait the full 15 seconds. So the opening never runs inside a request's
      transaction, and there is no loop of this plan's own: the clock watch is a job the runner
-     stops at a stepdown (`job-catalogue.ts:26`) and on a failed start (`boot.ts:2813`).
+     stops at a stepdown (`job-catalogue.ts:26`) and on a failed start (`boot.ts:2813`). As built
+     2026-11-24: `clockWatchJob`'s `minSleepMs` is 0, since at the interval a wake ended no sleep.
 
    The cases:
    - **A crash before A950 commits:** recovery restores the copy taken before the note was written,
@@ -562,6 +563,8 @@ The findings:
      confirmar la hora a mano ni con que las cajas coincidan con ella.", and 2 says "once the box's
      time service confirms its time" / "en cuanto el servicio de hora del servidor confirme su hora".
    - The till's guide gains the notice, in English and Spanish (`apps/server/src/guide/*/till-notices.md`).
+   - **As built 2026-11-24** (cleared by the watcher, 07:03, not the owner): while blocked, the Sales
+     row repeats the alert's words, and the Clock row leaves out **The date and time are right**.
    - Option 2 of decision 3 would need refusal words as well.
 8. **Order PR 1 → 2 → 3.** Nothing writes a note until PR 3.
 9. **The minute, and the box's role.**
@@ -1129,6 +1132,9 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 - `.github/workflows/ci.yml`: the comment at `:4692-4694`, and the refusal message at `:4734-4737`,
   which becomes "…and production boxes refuse to start on it unless it is installed as an upgrade,
   which opens a new fiscal installation. To publish it anyway, set…".
+- `docs/developers/conventions-data.md`: the topic file's copy of the sale-path bullet ("Nothing
+  external may block a sale…") gains what CLAUDE.md's gains. PR 2 already added the hold to "Every
+  start confirms the box's time before it trades".
 - `docs/operations/release.md:391-397`: **rewrite** "When the producer or the system code changes".
   The new text covers: set the three secrets, set `WAITRON_PRODUCER_CHANGE_ALLOWED`, install as an
   upgrade, a person confirms the time on a till or Box status if the box's time service is not

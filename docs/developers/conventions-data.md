@@ -4731,7 +4731,8 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   have confirmed, the reading's minute applies. While the start waits on a box that files records,
   `clock.retry` (under *The server's client* below) adds a request at most every 30 seconds. A synchronised answer confirms `by_internet`, from `waiting`,
   `by_devices` or `by_person`.
-- **Two devices.** While waiting, except for a future-date refusal (below), each look also offers
+- **Two devices.** While waiting, except for a future-date refusal or a new fiscal installation
+  (below), each look also offers
   the stored device readings: two or more devices at different network addresses, each within 5
   seconds (`START_CLOCK_MARGIN_MS`) of the box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
   `devices` and their ids. They set nothing. A till or handheld sends its clock with each
@@ -4766,6 +4767,14 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   second against its own steady clock (`performance.now()`) since it arrived. The cause reaches Box status as
   `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
   `clock.unconfirmed` alert as `params.cause`, which word a jump's wait apart from a start's.
+- **A new fiscal installation waiting to open** (A993, `apps/server/src/identity-change-opening.ts`).
+  While the upgrade's note waits, a confirmation is held instead of applied: the internet's in place
+  of any other, a person's in place of an earlier person's, devices' never. The box stays `waiting`
+  with cause `identity_change`; a person's confirmation is logged `clock_start.confirmation_held`, or
+  `clock_start.confirmation_unused` while the internet's is held. The start, then each clock-watch
+  look, which a person's held confirmation wakes, tries to open the installation in the correction's
+  turn while a confirmation is held. Opening it ends the wait by the held confirmation. A set that
+  moved the clock by more than a second, a return to waiting, or a refusal for the clock drops it.
 - **A future-date refusal** (`lookForRefusal` in `apps/server/src/clock-watch.ts`, A1420 PR 2,
   task 10). Each look, whatever the status, asks the seat's optional
   `latestFutureDateRefusal?(tx, nodeId, abovePosition)` for the highest sale on this box's chain
@@ -4864,7 +4873,7 @@ device's steady clock since the read that drew it; it says the time changed and 
 again.
 
 A box whose host service does not answer waits at every start and cannot be set through it, so
-devices (not in a wait for AEAT's future-date refusal) or a person confirm its time as it stands
+devices (not in a wait for AEAT's future-date refusal or a new fiscal installation) or a person confirm its time as it stands
 (plan D12).
 
 Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-clock-gate.test.ts`,
@@ -4966,8 +4975,9 @@ the correction's turn.
 While the start waits on a box that files records, a look whose device check leaves it waiting
 then asks `clock.retry` (`retryTimeService`, `apps/server/src/time-service-retry.ts`) in a
 correction turn of its own,
-after the devices', at most once every 30 seconds of the steady clock, and never once a set has
-been asked of the host, whatever it answered, or a person has confirmed the time in this process. Measured on the test box on
+after the devices', at most once every 30 seconds of the steady clock, and never while a
+confirmation is held for a new fiscal installation, nor once a set has been asked of the host,
+whatever it answered, or a person's confirmation has been applied in this process. Measured on the test box on
 2026-11-20 ([PR #3854's comment](https://github.com/clintongormley/waitron/pull/3854#issuecomment-7025912599)):
 timesyncd left alone tried again after waits that doubled (32, 64, 128 and 256 s were seen; by
 systemd v257's `src/timesync/timesyncd-manager.c`, read, not measured, they go on doubling up to
@@ -5033,7 +5043,7 @@ is that person's device, stored as their reading; a setup or restore set stores 
 the before and after times in the note, and a restore set names nobody.
 
 **The order** (`setInTurn`). Every set, and every confirmation of the start (the watch's two
-devices, a till's keep or agreeing check), runs in the correction's one-at-a-time **turn**. The turn is always taken around a whole transaction, never inside one:
+devices, a till's keep or agreeing check), and every attempt to open a new fiscal installation, runs in the correction's one-at-a-time **turn**. The turn is always taken around a whole transaction, never inside one:
 `withTransaction` holds the write lock (`packages/db/src/tenancy.ts`), and a set holding the turn
 waits for that lock, so a caller waiting for the turn inside a transaction would never finish.
 Inside the turn, each refusal asking nothing further:

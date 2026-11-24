@@ -358,8 +358,7 @@ pone el reloj del servidor a esa hora, y **El servidor** mantiene el reloj del s
 hora de la caja mientras el servidor espera a que se confirme su hora y los cobros no
 están parados además porque el reloj marca una fecha
 anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
-la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cada uno de ellos
-que el servidor acepta reanuda los cobros. Cuando el servidor pone su reloj en hora, la campana y el
+la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cuando el servidor pone su reloj en hora, la campana y el
 correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
 dispositivos no lo impiden.
 

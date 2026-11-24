@@ -64,7 +64,7 @@ servidor no vuelve a activar los cobros: usa **Comprobar la hora**.
 
 **Los cobros esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se
 confirme su hora · Comprobar la hora** es rojo. Que los dispositivos coincidan con el servidor no
-vuelve a activar los cobros: usa **Comprobar la hora**. Si la línea sigue, un encargado o un administrador puede
+vuelve a activar los cobros: usa **Comprobar la hora** y cobra cuando desaparezca la línea. Si la línea sigue, un encargado o un administrador puede
 reiniciar el servidor en la [página Estado del servidor](box-status.md#restart).
 
 Mientras los cobros esperan, o mientras la hora del servidor es incorrecta o su disco está lleno,

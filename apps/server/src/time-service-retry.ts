@@ -10,7 +10,7 @@ const LOG_EVERY = 10;
  * Asks the host to restart its time service, at most once per {@link RETRY_SPACING_MS}, while the
  * start waits for its time with no confirmation held; left alone, the service asks again only after
  * a wait that doubles. Never once a set has been asked of the host in this process, whatever it
- * answered, or a person's confirmation has ended a wait: a restart may move the clock (the host
+ * answered, or a person's confirmation has been applied: a restart may move the clock (the host
  * refuses the case it knows of, `saved_time_ahead`).
  */
 export function timeServiceRetry(deps: {

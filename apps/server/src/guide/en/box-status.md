@@ -331,7 +331,7 @@ box's clock to it, and **The box** keeps the box's clock whatever the till's tim
 waits for its time to be confirmed and payments are not also stopped because the clock
 reads before 28 October 2024; otherwise **The
 box** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
-box's clock. Each of these the box accepts restarts payments. When the box sets its clock, the bell and the email name the
+box's clock. When the box sets its clock, the bell and the email name the
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once

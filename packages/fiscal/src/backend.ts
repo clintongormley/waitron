@@ -303,7 +303,7 @@ export type SecondClock =
  * note does not name this release, this producer, or the producer the open chain was filed under. */
 export type IdentityChangeOutcome = "opened" | "nothing-to-open" | "not-named";
 
-/** Why two clocks did not vouch for the box's time. */
+/** Why the clocks read did not vouch for the box's time. */
 export type ClockRefusalReason =
   "clock_unconfirmed" | "second_clock_missing" | "clock_disagreement";
 
