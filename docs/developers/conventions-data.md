@@ -2252,10 +2252,11 @@ list in the same transaction. Export drops inactive stations and zones from the 
 remaps the remaining IDs. A pass view with no display choice shows other stations.
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
-device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0
-(a deleted course or station, `active`). Archived products still travel: their `active` field
-has no leave-behind selector. The export then excludes every row of a transferred table whose foreign key names a
-row left behind, repeating until nothing more is left behind (`exportConfigurationTables`,
+device profile, `retired_at`; the hidden product behind a custom item, `custom_item_key`), or whose
+`leaveBehindWhenFalse` column holds false or 0 (a deleted course or station, `active`). Being
+archived does not leave a product behind: its `active` field has no leave-behind selector. The export
+then excludes every row of a transferred table whose foreign key names a row left behind, repeating
+until nothing more is left behind (`exportConfigurationTables`,
 `packages/provisioning/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
 never the `references` lists, and follows only those between transferred tables that lead from a
 table declaring either selector to its children, and on to theirs. A key's parent table is

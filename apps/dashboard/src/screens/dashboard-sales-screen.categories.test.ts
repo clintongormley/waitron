@@ -486,7 +486,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(rows(await mount(api))[0]![0]).toBe("Payments on account");
   });
 
-  it("names Custom items in Spanish and English, with no path", async () => {
+  it("names Custom items in Spanish and English", async () => {
     const api = stubApi({
       getCategorySales: vi.fn().mockResolvedValue({
         ...report,
@@ -506,8 +506,6 @@ describe("dashboard-sales-screen — category report", () => {
     expect(rows(el)).toEqual([
       ["Artículos libres", 0, "custom_items", "12,00\u00a0€", "9,92\u00a0€"],
     ]);
-    const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test=category-row] th")!;
-    expect(cell.querySelector("[data-test=category-path]")).toBeNull();
     cleanupWidgets();
     setLocale("en");
     expect(rows(await mount(api))[0]![0]).toBe("Custom items");

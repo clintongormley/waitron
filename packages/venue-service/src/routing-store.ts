@@ -269,7 +269,10 @@ function rowProductIds(
   return covered;
 }
 
-/** Every active product but the hidden ones behind a custom item, or only `routedId`'s own row and its variants'. */
+/**
+ * Every active product, or only `routedId`'s own row and its variants'; never a hidden one behind a
+ * custom item.
+ */
 function activeProducts(tx: Transaction, routedId?: string) {
   return tx
     .select({
