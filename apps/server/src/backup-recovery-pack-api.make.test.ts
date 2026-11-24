@@ -1310,6 +1310,38 @@ describe("the status route", () => {
     expect(await read(fixture())).toMatchObject({ serverKey: "not_yet" });
   });
 
+  it("names the current master key and the pack that showed it, which a plain make does not change", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
+    expect(await read(f)).toMatchObject({ masterKey: null });
+    const response = await f.make(true);
+    const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
+    await response.arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+    await (await f.make(false)).arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+  });
+
+  it("names no pack for a master key no pack on this box showed", async () => {
+    await withTransaction(suite.db, (tx) =>
+      insertMasterKey(tx, {
+        name: "2026-10-01 · AAAA",
+        checkValue: "a".repeat(64),
+        publicKey: Buffer.alloc(44, 1),
+        madeAt: new Date("2026-10-01T09:00:00.000Z"),
+        madeBy: null,
+      }),
+    );
+    expect(await read(fixture())).toMatchObject({
+      masterKey: { name: "2026-10-01 · AAAA", pack: null },
+    });
+  });
+
+  it("names the day the old pack is kept until if a new master key is made now", async () => {
+    // Daily archives keeping 7: the last one made before now is gone 8 days from now.
+    expect(await read(fixture())).toMatchObject({ keepOldPackUntil: "2026-11-07T09:00:00.000Z" });
+  });
+
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });

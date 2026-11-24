@@ -52,7 +52,12 @@ import {
   drawRecoveryPack,
   shownMasterKey,
 } from "./backup-recovery-pack-output.js";
-import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
+import {
+  carriesServerKey,
+  keepOldPackUntil,
+  packStatus,
+  type CurrentChecks,
+} from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
@@ -492,6 +497,7 @@ export function mountBackupRecoveryPackMakeApi(
               ).map((p) => [p.id, p.name] as const),
         );
         const loaded = deps.backups();
+        const now = deps.now();
         const status = packStatus({
           records: records.map((r) => ({
             ...r,
@@ -507,9 +513,22 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== undefined &&
             fileKey !== undefined &&
             loaded.recoveryKey !== fileKey,
-          now: deps.now(),
+          now,
         });
-        return { ...status, timeZone: knownZone((await readVenue(tx)).timeZone) };
+        const master = await currentMasterKeyElsewhere(tx, records);
+        return {
+          ...status,
+          masterKey:
+            master.masterKeyName === null
+              ? null
+              : { name: master.masterKeyName, pack: master.masterKeyHeldBy },
+          keepOldPackUntil: keepOldPackUntil({
+            retention: loaded.retention,
+            schedule: loaded.schedule,
+            now,
+          }),
+          timeZone: knownZone((await readVenue(tx)).timeZone),
+        };
       });
       return c.json(status);
     });
