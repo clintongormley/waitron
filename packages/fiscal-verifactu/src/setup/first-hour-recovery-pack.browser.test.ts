@@ -7,7 +7,7 @@ import type {
   InitialSetupActions,
   InitialSetupNodeKey,
 } from "@waitron/module/src/setup-contract.js";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";

@@ -8,8 +8,7 @@ import {
   type KeptClockConfirmation,
 } from "@waitron/module";
 import { bootReader, type BootReading } from "./boot-reader.js";
-import { RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
-import { MAX_PACK_PDF, readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
+import { MAX_PACK_PDF, RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import "./errors.js";
 import { pageReturnPath } from "./waiting-page.js";
@@ -107,18 +106,27 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
     });
 
   /** The recovery pack PDF the page's person chose: its master key when it is the staged one, so
-   * the page fills the field with it, or what is wrong with the file. One PDF is read at a time. */
+   * the page fills the field with it, or what is wrong with the file. One PDF is taken and read at
+   * a time; a waiting sender's body stays unread until its turn. */
   let packTurn: Promise<unknown> = Promise.resolve();
-  app.post("/restore-clock/pack", bodyLimit({ maxSize: MAX_PACK_PDF }), async (c) => {
+  app.post("/restore-clock/pack", async (c) => {
     c.header("Cache-Control", "no-store");
     if (!sentFromThisOrigin(c)) return refuseOrigin(c);
-    const bytes = new Uint8Array(await c.req.arrayBuffer());
-    const read = packTurn.then(() => readRecoveryPackPdf(bytes));
+    const tooLarge = () => c.text("Payload Too Large", 413);
+    if (Number(c.req.header("content-length") ?? 0) > MAX_PACK_PDF) return tooLarge();
+    const read = packTurn.then(async () => {
+      const bytes = await readUpTo(c.req.raw.body, MAX_PACK_PDF);
+      if (bytes === null) return null;
+      const { readRecoveryPackPdf } = await packReader();
+      return readRecoveryPackPdf(bytes);
+    });
     packTurn = read.catch(() => {});
     let masterKey: string | null;
     let heldBy: number | null;
     try {
-      ({ masterKey, masterKeyHeldBy: heldBy } = await read);
+      const pack = await read;
+      if (pack === null) return tooLarge();
+      ({ masterKey, masterKeyHeldBy: heldBy } = pack);
     } catch (error) {
       const notAPack =
         error instanceof RecoveryPackFileError &&
@@ -219,6 +227,43 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       if (confirmation === kept) confirmation = null;
     },
   };
+}
+
+let packReaderLoad:
+  Promise<typeof import("@waitron/recovery-pack/src/read-pack-pdf.js")> | undefined;
+/** The pack reader, loaded on first use: pdf-lib is needed only while a restore waits for its
+ * time. */
+function packReader() {
+  packReaderLoad ??= import("@waitron/recovery-pack/src/read-pack-pdf.js");
+  return packReaderLoad;
+}
+
+/** The whole body, or null once it passes `limit` bytes, read no further. */
+async function readUpTo(
+  body: ReadableStream<Uint8Array> | null,
+  limit: number,
+): Promise<Uint8Array | null> {
+  if (body === null) return new Uint8Array();
+  const reader = body.getReader();
+  const pieces: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    size += next.value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      return null;
+    }
+    pieces.push(next.value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const piece of pieces) {
+    bytes.set(piece, offset);
+    offset += piece.byteLength;
+  }
+  return bytes;
 }
 
 function renderWaitingPage(locale: SupportedLocale, destination: string): string {

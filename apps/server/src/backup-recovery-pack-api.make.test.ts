@@ -48,7 +48,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
+import { PART_WORDS, type RecoveryPackPage } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import {
   AppError,
   decodeMasterKeyCode,

@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
 import type { VenueRequest } from "@waitron/provisioning";
 import type { NodeId } from "@waitron/shared";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";

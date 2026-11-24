@@ -11,6 +11,7 @@ import {
 import {
   looksLikePdf,
   MAX_PACK_FILE,
+  MAX_PACK_PDF,
   PACK_ATTACHMENT,
   parseRecoveryPackFile,
   RecoveryPackFileError,
@@ -18,7 +19,7 @@ import {
   type RecoveryPackFileRefusal,
 } from "./pack-file.js";
 
-export const MAX_PACK_PDF = 8 * 1024 * 1024;
+export { MAX_PACK_PDF };
 
 function refuse(reason: RecoveryPackFileRefusal): never {
   throw new RecoveryPackFileError(reason);

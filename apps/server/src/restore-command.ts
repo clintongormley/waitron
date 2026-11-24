@@ -8,12 +8,8 @@ import {
 import type { VenueLock } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  looksLikePdf,
-  readRecoveryPackPdf,
-  RecoveryPackFileError,
-  type RecoveryPackFile,
-} from "@waitron/recovery-pack";
+import { looksLikePdf, RecoveryPackFileError, type RecoveryPackFile } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { AppError, diskFullIn, hasCode, readVariable } from "@waitron/shared";
 import {
   createS3ObjectStore,

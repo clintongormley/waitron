@@ -29,7 +29,7 @@ import {
   verifactuIdentities,
   verifactuRecords,
 } from "@waitron/fiscal-verifactu";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { decodeMasterKeyCode, nodeId } from "@waitron/shared";
 import { quoteIdent, type VenueRequest } from "@waitron/provisioning";

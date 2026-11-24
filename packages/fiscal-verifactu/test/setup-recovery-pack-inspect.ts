@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import type { RecoveryDocument } from "../src/recovery-document.js";
 
 export const setupPackDocument: RecoveryDocument = {

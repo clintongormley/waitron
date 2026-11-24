@@ -9,7 +9,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueResult } from "@waitron/provisioning";
 import { masterKeys, readCurrentMasterKey, readRecoveryPacks, type Database } from "@waitron/db";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { PDFDocument } from "pdf-lib";
 import * as invoiceFont from "./invoice-font.js";

@@ -511,6 +511,72 @@ describe("the restore's waiting app: the recovery pack PDF", () => {
     expect(packReads.most).toBe(1);
   });
 
+  it("takes no waiting pack's body until the pack before it has been read", async () => {
+    const w = await waiting();
+    const pdf = await packPdf(KEY);
+    // The first sends all but its last byte, then holds the turn until `finish`.
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => (finish = resolve));
+    let begun!: () => void;
+    const reading = new Promise<void>((resolve) => (begun = resolve));
+    let pulls = 0;
+    const first = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          pulls += 1;
+          if (pulls === 1) {
+            controller.enqueue(pdf.slice(0, -1));
+            return begun();
+          }
+          await held;
+          controller.enqueue(pdf.slice(-1));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    /** The whole pack, counting what the route has taken of it. */
+    const counted = () => {
+      const taken = { bytes: 0 };
+      let sent = false;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (sent) return controller.close();
+            sent = true;
+            taken.bytes += pdf.length;
+            controller.enqueue(pdf.slice());
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return { body, taken };
+    };
+    const streamPack = (body: ReadableStream<Uint8Array>, headers: Record<string, string> = {}) =>
+      w.app.request("/restore-clock/pack", {
+        method: "POST",
+        headers: { "content-type": "application/pdf", ...headers },
+        body,
+        duplex: "half",
+      } as RequestInit);
+
+    const firstAnswer = streamPack(first);
+    await reading;
+    const unsized = counted();
+    const sized = counted();
+    const waitingAnswers = [
+      streamPack(unsized.body),
+      streamPack(sized.body, { "content-length": String(pdf.length) }),
+    ];
+    for (let turn = 0; turn < 20; turn += 1) await new Promise((r) => setImmediate(r));
+    expect([unsized.taken.bytes, sized.taken.bytes]).toEqual([0, 0]);
+
+    finish();
+    for (const res of [await firstAnswer, ...(await Promise.all(waitingAnswers))])
+      expect(await res.json()).toEqual({ key: KEY });
+    expect([unsized.taken.bytes, sized.taken.bytes]).toEqual([pdf.length, pdf.length]);
+  });
+
   it("refuses the right pack when no key is staged", async () => {
     const w = await waiting({ staged: null });
     const res = await sendPack(w, await packPdf(KEY));

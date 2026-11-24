@@ -3,13 +3,13 @@ import { create, type Font } from "fontkit";
 import { PACK_WORDS, type PackLocale } from "./i18n/pack-words.js";
 import {
   buildRecoveryPackFile,
+  MAX_PACK_PDF,
   PACK_ATTACHMENT,
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "./pack-file.js";
 import type { PackPart, RecoveryPackPage, ServerKeyLocation } from "./page.js";
 import { qrModules } from "./qr.js";
-import { MAX_PACK_PDF } from "./read-pack-pdf.js";
 
 export type { PackPart, RecoveryPackPage, ServerKeyLocation } from "./page.js";
 
