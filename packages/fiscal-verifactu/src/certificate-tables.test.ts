@@ -1,12 +1,4 @@
-import {
-  captureError,
-  checkFailed,
-  constraintTarget,
-  isUniqueViolation,
-  newId,
-  triggerRaised,
-  withTransaction,
-} from "@waitron/db";
+import { captureError, checkFailed, newId, triggerRaised, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
@@ -44,19 +36,6 @@ function insertInstall(
   ).then(() => id);
 }
 
-function insertReminder(db: Database, installId: string, stage = "warning") {
-  return withTransaction(db, (tx) =>
-    tx.execute(sql`
-      insert into fiscal_certificate_reminders (
-        id, node_id, install_id, stage, person_id, status, claimed_at, reported_at
-      ) values (
-        ${newId()}, ${NODE}, ${installId}, ${stage}, ${PERSON}, 'claimed',
-        '2026-10-18T10:00:00.000Z', null
-      )
-    `),
-  );
-}
-
 const SETUP = { source: "setup", personId: null, checkedEndpoint: null, checkedAt: null };
 const DASHBOARD = {
   source: "dashboard",
@@ -65,7 +44,7 @@ const DASHBOARD = {
   checkedAt: "2026-10-18T10:00:00.000Z",
 };
 
-describe("verifactu_certificates and fiscal_certificate_reminders", () => {
+describe("verifactu_certificates", () => {
   it("accepts a setup install with no person, endpoint or check time", async () => {
     const id = await insertInstall(pg.db, SETUP);
     const { rows } = await pg.db.execute<{ id: string; person_id: string | null }>(
@@ -105,21 +84,5 @@ describe("verifactu_certificates and fiscal_certificate_reminders", () => {
     const id = await insertInstall(pg.db, DASHBOARD);
     const { rows } = await pg.db.execute(sql`select id, source from verifactu_certificates`);
     expect(rows).toEqual([{ id, source: "dashboard" }]);
-  });
-
-  it("refuses a second reminder for the same install, stage and person", async () => {
-    const installId = await insertInstall(pg.db, SETUP);
-    await insertReminder(pg.db, installId);
-    await insertReminder(pg.db, installId, "urgent");
-    const error = await captureError(() => insertReminder(pg.db, installId));
-    expect(isUniqueViolation(error)).toBe(true);
-    expect(constraintTarget(error)).toEqual({
-      table: "fiscal_certificate_reminders",
-      columns: ["install_id", "stage", "person_id"],
-    });
-    const { rows } = await pg.db.execute(
-      sql`select stage from fiscal_certificate_reminders order by stage`,
-    );
-    expect(rows).toEqual([{ stage: "urgent" }, { stage: "warning" }]);
   });
 });

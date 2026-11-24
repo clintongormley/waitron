@@ -101,7 +101,7 @@ export interface MailSenderDeps {
   signal: AbortSignal;
   resolveDelivery: (tx: Transaction, rule: MailDeliveryRule) => Promise<EmailDelivery>;
   send?: MailTransport;
-  noticeRelayAllowed?: (tx: Transaction) => Promise<boolean>;
+  noticeRelayAllowed?: (tx: Transaction, kind: OutgoingMailKind) => Promise<boolean>;
   resolveAccountRelay?: (signal: AbortSignal) => Promise<CloudEmailGrant | null>;
   sendCloudEmail?: (
     grant: CloudEmailGrant,
@@ -216,6 +216,7 @@ export async function abandonMailClaims(
 }
 function isCloudStaffNotice({ kind, params }: OutgoingMail): boolean {
   return (
+    kind === "certificate_reminder" ||
     kind === "email_changed" ||
     kind === "security_change" ||
     kind === "role_membership_changed" ||
@@ -259,12 +260,16 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     const ready = first.filter(
       (r) => due(r, owners.get(r.kind)!, firstNow) && Date.parse(r.notAfter) > firstNow,
     );
-    if (
-      ready.some((r) => r.kind === "account_action") ||
-      (deps.noticeRelayAllowed &&
-        ready.some(isCloudStaffNotice) &&
-        (await deps.noticeRelayAllowed(deps.db)))
-    ) {
+    let relayNeeded = ready.some((r) => r.kind === "account_action");
+    if (!relayNeeded && deps.noticeRelayAllowed) {
+      for (const kind of new Set(ready.filter(isCloudStaffNotice).map((row) => row.kind))) {
+        if (await deps.noticeRelayAllowed(deps.db, kind)) {
+          relayNeeded = true;
+          break;
+        }
+      }
+    }
+    if (relayNeeded) {
       try {
         accountRelayRead = true;
         const grant = await deps.resolveAccountRelay(deps.signal);
@@ -316,7 +321,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
         )
           deliveries.set(owner.deliveryRule, await deps.resolveDelivery(tx, owner.deliveryRule));
       let unconfigured = false;
-      let noticeRelayAllowed: boolean | undefined;
+      const noticeRelayByKind = new Map<OutgoingMailKind, boolean>();
       for (const row of rows) {
         const owner = owners.get(row.kind)!;
         if (!due(row, owner, now.getTime()) || Date.parse(row.notAfter) <= now.getTime()) continue;
@@ -330,8 +335,12 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           isCloudStaffNotice(row) &&
           deps.noticeRelayAllowed
         ) {
-          noticeRelayAllowed ??= await deps.noticeRelayAllowed(tx);
-          if (noticeRelayAllowed) {
+          let relayAllowed = noticeRelayByKind.get(row.kind);
+          if (relayAllowed === undefined) {
+            relayAllowed = await deps.noticeRelayAllowed(tx, row.kind);
+            noticeRelayByKind.set(row.kind, relayAllowed);
+          }
+          if (relayAllowed) {
             if (!accountRelayRead) continue;
             delivery = accountDelivery ?? delivery;
           }

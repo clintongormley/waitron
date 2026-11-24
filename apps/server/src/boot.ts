@@ -242,7 +242,7 @@ import {
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
 import { createHealthState, healthApp, type HealthState } from "./health.js";
-import { abandonMailClaims, mailSendJob } from "./mail-sender.js";
+import { abandonMailClaims, mailSendJob, type MailSenderDeps } from "./mail-sender.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
 import { isUnset } from "./env-value.js";
@@ -419,7 +419,7 @@ import {
   runFiscalDrain,
 } from "./onboarding-policy.js";
 import { certificateReminderJob } from "./certificate-reminder-worker.js";
-import { createCertificateReminderSender } from "./certificate-reminder-email.js";
+import { certificateReminderMail } from "./certificate-reminder-mail.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -2606,7 +2606,10 @@ async function bootServer(
     }
     return (await resolveMailDeliveryIn(tx, ring, config, "notice")).mode;
   };
-  const cloudMail = {
+  const cloudMail: Pick<
+    MailSenderDeps,
+    "resolveAccountRelay" | "sendCloudEmail" | "noticeRelayAllowed"
+  > = {
     resolveAccountRelay: async (signal: AbortSignal) => {
       if (!cloudConnection || (await usesSavedAccountSmtp(db))) return null;
       return cloudConnection.emailRelay(signal);
@@ -2614,7 +2617,10 @@ async function bootServer(
     sendCloudEmail: cloudConnection?.sendEmail,
     ...(cloudConnection &&
       !captureAccountEmail && {
-        noticeRelayAllowed: async (tx: Transaction) => !(await hasSavedSmtp(tx)),
+        noticeRelayAllowed: async (tx, kind) =>
+          !(await hasSavedSmtp(tx)) &&
+          (kind !== "certificate_reminder" ||
+            (await cloudConnection.emailRelayEnabled().catch(() => false))),
       }),
   };
   const boxNoticeRelayAllowed = async (tx: Transaction) =>
@@ -3121,13 +3127,11 @@ async function bootServer(
         now,
         isPrimary: () => holders.singletonRole.current === "primary",
         resolveDelivery: resolveAccountEmail,
-        send: createCertificateReminderSender(),
         ...(cloudConnection &&
           !captureAccountEmail && {
             cloud: {
               enabled: cloudConnection.emailRelayEnabled,
               resolveGrant: cloudConnection.emailRelay,
-              send: cloudConnection.sendEmail,
             },
           }),
       }),
@@ -3159,6 +3163,15 @@ async function bootServer(
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
         log,
       }),
+      ...(certificateDutiesEnabled(enabledFiscal, config)
+        ? [
+            certificateReminderMail({
+              seat: enabledFiscal.certificate,
+              nodeId: tradingContext.nodeId,
+              venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+            }),
+          ]
+        : []),
       ...(workforceEnabled
         ? [
             attendanceReminderMail({

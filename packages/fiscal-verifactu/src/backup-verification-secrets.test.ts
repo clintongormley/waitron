@@ -57,7 +57,6 @@ const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: key });
 const createdAt = "2026-10-20T08:00:00.000Z";
 const oldAt = "2026-09-01T08:00:00.000Z";
 const secretsEnv = Buffer.from(`WAITRON_CREDENTIALS_KEY=${key}\n`);
-const installId = "10000000-0000-4000-8000-000000000012";
 let directory: string | undefined;
 let entries: Record<string, Uint8Array | null>;
 
@@ -88,10 +87,6 @@ async function capture(cert: Candidate | null = candidate) {
       { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(createdAt) },
       payload(cert),
     );
-    await suite.db.execute(sql`insert into fiscal_certificate_reminders
-      (id,node_id,install_id,stage,person_id,status,claimed_at,reported_at)
-      select ${installId},node_id,id,'warning','10000000-0000-4000-8000-000000000013','sent',${createdAt},${createdAt}
-      from verifactu_certificates where node_id=${TAXPAYER_A.nodeId} and installed_at=${oldAt}`);
   }
   entries = {
     "secrets/secrets.env": secretsEnv,
@@ -288,7 +283,6 @@ it("does not accept an older source-node certificate", async () => {
 });
 it("accepts a source with one genuine installation", async () => {
   await capture();
-  both((db) => db.prepare("delete from fiscal_certificate_reminders;").run());
   both((db) => db.prepare("delete from verifactu_certificates where installed_at=?").run(oldAt));
   expect(await verify()).toEqual(result("passed"));
 });
@@ -339,14 +333,6 @@ it.each([
   );
   expect(await verify()).toEqual(result("invalid"));
 });
-it.each(["node_id", "install_id", "stage", "person_id", "status", "claimed_at", "reported_at"])(
-  "preserves reminder field %s",
-  async (column) => {
-    await capture();
-    edit("after", (db) => db.exec(`update fiscal_certificate_reminders set ${column}='changed'`));
-    expect(await verify()).toEqual(result("invalid"));
-  },
-);
 it("requires an unambiguous latest source-node install", async () => {
   await capture();
   both((db) =>
@@ -478,9 +464,7 @@ it("keeps a positive-schema source with no certificate unavailable", async () =>
 it("cannot certify a zero predecessor when migration invents certificate evidence", async () => {
   await capture();
   edit("before", (db) => {
-    db.exec(
-      "delete from venue_credentials; delete from fiscal_certificate_reminders; delete from verifactu_certificates",
-    );
+    db.exec("delete from venue_credentials; delete from verifactu_certificates");
   });
   expect(await verify({ sourceSchema: null })).toEqual(result("invalid"));
 });

@@ -24,9 +24,4 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "the certificates installed on a node, keyed by its node id; read by that node and every node that took over from it (`readHistoryNodes`)",
   ),
-  classify(
-    "fiscal_certificate_reminders",
-    "local",
-    "the expiry emails about a node's certificate, keyed by the node that first wrote the row; read and updated by that node and every node that took over from it (`readHistoryNodes`)",
-  ),
 ];

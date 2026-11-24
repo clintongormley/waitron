@@ -17,21 +17,6 @@ CREATE TABLE `declaraciones_responsables` (
           )))
 );
 --> statement-breakpoint
-CREATE TABLE `fiscal_certificate_reminders` (
-	`id` text PRIMARY KEY NOT NULL,
-	`node_id` text NOT NULL,
-	`install_id` text NOT NULL,
-	`stage` text NOT NULL,
-	`person_id` text NOT NULL,
-	`status` text NOT NULL,
-	`claimed_at` text NOT NULL,
-	`reported_at` text,
-	FOREIGN KEY (`install_id`) REFERENCES `verifactu_certificates`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "fiscal_certificate_reminders_stage_ck" CHECK("fiscal_certificate_reminders"."stage" in ('warning', 'urgent', 'expired')),
-	CONSTRAINT "fiscal_certificate_reminders_status_ck" CHECK("fiscal_certificate_reminders"."status" in ('claimed', 'sent', 'failed', 'unknown'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_certificate_reminders_uq` ON `fiscal_certificate_reminders` (`install_id`,`stage`,`person_id`);--> statement-breakpoint
 CREATE TABLE `returned_invoice_records` (
 	`record_id` text PRIMARY KEY NOT NULL,
 	`received_at` text NOT NULL,

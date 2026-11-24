@@ -306,7 +306,6 @@
   "src/category-sales-page.test.ts": 16.7,
   "src/cert-expiry.test.ts": 0.1,
   "src/certificate-diagnosis.browser.test.ts": 10.9,
-  "src/certificate-reminder-email.test.ts": 1,
   "src/certificate-reminder-worker.test.ts": 2.4,
   "src/chain-height.test.ts": 2.4,
   "src/changes-after-sending.test.ts": 1,

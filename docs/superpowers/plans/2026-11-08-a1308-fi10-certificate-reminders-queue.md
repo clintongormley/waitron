@@ -35,6 +35,18 @@ U4; [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb8
 (`boxAlertMail`, the pattern this owner follows; `reopenMail`, Task 1, which this plan leaves as it is); [jr4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr4-working-time-and-mail.md)
 Task 3 (the decision as a job; it builds against either shape); rules [2026-11-08-a1308-slice-rules.md](2026-11-08-a1308-slice-rules.md).
 
+**Cloud delivery (watcher, 2026-11-24 13:38):** The certificate job checks whether Cloud
+delivery is enabled and a grant is available before queueing without SMTP. The shared sender
+preserves the recipient language, Cloud facts and delivery deadline. Saved SMTP takes priority.
+The queue's retry schedule replaces the old batch pause after a Cloud refusal.
+
+**Clock correction and retries (watcher, 2026-11-24 14:57 and 15:02):** The sender holds a
+future-stamped reminder until its queue time after the clock moves back. The email for that period
+can still go when the box reaches that time. Urgent and expired reminders usually get one attempt
+per day, including if the connection fails. The next day gets its own row. A clock correction can
+make a refused row due again. On a 25-hour autumn day, a refusal in the first hour can retry before
+midnight (watcher, 15:10).
+
 **Base:** `main` after fi9, with slices 3a-ii and 3b landed. Line numbers read at `9c66ef0356`
 (after #2570, which changed `claimReminder` and `reportReminder` to read across the takeover
 history).
@@ -61,10 +73,11 @@ Read from [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09
    claim are never sent again; a row past `not_after` is `expired`. So today's rule, "a failed one is
    retried once its report is a day old; claimed or unknown never again"
    (`certificate-reminders.ts:55-58`, `RETRY_AFTER_MS` `:13`), becomes `retryDelaysMs` = six entries of 86,400,000 ms
-   and `longestWaitMs` 86,400,000. A reminder's `not_after` is the end of its period (below), never
-   more than 3a-ii's seven days, so a weekly reminder the server keeps refusing is retried daily for
-   its week (the owner confirmed this on 2026-11-09), and a daily one gets one try a day: the next
-   day's reminder is a new row.
+   and `longestWaitMs` 86,400,000. A reminder's `not_after` is the end of its period (below). A
+   warning week follows seven local dates, including when the autumn clock change gives it an
+   extra hour (watcher, 2026-11-24). A weekly reminder the server keeps refusing is retried daily
+   for its week (owner, 2026-11-09), and a daily one gets one try a day. The next day's reminder is
+   a new row.
 4. **Unconfigured email** — the sender leaves due rows untouched while email is unconfigured (3a-ii
    decision A), but it still expires every waiting row past `not_after` in the same pass, before it
    looks at the delivery (3a-ii "One pass", step 3, first two bullets). The deciding pass keeps

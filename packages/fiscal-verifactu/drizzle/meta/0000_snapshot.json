@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b53758e2-e432-4ddd-b61a-1d4b46c34a32",
+  "id": "fa2656bc-cae5-4d95-8d5b-74ae25f6a574",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "declaraciones_responsables": {
@@ -37,105 +37,6 @@
         "declaraciones_responsables_version_ck": {
           "name": "declaraciones_responsables_version_ck",
           "value": "instr(\"declaraciones_responsables\".\"version\", char(0)) = 0\n          and length(\"declaraciones_responsables\".\"version\") <= 50\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) glob '[0-9]*.[0-9]*.[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*[^0-9.]*'\n          and length(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1)) - length(replace(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1), '.', '')) = 2\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '0[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*.0[0-9]*'\n          and (instr(\"declaraciones_responsables\".\"version\", '-') = 0 or (\n            substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), 1, instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') - 1) in ('alpha', 'beta', 'rc')\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) glob '[0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '*[^0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '0[0-9]*'\n          ))"
-        }
-      }
-    },
-    "fiscal_certificate_reminders": {
-      "name": "fiscal_certificate_reminders",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "install_id": {
-          "name": "install_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "stage": {
-          "name": "stage",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "reported_at": {
-          "name": "reported_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "fiscal_certificate_reminders_uq": {
-          "name": "fiscal_certificate_reminders_uq",
-          "columns": [
-            "install_id",
-            "stage",
-            "person_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "fiscal_certificate_reminders_install_id_verifactu_certificates_id_fk": {
-          "name": "fiscal_certificate_reminders_install_id_verifactu_certificates_id_fk",
-          "tableFrom": "fiscal_certificate_reminders",
-          "tableTo": "verifactu_certificates",
-          "columnsFrom": [
-            "install_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "fiscal_certificate_reminders_stage_ck": {
-          "name": "fiscal_certificate_reminders_stage_ck",
-          "value": "\"fiscal_certificate_reminders\".\"stage\" in ('warning', 'urgent', 'expired')"
-        },
-        "fiscal_certificate_reminders_status_ck": {
-          "name": "fiscal_certificate_reminders_status_ck",
-          "value": "\"fiscal_certificate_reminders\".\"status\" in ('claimed', 'sent', 'failed', 'unknown')"
         }
       }
     },

@@ -74,8 +74,6 @@ export interface FiscalCertificateDiagnosisDeps {
 }
 
 export interface FiscalCertificateReminder {
-  id: string;
-  recipient: string;
   subject: string;
   text: string;
   notice: {
@@ -138,22 +136,19 @@ export interface FiscalCertificateSeat {
       screen?: string;
     }[]
   >;
-  /** Expiry emails for the newest certificate install on `nodeId` or any box it took over from: at most one per person per stage. */
   reminders: {
-    /** Claims the next email due, or `null`; the caller sends it, then reports how it ended. */
-    claim(
+    queue(
       tx: Transaction,
       deps: { nodeId: string },
-      recipients: readonly { personId: string; email: string; language: "en" | "es" }[],
+      personIds: readonly string[],
       now: Date,
-    ): Promise<FiscalCertificateReminder | null>;
-    report(
-      tx: Transaction,
-      deps: { nodeId: string },
-      id: string,
-      outcome: "sent" | "rejected" | "unknown",
-      now: Date,
-    ): Promise<void>;
+    ): Promise<number>;
+    current(tx: Transaction, nodeId: string): Promise<string | null>;
+    word(input: {
+      params: Readonly<Record<string, unknown>>;
+      language: "en" | "es";
+      now: Date;
+    }): FiscalCertificateReminder;
   };
 }
 

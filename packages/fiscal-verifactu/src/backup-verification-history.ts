@@ -352,7 +352,6 @@ const LINKS = [
   ["verifactu_submissions", "registro_id", "verifactu_records", "id"],
   ["verifactu_submissions", "case_remedy_registro_id", "verifactu_records", "id"],
   ["verifactu_submissions", "case_resolved_by", "persons", "id"],
-  ["fiscal_certificate_reminders", "install_id", "verifactu_certificates", "id"],
   ["verifactu_history", "node_id", "nodes", "id"],
   ["verifactu_history", "person_id", "persons", "id"],
   ["verifactu_history", "registro_id", "verifactu_records", "id"],

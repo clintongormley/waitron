@@ -13,7 +13,6 @@ const OWNED = [
   "verifactu_sending_state",
   "verifactu_submissions",
   "verifactu_certificates",
-  "fiscal_certificate_reminders",
   "verifactu_series_conflicts",
   "verifactu_identities",
   "verifactu_records",

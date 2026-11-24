@@ -637,3 +637,23 @@ it("keeps a closed-port text send unknown for the legacy caller", async () => {
     }),
   ).toBe("unknown");
 });
+
+it("keeps a rejected text send rejected if its diagnostic callback throws", async () => {
+  const rig = await smtpRig("data-refused");
+  const onFailure = vi.fn(() => {
+    throw new Error("diagnostic failed");
+  });
+  try {
+    expect(
+      await createTextEmailSender({ onFailure })({
+        smtp: rig.config,
+        recipient: message.to,
+        subject: message.subject,
+        text: message.text,
+      }),
+    ).toBe("rejected");
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith("email.test_refused");
+  } finally {
+    await rig.close();
+  }
+});
