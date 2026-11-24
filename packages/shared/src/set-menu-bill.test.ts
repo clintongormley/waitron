@@ -149,6 +149,16 @@ describe("set-menu copies", () => {
     expect(shared.copiesListing(copies, "wine", null).map(({ id }) => id)).toEqual(["daily:other"]);
     expect(shared.copiesListing(copies, "juice", "glass")).toEqual([]);
   });
+
+  it("records the version a menu selling now holds, else the copy's first", () => {
+    const versionIds = ["version-1", "version-2", "version-3"];
+    expect(shared.newBillVersionOf(versionIds, new Set(["version-3", "version-2"]))).toBe(
+      "version-2",
+    );
+    expect(shared.newBillVersionOf(versionIds, new Set(["other"]))).toBe("version-1");
+    expect(shared.newBillVersionOf(versionIds, undefined)).toBe("version-1");
+    expect(shared.newBillVersionOf([], new Set(["version-1"]))).toBeUndefined();
+  });
 });
 
 it("does not offer a plain dish when none of its published variants can be served", () => {

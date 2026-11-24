@@ -629,6 +629,7 @@ export {
 export {
   checkMoves,
   copiesListing,
+  newBillVersionOf,
   placeInOrder,
   setMenuCopyOf,
   setMenuOfferOf,
