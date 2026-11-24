@@ -1150,7 +1150,8 @@ function coveredRefundActor(who: GiveBackActor) {
 }
 
 /** The rights a resend of `ask` needs, worked out from the same body and the rows its first send
- * wrote, so it needs what that send needed. */
+ * wrote. Judged from the stored rows, as Refund a payment judges a resend, it can refuse what the
+ * first send allowed: a covered refund stored under a person holding `sale.refund` is not covered. */
 async function resendRights(
   tx: Transaction,
   ask: GiveBackWrite,

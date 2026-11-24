@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import {
   deviceProfiles,
   devices,
   floorZones,
+  incidents,
   invoiceCorrections,
   parties,
   refunds,
@@ -105,8 +106,14 @@ vi.mock("./pin-check-ahead.js", async (importOriginal) => {
   };
 });
 
-/** The corrections `fileCorrectionAutomatically` was asked to file; with `refuse`, it throws. */
-const automaticFiling = vi.hoisted(() => ({ refuse: false, asked: [] as string[] }));
+/** The corrections `fileCorrectionAutomatically` was asked to file; with `refuse`, it throws; with
+ * `chainBroken`, the real one runs while the seat's chain check reports an issue, as
+ * `invoice-correction-alerts.test.ts`'s `standIn` makes it. */
+const automaticFiling = vi.hoisted(() => ({
+  refuse: false,
+  chainBroken: false,
+  asked: [] as string[],
+}));
 vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
   const real = await importOriginal<typeof import("./invoice-correction-alerts.js")>();
   return {
@@ -114,7 +121,18 @@ vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
     fileCorrectionAutomatically: (...args: Parameters<typeof real.fileCorrectionAutomatically>) => {
       automaticFiling.asked.push(args[1]);
       if (automaticFiling.refuse) return Promise.reject(new Error("automatic filing refused"));
-      return real.fileCorrectionAutomatically(...args);
+      if (!automaticFiling.chainBroken) return real.fileCorrectionAutomatically(...args);
+      const backend = args[0].backend;
+      const check = backend.checkIntegrity;
+      backend.checkIntegrity = () =>
+        Promise.resolve({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        } as Awaited<ReturnType<typeof check>>);
+      return real.fileCorrectionAutomatically(...args).finally(() => {
+        backend.checkIntegrity = check;
+      });
     },
   };
 });
@@ -1614,6 +1632,50 @@ describe("POST …/give-back on a separate terminal", () => {
     expect((await read(saleId)).underWay).toMatchObject({ state: "open", moneyBack: "10.00" });
   });
 
+  it("raises invoice_correction.filing_refused and keeps the terminal's refund completed when the filing after commit is refused (case 11)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    const before = effects();
+    automaticFiling.chainBroken = true;
+    onTestFinished(() => {
+      automaticFiling.chainBroken = false;
+    });
+    const answer = await give(saleId, { ...body, manualConfirmed: true, override: supervisor() });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "10.00", state: "pending" }],
+      underWay: { state: "open", gross: "10.00", moneyBack: "10.00", left: "0.00" },
+    });
+    const correctionId = (answer.json as { parts: { correctionId: string }[] }).parts[0]!
+      .correctionId;
+    const raised = await venue.db
+      .select({ params: incidents.params, severity: incidents.severity })
+      .from(incidents)
+      .where(
+        and(eq(incidents.code, "invoice_correction.filing_refused"), eq(incidents.saleId, saleId)),
+      );
+    expect(raised).toEqual([
+      {
+        params: {
+          correctionId,
+          saleId,
+          moneyBack: "10.00",
+          refusal: "invoice_correction.chain_unsound",
+        },
+        severity: "error",
+      },
+    ]);
+    const [leg] = await refundRowsOf(saleId);
+    expect(leg).toMatchObject({ appliedAmount: 1000, manual: true, state: "completed" });
+    expect(effects()).toEqual({
+      ...before,
+      refunds: before.refunds + 1,
+      corrections: before.corrections + 1,
+    });
+  });
+
   it("writes the paella's refund and the cheesecake's leg as two completed refunds on the one capture (section 10)", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ card: "34.00" }]);
@@ -1663,6 +1725,22 @@ describe("POST …/give-back on a separate terminal", () => {
       code: "management.request_invalid",
       params: { field: "manualConfirmed" },
     });
+  });
+
+  it("refuses a profile that may not take hand-keyed cards, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    const cashOnly = await ownTill(["take-orders", "open-cash-drawer", "take-cash"]);
+    const before = effects();
+    const answer = await give(
+      saleId,
+      { ...body, manualConfirmed: true, override: supervisor() },
+      cashOnly.cookie,
+    );
+    expectRefusedUnwritten(answer, "device.forbidden_action", before);
+    expect(answer.status).toBe(403);
   });
 
   it("asks a fresh PIN even of a person holding both rights, writing nothing without one", async () => {
