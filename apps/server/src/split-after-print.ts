@@ -159,18 +159,23 @@ export async function copyBillDishes(
     if (copy === undefined) cohorts.set(cohortId, (copy = newId()));
     return copy;
   };
+  const copies = rows.map((row, index) => ({
+    ...row,
+    id: copyOf.get(row.id)!,
+    workingOrderId: toBillId,
+    lineNo: index + 1,
+    parentLineId: row.parentLineId === null ? null : copyOf.get(row.parentLineId)!,
+    setMenuLineId: row.setMenuLineId === null ? null : copyOf.get(row.setMenuLineId)!,
+    cohortId: row.cohortId === null ? null : cohortFor(row.cohortId),
+  }));
+  // A long bill takes several statements, and a row's set menu or dish must already be stored: a set
+  // menu's row can come after its dishes.
+  const pointedAtFirst = (row: (typeof copies)[number]) =>
+    row.setMenuRole === "set_menu" ? 0 : row.parentLineId === null ? 1 : 2;
   await insertInChunks(
     tx,
     workingOrderLines,
-    rows.map((row, index) => ({
-      ...row,
-      id: copyOf.get(row.id)!,
-      workingOrderId: toBillId,
-      lineNo: index + 1,
-      parentLineId: row.parentLineId === null ? null : copyOf.get(row.parentLineId)!,
-      setMenuLineId: row.setMenuLineId === null ? null : copyOf.get(row.setMenuLineId)!,
-      cohortId: row.cohortId === null ? null : cohortFor(row.cohortId),
-    })),
+    copies.sort((a, b) => pointedAtFirst(a) - pointedAtFirst(b)),
   );
   const pairs = rows.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
   await carryLineReductions(tx, pairs);

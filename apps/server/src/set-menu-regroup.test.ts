@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { adjustmentLines, persons, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  adjustmentLines,
+  insertInChunks,
+  persons,
+  statementChunks,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
@@ -22,6 +29,7 @@ import {
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readGroupingCopies, regroupBills, saveBillGrouping } from "./set-menu-regroup.js";
+import { copyBillDishes } from "./split-after-print.js";
 import { mountTillApi } from "./till-api.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { parkOrder } from "./working-order-open.js";
@@ -728,4 +736,49 @@ it("changes nothing when a bill is regrouped with nothing changed", async () => 
   expect(answer).toEqual({ changed: false, exact: true });
   expect(await regroup(bill.tabId)).toEqual(new Set());
   expect(await rows(bill.tabId)).toEqual(before);
+});
+
+it("copies a bill whose new set menu comes after its dishes in a later insert statement", async () => {
+  const bill = await seated();
+  await send(bill, "Soup", "Hake");
+  const perStatement = statementChunks(workingOrderLines, Array.from({ length: 1 << 16 }))[0]!
+    .length;
+  const [soupRow] = await rows(bill.tabId);
+  // Rows the grouping leaves alone, so the Daily it saves is the first row of the second statement.
+  await inTx(venue, (tx) =>
+    insertInChunks(
+      tx,
+      workingOrderLines,
+      Array.from({ length: perStatement - 2 }, (_, index) => ({
+        ...soupRow!,
+        id: randomUUID(),
+        lineNo: index + 3,
+        aLaCarteUnitPrice: null,
+        cohortId: null,
+        cohortOrdinal: null,
+        wholePortion: null,
+      })),
+    ),
+  );
+  await regroup(bill.tabId);
+  const source = await rows(bill.tabId);
+  const daily = source.find(({ setMenuRole }) => setMenuRole === "set_menu")!;
+  expect(daily.lineNo).toBe(perStatement + 1);
+  expect(source.filter(({ setMenuLineId }) => setMenuLineId === daily.id)).toHaveLength(2);
+
+  const copy = await seated();
+  await inTx(venue, (tx) => copyBillDishes(tx, bill.tabId, copy.tabId));
+  const copied = await rows(copy.tabId);
+  expect(copied.map(({ lineNo }) => lineNo)).toEqual(source.map(({ lineNo }) => lineNo));
+  const copiedDaily = copied.find(({ setMenuRole }) => setMenuRole === "set_menu")!;
+  expect(copiedDaily.lineNo).toBe(daily.lineNo);
+  expect(
+    copied
+      .filter(({ setMenuLineId }) => setMenuLineId === copiedDaily.id)
+      .map(({ lineNo, setMenuPlace }) => ({ lineNo, setMenuPlace })),
+  ).toEqual(
+    source
+      .filter(({ setMenuLineId }) => setMenuLineId === daily.id)
+      .map(({ lineNo, setMenuPlace }) => ({ lineNo, setMenuPlace })),
+  );
 });
