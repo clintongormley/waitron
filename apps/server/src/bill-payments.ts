@@ -306,7 +306,8 @@ export interface BillPaymentResult {
   slipPrintFailed?: true;
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
-   * till (the first sign-in or a later one) answers the state it finds. */
+   * till (the first sign-in or a later one) answers the state it finds, except that Pay for items
+   * answers `declined` for a failed card its provider recorded as failed or refunded. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;

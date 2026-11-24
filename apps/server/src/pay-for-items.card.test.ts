@@ -531,7 +531,10 @@ describe("A1515 pay for items on the card reader", () => {
     expect(first.json.payment).toMatchObject({ outcome: "declined" });
     expect(again.status).toBe(200);
     expect(again.json.billId).toBe(first.json.billId);
-    expect(again.json.payment).toMatchObject({ payment: { state: "failed" } });
+    expect(again.json.payment).toMatchObject({
+      outcome: "declined",
+      payment: { state: "failed" },
+    });
     expect(venue.card.collectCalls.length).toBe(calls + 1);
     expect(await lineTotals(sourceId)).toEqual(["3.00", "18.00"]);
     const named = await inTx(venue, (tx) =>

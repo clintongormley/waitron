@@ -8,7 +8,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { readPaymentsSettings } from "@waitron/payments";
+import { findPaymentByBillPayment, readPaymentsSettings } from "@waitron/payments";
 import {
   AppError,
   centsToDecimal,
@@ -382,18 +382,26 @@ export async function payForItems(
           async (tx) => {
             const bill = await billFor(tx, true);
             billId = bill.billId;
-            return beginReaderBillPayment(tx, deps, cfg, billId, bill.request, operator, {
-              preRead,
-              print: slip,
-              hold,
-              fingerprint: print,
-            });
+            const started = await beginReaderBillPayment(
+              tx,
+              deps,
+              cfg,
+              billId,
+              bill.request,
+              operator,
+              { preRead, print: slip, hold, fingerprint: print },
+            );
+            return started.kind === "replay"
+              ? {
+                  ...started,
+                  result: await asFirstAnswered(tx, started.result as BillPaymentResult),
+                }
+              : started;
           },
           deps.log,
         ),
       );
-      // Begun with no basket, so a replay answers the payment, never a settled counter order.
-      if (begun.kind === "replay") return { billId, payment: begun.result as BillPaymentResult };
+      if (begun.kind === "replay") return { billId, payment: begun.result };
       return { billId, payment: await collectBegunReaderPayment(deps, cfg, begun) };
     } catch (error) {
       if (!hold.capturedReplay) throw error;
@@ -417,6 +425,22 @@ export async function payForItems(
     },
     deps.log,
   );
+}
+
+/**
+ * A replayed reader payment, a failed one answered `declined` when its provider recorded the card
+ * failed or refunded, as `collectBegunReaderPayment` words that outcome. Begun with no basket, so a
+ * replay answers the payment, never a settled counter order.
+ */
+async function asFirstAnswered(
+  tx: Transaction,
+  result: BillPaymentResult,
+): Promise<BillPaymentResult> {
+  if (result.outcome !== "failed") return result;
+  const provided = await findPaymentByBillPayment(tx, result.payment.id);
+  return provided?.state === "failed" || provided?.state === "refunded"
+    ? { ...result, outcome: "declined" }
+    : result;
 }
 
 /** What a preview of Pay for items is asked. */
