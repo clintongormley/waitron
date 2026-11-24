@@ -6,6 +6,10 @@ export const menuListStyles = css`
   h1 {
     margin: 0 0 var(--wt-space-4);
   }
+  .error {
+    margin: 0;
+    color: var(--wt-color-danger);
+  }
   .header {
     display: flex;
     flex-wrap: wrap;

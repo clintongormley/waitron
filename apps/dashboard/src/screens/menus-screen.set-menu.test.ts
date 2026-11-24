@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import {
   currentContentLanguages,
   NavigationGuard,
@@ -129,6 +130,9 @@ async function mount(path = "/menus", client = api(), theme?: "light" | "dark") 
 }
 
 it("shows only set menus, their prices and their offering menus on the new list", async () => {
+  const { innerWidth: width, innerHeight: height } = window;
+  await page.viewport(1280, height);
+  onTestFinished(() => page.viewport(width, height));
   const client = api();
   client.listMenus.mockResolvedValue([
     menu,
@@ -143,6 +147,8 @@ it("shows only set menus, their prices and their offering menus on the new list"
   await expect.element(holder).toHaveAttribute("href", "/menus/menu/lunch/view/structure");
   await expect.element(page.getByText("Not on any menu")).toBeVisible();
   expect(page.getByRole("button", { name: /Filters/ }).elements()).toHaveLength(0);
+  holder.element().closest("td")!.click();
+  expect(location.pathname).toBe("/set-menus");
   await holder.click();
   expect(location.pathname).toBe("/menus/menu/lunch/view/structure");
   expect(client.readSetMenu).not.toHaveBeenCalled();
@@ -444,6 +450,37 @@ it("recovers the ordinary Prices tab after the menus list is retried", async () 
   });
 });
 
+it("keeps a set menu address when settings fail before the menu list answers", async () => {
+  const client = api();
+  let answer!: (menus: MenuSummary[]) => void;
+  client.getMenuSettings.mockRejectedValueOnce(new Error("Settings unavailable"));
+  client.listMenus.mockReturnValueOnce(
+    new Promise((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await mount(dailyPath, client);
+  await expect.element(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  expect(location.pathname).toBe(dailyPath);
+  answer([menu, daily]);
+  await expect.element(page.getByRole("textbox", { name: /^Price per set menu/ })).toBeVisible();
+});
+
+it("returns to the list if the set menu being edited is deleted elsewhere", async () => {
+  const live = new LiveData();
+  const client = { ...api(), liveData: live };
+  await mount(dailyPath, client);
+  await page.getByRole("textbox", { name: "Price per set menu" }).fill("15.00");
+  const request = vi.fn<NavigationLeave["request"]>().mockResolvedValue("kept");
+  const guard = new NavigationGuard(window, { isDirty: () => true, request });
+  onTestFinished(() => guard.dispose());
+  client.listMenus.mockResolvedValue([menu]);
+  live.invalidate([{ type: "menus" }]);
+  await expect.element(page.getByText("No set menus yet.")).toBeVisible();
+  expect(location.pathname).toBe("/set-menus");
+  expect(request).not.toHaveBeenCalled();
+});
+
 it("keeps the unsaved price when Back is refused and returns to the list when allowed", async () => {
   const screen = await mount(dailyPath);
   const price = page.getByRole("textbox", { name: "Price per set menu" });
@@ -710,6 +747,12 @@ it("opens a created set menu and reports a failed re-read of the menus", async (
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector('[data-test="retry"]')).toBeTruthy(),
   );
+  const problem = screen.shadowRoot!.querySelector('[data-test="load-error"]')!;
+  const token = document.createElement("span");
+  token.style.color = "var(--wt-color-danger)";
+  screen.shadowRoot!.append(token);
+  expect(getComputedStyle(problem).color).toBe(getComputedStyle(token).color);
+  token.remove();
 });
 
 it("shows the saved name in the heading after the set menu's terms are saved", async () => {

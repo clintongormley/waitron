@@ -450,15 +450,9 @@ export class MenusScreen extends LitElement {
       .help {
         color: var(--wt-color-text-muted);
       }
-      .help,
-      .error {
-        margin: 0;
-      }
       .help {
+        margin: 0;
         font-size: var(--wt-font-size-sm);
-      }
-      .error {
-        color: var(--wt-color-danger);
       }
       .prices,
       .home {

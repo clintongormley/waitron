@@ -98,7 +98,7 @@ export class SetMenusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
-  @state() private menus: DashboardMenuSummary[] = [];
+  @state() private menus: DashboardMenuSummary[] | null = null;
   @state() private rows: DashboardMenuSummary[] = [];
   @state() private menuId: string | null = null;
   @state() private loading = true;
@@ -137,6 +137,7 @@ export class SetMenusScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
+    this.loading = true;
     this.loadError = false;
     try {
       await Promise.all([
@@ -175,11 +176,21 @@ export class SetMenusScreen extends LitElement {
     if (
       this.#url.read("dashboard") === "set-menus" &&
       this.menuId !== null &&
-      !this.loading &&
+      this.menus !== null &&
       !this.#queries.failing("listMenus") &&
       !this.rows.some(({ id }) => id === this.menuId)
-    )
-      this.#open(null, true);
+    ) {
+      const guard = navigationGuardFor(window);
+      if (!guard) {
+        this.#open(null, true);
+        return;
+      }
+      // This editor can no longer save, so correct the current address without a leave question.
+      this.menuId = null;
+      const address = new URL(guard.href);
+      address.pathname = "/set-menus";
+      guard.rewrite(address);
+    }
   }
 
   #open(id: string | null, replace = false): void {
@@ -374,7 +385,7 @@ export class SetMenusScreen extends LitElement {
       <dashboard-menu-copy-dialog
         .open=${this.copying !== null}
         .menu=${this.copying}
-        .menus=${this.menus}
+        .menus=${this.menus ?? []}
         .api=${this.api}
         @menu-copy-close=${() => {
           this.copying = null;
