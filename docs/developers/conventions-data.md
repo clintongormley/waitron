@@ -7378,7 +7378,8 @@ set menu whose dishes have different rates files its price as parts on its dishe
 (`shareSetMenus`, `packages/menu/src/pricing.ts`) and 0.00 on its own row, so those rows' filed
 totals differ from their stored lines' too, and a grouped row standing for dishes of several set
 menus files the sum of their parts. Each such row stores its part in `sale_lines.set_menu_part`
-(minus the whole price on the set menu's own row, null on every other row), and a row's sold amount
+(on the set menu's own row, minus what that row was charged after its comps, discounts and any free
+item's share; null on every other row), and a row's sold amount
 is `line_gross − set_menu_part`: read the sold amount from that column (`soldGross`,
 `packages/orders-sales/src/receipt-lines.ts`; `soldAmount`,
 `apps/server/src/cancellation-refund-value.ts`), never by pairing with the stored lines, which a

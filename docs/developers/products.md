@@ -208,9 +208,10 @@ files at the dish's own takeaway rate, and the set menu's own row files 0.00. Wh
 dishes share one rate that day, nothing is divided: the set menu's row files its whole price at that
 rate, as eaten in. A set menu with no dish of any weight on the bill files whole at the highest
 takeaway rate among the products its recorded copy can hold (`readLineVatRates`,
-`apps/server/src/takeaway-set-menus.ts`). A supplement stays on its dish's row at the dish's rate,
+`apps/server/src/line-vat-rates.ts`, through `recordedProducts`, `apps/server/src/takeaway-set-menus.ts`). A supplement stays on its dish's row at the dish's rate,
 a paid extra on its own row at its own rate, and neither is divided or weighed. Each filed row of a divided set menu stores its part in
-`sale_lines.set_menu_part` (minus the whole price on the set menu's own row, null elsewhere), so a
+`sale_lines.set_menu_part` (on the set menu's own row, minus what that row was charged after its
+comps, discounts and any free item's share; null elsewhere), so a
 row's sold amount is `line_gross − set_menu_part`. The ticket and its reprint (`soldGross`,
 `packages/orders-sales/src/receipt-lines.ts`), a refund (`soldAmount`,
 `apps/server/src/cancellation-refund-value.ts`) and the reports read that; a whole credit copies the

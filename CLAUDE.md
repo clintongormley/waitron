@@ -588,7 +588,7 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
 - **On a ticket where a free item took its share of the price paid (A445), or a takeaway set menu's
   price was divided between its dishes, a filed line's total differs from its stored line's, and a
   grouped filed row may not split into whole cents per portion; code pairing or valuing them allows
-  for both, and reads a row's sold amount as `line_gross − set_menu_part`.** Cost: a reprint dropped
+  for both, and reads a divided set menu's rows' sold amount as `line_gross − set_menu_part`.** Cost: a reprint dropped
   the comp, a reprint dropped a price each, and refunds overshot the filed row. Nothing guards it.
   [Receipt](docs/developers/conventions-data.md#a-free-items-share-or-a-divided-set-menu-changes-filed-line-totals).
 - **A reader that sums, counts or tests for a sale's correctives goes through `correctivesOf`

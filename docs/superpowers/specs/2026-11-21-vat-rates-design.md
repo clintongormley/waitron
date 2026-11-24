@@ -47,6 +47,7 @@ decision that a set menu carries its own two VAT rates
     the food's rate (owner, 21 November: "the safest thing for now is to say that we can't create
     set menus for takeaways containing items of different vat classes … we need the adviser's
     input before we change this last one").
+    _2026-11-24: replaced by the owner's division of the price; see "Set menus" below._
 - **A drink rung up at the counter as drunk on the premises stays at the dine-in rate** when the
   customer carries it out, and staff may ring it up that way when the customer says nothing
   (owner, 18 November: "yes"). Nothing here changes it: it follows the order's way, as today.
@@ -132,8 +133,8 @@ screen shows, is deleted rather than ported (**my call**).
 
 ### Set menus
 
-_2026-11-24: the three "Taken away", "The till refuses" and "A scheduled rate change" points below
-are replaced: taken away, a set menu's price is divided between its dishes by their à la carte
+_2026-11-24: the four "Taken away", "The dashboard says so", "The till refuses" and "A scheduled
+rate change" points below are replaced: taken away, a set menu's price is divided between its dishes by their à la carte
 prices, each part at its dish's takeaway rate, and nothing is refused (owner, 24 November; built in
 [VAT rates piece B](../plans/2026-11-24-vat-rates-b.md), PR B1)._
 
