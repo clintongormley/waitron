@@ -15,6 +15,7 @@ import type { MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setSingletonRole } from "@waitron/node-db";
 import { isAppError } from "@waitron/shared";
+import { installBenchClock, type BenchClock } from "../scripts/bench/bench-clock.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { ClockWatch } from "./clock-watch.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
@@ -444,11 +445,20 @@ describe("a production start whose chain is filed under another producer", () =>
 /** Puts the box's clock in the middle of the `nth` minute after this file's first, where no two
  * cases open an installation on the same one. The steady clock is left alone. */
 const firstMinute = Math.floor(Date.now() / 60_000);
+const middleOfMinute = (nth: number) => (firstMinute + nth) * 60_000 + 30_000;
 function inMinute(nth: number): void {
-  vi.restoreAllMocks();
-  const real = Date.now;
-  const offset = (firstMinute + nth) * 60_000 + 30_000 - real();
-  vi.spyOn(Date, "now").mockImplementation(() => real() + offset);
+  readClockAs(middleOfMinute(nth));
+}
+
+let boxClock: BenchClock | undefined;
+afterEach(() => {
+  boxClock?.uninstall();
+  boxClock = undefined;
+});
+/** Puts the box's clock at `wallMs`, for every reader of `Date`. */
+function readClockAs(wallMs: number): void {
+  boxClock?.uninstall();
+  boxClock = installBenchClock(new Date(wallMs));
 }
 
 const producerAtHead = () => lastFiledProducer(venue.db);
@@ -663,6 +673,115 @@ describe("a person who confirms the time while the box waits to open its new ins
     },
     30_000,
   );
+});
+
+describe("a person's confirmation that cannot open the new installation", () => {
+  const refusedOpening = () =>
+    vi.waitFor(
+      () => {
+        expect(opening.attempts).toBeGreaterThan(0);
+        expect(built.start!.heldConfirmation).toBeNull();
+      },
+      { timeout: 8_000 },
+    );
+
+  it("is dropped when the clock steps before the opening, opens nothing, and leaves Check the time to open it", async () => {
+    inMinute(22);
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    const before = installations();
+    const records = fiscalRecordCount(venue);
+    let looks = Promise.resolve();
+    const host: BoxHostClient = {
+      ...unsynchronisedHost(),
+      clockStatus: async () => {
+        await looks;
+        return clockServiceAnswer(false);
+      },
+    };
+    const seen = await serving({ producer, host, stateDir }, async () => {
+      opening.attempts = 0;
+      let release = () => {};
+      looks = new Promise((resolve) => (release = resolve));
+      try {
+        await checkTheTime(0, { keep: true });
+        expect(built.start!.heldConfirmation?.by).toBe("by_person");
+        expect(opening.attempts).toBe(0);
+        // Less than the clock watch counts as a jump.
+        readClockAs(Date.now() + 30_000);
+      } finally {
+        release();
+      }
+      await refusedOpening();
+      expect({
+        status: built.start!.status,
+        sale: (await sell()).status,
+        alerts: await clockAlerts(),
+        installations: installations(),
+        records: fiscalRecordCount(venue),
+        note: await noteExists(stateDir),
+      }).toEqual({
+        status: "waiting",
+        sale: 409,
+        alerts: ["clock.unconfirmed"],
+        installations: before,
+        records,
+        note: true,
+      });
+      await checkTheTime(20_000);
+      await vi.waitFor(() => expect(built.start!.status).toBe("by_person"), { timeout: 8_000 });
+      return { sale: await sell(), alerts: await clockAlerts() };
+    });
+
+    expect(seen.sale.status, seen.sale.body).toBe(200);
+    expect(recordOf(seen.sale.workingOrderId)).toMatchObject({ first: 1, producer });
+    expect(installations()).toBe(before + 1);
+    expect(seen.alerts).toEqual([]);
+  }, 30_000);
+
+  it("is dropped when it keeps a time before the release's, opens nothing, and leaves a set from the till to open it", async () => {
+    readClockAs(Date.parse("2026-10-01T10:00:30Z"));
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    const before = installations();
+    const records = fiscalRecordCount(venue);
+    const host: BoxHostClient = {
+      ...unsynchronisedHost(),
+      setClock: async ({ targetMs }) => {
+        const beforeMs = Date.now();
+        readClockAs(targetMs);
+        return { available: true, beforeMs, afterMs: targetMs };
+      },
+    };
+    const seen = await serving({ producer, host, stateDir }, async () => {
+      opening.attempts = 0;
+      await checkTheTime(600_000, { keep: true });
+      await refusedOpening();
+      expect({
+        status: built.start!.status,
+        sale: (await sell()).status,
+        alerts: await clockAlerts(),
+        installations: installations(),
+        records: fiscalRecordCount(venue),
+        note: await noteExists(stateDir),
+      }).toEqual({
+        status: "waiting",
+        sale: 409,
+        alerts: ["clock.unconfirmed"],
+        installations: before,
+        records,
+        note: true,
+      });
+      await checkTheTime(middleOfMinute(24) - Date.now());
+      await vi.waitFor(() => expect(built.start!.status).toBe("by_person"), { timeout: 8_000 });
+      return { sale: await sell(), alerts: await clockAlerts() };
+    });
+
+    expect(seen.sale.status, seen.sale.body).toBe(200);
+    expect(recordOf(seen.sale.workingOrderId)).toMatchObject({ first: 1, producer });
+    expect(installations()).toBe(before + 1);
+    expect(seen.alerts).toEqual([]);
+  }, 30_000);
 });
 
 describe("two devices that agree with the box's time", () => {
