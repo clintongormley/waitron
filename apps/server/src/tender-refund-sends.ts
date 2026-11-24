@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { withIssuanceTransaction } from "@waitron/core";
 import { IssuanceRefusedError, type TrustedReading } from "@waitron/fiscal";
 import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -19,10 +20,10 @@ import {
   type RefundRefusalReason,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { AppError, centsToDecimal, jobOrigin } from "@waitron/shared";
+import { AppError, centsToDecimal, isAppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
-import { alertOrigin, type AlertOrigin } from "./request-config.js";
-import { attestationColumns, type Attestation } from "./bill-payments.js";
+import { alertOrigin, storedDeviceOrigin, type AlertOrigin } from "./request-config.js";
+import { attestationColumns, issueIfFullyPaid, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import "./errors.js";
@@ -255,8 +256,10 @@ async function recordOutcome(
   { signal, raisedBy }: Resolution,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
-  return withTransaction(deps.db, (tx) =>
-    recordOutcomeIn(tx, deps, id, evidence, signal, raisedBy),
+  return withIssuanceTransaction(
+    deps.db,
+    (tx) => recordOutcomeIn(tx, deps, id, evidence, signal, raisedBy),
+    deps.log,
   );
 }
 async function recordOutcomeIn(
@@ -317,8 +320,36 @@ async function recordOutcomeIn(
           : refund.authorizedBy,
       ...(providerRef === null ? {} : { providerRefundRef: providerRef }),
     });
+  if (outcome === "completed" && refund.billPaymentId !== null)
+    await issueAfterBillRefund(tx, deps, refund);
   signal.throwIfAborted();
   return saved!;
+}
+
+/** A completed refund of a bill payment can leave a bill Pay for items overpaid owing exactly what
+ * it holds: its invoice is issued then, under the device and person that asked for the refund,
+ * dated by the latest acceptance as a card payment completed later is. The provider has already
+ * given the money back, so an advance's open correction leaves the invoice waiting, as it does for
+ * a card payment, rather than undoing the refund's outcome; closing that correction issues it. */
+async function issueAfterBillRefund(tx: Transaction, deps: TenderRefundDeps, refund: RefundRow) {
+  const [parent] = await tx
+    .select({ workingOrderId: billPayments.workingOrderId })
+    .from(billPayments)
+    .where(eq(billPayments.id, refund.billPaymentId!));
+  try {
+    await issueIfFullyPaid(
+      tx,
+      deps,
+      { ...deps.cfg, origin: storedDeviceOrigin(refund) },
+      parent!.workingOrderId,
+      refund.requestedBy,
+      { datedByLatestAcceptance: true },
+    );
+  } catch (error) {
+    // Thrown before the issuing writes anything.
+    if (isAppError(error) && error.code === "advance.correction_open") return;
+    throw error;
+  }
 }
 
 function canResolve(db: Database, refund: RefundRow): boolean {

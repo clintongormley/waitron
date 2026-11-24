@@ -2,7 +2,7 @@ import { createAdjustmentReason } from "@waitron/adjustments";
 import { GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
@@ -14,8 +14,11 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { centsToDecimal, deviceId as brandDeviceId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
+import { payForItems } from "./pay-for-items.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
@@ -468,6 +471,78 @@ describe("late issuance rolls back its initiating command", () => {
       json: { code: "fiscal.fingerprint_mismatch", params: {} },
     });
     expect(snapshot()).toEqual(before);
+    expect((await suite.db.select().from(incidents)).map((row) => row.code)).toEqual([
+      "fiscal.fingerprint_mismatch",
+    ]);
+  });
+});
+
+describe("a declined Pay for items card whose table's invoice is refused", () => {
+  it("leaves the card pending and records one refusal incident", async () => {
+    const billId = await tabWith(venue, "Tarta", "Tarta");
+    const [bill] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
+    const lines = await suite.db
+      .select({ id: workingOrderLines.id, lineTotal: workingOrderLines.lineTotal })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(workingOrderLines.lineNo);
+    await paid(billId, lines[0]!.lineTotal);
+    const [session] = await suite.db
+      .select({ id: tillSessions.id })
+      .from(tillSessions)
+      .where(
+        and(
+          eq(tillSessions.deviceId, venue.deviceId),
+          eq(tillSessions.personId, venue.operatorId),
+          isNull(tillSessions.endedAt),
+        ),
+      );
+    venue.card.failNextCollect();
+    fault.enabled = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // Putting the second Tarta back would take the table's bill past this limit, so it stays on
+    // its own bill and the table's bill, which its own payment covers, is issued.
+    const answer = payForItems(
+      {
+        admission: testTradingAdmission(),
+        db: suite.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: venue.card,
+      },
+      {
+        ...venue.cfg,
+        origin: { ...venue.cfg.origin, deviceId: brandDeviceId(venue.deviceId) },
+        simplifiedInvoiceLimit: centsToDecimal(lines[0]!.lineTotal + lines[1]!.lineTotal - 1),
+      },
+      billId,
+      {
+        submissionId: randomUUID(),
+        picks: [{ lineId: lines[1]!.id }],
+        partyId: bill!.partyId!,
+        expectedPartyRevision: await partyRevision(bill!.partyId!),
+        expectedEdits: [await readBillEditState(suite.db, billId)],
+        method: "card",
+        entry: "reader",
+        applied: centsToDecimal(lines[1]!.lineTotal),
+        tip: "0.00",
+      },
+      { personId: venue.operatorId, sessionId: session!.id },
+    ).finally(() => warn.mockRestore());
+
+    await expect(answer).rejects.toMatchObject({ code: "fiscal.fingerprint_mismatch" });
+    expect(fault.calls).toBe(1);
+    const [newBill] = await suite.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.itemsPaidFrom, billId));
+    expect(
+      await suite.db
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, newBill!.id)),
+    ).toEqual([{ state: "pending" }]);
     expect((await suite.db.select().from(incidents)).map((row) => row.code)).toEqual([
       "fiscal.fingerprint_mismatch",
     ]);

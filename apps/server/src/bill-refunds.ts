@@ -11,8 +11,11 @@ import type { PaymentProvider, RefundRefusalReason } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, decimalToCents, isAppError } from "@waitron/shared";
 import { money, ZERO } from "./bill-allocation.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
+import { refundPermission } from "./bill-overpaid.js";
+import { withIssuanceTransaction } from "@waitron/core";
 import {
   findSubmission,
+  issueIfFullyPaid,
   readBillBalance,
   readOnePaymentMoney,
   requireRefundableBill,
@@ -50,7 +53,9 @@ export interface BillRefundRequest {
   appliedAmount: string;
   tipAmount: string;
   reason: string;
-  /** A PIN holder with `sale.refund`; required for a confirmed standalone-terminal refund. */
+  /** The PIN of a person holding the permission the refund needs, for an operator who lacks it; a
+   * confirmed standalone-terminal refund that needs `sale.refund` requires one even from an
+   * operator who holds it. */
   override?: Override;
   /** Staff confirms the refund has already completed on the standalone card terminal. */
   manualConfirmed?: boolean;
@@ -141,9 +146,10 @@ export async function refundTender(
 
 /**
  * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
- * needing `sale.refund` from the operator or the override. A payment gives back up to its net
- * applied money; its tip comes back only with the whole of what is left of it; an item payment only
- * whole, which frees its lines.
+ * needing from the operator or the override the permission {@link refundPermission} names; where
+ * that is `payment.take`, a hand-keyed card needs no approver's PIN. A completed refund issues the
+ * bill if it leaves it paid. A payment gives back up to its net applied money; its tip comes back
+ * only with the whole of what is left of it; an item payment only whole, which frees its lines.
  *
  * Keyed by `submissionId` across the whole bill (design §5.1): the same refund again answers the
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
@@ -175,18 +181,13 @@ export async function refundBillPayment(
       confirmsManual,
       (checked) => {
         const override = withCheck(req.override, checked);
-        return withTransaction(deps.db, async (tx) => {
+        return withIssuanceTransaction(deps.db, async (tx) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
           await assertStillSignedIn(tx, {
             deviceId: cfg.origin.deviceId,
             personId: operator.personId,
             sessionId: operator.sessionId,
           });
-          const authorization = await authorize(
-            tx,
-            { sessionId: operator.sessionId, permission: "sale.refund", override },
-            operator.attempts,
-          );
           const [found] = await tx
             .select({ payment: billPayments, advanceSaleId: billAdvances.advanceSaleId })
             .from(billPayments)
@@ -194,12 +195,10 @@ export async function refundBillPayment(
             .where(
               and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
             );
-          if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
-          const { payment, advanceSaleId } = found;
-          if (advanceSaleId !== null)
-            await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
           const provided =
-            payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+            found?.payment.method === "card"
+              ? await findPaymentByBillPayment(tx, paymentId)
+              : undefined;
           const print = refundFingerprint(
             paymentId,
             req.appliedAmount,
@@ -207,8 +206,24 @@ export async function refundBillPayment(
             req.reason,
             provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
           );
-
           const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+          // A resend repeats a refund its first request was already authorised for, and what the
+          // bill is overpaid by may have changed since, so it needs only what every give-back
+          // needs.
+          const permission =
+            earlier.refund?.fingerprint === print
+              ? "payment.take"
+              : await refundPermission(tx, workingOrderId, centsToDecimal(applied + tip));
+          const authorization = await authorize(
+            tx,
+            { sessionId: operator.sessionId, permission, override },
+            operator.attempts,
+          );
+          if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+          const { payment, advanceSaleId } = found;
+          if (advanceSaleId !== null)
+            await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
+
           if (earlier.refund !== undefined) {
             assertRefundReplay(earlier.refund, print, req.submissionId);
             if (earlier.refund.state === "pending") {
@@ -253,15 +268,17 @@ export async function refundBillPayment(
           }
 
           const manual = provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true;
-          const approver = manual
-            ? await confirmManualRefundAuthority(
-                tx,
-                authorization,
-                override,
-                operator.attempts,
-                () => new AppError("bill.manual_refund_pin_required", { paymentId }),
-              )
-            : authorization;
+          // Money just taken on this bill goes back with no approver's PIN (owner, 2026-11-24).
+          const approver =
+            manual && permission === "sale.refund"
+              ? await confirmManualRefundAuthority(
+                  tx,
+                  authorization,
+                  override,
+                  operator.attempts,
+                  () => new AppError("bill.manual_refund_pin_required", { paymentId }),
+                )
+              : authorization;
           const connected = payment.method === "card" && !manual;
           const provider =
             connected && provided !== undefined
@@ -307,8 +324,10 @@ export async function refundBillPayment(
                 printers,
               ),
           });
-          if (refund.state === "completed")
+          if (refund.state === "completed") {
+            await issueIfFullyPaid(tx, deps, cfg, workingOrderId, operator.personId);
             return { kind: "done" as const, result: await resultOf(tx, refund, workingOrderId) };
+          }
 
           // Inside the transaction, so no loop pass runs between the insert and the claim.
           release = claimTenderRefund(deps.db, refund.id);

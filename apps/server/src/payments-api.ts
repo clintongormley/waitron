@@ -1811,7 +1811,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await withSettledSlip((print) =>
           gated(sessionId, async (tx) => {
             await requireStuckBillPayment(tx, id);
-            await failBillPayment(tx, id, now, undefined);
+            await failBillPayment(tx, fiscal, deps.cfg, id, now, undefined);
             await print(tx, id);
           }),
         );
@@ -1852,7 +1852,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const attestation = { attestedBy: personId, note };
         const now = deps.clock.now().instant;
         if (outcome === "failed") {
-          await failBillPayment(tx, id, now, attestation);
+          await failBillPayment(tx, fiscal, deps.cfg, id, now, attestation);
           await print(tx, id);
           return { outcome: "not_charged" as const };
         }

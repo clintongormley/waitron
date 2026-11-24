@@ -1,4 +1,4 @@
-import { decimal, isZeroDecimal, PORTIONS_AT_ONCE } from "@waitron/shared";
+import { decimal, formatMoney, isZeroDecimal, PORTIONS_AT_ONCE } from "@waitron/shared";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -596,6 +596,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "bill.received_exceeds_total": {
     en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
+  },
+  "bill.below_advances": {
+    en: "Part of this bill was paid with its own receipt ({advances}), so it cannot come to less than that. Choose fewer items, or pay by amount.",
+    es: "Parte de esta cuenta se pagó con su propio ticket ({advances}), así que no puede quedar por menos de eso. Elige menos artículos o paga una cantidad.",
+  },
+  "bill.all_items_chosen": {
+    en: "These are all the items on this bill. Pay the whole bill instead.",
+    es: "Son todos los artículos de esta cuenta. Cobra toda la cuenta.",
+  },
+  "bill.not_overpaid": {
+    en: "This bill has nothing paid over what it comes to.",
+    es: "Esta cuenta no tiene nada pagado de más.",
+  },
+  "bill.tip_not_allowed_on_excess": {
+    en: "This venue does not take tips. Give the money back instead.",
+    es: "Este local no acepta propinas. Devuelve el dinero.",
   },
   "bill.left_unpaid": {
     en: "This bill was recorded as left unpaid: its guests have gone",
@@ -1214,6 +1230,7 @@ export function codeMessage(
     finalNotFullyPaid?: unknown;
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
+    advances?: unknown;
   },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
@@ -1256,6 +1273,10 @@ export function codeMessage(
       "{invoiceNumber}",
       typeof params?.invoiceNumber === "string" ? ` ${params.invoiceNumber}` : "",
     );
+  if (code === "bill.below_advances")
+    return typeof params?.advances === "string"
+      ? message.replace("{advances}", () => formatMoney(params.advances as string, locale))
+      : message.replace(" ({advances})", "");
   if (typeof code !== "string" || !code.startsWith("set_menu.")) return message;
   const setMenuName =
     typeof params?.setMenuName === "string"

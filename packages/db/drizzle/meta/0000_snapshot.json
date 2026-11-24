@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "18455f8a-96a2-42b6-a0b0-b659c018f36c",
+  "id": "0594cccc-f90e-4ad9-8671-3a15939dbba9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1401,6 +1401,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "items_paid_from": {
+          "name": "items_paid_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1453,6 +1460,13 @@
           "name": "working_orders_party_idx",
           "columns": [
             "party_id"
+          ],
+          "isUnique": false
+        },
+        "working_orders_items_paid_from_idx": {
+          "name": "working_orders_items_paid_from_idx",
+          "columns": [
+            "items_paid_from"
           ],
           "isUnique": false
         }
@@ -1521,6 +1535,19 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_orders_items_paid_from_fk": {
+          "name": "working_orders_items_paid_from_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "items_paid_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "working_orders_zone_fk": {

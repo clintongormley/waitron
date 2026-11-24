@@ -62,7 +62,7 @@ interface PathBill {
 }
 
 /** The bill's own state, without its payments. */
-function refuseClosedBill(billId: string, status: BillStatus): void {
+export function refuseClosedBill(billId: string, status: BillStatus): void {
   if (status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
   if (status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
   if (status === "placed") throw new AppError("bill.presented", { workingOrderId: billId });
@@ -91,12 +91,13 @@ async function refuseTouched(tx: Transaction, billId: string, status: BillStatus
  * A command naming a party the bill is not in is `party.out_of_date` whatever revision it sends,
  * or `party.not_open` when no party has that id; one that read the bill with no party
  * (`partyId: null`) once it has one is `party.out_of_date`, naming that party. A bill of no party
- * has no revision.
+ * has no revision. `bump: false` checks without moving the revision on.
  */
 export async function guardPathParty(
   tx: Transaction,
   billId: string,
   command: Omit<BillCommand, "partyId"> & { partyId?: string | null },
+  options: { bump?: boolean } = {},
 ): Promise<PathBill> {
   const [bill] = await tx
     .select({ partyId: workingOrders.partyId, status: workingOrders.status })
@@ -106,7 +107,7 @@ export async function guardPathParty(
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
     await refuseMovedParty(tx, command.partyId ?? bill.partyId!);
   }
-  if (bill.partyId !== null) await guardParty(tx, bill.partyId, command);
+  if (bill.partyId !== null) await guardParty(tx, bill.partyId, command, options);
   return bill;
 }
 
@@ -286,8 +287,9 @@ async function checkMoveInvoice(
 /**
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
- * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
- * existing destination may hold payments and owes more afterwards.
+ * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received,
+ * unless `sourceMayBeOverpaid`. An existing destination may hold payments and owes more afterwards.
+ * `tellKitchen: false` leaves out the MOVED slips and station notices.
  */
 export async function moveDishes(
   tx: Transaction,
@@ -300,6 +302,7 @@ export async function moveDishes(
     admission: TradingAdmission;
     invoiceChoice?: unknown;
   },
+  options: { sourceMayBeOverpaid?: boolean; tellKitchen?: boolean } = {},
 ): Promise<{ billId: string }> {
   await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
@@ -365,8 +368,8 @@ export async function moveDishes(
   await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
   });
-  await assertBillInvariant(tx, [fromBillId]);
-  await enqueueMovedSlips(tx, cfg, before, destinationId);
+  if (options.sourceMayBeOverpaid !== true) await assertBillInvariant(tx, [fromBillId]);
+  if (options.tellKitchen !== false) await enqueueMovedSlips(tx, cfg, before, destinationId);
   return { billId: destinationId };
 }
 

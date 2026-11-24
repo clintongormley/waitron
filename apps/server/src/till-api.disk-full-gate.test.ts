@@ -16,6 +16,7 @@ import { openSessionPerson } from "./till-session.js";
 import {
   inTx,
   provisionBillVenue,
+  partyRevisionOf,
   seatedWith,
   send,
   statusOf,
@@ -43,10 +44,12 @@ const EXPECTED_OPEN = new Set([
   "DELETE /api/session",
   "PUT /api/session/locale",
   "POST /api/working-orders/:id/payments",
+  "POST /api/working-orders/:id/item-payments",
   "POST /api/dead-ends/sale",
   "POST /api/dead-ends/draft",
   "POST /api/dead-ends/order",
   "POST /api/working-orders/:id/payments/preview",
+  "POST /api/working-orders/:id/item-payments/preview",
   "POST /api/working-orders/:id/payments/:submissionId/cancel",
   "POST /api/working-orders/:id/adjustments/preview",
   "POST /api/parties/:id/allergy/send-preview",
@@ -237,6 +240,52 @@ describe("the full-disk gate on the till's routes", () => {
     const advanced = await advance(diskState({ bytes: 0 }));
     expect(advanced.status).toBe(200);
     expect((await ticketOf()).state).toBe("preparing");
+  });
+
+  it("answers a resent Pay for items while the stop holds, and refuses a new one", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    const [first, second] = venue.db.all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
+    );
+    const body = async (lineId: string) => ({
+      submissionId: randomUUID(),
+      picks: [{ lineId }],
+      partyId: party.partyId,
+      expectedPartyRevision: await partyRevisionOf(venue, billId),
+      expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, billId))],
+      method: "cash",
+      tendered: "10.00",
+      applied: "10.00",
+      tip: "0.00",
+    });
+    const payItems = (disk: DiskFullState, sent: unknown) =>
+      send(
+        venue.appWith({ disk }),
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/item-payments`,
+        sent,
+      );
+    const counts = () => ({
+      bills: count("working_orders", sql`items_paid_from = ${billId}`),
+      lines: count("working_order_lines", sql`working_order_id = ${billId}`),
+      payments: count("bill_payments"),
+      sales: count("sales"),
+    });
+
+    const sent = await body(first!.id);
+    const paid = await payItems(diskState({ bytes: 0 }), sent);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const after = counts();
+
+    const resent = await payItems(notedState(), sent);
+    expect(resent).toEqual(paid);
+    expect(counts()).toEqual(after);
+
+    const refused = await payItems(notedState(), await body(second!.id));
+    expect({ status: refused.status, json: refused.json }).toEqual(REFUSED);
+    expect(counts()).toEqual(after);
   });
 
   it("logs each refusal it gives, naming the route", async () => {

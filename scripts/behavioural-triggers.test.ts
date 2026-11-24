@@ -2188,7 +2188,7 @@ describe("products_id_fixed_update", () => {
 });
 
 describe("bill_payments_guard_update", () => {
-  it("allows actual amounts only as a pending card becomes received", () => {
+  it("allows actual amounts as a pending card becomes received, and otherwise only applied money moving to tip", () => {
     const statements = [
       ["bp-actual", "card", "pending", "received", 900, 0, undefined],
       ["bp-extra", "card", "pending", "received", 1000, 300, undefined],
@@ -2206,6 +2206,17 @@ describe("bill_payments_guard_update", () => {
         ),
       ).toBe(refusal);
     }
+
+    // 10.00 received with 5.00 of it being refunded: up to the other 5.00 may become a tip.
+    connection.exec(billPayment("bp-to-tip", "received"));
+    connection.exec(billRefund("bpr-to-tip", "bp-to-tip"));
+    const toTip = (applied, tip) =>
+      refusalFor(
+        connection,
+        `update bill_payments set applied = ${applied}, tip = ${tip} where id = 'bp-to-tip'`,
+      );
+    expect(toTip(400, 600)).toBe(BILL_PAYMENT_CHANGE_REFUSAL);
+    expect(toTip(500, 500)).toBeUndefined();
   });
 
   it("refuses a change to a bill payment's applied amount", () => {

@@ -3065,7 +3065,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   sign-out and the session's language, because a refused sign-out keeps someone signed in on a
   shared till and a refused sign-in keeps the next shift out. The payment routes can answer replays (below). POSTs that save nothing
   of their own — the three checks for dishes whose kitchen station is closed or switched off
-  (`/api/dead-ends/*`), four previews. A refused send-preview would turn into the till's
+  (`/api/dead-ends/*`), the previews. A refused send-preview would turn into the till's
   generic table error and the round would never be sent, so the kitchen send itself is what is
   refused. Open on the device mount (`DEVICE_OPEN_WHILE_DISK_FULL`, `device-api.ts`): the device's
   own joining, zones, equipment, active profile and battery. The schedule mount opens nothing. Each
@@ -3075,10 +3075,14 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - `POST /api/working-orders/:id/payments` checks for a replay before refusing new money inside
   its first transaction. A replay can still return the recorded result. Pay again can finish a whole-bill
   card payment that the reader already charged, without asking the reader again.
+  `POST /api/working-orders/:id/item-payments` (Pay for items) answers a replay the same way: a
+  resend of a recorded payment gets the recorded answer, and a new one is refused inside.
 - A card-reader payment checks the stop three times: the free-space read before its first
   transaction; inside it, refused when that read said full or a refusal has been noted since; and
   after it commits, just before the reader is asked, refused when a refusal has been noted, undoing
-  the bill payment's reservation (`takeReaderBillPayment` in `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
+  the bill payment's reservation, and putting Pay for items' items back (`collectBegunReaderPayment` in `bill-payments.ts`);
+  when the items cannot go back and the table's own payments already cover its bill, with no order
+  unsent on it, that bill is issued and its receipt queued. Writes take turns in the write queue, so a payment that read "not full" can
   wait behind another till's write that then fails.
 - A card charged on a connected reader whose sale then fails for a full disk answers
   `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not

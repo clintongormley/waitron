@@ -1,7 +1,8 @@
 import { readOutsideCardDetails } from "./outside-card.js";
-import { parseBillEditExpected } from "./bill-editing.js";
+import { parseBillEditExpected, parseBillEditExpecteds } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
+import { withIssuanceTransaction } from "@waitron/core";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import type { RequestReaderStop } from "@waitron/payments";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
@@ -14,10 +15,20 @@ import {
   previewBillPayment,
   takeBillPayment,
   takeReaderBillPayment,
+  type ReaderBillPaymentDeps,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
+import {
+  payForItems,
+  previewPayForItems,
+  type ItemPick,
+  type PayForItemsAsk,
+  type PayForItemsRequest,
+} from "./pay-for-items.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
+import { keepOverpaidAsTip } from "./bill-overpaid.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertProfileAction, assertTakesTender } from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
@@ -174,6 +185,72 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   return request;
 }
 
+function parsePicks(value: unknown): ItemPick[] {
+  if (!Array.isArray(value)) throw invalid("picks");
+  return value.map((entry: unknown) => {
+    const pick =
+      typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+    if (
+      pick === null ||
+      typeof pick.lineId !== "string" ||
+      !isUuid(pick.lineId) ||
+      (pick.quantity !== undefined && typeof pick.quantity !== "string")
+    )
+      throw invalid("picks");
+    return pick.quantity === undefined
+      ? { lineId: pick.lineId.toLowerCase() }
+      : { lineId: pick.lineId.toLowerCase(), quantity: pick.quantity as string };
+  });
+}
+
+/** Pay for items' ask, shared by its preview and its payment. */
+function parseItemsAsk(body: Record<string, unknown>): PayForItemsAsk {
+  const method = oneOf(body.method, ["cash", "card"] as const, "method");
+  const ask: PayForItemsAsk = { picks: parsePicks(body.picks), method };
+  if (method === "cash") ask.tendered = moneyField(body.tendered, "tendered");
+  else if (body.tendered !== undefined) throw invalid("tendered");
+  const addedTip = optionalMoney(body.addedTip, "addedTip");
+  if (addedTip !== undefined) ask.addedTip = addedTip;
+  return ask;
+}
+
+function parseItemsPayment(body: Record<string, unknown>): PayForItemsRequest {
+  const request: PayForItemsRequest = {
+    ...parseItemsAsk(body),
+    submissionId: submissionIdOf(body),
+    expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+    applied: moneyField(body.applied, "applied"),
+    tip: moneyField(body.tip, "tip"),
+  };
+  if (body.expectedPartyRevision !== undefined)
+    request.expectedPartyRevision = requireRevision(
+      body.expectedPartyRevision,
+      "expectedPartyRevision",
+    );
+  if (body.partyId !== undefined) {
+    if (typeof body.partyId !== "string" || !isUuid(body.partyId)) throw invalid("partyId");
+    request.partyId = body.partyId.toLowerCase();
+  }
+  if (body.entry !== undefined) {
+    if (request.method !== "card") throw invalid("entry");
+    request.entry = oneOf(body.entry, ["reader"] as const, "entry");
+  }
+  if (request.entry === "reader") {
+    if (body.simulationOutcome !== undefined)
+      request.simulationOutcome = oneOf(
+        body.simulationOutcome,
+        ["captured", "declined", "attempting"] as const,
+        "simulationOutcome",
+      );
+  } else {
+    const stray = (["readerId", "simulationOutcome"] as const).find(
+      (field) => body[field] !== undefined,
+    );
+    if (stray !== undefined) throw invalid(stray);
+  }
+  return request;
+}
+
 function parseRefund(body: Record<string, unknown>): BillRefundRequest {
   const submissionId = submissionIdOf(body);
   const appliedAmount = moneyField(body.appliedAmount, "appliedAmount");
@@ -232,6 +309,60 @@ export function mountBillPaymentsApi(
     log,
     attendance: deps.attendance,
   };
+
+  /**
+   * What a reader payment is collected with: the device's reader, or the one the body names, and
+   * the stop the cancel route finds under `stopKey` while the reader waits, removed by `done`.
+   */
+  async function readerDeps(
+    session: Awaited<ReturnType<typeof requireSession>>,
+    saleCfg: DeviceRequestConfig,
+    stopKey: string,
+    readerId: string | undefined,
+  ): Promise<{ deps: ReaderBillPaymentDeps; done: () => void }> {
+    const { sessionId, device } = session;
+    const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
+    let activeStop: RequestReaderStop | undefined;
+    return {
+      deps: {
+        ...fiscal,
+        provider,
+        onReaderCheckout(stop) {
+          activeStop = stop;
+          readerStops.set(stopKey, { sessionId, deviceId: device.deviceId, stop });
+        },
+        settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
+          const settled = await settleFromProviderRow(
+            tx,
+            { ...fiscal, cfg: saleCfg },
+            paymentId,
+            now,
+            print,
+            guestCount,
+          );
+          return settled.settled === "received" ? settled.invoice : null;
+        },
+        ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
+        deviceProfileId: device.deviceProfileId,
+        ...(deps.disk === undefined ? {} : { disk: deps.disk }),
+        sayCardChargedNotRecorded: true,
+      },
+      done: () => {
+        if (activeStop !== undefined && readerStops.get(stopKey)?.stop === activeStop)
+          readerStops.delete(stopKey);
+      },
+    };
+  }
+
+  function logCollectionFailed(requestId: string, orderId: string, outcome: string): void {
+    if (
+      outcome === "declined" ||
+      outcome === "failed" ||
+      outcome === "timeout" ||
+      outcome === "network_unavailable"
+    )
+      log("warn", "payment.collection_failed", { requestId, orderId, outcome });
+  }
 
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
@@ -334,57 +465,69 @@ export function mountBillPaymentsApi(
           ),
         );
       }
-      const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
-      const stopKey = `${id}/${request.submissionId}`;
-      let activeStop: RequestReaderStop | undefined;
+      const reading = await readerDeps(session, saleCfg, `${id}/${request.submissionId}`, readerId);
       const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         takeReaderBillPayment(
-          {
-            ...fiscal,
-            provider,
-            onReaderCheckout(stop) {
-              activeStop = stop;
-              readerStops.set(stopKey, { sessionId, deviceId: device.deviceId, stop });
-            },
-            settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
-              const settled = await settleFromProviderRow(
-                tx,
-                { ...fiscal, cfg: saleCfg },
-                paymentId,
-                now,
-                print,
-                guestCount,
-              );
-              return settled.settled === "received" ? settled.invoice : null;
-            },
-            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-            deviceProfileId: device.deviceProfileId,
-            ...(deps.disk === undefined ? {} : { disk: deps.disk }),
-            sayCardChargedNotRecorded: true,
-          },
+          reading.deps,
           saleCfg,
           id,
           request,
           operator,
           basket === undefined ? undefined : { ...basket, lateSend: late },
         ),
-      ).finally(() => {
-        if (activeStop !== undefined && readerStops.get(stopKey)?.stop === activeStop)
-          readerStops.delete(stopKey);
-      });
-      if (
-        outcome.outcome === "declined" ||
-        outcome.outcome === "failed" ||
-        outcome.outcome === "timeout" ||
-        outcome.outcome === "network_unavailable"
-      ) {
-        log("warn", "payment.collection_failed", {
-          requestId: c.get("requestId"),
-          orderId: id,
-          outcome: outcome.outcome,
-        });
-      }
+      ).finally(reading.done);
+      logCollectionFailed(c.get("requestId"), id, outcome.outcome);
       return c.json(outcome);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/item-payments/preview", (c) =>
+    runBodyLines(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const ask = parseItemsAsk(asObject(await readRawJsonBody<unknown>(c)));
+      return c.json(await previewPayForItems(deps.db, id, ask));
+    }),
+  );
+
+  app.post("/api/working-orders/:id/item-payments", (c) =>
+    runBodyLines(c, log, async () => {
+      const session = await requireSession(deps, c, { permission: "payment.take" });
+      await assertRequestDevice(deps, c, session);
+      const { personId, sessionId } = session;
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const request = parseItemsPayment(body);
+      assertTakesTender(
+        session.device,
+        request.method === "cash"
+          ? "cash"
+          : request.entry === "reader"
+            ? "reader-card"
+            : "hand-keyed-card",
+      );
+      const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      const operator = { personId, sessionId };
+      if (request.entry !== "reader")
+        return c.json(
+          await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, operator),
+        );
+      if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
+        throw invalid("simulationOutcome");
+      }
+      const reading = await readerDeps(
+        session,
+        saleCfg,
+        `${id}/${request.submissionId}`,
+        parseReaderId(body),
+      );
+      const paid = await payForItems(reading.deps, saleCfg, id, request, operator).finally(
+        reading.done,
+      );
+      logCollectionFailed(c.get("requestId"), id, paid.payment.outcome);
+      return c.json(paid);
     }),
   );
 
@@ -403,6 +546,28 @@ export function mountBillPaymentsApi(
     }),
   );
 
+  app.post("/api/working-orders/:id/overpaid/keep-as-tip", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { permission: "payment.take" });
+      await assertRequestDevice(deps, c, session);
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const submissionId = submissionIdOf(asObject(await readRawJsonBody<unknown>(c)));
+      const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      return c.json(
+        await withIssuanceTransaction(
+          deps.db,
+          (tx) =>
+            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, {
+              personId: session.personId,
+              sessionId: session.sessionId,
+            }),
+          log,
+        ),
+      );
+    }),
+  );
+
   // Like the drawer's list: any operator may see who could approve their refund.
   app.get("/api/refund-authorizers", (c) =>
     run(c, log, async () => {
@@ -415,7 +580,8 @@ export function mountBillPaymentsApi(
 
   // The refund names the requesting device. Cash opens a drawer only where
   // `enqueueRefundDrawer` finds one this device may open; a connected card goes through its
-  // provider, while a separately charged card needs staff confirmation and a manager PIN.
+  // provider, while a separately charged card needs staff confirmation, and a PIN from a holder of
+  // `sale.refund` unless it gives back no more than the bill is paid over its total.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);

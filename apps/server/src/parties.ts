@@ -457,17 +457,20 @@ export async function tableHeld(tx: Transaction, tableId: string): Promise<boole
 /**
  * Check and move on the revision of the party a bill action changes, against
  * `expectedPartyRevision`, which it must carry. A party that is not open is refused before its
- * revision moves.
+ * revision moves. `bump: false` checks without moving it.
  */
 export async function guardParty(
   tx: Transaction,
   partyId: string,
   command: Omit<PartyCommand, "operatorId">,
+  options: { bump?: boolean } = {},
 ): Promise<void> {
   if (command.expectedPartyRevision === undefined) {
     throw new AppError("management.request_invalid", { field: "expectedPartyRevision" });
   }
-  await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
+  if (options.bump === false)
+    await checkPartyRevision(tx, partyId, command.expectedPartyRevision, "open");
+  else await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
 }
 
 /** The party's revision as it stands in the transaction now. */
@@ -491,6 +494,22 @@ export async function checkAndBumpParty(
   requiredState: "open",
   alsoSet: { guestCount?: number | null } = {},
 ): Promise<number> {
+  const revision =
+    (await checkPartyRevision(tx, partyId, expectedPartyRevision, requiredState)) + 1;
+  await tx
+    .update(parties)
+    .set({ ...alsoSet, revision })
+    .where(eq(parties.id, partyId));
+  return revision;
+}
+
+/** {@link checkAndBumpParty} without moving the revision on; returns the revision. */
+async function checkPartyRevision(
+  tx: Transaction,
+  partyId: string,
+  expectedPartyRevision: number,
+  requiredState: "open",
+): Promise<number> {
   const [party] = await tx
     .select({ state: parties.state, revision: parties.revision })
     .from(parties)
@@ -501,12 +520,7 @@ export async function checkAndBumpParty(
   if (party.revision !== expectedPartyRevision) {
     throw new AppError("party.out_of_date", { partyId, revision: party.revision });
   }
-  const revision = party.revision + 1;
-  await tx
-    .update(parties)
-    .set({ ...alsoSet, revision })
-    .where(eq(parties.id, partyId));
-  return revision;
+  return party.revision;
 }
 
 /**

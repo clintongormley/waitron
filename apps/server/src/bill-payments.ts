@@ -123,11 +123,13 @@ import {
   owedOf,
   type RefundMoney,
 } from "./bill-payment-money.js";
-import { fingerprint } from "./parties.js";
+import { bumpPartyRevision, fingerprint } from "./parties.js";
 import {
+  bumpRevision,
   captureOrderEdit,
   createOpenOrder,
   filedLines,
+  moveOrderLines,
   priceOrderInvoice,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
@@ -287,10 +289,16 @@ export interface BillBalance {
   reserved: Decimal;
   /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: Decimal;
+  /** On an open or placed bill, received and reserved less the total when that is more than
+   * nothing (Pay for items can leave it so); zero otherwise. Such a bill issues nothing. */
+  overpaid: Decimal;
   /** The net tips of the received payments. */
   tips: Decimal;
   payments: BillPaymentView[];
   paidLines: { lineId: string; lineNo: number; paidQuantity: Decimal }[];
+  /** On an open bill: the open bill its chosen items moved to (Pay for items) while a card
+   * payment of theirs is pending. */
+  beingPaidOn?: { billId: string; billNumber: number | null };
 }
 
 export interface BillPaymentResult {
@@ -298,7 +306,8 @@ export interface BillPaymentResult {
   slipPrintFailed?: true;
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
-   * till (the first sign-in or a later one) answers the state it finds. */
+   * till (the first sign-in or a later one) answers the state it finds, except that Pay for items
+   * answers `declined` for a failed card its provider recorded as failed or refunded. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
   payment: BillPaymentView;
   balance: BillBalance;
@@ -546,27 +555,82 @@ export async function refusePaidLines(
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
  * plus the applied of its pending ones is at most its total. The line writers that take lines off
- * a bill or lower a quantity call it before they commit. No trigger stands behind it, because the
- * total is computed, not stored, so a writer that forgets it is seen only by its own tests.
+ * a bill or lower a quantity call it, or {@link assertLinesKeptExcess} where Pay for items may have
+ * left the bill above it, before they commit. No trigger stands behind it, because the total is
+ * computed, not stored, so a writer that forgets it is seen only by its own tests.
  */
 export async function assertBillInvariant(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<void> {
+  for (const [workingOrderId, excess] of await billExcesses(tx, workingOrderIds)) {
+    refuseExcess(workingOrderId, excess, undefined);
+  }
+}
+
+function refuseExcess(workingOrderId: string, excess: Decimal, allowed: Decimal | undefined) {
+  if (compareDecimal(excess, allowed ?? ZERO) > 0) {
+    throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
+  }
+}
+
+/** By how much the bill, holding these of its payments, has received and reserved more than its
+ * total now; undefined when it is not overpaid. */
+async function excessOf(
+  tx: Transaction,
+  workingOrderId: string,
+  held: readonly PaymentMoney[],
+  advances: BillAdvances,
+): Promise<Decimal | undefined> {
+  if (held.length === 0) return undefined;
+  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
+  const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
+  return compareDecimal(excess, ZERO) > 0 ? excess : undefined;
+}
+
+/** By how much each of these bills holding a payment has received and reserved more than its
+ * total; a bill that is not overpaid is left out. */
+async function billExcesses(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+): Promise<Map<string, Decimal>> {
   const { held: payments, advances } = await readHeld(tx, workingOrderIds);
+  const excesses = new Map<string, Decimal>();
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
-    if (held.length === 0) continue;
-    const funds = fundsOf(
-      workingOrderId,
-      await billPaymentTotal(tx, workingOrderId, advances),
-      held,
-    );
-    const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
-    if (compareDecimal(excess, ZERO) > 0) {
-      throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
-    }
+    const excess = await excessOf(tx, workingOrderId, held, advances);
+    if (excess !== undefined) excesses.set(workingOrderId, excess);
   }
+  return excesses;
+}
+
+/** One bill's {@link HeldMoney} and by how much it is paid over its total (undefined when it is
+ * not). */
+export interface BillExcess extends HeldMoney {
+  workingOrderId: string;
+  excess: Decimal | undefined;
+}
+
+/** The bill's {@link BillExcess}, read now. */
+export async function readBillExcess(tx: Transaction, workingOrderId: string): Promise<BillExcess> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  return {
+    workingOrderId,
+    held,
+    advances,
+    excess: await excessOf(tx, workingOrderId, held, advances),
+  };
+}
+
+/**
+ * {@link assertBillInvariant} after a write that changed the bill's lines but none of its payments,
+ * refunds or advances, against `before`, read ahead of the write: only the bill's new total is
+ * read. The write may keep or lessen an excess the bill already had, but not raise it.
+ */
+export async function assertLinesKeptExcess(tx: Transaction, before: BillExcess): Promise<void> {
+  const { workingOrderId, held, advances } = before;
+  const excess = await excessOf(tx, workingOrderId, held, advances);
+  if (excess !== undefined) refuseExcess(workingOrderId, excess, before.excess);
 }
 
 function receivedHoldsMoney({ row, netApplied, netTip }: PaymentMoney): boolean {
@@ -941,8 +1005,11 @@ export async function readBillBalance(
         };
   };
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
+  const beingPaidOn =
+    order.status === "open" ? await itemsBeingPaidOn(tx, workingOrderId) : undefined;
   return {
     ...(captureWarning === undefined ? {} : { captureWarning }),
+    ...(beingPaidOn === undefined ? {} : { beingPaidOn }),
     workingOrderId,
     status: order.status,
     total: money(funds.total),
@@ -953,6 +1020,11 @@ export async function readBillBalance(
     ),
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
+    overpaid:
+      (order.status === "open" || order.status === "placed") &&
+      compareDecimal(outstanding, ZERO) < 0
+        ? money(subtractDecimal(ZERO, outstanding))
+        : ZERO,
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
@@ -968,6 +1040,25 @@ export async function readBillBalance(
       })
       .sort((a, b) => a.lineNo - b.lineNo),
   };
+}
+
+async function itemsBeingPaidOn(
+  tx: Transaction,
+  sourceId: string,
+): Promise<BillBalance["beingPaidOn"]> {
+  const [row] = await tx
+    .select({ billId: workingOrders.id, billNumber: workingOrders.billNumber })
+    .from(workingOrders)
+    .innerJoin(billPayments, eq(billPayments.workingOrderId, workingOrders.id))
+    .where(
+      and(
+        eq(workingOrders.itemsPaidFrom, sourceId),
+        eq(workingOrders.status, "open"),
+        eq(billPayments.state, "pending"),
+      ),
+    )
+    .limit(1);
+  return row;
 }
 
 /** The latest moment among `received` that dates a payment: a card's {@link cardSaleMoment}, and
@@ -1307,7 +1398,9 @@ export async function issueIfFullyPaid(
  * {@link issueIfFullyPaid} for a bill whose money has already moved but whose invoice was held
  * back, issued as recovery's completion would have issued it for the bill's latest received
  * payment that paid no advance: under that payment's device and person, dated by the latest
- * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance.
+ * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance. An order
+ * left unsent on the bill makes it wait: issuing would settle the bill under it, and its send would
+ * then be refused; sending or discarding it issues the bill if it is still paid.
  */
 export async function issueHeldBill(
   tx: Transaction,
@@ -1316,6 +1409,7 @@ export async function issueHeldBill(
   workingOrderId: string,
   operatorId: string,
 ): Promise<TillSaleResult | null> {
+  if ((await readBillUnsent(tx, workingOrderId)).length > 0) return null;
   const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
   // Rows come in creation order (createdAt, then rowid), so of two received in the same
   // millisecond the later-created one wins.
@@ -1334,6 +1428,22 @@ export async function issueHeldBill(
     completing?.requestedBy ?? operatorId,
     { moneyMoved: true, datedByLatestAcceptance: true },
   );
+}
+
+/**
+ * Refuses `advance.correction_open` when the bill's money already covers it and one of its
+ * advances has an open correction, as a payment that covers it is refused: for a bill whose invoice
+ * is held while a card for another bill is collected, before that card is asked.
+ */
+export async function refuseCoveredWhileAdvanceCorrectionOpen(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  if (!advances.credits.has(workingOrderId)) return;
+  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
+  if (compareDecimal(addDecimal(funds.received, funds.reserved), funds.total) >= 0)
+    await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
 }
 
 interface ItemsDue {
@@ -1652,7 +1762,8 @@ export async function closeZeroBill(
   req: BillPaymentRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<SettledBill> {
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
@@ -1815,6 +1926,7 @@ async function beginBillPayment(
   refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
   basket?: CounterPayment,
+  printOverride?: string,
 ): Promise<
   | { replay: PaymentRow }
   | { payment: PaymentRow; figures: BillFigures; reading: TrustedReading }
@@ -1826,16 +1938,18 @@ async function beginBillPayment(
     sessionId: operator.sessionId,
     personId: operator.personId,
   });
-  const print = fingerprint({
-    ...retryShapeOf(req),
-    basket:
-      basket === undefined
-        ? undefined
-        : {
-            ...basket,
-            lateSend: undefined,
-          },
-  });
+  const print =
+    printOverride ??
+    fingerprint({
+      ...retryShapeOf(req),
+      basket:
+        basket === undefined
+          ? undefined
+          : {
+              ...basket,
+              lateSend: undefined,
+            },
+    });
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
     if (earlier.payment.fingerprint !== print) {
@@ -2046,78 +2160,129 @@ export async function takeBillPayment(
   operator: { personId: string; sessionId: string },
   basket?: CounterPayment,
 ): Promise<BillPaymentResult | SettledBill> {
-  // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
-  // this turn.
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
-    async (tx) => {
-      const begun = await beginBillPayment(
-        tx,
-        deps,
-        cfg,
-        workingOrderId,
-        req,
-        operator,
-        "received",
-        () => deps.clock.now(),
-        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-        deps.attendance,
-        basket,
-      );
-      if ("settled" in begun) return begun.settled;
-      if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
-      const { payment, reading } = begun;
-      const receivedAt = new Date(payment.receivedAt!);
-      const printers = printerLookup(tx, cfg.origin);
-      if (req.method === "card") {
-        await recordManualCardPayment(tx, {
-          origin: cfg.origin,
-          workingOrderId,
-          nodeId: cfg.nodeId,
-          amount: centsToDecimal(payment.applied + payment.tip),
-          settledAt: receivedAt,
-          externalRef: req.externalRef,
-          ...outsideCardDetails(req),
-          billPaymentId: payment.id,
-          requestedBy: operator.personId,
-        });
-        await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
-      } else {
-        await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
-      }
-      await recordBillDrawerPayment(tx, cfg, payment, printers);
-      const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
-      const { invoice, figures } = await issueWhenFullyPaid(
-        tx,
-        paidAt,
-        cfg,
-        workingOrderId,
-        operator.personId,
-        { figures: begun.figures, printers, guestCount: req.guestCount },
-      );
-      // An invoice issued or settled is answered, so with none `figures` still stand.
-      if (invoice === null) await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, figures);
-      const slip = await enqueueRequestedPaymentSlip(
-        tx,
-        cfg,
-        workingOrderId,
-        req.printCardSlip,
-        {
-          id: payment.id,
-          method: req.method,
-          charged: payment.applied + payment.tip,
-          tip: payment.tip,
-          paidAt: payment.receivedAt!,
-          reference: req.externalRef ?? null,
-          machine: outsideCardDetails(req).externalMachine ?? null,
-        },
-        printers,
-      );
-      return { ...(await resultOf(tx, deps, cfg, payment, invoice, figures?.meal)), ...slip };
-    },
+    (tx) =>
+      takeBillPaymentWithin(tx, deps, cfg, workingOrderId, req, operator, { preRead, basket }),
     deps.log,
   );
+}
+
+/**
+ * The full-disk refusal a payment reads before it opens its transaction, asked of the disk only
+ * while `since()` names a refusal. Otherwise it is `false` with no promise, so a caller that awaits
+ * only a promise enters the write queue in its own turn.
+ */
+export function diskFullBeforePayment(
+  deps: Pick<BillPaymentDeps, "disk">,
+): false | Promise<boolean> {
+  return deps.disk !== undefined && deps.disk.since() !== null && deps.disk.full();
+}
+
+/** What {@link takeBillPaymentIn} may be told besides the request. */
+export interface TakeBillPaymentOptions {
+  /** The full-disk refusal {@link takeBillPayment} reads before it opens its transaction. */
+  preRead?: boolean;
+  /** The retry fingerprint to store and compare in place of the request's own. */
+  print?: string;
+}
+
+/** {@link takeBillPayment} of a bill with no counter basket, in the caller's issuance transaction. */
+export async function takeBillPaymentIn(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  options: TakeBillPaymentOptions = {},
+): Promise<BillPaymentResult> {
+  return (await takeBillPaymentWithin(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    options,
+  )) as BillPaymentResult;
+}
+
+async function takeBillPaymentWithin(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  { preRead = false, print, basket }: TakeBillPaymentOptions & { basket?: CounterPayment },
+): Promise<BillPaymentResult | SettledBill> {
+  const begun = await beginBillPayment(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    "received",
+    () => deps.clock.now(),
+    { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+    deps.attendance,
+    basket,
+    print,
+  );
+  if ("settled" in begun) return begun.settled;
+  if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
+  const { payment, reading } = begun;
+  const receivedAt = new Date(payment.receivedAt!);
+  const printers = printerLookup(tx, cfg.origin);
+  if (req.method === "card") {
+    await recordManualCardPayment(tx, {
+      origin: cfg.origin,
+      workingOrderId,
+      nodeId: cfg.nodeId,
+      amount: centsToDecimal(payment.applied + payment.tip),
+      settledAt: receivedAt,
+      externalRef: req.externalRef,
+      ...outsideCardDetails(req),
+      billPaymentId: payment.id,
+      requestedBy: operator.personId,
+    });
+    await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
+  } else {
+    await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
+  }
+  await recordBillDrawerPayment(tx, cfg, payment, printers);
+  const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
+  const { invoice, figures } = await issueWhenFullyPaid(
+    tx,
+    paidAt,
+    cfg,
+    workingOrderId,
+    operator.personId,
+    { figures: begun.figures, printers, guestCount: req.guestCount },
+  );
+  // An invoice issued or settled is answered, so with none `figures` still stand.
+  if (invoice === null) await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, figures);
+  const slip = await enqueueRequestedPaymentSlip(
+    tx,
+    cfg,
+    workingOrderId,
+    req.printCardSlip,
+    {
+      id: payment.id,
+      method: req.method,
+      charged: payment.applied + payment.tip,
+      tip: payment.tip,
+      paidAt: payment.receivedAt!,
+      reference: req.externalRef ?? null,
+      machine: outsideCardDetails(req).externalMachine ?? null,
+    },
+    printers,
+  );
+  return { ...(await resultOf(tx, deps, cfg, payment, invoice, figures?.meal)), ...slip };
 }
 
 /** The card bill payments at a reader in this process, by id: a pending payment missing here is
@@ -2358,13 +2523,40 @@ export async function completeBillPayment(
   // An invoice issued or settled is answered, so with none `figures` still stand.
   if (issued.invoice === null)
     await issueAdvanceIfOwed(tx, deps, takenAt, payment!, printers, issued.figures);
+  const items = await itemsPaymentSource(tx, payment!);
+  if (items !== null) await issueHeldSource(tx, deps, takenAt, payment!, items.sourceId);
   return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
 }
 
-/** A card bill payment that charged nothing becomes `failed`, releasing its reservation. Its callers
- * have read it pending, as {@link completeBillPayment}'s have. */
+/**
+ * The bill Pay for items moved `payment`'s items from, when `payment` is the one it took: the
+ * earliest payment of a bill that names a source, as Pay for items inserts it in the transaction
+ * that makes the bill. `alone` when no other payment there is pending or received, so no other
+ * money sits on the bill. `null` otherwise.
+ */
+async function itemsPaymentSource(
+  tx: Transaction,
+  payment: PaymentRow,
+): Promise<{ sourceId: string; alone: boolean } | null> {
+  const [bill] = await tx
+    .select({ itemsPaidFrom: workingOrders.itemsPaidFrom })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, payment.workingOrderId));
+  const sourceId = bill?.itemsPaidFrom ?? null;
+  if (sourceId === null) return null;
+  const { rows } = await readPaymentRows(tx, [payment.workingOrderId]);
+  if (rows[0]?.id !== payment.id) return null;
+  const alone = rows.slice(1).every((row) => row.state !== "pending" && row.state !== "received");
+  return { sourceId, alone };
+}
+
+/** A card bill payment that charged nothing becomes `failed`, releasing its reservation, and the
+ * items it was paying for go back to their bill ({@link putItemsBack}). Its callers have read it
+ * pending, as {@link completeBillPayment}'s have. */
 export async function failBillPayment(
   tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TradingContext,
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
@@ -2378,7 +2570,111 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
+  await putItemsBack(tx, deps, cfg, payment!);
   return payment!;
+}
+
+/**
+ * Every line of a Pay for items bill goes back to the bill it came from when the payment Pay for
+ * items took there fails ({@link itemsPaymentSource}) and no other money sits on the bill, and the
+ * emptied bill is abandoned. Its own savepoint: a refusal leaves the items on their own open bill,
+ * to be paid there, and the payment's failure stands. A source no longer open is the same case.
+ * Pay for items held the source's invoice back for this payment, so where the items stay, the
+ * source is issued if its own payments now cover it ({@link issueHeldSource}).
+ */
+async function putItemsBack(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TradingContext,
+  failed: PaymentRow,
+) {
+  const items = await itemsPaymentSource(tx, failed);
+  if (items === null) return;
+  const moved = items.alone && (await movedItemsBack(tx, cfg, failed, items.sourceId));
+  if (!moved) await issueHeldSource(tx, deps, cfg, failed, items.sourceId);
+}
+
+/**
+ * Issues the bill Pay for items held back for `payment` if its own payments now cover it, the same
+ * way whether that payment was received or failed: as {@link issueHeldBill}, under the source's own
+ * latest payment, whose money its invoice settles, else `payment`'s device and person. With money
+ * moved, so an advance's correction opened while the card was collected makes the invoice wait
+ * (closing it issues the bill) rather than undo a card already captured.
+ */
+async function issueHeldSource(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TradingContext,
+  payment: PaymentRow,
+  sourceId: string,
+): Promise<void> {
+  await issueHeldBill(
+    tx,
+    deps,
+    { ...cfg, origin: storedDeviceOrigin(payment) },
+    sourceId,
+    payment.requestedBy,
+  );
+}
+
+/** {@link putItemsBack}'s move, true when it moved the items. */
+async function movedItemsBack(
+  tx: Transaction,
+  cfg: TradingContext,
+  failed: PaymentRow,
+  sourceId: string,
+): Promise<boolean> {
+  const billId = failed.workingOrderId;
+  const [bill] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (bill!.status !== "open") return false;
+  let bodyError: unknown;
+  try {
+    await tx.transaction(async () => {
+      try {
+        await moveOrderLines(tx, cfg, billId, sourceId, undefined, {
+          actorId: failed.requestedBy,
+        });
+        await bumpRevision(tx, [sourceId, billId]);
+        await tx
+          .update(workingOrders)
+          .set({ status: "abandoned" })
+          .where(eq(workingOrders.id, billId));
+        const [source] = await tx
+          .select({ partyId: workingOrders.partyId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, sourceId));
+        if (source!.partyId !== null) await bumpPartyRevision(tx, source!.partyId);
+      } catch (error) {
+        bodyError = error;
+        throw error;
+      }
+    });
+  } catch (error) {
+    // Only a domain refusal whose savepoint rolled back is absorbed; a storage refusal, a full disk
+    // included, or a store error that ended the whole transaction escapes.
+    if (
+      error !== bodyError ||
+      !isAppError(error) ||
+      error.code.startsWith("storage.") ||
+      diskFullIn(error)
+    )
+      throw error;
+    try {
+      console.warn("payment.items_put_back_refused", {
+        billPaymentId: failed.id,
+        workingOrderId: billId,
+        itemsPaidFrom: sourceId,
+        code: error.code,
+      });
+    } catch {
+      // Reporting must not undo the payment's failure.
+    }
+    return false;
+  }
+  return true;
 }
 
 /** These outcomes leave no retained charge to allocate to the bill. */
@@ -2425,155 +2721,239 @@ export async function takeReaderBillPayment(
   operator: { personId: string; sessionId: string },
   basket?: CounterPayment,
 ): Promise<BillPaymentResult | SettledBill> {
-  let release = (): void => {};
-  let capturedReplay = false;
+  const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
   try {
     // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
-    // Awaited only while `since()` names a refusal: otherwise payment preparation enters the write
-    // queue in this turn.
-    const preRead =
-      deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+    const pending = diskFullBeforePayment(deps);
+    const preRead = pending !== false && (await pending);
     const begun = await withSettledSlip((print) =>
       withIssuanceTransaction(
         deps.db,
-        async (tx) => {
-          const started = await beginBillPayment(
-            tx,
-            deps,
-            cfg,
-            workingOrderId,
-            req,
-            operator,
-            "pending",
-            () => deps.clock.now(),
-            { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-            deps.attendance,
+        (tx) =>
+          beginReaderBillPayment(tx, deps, cfg, workingOrderId, req, operator, {
+            preRead,
             basket,
-          );
-          if ("settled" in started) return { kind: "replay" as const, result: started.settled };
-          if ("replay" in started) {
-            let payment = started.replay;
-            let invoice: TillSaleResult | null = null;
-            if (
-              payment.state === "pending" &&
-              req.kind === "share" &&
-              req.shareOf === 1 &&
-              deps.settleCapturedReplay !== undefined &&
-              !billPaymentIsLive(deps.db, payment.id) &&
-              (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
-            ) {
-              capturedReplay = true;
-              const reading = deps.clock.now();
-              await deps.backend.refuseUntilRecordable(tx, reading);
-              invoice = await deps.settleCapturedReplay(
-                tx,
-                payment.id,
-                reading.instant,
-                print,
-                req.guestCount,
-              );
-              const [recorded] = await tx
-                .select()
-                .from(billPayments)
-                .where(eq(billPayments.id, payment.id));
-              payment = recorded!;
-            }
-            return {
-              kind: "replay" as const,
-              result: await resultOf(tx, deps, cfg, payment, invoice),
-            };
-          }
-          // Inside the transaction, so no loop pass runs between the insert and its registration.
-          release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
-          return {
-            kind: "collect" as const,
-            payment: started.payment,
-            slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
-          };
-        },
+            print,
+            hold,
+          }),
         deps.log,
       ),
     );
     if (begun.kind === "replay") return begun.result;
-    const { payment } = begun;
-    const slip = { frozen: begun.slip, log: deps.log };
-    if (deps.disk?.noted() === true) {
-      // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
-      // disk stops the till's writes"); only the reservation is released.
-      await withTransaction(deps.db, (tx) =>
-        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
-      );
-      refuseForDiskStop(deps.log, workingOrderId);
-    }
+    return await collectBegunReaderPayment(deps, cfg, begun);
+  } catch (error) {
+    if (!hold.capturedReplay) throw error;
+    return afterCardCharged(deps, workingOrderId, () => Promise.reject(error));
+  } finally {
+    hold.release();
+  }
+}
 
-    let result: PaymentResult;
-    try {
-      result = await deps.provider.collect({
-        origin: cfg.origin,
-        workingOrderId: brandWorkingOrderId(workingOrderId),
-        nodeId: cfg.nodeId,
-        amount: centsToDecimal(payment.applied + payment.tip),
-        ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-        ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
-        ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
-        simulationOutcome: req.simulationOutcome,
-        billPaymentId: payment.id,
-        requestedBy: operator.personId,
-        onReaderCheckout: deps.onReaderCheckout,
-      });
-    } catch (error) {
-      if (isAppError(error) && REFUSED_START.has(error.code)) {
-        await withSettledSlip(
-          (print) =>
-            withTransaction(deps.db, async (tx) => {
+/**
+ * What {@link beginReaderBillPayment} leaves its caller, set even when it throws: `release` frees
+ * the live claim on the payment it inserted, once the collect step is over or the transaction
+ * failed; `capturedReplay` says a failure is reported as a card charged but not recorded.
+ */
+export interface ReaderPaymentHold {
+  release: () => void;
+  capturedReplay: boolean;
+}
+
+/** A reader payment begun in its caller's transaction: a replay's answer, or a charge to collect. */
+export type BegunReaderPayment =
+  | { kind: "replay"; result: BillPaymentResult | SettledBill }
+  | {
+      kind: "collect";
+      workingOrderId: string;
+      req: BillPaymentRequest;
+      operator: { personId: string };
+      payment: PaymentRow;
+      slip: Awaited<ReturnType<typeof freezeWantedSlip>>;
+    };
+
+/**
+ * The first transaction of {@link takeReaderBillPayment}: inserts the pending payment, or answers
+ * a retry. It calls no provider; {@link collectBegunReaderPayment} does, after `tx` commits.
+ */
+export async function beginReaderBillPayment(
+  tx: Transaction,
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  options: {
+    /** The full-disk refusal read before the transaction opened ({@link diskFullBeforePayment}). */
+    preRead: boolean;
+    basket?: CounterPayment;
+    print: SettledSlipPrinter;
+    hold: ReaderPaymentHold;
+    /** The retry fingerprint to store and compare in place of the request's own. */
+    fingerprint?: string;
+  },
+): Promise<BegunReaderPayment> {
+  const { preRead, basket, print, hold } = options;
+  const started = await beginBillPayment(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    "pending",
+    () => deps.clock.now(),
+    { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+    deps.attendance,
+    basket,
+    options.fingerprint,
+  );
+  if ("settled" in started) return { kind: "replay", result: started.settled };
+  if ("replay" in started) {
+    let payment = started.replay;
+    let invoice: TillSaleResult | null = null;
+    if (
+      payment.state === "pending" &&
+      req.kind === "share" &&
+      req.shareOf === 1 &&
+      deps.settleCapturedReplay !== undefined &&
+      !billPaymentIsLive(deps.db, payment.id) &&
+      (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
+    ) {
+      hold.capturedReplay = true;
+      const reading = deps.clock.now();
+      await deps.backend.refuseUntilRecordable(tx, reading);
+      invoice = await deps.settleCapturedReplay(
+        tx,
+        payment.id,
+        reading.instant,
+        print,
+        req.guestCount,
+      );
+      const [recorded] = await tx
+        .select()
+        .from(billPayments)
+        .where(eq(billPayments.id, payment.id));
+      payment = recorded!;
+    }
+    return { kind: "replay", result: await resultOf(tx, deps, cfg, payment, invoice) };
+  }
+  // Inside the transaction, so no loop pass runs between the insert and its registration.
+  hold.release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
+  return {
+    kind: "collect",
+    workingOrderId,
+    req,
+    operator,
+    payment: started.payment,
+    slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
+  };
+}
+
+/**
+ * Asks the provider to collect a payment {@link beginReaderBillPayment} inserted, once its
+ * transaction has committed, and records the outcome. Its caller still holds the live claim.
+ */
+export async function collectBegunReaderPayment(
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  begun: Extract<BegunReaderPayment, { kind: "collect" }>,
+): Promise<BillPaymentResult> {
+  const { workingOrderId, req, operator, payment } = begun;
+  const slip = { frozen: begun.slip, log: deps.log };
+  if (deps.disk?.noted() === true) {
+    // A source the items stay off is issued here if its own payments cover it: no later payment or
+    // End meal is taken on a bill with nothing outstanding. If the disk refuses this transaction,
+    // the payment stays pending, and the recovery loop fails it as one no reader was asked to
+    // charge (`settleFromProviderRow`).
+    await withIssuanceTransaction(
+      deps.db,
+      (tx) => failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant),
+      deps.log,
+    );
+    refuseForDiskStop(deps.log, workingOrderId);
+  }
+
+  let result: PaymentResult;
+  try {
+    result = await deps.provider.collect({
+      origin: cfg.origin,
+      workingOrderId: brandWorkingOrderId(workingOrderId),
+      nodeId: cfg.nodeId,
+      amount: centsToDecimal(payment.applied + payment.tip),
+      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+      ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
+      ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
+      simulationOutcome: req.simulationOutcome,
+      billPaymentId: payment.id,
+      requestedBy: operator.personId,
+      onReaderCheckout: deps.onReaderCheckout,
+    });
+  } catch (error) {
+    if (isAppError(error) && REFUSED_START.has(error.code)) {
+      await withSettledSlip(
+        (print) =>
+          withIssuanceTransaction(
+            deps.db,
+            async (tx) => {
               await requireEconomicWrite(tx, cfg, deps.admission);
-              await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+              await failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined);
               await print(tx, payment.id);
-            }),
-          slip,
-        );
-      }
-      throw collectFailure(deps, workingOrderId, error);
-    }
-
-    if (result.state === "partially_refunded")
-      throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "partial_refund" });
-
-    if (result.state === "captured") {
-      // A captured result carries its time (`PaymentResult`, provider.ts).
-      const settledAt = result.settledAt!;
-      // Wrapped outside the transaction: when a full disk ended it or refused its commit,
-      // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
-      return await afterCardCharged(deps, workingOrderId, () =>
-        withSettledSlip(
-          (print) =>
-            withIssuanceTransaction(
-              deps.db,
-              async (tx) => {
-                const done = await completeBillPayment(tx, deps, cfg, payment.id, settledAt, {
-                  guestCount: req.guestCount,
-                });
-                const printed = await print(tx, payment.id);
-                return {
-                  ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.meal)),
-                  ...printed,
-                };
-              },
-              deps.log,
-            ),
-          slip,
-        ),
+            },
+            deps.log,
+          ),
+        slip,
       );
     }
-    return await withSettledSlip(
-      (print) =>
-        withTransaction(deps.db, async (tx) => {
+    throw collectFailure(deps, workingOrderId, error);
+  }
+
+  if (result.state === "partially_refunded")
+    throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "partial_refund" });
+
+  if (result.state === "captured") {
+    // A captured result carries its time (`PaymentResult`, provider.ts).
+    const settledAt = result.settledAt!;
+    // Wrapped outside the transaction: when a full disk ended it or refused its commit,
+    // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
+    return await afterCardCharged(deps, workingOrderId, () =>
+      withSettledSlip(
+        (print) =>
+          withIssuanceTransaction(
+            deps.db,
+            async (tx) => {
+              const done = await completeBillPayment(tx, deps, cfg, payment.id, settledAt, {
+                guestCount: req.guestCount,
+              });
+              const printed = await print(tx, payment.id);
+              return {
+                ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.meal)),
+                ...printed,
+              };
+            },
+            deps.log,
+          ),
+        slip,
+      ),
+    );
+  }
+  return await withSettledSlip(
+    (print) =>
+      withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
           if (!NO_RETAINED_CHARGE.has(result.state)) {
             const answer = await resultOf(tx, deps, cfg, payment, null);
             return { ...answer, outcome: "timeout" };
           }
-          const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+          const failed = await failBillPayment(
+            tx,
+            deps,
+            cfg,
+            payment.id,
+            deps.clock.now().instant,
+            undefined,
+          );
           // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
           // could not print." (`payment_slip.capture_failed`).
           await print(tx, payment.id);
@@ -2584,15 +2964,11 @@ export async function takeReaderBillPayment(
               ? { failureReason: result.failureReason }
               : {}),
           };
-        }),
-      slip,
-    );
-  } catch (error) {
-    if (!capturedReplay) throw error;
-    return afterCardCharged(deps, workingOrderId, () => Promise.reject(error));
-  } finally {
-    release();
-  }
+        },
+        deps.log,
+      ),
+    slip,
+  );
 }
 
 /** Reads a bill's balance in its own transaction. */

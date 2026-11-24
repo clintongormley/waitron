@@ -15,6 +15,7 @@ const root = join(import.meta.dirname, "..");
 const savepoint = "nested savepoint on the caller's transaction";
 const allowed: Record<string, { count: number; reason: string }> = {
   "apps/server/src/alerts.ts": { count: 1, reason: savepoint },
+  "apps/server/src/bill-payments.ts": { count: 1, reason: savepoint },
   "apps/server/src/clock-correction.ts": {
     count: 1,
     reason: "the `transaction` dependency, wired to withTransaction in boot.ts",

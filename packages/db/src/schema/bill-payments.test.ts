@@ -437,7 +437,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("bill_payments_guard_update: the state moves one way, and received amounts stay fixed", () => {
+  describe("bill_payments_guard_update: the state moves one way, and a received payment's amounts change only as kept tip", () => {
     it("allows pending to received, stamping the time", async () => {
       const id = await insertPayment();
       await updatePayment(id, `state = 'received', received_at = '${AT}'`);
@@ -536,7 +536,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
 
     describe.each(["applied", "tip"] as const)(
-      "%s stays fixed outside card confirmation",
+      "%s does not change alone outside card confirmation",
       (column) => {
         it.each([
           ["a pending card payment", {}, "state = 'pending'"],
@@ -606,6 +606,119 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const id = await insertPayment();
       const error = await captureError(() => run(sql`delete from bill_payments where id = ${id}`));
       expect(triggerRaised(error, BILL_PAYMENT_DELETE_REFUSAL)).toBe(true);
+    });
+  });
+
+  describe("bill_payments_guard_update: a received payment's excess kept as a tip", () => {
+    async function amounts(id: string) {
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ applied: billPayments.applied, tip: billPayments.tip })
+          .from(billPayments)
+          .where(eq(billPayments.id, id)),
+      );
+      return row;
+    }
+
+    it("a received payment on an open bill may move money from applied to tip", async () => {
+      const id = await receivedPayment({ applied: 1500, tip: 0 });
+      await updatePayment(id, `applied = 1000, tip = 500`);
+      expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+    });
+
+    it("a received payment on a placed bill may move it too", async () => {
+      const placed = await seedWorkingOrder(suite.db, {
+        ...DASHBOARD,
+        nodeId,
+        status: "open",
+        openedAt: AT,
+      });
+      const id = await receivedPayment({ workingOrderId: placed.id, applied: 1500, tip: 0 });
+      await run(sql`update working_orders set status = 'placed' where id = ${placed.id}`);
+      await updatePayment(id, `applied = 1000, tip = 500`);
+      expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+    });
+
+    it.each([
+      [
+        "the move keeps the payment's total",
+        { applied: 1500, tip: 0 },
+        `applied = 1000, tip = 400`,
+      ],
+      [
+        "a tip may not move back to applied",
+        { applied: 1000, tip: 500 },
+        `applied = 1500, tip = 0`,
+      ],
+      [
+        "a payment being declined may not move it",
+        { applied: 1500, tip: 0 },
+        `applied = 1000, tip = 500, state = 'declined'`,
+      ],
+    ] as const)("%s", async (_name, start, set) => {
+      const id = await receivedPayment(start);
+      const before = await amounts(id);
+      const error = await captureError(() => updatePayment(id, set));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual(before);
+    });
+
+    it("a payment for chosen items may not move it", async () => {
+      const id = await receivedPayment({ kind: "items", applied: 1500, tip: 0 });
+      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+    });
+
+    it.each([
+      ["pending", {}],
+      ["completed", { state: "completed", completedAt: AT }],
+    ] as const)(
+      "a move may not leave applied below what the payment's %s refunds take",
+      async (_state, refund) => {
+        const id = await receivedPayment({ applied: 1500, tip: 0 });
+        await insertRefund(id, { appliedAmount: 1200, ...refund });
+        const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+      },
+    );
+
+    it("a move may leave applied at exactly what the payment's refunds take, failed ones aside", async () => {
+      const id = await receivedPayment({ applied: 1500, tip: 0 });
+      await insertRefund(id, { appliedAmount: 1000, state: "completed", completedAt: AT });
+      await insertRefund(id, { appliedAmount: 500, state: "failed", failedAt: AT });
+      await updatePayment(id, `applied = 1000, tip = 500`);
+      expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+    });
+
+    it("a payment that is a tender may not move it", async () => {
+      const id = await receivedPayment({ applied: 1500, tip: 0 });
+      await tenderFor(id, 1500);
+      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+    });
+
+    it("a pending payment may not move it", async () => {
+      const id = await insertPayment({ method: "cash", tendered: 2000, applied: 1500, tip: 0 });
+      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+    });
+
+    it("a payment on an abandoned bill may not move it", async () => {
+      const abandoned = await seedWorkingOrder(suite.db, {
+        ...DASHBOARD,
+        nodeId,
+        status: "open",
+        openedAt: AT,
+      });
+      const id = await receivedPayment({ workingOrderId: abandoned.id, applied: 1500, tip: 0 });
+      await run(sql`update working_orders set status = 'abandoned' where id = ${abandoned.id}`);
+      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
     });
   });
 

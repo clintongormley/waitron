@@ -905,10 +905,23 @@ declare module "@waitron/shared" {
      */
     "bill.line_paid": { workingOrderId: string; lineNo: number };
     /**
-     * A write would leave the bill's total below the money it has received or reserved. `excess`
-     * is by how much; refunding that first lets the write through.
+     * A write would leave the bill's total below the money it has received or reserved; on a bill
+     * Pay for items left below it already, an edit of its lines is refused only for taking the
+     * total further below. `excess` is by how much; refunding that first lets the write through.
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
+    /**
+     * Paying for chosen items would leave the bill owing less than the payments on account it
+     * took off with their own receipts; `advances` is what they credit.
+     */
+    "bill.below_advances": { workingOrderId: string; advances: string };
+    /** Paying for chosen items chose every dish on the bill: that is paying the whole bill. */
+    "bill.all_items_chosen": { workingOrderId: string };
+    /** Keep as tip on a bill that holds nothing paid over its total. */
+    "bill.not_overpaid": { workingOrderId: string };
+    /** Keep as tip while the venue takes no tips: what the bill is paid over its total can only be
+     * given back. */
+    "bill.tip_not_allowed_on_excess": { workingOrderId: string };
     /**
      * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it
@@ -993,7 +1006,8 @@ declare module "@waitron/shared" {
      * no refund route Waitron can record before asking.
      */
     "bill.refund_unsupported": { paymentId: string };
-    /** A standalone terminal refund requires a manager's PIN on this request. */
+    /** A standalone-terminal refund that needs `sale.refund`, as one giving back more than the bill
+     * is paid over its total does, requires the PIN of a holder of it on this request. */
     "bill.manual_refund_pin_required": { paymentId: string };
     /**
      * A card refund of the bill is still pending: until the card provider shows its outcome, the
@@ -1099,8 +1113,9 @@ declare module "@waitron/shared" {
     "tab.transfer_self": { tabId: string };
     /**
      * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, with
-     * more integer digits than a quantity holds, or finer than the line's unit counts. `quantity` is
-     * the caller's own text.
+     * more integer digits than a quantity holds, or finer than the line's unit counts; or part of a
+     * line whose part and rest, each priced as its own line, would not add up to the line's price.
+     * `quantity` is the caller's own text.
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
@@ -1119,10 +1134,11 @@ declare module "@waitron/shared" {
      * A transfer would separate a modifier from its dish: an entry names a CHILD modifier line (it
      * moves only with its dish), or a PARTIAL split names a dish that carries modifier children
      * (their quantity would no longer match the dish's). Also a partial split that takes a dish's
-     * extras with it — asked for only by a give-away or a discount of part of a dish — when an extra
-     * is not a whole count for each dish, so its two parts would not add up to it; that path
-     * refuses the same case first as `adjustment.quantity_invalid`. `lineNo` is the offending
-     * source line.
+     * extras with it — asked for by a give-away or a discount of part of a dish, and by Pay for
+     * items — when an extra is not a whole count for each dish, so its two parts would not add up
+     * to it (the give-away and discount path refuses that case first as
+     * `adjustment.quantity_invalid`), or when an extra's two parts, each priced as its own line,
+     * would not add up to its price. `lineNo` is the offending source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**

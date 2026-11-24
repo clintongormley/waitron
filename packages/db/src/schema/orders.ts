@@ -117,6 +117,8 @@ export const workingOrders = table(
     zoneId: id("zone_id"),
     departmentId: id("department_id"),
     serviceMode: label("service_mode").$type<"table_tab" | "prepay" | "ticket_then_pay">(),
+    // On a bill made by Pay for items: the bill its items came from.
+    itemsPaidFrom: id("items_paid_from"),
   },
   (t) => [
     uniqueIndex("working_orders_party_bill_number_key")
@@ -153,6 +155,12 @@ export const workingOrders = table(
       name: "working_orders_party_fk",
     }),
     index("working_orders_party_idx").on(t.partyId),
+    foreignKey({
+      columns: [t.itemsPaidFrom],
+      foreignColumns: [t.id],
+      name: "working_orders_items_paid_from_fk",
+    }).onDelete("restrict"),
+    index("working_orders_items_paid_from_idx").on(t.itemsPaidFrom),
     check("working_orders_status_ck", enumCheck(t.status)),
     check("working_orders_dining_ck", enumCheck(t.dining)),
     foreignKey({

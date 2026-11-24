@@ -2,6 +2,7 @@ import { en, es } from "./strings.js";
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
 import { codeMessage, freeItemAtFinishMessage } from "./codes.js";
+import { formatMoney } from "@waitron/shared";
 
 it("explains an empty order in English and Spanish", () => {
   expect(codeMessage("sale.empty_basket", "en")).toBe(
@@ -23,6 +24,15 @@ it.each([
     expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
     expect(codeMessage(code, locale)).not.toContain(code);
   }
+});
+
+it("words Keep as tip refused while the venue takes no tips, saying to give the money back", () => {
+  expect(codeMessage("bill.tip_not_allowed_on_excess", "en")).toBe(
+    "This venue does not take tips. Give the money back instead.",
+  );
+  expect(codeMessage("bill.tip_not_allowed_on_excess", "es")).toBe(
+    "Este local no acepta propinas. Devuelve el dinero.",
+  );
 });
 
 it("words a refund Correct invoice must make, saying what each choice does, in both languages", () => {
@@ -1510,4 +1520,16 @@ it("words Finish table's tab.free_item_with_dish with an unknown reason as the g
     expect(freeItemAtFinishMessage("constructor", locale)).toBe(
       codeMessage("tab.free_item_with_dish", locale),
     );
+});
+
+it("words bill.below_advances with the advances' amount, and without it when none came", () => {
+  expect(codeMessage("bill.below_advances", "en", { advances: "15.00" })).toBe(
+    `Part of this bill was paid with its own receipt (${formatMoney("15.00", "en")}), so it cannot come to less than that. Choose fewer items, or pay by amount.`,
+  );
+  expect(codeMessage("bill.below_advances", "es", { advances: "15.00" })).toContain(
+    `(${formatMoney("15.00", "es")})`,
+  );
+  expect(codeMessage("bill.below_advances", "en")).toBe(
+    "Part of this bill was paid with its own receipt, so it cannot come to less than that. Choose fewer items, or pay by amount.",
+  );
 });

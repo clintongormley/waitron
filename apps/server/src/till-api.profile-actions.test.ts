@@ -166,6 +166,17 @@ const billPayment = (method: "cash" | "card", entry?: "manual" | "reader") => ({
   tip: "0.00",
 });
 
+const itemPayment = (method: "cash" | "card", entry?: "reader") => ({
+  submissionId: randomUUID(),
+  picks: [{ lineId: randomUUID() }],
+  expectedEdits: [],
+  method,
+  ...(entry === undefined ? {} : { entry }),
+  ...(method === "cash" ? { tendered: "1.00" } : {}),
+  applied: "1.00",
+  tip: "0.00",
+});
+
 type Row = readonly [
   method: string,
   path: string,
@@ -265,6 +276,27 @@ const ROUTES: readonly Row[] = [
     "integrated-card-payment",
     forbidden("pay"),
     billPayment("card", "reader"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "take-cash",
+    { status: 403, error: { code: "device.cash_not_allowed", params: {} } },
+    itemPayment("cash"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "hand-keyed-card-payment",
+    forbidden("hand-keyed-card-payment"),
+    itemPayment("card"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "integrated-card-payment",
+    forbidden("pay"),
+    itemPayment("card", "reader"),
   ],
   [
     "POST",
@@ -712,6 +744,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/transactions/:saleId/corrections/preview",
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
+      "POST /api/working-orders/:id/item-payments/preview",
     ],
   },
   {
@@ -727,6 +760,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     basis:
       'Close ends a correction without filing; it moves no money, prints nothing and opens no drawer. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
     routes: ["POST /api/invoice-corrections/:id/close"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: [],
+    basis:
+      'Keep as tip moves money the bill already received from its applied amount to its tip, so it takes no payment, hands none out and opens no drawer. When that leaves the bill paid it issues the bill\'s invoice through issueIfFullyPaid, as a completing payment does. print-receipt never refuses: issuing queues no receipt (enqueueSaleReceipt, receipt-print.ts, only reserves a full invoice staged for email or A4 and can print a prepaid order\'s collection number), and the receipt is its own request, POST /api/sales/:id/receipt, which requires print-receipt; bill-overpaid.test.ts "keeping the excess as a tip queues no receipt, whether or not the till may print receipts"; refusals: bill-overpaid.test.ts "keep as tip is refused when tips are off"',
+    routes: ["POST /api/working-orders/:id/overpaid/keep-as-tip"],
   },
   {
     proof: "matching request (source)",
