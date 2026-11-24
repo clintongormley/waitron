@@ -49,7 +49,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import "./errors.js";
 
 const AT = "2026-03-14T12:00:00.000Z";

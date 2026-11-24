@@ -12,7 +12,7 @@ import { createStation } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { readPassRows } from "./working-order-pass.js";
 import { listStationQueue } from "./working-order-station-queue.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
 const suite = useVenueDb({

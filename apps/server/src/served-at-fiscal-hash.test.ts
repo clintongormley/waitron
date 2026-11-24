@@ -38,7 +38,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { type TicketState } from "./kitchen-print.js";
+import { type TicketState } from "./kitchen-ticket-state.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { fireLines } from "./working-order-kitchen-fire.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";

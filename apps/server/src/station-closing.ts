@@ -4,7 +4,7 @@ import { ticketItems, workingOrderLines, workingOrders, type Transaction } from 
 import { invalid } from "./bill-allocation.js";
 import { moveDishesToStation, stillMovable, type StationMoveActor } from "./station-move.js";
 import type { TradingContext } from "./trading-context.js";
-import { kitchenWork } from "./kitchen-print.js";
+import { kitchenWork } from "./kitchen-ticket-state.js";
 
 export async function openDishCount(tx: Transaction, stationId: string): Promise<number> {
   const [row] = await tx

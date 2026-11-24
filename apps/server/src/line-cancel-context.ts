@@ -3,7 +3,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { cancelRowMembers } from "./adjustments-apply.js";
-import { isStarted, type TicketState } from "./kitchen-print.js";
+import { isStarted, type TicketState } from "./kitchen-ticket-state.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { partyFamily } from "./parties.js";
 import "./errors.js";

@@ -24,7 +24,7 @@ import {
   enqueueAllergyCorrectionSlips,
   foldPortionNotices,
   type CorrectionItem,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
 import type { KitchenLanguage } from "./i18n/kitchen-ticket.js";

@@ -24,7 +24,8 @@ import {
   type IssuedInvoice as OrderInvoice,
 } from "./cancel-credit.js";
 import { readFormerNumbers } from "./former-numbers.js";
-import { firedQuantity, enqueueCorrectionSlips, isStarted } from "./kitchen-print.js";
+import { enqueueCorrectionSlips } from "./kitchen-ticket-corrections.js";
+import { firedQuantity, isStarted } from "./kitchen-ticket-state.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { captureSentLineNutrition } from "./line-nutrition.js";
 import { VENUE_SERVICE } from "./modules.js";

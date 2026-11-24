@@ -1643,7 +1643,7 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   today does too (A650 ruling 1). After finding a slip for Bar leaving a named group misleading,
   the owner ruled the same day on what counts (A650): a MOVED slip only when an order left one of
   its tables, a place name on its kitchen paper is no longer one of its places, or its dishes are
-  on an order with another number (`kitchenToBeTold`, `apps/server/src/kitchen-print.ts`). So
+  on an order with another number (`kitchenToBeTold`, `apps/server/src/kitchen-ticket-moves.ts`). So
   Table 9 back to its saved place, ending the group of two named "García birthday", prints
   `From: García birthday` / `To: Counter 6, Table 9`; Bar back to its saved place inside a named
   group prints nothing, as the party keeps every table and the name; and an unnamed group of two

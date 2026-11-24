@@ -4,12 +4,10 @@ import { newId, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
-import {
-  enqueueMovedSlips,
-  moveKitchenPrintLinks,
-  orderTableLabel,
-  readSentWork,
-} from "./kitchen-print.js";
+import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
+import { readSentWork } from "./kitchen-ticket-paper.js";
+import { moveKitchenPrintLinks } from "./kitchen-ticket-links.js";
+import { orderTableLabel } from "./kitchen-ticket-items.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";

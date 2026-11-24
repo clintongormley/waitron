@@ -130,7 +130,7 @@ import {
 } from "./working-order-context.js";
 import { passReleaseRefusal } from "./pass-release.js";
 import { readScopedPassBoard } from "./pass-board.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 import type { OrderLinePatch } from "./working-order-edit-state.js";
 import type { LineExtras } from "./working-order-pricing.js";
 import type { OrderAttendance } from "./working-order-context.js";
@@ -211,7 +211,8 @@ import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-ca
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid, readBillBalance, type CounterPaymentBasket } from "./bill-payments.js";
 import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
-import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
+import { listPrintProblems } from "./kitchen-ticket-problems.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import {
   canonicaliseUuid,
   clearSessionCookie,

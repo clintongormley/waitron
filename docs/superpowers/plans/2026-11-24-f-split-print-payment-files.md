@@ -35,7 +35,7 @@ Move whole test blocks to `kitchen-print.{fire,extras,portions,corrections,repri
 for fire and routing, extras and units, A803 portions, corrections and moves, and full reprints.
 Put “show the rest of the order” and “a station printer that was deleted” in `fire`. Put the
 table-driven measured-extra label cases in `extras`. Keep the piece-unit group with the English
-exception, the stored-option answers, the frozen-name cases, table labels and course headings in
+exception, the stored-option answers, the frozen-name cases, table labels, party-name tickets and course headings in
 `kitchen-print.test.ts`. `kitchen-print.test-support.ts` holds the shared helpers and a database
 binding initialised in each isolated suite by `useVenueDb`. Every suite that uses helpers from
 `split-extras-venue.ts` calls `useSplitExtrasDb` in its own `beforeAll`. Keep both `afterEach`

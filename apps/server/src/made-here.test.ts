@@ -32,7 +32,7 @@ import { listStationQueue } from "./working-order-station-queue.js";
 import { fireOrderLines } from "./working-order-kitchen-service.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { fireLines } from "./working-order-kitchen-fire.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { setStationToday } from "@waitron/venue-service";

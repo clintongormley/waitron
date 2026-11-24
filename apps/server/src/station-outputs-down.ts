@@ -20,7 +20,7 @@ import { printJobInTrouble, printedOrResent, UNPRINTED_STATUSES } from "./print-
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
-import { kitchenWork } from "./kitchen-print.js";
+import { kitchenWork } from "./kitchen-ticket-state.js";
 import { lastDeviceSighting } from "./device-session.js";
 
 export interface DownPrinter {

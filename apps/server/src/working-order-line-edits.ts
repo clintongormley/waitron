@@ -31,15 +31,11 @@ import { readStationChanges, refuseChangesAfterSending } from "./changes-after-s
 import { requireMakeAtStation } from "./dead-ends.js";
 import { copyAllergyWorkingTicks, refreshKitchenAllergyClashes } from "./kitchen-allergy.js";
 import { initiatedAt, requestedItem } from "./kitchen-phase.js";
-import {
-  isStarted,
-  type CorrectionItem,
-  enqueueCorrectionSlips,
-  enqueueKitchenTickets,
-  hasUngroupedHoldPaper,
-  firedQuantity,
-  inIds,
-} from "./kitchen-print.js";
+import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
+import { type CorrectionItem, enqueueCorrectionSlips } from "./kitchen-ticket-corrections.js";
+import { isStarted, firedQuantity } from "./kitchen-ticket-state.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
+import { inIds } from "./in-ids.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
   namedPicks,

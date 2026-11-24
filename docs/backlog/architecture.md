@@ -111,11 +111,9 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   print, the accented samples its wrapping and character checks read ("Cumpleaños de la abuela"
   with and without "García", "Jalapeños en vinagre con eneldo" and "Café"), and one French sample,
   "Cornichons".
-  The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
-  printer, course, dish, extra, note and table names to what it creates; it keeps the default
-  kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
-  tickets), the party venue's dishes, the Spanish ticket words and unit
-  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
+  The kitchen-print suites give English station, printer, course, dish, extra, note and table names
+  to what they create. `kitchen-print.test.ts` keeps the piece-unit and Spanish alphabetical-order
+  cases, the Spanish party venue's default "Cocina" station and its party-name tickets. The kitchen-print
   concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, menu,
   station, printer and product but keeps its es-ES locale and the operation description "Venta en
   establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
@@ -507,11 +505,9 @@ also qualifies the historical operation-description references in this section.
   The server's zone-offer suite gives English location, menu, category, product, station and
   extras-list names to what it creates; its es-ES locale, its extras list's language key and
   the default kitchen station the shared seed helper names "Cocina" stay.
-  The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
-  printer, course, dish, extra, note and table names to what it creates; it keeps the default
-  kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
-  tickets), the party venue's dishes, the Spanish ticket words and unit
-  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
+  The kitchen-print suites give English station, printer, course, dish, extra, note and table names
+  to what they create. `kitchen-print.test.ts` keeps the piece-unit and Spanish alphabetical-order
+  cases, the Spanish party venue's default "Cocina" station and its party-name tickets. The kitchen-print
   concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, menu,
   station, printer and product but keeps its es-ES locale and the operation description "Venta en
   establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates

@@ -14,7 +14,7 @@ import { createProduct } from "@waitron/menu";
 import { setRoutingCell } from "@waitron/venue-service";
 import { eq, sql, and, isNotNull, asc, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { readCurrentOrders } from "./order-group-reads.js";
 import { fireGroup, fireHeldLine } from "./order-group-release.js";
 import type { GroupLine } from "./order-group-submission.js";

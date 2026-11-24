@@ -871,7 +871,7 @@ to a free table in the closed zone takes its service context, because `adoptZone
 zone only for an open bill. Printing existing orders remains
 possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks profile zone access through
 `apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
-`apps/server/src/kitchen-print.ts`.
+`apps/server/src/kitchen-ticket-reprint.ts`.
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order-pricing.ts` performs the zone check when adding lines, separately from its offer read.
 

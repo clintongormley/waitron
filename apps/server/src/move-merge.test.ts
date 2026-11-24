@@ -92,13 +92,13 @@ import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill
 import { fireGroup } from "./order-group-release.js";
 import { recordHeldPaper } from "./order-group-hold-paper.js";
 import { insertPartyBill } from "./parties.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
+import { enqueueMovedSlipsForNamesGone } from "./kitchen-ticket-moves.js";
+import { readPartiesSentWork } from "./kitchen-ticket-paper.js";
 import {
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
-  enqueueMovedSlipsForNamesGone,
-  readPartiesSentWork,
-  reprintOrderTickets,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
 
 /** Merge bills of `from` into `into` at `partyId`, in the caller's transaction, as staff do. */
 async function mergeInTx(

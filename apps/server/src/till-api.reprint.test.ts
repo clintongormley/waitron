@@ -35,7 +35,7 @@ import type { TradingContext } from "./trading-context.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
-// is pinned in `kitchen-print.test.ts`.
+// is pinned in `kitchen-print.reprint.test.ts`.
 const COFFEE = "Cafe con leche";
 let cfg: TradingContext;
 let anna: { id: string };

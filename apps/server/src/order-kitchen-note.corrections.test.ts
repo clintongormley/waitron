@@ -21,11 +21,11 @@ import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, listStationNotices, writeKitchenNote } from "@waitron/venue-service";
 import { thousandthsToDecimal } from "@waitron/shared";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import {
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
-  reprintOrderTickets,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { setStationPrinting } from "./testing/station-printing.js";

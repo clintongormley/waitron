@@ -24,7 +24,7 @@ import {
 import { eq, and, inArray, sql } from "drizzle-orm";
 import type { OrderEditAuthority } from "./bill-editing.js";
 import { initiatedAt } from "./kitchen-phase.js";
-import { firedQuantity } from "./kitchen-print.js";
+import { firedQuantity } from "./kitchen-ticket-state.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyOfOrder } from "./parties.js";
@@ -33,7 +33,7 @@ import { productSellable } from "./stored-order-lines.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TillSaleDeps } from "./working-order-context.js";
 import type { LineExtras, priceOrderLines } from "./working-order-pricing.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 /**
  * The complete edited basket and an optional label. A line naming a stored line by

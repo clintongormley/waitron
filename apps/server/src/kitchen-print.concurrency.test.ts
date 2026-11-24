@@ -13,7 +13,7 @@ import type { OriginConfig } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";

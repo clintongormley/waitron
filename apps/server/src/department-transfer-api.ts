@@ -20,7 +20,7 @@ import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
-import { firedQuantity } from "./kitchen-print.js";
+import { firedQuantity } from "./kitchen-ticket-state.js";
 import "./errors.js";
 
 function uuid(value: unknown, field: string): string {

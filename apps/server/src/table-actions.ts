@@ -28,8 +28,8 @@ import {
   enqueueMovedSlipsForNamesGone,
   enqueueMovedSlipsOnto,
   readNamesOnPaper,
-  readPartiesSentWork,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-moves.js";
+import { readPartiesSentWork } from "./kitchen-ticket-paper.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { carryDoneWithBill } from "./service-step-done.js";
 import {

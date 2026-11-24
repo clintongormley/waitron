@@ -68,7 +68,7 @@ import {
   type SetMenuOfferLookup,
 } from "./set-menu-offers.js";
 import "./errors.js";
-import { orderTableLabel } from "./kitchen-print.js";
+import { orderTableLabel } from "./kitchen-ticket-items.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {

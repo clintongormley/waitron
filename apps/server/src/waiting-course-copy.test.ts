@@ -32,7 +32,7 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { copyHeldGroups, copyWaitingGroups } from "./order-group-transfer.js";

@@ -32,7 +32,7 @@ import {
   freezeKitchenAllergyItems,
 } from "./kitchen-allergy.js";
 import { initiatedItem } from "./kitchen-phase.js";
-import { enqueueKitchenTickets } from "./kitchen-print.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
 import { requestStamps, passWaitingStations, requestHeldItems } from "./kitchen-release.js";
 import { captureSentLineNutrition } from "./line-nutrition.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";

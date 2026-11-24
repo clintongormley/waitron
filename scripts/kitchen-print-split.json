@@ -1,0 +1,135 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/kitchen-print.ts",
+      "targets": {
+        "apps/server/src/kitchen-ticket-items.ts": [
+          "FiredItem",
+          "byGroupThenLine",
+          "atFiredQuantity",
+          "changeItem",
+          "afterPeriodOf",
+          "ticketName",
+          "extraLabel",
+          "buildTicketItems",
+          "readStations",
+          "orderTableLabel",
+          "OrderHeader",
+          "readOrderHeaders",
+          "readOrderHeader",
+          "TicketItemsByLine"
+        ],
+        "apps/server/src/kitchen-ticket-printers.ts": [
+          "PrinterMapping",
+          "printerMappings",
+          "groupByLayout"
+        ],
+        "apps/server/src/in-ids.ts": ["inIds"],
+        "apps/server/src/kitchen-ticket-plan.ts": [
+          "KitchenRoute",
+          "KitchenJob",
+          "MappingsByStation",
+          "mappingsByStation",
+          "routeKitchenTickets",
+          "PaperRest",
+          "KnownStations",
+          "FirePaper",
+          "planKitchenTickets",
+          "foldWholePortions"
+        ],
+        "apps/server/src/kitchen-ticket-enqueue.ts": [
+          "enqueueKitchenJobs",
+          "enqueueKitchenTickets",
+          "markHoldPaper"
+        ],
+        "apps/server/src/kitchen-ticket-links.ts": [
+          "linkKitchenJob",
+          "readUncoveredLinks",
+          "writeLinksAfter",
+          "moveKitchenPrintLinks",
+          "copyKitchenPrintLinks",
+          "copyKitchenJobLines"
+        ],
+        "apps/server/src/kitchen-ticket-state.ts": [
+          "TicketState",
+          "isStarted",
+          "firedQuantity",
+          "leftToServe",
+          "kitchenWork",
+          "liveKitchenDish"
+        ],
+        "apps/server/src/kitchen-ticket-corrections.ts": [
+          "CorrectionItem",
+          "CorrectionChange",
+          "readKitchenChangeItems",
+          "enqueuePartyNameChange",
+          "enqueueOrderKitchenNoteChange",
+          "printKitchenNoteChanges",
+          "HoldCorrection",
+          "withoutMadeHere",
+          "enqueueCorrectionSlips",
+          "enqueueStationMoved",
+          "enqueueHoldCorrections",
+          "CancelledExtra",
+          "readCancelledExtra",
+          "enqueueExtraCancelled",
+          "foldPortionNotices",
+          "PortionRead",
+          "toNoticeItem",
+          "enqueueAllergyCorrectionSlips",
+          "printCorrectionSlips"
+        ],
+        "apps/server/src/kitchen-ticket-paper.ts": [
+          "SentWork",
+          "readSentWork",
+          "readSentItems",
+          "onHeldPaper",
+          "readOnHoldTickets",
+          "hasUngroupedHoldPaper",
+          "readWaitingOnHoldPaper",
+          "readPartiesSentWork",
+          "readSentWorkAt"
+        ],
+        "apps/server/src/kitchen-ticket-moves.ts": [
+          "enqueueMovedSlips",
+          "enqueueMovedSlipsOnto",
+          "kitchenToBeTold",
+          "lostAPlace",
+          "movedTexts",
+          "ItemOnOrder",
+          "readTicketItemsOn",
+          "MovedWork",
+          "notifyMoved",
+          "movedItems",
+          "MovedItem",
+          "MovedSlipPrinting",
+          "readMovedSlipPrinting",
+          "printMovedSlips",
+          "enqueueMovedSlipsFor",
+          "readNamesOnPaper",
+          "readTablesHeldOverTime",
+          "enqueueMovedSlipsForNamesGone",
+          "notifyOwnBillsWhere"
+        ],
+        "apps/server/src/kitchen-ticket-reprint.ts": [
+          "ReprintPart",
+          "readReprintParts",
+          "readReprintTargets",
+          "reprintOrderTickets",
+          "joinedPapers"
+        ],
+        "apps/server/src/kitchen-ticket-problems.ts": [
+          "PrintProblem",
+          "KitchenProblemLink",
+          "printedMovedDishes",
+          "readPrintProblems",
+          "kitchenJobsNotWaiting",
+          "listPrintProblems",
+          "ordersWithPrintProblem",
+          "stationOrdersWithPrintProblem"
+        ]
+      }
+    }
+  ]
+}

@@ -78,7 +78,7 @@ import {
   type OrderAttendance,
   readOrderRevision,
 } from "./working-order-context.js";
-import { firedQuantity, type TicketState } from "./kitchen-print.js";
+import { firedQuantity, type TicketState } from "./kitchen-ticket-state.js";
 import { readPortionBindings, readWholePortionLines } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";

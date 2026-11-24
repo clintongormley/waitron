@@ -34,7 +34,8 @@ import { inArray, eq, type SQL, and, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { readFormerNumbers } from "./former-numbers.js";
 import { type KitchenPhase, kitchenPhase } from "./kitchen-phase.js";
-import { kitchenWork, firedQuantity, stationOrdersWithPrintProblem } from "./kitchen-print.js";
+import { stationOrdersWithPrintProblem } from "./kitchen-ticket-problems.js";
+import { kitchenWork, firedQuantity } from "./kitchen-ticket-state.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readGroupNumberLabels } from "./order-group-records.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -42,7 +43,7 @@ import { type RestOfOrderItem, readRestOfOrder } from "./rest-of-order.js";
 import { type StationQueueMove, readStationQueueMoves } from "./station-queue-moves.js";
 import type { WorkingOrderStatus } from "./working-order-context.js";
 import { passStationsByGroup } from "./working-order-pass-groups.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 /** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
 interface UnservedLine {

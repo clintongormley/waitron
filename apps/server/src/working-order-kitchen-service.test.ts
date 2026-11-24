@@ -13,7 +13,7 @@ import { EACH_UNIT, createProduct } from "@waitron/menu";
 import { sql, eq, and, isNull, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { deleteCourse } from "./course-delete.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 import { createStation, createCourse, setProductCourse } from "./kitchen.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
