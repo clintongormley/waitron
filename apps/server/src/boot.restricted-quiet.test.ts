@@ -151,7 +151,7 @@ interface Observed {
   download?: Download;
   /** The same download after a passkey sign-in: the options request, then the signed answer. */
   passkeyDownload?: Download;
-  /** An unsigned request to the main box's route for the same file, on a restricted start. */
+  /** An unsigned request to the old box's route the main box asks for its data, on a restricted start. */
   peerRequest?: { status: number; body: unknown };
   mailStatus: string;
 }

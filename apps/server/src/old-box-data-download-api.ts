@@ -39,7 +39,7 @@ export interface OldBoxDataDownloadDeps extends ReturnRecordsDeps {
   fetch?: typeof fetch;
   post?: typeof postToBox;
   timeoutMs?: number;
-  /** One download at a time: each holds the answer of up to 64 MiB, and copies of it, in memory. */
+  /** One old box asked at a time, since each answer of up to 64 MiB is held in memory. */
   turn?: BuildTurn;
 }
 

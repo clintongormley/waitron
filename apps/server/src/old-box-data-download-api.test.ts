@@ -500,13 +500,15 @@ describe("while the old box's answer is in transit", () => {
   it("the browser gone meanwhile: nothing recorded", async () => {
     const { fetch, held, release } = firstAnswerHeld();
     const abort = new AbortController();
-    const pending = download(appWith({ fetch }), adminCookie, oldBox, { signal: abort.signal });
+    const app = appWith({ fetch });
+    const pending = download(app, adminCookie, oldBox, { signal: abort.signal });
     await held;
     abort.abort();
     release();
-    await pending;
+    expect((await pending).status).toBe(499);
     expect(await downloads()).toEqual([]);
     expect(lines.some((l) => l.event === "handover.old_box_data_downloaded")).toBe(false);
+    expect((await download(app)).status).toBe(200);
   });
 });
 

@@ -228,7 +228,7 @@ async function venueHash(): Promise<string> {
 }
 
 describe("POST /api/node/old-box-data on the old box", () => {
-  it("answers the main box's signed request with a signed workbook of what its summary lacks", async () => {
+  it("answers the main box's signed request with a workbook of what its summary lacks, and a signed envelope naming its SHA-256", async () => {
     const request = await query();
     const answer = await answered(await send(appWith(), request));
     expect(answer).toMatchObject({

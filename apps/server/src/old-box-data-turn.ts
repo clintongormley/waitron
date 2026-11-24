@@ -1,6 +1,6 @@
 /** One workbook made, or passed on, at a time; kept in memory. */
 export interface BuildTurn {
-  /** The turn's release, or null while another build holds it. */
+  /** The turn's release, or null while another holder has it. */
   take(): (() => void) | null;
 }
 
