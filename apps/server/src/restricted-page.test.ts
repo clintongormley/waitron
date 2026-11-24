@@ -162,6 +162,8 @@ const WORDS = {
       "The return stopped: some payments on this box differ from the main box's. Keep both boxes switched on with their data. Once the main box accepts the difference, switch this box off and on.",
     "record-clash":
       "The return stopped: an invoice record on this box clashes with one on the main box. Carry on selling on the main box, and keep this box's data.",
+    "hours-refused":
+      "This box's invoice records have reached the main box, but the main box could not store some of its working hours. Carry on with the main box. Before this box is wiped, download its data below.",
   },
   "es-ES": {
     dashboard: "Abrir el panel en el nuevo servidor principal.",
@@ -175,6 +177,8 @@ const WORDS = {
       "La devolución se ha detenido: algunos pagos de este servidor no coinciden con los del servidor principal. Mantén ambos servidores encendidos con sus datos. Cuando el servidor principal acepte la diferencia, apaga y enciende este servidor.",
     "record-clash":
       "La devolución se ha detenido: un registro de facturación de este servidor choca con uno del servidor principal. Sigue vendiendo con el servidor principal y conserva los datos de este servidor.",
+    "hours-refused":
+      "Los registros de facturación de este servidor han llegado al servidor principal, pero el servidor principal no ha podido guardar algunas de sus horas trabajadas. Sigue con el servidor principal. Antes de que se borre este servidor, descarga sus datos aquí abajo.",
   },
 } as const;
 
@@ -245,9 +249,17 @@ describe("the restricted box's own page", () => {
 
   it.each(
     LANGUAGES.flatMap(([locale, header]) =>
-      (["waiting", "sending", "needs-attention", "clock", "clash", "record-clash"] as const).map(
-        (state) => [locale, header, state] as const,
-      ),
+      (
+        [
+          "waiting",
+          "sending",
+          "needs-attention",
+          "clock",
+          "clash",
+          "record-clash",
+          "hours-refused",
+        ] as const
+      ).map((state) => [locale, header, state] as const),
     ),
   )(
     "shows one line for the return while it needs the person, in %s (%s), while %s",
@@ -301,7 +313,14 @@ describe("the restricted box's own page", () => {
     },
   );
 
-  it.each(["waiting", "sending", "needs-attention", "clock", "record-clash"] as const)(
+  it.each([
+    "waiting",
+    "sending",
+    "needs-attention",
+    "clock",
+    "record-clash",
+    "hours-refused",
+  ] as const)(
     "keeps Progress while %s says nothing of the new main box having started",
     async (state) => {
       const successor = await seedSuccessor("Counter box");
@@ -820,6 +839,7 @@ describe("the restricted page after the main box asks this box to reset", () => 
         "clock",
         "clash",
         "record-clash",
+        "hours-refused",
         "confirmed",
       ] as const
     ).map((state) => [locale, header, state] as const),

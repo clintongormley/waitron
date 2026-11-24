@@ -32,6 +32,7 @@ import {
   startReturnRecordsDuty,
   runReturnRecordsPass,
   formerMainForReturn,
+  readReturnInventory,
   returnDigest,
   returnVenue,
 } from "./return-records.js";
@@ -584,6 +585,149 @@ it("runs one pass on passNow() after the duty has confirmed and stopped", async 
     expect(duty.state()).toBe("confirmed");
   } finally {
     await duty.stop();
+  }
+});
+
+const workforceCodes = [
+  "attendance.return_entry_clash",
+  "attendance.return_entry_invalid",
+] as const;
+let hoursRefusal: (typeof workforceCodes)[number] | null;
+// The working-time stand-in is listed first, so only the fiscal slot can put invoices ahead of it.
+const hoursFirst: WaitronModule[] = [
+  {
+    name: "hours",
+    version: "1.0.0",
+    tier: "mandatory",
+    handover: {
+      returnRecords: {
+        read: async () => ["hours-1"],
+        receive: async (_tx, _source, batch) => {
+          received.push(batch);
+          return hoursRefusal === null ? true : { refusal: hoursRefusal };
+        },
+      },
+    },
+  },
+  {
+    name: "invoices",
+    version: "1.0.0",
+    tier: "mandatory",
+    fiscal: {} as NonNullable<WaitronModule["fiscal"]>,
+    handover: {
+      returnRecords: {
+        read: async () => ["invoice-1", "invoice-2"],
+        receive: async (_tx, _source, batch) => {
+          received.push(batch);
+          return true;
+        },
+      },
+    },
+  },
+];
+function hoursDestination() {
+  const app = new Hono();
+  mountReturnRecordsApi(
+    app,
+    {
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: receiver,
+      modules: hoursFirst,
+      requireWritable: () => {},
+      wake: () => {},
+    },
+    () => {},
+  );
+  const sentModules: string[] = [];
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const { body } = JSON.parse(String(init?.body)) as { body: { module: string } };
+    sentModules.push(body.module);
+    // Until the route maps the working-time codes, a refusal is answered here as the route will.
+    if (body.module === "hours" && hoursRefusal !== null)
+      return Response.json({ error: { code: hoursRefusal } }, { status: 409 });
+    return app.request(String(url), init);
+  };
+  return { sentModules, fetch };
+}
+
+it("sends the fiscal slot's batches before other modules' and takes the inventory in that order", async () => {
+  hoursRefusal = null;
+  const { batches, inventory } = await readReturnInventory({
+    db: suite.db,
+    nodeId: source,
+    modules: hoursFirst,
+  });
+  const expected = [
+    { module: "invoices", payload: "invoice-1" },
+    { module: "invoices", payload: "invoice-2" },
+    { module: "hours", payload: "hours-1" },
+  ];
+  expect(batches).toEqual(expected);
+  expect(inventory).toBe(returnDigest(expected.map(returnDigest)));
+  const { sentModules, fetch } = hoursDestination();
+  expect(
+    await runReturnRecordsPass({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules: hoursFirst,
+      fetch,
+      stopped: () => false,
+    }),
+  ).toBe("confirmed");
+  expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
+  expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
+});
+
+it.each(workforceCodes)(
+  "reads hours-refused when the main box refuses working hours with %s after every invoice batch",
+  async (code) => {
+    hoursRefusal = code;
+    const { sentModules, fetch } = hoursDestination();
+    expect(
+      await runReturnRecordsPass({
+        db: suite.db,
+        node: suite.node,
+        ring,
+        nodeId: source,
+        modules: hoursFirst,
+        fetch,
+        stopped: () => false,
+      }),
+    ).toBe("hours-refused");
+    expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
+    expect(received).toEqual(["invoice-1", "invoice-2"]);
+  },
+);
+
+it("ends the duty on hours-refused, and passNow() still runs one pass", async () => {
+  hoursRefusal = workforceCodes[0];
+  const { sentModules, fetch } = hoursDestination();
+  const pause = vi.spyOn(loop, "realSleep");
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: hoursFirst,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch,
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("hours-refused"));
+    // A pass scheduled after the first would reach its sleep before this settles.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pause).not.toHaveBeenCalled();
+    expect(sentModules).toHaveLength(3);
+    expect(await duty.passNow()).toBe("hours-refused");
+    expect(sentModules).toEqual(["invoices", "invoices", "hours", "invoices", "invoices", "hours"]);
+  } finally {
+    await duty.stop();
+    pause.mockRestore();
   }
 });
 

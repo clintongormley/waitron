@@ -69,7 +69,7 @@ const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 async function probeRows(
-  query: Parameters<NonNullable<WaitronModule["handover"]>["summarise"]>[0],
+  query: Parameters<NonNullable<NonNullable<WaitronModule["handover"]>["summarise"]>>[0],
 ) {
   for await (const row of query.rows("select count(*) as n from handover_probe")) {
     return Number(row.n);
