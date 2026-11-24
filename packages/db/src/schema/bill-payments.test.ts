@@ -663,6 +663,35 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(await amounts(id)).toEqual(before);
     });
 
+    it("a payment for chosen items may not move it", async () => {
+      const id = await receivedPayment({ kind: "items", applied: 1500, tip: 0 });
+      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+    });
+
+    it.each([
+      ["pending", {}],
+      ["completed", { state: "completed", completedAt: AT }],
+    ] as const)(
+      "a move may not leave applied below what the payment's %s refunds take",
+      async (_state, refund) => {
+        const id = await receivedPayment({ applied: 1500, tip: 0 });
+        await insertRefund(id, { appliedAmount: 1200, ...refund });
+        const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
+        expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+        expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
+      },
+    );
+
+    it("a move may leave applied at exactly what the payment's refunds take, failed ones aside", async () => {
+      const id = await receivedPayment({ applied: 1500, tip: 0 });
+      await insertRefund(id, { appliedAmount: 1000, state: "completed", completedAt: AT });
+      await insertRefund(id, { appliedAmount: 500, state: "failed", failedAt: AT });
+      await updatePayment(id, `applied = 1000, tip = 500`);
+      expect(await amounts(id)).toEqual({ applied: 1000, tip: 500 });
+    });
+
     it("a payment that is a tender may not move it", async () => {
       const id = await receivedPayment({ applied: 1500, tip: 0 });
       await tenderFor(id, 1500);

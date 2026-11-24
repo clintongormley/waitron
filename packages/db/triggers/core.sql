@@ -60,6 +60,9 @@ BEGIN
       OR (old.state = 'received' AND new.state = 'received'
         AND new.applied + new.tip = old.applied + old.tip
         AND new.tip > old.tip
+        AND old.kind <> 'items'
+        AND new.applied >= (SELECT coalesce(sum(applied_amount), 0) FROM refunds
+          WHERE bill_payment_id = old.id AND state IN ('pending', 'completed'))
         AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)
         AND (SELECT status FROM working_orders WHERE id = old.working_order_id)
           IN ('open', 'placed')))

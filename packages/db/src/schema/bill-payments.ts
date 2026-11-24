@@ -29,9 +29,11 @@ export const billPaymentState = enumType(["pending", "received", "failed", "decl
  *
  * Its state moves only pending → received, pending → failed, and received → declined while no
  * tender names it. Applied money and tip change only as a pending card payment becomes received,
- * or when a received payment that no tender names, on an open or placed bill, moves money from
- * applied to tip, keeping their sum. `bill_payments_guard_update` and `bill_payments_no_delete`
- * enforce these rules (`triggers/core.sql`).
+ * or when a received payment that no tender names and that is not for chosen items (`items`, whose
+ * applied money its lines record), on an open or placed bill, moves money from applied to tip,
+ * keeping their sum and leaving applied at least what its pending and completed refunds give back
+ * of it. `bill_payments_guard_update` and `bill_payments_no_delete` enforce these rules
+ * (`triggers/core.sql`).
  */
 export const billPayments = table(
   "bill_payments",
