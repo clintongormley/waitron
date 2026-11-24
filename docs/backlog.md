@@ -240,7 +240,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**
   Being built (owner, 2026-11-21, "build it") in three pull requests, from the
   [plan](superpowers/plans/2026-11-11-a993-identity-change.md); PR 1 gives the fiscal module a way
-  to open the new installation, which nothing calls yet. Until PR 3 lands a production box given
+  to open the new installation, and PR 2 makes a start that finds the upgrade's note open it. Nothing
+  writes that note until PR 3 lands, so until then a production box given
   another producer tax number refuses to start (`sif.producer_changed`). Constraint on its plan (owner, 2026-11-06): a start opens a new installation for a producer difference only when the upgrade's own marker names that same new producer; otherwise it keeps refusing.
   [Detail](backlog/fiscal.md#a993-a-change-of-the-systems-identity-opens-a-new-installation-by-itself--designed-in-a940-56-approved-2026-10-22-fiscal-the-owner-lands-it).
 
