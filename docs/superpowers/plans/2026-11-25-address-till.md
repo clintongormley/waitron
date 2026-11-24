@@ -19,7 +19,8 @@ Maps beside suggestions and beside an address they fill. ADDRESS-PROOF covers th
    function to `widgets/invoice-recipient-dialog.ts`. Read the saved recipient before checking
    availability. Use `cloudAddressProvider` for Spain and keep the existing injected provider.
    Show the manual form immediately and drop late answers after a country change or dialog close.
-   Reuse the address mapping and draft confirmation. First fail `api/client.test.ts` for the POST and a
+   The availability check stays in the dialog. Keep the current caps on till-app.ts, boot.ts and
+   api/client.ts. Reuse the address mapping and draft confirmation. First fail `api/client.test.ts` for the POST and a
    `till-app-bill-payments.test.ts` case that opens the real dialog and finds search only after
    availability succeeds. Use `invoice-recipient-dialog.address-lookup.test.ts` for switching
    away from Spain during the check and keeping manual entry on refusal.
@@ -28,22 +29,34 @@ Maps beside suggestions and beside an address they fill. ADDRESS-PROOF covers th
    the result types in `packages/country/src/country.ts` and `wt-address-lookup.ts`. Render one visible
    credit above the filled fields when the form accepts a choice. A manual address or country edit,
    reset or successful save ends the credit. A refused save or a provider that disappears leaves it.
-   Wire the existing handlers in setup's `venue-screen.ts` (the watcher wrote at 23:40 on
-   24 November, "Two addresses are two lookups, so each search keeps its own five"), dashboard's
+   In setup's `venue-screen.ts`, clear the venue and registered credits separately. Switching
+   on **Same as venue** clears the registered credit. Wire the existing handlers in dashboard's
    `venue-details-panel.ts` and `registered-address-dialog.ts`, and the till's recipient dialog.
    First fail `wt-address-lookup.test.ts` for showing the applied credit without a provider. Use
-   the form tests to cover applying and editing, and the till's save-state test for a refused save.
-   Check keyboard choice and manual entry in Chromium. Send English and Spanish pictures in both
-   themes at desktop and phone widths to the watcher before landing.
+   the form tests to cover applying and editing, including the setup switch, and the till's
+   save-state test for a refused save. Check keyboard choice and manual entry in Chromium. Take
+   full till-window pictures with the list open and after filling, in both languages, both themes
+   and at desktop and phone widths. For each other form, take a filled picture in desktop English
+   light and phone Spanish dark.
 4. **Tell staff and customers.** Update both languages of `apps/server/src/guide/*/table-service.md`
    and `data-protection.md`, plus `i18n/invoice-email-notice.ts`. Say that when staff use search,
    Cloud sends the typed search and selected suggestion to Google. Cover the adaptable notice,
    its email explanation and the full notice's recipients. Use the same conditional sentence
-   with and without a tax record. Assert its literal wording in both languages in
+   with and without a tax record. Put it in one entry per language in `INVOICE_EMAIL_NOTICE_WORDS` and
+   update the notice check in `boot.invoice-delivery.test.ts`. Assert the literal wording only in
    `invoice-email.test.ts`. Update the design system's Addresses section and remove A1171 from both backlog files.
+   - EN: If staff searched for your address, Waitron Cloud sent the search text and the selected
+     suggestion to Google Maps.
+   - ES: Si el personal buscó su dirección, Waitron Cloud envió el texto de la búsqueda y la
+     sugerencia seleccionada a Google Maps.
 
 Estimate about 230 production lines and 250 test lines, plus the guide and backlog edits.
 Run each touched test file and the till app files that open the recipient window. The watcher
 wrote in lane E's `questions.md` (25 November, 00:07), "Build ADDRESS-TILL on a branch stacked on
 feat/e-address-box in the meantime; it rebases once #4277 lands." Move only this slice's commits
 to main before finishing.
+
+The watcher cleared the plan with these edits at 00:19 on 25 November. Send the owner both
+email sentences with the pictures. Explain that every emailed full invoice with a privacy contact
+includes the sentence, even where address search is off. Lane E lands only after the owner's yes
+to both and green CI.
