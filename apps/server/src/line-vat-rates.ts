@@ -7,7 +7,7 @@ import {
   type Decimal,
   type Dining,
 } from "@waitron/shared";
-import { recordedProducts, setMenuWeights } from "./takeaway-set-menus.js";
+import { recordedProducts } from "./takeaway-set-menus.js";
 
 /** What {@link readLineVatRates} reads of a working-order line. */
 export interface RatedLine {
@@ -19,9 +19,8 @@ export interface RatedLine {
   setMenuVersionId: string | null;
   /** A covered dish's line: its set menu's line. */
   setMenuLineId: string | null;
-  menuVersionId: string | null;
-  /** The product's own price, a variant's own, else its dish's; null on a line with no product. */
-  productPrice: Decimal | null;
+  /** What the dish costs a la carte, stored when it was added (S2). */
+  aLaCarteUnitPrice: Decimal | null;
 }
 
 export interface LineVatRates {
@@ -62,14 +61,12 @@ export async function readLineVatRates(
       ? [{ index, line }]
       : [],
   );
-  const dishWeights = await setMenuWeights(
-    tx,
-    weighed.map(({ line }) => ({
-      productId: line.productId!,
-      menuVersionId: line.menuVersionId,
-      productPrice: line.productPrice!,
-    })),
-  );
+  const dishWeights = weighed.map(({ line }) => {
+    // Every line added as a dish stores its a la carte price; only extras and set-menu rows hold none.
+    if (line.aLaCarteUnitPrice === null)
+      throw new Error(`dish line ${line.id} has no a la carte price`);
+    return line.aLaCarteUnitPrice;
+  });
   const weights: (Decimal | null)[] = lines.map(() => null);
   const weightedDishes = new Map<string, number[]>();
   weighed.forEach(({ index, line }, at) => {

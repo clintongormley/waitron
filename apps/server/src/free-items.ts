@@ -10,13 +10,11 @@ import {
   adjustmentLines,
   departments,
   invoiceSeries,
-  products,
   sales,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
 import {
   civilDateOf,
   periodDays,
@@ -162,8 +160,7 @@ export async function listFreeItems(
       setMenuId: workingOrderLines.setMenuId,
       setMenuVersionId: workingOrderLines.setMenuVersionId,
       setMenuLineId: workingOrderLines.setMenuLineId,
-      menuVersionId: workingOrderLines.menuVersionId,
-      productPrice: effectiveProductColumns.unitPrice,
+      aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
@@ -173,8 +170,6 @@ export async function listFreeItems(
     .from(adjustmentLines)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
     .where(
       and(
         inIds(
@@ -200,8 +195,8 @@ export async function listFreeItems(
         setMenuId: line.setMenuId,
         setMenuVersionId: line.setMenuVersionId,
         setMenuLineId: line.setMenuLineId,
-        menuVersionId: line.menuVersionId,
-        productPrice: line.productId === null ? null : centsToDecimal(line.productPrice),
+        aLaCarteUnitPrice:
+          line.aLaCarteUnitPrice === null ? null : centsToDecimal(line.aLaCarteUnitPrice),
       })),
     );
     lines.forEach((line, i) => ratesOf.set(line, rates[i]!));

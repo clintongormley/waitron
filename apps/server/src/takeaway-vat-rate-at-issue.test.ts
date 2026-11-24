@@ -8,6 +8,7 @@ import {
   productTakeawayVatRates,
   readVenueClock,
   withTransaction,
+  workingOrderLines,
   workingOrders,
   type Database,
   type Transaction,
@@ -670,6 +671,42 @@ describe("a takeaway set menu priced for its invoice", () => {
     expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
   });
 
+  it("weighs a dish by the price stored when it was added, not its product's price at issue", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+    const soupPrice = (unitPrice: number) =>
+      partyTx(lunch.venue, (tx) =>
+        tx.update(products).set({ unitPrice }).where(eq(products.id, lunch.lunch.ids.Soup)),
+      );
+    await soupPrice(700);
+    try {
+      const { rows } = await pricedRows(lunch.venue, billId);
+      expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.58", "8.14", "2.28"]);
+    } finally {
+      await soupPrice(550);
+    }
+  });
+
+  it("weighs a dish by its line's stored a la carte price, not its menu copy's offer", async () => {
+    // The copy offers Soup at 6.00; its line says 7.00: 14.00 over 7.00, 12.50 and 3.50.
+    const lunch = await lunchVenue({ soupOnMenuAt: 600 });
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+    await partyTx(lunch.venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ aLaCarteUnitPrice: 700 })
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, billId),
+            eq(workingOrderLines.productId, lunch.lunch.ids.Soup),
+          ),
+        ),
+    );
+
+    const { rows } = await pricedRows(lunch.venue, billId);
+    expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
+  });
+
   it("weighs a dish sold as a variant by the variant's price in the menu copy", async () => {
     // Large Hake weighs its 16.50 on the full menu, not its own 15.50: 14.00 over 5.50, 16.50, 3.50.
     const lunch = await lunchVenue({ largeHake: true });
@@ -751,8 +788,8 @@ describe("a takeaway set menu priced for its invoice", () => {
     } finally {
       copyReads.mode = "pass";
     }
-    // The one read is the dishes' copies, for their weights.
-    expect(copyReads.count).toBe(1);
+    // The dishes' weights are stored on their lines.
+    expect(copyReads.count).toBe(0);
   });
 });
 
@@ -805,7 +842,7 @@ describe("the products' takeaway rates are read once per basket", () => {
     expect(copyReads.count).toBe(0);
   });
 
-  it("when a takeaway set-menu bill is priced, its copies read once", async () => {
+  it("when a takeaway set-menu bill is priced, which reads no menu copy", async () => {
     const lunch = await lunchVenue();
     const billId = await lunchBill(lunch, ["Soup", "Soup", "Hake", "Lemonade", "Hake"], 2);
 
@@ -814,7 +851,7 @@ describe("the products' takeaway rates are read once per basket", () => {
     await priced(lunch.venue, billId);
 
     expect(rateReads.count).toBe(1);
-    expect(copyReads.count).toBe(1);
+    expect(copyReads.count).toBe(0);
   });
 
   it("when a parked order is paid, and not when it is parked", async () => {

@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import {
   parentProducts,
-  effectiveProductColumns,
   parentJoin,
   type LockedLine,
   type GrossLines,
@@ -120,8 +119,7 @@ async function readLockedLinesForIssuance(
       setMenuId: workingOrderLines.setMenuId,
       setMenuVersionId: workingOrderLines.setMenuVersionId,
       setMenuLineId: workingOrderLines.setMenuLineId,
-      menuVersionId: workingOrderLines.menuVersionId,
-      productPrice: effectiveProductColumns.unitPrice,
+      aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -141,8 +139,8 @@ async function readLockedLinesForIssuance(
       setMenuId: row.setMenuId,
       setMenuVersionId: row.setMenuVersionId,
       setMenuLineId: row.setMenuLineId,
-      menuVersionId: row.menuVersionId,
-      productPrice: row.productId === null ? null : centsToDecimal(row.productPrice),
+      aLaCarteUnitPrice:
+        row.aLaCarteUnitPrice === null ? null : centsToDecimal(row.aLaCarteUnitPrice),
     })),
   );
   // A grouped row carries the id of the first working line it stands for; the lines it stands for

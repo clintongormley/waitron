@@ -310,24 +310,24 @@ function pairByPosition(stored: readonly Stored[], filed: readonly Filed[]): Map
   return pairs;
 }
 
-/** The filed rows the dish line `lineId` and its extras are valued from, the dish's first, each
- * with this line's share of it in cents; none where {@link refundValueIn} values none. */
+/** The filed rows the dish line `lineId` and its extras are valued from, the dish's first; none
+ * where {@link refundValueIn} values none. */
 export function filedFamilyOf(
   filing: BillFiling,
   pairs: FilingPairs,
   lineId: string,
-): { rowId: string; dish: boolean; share: number }[] | undefined {
+): { rowId: string; dish: boolean }[] | undefined {
   const family = pairs.familyOf.get(lineId);
   if (family === undefined) return undefined;
   if (filing.bindings.has(lineId)) {
     if (byPortion(pairs, lineId, family) === undefined) return undefined;
     return portionShares(pairs, lineId)
-      .map(({ row, share }) => ({ rowId: row.id, dish: row.parentLineId === null, share }))
+      .map(({ row }) => ({ rowId: row.id, dish: row.parentLineId === null }))
       .sort((a, b) => Number(b.dish) - Number(a.dish));
   }
   const rows = family.map((row) => pairs.atPosition.get(row.id));
   if (rows.some((row) => row?.lineGross == null)) return undefined;
-  return rows.map((row, i) => ({ rowId: row!.id, dish: i === 0, share: row!.lineGross! }));
+  return rows.map((row, i) => ({ rowId: row!.id, dish: i === 0 }));
 }
 
 /** An unbound line's family, each paired by position with a filed row no portion is linked to. */
