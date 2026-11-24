@@ -513,6 +513,18 @@ The findings:
      running release and producer and nothing is left to open: the head is already under the running
      producer, the open installation holds no record yet (a crash between the opening and the first
      record), or the box is not production. So a preproduction box that files records deletes it too.
+   - **As built 2026-11-24, the note carried forward** (cleared by the watcher, 08:23, not the owner;
+     it goes past "When it is written" above): before the stop the host reads the live state folder's
+     note. When it is exactly the reader's shape and its `producerTaxId` is the old image's, the new
+     note's `fromProducerTaxId` is the live note's, and not the old image's. So a fixed release by the
+     same producer is accepted while the first one's opening keeps failing, and a third producer's note
+     names the producer the latest record is under. There is still no note when that producer is the
+     candidate's own. A live note left over from an opening already made (a crash before its deletion)
+     opens nothing for a release by the same producer; a third producer is refused until the running
+     release's start deletes the note.
+   - **As built 2026-11-24, a failed read:** a refused or unreadable `docker image inspect` of either
+     image abandons the upgrade before anything stops. An image naming no producer, and a candidate
+     without a numbered release's label, still mean no note.
    - **Disclosed limit:** root on the box can write the note by hand, as root can edit the database.
 7. ★ **New words are unavoidable on three screens; the upgrade's report gets none.**
    - **The upgrade's report: no new words.** A refused opening on a copy leaves the copy's start

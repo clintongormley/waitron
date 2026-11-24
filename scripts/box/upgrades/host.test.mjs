@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
+import { execFile } from "node:child_process";
 import {
   lstat,
   mkdtemp,
@@ -15,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
@@ -596,8 +598,8 @@ async function imageFixture({
       };
     if (args[0] === "image" && args[1] === "inspect") {
       if (args[2] === "tunnel:dev") throw new Error("tunnel is not installed");
-      if (args.at(-1) === "{{json .Config}}" && imageConfigs[args[2]])
-        return { stdout: imageConfigs[args[2]]() };
+      if (args.at(-1) === "{{json .Config}}")
+        return { stdout: imageConfigs[args[2]]?.() ?? '{"Env":["PATH=/usr/bin"],"Labels":null}' };
       return {
         stdout: realCompose
           ? `sha256:${"1".repeat(64)}\n`
@@ -1440,7 +1442,7 @@ describe("the note of a change of producer", () => {
     fromProducerTaxId: FROM,
   };
 
-  async function upgrade({ old = OLD, next = NEXT, onRun } = {}) {
+  async function upgrade({ old = OLD, next = NEXT, onRun, live, beforeStop } = {}) {
     const seen = {};
     const t = await imageFixture({
       prepare: false,
@@ -1473,11 +1475,15 @@ describe("the note of a change of producer", () => {
         seen[mode].folder = { uid: folder.uid, gid: folder.gid };
       },
     });
+    const livePath = join(t.root, "state", IDENTITY_CHANGE_FILE);
+    if (typeof live === "function") await live(livePath);
+    else if (live !== undefined) await writeFile(livePath, live);
     const images = await t.f.host.prepareImages();
+    await beforeStop?.(livePath);
     await mkdir(t.directory, { recursive: true });
     await t.f.host.stop();
     onTestFinished(() => t.f.host.resume(images.old));
-    return { ...t, images, seen };
+    return { ...t, images, seen, livePath };
   }
 
   it("gives a release by another producer the note, in the trial's copy and the attempt", async () => {
@@ -1573,20 +1579,43 @@ describe("the note of a change of producer", () => {
     ["an old image naming no producer", { old: imageConfig("v1.3.0") }],
     ["an old image naming an empty producer", { old: imageConfig("v1.3.0", producer("")) }],
     ["an old image with no environment", { old: JSON.stringify({ Env: null, Labels: null }) }],
-    ["an answer that is not JSON", { next: "not json" }],
-    ["an answer that is null", { old: "null" }],
-    [
-      "a refused inspect",
-      {
-        next: () => {
-          throw new Error("No such image");
-        },
-      },
-    ],
   ])("writes no note for %s", async (_case, configs) => {
     const t = await upgrade(configs);
     expect(t.seen.trial.names).toEqual([]);
     expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
+  });
+
+  const refusedInspect = () => {
+    throw new Error("No such image");
+  };
+  it.each([
+    ["an old image's answer that is not JSON", { old: "not json" }, SyntaxError],
+    ["a candidate's answer that is not JSON", { next: "not json" }, SyntaxError],
+    ["an old image's answer that is null", { old: "null" }, TypeError],
+    ["a candidate's answer that is null", { next: "null" }, TypeError],
+    ["a refused inspect of the old image", { old: refusedInspect }, "No such image"],
+    ["a refused inspect of the candidate", { next: refusedInspect }, "No such image"],
+  ])("abandons the upgrade before any stop for %s", async (_case, configs, failure) => {
+    const t = await imageFixture({
+      prepare: false,
+      onlineTrial: "pass",
+      writers: true,
+      imageConfigs: {
+        "sha256:running-tunnel": () => OLD,
+        "sha256:app:new": () => NEXT,
+        ...Object.fromEntries(
+          Object.entries(configs).map(([key, value]) => [
+            key === "old" ? "sha256:running-tunnel" : "sha256:app:new",
+            typeof value === "function" ? value : () => value,
+          ]),
+        ),
+      },
+    });
+    await expect(t.f.host.prepareImages()).rejects.toThrow(failure);
+    const ran = (...words) => t.calls.filter((args) => words.every((word) => args.includes(word)));
+    expect(ran("tag").length).toBeGreaterThan(0);
+    expect(ran("image", "rm")).toHaveLength(ran("tag").length);
+    for (const word of ["stop", "run", "update"]) expect(ran(word)).toEqual([]);
   });
 
   it.each([
@@ -1620,6 +1649,150 @@ describe("the note of a change of producer", () => {
     expect(t.seen.trial.note?.release).toBe(isNumberedVersion(version) ? version : undefined);
   });
 
+  describe("over a live note whose installation has not opened", () => {
+    const THIRD = "B00000003";
+    const SAME = {
+      old: imageConfig("v1.4.0", producer(TO)),
+      next: imageConfig("v1.4.1", producer(TO)),
+    };
+    const FURTHER = { ...SAME, next: imageConfig("v1.5.0", producer(THIRD)) };
+    const LIVE = JSON.stringify(NOTE) + "\n";
+    const given = async (options) => (await upgrade(options)).seen.trial.note;
+
+    it("gives a fixed release by the same producer a note from the producer first replaced", async () => {
+      const t = await upgrade({ ...SAME, live: LIVE });
+      const carried = { ...NOTE, release: "1.4.1" };
+      expect(t.seen.trial.note).toEqual(carried);
+      expect(JSON.parse(await readFile(join(t.directory, IDENTITY_CHANGE_FILE), "utf8"))).toEqual(
+        carried,
+      );
+      expect(await readFile(t.livePath, "utf8")).toBe(LIVE);
+    });
+
+    it("gives a release by a third producer a note from the producer first replaced", async () => {
+      expect(await given({ ...FURTHER, live: LIVE })).toEqual({
+        version: 1,
+        release: "1.5.0",
+        producerTaxId: THIRD,
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("compares the live note with the running producer as that producer reads it", async () => {
+      expect(
+        await given({ ...SAME, old: imageConfig("v1.4.0", producer(` ${TO} `)), live: LIVE }),
+      ).toEqual({ ...NOTE, release: "1.4.1" });
+    });
+
+    it.each([
+      ["once the installation has opened, the note gone", SAME, undefined],
+      ["for a live note naming another producer", SAME, { ...NOTE, producerTaxId: THIRD }],
+      [
+        "for a live note whose producer differs in letter case",
+        SAME,
+        { ...NOTE, producerTaxId: TO.toLowerCase() },
+      ],
+      ["back to the producer first replaced", { ...SAME, next: OLD }, NOTE],
+      [
+        "for a candidate built from main",
+        { ...SAME, next: imageConfig("main", producer(TO)) },
+        NOTE,
+      ],
+      ["for a candidate naming no producer", { ...SAME, next: imageConfig("v1.4.1") }, NOTE],
+      ["for an old image naming no producer", { ...SAME, old: imageConfig("v1.4.0") }, NOTE],
+    ])("writes no note %s", async (_case, configs, note) => {
+      const live = note && JSON.stringify(note);
+      const t = await upgrade({ ...configs, live });
+      expect(t.seen.trial.names).toEqual([]);
+      expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
+      if (live) expect(await readFile(t.livePath, "utf8")).toBe(live);
+    });
+
+    it("names the running producer to a third one, for a live note naming another", async () => {
+      const live = JSON.stringify({ ...NOTE, producerTaxId: FROM, fromProducerTaxId: "B00000009" });
+      expect(await given({ ...FURTHER, live })).toMatchObject({ fromProducerTaxId: TO });
+    });
+
+    it.each([
+      ["exactly the server's shape", LIVE, true],
+      [
+        "its keys in another order",
+        JSON.stringify(Object.fromEntries(Object.entries(NOTE).reverse())),
+        true,
+      ],
+      ["nothing", "", false],
+      ["not JSON", LIVE.slice(0, -3), false],
+      ["null", "null", false],
+      ["text", JSON.stringify(LIVE), false],
+      ["a list", JSON.stringify([NOTE]), false],
+      ["another version", JSON.stringify({ ...NOTE, version: 2 }), false],
+      ["its version as text", JSON.stringify({ ...NOTE, version: "1" }), false],
+      ["a key too many", JSON.stringify({ ...NOTE, more: "x" }), false],
+      ...Object.keys(NOTE).flatMap((key) => [
+        [`no ${key}`, JSON.stringify({ ...NOTE, [key]: undefined }), false],
+        [`an empty ${key}`, JSON.stringify({ ...NOTE, [key]: "" }), false],
+        [`a listed ${key}`, JSON.stringify({ ...NOTE, [key]: [NOTE[key]] }), false],
+        [`a null ${key}`, JSON.stringify({ ...NOTE, [key]: null }), false],
+      ]),
+    ])(
+      "takes a live file holding %s as a note exactly as the server does",
+      async (_case, live, noted) => {
+        const t = await upgrade({ ...SAME, live });
+        expect((await readIdentityChangeNote(join(t.root, "state"))) !== null).toBe(noted);
+        expect(t.seen.trial.names).toEqual(noted ? [IDENTITY_CHANGE_FILE] : []);
+        const further = await given({ ...FURTHER, live });
+        expect(further).toMatchObject({ fromProducerTaxId: noted ? FROM : TO });
+      },
+    );
+
+    it.each([
+      ["a folder", (path) => mkdir(path)],
+      [
+        "a link to a note elsewhere",
+        async (path) => {
+          const outside = await mkdtemp(join(tmpdir(), "upgrade-note-outside-"));
+          onTestFinished(() => rm(outside, { recursive: true, force: true }));
+          await writeFile(join(outside, "note"), LIVE);
+          await symlink(join(outside, "note"), path);
+        },
+      ],
+      ["a pipe nobody writes to", (path) => promisify(execFile)("mkfifo", [path])],
+    ])("takes %s under the note's name as no note", async (_case, live) => {
+      expect(await given({ ...SAME, live })).toBeUndefined();
+      expect(await given({ ...FURTHER, live })).toMatchObject({ fromProducerTaxId: TO });
+    });
+
+    it("reads the live note before the stop", async () => {
+      const t = await upgrade({ ...SAME, live: LIVE, beforeStop: (path) => rm(path) });
+      expect(await readIdentityChangeNote(t.directory)).toMatchObject({
+        release: "1.4.1",
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("replaces the live note with the carried one once every check has passed", async () => {
+      const t = await apply({ ...SAME, live: LIVE });
+      expect(t.result).toMatchObject({ phase: "committed", target: "candidate" });
+      expect(await readIdentityChangeNote(t.state)).toEqual({
+        release: "1.4.1",
+        producerTaxId: TO,
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("leaves the live note as it was when the fixed release's sale is refused", async () => {
+      const t = await apply({
+        ...SAME,
+        live: LIVE,
+        sale: () => {
+          throw new Error("sale refused");
+        },
+      });
+      expect(t.result).toMatchObject({ phase: "awaiting-choice" });
+      expect(await readFile(join(t.state, IDENTITY_CHANGE_FILE), "utf8")).toBe(LIVE);
+    });
+  });
+
   it("saves the note for an app already stopped, which runs no trial", async () => {
     const t = await imageFixture({
       prepare: false,
@@ -1633,16 +1806,22 @@ describe("the note of a change of producer", () => {
     expect(await readIdentityChangeNote(t.directory)).toMatchObject({ release: "1.4.0" });
   });
 
-  async function apply({ sale = () => ({ stdout: '[{"name":"sale","ok":true}]' }) } = {}) {
+  async function apply({
+    sale = () => ({ stdout: '[{"name":"sale","ok":true}]' }),
+    old = OLD,
+    next = NEXT,
+    live,
+  } = {}) {
     const { DatabaseSync } = await import("node:sqlite");
     const { runUpgradeCli } = await import("./cli.mjs");
     const t = await imageFixture({
       prepare: false,
-      imageConfigs: { "sha256:app:old": () => OLD, "sha256:app:new": () => NEXT },
+      imageConfigs: { "sha256:app:old": () => old, "sha256:app:new": () => next },
     });
     t.candidate.services["print-agent"].healthcheck = { test: ["CMD", "true"] };
     const state = join(t.root, "state");
     await writeFile(join(state, "retained"), "intact source");
+    if (live !== undefined) await writeFile(join(state, IDENTITY_CHANGE_FILE), live);
     const held = () =>
       [RECOVERY_LOCK_FILE, `${VENUE_DIR_NAME}/${VENUE_LOCK_FILE}`].map((name) => {
         const contender = new DatabaseSync(join(state, name));

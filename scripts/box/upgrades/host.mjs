@@ -282,7 +282,7 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
-          identityNote = await identityChangeNote(old.app, next.app, run);
+          identityNote = await identityChangeNote(old.app, next.app, paths[0], run);
           if (await appIsRunning(compose, run))
             await runOnlineTrial({
               work: trial,
@@ -685,29 +685,57 @@ const RELEASE_REF =
   /^v(?=.{1,50}$)((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?)$/;
 const PRODUCER = "WAITRON_PRODUCER_TAX_ID=";
 
-async function identityChangeNote(oldImage, nextImage, run) {
+const isText = (value) => typeof value === "string" && value !== "";
+
+/** The note an earlier upgrade left in the live state, exactly as the server would take it. */
+async function liveIdentityNote(stateDirectory) {
+  let note;
+  try {
+    // The folder is the app's: a link there leads out of it, and a pipe would never answer.
+    const handle = await fs.open(
+      join(stateDirectory, IDENTITY_CHANGE_FILE),
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+    try {
+      note = JSON.parse(await handle.readFile("utf8"));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+  if (note === null) return null;
+  const { version, ...texts } = note;
+  return version === 1 &&
+    Object.keys(texts).sort().join() === "fromProducerTaxId,producerTaxId,release" &&
+    Object.values(texts).every(isText)
+    ? note
+    : null;
+}
+
+export async function identityChangeNote(oldImage, nextImage, stateDirectory, run) {
   const configOf = async (image) =>
     JSON.parse(
       (await run("docker", ["image", "inspect", image, "--format", "{{json .Config}}"])).stdout,
     );
   // The server compares its setting trimmed (readSoftwareProducer), and otherwise exactly.
   const producerOf = (config) =>
-    config.Env.find((entry) => entry.startsWith(PRODUCER))
+    config.Env?.find((entry) => entry.startsWith(PRODUCER))
       ?.slice(PRODUCER.length)
       .trim();
-  try {
-    const before = await configOf(oldImage);
-    const after = await configOf(nextImage);
-    const release = RELEASE_REF.exec(after.Labels["org.opencontainers.image.ref.name"])?.[1];
-    const fromProducerTaxId = producerOf(before);
-    const producerTaxId = producerOf(after);
-    if (!release || !fromProducerTaxId || !producerTaxId) return null;
-    if (producerTaxId === fromProducerTaxId) return null;
-    return { version: 1, release, producerTaxId, fromProducerTaxId };
-  } catch {
-    // Without a note the candidate refuses a changed producer, so a failed read opens nothing.
-    return null;
-  }
+  const before = await configOf(oldImage);
+  const after = await configOf(nextImage);
+  const release = RELEASE_REF.exec(after.Labels?.["org.opencontainers.image.ref.name"])?.[1];
+  const runningProducerTaxId = producerOf(before);
+  const producerTaxId = producerOf(after);
+  if (!release || !runningProducerTaxId || !producerTaxId) return null;
+  // While the running release waits to open its installation, the latest record is still under the
+  // producer its note replaced.
+  const live = await liveIdentityNote(stateDirectory);
+  const fromProducerTaxId =
+    live?.producerTaxId === runningProducerTaxId ? live.fromProducerTaxId : runningProducerTaxId;
+  if (producerTaxId === fromProducerTaxId) return null;
+  return { version: 1, release, producerTaxId, fromProducerTaxId };
 }
 
 export async function writeIdentityNote(stateDirectory, note) {
