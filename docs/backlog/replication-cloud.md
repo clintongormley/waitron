@@ -383,6 +383,9 @@ stream, which spare takes over, and how alerts and the update order (A950) work 
 
 ## A1171: the address forms need a provider from the Cloud address-lookup bridge
 
+**2026-11-24:** the [plan to finish it](../superpowers/plans/2026-11-24-address-lookup-finish.md) replaces the Cloud design's confirm
+call, allowance message and session token listed below: saving the form is the confirmation.
+
 Nothing hands
 `wt-address-lookup` a provider yet. Waitron Cloud's proposed design also asks for provider
 attribution beside the list, a confirm call at Save, an allowance message, a province inferred
