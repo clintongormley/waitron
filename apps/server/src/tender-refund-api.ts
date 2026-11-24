@@ -33,7 +33,6 @@ import {
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import "./errors.js";
 
-export { checkAccess };
 export function pathId(value: string, kind: "sale" | "refund"): string {
   if (!isUuid(value))
     throw kind === "sale"
