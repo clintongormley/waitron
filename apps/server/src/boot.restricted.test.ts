@@ -53,6 +53,9 @@ import type { PeerStatusBody } from "./peer-status-api.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import * as returnRecordsModule from "./return-records.js";
+import * as resetOrderDutyModule from "./reset-order-duty.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -207,11 +210,18 @@ describe("a box holding a handover restriction starts restricted", () => {
     return started;
   };
 
+  const returnDuty = vi.spyOn(returnRecordsModule, "startReturnRecordsDuty");
+  const resetOrderDuty = vi.spyOn(resetOrderDutyModule, "startResetOrderDuty");
+
   beforeAll(async () => {
     started = await boot(suite, { restricted: true });
   }, 60_000);
 
-  afterAll(stop);
+  afterAll(async () => {
+    returnDuty.mockRestore();
+    resetOrderDuty.mockRestore();
+    await stop();
+  });
 
   it("answers acceptingSales: false with its node id and term", async () => {
     const { port, venue } = start();
@@ -342,6 +352,20 @@ describe("a box holding a handover restriction starts restricted", () => {
     }
     expect((await fetch(`http://127.0.0.1:${port}/api/something-unknown`)).status).toBe(404);
   }, 60_000);
+
+  it("hands the return sender the main box's summary the reset-order duty last heard", () => {
+    start();
+    const resetOrder = resetOrderDuty.mock.results[0]!.value as ReturnType<
+      typeof resetOrderDutyModule.startResetOrderDuty
+    >;
+    const heard: HeardHoldings = { holdings: { "fiscal-verifactu": [] }, heardAt: new Date(0) };
+    const read = vi.spyOn(resetOrder, "mainHoldings").mockReturnValue(heard);
+    try {
+      expect(returnDuty.mock.calls[0]![0].mainHoldings?.()).toBe(heard);
+    } finally {
+      read.mockRestore();
+    }
+  });
 
   it("serves the old box's download, refusing it over plain HTTP with its page", async () => {
     const { port } = start();
