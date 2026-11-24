@@ -636,7 +636,7 @@ export async function readAgentJoinStatus(
         .where(eq(printAgents.id, joinId));
       if (accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash))
         return accepted.active ? "approved" : "revoked";
-      const deniedHash = await window?.deniedAgentHash(joinId);
+      const deniedHash = window?.deniedAgentHash(joinId);
       return deniedHash !== undefined && deviceTokenMatches(token, deniedHash)
         ? "denied"
         : "not_approved";

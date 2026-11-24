@@ -22,7 +22,8 @@ Write each named check first, see it fail for the expected behavior, implement a
   reading the body and in the write transaction. Use the shared device discard rule before join cap, status
   and manager routes. The holder remembers only the display flags and recent denied hashes. Each retry gets its
   own ID and challenge. Keep the last 100 denied token hashes. Record the flag and hash inside their writes so the
-  next queued reader sees them. Publish the denial only after commit and to the matching token. A matching inactive agent gets
+  next queued reader sees them. A failed write forgets the denial. Match the token before telling
+  the agent about it. A matching inactive agent gets
   `revoked: true`. Both replies retain `status: "not_approved"`. Test closure, stale approval and
   list order in `join-api.db.test.ts`, and admission and token-specific replies in `print-api.test.ts`.
 - **Agent.** In `packages/print-agent/src/{agent,client,host}.ts` and

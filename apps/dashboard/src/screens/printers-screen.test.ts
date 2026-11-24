@@ -2072,31 +2072,45 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=join-dialog]")).toBeNull();
   });
 
-  it("lets an in-flight agent approval finish before releasing the pairing hold", async () => {
-    const pending = Promise.withResolvers<void>();
-    const api = stubApi({
-      acceptPrintAgentJoinRequest: vi.fn().mockReturnValue(pending.promise),
-    });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await selectTab(el, "agents");
-    try {
-      await userEvent.click(q(el, "[data-test=open-add-agent]")!);
+  it.each(["approval", "denial"])(
+    "lets an in-flight agent %s finish before releasing the pairing hold",
+    async (decision) => {
+      let answer!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      const api = stubApi({
+        acceptPrintAgentJoinRequest: vi.fn().mockReturnValue(pending),
+        denyJoinRequest: vi.fn().mockReturnValue(pending),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(el);
-      await userEvent.click(q(el, "[data-test=join-review-j1]")!);
-      await flush(el);
-      await userEvent.click(q(el, `[data-choice="${REAL_NUMBER}"]`)!);
-      expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledOnce();
-      await userEvent.click(q(el, "[data-test=join-cancel]")!);
-      await flush(el);
-      await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
-      expect(api.releasePairingHold).not.toHaveBeenCalled();
-    } finally {
-      pending.resolve();
-      await flush(el);
-    }
-    expect(api.releasePairingHold).toHaveBeenCalledOnce();
-  });
+      await selectTab(el, "agents");
+      try {
+        await userEvent.click(q(el, "[data-test=open-add-agent]")!);
+        await flush(el);
+        if (decision === "approval") {
+          await userEvent.click(q(el, "[data-test=join-review-j1]")!);
+          await flush(el);
+          await userEvent.click(q(el, `[data-choice="${REAL_NUMBER}"]`)!);
+          expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledOnce();
+          await userEvent.click(q(el, "[data-test=join-cancel]")!);
+          await flush(el);
+        } else {
+          await userEvent.click(q(el, "[data-test=join-deny-j1]")!);
+          await flush(el);
+          await userEvent.click(q(el, "[data-test=join-deny-j1]")!);
+          expect(api.denyJoinRequest).toHaveBeenCalledOnce();
+        }
+        await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
+        expect(api.releasePairingHold).not.toHaveBeenCalled();
+      } finally {
+        answer();
+        await flush(el);
+      }
+      expect(api.releasePairingHold).toHaveBeenCalledOnce();
+    },
+  );
 
   // A wrong tap has already denied the request server-side.
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {

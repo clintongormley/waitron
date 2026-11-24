@@ -120,6 +120,17 @@ describe("createContainerHost — config()", () => {
     });
   });
 
+  it("keeps a denial when the environment and the agent name the same box address", async () => {
+    const state = new FileState(dir);
+    await state.writeConfig({ serverUrl: "https://env", name: "saved", previouslyDenied: true });
+    const host = createContainerHost({
+      env: { ...baseEnv, serverUrl: "https://env" },
+      state,
+      onStatus: () => {},
+    });
+    expect((await host.config())?.previouslyDenied).toBe(true);
+  });
+
   it("prefers the env name over the saved name, and falls back to a default when neither exists", async () => {
     const withEnvName = createContainerHost({
       env: { ...baseEnv, serverUrl: "https://env", name: "envname" },

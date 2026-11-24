@@ -277,25 +277,23 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const sessionKey = hashSessionToken(sessionId);
       // Parsed out here and screened inside the gate, for the accept route's reasons.
       const body = await readJsonBody<{ createdAt?: unknown }>(c);
-      // The next queued poll can see the deletion before this handler resumes.
-      const committed = Promise.withResolvers<boolean>();
+      let forgetDenial = (): void => {};
       try {
         await gatedByRowKind(sessionId, id, (tx, row) => {
+          // A replaced ask is already gone, regardless of who holds the replacement claim.
           if (row.kind === "device" && requireString(body.createdAt, "createdAt") !== row.createdAt)
             throw new AppError("join_request.not_found", {});
           const claim = deps.pairingMode.claimOf(id);
           if (claim !== undefined && claim.sessionKey !== sessionKey)
             throw new AppError("join_request.claimed", {});
-          return denyJoinRequest(tx, deps.cfg, id, (hash) =>
-            deps.pairingMode.rememberDeniedAgent(
-              id,
-              committed.promise.then((saved) => (saved ? hash : undefined)),
-            ),
-          );
+          return denyJoinRequest(tx, deps.cfg, id, (hash) => {
+            // Record before the write queue admits the next poll.
+            forgetDenial = deps.pairingMode.rememberDeniedAgent(id, hash);
+          });
         });
-        committed.resolve(true);
-      } finally {
-        committed.resolve(false);
+      } catch (error) {
+        forgetDenial();
+        throw error;
       }
       deps.pairingMode.dropClaim(id);
       return c.body(null, 204);

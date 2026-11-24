@@ -1262,7 +1262,7 @@ export class PrintersScreen extends LitElement {
   #agentScanUntil = 0;
   #agentReadInFlight = false;
   #agentEpoch = 0;
-  #agentAcceptance: Promise<void> | undefined;
+  readonly #agentDecisions = new Set<Promise<void>>();
   @state() private holdStatus: PairingHoldStatus = "idle";
   /** The taken hold's lapse, shown before the live read of the window next answers. */
   @state() private takenUntil: string | null = null;
@@ -1531,7 +1531,9 @@ export class PrintersScreen extends LitElement {
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
     this.scanningAgents = false;
-    this.#hold.stop(this.#agentAcceptance);
+    this.#hold.stop(
+      this.#agentDecisions.size === 0 ? undefined : Promise.allSettled(this.#agentDecisions),
+    );
   }
 
   async #scanAgents(): Promise<void> {
@@ -1586,10 +1588,17 @@ export class PrintersScreen extends LitElement {
     this.armedDenyId = id;
   }
 
+  #waitForAgentDecision(decision: Promise<void>): Promise<void> {
+    this.#agentDecisions.add(decision);
+    return decision.finally(() => {
+      this.#agentDecisions.delete(decision);
+    });
+  }
+
   async #deny(id: string): Promise<void> {
     this.errorKey = null;
     try {
-      await this.api.denyJoinRequest(id);
+      await this.#waitForAgentDecision(this.api.denyJoinRequest(id));
       if (this.openRequestId === id) this.openRequestId = null;
       await this.#reloadJoins();
     } catch (error) {
@@ -1605,8 +1614,9 @@ export class PrintersScreen extends LitElement {
     this.submitting = true;
     this.acceptingChoice = choice;
     try {
-      this.#agentAcceptance = this.api.acceptPrintAgentJoinRequest(request.id, { choice });
-      await this.#agentAcceptance;
+      await this.#waitForAgentDecision(
+        this.api.acceptPrintAgentJoinRequest(request.id, { choice }),
+      );
       this.openRequestId = null;
       await Promise.all([this.#reloadJoins(), this.#reloadAgents()]);
     } catch (error) {
@@ -1623,7 +1633,6 @@ export class PrintersScreen extends LitElement {
     } finally {
       this.submitting = false;
       this.acceptingChoice = null;
-      this.#agentAcceptance = undefined;
     }
   }
 

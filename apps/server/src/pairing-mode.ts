@@ -37,8 +37,8 @@ export interface PairingMode {
   dropClaim(requestId: string): void;
   markPreviouslyDenied(id: string): void;
   wasPreviouslyDenied(id: string): boolean;
-  rememberDeniedAgent(id: string, tokenHash: Promise<string | undefined>): void;
-  deniedAgentHash(id: string): Promise<string | undefined> | undefined;
+  rememberDeniedAgent(id: string, tokenHash: string): () => void;
+  deniedAgentHash(id: string): string | undefined;
 }
 
 export function createPairingMode(
@@ -60,7 +60,7 @@ export function createPairingMode(
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
   const previouslyDenied = new Set<string>();
-  const deniedAgents = new Map<string, Promise<string | undefined>>();
+  const deniedAgents = new Map<string, { tokenHash: string }>();
   let openSinceMs: number | null = null;
   let openings = 0;
   let lapse: ReturnType<typeof setTimeout> | undefined;
@@ -170,11 +170,15 @@ export function createPairingMode(
       return previouslyDenied.has(id);
     },
     rememberDeniedAgent(id, tokenHash) {
-      deniedAgents.set(id, tokenHash);
+      const denial = { tokenHash };
+      deniedAgents.set(id, denial);
       if (deniedAgents.size > 100) deniedAgents.delete(deniedAgents.keys().next().value!);
+      return () => {
+        if (deniedAgents.get(id) === denial) deniedAgents.delete(id);
+      };
     },
     deniedAgentHash(id) {
-      return deniedAgents.get(id);
+      return deniedAgents.get(id)?.tokenHash;
     },
   };
 }

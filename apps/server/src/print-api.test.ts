@@ -510,7 +510,7 @@ describe("remote print agent pairing retries", () => {
   it("refuses an earlier window’s Deny and clears stale requests before counting the cap", async () => {
     let elapsed = 0;
     const start = Date.now();
-    const mode = createPairingMode({ steady: () => elapsed });
+    const mode = createPairingMode({ now: () => Date.now(), steady: () => elapsed });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(start);
     try {
@@ -519,6 +519,7 @@ describe("remote print agent pairing retries", () => {
       mode.open();
       const first = await knock(app);
       for (let i = 1; i < PENDING_CAP; i++) await knock(app, `Agent ${i}`);
+      expect(await suite.db.select().from(joinRequests)).toHaveLength(PENDING_CAP);
 
       elapsed = PAIRING_HOLD_MS + 1_000;
       vi.setSystemTime(start + elapsed);

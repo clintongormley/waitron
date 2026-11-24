@@ -110,10 +110,10 @@ async function pendingCount(): Promise<number> {
 
 /** An app whose window was opened BEFORE the test makes its requests, so the gates' discard of
  *  requests a shut window stranded keeps them. */
-function openApp(cfg: TradingContext): { app: Hono; mode: PairingMode; holdId: string } {
+function openApp(cfg: TradingContext): { app: Hono; holdId: string } {
   const mode = createPairingMode();
   const { holdId } = mode.open();
-  return { app: mountApp(cfg, mode), mode, holdId };
+  return { app: mountApp(cfg, mode), holdId };
 }
 
 const shownAsks = new Map<string, string>();
