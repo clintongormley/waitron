@@ -269,15 +269,17 @@ before retrying and reproduce the pending operation before assigning a cause.
 
 [Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
 has no retained assertion trace. The PDF case passed five focused local runs unchanged.
-`backup-verification-history.test.ts` took 323.1 s; `recovery-hour.browser.test.ts` was assigned
-only 14.224 s before the 420 s shard deadline, so that report does not establish a recovery-hour hang.
+`recovery-hour.browser.test.ts` was assigned only 14.224 s before the 420 s shard deadline.
+Whether that file hung remains unknown. See the [history-file timing record](#fiscal-backup-history-fixture-edits-use-one-transaction-per-copy).
 Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
 before retrying; locate the pending operation before changing test or product behaviour.
 Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
 failed the same first-hour key-only PDF case before the deadline; the deadline again prevented
 Vitest's final assertion trace. The complete failed log and process report are retained in lane E's
-`receipts/a1308-5h/ci-rebased-fiscal.log`. History verification passed in 311.4 s; recovery-reader
-began 20.8 s before the deadline. The unchanged first-hour file passed all 142 cases locally.
+`receipts/a1308-5h/ci-rebased-fiscal.log`. Recovery-reader began 20.8 s before the deadline.
+The unchanged first-hour file passed all 142 cases locally. The key-only PDF case also passed in
+the [24 November job](https://github.com/clintongormley/waitron/actions/runs/45330023321/job/138229178179).
+Both 14 November PDF failures still need an assertion trace.
 
 ## Bundle: Qualify CI's server routing and action setup
 
@@ -340,6 +342,18 @@ Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` an
 The watcher chose a one-off sweep for stale comments on 2026-11-23 because the
 [2026-09-14 run](https://github.com/clintongormley/waitron/blob/ea2178d378813e1b680444e53137616cc4bd312b/docs/backlog/ci.md#L205-L211)
 found that 13 of 19 matches were valid group headings a permanent guard would need to allow.
+
+### Fiscal backup-history fixture edits use one transaction per copy
+
+The backup-history file took 323.1 s and 311.4 s on 14 November, then 328.4 s on 24 November.
+On Linux with Node 26.13.1 and SQLite 3.54.1, the original file performed 53,587 trigger changes
+outside a transaction. Adding 2 ms before each disk flush on the copied fixtures raised test
+time from 53.51 s to 247.57 s. Putting each edit and its trigger changes in one transaction took
+14.12 s under the same injected delay. All 107 cases passed in each run. The CI logs have no
+disk timings. The probe and results are in Lane K's `receipts/backup-verification-history-slow/`.
+[First 14 November job](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811),
+[second 14 November job](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462),
+[24 November job](https://github.com/clintongormley/waitron/actions/runs/45330023321/job/138229178179).
 
 ### Remaining fixed-secret setup: measured below the conversion threshold
 
