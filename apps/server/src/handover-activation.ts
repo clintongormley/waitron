@@ -54,6 +54,7 @@ export interface HandoverActivationDeps {
   passwordThrottle?: PasswordThrottle;
   switchSignIn?: SwitchSignIn;
   emergency?: EmergencyHandover;
+  /** A mirror start keeps its runner through an in-process retry. Other starts supply null. */
   run:
     | ((
         attestation: FenceAttestation,

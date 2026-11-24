@@ -315,7 +315,7 @@ declare module "@waitron/shared" {
     "handover.source_unreachable": Record<string, never>;
     /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
     "handover.not_a_spare": Record<string, never>;
-    /** An older peer can send this refusal, and an abandoned handover can replay it. */
+    /** An older spare refused an offer while another promotion was running. An abandoned handover can replay it. */
     "handover.promotion_running": Record<string, never>;
     /**
      * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
@@ -1450,6 +1450,7 @@ declare module "@waitron/shared" {
      * two submitters under one NIF (CLAUDE.md §5).
      */
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
+    /** This request could not use the venue’s master key. */
     "promotion.break_glass_invalid": Record<string, never>;
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
