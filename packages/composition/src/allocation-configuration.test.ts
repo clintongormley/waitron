@@ -1,7 +1,10 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "./modules.js";
-import { FISCAL_OPERATIONS as historicalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
+import {
+  configuredOperations,
+  type HistoricalAllocationPaths,
+} from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import type { ModuleOperationHost, ModuleRecoveryFacts } from "@waitron/module";
 import * as release from "@waitron/fiscal-verifactu/src/hour-release.js";
 import * as internet from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
@@ -135,9 +138,6 @@ async function withFiles(
 }
 
 beforeEach(async () => {
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", undefined);
   await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await suite.db
@@ -145,17 +145,18 @@ beforeEach(async () => {
     .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
 });
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-function configure(paths: { custodianPath: string; confirmationPath: string }) {
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", paths.custodianPath);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", paths.confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", fingerprint);
+function historicalPaths(paths: { custodianPath: string; confirmationPath: string }) {
+  return {
+    custodianFile: paths.custodianPath,
+    confirmationFile: paths.confirmationPath,
+    custodianFingerprint: fingerprint,
+  };
 }
-async function attempt() {
-  const operations = historicalOperations;
+async function attempt(paths: HistoricalAllocationPaths) {
+  const operations = configuredOperations(paths);
   expect(operations).toBeDefined();
   return withOperationAuthority(binding, operatorId, (authority) =>
     operations!.prepare({ binding, authority, input }, (prepared) =>
@@ -165,8 +166,7 @@ async function attempt() {
 }
 it("reads an independently configured historical paper source without production dispatch", async () => {
   await withFiles(async (paths) => {
-    configure(paths);
-    const result = await attempt();
+    const result = await attempt(historicalPaths(paths));
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
@@ -179,18 +179,12 @@ it("reads an independently configured historical paper source without production
     ]);
   });
 });
-it.each([
-  "WAITRON_FISCAL_CUSTODIAN_FILE",
-  "WAITRON_FISCAL_CONFIRMATION_FILE",
-  "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
-])(
+it.each(["custodianFile", "confirmationFile", "custodianFingerprint"])(
   "refuses missing or empty host configuration %s without accepting request evidence",
-  async (variable) => {
+  async (field) => {
     await withFiles(async (paths) => {
-      configure(paths);
       for (const value of [undefined, "", "  "]) {
-        vi.stubEnv(variable, value);
-        await expect(attempt()).rejects.toMatchObject({
+        await expect(attempt({ ...historicalPaths(paths), [field]: value })).rejects.toMatchObject({
           code: "sif.allocation_invalid",
           params: { reason: "outside_confirmation_missing" },
         });
@@ -202,9 +196,12 @@ it.each([
 );
 it("requires a separately configured fingerprint even when the submitted files agree", async () => {
   await withFiles(async (paths) => {
-    configure(paths);
-    vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", "different-independent-fingerprint");
-    await expect(attempt()).rejects.toMatchObject({
+    await expect(
+      attempt({
+        ...historicalPaths(paths),
+        custodianFingerprint: "different-independent-fingerprint",
+      }),
+    ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "reservation_untrusted" },
     });
@@ -213,14 +210,13 @@ it("requires a separately configured fingerprint even when the submitted files a
 });
 it("reads the current event file again on the next attempt", async () => {
   await withFiles(async (paths) => {
-    configure(paths);
-    await attempt();
+    await attempt(historicalPaths(paths));
     const ledger = await allocationRows(suite.db);
     await writeFile(
       paths.confirmationPath,
       JSON.stringify({ ...confirmation, binding: { ...binding, eventId: "another-event" } }),
     );
-    await expect(attempt()).rejects.toMatchObject({
+    await expect(attempt(historicalPaths(paths))).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "event_mismatch" },
     });
@@ -228,7 +224,7 @@ it("reads the current event file again on the next attempt", async () => {
   });
 });
 
-function hourHost(environment: ModuleOperationHost["environment"] = {}) {
+function hourHost() {
   let value: unknown = null;
   const history: unknown[] = [];
   let held = false;
@@ -246,7 +242,7 @@ function hourHost(environment: ModuleOperationHost["environment"] = {}) {
     priorActivation: "none",
   };
   const host: ModuleOperationHost = {
-    environment,
+    environment: {},
     readPublicEvidence: async () => ({ trust: custodian, current: confirmation }),
     readRecoveryFacts: async () => {
       if (!held) throw new Error("recovery facts read outside exclusion");
@@ -279,41 +275,32 @@ function hourHost(environment: ModuleOperationHost["environment"] = {}) {
 }
 
 it("refuses legacy paper input through unconfigured production composition", async () => {
-  await withFiles(async (paths) => {
-    configure(paths);
-    const operations = ALL_MODULES.find((module) => module.name === binding.module)!.operations!;
-    await withOperationAuthority(binding, operatorId, async (authority) => {
-      await expect(
-        operations.prepare({ binding, authority, input }, async () => "admitted"),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "outside_confirmation_missing" },
-      });
+  const operations = ALL_MODULES.find((module) => module.name === binding.module)!.operations!;
+  await withOperationAuthority(binding, operatorId, async (authority) => {
+    await expect(
+      operations.prepare({ binding, authority, input }, async () => "admitted"),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
     });
-    expect(await allocationRows(suite.db)).toEqual([]);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([]);
   });
+  expect(await allocationRows(suite.db)).toEqual([]);
+  expect(await fixtureSifIdentities(suite.db)).toEqual([]);
 });
 
 it("refuses legacy paper input through a configured production host without durable hour intent", async () => {
-  await withFiles(async (paths) => {
-    const { operations, history } = hourHost({
-      WAITRON_FISCAL_CUSTODIAN_FILE: paths.custodianPath,
-      WAITRON_FISCAL_CONFIRMATION_FILE: paths.confirmationPath,
-      WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: fingerprint,
+  const { operations, history } = hourHost();
+  await withOperationAuthority(binding, operatorId, async (authority) => {
+    await expect(
+      operations.prepare({ binding, authority, input }, async () => "admitted"),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "clock_stale" },
     });
-    await withOperationAuthority(binding, operatorId, async (authority) => {
-      await expect(
-        operations.prepare({ binding, authority, input }, async () => "admitted"),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "clock_stale" },
-      });
-    });
-    expect(history).toEqual([]);
-    expect(await allocationRows(suite.db)).toEqual([]);
-    expect(await fixtureSifIdentities(suite.db)).toEqual([]);
   });
+  expect(history).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
+  expect(await fixtureSifIdentities(suite.db)).toEqual([]);
 });
 
 it("activates the current hour through production composition without signed-file authority", async () => {

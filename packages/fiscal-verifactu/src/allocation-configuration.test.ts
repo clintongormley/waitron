@@ -1,11 +1,20 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it, vi } from "vitest";
 import { withOperationAuthority } from "@waitron/module";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
-const variables = [
-  "WAITRON_FISCAL_CUSTODIAN_FILE",
-  "WAITRON_FISCAL_CONFIRMATION_FILE",
-  "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
-] as const;
+import {
+  configuredOperations,
+  type HistoricalAllocationPaths,
+} from "./allocation-configuration.js";
+import { paperCustodianFingerprint } from "./paper-evidence.js";
+const paths = {
+  custodianFile: "unavailable-outside-file",
+  confirmationFile: "unavailable-outside-file",
+  custodianFingerprint: "unavailable-outside-file",
+};
+const fields = ["custodianFile", "confirmationFile", "custodianFingerprint"] as const;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -13,21 +22,23 @@ const binding = {
   sourceId: "archive",
   targetNodeId: "target",
 };
-beforeEach(() => {
-  for (const variable of variables) vi.stubEnv(variable, "unavailable-outside-file");
-});
-afterEach(() => vi.unstubAllEnvs());
-function attempt(input: unknown = { allocation: {}, approval: {} }) {
-  return withOperationAuthority(binding, "admin", (authority) =>
-    FISCAL_OPERATIONS.prepare({ binding, authority, input }, async () => {
-      throw new Error("unverified input admitted");
-    }),
+function attempt(
+  input: unknown = { allocation: {}, approval: {} },
+  operationBinding = binding,
+  options: HistoricalAllocationPaths = paths,
+) {
+  return withOperationAuthority(operationBinding, "admin", (authority) =>
+    configuredOperations(options).prepare(
+      { binding: operationBinding, authority, input },
+      async () => {
+        throw new Error("unverified input admitted");
+      },
+    ),
   );
 }
-it.each(variables)("requires the host to configure %s independently", async (variable) => {
+it.each(fields)("requires the host to configure %s independently", async (field) => {
   for (const value of [undefined, "", "  "]) {
-    vi.stubEnv(variable, value);
-    await expect(attempt()).rejects.toMatchObject({
+    await expect(attempt(undefined, binding, { ...paths, [field]: value })).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
@@ -38,6 +49,40 @@ it("refuses an unavailable host custodian instead of accepting trust from input"
     code: "sif.allocation_invalid",
     params: { reason: "reservation_untrusted" },
   });
+});
+it("refuses a missing setup custodian before checking the confirmation file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "missing-setup-custodian-"));
+  try {
+    const publicKey = generateKeyPairSync("ed25519").publicKey.export({
+      type: "spki",
+      format: "pem",
+    });
+    const fingerprint = paperCustodianFingerprint(publicKey)!;
+    const options = {
+      custodianFile: join(directory, "custodian.json"),
+      confirmationFile: join(directory, "confirmation.json"),
+      custodianFingerprint: fingerprint,
+    };
+    const setup = { ...binding, action: "setup" };
+    await expect(attempt(undefined, setup, options)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "reservation_untrusted" },
+    });
+    await writeFile(
+      options.custodianFile,
+      JSON.stringify({
+        custodianId: "fixture-custodian",
+        publicKey,
+        fingerprint,
+      }),
+    );
+    await expect(attempt(undefined, setup, options)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 it("refuses outside trust fields injected into an otherwise shaped operation", async () => {
   await expect(
@@ -56,7 +101,7 @@ it.each(["symbol", "non-enumerable", "function"])(
       enumerable: which !== "non-enumerable",
     });
     const readPublicEvidence = vi.fn(async () => undefined);
-    const configured = FISCAL_OPERATIONS.configure!({ environment: {}, readPublicEvidence });
+    const configured = configuredOperations({}, { environment: {}, readPublicEvidence });
     await expect(
       withOperationAuthority(binding, "admin", (authority) =>
         configured.prepare({ binding, authority, input }, async () => "admitted"),
@@ -69,11 +114,13 @@ it.each(["symbol", "non-enumerable", "function"])(
   },
 );
 
-it("binds explicit launch settings instead of ambient process variables", async () => {
-  const configured = FISCAL_OPERATIONS.configure!({
+it("binds the settings supplied when the historical host is configured", async () => {
+  const options = {};
+  const configured = configuredOperations(options, {
     environment: {},
     readPublicEvidence: async () => undefined,
   });
+  Object.assign(options, paths);
   await withOperationAuthority(binding, "admin", async (authority) => {
     for (const input of [{ allocation: {}, approval: {} }, { receipt: {} }, { emergency: {} }]) {
       await expect(

@@ -1859,9 +1859,6 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
-          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
-          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
-          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
           WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -2044,9 +2041,6 @@ describe("startServer, against a migrated venue directory", () => {
       await withMockedKill(async (kills) => {
         const server = await startServer(
           {
-            WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
-            WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
-            WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
             WAITRON_VENUE_DIR: venue.directory,
             WAITRON_HTTP_PORT: String(port),
             WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -2184,9 +2178,6 @@ describe("startServer, against a migrated venue directory", () => {
       try {
         // No third argument: the call production makes (`node-entry.ts`).
         const server = await startServer({
-          WAITRON_FISCAL_CUSTODIAN_FILE: process.env.WAITRON_FISCAL_CUSTODIAN_FILE,
-          WAITRON_FISCAL_CONFIRMATION_FILE: process.env.WAITRON_FISCAL_CONFIRMATION_FILE,
-          WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: process.env.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
           WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,

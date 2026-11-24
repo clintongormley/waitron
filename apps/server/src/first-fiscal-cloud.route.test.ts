@@ -45,14 +45,13 @@ async function historicalCloudFixture(configured = true) {
     }),
   );
   const host = createFirstSetupModuleHost({
-    modules: historicalFirstFiscalDocuments(ALL_MODULES),
-    environment: configured
-      ? {
-          WAITRON_FISCAL_CLOUD_TRUST_FILE: path,
-          WAITRON_FISCAL_CLOUD_FINGERPRINT: keyId,
-          WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: root,
-        }
-      : {},
+    modules: historicalFirstFiscalDocuments(
+      ALL_MODULES,
+      configured
+        ? { cloudTrustFile: path, cloudFingerprint: keyId, cloudReceiptDirectory: root }
+        : {},
+    ),
+    environment: {},
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
   });

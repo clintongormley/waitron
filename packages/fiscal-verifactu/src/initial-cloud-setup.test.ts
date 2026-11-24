@@ -12,8 +12,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { configureHistoricalInitialSetup, FISCAL_INITIAL_SETUP } from "./initial-setup.js";
+import { configuredOperations } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readCloudAllocationReport } from "./cloud-preparation.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -287,32 +287,33 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
         historyDigest: createHash("sha256").update(f.packet).digest("hex"),
       },
     };
+    const paths = {
+      cloudTrustFile: trustPath,
+      cloudFingerprint: f.receipt.keyId,
+      cloudReceiptDirectory: root,
+    };
     const host = {
-      environment: {
-        WAITRON_FISCAL_CLOUD_TRUST_FILE: trustPath,
-        WAITRON_FISCAL_CLOUD_FINGERPRINT: f.receipt.keyId,
-        WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: root,
-      },
+      environment: {},
       readPublicEvidence: async () => ({ trust: null, current }),
     };
-    const seat = FISCAL_INITIAL_SETUP.configure!(host);
-    return { ...f, root, host, current, seat };
+    const seat = configureHistoricalInitialSetup(paths);
+    return { ...f, root, host, paths, current, seat };
   }
   it.each(["missing fingerprint", "directory", "oversized", "unknown trust field"])(
     "refuses configured Cloud trust with %s before accepting retained evidence",
     async (kind) => {
       const f = await setup();
-      const host = { ...f.host, environment: { ...f.host.environment } };
-      const path = host.environment.WAITRON_FISCAL_CLOUD_TRUST_FILE;
-      if (kind === "missing fingerprint") host.environment.WAITRON_FISCAL_CLOUD_FINGERPRINT = "";
-      if (kind === "directory") host.environment.WAITRON_FISCAL_CLOUD_TRUST_FILE = f.root;
+      const paths = { ...f.paths };
+      const path = paths.cloudTrustFile;
+      if (kind === "missing fingerprint") paths.cloudFingerprint = "";
+      if (kind === "directory") paths.cloudTrustFile = f.root;
       if (kind === "oversized")
         await writeFile(path, (await readFile(path, "utf8")).padEnd(65537, " "));
       if (kind === "unknown trust field") {
         const trust = JSON.parse(await readFile(path, "utf8"));
         await writeFile(path, JSON.stringify({ ...trust, approved: true }));
       }
-      const seat = FISCAL_INITIAL_SETUP.configure!(host);
+      const seat = configureHistoricalInitialSetup(paths);
       expect(() => seat.inspect(f.held, f.input)).toThrowError(
         expect.objectContaining({
           code: "sif.allocation_invalid",
@@ -390,10 +391,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const paperPath = join(f.root, "kept-paper-public.json");
     const priorBytes = declaredHistoryBytes(priorPaper);
     await writeFile(paperPath, priorBytes);
-    const configured = FISCAL_OPERATIONS.configure!({
-      ...f.host,
-      environment: { ...f.host.environment, WAITRON_FISCAL_PAPER_HISTORY_FILE: paperPath },
-    });
+    const configured = configuredOperations({ ...f.paths, paperHistoryFile: paperPath }, f.host);
     const result = await withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
       configured.prepare({ binding: scope.binding, authority, input: f.input }, (ready) =>
         withTransaction(suite.db, (tx) =>
@@ -567,10 +565,13 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       phase: "activate",
       delivery: { kept: true, documentDigest: "d".repeat(64), historyDigest: digest(history) },
     };
-    const offline = FISCAL_OPERATIONS.configure!({
-      environment: {},
-      readPublicEvidence: async () => ({ trust: null, current }),
-    });
+    const offline = configuredOperations(
+      {},
+      {
+        environment: {},
+        readPublicEvidence: async () => ({ trust: null, current }),
+      },
+    );
     const continued = await withOperationAuthority(paperBinding, operator, (authority) =>
       offline.prepare({ binding: paperBinding, authority, input: paperInput }, (ready) =>
         withTransaction(suite.db, (tx) =>
@@ -654,7 +655,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     if (failure === "changed-document") f.current.delivery.documentDigest = "c".repeat(64);
     if (failure === "changed-history") f.current.delivery.historyDigest = "c".repeat(64);
     if (failure === "changed-current") f.current.operatorId = "Cloud-actor";
-    if (failure === "missing-trust") await rm(f.host.environment.WAITRON_FISCAL_CLOUD_TRUST_FILE);
+    if (failure === "missing-trust") await rm(f.paths.cloudTrustFile);
     expect(() =>
       f.seat.documentConfirmation!(f.held, imported, {
         statement: f.current,
@@ -669,7 +670,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const f = await setup((p) => Reflect.set(p.approval!, "oldMachineOffline", true));
     await expect(
       withOperationAuthority(scope.binding, scope.administratorId, (authority) =>
-        FISCAL_OPERATIONS.configure!(f.host).prepare(
+        configuredOperations(f.paths, f.host).prepare(
           { binding: scope.binding, authority, input: f.input },
           (ready) =>
             withTransaction(suite.db, (tx) =>
@@ -684,7 +685,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
     const f = await setup();
     await expect(
       withOperationAuthority(scope.binding, f.receipt.payload.cloudAccountId, (authority) =>
-        FISCAL_OPERATIONS.configure!(f.host).prepare(
+        configuredOperations(f.paths, f.host).prepare(
           { binding: scope.binding, authority, input: f.input },
           async () => "unexpected",
         ),
@@ -695,17 +696,21 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
 });
 
 it("retains independently configured public evidence roots for setup resolution", () => {
-  const configured = FISCAL_INITIAL_SETUP.configure!({
-    environment: {
-      WAITRON_FISCAL_CLOUD_TRUST_FILE: "/outside/trust.json",
-      WAITRON_FISCAL_CONFIRMATION_FILE: "/outside/current.json",
-      WAITRON_FISCAL_PAPER_HISTORY_FILE: "/outside/history.json",
-      WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: "/outside/receipts",
-    },
-    readPublicEvidence: async () => undefined,
+  const configured = configureHistoricalInitialSetup({
+    custodianFile: "/outside/custodian.json",
+    cloudTrustFile: "/outside/trust.json",
+    confirmationFile: "/outside/current.json",
+    paperHistoryFile: "/outside/history.json",
+    cloudReceiptDirectory: "/outside/receipts",
+    emergencyDirectory: "/outside/incidents",
   });
   expect(configured.resolutionEvidence?.()).toEqual({
-    files: ["/outside/trust.json", "/outside/current.json", "/outside/history.json"],
-    directories: ["/outside/receipts"],
+    files: [
+      "/outside/custodian.json",
+      "/outside/trust.json",
+      "/outside/current.json",
+      "/outside/history.json",
+    ],
+    directories: ["/outside/receipts", "/outside/incidents"],
   });
 });

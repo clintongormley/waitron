@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { vi } from "vitest";
 import { nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
@@ -10,11 +9,9 @@ import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { DEFAULT_SERIES_CODES, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../modules.js";
 import { provisionVenue, type ProvisionDeps, type ProvisionRequest } from "../provision.js";
-import { writeAllocationInput } from "./allocation-input.js";
 import { createHourTestClock, selectPastWaits, type HourTestClock } from "./hour-test-clock.js";
 
-export async function initialSetupInput(
-  directory: string,
+export function initialSetupInput(
   venue: {
     taxId: string;
     seriesCode: string;
@@ -46,8 +43,6 @@ export async function initialSetupInput(
     ],
   });
   const held = fixture.request("setup");
-  const configuration = await writeAllocationInput(directory, fixture, "setup");
-  for (const [key, value] of Object.entries(configuration)) vi.stubEnv(key, value);
   return {
     nodeId: targetNodeId,
     administratorId,

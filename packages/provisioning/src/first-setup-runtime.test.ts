@@ -445,7 +445,7 @@ it.each(["readSetupFacts", "withPreparationState"] as const)(
   "there is no ambient preparation fallback when the host omits %s",
   (missing) => {
     const host: ModuleOperationHost = {
-      environment: { WAITRON_FISCAL_CONFIRMATION_FILE: "ambient.json" },
+      environment: {},
       readPublicEvidence: async () => undefined,
       readSetupFacts: async () => {
         throw new Error("must not read");

@@ -1695,11 +1695,7 @@ owner's address is settled: supplied on 2026-11-04, it travels with the other tw
 Signed paper, Cloud receipts and emergency names are still read by historical code: the activation
 check (`packages/fiscal-verifactu/src/allocation-envelope.ts`, its Cloud branch importing
 `cloud-evidence.ts`) and the historical setup
-contribution (`initial-setup.ts`, spread into production by `hour-configuration.ts`). The settings
-`WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_FINGERPRINT` and
-`WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` are read by `allocation-configuration.ts`,
-`initial-setup.ts` (the trust file and receipt folder) and `initial-cloud-setup.ts` (the trust
-file and the fingerprint); their only guide, the Cloud allocation guide, was deleted. Removing the
+contribution (`initial-setup.ts`, spread into production by `hour-configuration.ts`). Removing the
 formats changes activation and the remaining assertions of several tests (among them
 `hour-configuration.test.ts`, `backup-verification-history.test.ts`,
 `paper-register-history.test.ts`, and the server's `retired-first-setup-routes.test.ts` and

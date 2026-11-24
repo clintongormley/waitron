@@ -1,6 +1,6 @@
 // Historical protocol tests retain this dispatcher; production composition uses hour-configuration.
 import "./errors.js";
-import { AppError, readVariable } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
 import {
   createAllocationPreparation,
@@ -41,10 +41,22 @@ function snapshotOperationInput(input: unknown): unknown {
   }
 }
 
-function configuredOperations(
-  environment: Readonly<Record<string, string | undefined>>,
+export interface HistoricalAllocationPaths {
+  readonly custodianFile?: string;
+  readonly custodianFingerprint?: string;
+  readonly confirmationFile?: string;
+  readonly emergencyDirectory?: string;
+  readonly paperHistoryFile?: string;
+  readonly cloudTrustFile?: string;
+  readonly cloudFingerprint?: string;
+  readonly cloudReceiptDirectory?: string;
+}
+
+export function configuredOperations(
+  paths: HistoricalAllocationPaths,
   host?: ModuleOperationHost,
 ): ModuleOperationPreparation {
+  const settings = { ...paths };
   return {
     async prepare(supplied, run) {
       const operation = {
@@ -57,11 +69,8 @@ function configuredOperations(
         operation.input !== null &&
         Object.hasOwn(operation.input, "receipt");
       if (cloud && operation.binding.action === "setup") {
-        const trust = configuredCloudTrust(environment);
-        const receiptDirectory = readVariable(
-          environment,
-          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
-        );
+        const trust = configuredCloudTrust(settings);
+        const receiptDirectory = settings.cloudReceiptDirectory;
         if (host === undefined || trust === null || !receiptDirectory?.trim())
           throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
         return createCloudAllocationPreparation({
@@ -117,13 +126,10 @@ function configuredOperations(
         operation.input !== null &&
         Object.hasOwn(operation.input, "receipt")
       ) {
-        const trustPath = readVariable(environment, "WAITRON_FISCAL_CLOUD_TRUST_FILE");
-        const confirmedFingerprint = readVariable(environment, "WAITRON_FISCAL_CLOUD_FINGERPRINT");
-        const confirmationPath = readVariable(environment, "WAITRON_FISCAL_CONFIRMATION_FILE");
-        const receiptDirectory = readVariable(
-          environment,
-          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
-        );
+        const trustPath = settings.cloudTrustFile;
+        const confirmedFingerprint = settings.cloudFingerprint;
+        const confirmationPath = settings.confirmationFile;
+        const receiptDirectory = settings.cloudReceiptDirectory;
         if (
           !trustPath?.trim() ||
           !confirmedFingerprint?.trim() ||
@@ -144,8 +150,8 @@ function configuredOperations(
         operation.input !== null &&
         Object.hasOwn(operation.input, "emergency")
       ) {
-        const confirmationPath = readVariable(environment, "WAITRON_FISCAL_CONFIRMATION_FILE");
-        const incidentDirectory = readVariable(environment, "WAITRON_FISCAL_EMERGENCY_DIRECTORY");
+        const confirmationPath = settings.confirmationFile;
+        const incidentDirectory = settings.emergencyDirectory;
         if (!confirmationPath?.trim() || !incidentDirectory?.trim())
           throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
         return createEmergencyAllocationPreparation({
@@ -153,28 +159,17 @@ function configuredOperations(
           incidentDirectory,
         }).prepare(operation, run);
       }
-      const custodianPath = readVariable(environment, "WAITRON_FISCAL_CUSTODIAN_FILE");
-      const confirmationPath = readVariable(environment, "WAITRON_FISCAL_CONFIRMATION_FILE");
-      const confirmedFingerprint = readVariable(
-        environment,
-        "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
-      );
+      const custodianPath = settings.custodianFile;
+      const confirmationPath = settings.confirmationFile;
+      const confirmedFingerprint = settings.custodianFingerprint;
       if (!custodianPath?.trim() || !confirmationPath?.trim() || !confirmedFingerprint?.trim())
         throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
       return createPaperAllocationPreparation({
         custodianPath,
         confirmationPath,
         confirmedFingerprint,
-        knownHistoryPath: readVariable(environment, "WAITRON_FISCAL_PAPER_HISTORY_FILE"),
+        knownHistoryPath: settings.paperHistoryFile,
       }).prepare(operation, run);
     },
   };
 }
-export const FISCAL_OPERATIONS: ModuleOperationPreparation = {
-  configure(host) {
-    return configuredOperations(Object.freeze({ ...host.environment }), host);
-  },
-  prepare(operation, run) {
-    return configuredOperations(process.env).prepare(operation, run);
-  },
-};

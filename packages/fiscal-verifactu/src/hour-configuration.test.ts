@@ -1,14 +1,12 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { withOperationAuthority } from "@waitron/module";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import { FISCAL_INITIAL_SETUP, FISCAL_OPERATIONS } from "./index.js";
 import { createCloudAllocationFilePreparation } from "./cloud-preparation.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
-
-afterEach(() => vi.unstubAllEnvs());
 
 it.each(["symbol", "non-enumerable", "function"])(
   "refuses %s input before a missing host can mask it",
@@ -62,7 +60,7 @@ it("a setup without a host cannot generate names from paper serials", () => {
 });
 
 it.each([
-  ["ambient", "restore"],
+  ["unconfigured", "restore"],
   ["configured", "restore"],
 ] as const)(
   "%s %s cannot use an old signed Cloud receipt as activation authority",
@@ -96,18 +94,11 @@ it.each([
       );
       await writeFile(confirmationPath, JSON.stringify(confirmation));
       const original = await readFile(confirmationPath);
-      const environment = {
-        WAITRON_FISCAL_CLOUD_TRUST_FILE: trustPath,
-        WAITRON_FISCAL_CLOUD_FINGERPRINT: fixture.receipt.keyId,
-        WAITRON_FISCAL_CONFIRMATION_FILE: confirmationPath,
-        WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: root,
-      };
-      for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
       const operations =
-        mode === "ambient"
+        mode === "unconfigured"
           ? FISCAL_OPERATIONS
           : FISCAL_OPERATIONS.configure!({
-              environment,
+              environment: {},
               readPublicEvidence: async () => undefined,
             });
       const input = {

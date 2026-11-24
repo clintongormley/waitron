@@ -8,7 +8,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationInput } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import {
+  configuredOperations,
+  type HistoricalAllocationPaths,
+} from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import * as envelope from "./allocation-envelope.js";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
@@ -53,6 +56,7 @@ const confirmation = {
 };
 let outside: string;
 let confirmationPath: string;
+let paths: HistoricalAllocationPaths;
 beforeEach(async () => {
   await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
@@ -62,13 +66,9 @@ beforeEach(async () => {
   outside = await mkdtemp(join(tmpdir(), "emergency-outside-"));
   confirmationPath = join(outside, "current.json");
   await writeFile(confirmationPath, JSON.stringify(confirmation));
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", undefined);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", outside);
+  paths = { confirmationFile: confirmationPath, emergencyDirectory: outside };
 });
 afterEach(async () => {
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   if (outside) await rm(outside, { recursive: true, force: true });
 });
@@ -78,7 +78,7 @@ function attempt(
     withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, operation)),
 ) {
   return withOperationAuthority(binding, operator, (authority) =>
-    FISCAL_OPERATIONS.prepare({ binding, authority, input }, run),
+    configuredOperations(paths).prepare({ binding, authority, input }, run),
   );
 }
 async function incident() {
@@ -199,7 +199,7 @@ it("redraws an identity already named in current outside evidence", async () => 
 it.each([undefined, "", "  "])(
   "requires an independently configured incident directory: %j",
   async (directory) => {
-    vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", directory);
+    paths = { ...paths, emergencyDirectory: directory };
     await expect(attempt()).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
@@ -209,7 +209,7 @@ it.each([undefined, "", "  "])(
 );
 
 it("refuses an unavailable incident directory without activating", async () => {
-  vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", join(outside, "not-mounted"));
+  paths = { ...paths, emergencyDirectory: join(outside, "not-mounted") };
   await expect(attempt()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
@@ -220,7 +220,7 @@ it("refuses an unavailable incident directory without activating", async () => {
 it.each(["invalid-json", "oversized", "directory"])(
   "refuses a %s outside confirmation",
   async (kind) => {
-    if (kind === "directory") vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", outside);
+    if (kind === "directory") paths = { ...paths, confirmationFile: outside };
     else await writeFile(confirmationPath, kind === "invalid-json" ? "{" : " ".repeat(65537));
     await expect(attempt()).rejects.toMatchObject({
       code: "sif.allocation_invalid",
@@ -300,7 +300,7 @@ it("refuses a binding carrying the relinquished fact with a version 2 approval",
   };
   await expect(
     withOperationAuthority(carrying, operator, (authority) =>
-      FISCAL_OPERATIONS.prepare(
+      configuredOperations(paths).prepare(
         {
           binding: carrying,
           authority,
@@ -334,7 +334,7 @@ it("cannot burn the same event again by reordering its binding or changing its s
     await writeFile(confirmationPath, JSON.stringify({ ...confirmation, binding: changed }));
     await expect(
       withOperationAuthority(changed, operator, (authority) =>
-        FISCAL_OPERATIONS.prepare(
+        configuredOperations(paths).prepare(
           {
             binding: changed,
             authority,
@@ -371,7 +371,7 @@ it("leaves a burned event behind and uses a new draw for the next fresh event", 
     JSON.stringify({ ...confirmation, binding: nextBinding, operatorId: nextOperator }),
   );
   await withOperationAuthority(nextBinding, nextOperator, (authority) =>
-    FISCAL_OPERATIONS.prepare(
+    configuredOperations(paths).prepare(
       {
         binding: nextBinding,
         authority,

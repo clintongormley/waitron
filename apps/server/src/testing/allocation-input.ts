@@ -19,8 +19,8 @@ export async function writeAllocationInput(
   await writeFile(confirmationFile, JSON.stringify(request.confirmation));
   return {
     WAITRON_RECOVERY_OPERATION_FILE: operationFile,
-    WAITRON_FISCAL_CUSTODIAN_FILE: custodianFile,
-    WAITRON_FISCAL_CONFIRMATION_FILE: confirmationFile,
-    WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: fixture.custodian.fingerprint,
+    custodianFile,
+    confirmationFile,
+    custodianFingerprint: fixture.custodian.fingerprint,
   };
 }

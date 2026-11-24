@@ -507,21 +507,21 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       recoveryKey: true,
       bases: SERIES_BASES,
     });
-    const allocationEnv = await writeAllocationInput(scratch, recoveryFixture, "restore");
+    const allocationPaths = await writeAllocationInput(scratch, recoveryFixture, "restore");
     const recoveryModules = ALL_MODULES.map((module) =>
       module.name === "fiscal-verifactu"
         ? {
             ...module,
             operations: createPaperAllocationPreparation({
-              custodianPath: allocationEnv.WAITRON_FISCAL_CUSTODIAN_FILE,
-              confirmationPath: allocationEnv.WAITRON_FISCAL_CONFIRMATION_FILE,
-              confirmedFingerprint: allocationEnv.WAITRON_FISCAL_CUSTODIAN_FINGERPRINT,
+              custodianPath: allocationPaths.custodianFile,
+              confirmationPath: allocationPaths.confirmationFile,
+              confirmedFingerprint: allocationPaths.custodianFingerprint,
             }),
           }
         : module,
     );
     const said: string[] = [];
-    const { WAITRON_RECOVERY_OPERATION_FILE: operationPath, ...paperEnv } = allocationEnv;
+    const { WAITRON_RECOVERY_OPERATION_FILE: operationPath } = allocationPaths;
     const code = await runRestore({
       withModuleOperations: createRecoveryRestoreRunner(
         recoveryModules,
@@ -537,7 +537,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         "74000001P",
       ],
       env: {
-        ...paperEnv,
         WAITRON_MASTER_KEY: nodeSecret!,
         WAITRON_STATE_DIR: dirsB.state,
         WAITRON_VENUE_DIR: dirsB.venue,

@@ -7,6 +7,10 @@
 > [recovering a box](../operations/hour-recovery.md). Cloud accounts, backup
 > transport and recovery authentication remain separate from naming authority.
 
+> **2026-11-24, A1308 Fi11.** The eight historical `WAITRON_FISCAL_*` allocation variables and
+> the former `WAITRON_RECOVERY_PUBLIC_DIR` and `WAITRON_RECOVERY_INCIDENT_DIR` names are retired.
+> Historical protocol tests pass evidence paths as options.
+
 # Retain an emergency allocation outside the box
 
 When you cannot establish the current short-name register, an emergency allocation uses a fresh
