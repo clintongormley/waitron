@@ -617,7 +617,7 @@ describe("a made pack", () => {
     expect(await storedMasterKeys()).toEqual([]);
   });
 
-  it("a ticked pack whose box key is not replaced makes no master key", async () => {
+  it("a Make a new master key whose box-key page fails makes no master key", async () => {
     const response = await fixture({ seats: 2 }).make(true);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
     expect(response.headers.has("x-waitron-master-key")).toBe(false);
@@ -652,6 +652,51 @@ describe("a made pack", () => {
       { number: 1, name: old.name },
       { number: 2, name: shownMasterKey(retried).masterKeyName },
     ]);
+  });
+
+  it("a refused master_keys save after the new box key is saved answers an error and keeps the old master key current, the new box key nobody was shown in force until a retry makes one key and a working box key", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    const f = fixture();
+    suite.db.run(
+      sql`create trigger refuse_master_key before insert on master_keys begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await f.make(true);
+    } finally {
+      suite.db.run(sql`drop trigger refuse_master_key`);
+    }
+    expect(refused.status).toBe(500);
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await refused.json()).toEqual({ error: { code: "server.internal" } });
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: old.name }]);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).not.toBe(keyInForce.name);
+    const unseen = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
+    expect(await verifySecretAsync(keyInForce.secret, unseen)).toBe(false);
+
+    const retried = await f.make(true);
+    expect(retried.status).toBe(200);
+    const shown = shownMasterKey(retried);
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: old.name },
+      {
+        number: 2,
+        name: shown.masterKeyName,
+        checkValue: masterKeyCheckValue(decodeMasterKeyCode(shown.masterKey!)),
+      },
+    ]);
+    const file = await readRecoveryPackPdf(new Uint8Array(await retried.arrayBuffer()));
+    const carried = (file.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(carried.name);
+    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
+    expect(await verifySecretAsync(carried.secret, verifier)).toBe(true);
   });
 
   it("Make a new master key also makes a new box key, and its pack holds both", async () => {
@@ -689,7 +734,7 @@ describe("a made pack", () => {
     expect(await pdfText(bytes)).not.toContain(first.masterKey!);
   });
 
-  it("a ticked pack whose box key is not replaced shows no new master key", async () => {
+  it("a Make a new master key whose box-key page fails shows no new master key", async () => {
     const response = await fixture({ seats: 2 }).make(true);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
