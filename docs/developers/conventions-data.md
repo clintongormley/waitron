@@ -7396,10 +7396,6 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 > Guards: the held-reader and two-store checkpoint cases in `packages/store/src/connections.test.ts` and `packages/store/src/index.test.ts`, weaker than the rule: those paths only.
 
-### Optional request fields
-
-> A field whose null is itself a value is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`, the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
-
 ### Personal data in logs
 
 > Guard: `scripts/personal-log-params.test.ts`, weaker than its name: judges field names by a word list and named registry types by their names.
@@ -7420,41 +7416,9 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 > Guards: `scripts/settings-not-migrated.test.ts` and the pinned-CHECK case in `packages/db/src/settings.test.ts`, both weaker than the rule: they read text.
 
-### Housekeeping on a full disk
-
-> Guard: `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule: covers only named routes.
-
-### Full-disk refusal codes
-
-See the [named test and its limits](#a-full-disk-is-not-one-error-code).
-
-> Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
-
-### Venue folder ownership
-
-> Guards: `packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker than their names: prove the locks, not that every caller takes them.
-
-### Failed-start cleanup
-
-> Guard: `apps/server/src/boot.failed-start.test.ts`, weaker than its name: covers only named duties.
-
-### Database column declarations
-
-> Guard: `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
-
 ### Counting sale correctives
 
 > Guard: `scripts/corrective-sums.test.ts`, weaker than its name: reads lines of text, not queries.
-
-### Quantity and rate scales
-
-> Guard: `packages/db/src/testing/schema-conformance.ts`, weaker than a universal check: only migration sets opting in are covered.
-
-### Append-only table classification
-
-> Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`, `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
-
-> Classification alone is not the trigger set; triggers cannot prevent `DROP TABLE`.
 
 ### The till person header
 
@@ -7466,25 +7430,13 @@ See the [named test and its limits](#a-full-disk-is-not-one-error-code).
 
 > **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`), except the spare's bucket-stream pipe, which always connects over TLS (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine, in every environment; `parseHello` refuses a joining spare's plain-http contact address off this machine** (the watcher, 2026-11-24, not the owner's).
 
-### Module migration requirements
-
-> Guard: `scripts/module-graph-honesty.test.ts`, weaker than its name: text scan recognising fixed SQL shapes.
-
 ### Migration-set ownership
 
 > Guard: the eight-sets cases in `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and hosted modules.
 
-### Schema constraints
-
-> Guard: `scripts/schema-constraints.test.ts`, weaker than its name: reads built schema.
-
 ### Starting migration rebuilds
 
 > Guard: `scripts/starting-migrations.test.ts`, weaker than its name: trusts drizzle-kit.
-
-### Migration journal ordering
-
-> Guard: `scripts/journal-monotonic.test.ts`, weaker than a universal check: only sets with multiple entries.
 
 ### Environment variable inventory
 

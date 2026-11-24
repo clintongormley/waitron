@@ -6035,45 +6035,13 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 > Let the normal pre-push hook run the local checks once; scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
 
-### Server shard packing
-
-> Guard: `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
-
 ### Browser shard coverage
 
 > Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, not the Vitest config.
 
-### Sharp in Node bundles
-
-> Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
-
-### Workflow job timeouts
-
-> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text.
-
-### Bounded package installation
-
-> Guards: `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`, weaker than their names: read text, not retries; `scripts/waitron-sh.test.mjs` runs waitron.sh's retries under stubs.
-
-### Bounded pnpm setup
-
-> Guards: `scripts/ci-workflow.test.mjs` (weaker than its name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
-
 ### Bounded Node setup
 
 > Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
-
-### Bounded checkout
-
-> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, never runs a workflow.
-
-### Bounded artifact downloads
-
-> Guard: the artifact-download cases in `scripts/ci-workflow.test.mjs`, weaker than their name: read workflow text, never run it.
-
-### Bounded artifact uploads
-
-> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, never runs an upload.
 
 ### TypeScript compiler versions
 
@@ -6082,11 +6050,3 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 ### Name-filtered test runs
 
 > A focused pass proves only those cases; CI supplies package-wide coverage.
-
-### Browser-mode test concurrency
-
-> Chromium launch depends on seat permissions.
-
-### CI scratch directories
-
-> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, not the tests.

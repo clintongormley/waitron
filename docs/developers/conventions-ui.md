@@ -2726,18 +2726,6 @@ guard and pointer.
 
 These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
 
-### Native form fields
-
-> Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals.
-
-### Address lookup placement
-
-> Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not placement or provider.
-
-### Help tooltips
-
-> Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text
-
 ### Dashboard draft scopes
 
 > **A new dashboard dialog or page holding staged input takes a draft scope from `draftScopeFor` (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`.** Nothing checks it across screens.
@@ -2745,14 +2733,6 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 ### Field refusals
 
 > `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE.
-
-### Pinned row menu columns
-
-> Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that literal key; a data column must use another key.
-
-### Brand-coloured text
-
-> Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads `color:` declarations as text, in tracked files only; what it misses is in [design-system.md](../developers/design-system.md).
 
 ### Print-agent confinement
 
