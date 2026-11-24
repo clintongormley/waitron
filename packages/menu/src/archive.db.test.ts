@@ -49,7 +49,7 @@ import {
 import { eq } from "drizzle-orm";
 import { listProductVariants, setMenuVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
-import { moveProductItems, deleteProductItems } from "./product-items.js";
+import { moveProductItems, deleteProductItems, setProductAvailability } from "./product-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
 import {
@@ -533,6 +533,16 @@ describe("archiving", () => {
       archived(f.large),
     );
     expect(await row(f.large)).toEqual(before);
+  });
+  it("refuses a batch naming an active variant whose parent was deleted", async () => {
+    const f = await menusFixture(fx.db);
+    await switchOff(f.lemonade);
+    const before = [await row(f.burger), await row(f.large)];
+    expect(before[1]).toMatchObject({ active: true, available: true });
+    await expect(
+      app((tx) => setProductAvailability(tx, [f.burger, f.large], false)),
+    ).rejects.toMatchObject(archived(f.large));
+    expect([await row(f.burger), await row(f.large)]).toEqual(before);
   });
   it("refuses editor saves of an archived product", async () => {
     const f = await menusFixture(fx.db);

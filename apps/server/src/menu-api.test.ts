@@ -1835,6 +1835,13 @@ describe("dashboard product availability", () => {
     expect(await response.json()).toEqual({
       error: { code: "product.archived", params: { productId: archived } },
     });
+    const unknown = await send(app, "PUT", path, {
+      body: { productIds: [archived, productId], available: false },
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: { code: "product.not_found", params: { productId } },
+    });
     const stored = await send(app, "GET", "/management-api/products");
     expect(stored.headers.get("x-waitron-menu-revision")).toBe(
       archive.headers.get("x-waitron-menu-revision"),
