@@ -1,55 +1,56 @@
 # Split the Server order-group file
 
-Developers can find group operations by job and carry an open branch across the move. This is the
-`order-groups.ts` slice of Lane H's 24 November file split. Land the split in one PR using
-`node scripts/move-ts-declarations.mjs scripts/order-groups-split.json`. Keep the work in Server.
-Move functions whole, with their names, signatures, bodies and comments intact. Point callers at
-the definitions and delete the old product file. Keep route, storage and fiscal behaviour as it is.
+Developers can find group operations by job and use the move on an open branch. This is the
+`order-groups.ts` slice of Lane H's 24 November queue. Land it in one PR. Use Server's existing
+`node scripts/move-ts-declarations.mjs scripts/order-groups-split.json` workflow. Move functions
+whole, keeping their names, signatures, bodies and comments. Point callers at the definitions and
+delete the old product file. Keep route, storage and fiscal behaviour as it is.
 
 | Move order under `apps/server/src/` | What goes there |
 | --- | --- |
-| `order-group-types.ts` | `GroupRelease`, `GroupLine`, `SubmitGroupsInput`, `PartyCommandArgs`, `PartyFireArgs`, `Firer`, `OrderGroup`, `SubmittedGroups`. |
-| `order-group-records.ts` | `startGroup`, `startGroupAfter`, `nextFireKind`, `removeEmptiedHeldGroups`, `requireOperator`, `requireHeldGroup`, `requireGroup`, `lastPosition`, `nextGroupNumber`, `readGroupNumberLabels`, `groupNumberIdentity`, `currentRevision`, `recordGroupEvent`. |
-| `order-group-reads.ts` | Group list, current orders and their types, `onShownBill`, counts, and reminder reads and calculations. |
+| `order-group-records.ts` | `GroupRelease`, `PartyCommandArgs`, `PartyFireArgs`, `Firer`, group creation and guards, number and revision lookups, emptied groups and group events. |
+| `order-group-reads.ts` | `OrderGroup`, group list, current orders and their types, `onShownBill`, counts and reminder reads and calculations. |
 | `order-group-reminders.ts` | Snooze and unsnooze, their maximum, and `requireWaitingGroup`. |
 | `order-group-hold-paper.ts` | `printHoldTickets` through `correctJoin`, including their inputs and reads. |
-| `order-group-submission.ts` | `submitGroups`, `PlaceGroupsInput`, `placeGroups`. |
-| `order-group-release.ts` | `fireGroup`, `fireHeldLine`, `judgeHeldSetMenuDishes`, `activeGroupLines`, `releaseHeldWorkOf`, `releaseGroup`. |
+| `order-group-submission.ts` | `GroupLine`, submit and place inputs and results, `submitGroups` and `placeGroups`. |
+| `order-group-release.ts` | Firing groups and lines, held set-menu checks and releasing held work. |
 | `order-group-readiness.ts` | `bumpGroupReady`, `passStep`, `groupLinesOf`. |
 | `order-group-edits.ts` | `reorderHeldGroups`, `moveLinesToGroup`, `splitHeldLineIntoUnits`, `isWholeLine`. |
-| `order-group-transfer.ts` | Moving and copying groups between parties, the waiting-dish paper lookup, and grouping arriving dishes. |
+| `order-group-transfer.ts` | Moving and copying groups between parties, the waiting-dish paper lookup and grouping arriving dishes. |
 
-- Use the script's byte comparison for bodies and test blocks and its signature and comment check.
-  Correct generated imports if needed, and keep `./errors.js` where an entry point needs the
-  registered refusals. Check that no old Server module import survives and that the ten pieces
-  have no import cycle among themselves, including type imports. Remove the old entry from
-  `scripts/product-file-size-limits.json` and repoint live guide and backlog references. Update
-  file-name guards only for the operations they already track.
-- Move the 258 cases in `order-groups.test.ts` as whole titled blocks. Keep shared venue setup,
-  database bindings and common helpers in `testing/order-groups.test-support.ts` with Vitest
-  file isolation and one `useVenueDb` per suite instance. Group the cases under
-  `order-groups.submission.test.ts` (destinations and courses),
-  `order-groups.release.test.ts` (firing, kitchen tickets and device release),
-  `order-groups.edits.test.ts` (holds, stale and retried edits, payment holds, quantities and modifiers),
-  `order-groups.transfer.test.ts` (party and bill moves, split and merge),
-  `order-groups.reads.test.ts` (summaries, kitchen and pass views),
-  `order-groups.readiness.test.ts` (ready and pass commands), and
-  `order-groups.hold-paper.test.ts` (advance HOLD printing). Keep the helper groups with their use
-  where possible, and preserve both the existing fire-now-course and request-kind suites.
-- Compare the discovered case names and repeat counts before and after with
-  `pnpm --filter @waitron/server exec vitest list src/order-groups --json=<file>`. Run those suites,
-  Server `till-api.groups.test.ts`, `till-api.sell-published.test.ts`, `move-merge.test.ts`,
-  `pass-release.test.ts`, `bill-editing.station-move.test.ts`, and Till `till-app-menu-refresh.test.ts`.
-  Run the unchanged fiscal `write-path.e2e.test.ts` and `inmutabilidad.test.ts`, Server typecheck,
-  and the applicable root guards. Remove the retired duration entry and record measured durations
-  for the replacement suites in `apps/server/test-durations.json`. Require the current PR head's
-  selected CI suites before landing.
-- Rehearse the same map in a disposable copy of the open give-back branch, PR #4257 at
-  `2ce0ee32c2330ce7292d5cb5fafbbe4bbd0309c1`, which edits the importing `till-api.ts`.
-  Use the working-order plan's pair of disposable base and branch trees with this map. Confirm the
-  two give-back route changes survive the move and Server typecheck passes. If the PR lands first,
-  use an open branch that still changes an importer. List the current overlaps in the split PR.
+1. Before running the map, remove the star re-export in `testing/group-composition-fixture.ts`.
+   Import unwrapped operations and types directly in its five suites. Keep the fixture wrappers for
+   submit, place, grouped rounds, move and split so their editor observations and operator setup stay.
+   Remove the explicit Vitest import from `order-groups.test.ts`. The Server project provides globals.
+2. Move its 258 cases as whole titled blocks into the matching `order-group-*.test.ts` files under
+   `src/`. Submission gets destinations and starter courses. Release gets firing, the two orders of
+   events and kitchen tickets. Edits gets held edits, stale and retried commands, payment holds, line
+   quantities, extras and A884. Transfer gets permanent numbers, bill and party moves, the first
+   event's bill and credit. Reads gets summaries and kitchen and pass views. Readiness gets the ready
+   and pass commands. Hold paper gets advance HOLD printing. Put every helper used by more than one
+   suite in `testing/order-groups.test-support.ts`, including the venue setup and live database binding.
+   No suite imports another suite. Retain Vitest file isolation and the two existing smaller suites.
+3. Use the tool's byte comparison for bodies and test blocks and its signature and comment check.
+   Repoint the namespace spies in `order-drafts.db.test.ts` and `waiting-course-copy.test.ts` at the
+   moved functions. Keep `./errors.js` at direct refusal sites in records, reads, reminders,
+   submission, release and edits. Check that all nine files fit the size rule, have no import cycle
+   among themselves including types, and leave no old Server module import. Remove the retired cap
+   and repoint live backlog, guide and source references. Change file-name guards only where they
+   already cover a moved operation.
+4. Compare case names and repeat counts with `pnpm --filter @waitron/server exec vitest list src/order-group --json=<file>`.
+   Run those suites and `till-api.groups`, `till-api.sell-published`, `move-merge`, `pass-release`,
+   `bill-editing.station-move`, `current-orders`, `served`, `print-problems`, `split-off-extras.groups`,
+   `order-drafts.db` and `waiting-course-copy`. Run Till's `till-app-menu-refresh` and the unchanged fiscal
+   `write-path.e2e` and `inmutabilidad` suites, Server typecheck and affected root guards. Replace the
+   old entry in `apps/server/test-durations.json` with measured times. Require all Server test shards
+   on the current PR head.
+5. The same tool kept edited declarations byte for byte on real PR #4238 in the working-order trial.
+   The open-branch scan found no edits to these declarations. Rehearse the order-group map once on
+   a disposable copy of PR #4258 at `fb5199ce336a80c67b28d8b2fb6df5bd6123b5b5`, using its own fork.
+   Check that its pricing edits in `working-order-line-edits.ts` and `set-menu-period.test.ts` survive
+   and that Server typecheck passes. Recheck open branches before opening the split PR and name any
+   affected ones. If a branch starts changing a moved declaration, use that branch for the rehearsal.
 
-Expect about 2,900 product and 6,300 test or fixture lines to move, plus up to 350 import lines and
-150 map and duration lines. No new behaviour tests are needed for a move with the original
-assertions intact. The till mount and bill-payments split each have their own plan.
+Expect about 2,900 product and 6,300 test or fixture lines to move, plus 700–1,000 changed import
+lines and around 150 map and duration lines. The existing tests retain their assertions. The till
+mount and bill-payments split each have their own plan.
