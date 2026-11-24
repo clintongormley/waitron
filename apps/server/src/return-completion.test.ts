@@ -12,7 +12,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { returnDigest } from "./return-records.js";
 import {
   activationsBySource,
@@ -49,6 +49,7 @@ const activate = (id: string, source: string, activatedAt = "2026-11-12T10:00:00
   });
 beforeEach(async () => {
   await seedVenue(suite.db);
+  await seedPerson(suite.db, { id: "person" });
   sourceNodeId = await seedNode(suite.db);
   destinationNodeId = await seedNode(suite.db);
   await activate(operationId, sourceNodeId);

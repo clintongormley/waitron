@@ -4,7 +4,7 @@ import { triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { invoicePdfDownloads } from "./invoice-pdf-downloads.js";
@@ -46,6 +46,14 @@ describe("invoice PDF download record", () => {
         fiscalState: "recorded",
       })
       .returning({ id: sales.id });
+
+    const missingPerson = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx.insert(invoicePdfDownloads).values({ saleId: sale!.id, personId: PERSON }),
+      ),
+    );
+    expect(FOREIGN_KEY_VIOLATION).toContain((missingPerson as { errcode: number }).errcode);
+    await seedPerson(db, { id: PERSON });
 
     const missing = await captureError(() =>
       withTransaction(db, (tx) =>

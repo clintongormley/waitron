@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { restrictRefused } from "../constraint-target.js";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
@@ -7,6 +8,7 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { persons } from "./identity/persons.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { randomUUID } from "node:crypto";
@@ -31,6 +33,8 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
       name: "Loc A",
       invoiceLocales: ["es"],
     });
+    await seedPerson(db, { id: PERSON });
+    await seedPerson(db, { id: AUTHORIZER, displayName: "Authorizer" });
     await db.insert(printers).values({
       id: PRINTER_A,
       name: "Impresora A",
@@ -91,6 +95,33 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     );
     expect(row!.authorizedBy).toBe(AUTHORIZER);
     expect(row!.viaOverride).toBe(true);
+  });
+
+  it.each(["personId", "authorizedBy"] as const)("refuses an unknown %s", async (field) => {
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(drawerOpens).values({
+          deviceId: deviceA,
+          reason: "manual",
+          personId: PERSON,
+          authorizedBy: AUTHORIZER,
+          viaOverride: true,
+          [field]: randomUUID(),
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("keeps the person referenced by an open", async () => {
+    const personId = await seedPerson(suite.db, { displayName: "Drawer operator" });
+    await inTx((tx) =>
+      tx.insert(drawerOpens).values({ deviceId: deviceA, personId, reason: "manual" }),
+    );
+    const error = await captureError(() =>
+      inTx((tx) => tx.delete(persons).where(eq(persons.id, personId))),
+    );
+    expect(restrictRefused(error)).toBe(true);
   });
 
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason", async () => {

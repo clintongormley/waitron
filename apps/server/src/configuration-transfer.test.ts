@@ -7614,6 +7614,7 @@ describe("a deleted printer in a configuration transfer", () => {
         status: "done",
       },
     ]);
+    await seedPerson(suite.db, { id: "admin", displayName: "Drawer operator" });
     await suite.db
       .insert(drawerOpens)
       .values({ printerId: ids.old, personId: "admin", reason: "calibration" });

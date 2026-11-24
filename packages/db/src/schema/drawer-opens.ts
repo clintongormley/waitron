@@ -1,7 +1,8 @@
-import { check } from "drizzle-orm/sqlite-core";
+import { check, foreignKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
+import { persons } from "./identity/persons.js";
 import { devices } from "./devices.js";
 import { sales } from "./sales.js";
 import { printers } from "./printers.js";
@@ -15,8 +16,6 @@ import { refunds } from "./refunds.js";
  *
  * No trigger refuses an update or a delete: the table is declared with `classify()`, not
  * `appendOnly()`, in `../classification.ts`.
- *
- * `person_id` and `authorized_by` are plain ids: no key yet.
  */
 export const drawerOpens = table(
   "drawer_opens",
@@ -45,6 +44,16 @@ export const drawerOpens = table(
     viaOverride: flag("via_override").notNull().default(false),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "drawer_opens_person_id_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.authorizedBy],
+      foreignColumns: [persons.id],
+      name: "drawer_opens_authorized_by_fk",
+    }).onDelete("restrict"),
     check("drawer_opens_reason_ck", enumCheck(t.reason)),
     check(
       "drawer_opens_target_ck",

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -74,6 +74,10 @@ async function activation(
   destination: NodeId,
   scenario: "controlled" | "emergency" = "controlled",
 ): Promise<void> {
+  const personId = await seedPerson(suite.db, {
+    id: "handover-operator",
+    displayName: "Handover operator",
+  });
   await withTransaction(suite.db, (tx) =>
     insertHandoverActivationTx(tx, {
       operationId: randomUUID(),
@@ -81,7 +85,7 @@ async function activation(
       sourceNodeId: source,
       destinationNodeId: destination,
       evidence: {} as never,
-      personId: randomUUID(),
+      personId,
       activatedAt: new Date().toISOString(),
     }),
   );

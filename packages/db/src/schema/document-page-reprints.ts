@@ -1,5 +1,6 @@
-import { index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, newId, nowIso, table, tsString } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { printJobs } from "./print-jobs.js";
 import { sales } from "./sales.js";
 
@@ -13,11 +14,15 @@ export const documentPageReprints = table(
     printJobId: id("print_job_id")
       .notNull()
       .references(() => printJobs.id, { onDelete: "restrict" }),
-    // Identity owns people; removal must not erase the requesting operator's attribution.
     personId: id("person_id").notNull(),
     requestedAt: tsString("requested_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "document_page_reprints_person_id_fk",
+    }).onDelete("restrict"),
     uniqueIndex("document_page_reprints_job_uq").on(t.printJobId),
     index("document_page_reprints_sale_idx").on(t.saleId),
   ],

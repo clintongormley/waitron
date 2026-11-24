@@ -467,7 +467,7 @@ async function activatedTakeover(options: {
       signerNodeId: receiverId,
       signature: "signature",
     },
-    personId: "person",
+    personId: await seedPerson(current.db, { id: "person", displayName: "Handover operator" }),
     activatedAt: "2026-07-20T10:00:00.000Z",
   });
   const app = new Hono();
@@ -842,7 +842,7 @@ it("returns an earlier box's records the main box lacks before the old box's own
       signerNodeId: receiverId,
       signature: "signature",
     },
-    personId: "person",
+    personId: await seedPerson(current.db, { id: "person", displayName: "Handover operator" }),
     activatedAt: "2026-07-20T10:00:00.000Z",
   });
   const app = new Hono();

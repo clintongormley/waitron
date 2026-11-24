@@ -14,6 +14,7 @@ import {
   tsString,
 } from "./columns.js";
 import { devices } from "./devices.js";
+import { persons } from "./identity/persons.js";
 import { nodes } from "./nodes.js";
 import { originChecks, saleSourceColumn } from "./origin.js";
 import { sales } from "./sales.js";
@@ -31,7 +32,6 @@ export const invoiceCorrections = table(
     // Null when the correction names no lines.
     lineIds: labelList("line_ids"),
     reason: label("reason").notNull(),
-    // Plain ids, as on bill refunds: no key yet.
     requestedBy: id("requested_by").notNull(),
     authorizedBy: id("authorized_by").notNull(),
     viaOverride: flag("via_override").notNull(),
@@ -42,10 +42,24 @@ export const invoiceCorrections = table(
     correctiveSaleId: id("corrective_sale_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
-    // Plain ids, as on bill refunds: no key yet.
     endedBy: id("ended_by"),
   },
   (t) => [
+    foreignKey({
+      columns: [t.requestedBy],
+      foreignColumns: [persons.id],
+      name: "invoice_corrections_requested_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.authorizedBy],
+      foreignColumns: [persons.id],
+      name: "invoice_corrections_authorized_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.endedBy],
+      foreignColumns: [persons.id],
+      name: "invoice_corrections_ended_by_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.originalSaleId],
       foreignColumns: [sales.id],

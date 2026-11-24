@@ -1,5 +1,6 @@
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, json, table, tsString } from "../columns.js";
+import { persons } from "../identity/persons.js";
 import { nodes } from "../nodes.js";
 import type { SignedHandoverEnvelope } from "@waitron/shared";
 
@@ -19,7 +20,6 @@ export const handoverActivations = table(
     destinationNodeId: id("destination_node_id").notNull(),
     /** The signed relinquishment, or the signed declaration. */
     evidence: json<SignedHandoverEnvelope<unknown>>("evidence").notNull(),
-    /** No key yet. */
     personId: id("person_id").notNull(),
     activatedAt: tsString("activated_at").notNull(),
   },
@@ -34,6 +34,11 @@ export const handoverActivations = table(
       foreignColumns: [nodes.id],
       name: "handover_activations_destination_node_fk",
     }),
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "handover_activations_person_id_fk",
+    }).onDelete("restrict"),
     index("handover_activations_destination_idx").on(t.destinationNodeId),
     check("handover_activations_scenario_ck", enumCheck(t.scenario)),
   ],

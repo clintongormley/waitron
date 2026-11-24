@@ -20,7 +20,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson } from "@waitron/db/testing/seed.js";
 import {
   loadKeyRing,
   setPairLinkStateTx,
@@ -438,6 +438,7 @@ async function returnFrom(
   const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
   const inventory = returnDigest(digests);
   await withTransaction(db, async (tx) => {
+    await seedPerson(tx, { id: "person", displayName: "Handover operator" });
     await tx.insert(handoverActivations).values({
       operationId,
       sourceNodeId,

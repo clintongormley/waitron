@@ -22,7 +22,7 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -95,6 +95,7 @@ beforeEach(async () => {
   received = [];
   accounted = true;
   await seedVenue(suite.db, { name: "Return venue" });
+  await seedPerson(suite.db, { id: "person", displayName: "Handover operator" });
   await stampDeployment(suite.db, "preproduction");
   source = await seedNode(suite.db);
   receiver = await seedNode(suite.db);

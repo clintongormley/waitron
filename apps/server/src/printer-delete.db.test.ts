@@ -28,6 +28,7 @@ import {
   seedDevice,
   seedDeviceProfiles,
   seedNode,
+  seedPerson,
   seedVenue,
   seedWorkingOrder,
   attachStationPrinterForTest,
@@ -373,6 +374,8 @@ async function seedVenueWithPrinters() {
   const drawer = await job(P, { kind: "drawer" });
   const qJob = await job(Q, { saleId: sales[3], receiptCopy: false });
   const dJob = await job(D);
+  await seedPerson(suite.db, { id: "staff-one", displayName: "Staff operator" });
+  await seedPerson(suite.db, { id: "manager-one", displayName: "Manager" });
 
   const delivery = (saleId: string, printJobId: string, status: "queued" | "sending") => ({
     saleId,

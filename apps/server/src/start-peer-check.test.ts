@@ -47,6 +47,7 @@ import {
   type BoxServer,
 } from "./testing/box-authority.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 const migrations = migrationOptionsFor(manifestSets(), null);
@@ -321,6 +322,10 @@ describe("a destination whose activation committed and whose node.db record was 
     } = {},
   ): Promise<void> {
     const operationId = row.operationId ?? OP;
+    const personId = await seedPerson(suite.db, {
+      id: "handover-operator",
+      displayName: "Handover operator",
+    });
     await withTransaction(suite.db, (tx) =>
       insertHandoverActivationTx(tx, {
         operationId,
@@ -328,7 +333,7 @@ describe("a destination whose activation committed and whose node.db record was 
         sourceNodeId: row.sourceNodeId ?? PEER.nodeId,
         destinationNodeId: row.destinationNodeId ?? nodeId,
         evidence: signEnvelope("status", {} as never, PEER),
-        personId: operationId,
+        personId,
         activatedAt: "2026-10-16T12:40:00.000Z",
       }),
     );

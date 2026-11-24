@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0594cccc-f90e-4ad9-8671-3a15939dbba9",
+  "id": "591df3a4-9cdd-4d56-90fd-98c4c19e3e4d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6345,6 +6345,19 @@
         }
       },
       "foreignKeys": {
+        "receipt_reprints_person_id_fk": {
+          "name": "receipt_reprints_person_id_fk",
+          "tableFrom": "receipt_reprints",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "receipt_reprints_sale_fk": {
           "name": "receipt_reprints_sale_fk",
           "tableFrom": "receipt_reprints",
@@ -6418,6 +6431,19 @@
         }
       },
       "foreignKeys": {
+        "invoice_pdf_downloads_person_id_fk": {
+          "name": "invoice_pdf_downloads_person_id_fk",
+          "tableFrom": "invoice_pdf_downloads",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "invoice_pdf_downloads_sale_fk": {
           "name": "invoice_pdf_downloads_sale_fk",
           "tableFrom": "invoice_pdf_downloads",
@@ -6585,6 +6611,45 @@
         }
       },
       "foreignKeys": {
+        "invoice_corrections_requested_by_fk": {
+          "name": "invoice_corrections_requested_by_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_corrections_authorized_by_fk": {
+          "name": "invoice_corrections_authorized_by_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_corrections_ended_by_fk": {
+          "name": "invoice_corrections_ended_by_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "ended_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "invoice_corrections_original_sale_fk": {
           "name": "invoice_corrections_original_sale_fk",
           "tableFrom": "invoice_corrections",
@@ -7465,6 +7530,32 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "drawer_opens_person_id_fk": {
+          "name": "drawer_opens_person_id_fk",
+          "tableFrom": "drawer_opens",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_opens_authorized_by_fk": {
+          "name": "drawer_opens_authorized_by_fk",
+          "tableFrom": "drawer_opens",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "authorized_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -12066,6 +12157,19 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "handover_activations_person_id_fk": {
+          "name": "handover_activations_person_id_fk",
+          "tableFrom": "handover_activations",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -18632,6 +18736,19 @@
           "tableTo": "print_jobs",
           "columnsFrom": [
             "print_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "document_page_reprints_person_id_fk": {
+          "name": "document_page_reprints_person_id_fk",
+          "tableFrom": "document_page_reprints",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
           ],
           "columnsTo": [
             "id"

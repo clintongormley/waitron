@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
-import { seedDevice, seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import type { NodeStanding } from "@waitron/membership";
@@ -99,6 +99,7 @@ function observeStart(options: StartCase): () => Observed {
   beforeAll(async () => {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
+    const personId = await seedPerson(suite.db, { displayName: "Handover operator" });
     const box = venue.cfg.nodeId;
     const [first, second, bystander] = [
       await seedNode(suite.db),
@@ -126,7 +127,7 @@ function observeStart(options: StartCase): () => Observed {
           sourceNodeId: owners[source],
           destinationNodeId: owners[destination],
           evidence: {} as never,
-          personId: randomUUID(),
+          personId,
           activatedAt: new Date().toISOString(),
         });
       }

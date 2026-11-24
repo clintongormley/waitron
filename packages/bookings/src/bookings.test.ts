@@ -45,7 +45,6 @@ beforeAll(() => {
 });
 
 interface Venue {
-  /** A fixture person id for `created_by` (no FK — the drawer_opens.person_id seam). */
   createdBy: string;
 }
 

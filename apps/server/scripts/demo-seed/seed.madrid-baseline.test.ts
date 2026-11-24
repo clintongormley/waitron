@@ -1758,6 +1758,16 @@ for (const locale of ["en", "es"] as const) {
         on_delete: "RESTRICT",
         match: "NONE",
       });
+      const drawer = expected[phase].tables.drawer_opens!;
+      drawer.foreignKeys = [
+        personKey("authorized_by", 0),
+        personKey("person_id", 1),
+        ...drawer.foreignKeys.map((key) => ({ ...key, id: key.id + 2 })),
+      ];
+      for (const name of ["invoice_pdf_downloads", "receipt_reprints"]) {
+        const table = expected[phase].tables[name]!;
+        table.foreignKeys.push(personKey("person_id", table.foreignKeys.length));
+      }
       const incidentTable = expected[phase].tables.incidents!;
       incidentTable.foreignKeys = [
         personKey("acknowledged_by", 0),

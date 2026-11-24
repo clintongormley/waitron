@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { afterEach, expect, it, vi } from "vitest";
 import forge from "node-forge";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -54,6 +55,7 @@ const mismatchedPfx = Buffer.from(
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const key = Buffer.alloc(32, 23).toString("base64");
 const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: key });
+const HANDOVER_PERSON_ID = "10000000-0000-4000-8000-000000000014";
 const createdAt = "2026-10-20T08:00:00.000Z";
 const oldAt = "2026-09-01T08:00:00.000Z";
 const secretsEnv = Buffer.from(`WAITRON_CREDENTIALS_KEY=${key}\n`);
@@ -74,6 +76,7 @@ function payload(cert = candidate) {
 }
 async function capture(cert: Candidate | null = candidate) {
   await seedTaxpayers(suite.db);
+  await seedPerson(suite.db, { id: HANDOVER_PERSON_ID });
   if (cert !== null) {
     await sealAeatSecret(
       { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(oldAt) },
@@ -239,8 +242,8 @@ function tookOver(db: DatabaseSync, source: string, destination: string) {
   db.prepare(
     `insert into handover_activations
       (operation_id,scenario,source_node_id,destination_node_id,evidence,person_id,activated_at)
-      values (?, 'controlled', ?, ?, '{}', '10000000-0000-4000-8000-000000000014', ?)`,
-  ).run(`${source}-${destination}`, source, destination, createdAt);
+      values (?, 'controlled', ?, ?, '{}', ?, ?)`,
+  ).run(`${source}-${destination}`, source, destination, HANDOVER_PERSON_ID, createdAt);
 }
 it("accepts the install of the box the source took over from", async () => {
   await capture();

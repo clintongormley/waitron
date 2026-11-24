@@ -5,7 +5,7 @@ import type { NodeId } from "@waitron/shared";
 import { readHistoryNodes } from "./history-nodes.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { handoverActivations } from "./schema/index.js";
-import { seedNode, seedVenue } from "./testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 describe("readHistoryNodes", () => {
@@ -14,11 +14,13 @@ describe("readHistoryNodes", () => {
   let m1: NodeId;
   let m2: NodeId;
   let m3: NodeId;
+  let personId: string;
 
   beforeEach(async () => {
     await suite.db.execute(sql`delete from handover_activations`);
     await suite.db.execute(sql`delete from nodes`);
     await seedVenue(suite.db);
+    personId = await seedPerson(suite.db);
     m1 = await seedNode(suite.db);
     m2 = await seedNode(suite.db);
     m3 = await seedNode(suite.db);
@@ -31,7 +33,7 @@ describe("readHistoryNodes", () => {
       sourceNodeId: source,
       destinationNodeId: destination,
       evidence: {} as never,
-      personId: randomUUID(),
+      personId,
       activatedAt,
     });
   }

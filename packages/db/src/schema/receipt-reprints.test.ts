@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { receiptReprints } from "./receipt-reprints.js";
@@ -55,6 +55,16 @@ describe("receipt reprint record", () => {
         fiscalState: "recorded",
       })
       .returning({ id: sales.id });
+
+    const missingPerson = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx
+          .insert(receiptReprints)
+          .values({ saleId: sale!.id, printJobId: job!.id, personId: PERSON }),
+      ),
+    );
+    expect(FOREIGN_KEY_VIOLATION).toContain((missingPerson as { errcode: number }).errcode);
+    await seedPerson(db, { id: PERSON });
 
     const missing = await captureError(() =>
       withTransaction(db, (tx) =>

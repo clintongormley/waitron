@@ -21,6 +21,7 @@ let source: string;
 let destination: string;
 let cookie: string;
 let staffCookie: string;
+let supervisorId: string;
 let app: Hono;
 const path = "/management-api/reports/handover-intervals";
 const declaredAtMs = Date.parse("2026-11-10T10:00:00Z");
@@ -45,8 +46,10 @@ beforeEach(async () => {
         personId: person!.id,
       });
       const value = `${MANAGEMENT_COOKIE}=${session.token}`;
-      if (role === "supervisor") cookie = value;
-      else staffCookie = value;
+      if (role === "supervisor") {
+        cookie = value;
+        supervisorId = person!.id;
+      } else staffCookie = value;
     }
   });
   app = new Hono();
@@ -78,7 +81,7 @@ async function activation(
     reason: "The old box failed during lunch",
     lastCopy: { source: "mirror-copy", identifier: "b".repeat(64), lastChangeAtMs },
     provider: null,
-    actor: { personId: randomUUID(), method: "password" },
+    actor: { personId: supervisorId, method: "password" },
     declaredAtMs,
     replaces: null,
   };
