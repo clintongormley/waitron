@@ -1,6 +1,6 @@
 import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -92,6 +92,7 @@ async function list(
 }
 
 const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
 
 describe("facts this list relies on", () => {
   it("an open bill abandoned from the till keeps its lines", async () => {
@@ -149,6 +150,35 @@ describe("each status, from the product's own write paths", () => {
       tables: [expect.stringMatching(/^Mesa /)],
       counter: false,
     });
+  });
+
+  it("shows portions with identical recorded wording together even when the option lists differ", async () => {
+    const id = await parked(venue, "Small beer", "Small beer");
+    await inTx(venue, async (tx) => {
+      for (const lineNo of [1, 2]) {
+        await tx
+          .update(workingOrderLines)
+          .set({
+            optionSnapshots: [
+              {
+                listId: randomUUID(),
+                listName: { en: "Glass" },
+                listCustomerName: null,
+                listKitchenName: null,
+                labelName: { en: "Tall" },
+                labelCustomerName: null,
+                labelKitchenName: null,
+              },
+            ],
+          })
+          .where(
+            and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, lineNo)),
+          );
+      }
+    });
+
+    const detail = await detailOf(id);
+    expect(detail.lines.map((line) => Number(line.quantity))).toEqual([2]);
   });
 
   it("reads an explicitly issued unpaid bill as Waiting for payment, with its invoice", async () => {
@@ -618,7 +648,6 @@ describe("dates and pages", () => {
 
 describe("rows written within one millisecond, read in the order they were written", () => {
   const AT = "2026-09-26T09:59:00.000Z";
-  const detailOf = (id: string) => inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
   const saleOf = async (billId: string) => {
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),

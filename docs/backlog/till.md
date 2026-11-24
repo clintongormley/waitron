@@ -1218,7 +1218,9 @@ the remaining till unit and tab edges joined on 2026-11-12. A470 and A1107 (the 
   in A1125's review (the probe was not kept); left open by A1125, #2238.
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
-- **Let staff answer a new required list on a withdrawn dish.** A recalled dish absent from the live menu can require an answer at save that the till has no list to show.
+## Options on a withdrawn dish
+
+If the server requires an options list on a recalled dish absent from the live menu, the till cannot offer that list and staff cannot save the order with the dish on it.
 
 ## Decisions and deliberate limits
 

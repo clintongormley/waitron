@@ -287,14 +287,9 @@ it moves to another list offering the same product: it is a new pick" and "price
 when two lists offering the same product exchange their counts: each is a new pick", which assert
 the BILL.
 
-An OPTIONS list RENAMED between the two sends, when the request still names that list and label,
-does make the two sides differ, so the renamed answer is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
-line is touched. That is a decision, not an omission: an options answer freezes six names and no
-ids, so the wording is the only evidence the line carries about what was chosen, and a rename cannot
-be told from a different answer. Giving the comparison an id to use would mean putting one on the
-line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
-list was renamed between the two sends, freezing the new name"
-(`apps/server/src/working-order.test.ts`). A line already sent (it or one of its extras sent, or
+If a save re-sends a list and label after a rename, an unsent dish takes the new wording and
+keeps its stored price. See "keeps the price of a held line whose options list was renamed between
+the two sends, freezing the new name" in `apps/server/src/working-order.test.ts`. A line already sent (it or one of its extras sent, or
 either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
 `updateHeldOrder` passes `keepRecordedAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names
@@ -314,7 +309,8 @@ product's ids, so renaming the list — or the product — disturbs nothing and 
 
 On a whole-order save, `editUnsentLineOptions` keeps a recorded answer when its list was
 removed or its staff wording no longer matches an available label. An explicit choice of an
-available label replaces the answer to that list. The server requires an answer for every new
+available label replaces the answer to that list. An explicit answer to a new list with the
+same staff name replaces the removed list's answer. The server requires an answer for every new
 active list and for every list whose recorded answer still matches. See "refuses a new Milk
 list even after the Cooking list is deleted" in `apps/server/src/working-order.test.ts`.
 

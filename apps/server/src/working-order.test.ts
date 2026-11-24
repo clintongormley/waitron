@@ -2880,7 +2880,7 @@ describe("updateHeldOrder", () => {
             workingOrderLineId: dish!.id,
             menuItemId: offers.offerFor(coffeeId),
             quantity: "1",
-            // The till matches a stored answer by staff name, so it has none to send once that is renamed.
+            // The till omits a recorded answer when its staff wording no longer matches.
             ...(column === "name" ? {} : { options: seeded.options }),
           },
           {
@@ -3025,7 +3025,7 @@ describe("updateHeldOrder", () => {
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       revision,
       operatorId: OPERATOR,
-      // The till matches a stored answer by staff name, so it has none to send once that is renamed.
+      // The till omits a recorded answer when its staff wording no longer matches.
       lines: [
         { workingOrderLineId: dish.id, menuItemId: offers.offerFor(coffeeId), quantity: "1" },
       ],
@@ -10062,6 +10062,31 @@ describe("what a held-order edit preserves and what it replaces", () => {
       const savedRevision = await revisionOf(parked.id);
       await parked.save(answers);
       expect(await revisionOf(parked.id)).toBe(savedRevision);
+    });
+
+    it("saves one Cooking answer when staff answer a re-created Cooking list", async () => {
+      const parked = await parkAnswered();
+      const cooking = await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.cooking.listId);
+        const list = await addOptionList(tx, parked.coffeeId, "Cooking", ["Well done"]);
+        await republishMenus(tx);
+        return list;
+      });
+      await parked.save([
+        parked.answers[1]!,
+        { listId: cooking.listId, labelId: cooking.labelIds[0]! },
+      ]);
+
+      const [saved] = await parked.lines();
+      expect(
+        saved!.optionSnapshots.map(({ listId, labelName }) => [
+          listId,
+          labelName[CONTENT_LANGUAGE],
+        ]),
+      ).toEqual([
+        [parked.answers[1]!.listId, "Pepper staff"],
+        [cooking.listId, "Well done staff"],
+      ]);
     });
 
     it("replaces the answer when staff pick a different one", async () => {

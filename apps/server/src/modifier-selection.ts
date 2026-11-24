@@ -285,7 +285,9 @@ export function editUnsentLineOptions(
   stored: readonly OptionSnapshot[],
   defaultLanguage: string,
 ): OptionSnapshot[] | null {
-  const activeIds = new Set(offered.filter((list) => list.active).map((list) => list.id));
+  const activeIds = new Set<OptionSnapshot["listId"]>(
+    offered.filter((list) => list.active).map((list) => list.id),
+  );
   const heldByList = new Map(stored.map((held) => [held.listId, held]));
   const entries = (Array.isArray(requested) ? requested : []) as {
     listId?: unknown;
@@ -323,7 +325,7 @@ export function editUnsentLineOptions(
     };
   });
 
-  const kept = stored.filter((held) => !activeIds.has(held.listId!) || retained.has(held.listId!));
+  const kept = stored.filter((held) => !activeIds.has(held.listId) || retained.has(held.listId!));
   const replaced = stored.filter((held) => !kept.includes(held));
   const edited = editOptionAnswers(
     answerFreezers(listsToCheck, requested, retained),
@@ -345,7 +347,18 @@ export function editUnsentLineOptions(
     const editedByList = new Map(edited.map((answer) => [answer.listId, answer]));
     return stored.map((answer) => editedByList.get(answer.listId) ?? answer);
   }
-  return [...edited, ...kept];
+  // An explicit answer to a re-created list supersedes the removed list's instruction.
+  const newListNames = new Set(
+    edited
+      .filter((answer) => !heldByList.has(answer.listId))
+      .map((answer) => staffName(answer.listName)),
+  );
+  return [
+    ...edited,
+    ...kept.filter(
+      (answer) => activeIds.has(answer.listId) || !newListNames.has(staffName(answer.listName)),
+    ),
+  ];
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */

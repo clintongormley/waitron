@@ -168,4 +168,5 @@ de una opción, desactivas una opción o eliminas la lista. Una línea aún no e
 nuevo para el cliente o de estación de su lista u opción con el siguiente cambio del pedido.
 Si la caja te pide que elijas una opción para un plato de un pedido recuperado, abre el plato,
 elige una opción de la lista nueva y guarda el pedido. El plato conserva las respuestas de las
-listas eliminadas. Renombrar una lista de extras o su producto tampoco afecta a un pedido aparcado.
+listas eliminadas salvo que respondas a una lista nueva con el mismo nombre. Renombrar una lista
+de extras o su producto tampoco afecta a un pedido aparcado.

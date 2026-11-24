@@ -1697,8 +1697,7 @@ export interface StationQueueItem {
     deviceName: string | null;
     movedAt: string;
   };
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   id: string;
   workingOrderLineId: string;
@@ -2103,8 +2102,7 @@ export interface DevDeviceList {
  */
 export interface ExpoItem {
   allergy: KitchenAllergyBlock | null;
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   id: string;
   name: string;
@@ -2587,8 +2585,7 @@ export interface TabLine {
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live menu name. */
   name?: string;
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   lineNo: number;
   /** The line's product. `string | null` because the COLUMN is nullable, NOT because a child line lacks

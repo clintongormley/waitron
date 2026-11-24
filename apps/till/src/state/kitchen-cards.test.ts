@@ -428,6 +428,17 @@ describe("A803 portion grouping: a card's rows", () => {
     expect(ids(card)).toEqual(["a", "b"]);
   });
 
+  it("groups kitchen portions with the same answer wording from different list ids", () => {
+    const answer = answerFor("Doneness", "Rare");
+    const card = one(
+      bill("o-1", [
+        portion("a", { optionSnapshots: [{ ...answer, listId: "previous-list" }] }),
+        portion("b", { optionSnapshots: [{ ...answer, listId: "current-list" }] }),
+      ]),
+    );
+    expect(rows(card)).toEqual([[["a", "b"]]]);
+  });
+
   it("A803 portion grouping: a group sits where its first portion was read, members in the read's order", () => {
     const card = one(
       bill("o-1", [portion("a"), portion("f", { name: "Fish" }), portion("c"), portion("d")]),

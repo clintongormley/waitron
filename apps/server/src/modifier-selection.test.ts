@@ -304,8 +304,6 @@ describe("buildLineExtras", () => {
         labelKitchenName: "MR kitchen",
       },
     ]);
-    // Neither the list's id nor the label's reaches the line, so editing or deleting either cannot
-    // rewrite a saved order.
     expect(JSON.stringify(optionSnapshots)).not.toContain("label-medium-rare");
   });
 
@@ -815,14 +813,16 @@ describe("asksNoNewAnswer", () => {
   });
 
   it("pairs two lists sharing a staff name each with its own stored answer", () => {
-    const twin: OptionList = { ...cooked, id: "list-cooked-twin" };
+    const twinLabel = { ...mediumRare, id: "label-medium-rare-twin" };
+    const twin: OptionList = { ...cooked, id: "list-cooked-twin", labels: [twinLabel] };
     const requested = [
       { listId: cooked.id, labelId: mediumRare.id },
-      { listId: twin.id, labelId: "label-well-done" },
+      { listId: twin.id, labelId: twinLabel.id },
     ];
     const both = freeze({ options: [cooked, twin] }, { options: requested }).optionSnapshots;
     expect(asksNoNewAnswer([cooked, twin], requested, both)).toBe(true);
     expect(asksNoNewAnswer([cooked, twin], requested, [both[0]!, both[0]!])).toBe(false);
+    expect(asksNoNewAnswer([cooked, twin], [requested[1]!], [both[0]!])).toBe(false);
   });
 
   it("leaves a request naming one list twice to the validator, in any case", () => {
@@ -922,11 +922,28 @@ describe("editUnsentLineOptions", () => {
 
     it("leaves as stored an answer a stale till re-sends with its withdrawn label", () => {
       expect(editUnsentLineOptions([withdrawn, sauce], [rare, pepper], stored, "en")).toBeNull();
-      expect(editUnsentLineOptions([withdrawn, reworded], [rare, pepper], stored, "en")).toEqual([
-        storedRare,
-        { ...storedPepper, labelKitchenName: "New pepper kitchen" },
-      ]);
+      const uppercase = { listId: rare.listId.toUpperCase(), labelId: rare.labelId.toUpperCase() };
+      expect(
+        editUnsentLineOptions([withdrawn, reworded], [uppercase, pepper], stored, "en"),
+      ).toEqual([storedRare, { ...storedPepper, labelKitchenName: "New pepper kitchen" }]);
     });
+
+    it("replaces a withdrawn answer with the available label staff choose", () => {
+      const edited = editUnsentLineOptions([withdrawn, sauce], [wellDone, pepper], stored, "en");
+      expect(staffLabels(edited)).toEqual(["Well done staff", "Pepper staff"]);
+    });
+
+    it.each([["not an array"], [[null]]])(
+      "refuses a malformed request beside a withdrawn answer: %j",
+      (request) => {
+        expect(() => editUnsentLineOptions([withdrawn, sauce], request, stored, "en")).toThrow(
+          expect.objectContaining({
+            code: "options.invalid",
+            params: { field: "optionSelections" },
+          }),
+        );
+      },
+    );
   });
 
   it("refuses leaving out an answer the menu still matches beside an unmatched one", () => {
@@ -973,6 +990,23 @@ describe("editUnsentLineOptions", () => {
       expect(edited![0]!.listName).toEqual({ en: "Doneness staff" });
     });
 
+    it("validates a re-created list separately and replaces the removed answer once staff choose", () => {
+      const replacement = { ...cooked, id: "list-new-cooked" };
+      expect(() => editUnsentLineOptions([replacement, sauce], [pepper], stored, "en")).toThrow(
+        expect.objectContaining({
+          code: "options.label_required",
+          params: { optionListId: replacement.id },
+        }),
+      );
+      const edited = editUnsentLineOptions(
+        [replacement, sauce],
+        [{ ...wellDone, listId: replacement.id }, pepper],
+        stored,
+        "en",
+      );
+      expect(staffLabels(edited)).toEqual(["Well done staff", "Pepper staff"]);
+    });
+
     describe("with two lists sharing a staff name", () => {
       const twin: OptionList = {
         ...sauce,
@@ -997,7 +1031,7 @@ describe("editUnsentLineOptions", () => {
         ).toEqual(["Mayo staff", "Pepper staff", "Medium rare staff"]);
       });
 
-      it("keeps the removed answer when an identically named list is new", () => {
+      it("keeps a removed list's answer when two other lists share a name", () => {
         expect(
           staffLabels(editUnsentLineOptions([withMayo, twin], [mayo, pepperOnTwin], stored, "en")),
         ).toEqual(["Mayo staff", "Pepper staff", "Medium rare staff"]);

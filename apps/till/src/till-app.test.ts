@@ -8510,14 +8510,34 @@ describe("till-app", () => {
       expect(counter.store.dirty).toBe(false);
     });
 
-    it("asks for Milk and reads back Cooking after the Cooking list is deleted", async () => {
+    const recreatedCooking = {
+      ...donenessList,
+      id: "list-punto-recreated",
+      labels: donenessList.labels.map((label) => ({ ...label, id: `new-${label.id}` })),
+    };
+    it.each([
+      {
+        scenario: "asks for Milk and reads back Cooking after the Cooking list is deleted",
+        list: oatMilkList,
+        choice: frozenMilk,
+        keepsCooking: true,
+      },
+      {
+        scenario: "asks for a re-created Cooking choice and reads back one Cooking answer",
+        list: recreatedCooking,
+        choice: frozenRare,
+        keepsCooking: false,
+      },
+    ])("$scenario", async ({ list, choice, keepsCooking }) => {
       const sauceList = { ...donenessList, id: "list-sauce", name: "Sauce" };
-      const cooking = { ...frozenDoneness, listId: donenessList.id };
       const sauce = { ...frozenDoneness, listId: sauceList.id, listName: { es: "Sauce" } };
-      const milk = { ...frozenMilk, listId: oatMilkList.id };
-      const before = [cooking, sauce];
-      const saved = [cooking, sauce, milk];
-      const offering = { ...coffee, offeredModifiers: [sauceList, oatMilkList] };
+      const before = [frozenDoneness, sauce];
+      const saved = [
+        ...(keepsCooking ? [frozenDoneness] : []),
+        sauce,
+        { ...choice, listId: list.id },
+      ];
+      const offering = { ...coffee, offeredModifiers: [sauceList, list] };
       const { el } = await mountApp({
         listDefaultZoneOffers: vi
           .fn()
@@ -8545,7 +8565,7 @@ describe("till-app", () => {
       const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
       await picker.updateComplete;
       await userEvent.click(
-        picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="options-list-leche"]')!,
+        picker.shadowRoot!.querySelector<HTMLInputElement>(`input[name="options-${list.id}"]`)!,
       );
       await userEvent.click(picker.shadowRoot!.querySelector<HTMLButtonElement>(".confirm")!);
       await flush(el);
@@ -8562,7 +8582,7 @@ describe("till-app", () => {
               workingOrderLineId: "line-answered",
               options: [
                 { listId: "list-sauce", labelId: "label-medium" },
-                { listId: "list-leche", labelId: "label-avena" },
+                { listId: list.id, labelId: list.labels[0]!.id },
               ],
             }),
           ],

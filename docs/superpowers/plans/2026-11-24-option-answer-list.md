@@ -3,6 +3,8 @@
 Lane H, 24 November 14:13 queue and [backlog](../../backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables), after #3746.
 Staff can recall an unsent dish, keep its Cooking answer after the list disappears, and answer the new required Milk list before saving. Follow the [A1308 slice rules](2026-11-08-a1308-slice-rules.md). The watcher cleared working-order storage and Lane H landing on 24 November at 14:35 in Lane H's questions.md.
 
+The watcher cleared a further case at 15:15. If staff answer a re-created Cooking list with the same staff name, its answer replaces the removed list's answer. The server modifier and working-order tests pin the replacement. The till test pins the prompt and the single Cooking answer after reading the save back.
+
 ## Tests first
 
 - In `apps/server/src/working-order.test.ts`, park Cooking and Sauce, delete Cooking, add Milk and republish. Saving Sauce alone must refuse with `options.label_required` for Milk and leave the line and revision intact. A save with Milk must store all three original identities and retry without changing the revision.

@@ -155,5 +155,5 @@ A parked counter order keeps what was asked for when you change the staff name o
 option, turn an option off, or delete the list. A line not yet sent takes a new customer-facing or
 prep station name of its list or option at the next change to the order. If the till asks you to
 choose an option for a recalled dish, open the dish, choose from the new list and save the order.
-The dish keeps any answer from a list you deleted. Renaming an extras list or its product also
-leaves a parked order alone.
+The dish keeps answers from deleted lists unless you answer a new list with the same name.
+Renaming an extras list or its product also leaves a parked order alone.
