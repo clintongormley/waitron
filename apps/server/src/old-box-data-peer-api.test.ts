@@ -411,6 +411,25 @@ describe("refusals of POST /api/node/old-box-data", () => {
     await answered(await first);
     await answered(await send(app, await query()));
   });
+
+  it("gives the turn back after a build that fails", async () => {
+    let calls = 0;
+    const app = appWith({
+      build: async (input) => {
+        if (calls++ === 0) throw new Error("build failed");
+        return makeOldBoxWorkbook(input);
+      },
+    });
+    const failed = await send(app, await query());
+    expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({ error: { code: "server.internal" } });
+    expect(lines).toContainEqual({
+      level: "error",
+      event: "old_box_data.peer_failed",
+      fields: { errorCode: "unknown", requestId: undefined },
+    });
+    await answered(await send(app, await query()));
+  });
 });
 
 describe("the one build at a time the old box's page and its peer route share", () => {

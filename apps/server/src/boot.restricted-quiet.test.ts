@@ -333,7 +333,14 @@ function observeStart(options: { restricted: boolean }): () => Observed {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ body: {}, purpose: "x", signature: "x", signerNodeId: "x" }),
       });
-      peerRequest = { status: peer.status, body: await peer.json() };
+      const text = await peer.text();
+      let body: unknown = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Left as text, so the case's toEqual names what came back.
+      }
+      peerRequest = { status: peer.status, body };
     }
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
     observed = {
