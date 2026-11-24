@@ -493,8 +493,10 @@ describe("A1515 a bill left owing less than it was paid", () => {
     try {
       const kept = await keepAsTip(billId);
 
-      expect(kept.status).toBe(422);
-      expect(kept.json).toMatchObject({ code: "bill.tip_not_allowed" });
+      expect(kept).toEqual({
+        status: 409,
+        json: { code: "bill.tip_not_allowed_on_excess", params: { workingOrderId: billId } },
+      });
     } finally {
       await setTipsForTest(venue.db, true);
     }

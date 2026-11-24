@@ -26,6 +26,15 @@ it.each([
   }
 });
 
+it("words Keep as tip refused while the venue takes no tips, saying to give the money back", () => {
+  expect(codeMessage("bill.tip_not_allowed_on_excess", "en")).toBe(
+    "This venue does not take tips. Give the money back instead.",
+  );
+  expect(codeMessage("bill.tip_not_allowed_on_excess", "es")).toBe(
+    "Este local no acepta propinas. Devuelve el dinero.",
+  );
+});
+
 it("words a refund Correct invoice must make, saying what each choice does, in both languages", () => {
   expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
     "Correct invoice can give this money back, so Refund a payment cannot: it files nothing. Close this window and choose Correct invoice: it gives the money back and files a corrective invoice for it. Refund a payment still gives back a tip, or what is still owed for cancelled dishes.",

@@ -919,6 +919,9 @@ declare module "@waitron/shared" {
     "bill.all_items_chosen": Record<string, never>;
     /** Keep as tip on a bill that holds nothing paid over its total. */
     "bill.not_overpaid": { workingOrderId: string };
+    /** Keep as tip while the venue takes no tips: what the bill is paid over its total can only be
+     * given back. */
+    "bill.tip_not_allowed_on_excess": { workingOrderId: string };
     /**
      * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it

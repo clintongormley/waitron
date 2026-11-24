@@ -609,6 +609,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has nothing paid over what it comes to.",
     es: "Esta cuenta no tiene nada pagado de más.",
   },
+  "bill.tip_not_allowed_on_excess": {
+    en: "This venue does not take tips. Give the money back instead.",
+    es: "Este local no acepta propinas. Devuelve el dinero.",
+  },
   "bill.left_unpaid": {
     en: "This bill was recorded as left unpaid: its guests have gone",
     es: "Esta cuenta se registró como no pagada: los clientes se han ido",
