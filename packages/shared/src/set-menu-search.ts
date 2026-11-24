@@ -60,23 +60,62 @@ export function searchMixes(problem: MixSearchProblem): MixSearchResult {
   }
   enumerate(0, unfixed);
 
+  let best: MixSearchResult | undefined;
+  searchMixVectors({
+    offerCount,
+    pairOffer,
+    pairPlaces,
+    vectors,
+    bases,
+    solve,
+    cutoff: () => best?.cost ?? Infinity,
+    accept: (candidate) => {
+      if (!best || candidate.cost < best.cost) best = candidate;
+    },
+  });
+  return best!;
+}
+
+interface MixVectors {
+  readonly offerCount: number;
+  readonly pairOffer: readonly number[];
+  readonly pairPlaces: readonly number[];
+  readonly vectors: Int32Array;
+  readonly bases: Float64Array;
+  readonly solve: (counts: number[], base: number) => MixSearchResult;
+  readonly cutoff: () => number;
+  readonly canSolve?: () => boolean;
+  readonly accept: (candidate: MixSearchResult) => void;
+}
+
+export function searchMixVectors({
+  offerCount,
+  pairOffer,
+  pairPlaces,
+  vectors,
+  bases,
+  solve,
+  cutoff,
+  canSolve,
+  accept,
+}: MixVectors): boolean {
   const bounds = bases.slice();
   const slopes = new Float64Array(offerCount);
-  let best: MixSearchResult | undefined;
   for (;;) {
     let next = -1;
-    let lowest = best?.cost ?? Infinity;
-    for (let mix = 0; mix < mixes; mix++) {
+    let lowest = cutoff();
+    for (let mix = 0; mix < bases.length; mix++) {
       if (bounds[mix]! < lowest) {
         lowest = bounds[mix]!;
         next = mix;
       }
     }
-    if (next === -1) return best!;
+    if (next === -1) return true;
+    if (canSolve && !canSolve()) return false;
 
     const start = next * offerCount;
     const candidate = solve(Array.from(vectors.subarray(start, start + offerCount)), bases[next]!);
-    if (!best || candidate.cost < best.cost) best = candidate;
+    accept(candidate);
     bounds[next] = Infinity;
 
     slopes.fill(0);
@@ -85,8 +124,9 @@ export function searchMixes(problem: MixSearchProblem): MixSearchResult {
       slopes[offer] = slopes[offer]! + price * pairPlaces[pair]!;
     });
 
-    for (let mix = 0; mix < mixes; mix++) {
-      if (bounds[mix]! >= best.cost) continue;
+    const limit = cutoff();
+    for (let mix = 0; mix < bases.length; mix++) {
+      if (bounds[mix]! >= limit) continue;
       let bound = bases[mix]! + candidate.placement.cost;
       for (let offer = 0; offer < offerCount; offer++) {
         const count = vectors[mix * offerCount + offer]!;

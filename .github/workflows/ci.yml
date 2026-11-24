@@ -4016,7 +4016,7 @@ jobs:
           node scripts/run-with-deadline.mjs 424 --diagnostics -- pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-  # Whole-file shards preserve every mutation target; the aggregate enforces the package floor.
+  # The first two jobs score separate grouping ranges. The aggregate enforces the package floor.
   mutation-shared:
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')

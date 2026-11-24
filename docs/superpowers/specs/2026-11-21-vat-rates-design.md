@@ -1,5 +1,9 @@
 # VAT rates: one rate for eating in, a rate per product for taking away — design
 
+_24 November 2026. The owner's decision relayed by the watcher at 11:21 replaces the mixed-rate
+takeaway refusal below. For these menus, divide the price in proportion to each dish's à la carte
+price and apply its own takeaway rate. See [set-menu design §4](2026-11-24-set-menus-automatic-grouping-design.md#4-the-calculation)._
+
 Status: **approved by the owner, 21 November 2026** ("y"), after reading the list of the writer's
 calls and asking how a takeaway set menu gets its rate (answer: worked out from its products, as
 in "Set menus" below). The owner confirmed this approval on 22 November 2026 at 10:03, choosing "Yes to all" for piece A's D10, D11, D17 and D18 (lane L's `questions.md`, "WATCHER 2026-11-22 10:03"). The rules in "What the owner decided" are the owner's, from conversations on

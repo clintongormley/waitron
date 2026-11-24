@@ -286,7 +286,7 @@ describe("the selection follows each package's own stryker config", () => {
 });
 
 describe("HEAVY_FILES", () => {
-  it("splits ui's costly components, keeping db, ui-core and shared whole", () => {
+  it("splits the costly UI components and Shared grouping while keeping DB and UI Core whole", () => {
     expect(HEAVY_FILES).toEqual({
       db: {},
       ui: {
@@ -297,7 +297,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-icon.ts": 2,
       },
       "ui-core": {},
-      shared: {},
+      shared: { "src/set-menu-grouping.ts": 2 },
     });
   });
 
@@ -327,11 +327,20 @@ describe("shardFiles", () => {
     ]);
   });
 
-  it("partitions every shared mutation target into four nonempty whole-file shards", () => {
+  it("gives each Shared grouping range its own job and packs the remaining source files whole", () => {
     const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("shared", shard, 4, root));
+    const grouping = "src/set-menu-grouping.ts";
+    const lines = readFileSync(join(packageDir("shared"), grouping), "utf8").split("\n").length;
+    const middle = Math.ceil(lines / 2);
     expect(shards.every((paths) => paths.length > 0)).toBe(true);
-    expect(shards.flat().some((path) => path.includes(":"))).toBe(false);
-    expect(shards.flat().sort()).toEqual(eligibleFiles("shared"));
+    expect(shards.slice(0, 2)).toEqual([
+      [`${grouping}:1-${middle}`],
+      [`${grouping}:${middle + 1}-${lines}`],
+    ]);
+    const fixtures = ["src/set-menu-bill.fixtures.ts", "src/set-menu-fit.fixtures.ts"];
+    expect(shards.slice(2).flat().sort()).toEqual(
+      eligibleFiles("shared").filter((file) => file !== grouping && !fixtures.includes(file)),
+    );
   });
 
   it("refuses a package it has no heavy-file list for", () => {

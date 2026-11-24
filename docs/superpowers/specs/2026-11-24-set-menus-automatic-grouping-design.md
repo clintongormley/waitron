@@ -164,6 +164,10 @@ What changes:
 
 ### 4. The calculation
 
+**24 November 2026, 11:21 watcher note relaying the owner:** Takeaway dishes may group across VAT
+rates. Divide the set menu's price across its dishes in proportion to their à la carte prices and
+apply each dish's own takeaway VAT rate. VAT-rates piece B handles that division.
+
 A shared function, the same in the till and the server, extending the one on `main`
 (`packages/shared/src/set-menu-fit.ts`, `set-menu-search.ts`, `set-menu-placement.ts`). Today it
 places dishes into a number of set menus fixed by the waiter. It has to:
@@ -174,17 +178,20 @@ places dishes into a number of set menus fixed by the waiter. It has to:
   supplement where a dish fills a place that carries one, and every dish left out at its à la carte
   price. Paid extras on a dish are charged as usual whether or not the dish is in a set menu;
 - leave out of the grouping every dish carrying a comp or discount of its own (section 6);
-- on a takeaway bill, form a set menu only from dishes that share one takeaway VAT rate that day.
-  Dishes with mixed rates stay à la carte. Nothing is refused (**owner**, 24 November, keeping the
-  21 November limit until the adviser confirms the "main item's rate" rule; when he does, this rule
-  is replaced);
+- use the same grouping rules for eat-in and takeaway;
 - between equally cheap answers, keep the one closest to the saved grouping, so dishes do not jump
   between set menus for no saving. The function on `main` already prefers the arrangement closest to
   the current one;
 - **never block a sale.** If a bill is too large to search fully, the function still returns a
-  valid answer: it keeps the saved grouping and finds the cheapest place for the new dishes, and the
-  summary says it may not be the cheapest (**my call**; the bound today is `MAX_SET_MENU_MIXES`,
-  `set-menu-search.ts:3`).
+  valid answer, and the summary says it may not be the cheapest (**my call**).
+
+**24 November 2026, piece 2 search limit (watcher, 13:06):** At the search limit, compare a grouping
+that starts from the saved places with one that starts fresh. Keep the cheaper bill, with ties
+going to the saved places. The calculation searches more combinations for up to 60 eligible
+portions and five price choices. All 96 sampled bills for 16–20 diners with five offers and 24
+diners with four offers matched the cheapest prices the longer search proved. Beyond the raised
+limit, a bill can still cost about €10 more than the cheapest. In 24 sampled bills for 21 diners
+with five offers, the largest gaps were €10.08 ordered together and €9.36 ordered course by course.
 
 A set menu with an empty place still costs its full price. So removing a dish (a cancel, a comp, a
 move away) can never make the cheapest answer dearer, and adding a dish can never make it cheaper.
@@ -226,6 +233,9 @@ be cancelled or edited by hand.
   of that type on the bill; the calculation counts that one as cheaper, so it does not break it up
   for no reason. If the bill ends up with no set menu of that type, the discount falls away and the
   till says so (**my call**).
+- **24 November 2026, 11:21 watcher note relaying the owner:** A set menu carries one discount.
+  A new discount replaces the old one and the till says so. If two discounted menus of the same
+  type become one, keep the larger saving in cents and tell staff which discount fell away.
 - **Comps** work the same way: a comped dish leaves the grouping; a comped set menu is one set menu
   of that type at no charge.
 - **What a set-menu comp or discount covers:** the set menu's price and the supplements of the
@@ -346,9 +356,8 @@ receipt and invoice layout, the kitchen behaviour, reports, and VAT as the VAT r
 Pieces 1, 3 and 4 touch amounts on invoices, so they take the full review and the owner lands them.
 No venue is live, so the stored set-menu data is reset, not carried over.
 
-**Lane L's VAT piece B** (set menus lose their own VAT fields; a mixed-rate set menu cannot be taken
-away) still fits. Its "cannot be taken away" refusal becomes section 4's rule that such dishes stay
-à la carte; whichever lands second adapts.
+**Lane L's VAT piece B** removes the set menu's own VAT fields and handles the takeaway price
+division in section 4. The owner's 24 November decision retires the mixed-rate refusal.
 
 ## Left to the builder
 

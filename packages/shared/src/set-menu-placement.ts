@@ -1,6 +1,7 @@
 export interface PlacementProblem {
   readonly classes: readonly {
     readonly count: number;
+    readonly uncoveredCost?: number;
     readonly arcs: readonly { readonly pair: number; readonly cost: number }[];
   }[];
   readonly capacities: readonly number[];
@@ -42,7 +43,7 @@ export function solvePlacement({
   }
 
   let remaining = 0;
-  const classEdges = classes.map(({ count, arcs }, index) => {
+  const classEdges = classes.map(({ count, arcs, uncoveredCost: classCost }, index) => {
     const node = index + 1;
     remaining += count;
     connect(source, node, count, 0);
@@ -50,7 +51,7 @@ export function solvePlacement({
       pair,
       edge: connect(node, firstPair + pair, Infinity, cost),
     }));
-    return { pairs, uncovered: connect(node, sink, Infinity, uncoveredCost) };
+    return { pairs, uncovered: connect(node, sink, Infinity, classCost ?? uncoveredCost) };
   });
   capacities.forEach((capacity, pair) => connect(firstPair + pair, sink, capacity, 0));
 

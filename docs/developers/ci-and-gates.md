@@ -1087,7 +1087,7 @@ is `src/english-only.ts`, whose only suite lives in the root vitest project and 
 `packages/db` imports, so every one of its mutants survives by construction. The receipt is `packages/db/stryker.config.json`'s `mutate` list;
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
 keeping its own copy, and `scripts/mutation-shard.test.mjs` names exactly the files db's selection
-leaves out. UI still uses line ranges: a mutant spanning a `HEAVY_FILES` boundary belongs to no shard.
+leaves out. UI and Shared use line ranges. A mutant spanning a `HEAVY_FILES` boundary belongs to no shard.
 The 2026-10-12 comparison counted 26 such ui mutants and two db mutants. Since 13 November,
 db mutates whole files, including `sales.ts`, instead of ranges. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
 package holds which bar, is weaker than its name: it reads the local reusable workflow as TEXT for its literal floor and upload path,
@@ -1140,7 +1140,7 @@ page, not Chromium, and it reads the getter directly rather than through `@vites
 per-command copy (`Object.assign` in `triggerCommand`), which is what reads it as each command
 starts.
 
-### Shared mutation work is split across four whole-file shards
+### Shared mutation work is split across four shards
 
 A slow runner can use the whole ten-minute job budget while still making progress. On
 27 October 2026, run `40520210328` instrumented 2,090 mutants and passed its initial 827 tests
@@ -1156,11 +1156,14 @@ run `41280853700`, completed installation 30 seconds after the job began, then r
 Stryker until cancellation. Its log request returned HTTP 404, so its internal wait remains unknown.
 Its job timestamps span 900 seconds even though its configured limit was ten minutes.
 
-`mutation-shared` uses `scripts/mutation-shard.mjs` to partition the package's unchanged `mutate`
-list across four jobs. Each target file belongs to one shard, with no line-range splits. The jobs
-retain their ten-minute limits. `stryker.ci.config.mjs` disables incremental results so an existing
-full report cannot contribute results outside a shard's selected files. The ordinary local
-`pnpm --filter @waitron/shared mutation` keeps its existing configuration and 90% floor.
+`mutation-shared` uses `scripts/mutation-shard.mjs` to partition the package's `mutate` list.
+The first two jobs each take one range of `set-menu-grouping.ts`. The other two pack the remaining
+source files whole. A mutation spanning the grouping boundary appears in neither report. In PR #4224,
+run `45394392127` instrumented 1,929 mutants in the old first job and reached 1,237 before the job
+limit. Each job still has ten minutes. The package leaves `*.fixtures.ts` out of mutation because
+those files construct inputs for tests. Local `pnpm --filter @waitron/shared mutation` mutates the
+whole grouping file under the package's 90% floor. CI disables incremental results so each shard
+reports only its own selection.
 
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
@@ -1173,8 +1176,8 @@ to be `always() && needs.changes.result == 'success' && ` followed by the shards
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
 in its own directory because the aggregate counts those directories. No new Actions cache is added.
 
-A local cold comparison on the development Mac used two Stryker workers for the full run and
-for each shard. The full run took 131 seconds; the four shard commands took 42.12, 24.92, 25.76
+A local cold comparison of the original whole-file layout used two Stryker workers for the full
+run and for each shard on the development Mac. The full run took 131 seconds; the four shard commands took 42.12, 24.92, 25.76
 and 45.19 seconds including command startup. Their reports contain 738, 436, 470 and 503 mutants.
 The union contains exactly the full run's 2,147 mutant identities, once each, with identical statuses.
 Both scores are 94.83% (2,036 detected). Actual-report controls remove one shard or mark every
@@ -1189,8 +1192,8 @@ computed names and other wrappers remain outside that text scan. A real-workspac
 selected `@waitron/shared` for each helper independently.
 
 The workflow case in `scripts/ci-workflow.test.mjs` reads text, not a hosted workflow. The real-tree
-case in `scripts/mutation-shard.test.mjs` requires four nonempty shards containing every shared
-source file once. `scripts/mutation-break-thresholds.test.mjs` imports the CI configuration and
+case in `scripts/mutation-shard.test.mjs` requires four nonempty shards, with two contiguous
+grouping ranges and every other source file once except the named fixtures. `scripts/mutation-break-thresholds.test.mjs` imports the CI configuration and
 checks that it preserves the local mutation list and floor while disabling incremental reuse.
 
 ### Mutation testing runs nightly at 05:00 UTC
@@ -3299,7 +3302,7 @@ Current sharded mutation limits are unchanged by the shared workflow:
 The following measurements describe the October window above. Since 13 November, the three
 sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs; the old
 job names in this table remain historical. Since 1 November 2026,
-[shared has four mutation shards and a five-minute score job](#shared-mutation-work-is-split-across-four-whole-file-shards);
+[shared has four mutation shards and a five-minute score job](#shared-mutation-work-is-split-across-four-shards);
 the `mutation-shared` row below records the earlier unsharded job.
 
 | file               | job                               | longest measured (min)         | limit |
