@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { products, readHistoryNodes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -35,7 +35,6 @@ const PRICES = [
   ["Soup", 550],
   ["Hake", 1250],
 ] as const;
-let before: Map<string, number | null>;
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -57,13 +56,7 @@ function setPrices(prices: readonly (readonly [keyof SpecVenue["productIds"], nu
 
 beforeAll(async () => {
   lunch = await addSpecLunch(spec);
-  const rows = await venue.db.select({ id: products.id, price: products.unitPrice }).from(products);
-  before = new Map(rows.map(({ id, price }) => [id, price]));
   await setPrices(PRICES);
-});
-
-afterAll(async () => {
-  await setPrices(PRICES.map(([dish]) => [dish, before.get(spec.productIds[dish])!] as const));
 });
 
 function shiftDay(day: string, days: number): string {

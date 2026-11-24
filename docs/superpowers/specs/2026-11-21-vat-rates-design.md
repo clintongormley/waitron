@@ -39,6 +39,7 @@ decision that a set menu carries its own two VAT rates
 - **The ticket takes the rates of the day the meal ends** (adviser answer 1.4; owner, 18
   November: "correct"). An advance keeps the rate of the day it was paid.
 - **Set menus have no VAT settings of their own.**
+  _2026-11-24: the two "Taken away" points below are replaced by the owner's division of the price; see "Set menus" below._
   - Eaten in, a set menu is at the dine-in rate, whatever it holds.
   - Taken away, a set menu is allowed only when every product it can hold has the same takeaway
     rate. It is then at that rate.
@@ -47,7 +48,6 @@ decision that a set menu carries its own two VAT rates
     the food's rate (owner, 21 November: "the safest thing for now is to say that we can't create
     set menus for takeaways containing items of different vat classes … we need the adviser's
     input before we change this last one").
-    _2026-11-24: replaced by the owner's division of the price; see "Set menus" below._
 - **A drink rung up at the counter as drunk on the premises stays at the dine-in rate** when the
   customer carries it out, and staff may ring it up that way when the customer says nothing
   (owner, 18 November: "yes"). Nothing here changes it: it follows the order's way, as today.
@@ -126,6 +126,8 @@ Rates are worked out once, when the ticket is issued, for the day the meal ends 
 - **Taken away:** each line's product's takeaway rate on that day. A set-menu line uses its set
   menu's takeaway rate (below). Its dishes and their surcharges and extras use their products'
   own rates, which are that same rate.
+  _2026-11-24: replaced: a takeaway set menu's price is divided between its dishes, each part at
+  its dish's rate (VAT rates piece B, PR B1)._
 - **Advances:** the dine-in rate on the day paid, replacing the fixed `"reduced"`.
 
 `rateLines` takes a rate for each line instead of a label. The till's `vatBreakdown`, which no
@@ -135,7 +137,7 @@ screen shows, is deleted rather than ported (**my call**).
 
 _2026-11-24: the four "Taken away", "The dashboard says so", "The till refuses" and "A scheduled
 rate change" points below are replaced: taken away, a set menu's price is divided between its dishes by their à la carte
-prices, each part at its dish's takeaway rate, and nothing is refused (owner, 24 November; built in
+prices, each part at its dish's takeaway rate, and a set menu is no longer refused because its dishes' rates differ (owner, 24 November; built in
 [VAT rates piece B](../plans/2026-11-24-vat-rates-b.md), PR B1)._
 
 - `set_vat_class` and `set_takeaway_vat_class` are removed, with their fields in the dashboard's
@@ -220,6 +222,8 @@ rate a ticket is filed at, so the owner lands them.
   the plan should split it into slices of a size one implementer can finish.
 - **B. Set menus without VAT of their own.** Remove their two fields. The takeaway check in the
   dashboard, the till and at payment. Needs A.
+  _2026-11-24: the takeaway check is replaced: taken away, a set menu's price is divided between
+  its dishes (owner, 24 November)._
 - **C. Scheduled changes and changing many products at once.** The "Change from" field and the
   product list's "Change takeaway VAT". Needs A.
 

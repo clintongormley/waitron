@@ -274,6 +274,10 @@ export const saleLines = table(
     advanceRole: saleLineAdvanceRole("advance_role"),
     deductsSaleId: id("deducts_sale_id"),
     setMenuRole: saleLineSetMenuRole("set_menu_role"),
+    // On a row of a takeaway set menu whose price was divided between its dishes: how much of
+    // `line_gross` is the set menu's price (on the set menu's own row, minus what it was charged,
+    // since its dishes file it). A corrective's row carries the part it takes off, or null when it
+    // takes none. Null on every other row. A row's sold amount is `line_gross` less this.
     setMenuPart: money("set_menu_part"),
   },
   (t) => [

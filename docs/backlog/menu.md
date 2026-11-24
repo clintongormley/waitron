@@ -825,7 +825,7 @@ dishes a set menu covers; the till's pay-by-items list leaves those out too, and
 show set menus as a group of their own. The table-service guide covers this in both languages.
 A takeaway set-menu bill takes money like any bill: its price is divided between its dishes when
 their takeaway rates differ, and when it is divided, its ticket names the covered dishes with their VAT letter and no
-amount ([fiscal backlog](fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)).
+amount, and its full invoice lists them with their parts ([fiscal backlog](fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)).
 Selecting copy-only dishes in the live correction dialog remains open. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer

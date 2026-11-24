@@ -912,7 +912,7 @@ Each product has its own dated takeaway rate, picked as a percentage, everything
 at the one dine-in rate, and no product screen offers an eat-in VAT class (piece A,
 [plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Taken away, a set menu's price is
 divided between its dishes, when their rates differ, in proportion to the à la carte prices stored on their lines, each part
-at its dish's takeaway rate, and nothing about a takeaway set menu is refused for its VAT (owner,
+at its dish's takeaway rate, and a takeaway set menu is no longer refused because its dishes' rates differ (owner,
 24 November; piece B's first pull request, [plan](../superpowers/plans/2026-11-24-vat-rates-b.md)).
 The adviser is asked to confirm it ([question 4](../compliance/2026-11-19-adviser-meeting.md)). Left:
 

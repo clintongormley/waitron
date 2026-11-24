@@ -66,7 +66,8 @@ Part 2 and the shared Google Doc are unchanged. Against the plans this sheet put
   and its supplements as the ticket does. In the watcher's follow-up on 18 November around 19:30,
   the owner answered "no" to whether a drink supplement keeps the drink's own VAT rate. The
   supplement takes the set menu's rate. _Replaced on 21 and 24 November: set menus have no VAT of
-  their own, and a supplement stays at its dish's rate (VAT rates piece B plan, S5)._
+  their own, and a supplement stays at its dish's rate (VAT rates piece B plan, S5); a divided
+  takeaway set menu's full invoice lists its dishes with their parts (question 4)._
 - Drinks served without food stay at the eat-in rate until the adviser comes back (question 4).
 - Money given back as goodwill takes a corrective (question 6).
 - Waitron issues the corrective for a no-show's kept deposit by itself, at every venue (question 6).

@@ -218,7 +218,7 @@ Read on `af930f2b30`; "ran" marks what was run.
 - **S10. Correctives reuse the filed parts and never divide again.** A whole credit copies the rows reversed
   with their parts negated (a split after print credits exactly what was filed; the new bills are divided at
   their own issue). A goodwill amount is shared over the filed rows (#4192), so on a divided set menu it comes
-  off its dishes' parts (a corrective line's part is −min(amount, part), any rest off the sold amount);
+  off its dishes' parts (a corrective line's part is −min(amount, what earlier correctives left of the part), any rest off the sold amount);
   with no lines named it is shared over the filed rows as on any ticket (`correction-allocation.ts:62-66`;
   corrected 24 Nov after B1.2d: an empty list is what is refused, `sale.correction_scope_invalid`).
   **A covered dish cancelled after payment refunds its sold amount** (its supplement, or nothing), as today
@@ -352,7 +352,7 @@ not multiply back exactly).
   the menu's row 0.00 at 10.00; VAT rows `10.00: 10.65/1.07`, `21.00: 1.88/0.40`); one rate (row 14.00 at
   10.00, 12.73/1.27; dishes 0.00 at 10.00; no `setMenuPart`); the tie (10.00 → 3.34/3.33/3.33; `10.00:
   6.07/0.60`, `21.00: 2.75/0.58`); the burger (9.12/2.88); a 2.00 supplement on hake (hake row 10.14 at 10%,
-  part 8.14); a paid extra at 21% untouched; a dish with weight 0 at 4% (no part, 0.00 at 10.00, no 4% row);
+  part 8.14); a paid extra at 21% untouched; a dish with weight 0 at 4% (part 0.00, 0.00 at 10.00, no 4% row);
   a free extra at 4% on an à la carte takeaway dish at 10% (0.00 at 10.00, no 4% row); no dish with a weight
   (row whole at its own list); a comped set menu beside a 6.00 burger at 21% (A445 gives the row its share,
   which is then divided); a set menu whose row is at 21% while its dishes are at 10% beside a comped coffee
@@ -453,7 +453,7 @@ a divided set menu's list price with its sold amount), `invoice-document.ts`, `t
 **Files:** `apps/server/src/cancellation-refund-value.ts:224` (a row's refund is its sold amount, S10),
 `free-items.ts:153-195` (S12, through `recordedProducts`), `packages/core/src/correction-history.ts`
 (`correctionLinesFor`: an amount taken off a row comes off its part first, so the corrective line's
-`setMenuPart` is −min(amount, part), and any rest off its sold amount; S10, ruled 24 Nov after B1.2s), and
+`setMenuPart` is −min(amount, what earlier correctives left of the part), and any rest off its sold amount; S10, ruled 24 Nov after B1.2s), and
 wherever a replacement's lines are built (find it: only `cancel-credit.ts` and `correction-history.ts` satisfy
 `Required<RecordSaleLine>`); tests `split-after-print.set-menus.test.ts`,
 `invoice-corrections.test.ts`, `line-cancel.test.ts`, `free-items.test.ts`.
@@ -545,6 +545,7 @@ fields, `#vatField`, `defaultVatClass`), `screens/menus-screen.ts:93, 728, 1096,
 **Files:** `guide/en/products.md:303-307`, `es/products.md:319-326` (before "Publish"): EN "Give it a name and price,
 add customer names in the languages you use, then save."; ES the same; the VAT sentence about set menus goes.
 `docs/developers/products.md:195`; `docs/backlog/fiscal.md:906`; dashboard words for a set menu's "VAT" change.
+_2026-11-24: the guide sentence was cut in B1 (finish-branch review)._
 
 - [ ] Run `guide-content`, `guide-links`, `pnpm -r typecheck`; commit; `/finish-branch`.
 
