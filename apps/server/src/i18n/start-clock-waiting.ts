@@ -14,14 +14,6 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       keyRefused: string;
       /** `{keyName}` stands for the backup's master key's name. */
       wrongKey: string;
-      packButton: string;
-      notPack: string;
-      damaged: string;
-      /** The chosen PDF did not reach the box, or its answer did not come back. */
-      packFailed: string;
-      elsewhere: string;
-      /** `{heldBy}` stands for the number of the pack holding the master key. */
-      elsewhereOn: string;
       keyContinue: string;
       waitingForClock: string;
       deviceTime: string;
@@ -38,14 +30,6 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     title: "The box is restoring your backup and is waiting to confirm its time.",
     why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
     keyLabel: "Master key",
-    packButton: "Choose the recovery pack PDF",
-    notPack: "This PDF is not a recovery pack.",
-    damaged: "This recovery pack PDF is damaged. Type the key.",
-    packFailed: "The box could not read this PDF. Choose it again, or type the key.",
-    elsewhere:
-      "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it.",
-    elsewhereOn:
-      "This recovery pack does not hold the master key. It is on recovery pack {heldBy}: choose that pack, or type the key from it.",
     keyRefused: "Enter the selected backup’s master key.",
     wrongKey: "Wrong master key. Use the one dated {keyName}.",
     keyContinue: "Continue",
@@ -65,14 +49,6 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
     why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
     keyLabel: "Clave maestra",
-    packButton: "Elegir el PDF del paquete de recuperación",
-    notPack: "Este PDF no es un paquete de recuperación.",
-    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
-    packFailed: "El servidor no ha podido leer este PDF. Vuelve a elegirlo o escribe la clave.",
-    elsewhere:
-      "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.",
-    elsewhereOn:
-      "Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación {heldBy}: elige ese paquete o introduce su clave.",
     keyRefused: "Introduce la clave maestra de la copia elegida.",
     wrongKey: "Clave maestra incorrecta. Usa la del {keyName}.",
     keyContinue: "Continuar",

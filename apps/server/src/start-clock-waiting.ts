@@ -7,9 +7,7 @@ import {
   type ClockMoment,
   type KeptClockConfirmation,
 } from "@waitron/module";
-import { createTurns } from "./backup-turns.js";
 import { bootReader, type BootReading } from "./boot-reader.js";
-import { MAX_PACK_PDF, RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import "./errors.js";
 import { pageReturnPath } from "./waiting-page.js";
@@ -55,8 +53,7 @@ export interface StartClockWaiting {
 /**
  * What the box's usual address answers while a restore's start waits to confirm its time: the
  * waiting page for every page, `server.waiting_for_clock` for everything else, and the clock
- * routes, which take nothing from a request without the master key whose authority key is staged
- * (a chosen recovery pack PDF is answered with its master key only when it is that key).
+ * routes, which take nothing from a request without the master key whose authority key is staged.
  */
 export function createStartClockWaiting(options: StartClockWaitingOptions): StartClockWaiting {
   const wall = options.clock?.wall ?? Date.now;
@@ -77,14 +74,6 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
     });
   };
 
-  const refuse = (c: Context, err: AppError) => {
-    c.set("refusalCode", err.code);
-    return c.json({ error: { code: err.code, params: err.params } }, 403);
-  };
-  const refuseOrigin = (c: Context) => refuse(c, new AppError("restore.clock_origin_refused", {}));
-  /** A wrong key, naming the key staging recorded for the backup when it recorded one. */
-  const refuseKey = async (c: Context) =>
-    refuse(c, wrongMasterKey(await readStagedMasterKeyName(options.stateDir)));
   /** Each clock route: refused from another site's page or without the key, otherwise `answer`
    * with the body and its time. */
   const keyed = (
@@ -97,43 +86,18 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       const sent =
         typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
       c.header("Cache-Control", "no-store");
-      if (!sentFromThisOrigin(c)) return refuseOrigin(c);
-      if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) return refuseKey(c);
+      if (!sentFromThisOrigin(c)) {
+        const err = new AppError("restore.clock_origin_refused", {});
+        c.set("refusalCode", err.code);
+        return c.json({ error: { code: err.code, params: err.params } }, 403);
+      }
+      if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) {
+        const err = wrongMasterKey(await readStagedMasterKeyName(options.stateDir));
+        c.set("refusalCode", err.code);
+        return c.json({ error: { code: err.code, params: err.params } }, 403);
+      }
       return answer(c, sent, received);
     });
-
-  /** The recovery pack PDF the page's person chose: its master key when it is the staged one, so
-   * the page fills the field with it, or what is wrong with the file. One PDF is taken and read at
-   * a time; a waiting sender's body stays unread until its turn. */
-  const packTurns = createTurns();
-  app.post("/restore-clock/pack", async (c) => {
-    c.header("Cache-Control", "no-store");
-    if (!sentFromThisOrigin(c)) return refuseOrigin(c);
-    const tooLarge = () => c.json({ result: "not_a_pack" }, 413);
-    if (Number(c.req.header("content-length") ?? 0) > MAX_PACK_PDF) return tooLarge();
-    const read = packTurns(async () => {
-      const bytes = await readUpTo(c.req.raw.body, MAX_PACK_PDF);
-      if (bytes === null) return null;
-      const { readRecoveryPackPdf } = await packReader();
-      return readRecoveryPackPdf(bytes);
-    });
-    let masterKey: string | null;
-    let heldBy: number | null;
-    try {
-      const pack = await read;
-      if (pack === null) return tooLarge();
-      ({ masterKey, masterKeyHeldBy: heldBy } = pack);
-    } catch (error) {
-      const notAPack =
-        error instanceof RecoveryPackFileError &&
-        (error.reason === "not_a_pack" || error.reason === "size");
-      return c.json({ result: notAPack ? "not_a_pack" : "damaged" });
-    }
-    if (masterKey === null) return c.json({ result: "elsewhere", heldBy });
-    if (!(await matchesStagedNodeKey(options.stateDir, masterKey))) return refuseKey(c);
-    return c.json({ key: masterKey });
-  });
-
   /** This device's time against the challenge it names, which answers once. */
   const measure = (c: Context, sent: Record<string, unknown>, received: ClockMoment) => {
     const id = typeof sent.challengeId === "string" ? sent.challengeId : undefined;
@@ -225,54 +189,9 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   };
 }
 
-let packReaderLoad:
-  Promise<typeof import("@waitron/recovery-pack/src/read-pack-pdf.js")> | undefined;
-/** The pack reader, loaded on first use: pdf-lib is needed only while a restore waits for its
- * time. */
-function packReader() {
-  packReaderLoad ??= import("@waitron/recovery-pack/src/read-pack-pdf.js");
-  return packReaderLoad;
-}
-
-/** The whole body, or null once it passes `limit` bytes, read no further. */
-async function readUpTo(
-  body: ReadableStream<Uint8Array> | null,
-  limit: number,
-): Promise<Uint8Array | null> {
-  if (body === null) return new Uint8Array();
-  const reader = body.getReader();
-  const pieces: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const next = await reader.read();
-    if (next.done) break;
-    size += next.value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return null;
-    }
-    pieces.push(next.value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const piece of pieces) {
-    bytes.set(piece, offset);
-    offset += piece.byteLength;
-  }
-  return bytes;
-}
-
 function renderWaitingPage(locale: SupportedLocale, destination: string): string {
   const words = START_CLOCK_WAITING_WORDS[locale];
-  const packLines = {
-    notPack: words.notPack,
-    damaged: words.damaged,
-    failed: words.packFailed,
-    elsewhere: words.elsewhere,
-    elsewhereOn: words.elsewhereOn,
-    keyRefused: words.keyRefused,
-    wrongKey: words.wrongKey,
-  };
+  const keyLines = { keyRefused: words.keyRefused, wrongKey: words.wrongKey };
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
     locale,
@@ -282,9 +201,6 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
 <p><label for="clock-key-field">${escapeHtml(words.keyLabel)} *</label></p>
 <p><input type="password" id="clock-key-field" name="master-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
 <p id="clock-key-error" hidden>${escapeHtml(words.keyRefused)}</p>
-<p><label for="clock-pack">${escapeHtml(words.packButton)}</label></p>
-<p><input type="file" id="clock-pack" accept="application/pdf,.pdf" aria-describedby="clock-pack-error"></p>
-<p id="clock-pack-error" hidden></p>
 <p><button type="submit">${escapeHtml(words.keyContinue)}</button></p>
 </form>
 <div id="clock-step" hidden>
@@ -298,7 +214,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
 <script>
 (() => {
   const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
-  const packLines = ${JSON.stringify(packLines).replaceAll("<", "\\u003c")};
+  const keyLines = ${JSON.stringify(keyLines).replaceAll("<", "\\u003c")};
   const $ = (id) => document.getElementById(id);
   const field = $("clock-key-field");
   const show = (id) => {
@@ -326,15 +242,13 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     const keyName = refusal?.error?.params?.keyName;
     $("clock-key-error").textContent =
       typeof keyName === "string"
-        ? packLines.wrongKey.replace("{keyName}", keyName)
-        : packLines.keyRefused;
+        ? keyLines.wrongKey.replace("{keyName}", keyName)
+        : keyLines.keyRefused;
     $("clock-key-error").hidden = refusal === null;
     field.toggleAttribute("aria-invalid", refusal !== null);
   };
-  let attempt = 0;
   // This device's time against a fresh challenge; a refused key shows the key's refusal.
   const timed = async (path) => {
-    attempt += 1;
     const challenge = await post("challenge", {});
     const refused = typeof challenge.id !== "string";
     keyLine(refused ? challenge : null);
@@ -351,59 +265,8 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     $("clock-server").textContent = when(answer.serverMs);
   };
   const quietly = (run) => () => run().catch(() => {});
-  const pack = $("clock-pack");
-  const packLine = (text) => {
-    $("clock-pack-error").textContent = text ?? "";
-    $("clock-pack-error").hidden = text === null;
-    pack.toggleAttribute("aria-invalid", text !== null);
-  };
-  // Each PDF chosen, each key typed and each request that sends the key is a new attempt; a PDF's
-  // answer is used only while its choice is still the latest attempt.
-  field.addEventListener("input", () => (attempt += 1));
-  // The chosen PDF is read on the box; the master key it answers is used as if typed.
-  pack.addEventListener("change", quietly(async () => {
-    const file = pack.files[0];
-    if (file === undefined) return;
-    const mine = (attempt += 1);
-    let answer;
-    try {
-      const response = await fetch("/restore-clock/pack", {
-        method: "POST",
-        headers: { "content-type": "application/pdf" },
-        body: file,
-      });
-      answer = await response.json();
-    } catch {
-      answer = { result: "failed" };
-    } finally {
-      pack.value = "";
-    }
-    if (mine !== attempt) return;
-    if (typeof answer.key === "string") {
-      packLine(null);
-      field.value = answer.key;
-      return compare();
-    }
-    if (answer.error !== undefined) {
-      packLine(null);
-      field.value = "";
-      return keyLine(answer);
-    }
-    packLine(
-      answer.result === "elsewhere"
-        ? answer.heldBy === null
-          ? packLines.elsewhere
-          : packLines.elsewhereOn.replace("{heldBy}", String(answer.heldBy))
-        : answer.result === "damaged"
-          ? packLines.damaged
-          : answer.result === "failed"
-            ? packLines.failed
-            : packLines.notPack,
-    );
-  }));
   $("clock-key").addEventListener("submit", (event) => {
     event.preventDefault();
-    packLine(null);
     void quietly(compare)();
   });
   const confirm = async () => {

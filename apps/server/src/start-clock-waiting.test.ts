@@ -6,32 +6,11 @@ import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/modul
 import { authorityKey } from "@waitron/credentials";
 import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
-import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { escapeHtml } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import type { SetupClockPerson } from "./setup-clock-set.js";
 import { createStartClockWaiting, type StartClockWaitingOptions } from "./start-clock-waiting.js";
-import { recoveryPackPdf as packPdf } from "./testing/recovery-pack-pdf.js";
-
-/** How many pack reads are under way at once, and the most there have been. */
-const packReads = vi.hoisted(() => ({ now: 0, most: 0 }));
-vi.mock("@waitron/recovery-pack/src/read-pack-pdf.js", async (load) => {
-  const real = await load<typeof import("@waitron/recovery-pack/src/read-pack-pdf.js")>();
-  return {
-    ...real,
-    readRecoveryPackPdf: async (bytes: Uint8Array) => {
-      packReads.now += 1;
-      packReads.most = Math.max(packReads.most, packReads.now);
-      try {
-        return await real.readRecoveryPackPdf(bytes);
-      } finally {
-        packReads.now -= 1;
-      }
-    },
-  };
-});
 
 const BOX_MS = Date.parse("2026-11-13T10:00:00.000Z");
 const KEY = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => i * 13 + 5));
@@ -138,6 +117,7 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(escapeHtml("Master key"));
       expect(body).toMatch(/<input [^>]*type="password"[^>]*name="master-key"/);
+      expect(body).not.toContain('type="file"');
     },
   );
 
@@ -161,6 +141,7 @@ describe("the restore's waiting app: pages", () => {
     ["POST", "/api/payments", html],
     ["GET", "/", { accept: "application/json" }],
     ["POST", "/restore-clock/reading", {}],
+    ["POST", "/restore-clock/pack", { "content-type": "application/pdf" }],
   ] as const)("answers %s %s with server.waiting_for_clock", async (method, path, headers) => {
     const log = vi.fn();
     const { app } = await waiting({ log });
@@ -364,227 +345,9 @@ describe("the restore's waiting app: naming the master key a wrong key is refuse
     },
   );
 
-  it("refuses another key's pack naming the staged key", async () => {
-    const w = await waiting({ stateDir: await stateWith(STAGED, NAME) });
-    const res = await w.app.request("/restore-clock/pack", {
-      method: "POST",
-      headers: { "content-type": "application/pdf" },
-      body: new Uint8Array(await packPdf(other)),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual(named);
-  });
-
   it("still serves the right key with a name staged (control)", async () => {
     const w = await waiting({ stateDir: await stateWith(STAGED, NAME) });
     expect((await w.post("challenge", { key: KEY })).status).toBe(200);
-  });
-});
-
-describe("the restore's waiting app: the recovery pack PDF", () => {
-  const sendPack = (
-    w: Awaited<ReturnType<typeof waiting>>,
-    bytes: Uint8Array,
-    headers: Record<string, string> = {},
-  ) =>
-    w.app.request("/restore-clock/pack", {
-      method: "POST",
-      headers: { "content-type": "application/pdf", ...headers },
-      body: new Uint8Array(bytes),
-    });
-
-  it("the restore clock page takes the master key and the pack PDF", async () => {
-    const w = await waiting();
-    const res = await sendPack(w, await packPdf(KEY));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ key: KEY });
-    // The key it answers opens the clock routes, as a typed one does.
-    expect((await w.post("challenge", { key: KEY })).status).toBe(200);
-  });
-
-  it("refuses another key's pack as a wrong key", async () => {
-    const log = vi.fn();
-    const w = await waiting({ log });
-    const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
-    const res = await sendPack(w, await packPdf(other));
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual(refused);
-    expect(log).toHaveBeenLastCalledWith(
-      "warn",
-      "http.request",
-      expect.objectContaining({ errorCode: "promotion.break_glass_invalid" }),
-    );
-  });
-
-  it("says a PDF that is not a pack, or a file that is not a PDF, is not a pack", async () => {
-    const w = await waiting();
-    const plain = await PDFDocument.create();
-    plain.addPage();
-    for (const bytes of [await plain.save(), new TextEncoder().encode(KEY), new Uint8Array()]) {
-      const res = await sendPack(w, bytes);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ result: "not_a_pack" });
-    }
-  });
-
-  it("says a pack whose digest is broken is damaged", async () => {
-    const w = await waiting();
-    const pdf = await PDFDocument.load(await packPdf(KEY));
-    const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
-    info.set(PDFName.of("WaitronRecoveryDigest"), PDFString.of(`sha256-v1:${"0".repeat(64)}`));
-    const res = await sendPack(w, await pdf.save());
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ result: "damaged" });
-  });
-
-  it("says a pack without the master key holds it elsewhere, naming the pack that holds it", async () => {
-    const w = await waiting();
-    for (const heldBy of [1, null]) {
-      const res = await sendPack(w, await packPdf(null, heldBy));
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ result: "elsewhere", heldBy });
-    }
-  });
-
-  it("refuses the right pack from another site's page", async () => {
-    const w = await waiting();
-    const res = await sendPack(w, await packPdf(KEY), { origin: "https://elsewhere.example" });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({
-      error: { code: "restore.clock_origin_refused", params: {} },
-    });
-  });
-
-  it("refuses a body over 8 MiB", async () => {
-    const w = await waiting();
-    const res = await sendPack(w, new Uint8Array(MAX_PACK_PDF + 1));
-    expect(res.status).toBe(413);
-    expect(await res.json()).toEqual({ result: "not_a_pack" });
-  });
-
-  /** A body sent in 1 MiB pieces, `total` bytes in all, counting what the route has taken. */
-  function streamed(total: number) {
-    const piece = 1024 * 1024;
-    const taken = { bytes: 0 };
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (taken.bytes >= total) return controller.close();
-        const size = Math.min(piece, total - taken.bytes);
-        taken.bytes += size;
-        controller.enqueue(new Uint8Array(size));
-      },
-    });
-    return { body, taken };
-  }
-
-  it("refuses an oversized body without reading it whole", async () => {
-    const total = 64 * 1024 * 1024;
-    const unsized = streamed(total);
-    const w = await waiting();
-    const res = await w.app.request("/restore-clock/pack", {
-      method: "POST",
-      headers: { "content-type": "application/pdf" },
-      body: unsized.body,
-      duplex: "half",
-    } as RequestInit);
-    expect(res.status).toBe(413);
-    expect(await res.json()).toEqual({ result: "not_a_pack" });
-    // No more than the limit and the piece that crossed it, with one piece read ahead.
-    expect(unsized.taken.bytes).toBeLessThanOrEqual(MAX_PACK_PDF + 2 * 1024 * 1024);
-
-    const sized = streamed(total);
-    const declared = await w.app.request("/restore-clock/pack", {
-      method: "POST",
-      headers: { "content-type": "application/pdf", "content-length": String(total) },
-      body: sized.body,
-      duplex: "half",
-    } as RequestInit);
-    expect(declared.status).toBe(413);
-    expect(await declared.json()).toEqual({ result: "not_a_pack" });
-    expect(sized.taken.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
-  });
-
-  it("reads one pack at a time", async () => {
-    const w = await waiting();
-    const pdf = await packPdf(KEY);
-    packReads.most = 0;
-    const answers = await Promise.all([1, 2, 3].map(() => sendPack(w, pdf)));
-    for (const res of answers) expect(await res.json()).toEqual({ key: KEY });
-    expect(packReads.most).toBe(1);
-  });
-
-  it("takes no waiting pack's body until the pack before it has been read", async () => {
-    const w = await waiting();
-    const pdf = await packPdf(KEY);
-    // The first sends all but its last byte, then holds the turn until `finish`.
-    let finish!: () => void;
-    const held = new Promise<void>((resolve) => (finish = resolve));
-    let begun!: () => void;
-    const reading = new Promise<void>((resolve) => (begun = resolve));
-    let pulls = 0;
-    const first = new ReadableStream<Uint8Array>(
-      {
-        async pull(controller) {
-          pulls += 1;
-          if (pulls === 1) {
-            controller.enqueue(pdf.slice(0, -1));
-            return begun();
-          }
-          await held;
-          controller.enqueue(pdf.slice(-1));
-          controller.close();
-        },
-      },
-      { highWaterMark: 0 },
-    );
-    /** The whole pack, counting what the route has taken of it. */
-    const counted = () => {
-      const taken = { bytes: 0 };
-      let sent = false;
-      const body = new ReadableStream<Uint8Array>(
-        {
-          pull(controller) {
-            if (sent) return controller.close();
-            sent = true;
-            taken.bytes += pdf.length;
-            controller.enqueue(pdf.slice());
-          },
-        },
-        { highWaterMark: 0 },
-      );
-      return { body, taken };
-    };
-    const streamPack = (body: ReadableStream<Uint8Array>, headers: Record<string, string> = {}) =>
-      w.app.request("/restore-clock/pack", {
-        method: "POST",
-        headers: { "content-type": "application/pdf", ...headers },
-        body,
-        duplex: "half",
-      } as RequestInit);
-
-    const firstAnswer = streamPack(first);
-    await reading;
-    const unsized = counted();
-    const sized = counted();
-    const waitingAnswers = [
-      streamPack(unsized.body),
-      streamPack(sized.body, { "content-length": String(pdf.length) }),
-    ];
-    for (let turn = 0; turn < 20; turn += 1) await new Promise((r) => setImmediate(r));
-    expect([unsized.taken.bytes, sized.taken.bytes]).toEqual([0, 0]);
-
-    finish();
-    for (const res of [await firstAnswer, ...(await Promise.all(waitingAnswers))])
-      expect(await res.json()).toEqual({ key: KEY });
-    expect([unsized.taken.bytes, sized.taken.bytes]).toEqual([pdf.length, pdf.length]);
-  });
-
-  it("refuses the right pack when no key is staged", async () => {
-    const w = await waiting({ staged: null });
-    const res = await sendPack(w, await packPdf(KEY));
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual(refused);
   });
 });
 

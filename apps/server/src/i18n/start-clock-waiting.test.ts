@@ -18,14 +18,7 @@ describe("restore's clock-waiting page wording", () => {
   ] as const)("its field's words in %s are every master-key field's", (locale, pack) => {
     const words = START_CLOCK_WAITING_WORDS[locale];
     const field = MASTER_KEY_FIELD_WORDS[pack];
-    expect([words.keyLabel, words.packButton, words.notPack, words.damaged]).toEqual([
-      field.label,
-      field.button,
-      field.notPack,
-      field.damaged,
-    ]);
-    expect(words.elsewhere).toBe(field.elsewhere(null));
-    expect(words.elsewhereOn.replace("{heldBy}", "3")).toBe(field.elsewhere(3));
+    expect(words.keyLabel).toBe(field.label);
     expect(words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV")).toBe(
       field.wrongKey("2026-11-23 · QZJV"),
     );

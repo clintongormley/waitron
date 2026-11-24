@@ -2,8 +2,8 @@ import { canonicalJson } from "./canonical-json.js";
 
 export const PACK_ATTACHMENT = "waitron-recovery-pack-v2.json";
 export const MAX_PACK_FILE = 16 * 1024;
-/** The largest recovery pack PDF read; here rather than beside the reader so a server can refuse a
- * larger body without loading pdf-lib. */
+/** The largest recovery pack PDF read; here rather than beside the reader so a master-key field can
+ * refuse a larger PDF without loading pdf-lib. */
 export const MAX_PACK_PDF = 8 * 1024 * 1024;
 export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-2:";
 export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
