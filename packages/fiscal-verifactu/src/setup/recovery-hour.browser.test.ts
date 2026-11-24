@@ -3601,7 +3601,6 @@ it.each(["controlled", "emergency"] as const)(
       scenario,
     );
     expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
-    expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
   },
 );
 it("a restore request refused for the wrong master key names the backup's key under the field, and twice", async () => {

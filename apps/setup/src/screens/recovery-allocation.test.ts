@@ -69,7 +69,7 @@ async function keyField(entry: LitElement) {
   return field;
 }
 
-it("pairs the public recovery record with the selected copy's separate node key", async () => {
+it("pairs the public recovery record with the selected copy's separate master key", async () => {
   const { entry } = await selected();
   expect(entry.readCredentials()).toBeNull();
   await fill(entry);
@@ -120,7 +120,7 @@ it("uses the prepared stream digest rather than the generation's display locator
   });
   expect(entry.readCredentials()).toBeNull();
 });
-it("requires the node key and both operator confirmations after entering a record", async () => {
+it("requires the master key and both operator confirmations after entering a record", async () => {
   const { entry } = await selected();
   change(entry, "record", JSON.stringify(operation));
   expect(entry.readCredentials()).toBeNull();
@@ -197,16 +197,16 @@ it("holds Restore after an invalid record and releases it after the fields are f
   expect(button.disabled).toBe(false);
 });
 
-it("shows a request's node-key refusal beside that field and clears it when edited", async () => {
+it("shows a request's master-key refusal beside that field and clears it when edited", async () => {
   const { el, entry } = await selected();
   Object.assign(el, {
     invalidField: "nodeRecoverySecret",
-    errorMessage: "Check the selected backup's node key.",
+    errorMessage: "Check the selected backup's master key.",
   });
   await el.updateComplete;
   await entry.updateComplete;
   const field = await keyField(entry);
-  await vi.waitFor(() => expect(field.error).toBe("Check the selected backup's node key."));
+  await vi.waitFor(() => expect(field.error).toBe("Check the selected backup's master key."));
   await typeMasterKey(entry, "q");
   await entry.updateComplete;
   await field.updateComplete;
@@ -283,7 +283,6 @@ it("allocation draws the master-key field labelled Master key with no hint, and 
   expect(field.label).toBe("Master key");
   expect(field.shadowRoot!.querySelector("input")!.placeholder).toBe("");
   expect(key!.shadowRoot!.textContent).toContain("Choose the recovery pack PDF");
-  expect(entry.shadowRoot!.querySelector("[data-test=node-key]")).toBeNull();
   change(entry, "record", JSON.stringify(operation));
   tick(entry, "isolated");
   tick(entry, "retained");
