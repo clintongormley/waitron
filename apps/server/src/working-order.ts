@@ -4933,6 +4933,86 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
   }
 }
 
+/** A line as {@link checkLinePart} reads it, its amounts as decimals. */
+export interface PartLine {
+  lineNo: number;
+  quantity: Decimal;
+  unitPriceGross: Decimal;
+  priceQuantity: Decimal;
+  unitPrecision: number | null;
+}
+
+/** An extra split with its dish: what stays on its row and what goes to the new one. */
+export interface ExtraPart<L extends PartLine = PartLine> {
+  row: L;
+  remaining: Decimal;
+  moved: Decimal;
+}
+
+/**
+ * Refuse `quantity` of `line` as {@link carveOffLines} refuses it: `null` when it is the whole
+ * line, else how each of its `extras` splits with the part.
+ */
+export function checkLinePart<L extends PartLine>(
+  tabId: string,
+  line: L,
+  quantity: string,
+  extras: readonly L[],
+  opts: { splitExtras?: boolean; splitIntoUnits?: boolean },
+): ExtraPart<L>[] | null {
+  // A malformed literal is reported as the same domain code as an out-of-range one.
+  let inRange: boolean;
+  try {
+    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
+      positive: true,
+    });
+    inRange = compareDecimal(decimal(quantity), decimal(line.quantity)) <= 0;
+    if (opts.splitIntoUnits) {
+      const units = stringToThousandths(line.quantity);
+      inRange = inRange && line.unitPrecision === 0 && units >= 2000 && units % 1000 === 0;
+      inRange = inRange && pricesAddUp(line, Array(units / 1000).fill(decimal("1")));
+    } else if (inRange && compareDecimal(decimal(quantity), decimal(line.quantity)) < 0) {
+      const moved = decimal(quantity);
+      inRange = pricesAddUp(line, [moved, subtractDecimal(decimal(line.quantity), moved)]);
+    }
+  } catch {
+    inRange = false;
+  }
+  if (!inRange) {
+    throw new AppError("tab.transfer_quantity_invalid", {
+      tabId,
+      lineNo: line.lineNo,
+      quantity: opts.splitIntoUnits ? line.quantity : quantity,
+    });
+  }
+  if (compareDecimal(decimal(quantity), decimal(line.quantity)) === 0) return null;
+  if (extras.length > 0 && opts.splitExtras !== true) {
+    throw new AppError("tab.transfer_modifier_line", { tabId, lineNo: line.lineNo });
+  }
+  const moved = decimal(quantity);
+  const remaining = subtractDecimal(decimal(line.quantity), moved);
+  const children = extras.map((row) => {
+    const perDish = perDishExtraPicks(row.quantity, line.quantity, row.priceQuantity);
+    return {
+      row,
+      remaining: extraQuantityFor(perDish, remaining, row.priceQuantity),
+      moved: extraQuantityFor(perDish, moved, row.priceQuantity),
+    };
+  });
+  // An extra that is not a whole count a dish would split into parts that do not add up to it,
+  // and the bill would drift.
+  if (
+    children.some(
+      (child) =>
+        compareDecimal(sumDecimals([child.remaining, child.moved]), child.row.quantity) !== 0 ||
+        !pricesAddUp(child.row, [child.remaining, child.moved]),
+    )
+  ) {
+    throw new AppError("tab.transfer_modifier_line", { tabId, lineNo: line.lineNo });
+  }
+  return children;
+}
+
 /**
  * Carry whole lines between two orders, or cut part of a line off into a new row of its own order,
  * keeping each unit's LOCKED prices and CONSERVING quantity. It makes no open-order check and no
@@ -5056,9 +5136,7 @@ async function carveLines(
   // source, which `working_order_lines_quantity_ck` refuses.
   const wholeLineNos: number[] = [];
   type SourceLine = (typeof sourceLines)[number];
-  /** An extra split with its dish: what stays on its row and what goes to the new one. */
-  type ExtraPart = { row: SourceLine; remaining: Decimal; moved: Decimal };
-  const partials: { line: SourceLine; quantity: string; children: ExtraPart[] }[] = [];
+  const partials: { line: SourceLine; quantity: string; children: ExtraPart<SourceLine>[] }[] = [];
   for (const t of transfers) {
     const line = byLineNo.get(t.lineNo);
     if (line === undefined) {
@@ -5073,61 +5151,15 @@ async function carveLines(
       wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
     }
-    // A malformed literal is reported as the same domain code as an out-of-range one.
-    let inRange: boolean;
-    try {
-      assertQuantityPrecision(t.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
-        positive: true,
-      });
-      inRange = compareDecimal(decimal(t.quantity), decimal(line.quantity)) <= 0;
-      if (opts.splitIntoUnits) {
-        const units = stringToThousandths(line.quantity);
-        inRange = inRange && line.unitPrecision === 0 && units >= 2000 && units % 1000 === 0;
-        inRange = inRange && pricesAddUp(line, Array(units / 1000).fill(decimal("1")));
-      } else if (inRange && compareDecimal(decimal(t.quantity), decimal(line.quantity)) < 0) {
-        const moved = decimal(t.quantity);
-        inRange = pricesAddUp(line, [moved, subtractDecimal(decimal(line.quantity), moved)]);
-      }
-    } catch {
-      inRange = false;
-    }
-    if (!inRange) {
-      throw new AppError("tab.transfer_quantity_invalid", {
-        tabId: fromTabId,
-        lineNo: t.lineNo,
-        quantity: opts.splitIntoUnits ? line.quantity : t.quantity,
-      });
-    }
-    if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
-      wholeLineNos.push(t.lineNo, ...childLineNos);
-    } else {
-      if (childLineNos.length > 0 && opts.splitExtras !== true) {
-        throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
-      }
-      const moved = decimal(t.quantity);
-      const remaining = subtractDecimal(decimal(line.quantity), moved);
-      const children = childLineNos.map((childLineNo) => {
-        const row = byLineNo.get(childLineNo)!;
-        const perDish = perDishExtraPicks(row.quantity, line.quantity, row.priceQuantity);
-        return {
-          row,
-          remaining: extraQuantityFor(perDish, remaining, row.priceQuantity),
-          moved: extraQuantityFor(perDish, moved, row.priceQuantity),
-        };
-      });
-      // An extra that is not a whole count a dish would split into parts that do not add up to it,
-      // and the bill would drift.
-      if (
-        children.some(
-          (child) =>
-            compareDecimal(sumDecimals([child.remaining, child.moved]), child.row.quantity) !== 0 ||
-            !pricesAddUp(child.row, [child.remaining, child.moved]),
-        )
-      ) {
-        throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
-      }
-      partials.push({ line, quantity: t.quantity, children });
-    }
+    const children = checkLinePart(
+      fromTabId,
+      line,
+      t.quantity,
+      childLineNos.map((childLineNo) => byLineNo.get(childLineNo)!),
+      opts,
+    );
+    if (children === null) wholeLineNos.push(t.lineNo, ...childLineNos);
+    else partials.push({ line, quantity: t.quantity, children });
   }
   if (fromTabId !== toTabId && partials.length > 0) {
     throw new Error("a part of a line is cut only within its order");

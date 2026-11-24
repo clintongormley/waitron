@@ -30,7 +30,7 @@ import "./errors.js";
 
 let v: PartyVenue;
 let offers: ZoneOffers;
-let ids: Record<"soup" | "hake" | "beer", string>;
+let ids: Record<"soup" | "hake" | "beer" | "ham", string>;
 
 useVenueDb({
   resetPerTest: false,
@@ -44,14 +44,18 @@ useVenueDb({
           sql`select category_id as categoryId from products where id = ${v.productId("Burger")}`,
         )
       )[0]!.categoryId;
-      const product = async (name: string, unitPrice: string) =>
+      const product = async (
+        name: string,
+        unitPrice: string,
+        pricingUnit: "each" | "weight" = "each",
+      ) =>
         (
           await createProduct(tx, {
             categoryId: category,
             name,
             customerName: { [v.cfg.locale]: `${name} (customer)` },
             kitchenName: name.toUpperCase(),
-            pricingUnit: "each",
+            pricingUnit,
             unitPrice,
             vatClass: "general",
           })
@@ -60,6 +64,8 @@ useVenueDb({
         soup: await product("Soup", "6.00"),
         hake: await product("Hake", "15.00"),
         beer: await product("Beer", "2.50"),
+        // By the kilo: 0.050 kg is 1.01, and its halves would come to 0.51 each.
+        ham: await product("Ham", "20.20", "weight"),
       };
       offers = await offerProducts(tx, { zone: "tables" });
     });
@@ -308,4 +314,41 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     expect(await billsNaming(billId)).toEqual([]);
     expect(await lineTotals(billId)).toEqual(["7.50", "15.00", "6.00"]);
   });
+
+  it.each([
+    ["half of a dish sold by the unit", { product: "beer" }, "beer", "0.5"],
+    [
+      "part of a weighed line whose part and rest would cost more than it",
+      { product: "ham", quantity: "0.050" },
+      "ham",
+      "0.025",
+    ],
+  ] as const)(
+    "the preview refuses %s, as paying for it does",
+    async (_, line, product, quantity) => {
+      const { partyId, billId } = await seatedBill({ product: "soup" }, line);
+      const picks = [{ lineId: await lineOf(billId, product), quantity }];
+
+      const paying = await payForItems(
+        deps(),
+        v.cfg,
+        billId,
+        await request(partyId, billId, picks, { method: "card", applied: "1.25", tip: "0.00" }),
+        v.operator,
+      ).catch((error: unknown) => error);
+      const previewing = await previewPayForItems(v.db, billId, { picks, method: "card" }).catch(
+        (error: unknown) => error,
+      );
+
+      expect(paying).toMatchObject({
+        code: "tab.transfer_quantity_invalid",
+        params: { tabId: billId, lineNo: 2, quantity },
+      });
+      expect(previewing).toMatchObject({
+        code: (paying as { code: string }).code,
+        params: (paying as { params: unknown }).params,
+      });
+      expect(await billsNaming(billId)).toEqual([]);
+    },
+  );
 });

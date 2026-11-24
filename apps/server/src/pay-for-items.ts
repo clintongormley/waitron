@@ -58,8 +58,11 @@ import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import {
+  assertDistinctTransferLines,
+  checkLinePart,
   splitLinesWithinOrder,
   storedOrderTotal,
+  type PartLine,
   type SplitRow,
   type TillSaleDeps,
 } from "./working-order.js";
@@ -94,14 +97,26 @@ async function readPicks(
       name: workingOrderLines.name,
       quantity: workingOrderLines.quantity,
       lineTotal: workingOrderLines.lineTotal,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      priceQuantity: workingOrderLines.priceQuantity,
+      unitPrecision: workingOrderLines.unitPrecision,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
   const byId = new Map(rows.map((row) => [row.id, row]));
   const extrasCents = new Map<string, number>();
+  const extrasOf = new Map<string, PartLine[]>();
+  const asPart = (row: (typeof rows)[number]): PartLine => ({
+    lineNo: row.lineNo,
+    quantity: thousandthsToDecimal(row.quantity),
+    unitPriceGross: centsToDecimal(row.unitPriceGross),
+    priceQuantity: thousandthsToDecimal(row.priceQuantity),
+    unitPrecision: row.unitPrecision,
+  });
   for (const row of rows) {
     if (row.parentLineId === null) continue;
     extrasCents.set(row.parentLineId, (extrasCents.get(row.parentLineId) ?? 0) + row.lineTotal);
+    extrasOf.set(row.parentLineId, [...(extrasOf.get(row.parentLineId) ?? []), asPart(row)]);
   }
   const ownCents = (id: string) => byId.get(id)!.lineTotal + (extrasCents.get(id) ?? 0);
   // A set menu's dishes move with it (`resolveMoveLines`), so they are priced with it.
@@ -113,33 +128,31 @@ async function readPicks(
       (dishesCents.get(row.setMenuLineId) ?? 0) + ownCents(row.id),
     );
   }
-  const seen = new Set<string>();
-  const picked = picks.map((pick): PickedLine => {
+  const chosen = picks.map((pick) => {
     const row = byId.get(pick.lineId);
     if (row === undefined)
       throw new AppError("tab.line_not_found", { tabId: billId, lineId: pick.lineId });
     if (row.parentLineId !== null)
       throw new AppError("tab.transfer_modifier_line", { tabId: billId, lineNo: row.lineNo });
-    if (seen.has(row.id))
-      throw new AppError("tab.transfer_duplicate_line", { tabId: billId, lineNo: row.lineNo });
-    seen.add(row.id);
+    return { row, quantity: pick.quantity };
+  });
+  assertDistinctTransferLines(
+    billId,
+    chosen.map(({ row }) => row),
+  );
+  const picked = chosen.map(({ row, quantity }): PickedLine => {
     const familyCents = ownCents(row.id) + (dishesCents.get(row.id) ?? 0);
-    if (pick.quantity === undefined) return { id: row.id, lineNo: row.lineNo, familyCents };
-    const quantity = pickedThousandths(pick.quantity);
-    if (quantity === null || quantity <= 0 || quantity > row.quantity) {
-      throw new AppError("tab.transfer_quantity_invalid", {
-        tabId: billId,
-        lineNo: row.lineNo,
-        quantity: String(pick.quantity),
-      });
-    }
-    return quantity === row.quantity
+    // Refused here as the split would refuse it, so a preview never prices a part it cannot cut.
+    return quantity === undefined ||
+      checkLinePart(billId, asPart(row), quantity, extrasOf.get(row.id) ?? [], {
+        splitExtras: true,
+      }) === null
       ? { id: row.id, lineNo: row.lineNo, familyCents }
       : {
           id: row.id,
           lineNo: row.lineNo,
           familyCents,
-          part: { quantity: pick.quantity, ofQuantity: row.quantity },
+          part: { quantity, ofQuantity: row.quantity },
         };
   });
   // A set menu's dish chosen with its set menu is already in the set menu's price; chosen without
