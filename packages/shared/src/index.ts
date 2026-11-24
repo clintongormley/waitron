@@ -652,3 +652,12 @@ export {
   type VariableSource,
   type VariableSpec,
 } from "./environment-variables.js";
+
+export {
+  groupSetMenus,
+  type SetMenuGrouping,
+  type SetMenuGroupingDiscount,
+  type SetMenuGroupingDish,
+  type SetMenuGroupingInput,
+  type SetMenuGroupingPrevious,
+} from "./set-menu-grouping.js";

@@ -32,16 +32,17 @@ Extras stay separate. Comps and fixed reductions up to the base price are additi
 costs for a single percentage and compare the final rounded price. When several percentages can
 round differently or a fixed amount exceeds the base, vary only the supplement choices that can
 affect that discount and send the rest to the same placement solver. Verify those prices against
-exhaustive small bills. The watcher settles whether discounts can stack on a remaining menu.
+exhaustive small bills. If two discounted menus become one, keep the larger reduction in cents
+and return the other discount as unused (watcher, 24 November at 10:38).
 
 **Search limit.** Keep the mix cap for enumerated count vectors. Reserve a smaller deterministic
 placement-solve budget for finding a complete fallback, and check it on the large fixture below.
 Start with valid saved places and test whole-menu additions so a first order can get a saving.
 Use the best complete result found that keeps valid saved places when the exact price is still
 unknown. A proven cheapest price stands even if tie-breaking stops early. On an unchanged repeat,
-keep the saved fallback price and places. The watcher settles whether fallback can close a saved
-menu that becomes dearer than its remaining dishes after a change. Ineligible or over-limit
-portions keep their à la carte charges.
+keep the saved fallback price and places. Close any saved menu that becomes dearer than its
+remaining dishes à la carte (watcher, 24 November at 10:38). Ineligible or over-limit portions
+keep their à la carte charges.
 
 **Worked bills.** After clearance observe failures before implementing. Keep the old assertions.
 

@@ -59,6 +59,19 @@ describe("set-menu placement", () => {
     ).toEqual({ cost: 3000, uncovered: 3, flows: [[]], capacityPrices: [0] });
   });
 
+  it("compares a place with each dish's own à la carte charge", () => {
+    expect(
+      solvePlacement({
+        capacities: [1],
+        classes: [
+          { count: 1, arcs: [{ pair: 0, cost: 50 }], uncoveredCost: 100 },
+          { count: 1, arcs: [{ pair: 0, cost: 80 }], uncoveredCost: 300 },
+        ],
+        uncoveredCost: 1000,
+      }),
+    ).toMatchObject({ cost: 180, uncovered: 1, flows: [[], [{ pair: 0, count: 1 }]] });
+  });
+
   it("prices a full pair a dish wanted", () => {
     expect(solvePlacement(twoPlaces).capacityPrices).toEqual([5, 0]);
   });
