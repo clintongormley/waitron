@@ -180,7 +180,7 @@ async function writeBillGrouping(
 /**
  * Regroups each open bill among `billIds`, in turn, and answers the bills whose lines or `exact`
  * changed. A takeaway bill is grouped with no set menus (D14), so its set-menu rows go and its
- * dishes are charged à la carte.
+ * dishes are charged a la carte.
  */
 export async function regroupBills(
   tx: Transaction,

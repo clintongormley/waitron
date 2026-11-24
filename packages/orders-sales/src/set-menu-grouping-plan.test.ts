@@ -365,7 +365,7 @@ describe("planBillGrouping", () => {
     expect(plan.menuUpdates).toEqual([]);
   });
 
-  it("charges à la carte a placed dish whose set menu goes", () => {
+  it("charges a la carte a placed dish whose set menu goes", () => {
     const lines = [placed(dish("soup", 1, "soup"), "menu-a", 0), menuRow("menu-a", 2)];
     const plan = planBillGrouping(lines, none, [daily], ids());
     expect(plan.deletes).toEqual(["menu-a"]);
@@ -478,7 +478,7 @@ describe("planBillGrouping", () => {
     expect(plan.inserts).toEqual([]);
   });
 
-  it("passes a dish with no course or no menu item as not eligible, and charges it à la carte (D12)", () => {
+  it("passes a dish with no course or no menu item as not eligible, and charges it a la carte (D12)", () => {
     const lines = [
       placed(dish("soup", 1, "soup"), "menu-a", 0),
       placed(dish("hake", 2, "hake"), "menu-a", 1),

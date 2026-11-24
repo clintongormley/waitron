@@ -385,7 +385,7 @@ it("leaves Soup alone at its own price", async () => {
   );
 });
 
-it("puts Hake alone in a Daily with an empty place, cheaper than Hake à la carte", async () => {
+it("puts Hake alone in a Daily with an empty place, cheaper than Hake a la carte", async () => {
   const bill = await seated();
   await send(bill, "Hake");
   await regroup(bill.tabId);
@@ -748,7 +748,7 @@ it("saves a valid grouping a calculation hands it, even when not the cheapest", 
   ]);
 });
 
-it("charges a takeaway bill's dishes à la carte and removes its set menu (D14)", async () => {
+it("charges a takeaway bill's dishes a la carte and removes its set menu (D14)", async () => {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
