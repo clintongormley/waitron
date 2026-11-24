@@ -42,9 +42,17 @@ it.each([false, true])(
       {
         way: "whole",
         lines: [
-          { lineNo: 1, name: "Recorded dish", quantity: "2", total: "8.00", unitTotal: null },
+          {
+            lineNo: 1,
+            lineId: "stored-dish",
+            name: "Recorded dish",
+            quantity: "2",
+            total: "8.00",
+            unitTotal: null,
+          },
           {
             lineNo: 3,
+            lineId: "stored-served",
             name: "Recorded served dish",
             quantity: "1",
             total: "2.00",
@@ -201,9 +209,17 @@ describe("the bill actions below Sent and New order", () => {
       {
         way: "whole",
         lines: [
-          { lineNo: 1, name: "Recorded dish", quantity: "2", total: "8.00", unitTotal: null },
+          {
+            lineNo: 1,
+            lineId: "stored-dish",
+            name: "Recorded dish",
+            quantity: "2",
+            total: "8.00",
+            unitTotal: null,
+          },
           {
             lineNo: 3,
+            lineId: "stored-served",
             name: "Recorded served dish",
             quantity: "1",
             total: "2.00",

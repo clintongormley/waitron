@@ -32,9 +32,9 @@ const balance: BillBalance = {
 };
 
 const lines: PayLine[] = [
-  { lineNo: 1, name: "Paella", quantity: "1", total: "35.00", unitTotal: null },
-  { lineNo: 2, name: "Caña", quantity: "3", total: "9.00", unitTotal: "3.00" },
-  { lineNo: 3, name: "Tiramisú", quantity: "1", total: "6.00", unitTotal: null },
+  { lineNo: 1, lineId: "line-1", name: "Paella", quantity: "1", total: "35.00", unitTotal: null },
+  { lineNo: 2, lineId: "line-2", name: "Caña", quantity: "3", total: "9.00", unitTotal: "3.00" },
+  { lineNo: 3, lineId: "line-3", name: "Tiramisú", quantity: "1", total: "6.00", unitTotal: null },
 ];
 
 const pressed = async (el: TillBillPayDialog, selector: string) => {
@@ -370,7 +370,14 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     const { el, host } = await mount({
       lines: [
         ...lines,
-        { lineNo: 4, name: "Chuletón", quantity: "1", total: "25.00", unitTotal: null },
+        {
+          lineNo: 4,
+          lineId: "line-4",
+          name: "Chuletón",
+          quantity: "1",
+          total: "25.00",
+          unitTotal: null,
+        },
       ],
       balance: { ...balance, received: "105.00", reserved: "0.00", outstanding: "15.00" },
     });
@@ -1261,7 +1268,14 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         const mounted = await mount({
           lines: [
             ...lines,
-            { lineNo: 4, name: "Chuletón", quantity: "1", total: "25.00", unitTotal: null },
+            {
+              lineNo: 4,
+              lineId: "line-4",
+              name: "Chuletón",
+              quantity: "1",
+              total: "25.00",
+              unitTotal: null,
+            },
           ],
           balance: { ...longBalance, outstanding: "15.00" },
         });

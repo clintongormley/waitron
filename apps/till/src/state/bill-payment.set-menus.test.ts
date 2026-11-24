@@ -76,9 +76,30 @@ it("the items list shows set menus and leaves out covered dishes at 0.00", () =>
       ),
     ),
   ).toEqual([
-    { lineNo: 1, name: "Daily menu", quantity: "1", total: "14.00", unitTotal: null },
-    { lineNo: 2, name: "Special menu", quantity: "1", total: "20.00", unitTotal: null },
-    { lineNo: 5, name: "Sirloin", quantity: "1", total: "5.00", unitTotal: null },
+    {
+      lineNo: 1,
+      lineId: "daily-1",
+      name: "Daily menu",
+      quantity: "1",
+      total: "14.00",
+      unitTotal: null,
+    },
+    {
+      lineNo: 2,
+      lineId: "special-1",
+      name: "Special menu",
+      quantity: "1",
+      total: "20.00",
+      unitTotal: null,
+    },
+    {
+      lineNo: 5,
+      lineId: "sirloin",
+      name: "Sirloin",
+      quantity: "1",
+      total: "5.00",
+      unitTotal: null,
+    },
   ]);
 });
 
@@ -97,9 +118,23 @@ it("a covered soup with bread is listed at the bread's amount", () => {
   ];
 
   expect(payLines(lines, (line) => line.name!, state(placed("soup", "daily-1", 0)))).toEqual([
-    { lineNo: 1, name: "Daily menu", quantity: "1", total: "14.00", unitTotal: null },
-    { lineNo: 2, name: "Special menu", quantity: "1", total: "20.00", unitTotal: null },
-    { lineNo: 3, name: "Soup", quantity: "1", total: "1.50", unitTotal: null },
+    {
+      lineNo: 1,
+      lineId: "daily-1",
+      name: "Daily menu",
+      quantity: "1",
+      total: "14.00",
+      unitTotal: null,
+    },
+    {
+      lineNo: 2,
+      lineId: "special-1",
+      name: "Special menu",
+      quantity: "1",
+      total: "20.00",
+      unitTotal: null,
+    },
+    { lineNo: 3, lineId: "soup", name: "Soup", quantity: "1", total: "1.50", unitTotal: null },
   ]);
 });
 
@@ -117,8 +152,22 @@ it("a comped dish that is not in a set menu is still listed", () => {
   ];
 
   expect(payLines(lines, (line) => line.name!, state(placed("soup", "daily-1", 0)))).toEqual([
-    { lineNo: 1, name: "Daily menu", quantity: "1", total: "14.00", unitTotal: null },
-    { lineNo: 2, name: "Special menu", quantity: "1", total: "20.00", unitTotal: null },
-    { lineNo: 4, name: "Wine", quantity: "1", total: "0.00", unitTotal: null },
+    {
+      lineNo: 1,
+      lineId: "daily-1",
+      name: "Daily menu",
+      quantity: "1",
+      total: "14.00",
+      unitTotal: null,
+    },
+    {
+      lineNo: 2,
+      lineId: "special-1",
+      name: "Special menu",
+      quantity: "1",
+      total: "20.00",
+      unitTotal: null,
+    },
+    { lineNo: 4, lineId: "wine", name: "Wine", quantity: "1", total: "0.00", unitTotal: null },
   ]);
 });

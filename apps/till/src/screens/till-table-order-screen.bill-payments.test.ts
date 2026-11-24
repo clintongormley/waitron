@@ -133,9 +133,9 @@ const press = async (el: TillTableOrderScreen, selector: string) => {
 };
 
 const offeredLines = [
-  { lineNo: 1, name: "Paella", quantity: "1", total: "30.00", unitTotal: null },
-  { lineNo: 2, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
-  { lineNo: 3, name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
+  { lineNo: 1, lineId: "line-1", name: "Paella", quantity: "1", total: "30.00", unitTotal: null },
+  { lineNo: 2, lineId: "line-2", name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
+  { lineNo: 3, lineId: "line-3", name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
 ];
 
 beforeEach(() => setLocale("en"));

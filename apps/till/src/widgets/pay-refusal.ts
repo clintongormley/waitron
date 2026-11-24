@@ -34,6 +34,10 @@ export interface PayRefusal {
   moneyLeft?: string;
   /** An `invoice_correction.money_short`'s: the payments on account the receipt took off. */
   advanceInvoiceNumbers?: string[];
+  /** A `bill.below_advances`'s: what the bill's payments on account came to. */
+  advances?: string;
+  /** The dish a `set_menu.*` refusal names. */
+  dishName?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }
@@ -96,5 +100,5 @@ export function refusalText(
     return t("card_reader.not_set_up");
   if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)
     return chargeableText(refusal.chargeable);
-  return codeMessage(refusal.code);
+  return codeMessage(refusal.code, undefined, refusal);
 }

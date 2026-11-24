@@ -36,14 +36,23 @@ function balanceOf(over: Partial<BillBalance> = {}): BillBalance {
 
 const mainDish: PayLine = {
   lineNo: 1,
+  lineId: "line-1",
   name: "Paella",
   quantity: "1",
   total: "35.00",
   unitTotal: null,
 };
-const beers: PayLine = { lineNo: 2, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" };
+const beers: PayLine = {
+  lineNo: 2,
+  lineId: "line-2",
+  name: "Beer",
+  quantity: "3",
+  total: "9.00",
+  unitTotal: "3.00",
+};
 const tiramisu: PayLine = {
   lineNo: 3,
+  lineId: "line-3",
   name: "Tiramisu",
   quantity: "1",
   total: "6.00",
@@ -326,6 +335,7 @@ describe("till-bill-pay-dialog: paying for items", () => {
     setLocale(locale);
     const ham: PayLine = {
       lineNo: 4,
+      lineId: "line-4",
       name: "Ham",
       quantity: "0.35",
       total: "7.00",
@@ -900,6 +910,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
 describe("till-bill-pay-dialog: the steak's two choices", () => {
   const steak: PayLine = {
     lineNo: 4,
+    lineId: "line-4",
     name: "Steak",
     quantity: "1",
     total: "25.00",
@@ -3265,6 +3276,7 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await page.viewport(390, 900);
     const steak: PayLine = {
       lineNo: 4,
+      lineId: "line-4",
       name: "Steak",
       quantity: "1",
       total: "25.00",

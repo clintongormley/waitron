@@ -98,6 +98,7 @@ type Method = "cash" | "card" | "manual";
 /** A dish of the bill as the dialog offers it. */
 export interface PayLine {
   lineNo: number;
+  lineId: string;
   name: string;
   /** Its quantity as shown. */
   quantity: string;
