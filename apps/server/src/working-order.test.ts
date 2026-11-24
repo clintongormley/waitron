@@ -2679,6 +2679,7 @@ describe("updateHeldOrder", () => {
     expect(firedBefore[0]!.firedAt).not.toBeNull();
     expect(before[0]!.optionSnapshots).toEqual([
       {
+        listId: seeded.options[0]!.listId,
         listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
         listCustomerName: { [CONTENT_LANGUAGE]: "Cooking customer" },
         listKitchenName: "Cooking list kitchen",
@@ -2772,6 +2773,7 @@ describe("updateHeldOrder", () => {
       expect(firedBefore[0]!.firedAt).not.toBeNull();
       expect(before[0]!.optionSnapshots).toEqual([
         {
+          listId: seeded.options[0]!.listId,
           listName: { [CONTENT_LANGUAGE]: "Cooking list staff" },
           listCustomerName: { [CONTENT_LANGUAGE]: "Cooking customer" },
           listKitchenName: "Cooking list kitchen",
@@ -2878,7 +2880,7 @@ describe("updateHeldOrder", () => {
             workingOrderLineId: dish!.id,
             menuItemId: offers.offerFor(coffeeId),
             quantity: "1",
-            // The till matches a stored answer by staff name, so it has none to send once that is renamed.
+            // The till omits a recorded answer when its staff wording no longer matches.
             ...(column === "name" ? {} : { options: seeded.options }),
           },
           {
@@ -3023,7 +3025,7 @@ describe("updateHeldOrder", () => {
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       revision,
       operatorId: OPERATOR,
-      // The till matches a stored answer by staff name, so it has none to send once that is renamed.
+      // The till omits a recorded answer when its staff wording no longer matches.
       lines: [
         { workingOrderLineId: dish.id, menuItemId: offers.offerFor(coffeeId), quantity: "1" },
       ],
@@ -8691,6 +8693,7 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
     void orderId;
     const optionSnapshots = [
       {
+        listId: milk.listId,
         listName: { [CONTENT_LANGUAGE]: "Milk list staff" },
         listCustomerName: { [CONTENT_LANGUAGE]: "Milk list customer" },
         listKitchenName: "Milk list kitchen",
@@ -8842,6 +8845,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       expect(held.lines).toHaveLength(1);
       const frozen = [
         {
+          listId: cupOptions.listId,
           listName: { [CONTENT_LANGUAGE]: "Taza list staff" },
           listCustomerName: { [CONTENT_LANGUAGE]: "Taza list customer" },
           listKitchenName: "Taza list kitchen",
@@ -9097,6 +9101,7 @@ describe("order path — extras and options", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]!.optionSnapshots).toEqual([
       {
+        listId: seeded.optionListId,
         listName: { [seeded.defaultLanguage]: "Cooked staff" },
         listCustomerName: { [seeded.defaultLanguage]: "Cooked customer" },
         listKitchenName: "Cooked kitchen",
@@ -9298,6 +9303,7 @@ describe("order path — extras and options", () => {
       expect(lines.map((line) => line.optionSnapshots)).toEqual([
         [
           {
+            listId: list.id,
             listName: { [CONTENT_LANGUAGE]: "Milk list staff" },
             listCustomerName: { [CONTENT_LANGUAGE]: "Milk customer" },
             listKitchenName: "Milk list kitchen",
@@ -10015,6 +10021,74 @@ describe("what a held-order edit preserves and what it replaces", () => {
       expect(await parked.lines()).toEqual([parked.dish]);
     });
 
+    it("refuses a new Milk list even after the Cooking list is deleted", async () => {
+      const parked = await parkAnswered();
+      const milk = await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.cooking.listId);
+        const list = await addOptionList(tx, parked.coffeeId, "Milk", ["Oat"]);
+        await republishMenus(tx);
+        return list;
+      });
+      const sauce = parked.answers[1]!;
+      const revision = await revisionOf(parked.id);
+
+      await expect(parked.save([sauce])).rejects.toMatchObject({
+        code: "options.label_required",
+        params: { optionListId: milk.listId },
+      });
+      expect(await parked.lines()).toEqual([parked.dish]);
+      expect(await revisionOf(parked.id)).toBe(revision);
+
+      const answers = [sauce, { listId: milk.listId, labelId: milk.labelIds[0]! }];
+      await parked.save(answers);
+      const [saved] = await parked.lines();
+      expect(saved!.optionSnapshots).toHaveLength(3);
+      expect(saved!.optionSnapshots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            listId: parked.cooking.listId,
+            labelName: { [CONTENT_LANGUAGE]: "Medium rare staff" },
+          }),
+          expect.objectContaining({
+            listId: sauce.listId,
+            labelName: { [CONTENT_LANGUAGE]: "Pepper staff" },
+          }),
+          expect.objectContaining({
+            listId: milk.listId,
+            labelName: { [CONTENT_LANGUAGE]: "Oat staff" },
+          }),
+        ]),
+      );
+      const savedRevision = await revisionOf(parked.id);
+      await parked.save(answers);
+      expect(await revisionOf(parked.id)).toBe(savedRevision);
+    });
+
+    it("saves one Cooking answer when staff answer a re-created Cooking list", async () => {
+      const parked = await parkAnswered();
+      const cooking = await withTransaction(db, async (tx) => {
+        await menu.deleteOptionList(tx, parked.cooking.listId);
+        const list = await addOptionList(tx, parked.coffeeId, "Cooking", ["Well done"]);
+        await republishMenus(tx);
+        return list;
+      });
+      await parked.save([
+        parked.answers[1]!,
+        { listId: cooking.listId, labelId: cooking.labelIds[0]! },
+      ]);
+
+      const [saved] = await parked.lines();
+      expect(
+        saved!.optionSnapshots.map(({ listId, labelName }) => [
+          listId,
+          labelName[CONTENT_LANGUAGE],
+        ]),
+      ).toEqual([
+        [parked.answers[1]!.listId, "Pepper staff"],
+        [cooking.listId, "Well done staff"],
+      ]);
+    });
+
     it("replaces the answer when staff pick a different one", async () => {
       const parked = await parkAnswered();
 
@@ -10091,7 +10165,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       expect(await revisionOf(parked.id)).toBe(revision);
     });
 
-    it("keeps no old answer once staff answer a renamed list", async () => {
+    it("keeps the deleted list answer once staff answer a renamed list", async () => {
       const parked = await parkAnswered();
       await withTransaction(db, async (tx) => {
         await tx.execute(
@@ -10106,6 +10180,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
       const [after] = await parked.lines();
       expect(after!.optionSnapshots.map((answer) => answer.listName)).toEqual([
         { [CONTENT_LANGUAGE]: "Doneness" },
+        parked.dish.optionSnapshots[1]!.listName,
       ]);
     });
 

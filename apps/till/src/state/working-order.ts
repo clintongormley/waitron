@@ -89,9 +89,8 @@ export interface OrderLine {
    * selling the dish. Display only; never sent. */
   endedPeriod?: EndedPeriod;
   /**
-   * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
-   * frozen wording (`deriveOptionSelections`), so an answer the menu no longer matches is missing here
-   * and stays only in `optionSnapshots`.
+   * One selection per answered list. On a retrieved line, the selection comes from the original
+   * list id and matching staff wording. An answer with no match stays in `optionSnapshots`.
    */
   options?: OptionSelection[];
   /** Never sent on the wire. */

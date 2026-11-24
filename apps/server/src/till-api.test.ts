@@ -4230,9 +4230,9 @@ async function modifierOfferFixture() {
     extras: [{ listId: data.extrasList.id, picks: [{ productId: data.cheese.id, quantity: 2 }] }],
     options: [{ listId: data.prepList.id, labelId: coldLabel.id }],
   };
-  /** The six names the dish line freezes — the list's three and the chosen label's three. */
   const optionSnapshots = [
     {
+      listId: data.prepList.id,
       listName: { [language]: "Preparation staff" },
       listCustomerName: { [language]: "Preparación customer" },
       listKitchenName: "Preparación kitchen",

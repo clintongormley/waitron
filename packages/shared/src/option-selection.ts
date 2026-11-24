@@ -3,10 +3,11 @@ export type OptionSelection = { listId: string; labelId: string };
 
 /**
  * The answer as it is frozen onto an order line — the list's three names and the chosen label's
- * three names, copied by value. Nothing here points back at the list or label by id, so editing or
- * deleting a list cannot rewrite a saved order.
+ * three names, copied by value. A working order also holds the original list's id so a new list
+ * cannot take over its answer. The copied names survive a list change or deletion.
  */
 export type OptionSnapshot = {
+  listId?: string;
   listName: Record<string, string>;
   listCustomerName: Record<string, string> | null;
   listKitchenName: string | null;
@@ -14,3 +15,9 @@ export type OptionSnapshot = {
   labelCustomerName: Record<string, string> | null;
   labelKitchenName: string | null;
 };
+
+export function optionSnapshotNames(snapshot: OptionSnapshot): Omit<OptionSnapshot, "listId"> {
+  const names = { ...snapshot };
+  delete names.listId;
+  return names;
+}

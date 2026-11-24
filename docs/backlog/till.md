@@ -1218,6 +1218,10 @@ the remaining till unit and tab edges joined on 2026-11-12. A470 and A1107 (the 
   in A1125's review (the probe was not kept); left open by A1125, #2238.
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
 
+## Options on a withdrawn dish
+
+If the server requires an options list on a recalled dish absent from the live menu, the till cannot offer that list and staff cannot save the order with the dish on it.
+
 ## Decisions and deliberate limits
 
 - **A1325. Sales groups drawer closes by the current business-day rules** (watcher, 2026-11-22 05:35).
@@ -1270,9 +1274,9 @@ the remaining till unit and tab edges joined on 2026-11-12. A470 and A1107 (the 
   the dish is started or served, or when its station refuses changes after sending.
 
 - **A parked dish not yet sent keeps a recorded options answer the menu no longer matches (lane B,
-  2026-11-18, not the owner; the owner may overrule).** The till asks staff to choose only when more
-  lists are unanswered than recorded answers went unmatched;
-  [the rule](../developers/modifiers.md#ordering-and-stored-facts).
+  2026-11-18, not the owner; the owner may overrule).** The till asks staff to choose for each new
+  list that has no recorded answer of its own.
+  [The rule](../developers/modifiers.md#ordering-and-stored-facts).
 
 - **The server still works out each pass dish's age colour, which the till does not read (A773-2
   B4 plan, D68, 2026-11-02, not the owner).** "The server's `band` stays correct for any other

@@ -648,9 +648,9 @@ describe("till-modifier-picker", () => {
       { listId: "list-extras", productId: "p-cheese", name: "Queso", price: "1.00", quantity: 2 },
     ]);
     expect(line.options).toEqual([{ listId: "list-cooked", labelId: "label-rare" }]);
-    // The answer freezes six names and no ids, exactly as the server freezes it.
     expect(line.optionSnapshots).toEqual([
       {
+        listId: "list-cooked",
         listName: { es: "Cooking" },
         listCustomerName: { es: "Cooking carta" },
         listKitchenName: "Cooking KDS",

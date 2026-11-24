@@ -65,33 +65,37 @@ export interface ExtraChild {
 function answerFreezers(
   offered: readonly OptionList[],
   requested: unknown,
+  retained?: ReadonlySet<string>,
 ): ((language: string, mode?: "new" | "recorded") => OptionSnapshot)[] {
   // The validator answers with ids drawn from the lists it was handed, so both lookups resolve.
-  return validateOptionSelections(offered, requested ?? []).map((selection) => {
-    const list = offered.find((candidate) => candidate.id === selection.listId)!;
-    const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
-    return (language, mode = "new") => {
-      const customer = (text: Record<string, string> | null, staff: string) =>
-        text === null
-          ? null
-          : mode === "recorded"
-            ? { [language]: resolveSnapshotText(text, language, language) }
-            : {
-                [language]: newCustomerText(text, staff, language, {
-                  defaultLanguage: language,
-                  languages: [language],
-                }),
-              };
-      return {
-        listName: { [language]: list.name },
-        listCustomerName: customer(list.customerName, list.name),
-        listKitchenName: list.kitchenName,
-        labelName: { [language]: label.name },
-        labelCustomerName: customer(label.customerName, label.name),
-        labelKitchenName: label.kitchenName,
+  return validateOptionSelections(offered, requested ?? [])
+    .filter(({ listId }) => !retained?.has(listId))
+    .map((selection) => {
+      const list = offered.find((candidate) => candidate.id === selection.listId)!;
+      const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
+      return (language, mode = "new") => {
+        const customer = (text: Record<string, string> | null, staff: string) =>
+          text === null
+            ? null
+            : mode === "recorded"
+              ? { [language]: resolveSnapshotText(text, language, language) }
+              : {
+                  [language]: newCustomerText(text, staff, language, {
+                    defaultLanguage: language,
+                    languages: [language],
+                  }),
+                };
+        return {
+          listId: list.id,
+          listName: { [language]: list.name },
+          listCustomerName: customer(list.customerName, list.name),
+          listKitchenName: list.kitchenName,
+          labelName: { [language]: label.name },
+          labelCustomerName: customer(label.customerName, label.name),
+          labelKitchenName: label.kitchenName,
+        };
       };
-    };
-  });
+    });
 }
 
 function extraUnitSnapshot(
@@ -219,7 +223,7 @@ function freezesTo(freeze: AnswerFreezer, held: OptionSnapshot): boolean {
  * `defaultLanguage`.
  *
  * Compared BY VALUE — not by JSON key order, send order or offered order, because the offered
- * order is a stored position a save re-numbers. A RENAMED list still differs, deliberately.
+ * order is a stored position a save re-numbers.
  * Receipt: docs/developers/modifiers.md.
  */
 export function editLineOptions(
@@ -228,172 +232,133 @@ export function editLineOptions(
   stored: readonly OptionSnapshot[],
   defaultLanguage: string,
 ): OptionSnapshot[] | null {
-  const answers = answerFreezers(offered, requested);
+  return editOptionAnswers(answerFreezers(offered, requested), stored, defaultLanguage);
+}
+
+function editOptionAnswers(
+  answers: readonly AnswerFreezer[],
+  stored: readonly OptionSnapshot[],
+  defaultLanguage: string,
+): OptionSnapshot[] | null {
   const kept = pairEach(answers, stored, freezesTo);
   if (answers.length === stored.length && kept.every((answer) => answer !== undefined)) return null;
   return answers.map((freeze, index) => kept[index] ?? freeze(defaultLanguage));
 }
 
-/**
- * Whether every answer `requested` names is one `stored` holds, by the staff names of its list and
- * label: the till re-derives a stored answer by those names alone, and leaves out a list it cannot
- * match, so such a request asks for nothing new. A malformed request, one naming an id `offered`
- * does not carry, or one naming a list twice (which the validator refuses) answers false.
- */
+function sameStaffAnswer(held: OptionSnapshot, list: OptionList, labelName: string): boolean {
+  return (
+    held.listId === list.id &&
+    staffName(held.listName) === list.name &&
+    staffName(held.labelName) === labelName
+  );
+}
+
+/** A sent dish can keep its recorded answers when every re-sent choice is one it already holds. */
 export function asksNoNewAnswer(
   offered: readonly OptionList[],
   requested: unknown,
   stored: readonly OptionSnapshot[],
 ): boolean {
   if (!Array.isArray(requested)) return false;
-  const named: { list: string; label: string }[] = [];
   const listIds = new Set<string>();
   for (const entry of requested as unknown[]) {
     const { listId, labelId } = (entry ?? {}) as { listId?: unknown; labelId?: unknown };
     if (typeof listId !== "string" || typeof labelId !== "string") return false;
-    if (listIds.has(listId.toLowerCase())) return false;
-    listIds.add(listId.toLowerCase());
     const list = offered.find((candidate) => candidate.id === listId.toLowerCase());
     const label = list?.labels.find((candidate) => candidate.id === labelId.toLowerCase());
-    if (list === undefined || label === undefined) return false;
-    named.push({ list: list.name, label: label.name });
+    if (
+      list === undefined ||
+      label === undefined ||
+      listIds.has(list.id) ||
+      !stored.some((held) => sameStaffAnswer(held, list, label.name))
+    )
+      return false;
+    listIds.add(list.id);
   }
-  return pairEach(
-    named,
-    stored,
-    (answer, held) =>
-      staffName(held.listName) === answer.list && staffName(held.labelName) === answer.label,
-  ).every((held) => held !== undefined);
+  return true;
 }
 
-/** The active lists `requested` answers with an available label, each with its answer. A malformed
- * request or entry answers nothing here, and is left to the validator. */
-function answeredLists(
-  offered: readonly OptionList[],
-  requested: unknown,
-): { list: OptionList; answer: { listId: string; labelId: string } }[] {
-  const entries: unknown[] = Array.isArray(requested) ? requested : [];
-  return offered.flatMap((list) => {
-    if (!list.active) return [];
-    for (const entry of entries) {
-      const { listId, labelId } = (entry ?? {}) as { listId?: unknown; labelId?: unknown };
-      if (typeof listId !== "string" || typeof labelId !== "string") continue;
-      if (listId.toLowerCase() !== list.id) continue;
-      const label = list.labels.find(
-        (candidate) => candidate.available && candidate.id === labelId.toLowerCase(),
-      );
-      return label === undefined ? [] : [{ list, answer: { listId: list.id, labelId: label.id } }];
-    }
-    return [];
-  });
-}
-
-/**
- * Whether a request {@link asksNoNewAnswer} accepted re-sends every stored answer the menu still
- * matches, at least one stored answer is left unmatched, and the dish has no more active lists than
- * the line holds answers. Answers are counted, never tied to a list: a frozen answer holds no ids,
- * and two lists can share a staff name.
- */
-export function onlyStoredAnswersUnmatched(
-  offered: readonly OptionList[],
-  requested: unknown,
-  stored: readonly OptionSnapshot[],
-): boolean {
-  const active = offered.filter((list) => list.active);
-  const matched = pairEach(
-    stored,
-    active,
-    (held, list) =>
-      list.name === staffName(held.listName) &&
-      list.labels.some((label) => label.available && label.name === staffName(held.labelName)),
-  ).filter((list) => list !== undefined).length;
-  return (
-    matched < stored.length &&
-    answeredLists(offered, requested).length === matched &&
-    active.length <= stored.length
-  );
-}
-
-/**
- * `stored` with each answer `requested` re-sends brought up to today's wording, or `null` when none
- * differs. Everything else stays as stored and in its place, including an answer re-sent with a label
- * since withdrawn.
- */
-function refreshResentAnswers(
-  offered: readonly OptionList[],
-  requested: unknown,
-  stored: readonly OptionSnapshot[],
-  defaultLanguage: string,
-): OptionSnapshot[] | null {
-  const answered = answeredLists(offered, requested);
-  const freezers = answerFreezers(
-    answered.map(({ list }) => list),
-    answered.map(({ answer }) => answer),
-  );
-  const slots = stored.map((held, index) => ({ held, index }));
-  const unchanged = pairEach(freezers, slots, (freeze, { held }) => freezesTo(freeze, held));
-  const reworded = freezers
-    .filter((_, index) => unchanged[index] === undefined)
-    .map((freeze) => freeze(defaultLanguage));
-  if (reworded.length === 0) return null;
-  const taken = new Set(unchanged.map((slot) => slot?.index));
-  const refreshed = [...stored];
-  // Every re-sent answer pairs: asksNoNewAnswer found each a stored answer of the same staff names.
-  pairEach(
-    reworded,
-    slots.filter(({ index }) => !taken.has(index)),
-    (answer, { held }) =>
-      staffName(answer.listName) === staffName(held.listName) &&
-      staffName(answer.labelName) === staffName(held.labelName),
-  ).forEach((slot, index) => {
-    refreshed[slot!.index] = reworded[index]!;
-  });
-  return refreshed;
-}
-
-/**
- * The stored answers left over once each active list is paired with one answer under its staff name,
- * the answers `edited` keeps being paired first so that none is carried twice. A frozen answer holds
- * no ids, so of two answers under one name either may be the one left over. None is left over while
- * an active list finds no answer: that list may be a gone one, renamed.
- */
-function answersOfGoneLists(
-  offered: readonly OptionList[],
-  stored: readonly OptionSnapshot[],
-  edited: readonly OptionSnapshot[],
-): OptionSnapshot[] {
-  const slots = stored.map((held) => ({ held }));
-  const paired = pairEach(
-    offered.filter((list) => list.active),
-    [
-      ...slots.filter(({ held }) => edited.includes(held)),
-      ...slots.filter(({ held }) => !edited.includes(held)),
-    ],
-    (list, { held }) => list.name === staffName(held.listName),
-  );
-  if (paired.includes(undefined)) return [];
-  return slots.filter((slot) => !paired.includes(slot)).map(({ held }) => held);
-}
-
-/**
- * {@link editLineOptions} for a line not yet sent, on a whole-order save. When only stored answers the
- * menu no longer matches are missing from the request ({@link onlyStoredAnswersUnmatched}), those stay
- * as stored and the re-sent ones are compared as usual. Otherwise the request is validated and applied
- * as usual, and the answers of lists gone from the dish are kept as {@link answersOfGoneLists} allows.
- */
+/** An unsent dish keeps an answer that its own list no longer offers until staff replace it. */
 export function editUnsentLineOptions(
   offered: readonly OptionList[],
   requested: unknown,
   stored: readonly OptionSnapshot[],
   defaultLanguage: string,
 ): OptionSnapshot[] | null {
-  if (
-    asksNoNewAnswer(offered, requested, stored) &&
-    onlyStoredAnswersUnmatched(offered, requested, stored)
-  )
-    return refreshResentAnswers(offered, requested, stored, defaultLanguage);
-  const edited = editLineOptions(offered, requested, stored, defaultLanguage);
-  return edited === null ? null : [...edited, ...answersOfGoneLists(offered, stored, edited)];
+  const activeIds = new Set<OptionSnapshot["listId"]>(
+    offered.filter((list) => list.active).map((list) => list.id),
+  );
+  const heldByList = new Map(stored.map((held) => [held.listId, held]));
+  const entries = (Array.isArray(requested) ? requested : []) as {
+    listId?: unknown;
+    labelId?: unknown;
+  }[];
+  const retained = new Set<string>();
+  const listsToCheck = offered.map((list) => {
+    const held = heldByList.get(list.id);
+    if (
+      !list.active ||
+      held === undefined ||
+      list.labels.some((label) => label.available && sameStaffAnswer(held, list, label.name))
+    )
+      return list;
+    const entry = entries.find(
+      (choice) => typeof choice?.listId === "string" && choice.listId.toLowerCase() === list.id,
+    );
+    if (entry === undefined) {
+      retained.add(list.id);
+      return { ...list, active: false };
+    }
+    const labelId = typeof entry.labelId === "string" ? entry.labelId.toLowerCase() : undefined;
+    const withdrawn = list.labels.find(
+      (label) =>
+        !label.available && label.id === labelId && sameStaffAnswer(held, list, label.name),
+    );
+    if (withdrawn === undefined) return list;
+    retained.add(list.id);
+    // Let a stale till re-send this one label through the normal shape and duplicate checks.
+    return {
+      ...list,
+      labels: list.labels.map((label) =>
+        label === withdrawn ? { ...label, available: true } : label,
+      ),
+    };
+  });
+
+  const kept = stored.filter((held) => !activeIds.has(held.listId) || retained.has(held.listId!));
+  const replaced = stored.filter((held) => !kept.includes(held));
+  const edited = editOptionAnswers(
+    answerFreezers(listsToCheck, requested, retained),
+    replaced,
+    defaultLanguage,
+  );
+  if (edited === null) return null;
+  const wordingOnly =
+    edited.length === replaced.length &&
+    edited.every((answer) => {
+      const previous = heldByList.get(answer.listId);
+      return (
+        previous !== undefined &&
+        staffName(previous.listName) === staffName(answer.listName) &&
+        staffName(previous.labelName) === staffName(answer.labelName)
+      );
+    });
+  if (wordingOnly) {
+    const editedByList = new Map(edited.map((answer) => [answer.listId, answer]));
+    return stored.map((answer) => editedByList.get(answer.listId) ?? answer);
+  }
+  // An explicit answer to a re-created list supersedes the removed list's instruction.
+  const newListNames = new Set(
+    edited
+      .filter((answer) => !heldByList.has(answer.listId))
+      .map((answer) => staffName(answer.listName)),
+  );
+  return [
+    ...edited,
+    ...kept.filter(
+      (answer) => activeIds.has(answer.listId) || !newListNames.has(staffName(answer.listName)),
+    ),
+  ];
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */

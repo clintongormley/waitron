@@ -204,9 +204,8 @@ the basket resolved, and decides what is stored:
   labels. An unanswered list, or one answered with a label it does not carry, is
   `options.label_required` carrying the list id; an answer for a list not on offer, two answers for
   one list, or a malformed entry is `options.invalid` naming the field.
-- An answered list freezes onto the PARENT line's `option_snapshots` column as six names — the
-  list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
-  afterwards cannot rewrite a saved order.
+- The parent line's `option_snapshots` stores the original list id, the list's three names and
+  the chosen label's three names. The wording survives changes to the menu.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
   that product's three frozen names and the price the offer resolved. Taken away, the line files at the picked
   product's takeaway rate, or its parent's when a variant has none (`readLineVatRates`).
@@ -288,20 +287,15 @@ it moves to another list offering the same product: it is a new pick" and "price
 when two lists offering the same product exchange their counts: each is a new pick", which assert
 the BILL.
 
-An OPTIONS list RENAMED between the two sends, when the request still names that list and label,
-does make the two sides differ, so the renamed answer is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
-line is touched. That is a decision, not an omission: an options answer freezes six names and no
-ids, so the wording is the only evidence the line carries about what was chosen, and a rename cannot
-be told from a different answer. Giving the comparison an id to use would mean putting one on the
-line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
-list was renamed between the two sends, freezing the new name"
-(`apps/server/src/working-order.test.ts`). A line already sent (it or one of its extras sent, or
+If a save re-sends a list and label after a rename, an unsent dish takes the new wording and
+keeps its stored price. See "keeps the price of a held line whose options list was renamed between
+the two sends, freezing the new name" in `apps/server/src/working-order.test.ts`. A line already sent (it or one of its extras sent, or
 either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
 `updateHeldOrder` passes `keepRecordedAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names
-no answer the line does not already hold by the staff names of its list and label
-(`asksNoNewAnswer`, `apps/server/src/modifier-selection.ts`). That is what the till sends for a line
-nobody changed: it matches by staff name, and leaves out a list it cannot match. Pinned by "saves the
+only answers the line already holds for the same list id and staff wording
+(`asksNoNewAnswer`, `apps/server/src/modifier-selection.ts`). The till sends those matches and
+omits the rest. Pinned by "saves the
 whole order around a $state dish whose option's $renamed was renamed, keeping what was sent" and
 "keeps a sent dish's answer from an options list deleted since". A request naming any other answer
 is a change like any other, on a whole-order save as through `updateOrderLine`: the kitchen gets a
@@ -313,58 +307,18 @@ was renamed" and "still recalls and resends a fired dish whose options answer on
 replaces". An EXTRAS list is different: its children are compared by the list's and the picked
 product's ids, so renaming the list — or the product — disturbs nothing and the line is preserved.
 
-A line NOT yet sent goes through `editUnsentLineOptions` on a whole-order save
-(`apps/server/src/modifier-selection.ts`); `updateOrderLine` does not. A stored answer is unmatched
-when, with stored answers paired one to one with active lists holding an available label of the same
-staff names, it is left over. The unmatched answers stay as stored when
-`onlyStoredAnswersUnmatched` holds: the request names no answer the line does not hold
-(`asksNoNewAnswer`), at least one answer is unmatched, the request answers with an available label as
-many active lists as there are matched answers, and the dish has no more active lists than the line
-holds answers. The count is deliberate: two lists can share a staff name, and the till may give an
-answer to the other one. A re-sent answer is then compared and frozen as on any edit, in its stored
-place, and when none differs the line keeps its stored value and no change is recorded. So a rename,
-a withdrawn label and a deleted list keep the answer, while leaving out an answer the menu still
-matches is refused with `options.label_required`, as is a list beyond the answers the line holds.
+On a whole-order save, `editUnsentLineOptions` keeps a recorded answer when its list was
+removed or its staff wording no longer matches an available label. An explicit choice of an
+available label replaces the answer to that list. An explicit answer to a new list with the
+same staff name replaces the removed list's answer. The server requires an answer for every new
+active list and for every list whose recorded answer still matches. See "refuses a new Milk
+list even after the Cooking list is deleted" in `apps/server/src/working-order.test.ts`.
 
-Any other request is validated and applied as usual. Each active list is then paired with one stored
-answer under its staff name, the answers the edit keeps first, and the answers left over follow the
-new ones, unless an active list finds none: that list may be a gone one renamed, so none is carried.
-Of two stored answers under one staff name, either may be the one left over, because a frozen answer
-has no ids (`answersOfGoneLists`). Because of that too, an
-unmatched answer is treated as possibly the renamed form of any unanswered list, so a list added after
-an answer's list was deleted, in the same publish or a later one, is not asked for. Pinned by "keeps
-the answer and records no change when $change", "still refuses a list added after parking that nothing
-recorded could have answered", "refuses leaving out an answer the menu still matches beside one it no
-longer does", "saves the new wording of a re-sent answer beside one the menu no longer matches" and
-"keeps the answer of a deleted list when staff change another answer"
-(`apps/server/src/working-order.test.ts`), and by "keeps exactly one of their answers beside the
-changed one" and "does not carry a second copy of the answer the request re-sends"
-(`apps/server/src/modifier-selection.test.ts`).
-
-The window that changes an answer gives the row only the answers of lists still on the dish. After a
-save, the till reads the order back when the stored line it last read holds more answers than the
-row (`#syncIfDirty`, `apps/till/src/till-app.ts`), so the basket shows an answer the server kept.
-Pinned by "shows the answer the server kept for a deleted list" (`apps/till/src/till-app.test.ts`).
-
-For a parked-order edit, the till sends one `options` entry per answered list and one `extras` entry
-per list picked from. It reads a line's frozen answers back as `optionSnapshots`
-(`apps/till/src/api/client.ts`), and tells a child extras row from a dish by `parentLineNo` rather
-than by a null product. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
-six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
-answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
-which it has to, because leaving out an answer the menu still matches on a line not yet sent refuses
-the whole edit with `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
-the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
-the server then freezes the new wording on that line if it is not yet sent. What it will not
-do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, so the till
-leaves that answer out of the save, rather than substituting the list's own default. The till asks
-the operator to open the line and choose only when more lists are unanswered than frozen answers went
-unmatched, which for a dish the live menu still offers is the server's own test, and on a line not yet
-sent only
-(`#basketLinesOf`, `apps/till/src/till-app.ts`). The basket
-makes a sent line read-only (`#lineReadOnly`, `apps/till/src/widgets/basket.ts`) only when it could
-read which lines were sent; when it could not, a different answer picked on a sent line reaches the
-server as a change and is checked as one.
+The till rebuilds each selection against its original list id and the recorded staff wording.
+It asks staff to reopen an unsent dish when a list on offer has no recorded answer of its own.
+When an edit leaves out a stored list id, the till reads the saved order back so the basket
+shows any answer the server kept. See "asks for Milk and reads back Cooking after the
+Cooking list is deleted" in `apps/till/src/till-app.test.ts`.
 
 ## What a till is offered
 
@@ -473,10 +427,9 @@ Six things it is worth knowing about that payload:
 A filed sale is a snapshot and never holds a menu key (`packages/db/src/schema/sales.ts`,
 architecture §6), so the two kinds of answer land differently:
 
-- An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
-  the open order froze, and no ids. Both filing routes supply it: a walk-up from the basket it was
-  priced from, a retrieved order from `working_order_lines.option_snapshots`, read by
-  `readLockedLines` (`apps/server/src/working-order.ts`).
+- The dish's `sale_lines.option_snapshots` carries the six recorded names.
+  `toStoredLines` in `apps/server/src/working-order.ts` takes those names from the working
+  order when it builds the lines used for payment.
 - An extras pick is already its own CHILD line, and that line IS the record: the picked product's
   frozen name, its quantity, the price it sold at and its own VAT rate. Like the open order's child
   line it names the picked product in `product_id`, here as a plain value with no foreign key, and

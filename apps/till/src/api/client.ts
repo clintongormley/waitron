@@ -1548,13 +1548,8 @@ export interface HeldOrder {
     extras?: HeldExtra[];
     product?: TillProduct;
     /**
-     * The dish's frozen answers to its options lists; absent on a line that answered none and on
-     * every child line. The six names per answer are the server's, copied by value.
-     *
-     * `options` is deliberately NOT here: a frozen answer carries no list or label id, so the till
-     * re-derives them by matching these names against the dish's live offered lists
-     * (`deriveOptionSelections`, `../state/held-options.ts`). The match is on the STAFF name alone, so
-     * a list or label whose staff wording changed matches nothing.
+     * The dish's recorded answers with the original list id and six frozen names.
+     * The till rebuilds a selection only when that list still offers the recorded staff wording.
      */
     optionSnapshots?: OptionSnapshot[];
   })[];
@@ -1702,8 +1697,7 @@ export interface StationQueueItem {
     deviceName: string | null;
     movedAt: string;
   };
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   id: string;
   workingOrderLineId: string;
@@ -2108,8 +2102,7 @@ export interface DevDeviceList {
  */
 export interface ExpoItem {
   allergy: KitchenAllergyBlock | null;
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   id: string;
   name: string;
@@ -2592,8 +2585,7 @@ export interface TabLine {
   /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
    * only on a fixture that omits it, which falls back to the live menu name. */
   name?: string;
-  /** The dish's frozen answers to its options lists; absent on a line that answered none and on
-   *  every child line. The six names per answer are the server's, copied by value. */
+  /** The dish's recorded answers with their list ids and frozen names. */
   optionSnapshots?: OptionSnapshot[];
   lineNo: number;
   /** The line's product. `string | null` because the COLUMN is nullable, NOT because a child line lacks

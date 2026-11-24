@@ -9038,10 +9038,14 @@ export class TillApp extends LitElement {
       );
     const mustReadBack =
       rows.some((row) => row.portionLineIds !== undefined) ||
-      // The server can keep an answer the row no longer shows: one from a list gone from the dish.
+      // The server can keep a list's old answer alongside a new list's answer.
       rows.some((row) => {
         const stored = listed.find((line) => line.id === row.workingOrderLineId);
-        return (stored?.optionSnapshots?.length ?? 0) > (row.optionSnapshots?.length ?? 0);
+        return (
+          stored?.optionSnapshots?.some(
+            ({ listId }) => !row.optionSnapshots?.some((answer) => answer.listId === listId),
+          ) === true
+        );
       }) ||
       sent.some((wire) => {
         const lineId = wire.workingOrderLineId;
@@ -10906,13 +10910,9 @@ export class TillApp extends LitElement {
       // Each pick goes back to the list it was taken from, if the live offer still has it there.
       const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
       if (picks.notOffered.length > 0) extraNotOffered = true;
-      // For a dish the live menu still offers, the server's test on a whole-order save: unanswered
-      // lists no unmatched frozen answer can stand for are new, and it refuses the line until they
-      // are answered. A sent line keeps its answers.
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
       const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      const unmatched = (line.optionSnapshots?.length ?? 0) - answers.options.length;
-      if (answers.unanswered.length > unmatched && !sent) mustChooseAgain = true;
+      if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
       lines.push({
         product,
         ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),

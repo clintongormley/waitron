@@ -590,6 +590,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Let staff answer a required list on a withdrawn dish.** [Detail](backlog/till.md#options-on-a-withdrawn-dish)
+
 - **Check the till above a tablet's own keyboard again (left open by A1563, typing on the till
   with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
   tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a
@@ -1527,7 +1529,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
   [Table restrictions after the grants audit](backlog/architecture.md#remaining-table-restrictions-after-the-grants-record-audit)
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 8, 5 important, size M, waits for the A1308 table hold to lift). [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 2, size M, waits for the A1308 table hold to lift). [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes

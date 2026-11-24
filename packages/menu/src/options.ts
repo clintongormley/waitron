@@ -291,8 +291,7 @@ export async function updateOptionList(
 
 export async function deleteOptionList(tx: Transaction, optionListId: string): Promise<void> {
   await assertOptionList(tx, optionListId);
-  // The labels go with it through `option_labels_list_fk`'s cascade. There is no open-order check:
-  // an order line carries the chosen names as text and points at nothing here.
+  // A saved order holds the list id and wording as copied values, so deletion leaves its answer intact.
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
 
@@ -301,9 +300,7 @@ export type { OptionListDependants } from "@waitron/shared";
 /**
  * What deleting this list would touch — read by the dashboard's Used by popup and its delete
  * confirmation: the products that carry it, alphabetical by staff name with the id breaking a tie.
- * They are detached by the delete rather than blocking it: the `product_modifiers` key cascades,
- * and an order line carries the chosen names as text and points at nothing here. No table attaches
- * an options list to a menu offer, so a menu is never a dependant.
+ * The `product_modifiers` key detaches products when the list is deleted.
  *
  * ``grep -rn 'REFERENCES `option_l' --include='*.sql' packages apps`` prints two keys, both into
  * `option_lists`: `option_labels`' and `product_modifiers`'. No foreign key references `option_labels`.

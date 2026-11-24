@@ -26,9 +26,9 @@ function list(id: string, staff: string, labels: [string, string][]): OfferedMod
   };
 }
 
-/** One answer as a held order hands it back: six names, and no id anywhere. */
-function frozen(listStaff: string, labelStaff: string): OptionSnapshot {
+function frozen(listId: string, listStaff: string, labelStaff: string): OptionSnapshot {
   return {
+    listId,
     listName: { es: listStaff },
     listCustomerName: { es: `${listStaff} para el cliente` },
     listKitchenName: `${listStaff} cocina`,
@@ -68,6 +68,7 @@ describe("a newly prepared option answer", () => {
     (listText, labelText, wantList, wantLabel) => {
       setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
       const selectedList = {
+        id: "list-staff",
         name: "Staff list",
         customerName: listText,
         kitchenName: "LIST KITCHEN",
@@ -80,6 +81,7 @@ describe("a newly prepared option answer", () => {
       const before = structuredClone([selectedList, selectedLabel]);
       const answer = optionSnapshotOf(selectedList, selectedLabel);
       expect(answer).toEqual({
+        listId: "list-staff",
         listName: { en: "Staff list" },
         listCustomerName: listText === null ? null : { en: wantList },
         listKitchenName: "LIST KITCHEN",
@@ -100,13 +102,15 @@ describe("deriveOptionSelections", () => {
       products: [],
       optionLabels: ["label-rare"],
     });
-    expect(deriveOptionSelections(live!.offeredModifiers, [frozen("Punto", "Poco hecho")])).toEqual(
-      { options: [], unanswered: ["list-punto"] },
-    );
+    expect(
+      deriveOptionSelections(live!.offeredModifiers, [frozen("list-punto", "Punto", "Poco hecho")]),
+    ).toEqual({ options: [], unanswered: [] });
   });
 
   it("names the list and the label whose staff names the answer froze", () => {
-    expect(deriveOptionSelections([doneness], [frozen("Punto", "Poco hecho")])).toEqual({
+    expect(
+      deriveOptionSelections([doneness], [frozen("list-punto", "Punto", "Poco hecho")]),
+    ).toEqual({
       options: [{ listId: "list-punto", labelId: "label-rare" }],
       unanswered: [],
     });
@@ -115,7 +119,7 @@ describe("deriveOptionSelections", () => {
   it("answers every offered list, in the order the dish offers them", () => {
     const result = deriveOptionSelections(
       [doneness, toppings, breadOptions],
-      [frozen("Pan", "Blanco"), frozen("Punto", "Al punto")],
+      [frozen("list-pan", "Pan", "Blanco"), frozen("list-punto", "Punto", "Al punto")],
     );
     expect(result.options).toEqual([
       { listId: "list-punto", labelId: "label-medium" },
@@ -127,16 +131,20 @@ describe("deriveOptionSelections", () => {
   it("reports a list no frozen answer names, rather than filling it in", () => {
     // The dish's Pan list was answered before Punto was attached to it. Inventing an answer would
     // change what the diner asked for on a line that is about to be billed.
-    expect(deriveOptionSelections([doneness, breadOptions], [frozen("Pan", "Blanco")])).toEqual({
+    expect(
+      deriveOptionSelections([doneness, breadOptions], [frozen("list-pan", "Pan", "Blanco")]),
+    ).toEqual({
       options: [{ listId: "list-pan", labelId: "label-white" }],
       unanswered: ["list-punto"],
     });
   });
 
-  it("reports a list whose chosen label was renamed, and names no other label of it", () => {
-    expect(deriveOptionSelections([doneness], [frozen("Punto", "A la brasa")])).toEqual({
+  it("keeps a recorded answer whose chosen label was renamed without selecting a substitute", () => {
+    expect(
+      deriveOptionSelections([doneness], [frozen("list-punto", "Punto", "A la brasa")]),
+    ).toEqual({
       options: [],
-      unanswered: ["list-punto"],
+      unanswered: [],
     });
   });
 
@@ -144,7 +152,10 @@ describe("deriveOptionSelections", () => {
     // The Pan list was deactivated between the park and the edit, so the server would refuse an
     // answer to it.
     expect(
-      deriveOptionSelections([doneness], [frozen("Pan", "Blanco"), frozen("Punto", "Al punto")]),
+      deriveOptionSelections(
+        [doneness],
+        [frozen("list-pan", "Pan", "Blanco"), frozen("list-punto", "Punto", "Al punto")],
+      ),
     ).toEqual({ options: [{ listId: "list-punto", labelId: "label-medium" }], unanswered: [] });
   });
 
@@ -152,7 +163,7 @@ describe("deriveOptionSelections", () => {
     const otherDoneness = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
     const result = deriveOptionSelections(
       [doneness, otherDoneness],
-      [frozen("Punto", "Al punto"), frozen("Punto", "Al punto")],
+      [frozen("list-punto-2", "Punto", "Al punto"), frozen("list-punto", "Punto", "Al punto")],
     );
     expect(result.options).toEqual([
       { listId: "list-punto", labelId: "label-medium" },
@@ -161,67 +172,28 @@ describe("deriveOptionSelections", () => {
     expect(result.unanswered).toEqual([]);
   });
 
-  it("moves an answer off one list so a narrower one sharing its name can be answered too", () => {
-    // Both lists are called "Punto". The first offers "Al punto" and "Poco hecho"; the second offers
-    // "Al punto" alone. Taking the answers in arrival order leaves the second list with nothing,
-    // although giving "Poco hecho" to the first satisfies both.
-    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
-    const result = deriveOptionSelections(
-      [doneness, narrow],
-      [frozen("Punto", "Al punto"), frozen("Punto", "Poco hecho")],
-    );
-    expect(result.options).toEqual([
-      { listId: "list-punto", labelId: "label-rare" },
-      { listId: "list-punto-2", labelId: "label-medium-2" },
-    ]);
-    expect(result.unanswered).toEqual([]);
-  });
-
-  it("tries a list's next answer when the holder of its first cannot give it up", () => {
-    // The narrow list comes first and takes "Al punto"; the wide list's first candidate is that same
-    // answer, and the narrow list has nothing else to move to, so the wide list must fall through to
-    // "Poco hecho" rather than stop.
-    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
-    const result = deriveOptionSelections(
-      [narrow, doneness],
-      [frozen("Punto", "Al punto"), frozen("Punto", "Poco hecho")],
-    );
-    expect(result.options).toEqual([
-      { listId: "list-punto-2", labelId: "label-medium-2" },
-      { listId: "list-punto", labelId: "label-rare" },
-    ]);
-    expect(result.unanswered).toEqual([]);
-  });
-
-  it("answers the same two lists when arrival order needs no move (control)", () => {
-    // The same dish and the same two answers, arriving the other way round — the order in which
-    // taking each answer as it comes already satisfies both. It must keep working.
-    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
-    const result = deriveOptionSelections(
-      [doneness, narrow],
-      [frozen("Punto", "Poco hecho"), frozen("Punto", "Al punto")],
-    );
-    expect(result.options).toEqual([
-      { listId: "list-punto", labelId: "label-rare" },
-      { listId: "list-punto-2", labelId: "label-medium-2" },
-    ]);
-    expect(result.unanswered).toEqual([]);
+  it("does not let a new list claim a deleted list's answer even when the wording matches", () => {
+    const replacement = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
+    expect(
+      deriveOptionSelections([replacement], [frozen("list-punto", "Punto", "Al punto")]),
+    ).toEqual({ options: [], unanswered: ["list-punto-2"] });
   });
 
   it("matches nothing when an answer arrives with no staff name in it", () => {
-    // An empty map is an answer that lost the wording it is identified by, and must not match.
-    const nameless = { ...frozen("Punto", "Al punto"), listName: {} };
+    const nameless = { ...frozen("list-punto", "Punto", "Al punto"), listName: {} };
     expect(deriveOptionSelections([doneness], [nameless])).toEqual({
       options: [],
-      unanswered: ["list-punto"],
+      unanswered: [],
     });
   });
 
   it("answers nothing for a dish offering no options list, and for a line that froze none", () => {
-    expect(deriveOptionSelections([toppings], [frozen("Punto", "Al punto")])).toEqual({
-      options: [],
-      unanswered: [],
-    });
+    expect(deriveOptionSelections([toppings], [frozen("list-punto", "Punto", "Al punto")])).toEqual(
+      {
+        options: [],
+        unanswered: [],
+      },
+    );
     expect(deriveOptionSelections([doneness], undefined)).toEqual({
       options: [],
       unanswered: ["list-punto"],

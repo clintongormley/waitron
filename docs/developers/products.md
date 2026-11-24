@@ -163,9 +163,9 @@ invoice is issued; a set-menu line files at the takeaway class its set menu froz
   with no separate variant fields. The publication retains both original source maps, so a
   default-language change does not reuse wording composed under the previous default.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
-  as the list's three names and the chosen label's three names, and no ids at all
-  (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
-  customer-facing text of its own, alongside the two `descriptions` columns above. An extras pick is
+  as the list's three names and the chosen label's three names. A working order line also stores
+  the list's original id so a new list cannot claim an old answer
+  (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). An extras pick is
   not in here: it becomes its own priced child line, which carries the picked product's names in the
   columns above like any other line.
 

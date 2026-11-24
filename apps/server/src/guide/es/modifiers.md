@@ -165,9 +165,8 @@ comanda, su cuenta y su ticket.
 
 Un pedido aparcado de caja conserva lo que se pidió si cambias el nombre del personal de una lista o
 de una opción, desactivas una opción o eliminas la lista. Una línea aún no enviada toma el nombre
-nuevo para el cliente o de estación de su lista u opción con el siguiente cambio del pedido. Cuando
-la caja pide al personal que abra una línea aún no enviada y elija, el plato tiene una lista nueva
-desde que se aparcó el pedido. Esa ventana pregunta todas las listas del plato, así que el personal
-también vuelve a elegir en las listas cuya respuesta guardada ya no coincide con la carta. Al guardar
-esa ventana se quita cualquier respuesta de una lista eliminada. Renombrar una lista de extras, o el
-producto que contiene, tampoco afecta a un pedido aparcado.
+nuevo para el cliente o de estación de su lista u opción con el siguiente cambio del pedido.
+Si la caja te pide que elijas una opción para un plato de un pedido recuperado, abre el plato,
+elige una opción de la lista nueva y guarda el pedido. El plato conserva las respuestas de las
+listas retiradas salvo que respondas a una lista nueva con el mismo nombre para el personal.
+Renombrar una lista de extras o su producto tampoco afecta a un pedido aparcado.
