@@ -508,7 +508,7 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   No guard enforces this convention.
 - **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
   `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key and, until A1323
-  PR 2b, a new master key's row are the stated exceptions); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
+  PR 3b, a new master key's row are the stated exceptions); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
   handle at compile time.** Nothing guards the first two. [Rules and sites](docs/developers/conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
 - **Housekeeping writes must not take reads down on a full disk.** Last-seen stamps give way;
   reads that must answer while a change waits use `withWriteLock` turns without draining, a stated

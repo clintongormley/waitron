@@ -186,7 +186,7 @@ Pack 1 has two pages, the master key's and the box key's, and its attached file 
 copy or archives
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
 1 holding the master key, then the staged box key, in %s"). Your Cloud login, or the downloaded archive's password,
-stays separate. Keep an older pack or recovery sheet while you retain backups that need its key.
+stays separate. Keep an older pack while you retain backups that need its key.
 The box stores a verifier for the key; it cannot recover the old secret from that verifier.
 
 During recovery, select the recovery pack that holds this backup's master key, or type the master

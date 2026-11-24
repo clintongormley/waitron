@@ -1774,7 +1774,7 @@ queues (`packages/store/src/index.ts`):
   (`packages/provisioning/src/first-setup-node-key.ts`). The last two hold the node lock around
   the venue save; promotion takes the two one after the other. A signing key is the stated exception: it is sealed in `node.db` before its public
   half reaches `venue.db`, because a public key with no private half could never sign as the box.
-  Until A1323 PR 2b, a new master key's `master_keys` row is the other exception: setup
+  Until A1323 PR 3b, a new master key's `master_keys` row is the other exception: setup
   (`apps/server/src/setup-api.ts`) and Make a new master key (`backup-recovery-pack-api.ts`) save it
   as the request's last venue.db write, after node.db's box-key save where there is one, so a
   failure before it leaves no row.

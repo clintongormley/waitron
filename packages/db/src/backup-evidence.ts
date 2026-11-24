@@ -330,7 +330,10 @@ export async function verifyBackupMembershipIdentity(input: {
   after: BackupQuery;
   nodeId: string;
   privateKey: string | null;
-  /** The backup's node copy holds a role or recovery key for this node, so it is no key-less source. */
+  /**
+   * The backup holds a role for this node in its node copy, or a master key in a venue copy, so it
+   * is no key-less source.
+   */
   nodeCopyHoldsSource: boolean;
 }): Promise<boolean> {
   if (!(await hasTable(input.before, "nodes")) || !(await hasTable(input.after, "nodes")))

@@ -25,25 +25,34 @@ async function holdsAny(query: BackupVerificationContext["before"]): Promise<boo
 
 const SOURCE_ROW = {
   role: "select node_id from box where node_id=? and mode is not null",
-  recovery: "select node_id from box where node_id=? and recovery_key_verifier is not null",
   signing:
     "select signing_key_ciphertext as ciphertext, signing_key_iv as iv, signing_key_auth_tag as auth_tag, signing_key_version as key_version from box where node_id=? and signing_key_ciphertext is not null",
 } as const;
+
+async function hasTable(copy: BackupQuery, table: string): Promise<boolean> {
+  let present = false;
+  for await (const row of copy.rows(
+    "select name from sqlite_schema where type='table' and name=?",
+    [table],
+  ))
+    present = row.name === table;
+  return present;
+}
 
 async function sourceRow(
   copy: BackupQuery,
   group: keyof typeof SOURCE_ROW,
   nodeId: string,
 ): Promise<BackupRow | undefined> {
-  let present = false;
-  for await (const row of copy.rows(
-    "select name from sqlite_schema where type='table' and name=?",
-    ["box"],
-  ))
-    present = row.name === "box";
-  if (!present) return undefined;
+  if (!(await hasTable(copy, "box"))) return undefined;
   for await (const row of copy.rows(SOURCE_ROW[group], [nodeId])) return row;
   return undefined;
+}
+
+async function holdsMasterKey(copy: BackupQuery): Promise<boolean> {
+  if (!(await hasTable(copy, "master_keys"))) return false;
+  for await (const _row of copy.rows("select 1 from master_keys limit 1", [])) return true;
+  return false;
 }
 
 function codeOf(error: unknown): unknown {
@@ -96,7 +105,7 @@ async function sourcePrivateKey(
  * The archive's node.dump must open as a database, and neither venue copy may hold one of
  * node.db's tables: they belong to the box, never to the venue. The source's signing key, sealed
  * in its node copy, must pair with the public key the venue copies record for it; a source with no
- * key may hold no role or recovery key there either.
+ * key may hold no role in the node copy, and its venue copies no master key.
  */
 export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
@@ -136,7 +145,8 @@ export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
           privateKey,
           nodeCopyHoldsSource:
             (await sourceRow(copy, "role", nodeId)) !== undefined ||
-            (await sourceRow(copy, "recovery", nodeId)) !== undefined,
+            (await holdsMasterKey(context.before)) ||
+            (await holdsMasterKey(context.after)),
         }))
           ? "passed"
           : "invalid";
