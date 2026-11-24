@@ -1262,6 +1262,7 @@ export class PrintersScreen extends LitElement {
   #agentScanUntil = 0;
   #agentReadInFlight = false;
   #agentEpoch = 0;
+  #agentAcceptance: Promise<void> | undefined;
   @state() private holdStatus: PairingHoldStatus = "idle";
   /** The taken hold's lapse, shown before the live read of the window next answers. */
   @state() private takenUntil: string | null = null;
@@ -1530,7 +1531,7 @@ export class PrintersScreen extends LitElement {
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
     this.scanningAgents = false;
-    this.#hold.stop();
+    this.#hold.stop(this.#agentAcceptance);
   }
 
   async #scanAgents(): Promise<void> {
@@ -1604,7 +1605,8 @@ export class PrintersScreen extends LitElement {
     this.submitting = true;
     this.acceptingChoice = choice;
     try {
-      await this.api.acceptPrintAgentJoinRequest(request.id, { choice });
+      this.#agentAcceptance = this.api.acceptPrintAgentJoinRequest(request.id, { choice });
+      await this.#agentAcceptance;
       this.openRequestId = null;
       await Promise.all([this.#reloadJoins(), this.#reloadAgents()]);
     } catch (error) {
@@ -1621,6 +1623,7 @@ export class PrintersScreen extends LitElement {
     } finally {
       this.submitting = false;
       this.acceptingChoice = null;
+      this.#agentAcceptance = undefined;
     }
   }
 

@@ -716,13 +716,9 @@ export function createAgent(opts: AgentOptions): Agent {
         report({ phase: "spare_box", serverUrl: config.serverUrl, current, lastError: undefined });
         return false;
       }
-      if (retryJoinAt !== undefined) {
-        if (steady() < retryJoinAt) {
-          report({ phase: "pairing_closed", serverUrl: config.serverUrl, current });
-          return false;
-        }
+      if (retryJoinAt !== undefined && steady() < retryJoinAt) return false;
+      if (retryJoinAt !== undefined || config.previouslyDenied)
         retryJoinAt = steady() + JOIN_RETRY_INTERVAL_MS;
-      }
       const joined = config.previouslyDenied
         ? await client.join(current, config.name, true)
         : await client.join(current, config.name);
@@ -739,12 +735,12 @@ export function createAgent(opts: AgentOptions): Agent {
         }
         return false;
       }
-      retryJoinAt = undefined;
       // The only surviving copy, after a restart, of the code the admin must match.
       config = { ...config, pendingVerificationNumber: joined.value.verificationNumber };
       await host.saveConfig(config);
       token = joined.value.token;
       await host.saveToken(token);
+      retryJoinAt = undefined;
       approved = false;
       report({
         phase: "pending",
@@ -780,13 +776,13 @@ export function createAgent(opts: AgentOptions): Agent {
           await halt(config, current);
           return false;
         }
-        await host.saveToken(null);
-        await host.saveConfig({
-          ...config,
-          pendingVerificationNumber: undefined,
-          previouslyDenied: s.value === "denied" ? true : config.previouslyDenied,
-        });
         retryJoinAt = steady() + JOIN_RETRY_INTERVAL_MS;
+        if (s.value === "denied" && !config.previouslyDenied) {
+          config = { ...config, previouslyDenied: true };
+          await host.saveConfig(config);
+        }
+        await host.saveToken(null);
+        await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
         report({
           phase: "pairing_closed",
           serverUrl: config.serverUrl,

@@ -1931,7 +1931,7 @@ describe("printers-screen", () => {
   ] as const)(
     "shows a previously denied agent below new requests in %s",
     async (locale, label, letIn) => {
-      await setLocale(locale);
+      setLocale(locale);
       const api = stubApi({
         joinRequests: vi.fn().mockResolvedValue([
           {
@@ -2070,6 +2070,32 @@ describe("printers-screen", () => {
     answer();
     await flush(el);
     expect(q(el, "[data-test=join-dialog]")).toBeNull();
+  });
+
+  it("lets an in-flight agent approval finish before releasing the pairing hold", async () => {
+    const pending = Promise.withResolvers<void>();
+    const api = stubApi({
+      acceptPrintAgentJoinRequest: vi.fn().mockReturnValue(pending.promise),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "agents");
+    try {
+      await userEvent.click(q(el, "[data-test=open-add-agent]")!);
+      await flush(el);
+      await userEvent.click(q(el, "[data-test=join-review-j1]")!);
+      await flush(el);
+      await userEvent.click(q(el, `[data-choice="${REAL_NUMBER}"]`)!);
+      expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledOnce();
+      await userEvent.click(q(el, "[data-test=join-cancel]")!);
+      await flush(el);
+      await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
+      expect(api.releasePairingHold).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve();
+      await flush(el);
+    }
+    expect(api.releasePairingHold).toHaveBeenCalledOnce();
   });
 
   // A wrong tap has already denied the request server-side.

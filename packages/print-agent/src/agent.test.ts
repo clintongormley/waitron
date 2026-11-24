@@ -266,6 +266,79 @@ describe("createAgent — phases", () => {
     expect(c.pullJobs).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    "retries an ordinary lost request and keeps a prior denial of %s",
+    async (marked) => {
+      const host = fakeHost({
+        config: {
+          ...CONFIG,
+          pendingVerificationNumber: "07",
+          ...(marked ? { previouslyDenied: true } : {}),
+        },
+        token: "a1.s",
+      });
+      const join = vi.fn(async () => okR({ token: "a2.s", verificationNumber: "42" }));
+      const c = client({
+        join,
+        joinStatus: vi
+          .fn()
+          .mockResolvedValueOnce(okR<JoinStatus>("not_approved"))
+          .mockResolvedValueOnce(okR<JoinStatus>("approved")),
+      });
+      let steady = 0;
+      const agent = createAgent({ host, client: c, steady: () => steady });
+      await agent.runOnce();
+      expect((await host.config())?.previouslyDenied).toBe(marked ? true : undefined);
+      steady = 30_000;
+      await agent.runOnce();
+      expect(join).toHaveBeenCalledExactlyOnceWith(A, CONFIG.name, ...(marked ? [true] : []));
+      await agent.runOnce();
+      expect((await host.config())?.previouslyDenied).toBeUndefined();
+      expect((await host.config())?.pendingVerificationNumber).toBeUndefined();
+    },
+  );
+
+  it("keeps the pending token until a denial is saved and spaces retries when saving a new request fails", async () => {
+    const host = fakeHost({
+      config: { ...CONFIG, environment: "preproduction", pendingVerificationNumber: "07" },
+      token: "a1.s",
+    });
+    const write = host.saveConfig.bind(host);
+    host.saveConfig = vi.fn(write).mockRejectedValueOnce(new Error("no room to save denial"));
+    const join = vi.fn(async () => okR({ token: "a2.s", verificationNumber: "42" }));
+    const c = client({ join, joinStatus: vi.fn(async () => okR<JoinStatus>("denied")) });
+    let steady = 0;
+    const agent = createAgent({ host, client: c, steady: () => steady });
+    await agent.runOnce();
+    expect(await host.token()).toBe("a1.s");
+    await agent.runOnce();
+    expect((await host.config())?.previouslyDenied).toBe(true);
+
+    host.saveConfig = vi.fn(async () => {
+      throw new Error("no room to save next request");
+    });
+    steady = 30_000;
+    await agent.runOnce();
+    expect(join).toHaveBeenCalledExactlyOnceWith(A, CONFIG.name, true);
+    expect(agent.status.phase).toBe("unreachable");
+
+    steady = 32_000;
+    await agent.runOnce();
+    expect(join).toHaveBeenCalledTimes(1);
+    expect(agent.status.phase).toBe("unreachable");
+  });
+
+  it("spaces a remembered denial's retries after restarting the agent", async () => {
+    const host = fakeHost({ config: { ...CONFIG, previouslyDenied: true } });
+    const join = vi.fn(async () => failR({ kind: "pairing_closed" }));
+    let steady = 0;
+    const agent = createAgent({ host, client: client({ join }), steady: () => steady });
+    await agent.runOnce();
+    steady = 2_000;
+    await agent.runOnce();
+    expect(join).toHaveBeenCalledExactlyOnceWith(A, CONFIG.name, true);
+  });
+
   it("halts a matching revoked agent even when its last saved number is still pending", async () => {
     const host = fakeHost({
       config: { ...CONFIG, pendingVerificationNumber: "07" },

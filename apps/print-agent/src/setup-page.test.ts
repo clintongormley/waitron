@@ -289,7 +289,7 @@ describe("createSetupApp — rendering", () => {
         "192.168.20.5",
       )
     ).text();
-    expect(html).toContain("This agent was disabled.");
+    expect(html).toContain("This agent no longer has approval.");
     expect(html).toContain("Save the box address");
     expect(html).toContain("approve the new join");
     expect(html).not.toContain("restart");
