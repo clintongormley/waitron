@@ -605,6 +605,13 @@ test("the hidden status says a PDF's line, never a typed key's or the host's", a
   expect(status()).toBe(EN.wrongKey(KEY_NAME));
 });
 
+test("a field just drawn says nothing in its hidden status", async () => {
+  const el = (await mount("<wt-master-key-input></wt-master-key-input>")) as WtMasterKeyInput;
+  el.copy = EN;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe("");
+});
+
 test("the hidden status says the key was loaded from a PDF, never the key, until it changes", async () => {
   const { el } = await field();
   const status = () => el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim();
