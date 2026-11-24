@@ -326,8 +326,10 @@ import {
   type Submission,
 } from "./state/bill-payment.js";
 import {
+  givesBackOverpaid,
   itemsAllocatedFrom,
   itemsRefusal,
+  overpaidOf,
   previewPayment,
   takePayment,
   withItems,
@@ -13438,6 +13440,7 @@ export class TillApp extends LitElement {
     return html`<till-bill-refund-dialog
         .payment=${open.payment}
         .suggested=${open.suggested}
+        .pinFreeUpTo=${overpaidOf(this.#billPayingNow(open.payId)?.balance ?? null)}
         .terminal=${open.terminal}
         .refusal=${open.refusal}
         .busy=${open.busy}
@@ -24003,8 +24006,8 @@ export class TillApp extends LitElement {
    * How much and why, confirmed: the refund is sent in the operator's own name, and only when the
    * server answers that they cannot give refunds are the people who can approve it read and their
    * PIN prompt opened, as the drawer does. A card keyed on a separate terminal is given back there
-   * first, and its confirmation always asks for a PIN, which the server needs even from someone
-   * allowed to give refunds.
+   * first, and its confirmation asks for a PIN first, which the server needs even from someone
+   * allowed to give refunds, unless it gives back no more than the bill was paid over its total.
    */
   async #onRefundContinue(event: Event): Promise<void> {
     const asked = (event as CustomEvent<RefundAsk>).detail;
@@ -24017,7 +24020,8 @@ export class TillApp extends LitElement {
     }
     const sending: BillRefunding = { ...open, asked, refusal: null, busy: true };
     this.billRefunding = sending;
-    if (asked.manualConfirmed === true) await this.#askRefundApprover(open.id);
+    const pinFree = givesBackOverpaid(this.#billPayingNow(open.payId)?.balance ?? null, asked);
+    if (asked.manualConfirmed === true && !pinFree) await this.#askRefundApprover(open.id);
     else await this.#sendRefund(sending);
   }
 
@@ -24096,7 +24100,9 @@ export class TillApp extends LitElement {
         const unconfirmed = settle(error);
         if (
           override === undefined &&
-          (error as { code?: unknown }).code === "authorization.not_permitted" &&
+          ["authorization.not_permitted", "bill.manual_refund_pin_required"].includes(
+            (error as { code?: string }).code ?? "",
+          ) &&
           this.#billRefundingNow(open.id) !== null
         )
           await this.#askRefundApprover(open.id);

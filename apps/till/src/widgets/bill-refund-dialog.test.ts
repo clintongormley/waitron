@@ -553,6 +553,52 @@ describe("till-bill-refund-dialog: a card keyed on a separate terminal", () => {
   });
 });
 
+describe.each(["en", "es"] as const)(
+  "till-bill-refund-dialog: money just taken on this bill (%s)",
+  (locale) => {
+    const keyed = paymentOf({ method: "card", entry: "manual", tendered: null, change: null });
+    const words = (key: keyof typeof es) => (locale === "en" ? t(key) : es[key]);
+
+    it("says no PIN is needed for an amount up to pinFreeUpTo", async () => {
+      setLocale(locale);
+      const el = await mount({ payment: keyed, pinFreeUpTo: "15.00" });
+      await pick(el, "part");
+      await type(el, "amount", "15");
+      expect(text(root(el).querySelector("[data-refund-next]"))).toBe(
+        words("bill_refund.terminal_next_no_pin"),
+      );
+      el.terminal = true;
+      await el.updateComplete;
+      expect(text(root(el).querySelector("[data-refund-terminal]"))).toBe(
+        words("bill_refund.terminal_no_pin")
+          .replace("{amount}", money("15.00"))
+          .replace(/\s+/g, " "),
+      );
+
+      const cash = await mount({ pinFreeUpTo: "60.00" });
+      expect(root(cash).querySelector("[data-refund-next]")).toBeNull();
+    });
+
+    it("says a manager approves an amount above it", async () => {
+      setLocale(locale);
+      const el = await mount({ payment: keyed, pinFreeUpTo: "15.00" });
+      expect(text(root(el).querySelector("[data-refund-next]"))).toBe(
+        words("bill_refund.terminal_next"),
+      );
+      el.terminal = true;
+      await el.updateComplete;
+      expect(text(root(el).querySelector("[data-refund-terminal]"))).toBe(
+        words("bill_refund.terminal").replace("{amount}", money("50.00")).replace(/\s+/g, " "),
+      );
+
+      const cash = await mount({ pinFreeUpTo: "15.00" });
+      expect(text(root(cash).querySelector("[data-refund-next]"))).toBe(
+        words("bill_refund.approval_next"),
+      );
+    });
+  },
+);
+
 for (const locale of ["en", "es"]) {
   it(`decimal input amount follows ${locale}`, async () => {
     setLocale(locale);

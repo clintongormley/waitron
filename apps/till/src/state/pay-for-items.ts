@@ -16,7 +16,13 @@ import type {
 } from "../api/item-payment-types.js";
 import { fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
-import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
+import {
+  moneyPlus,
+  paymentAsk,
+  type Confirmation,
+  type PayChoice,
+  type RefundAsk,
+} from "./bill-payment.js";
 
 /** What Pay for items sends beyond a bill payment's confirmation, fixed when the waiter confirms:
  * the server's retry fingerprint reads all of it, so a resend after no answer sends the same. */
@@ -31,6 +37,20 @@ export type ItemsPart = {
 export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): string | null {
   const over = balance?.overpaid;
   return over === undefined || compareDecimal(decimal(over), decimal("0")) <= 0 ? null : over;
+}
+
+/** Whether `asked` gives back no more than `balance` was paid over its total: money just taken on
+ * this bill, which the server gives back with no approver's PIN unless tips it gave back earlier
+ * used up the excess (`refundPermission`, apps/server/src/bill-overpaid.ts). */
+export function givesBackOverpaid(
+  balance: Pick<BillBalance, "overpaid"> | null,
+  asked: Pick<RefundAsk, "appliedAmount" | "tipAmount">,
+): boolean {
+  const over = overpaidOf(balance);
+  return (
+    over !== null &&
+    compareDecimal(moneyPlus(asked.appliedAmount, asked.tipAmount), decimal(over)) <= 0
+  );
 }
 
 type ItemsChoice = Extract<PayChoice, { kind: "items" }>;

@@ -2072,6 +2072,10 @@ export const en = {
     "Next, refund it on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
   "bill_refund.terminal":
     "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
+  "bill_refund.terminal_next_no_pin":
+    "Next, refund it on the separate card terminal it was keyed on.",
+  "bill_refund.terminal_no_pin":
+    "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal first, then confirm it here.",
   "bill_refund.terminal_done": "Refunded on the terminal",
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
@@ -4399,6 +4403,10 @@ export const es: Record<StringKey, string> = {
     "A continuación, devuélvelo en el datáfono aparte en el que se cobró. Después lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal":
     "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí. Lo aprueba un responsable o encargado con su PIN.",
+  "bill_refund.terminal_next_no_pin":
+    "A continuación, devuélvelo en el datáfono aparte en el que se cobró.",
+  "bill_refund.terminal_no_pin":
+    "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí.",
   "bill_refund.terminal_done": "Devuelto en el datáfono",
   "bill_refund.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "bill_refund.unconfirmed":

@@ -26,7 +26,7 @@ import {
   till,
   type,
 } from "../test/bill-pay-app.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cancelReason, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -939,5 +939,168 @@ describe("till-app: a bill paid more than it comes to", () => {
       )!;
     expect(giving).not.toBeNull();
     expect(giving.suggested).toBe("5.00");
+  });
+});
+
+describe("till-app: giving back money just taken on this bill", () => {
+  const keyed = paymentOf({
+    method: "card",
+    entry: "manual",
+    applied: "15.00",
+    tendered: null,
+    change: null,
+  });
+  const keyedOverpaid = (overpaid: string) =>
+    balanceOf({
+      total: overpaid === "0.00" ? "15.00" : "10.00",
+      received: "15.00",
+      outstanding: overpaid === "0.00" ? "0.00" : `-${overpaid}`,
+      overpaid,
+      payments: [keyed],
+    });
+  const givenBack = {
+    refund: {
+      id: "r-1",
+      paymentId: "pay-1",
+      submissionId: "rs-1",
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      reason: "Charged twice",
+      state: "completed",
+      createdAt: "2026-09-30T20:10:00.000Z",
+      completedAt: "2026-09-30T20:10:00.000Z",
+    },
+    balance: balanceOf({ total: "10.00", received: "10.00", outstanding: "0.00" }),
+  };
+  const refundDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-bill-refund-dialog"]>(
+      "till-bill-refund-dialog",
+    );
+  const inRefund = (el: TillApp, selector: string) =>
+    refundDialog(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector("till-supervisor-override-dialog[data-refund-approval]");
+  const refunds = () => vi.mocked(api.refundBillPayment).mock.calls.map(([, , request]) => request);
+
+  /** wo-4 holding `keyed` with `overpaid` over its total: the Refund window opened on `keyed` by
+   * Give back (by Pay's Refund when nothing is overpaid) and a reason chosen and continued. */
+  async function giveBackKeyed(overrides: Record<string, unknown>, overpaid: string) {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          billOf({ total: "10.00", outstanding: "0.00", overpaid, hasPayments: true }),
+        ]),
+      getBillBalance: vi.fn().mockResolvedValue(keyedOverpaid(overpaid)),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+      listAdjustmentReasons: vi.fn().mockResolvedValue([cancelReason]),
+      ...overrides,
+    });
+    const order = await openTable(el);
+    if (overpaid === "0.00") {
+      await openDialog(el, "rest");
+      await press(el, `[data-payment-refund="${keyed.id}"]`);
+    } else {
+      await flush(el);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!.click();
+      await flush(el, 6);
+      expect(refundDialog(el)!.suggested).toBe(overpaid);
+    }
+    const combo = inRefund(
+      el,
+      'wt-combobox[name="reason"]',
+    ) as HTMLElementTagNameMap["wt-combobox"];
+    await expect.poll(() => combo.options[0]?.value).toBeDefined();
+    combo.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: combo.options[0]!.value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  async function pinPad(el: TillApp, digits: string): Promise<void> {
+    const override = approval(el)! as HTMLElement & { updateComplete: Promise<unknown> };
+    override.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!.click();
+    await override.updateComplete;
+    for (const digit of digits) {
+      override
+        .shadowRoot!.querySelector("till-numeric-pad")!
+        .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!
+        .click();
+      await override.updateComplete;
+    }
+    override.shadowRoot!.querySelector<HTMLElement>(".authorize")!.click();
+    await flush(el);
+  }
+
+  it("a hand-keyed give-back within the excess is recorded with no PIN", async () => {
+    const el = await giveBackKeyed(
+      { refundBillPayment: vi.fn().mockResolvedValue(givenBack) },
+      "5.00",
+    );
+    expect(refunds()).toEqual([]);
+
+    inRefund(el, "[data-refund-terminal-done]")!.click();
+    await flush(el);
+
+    expect(refunds()).toEqual([
+      {
+        submissionId: expect.any(String),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: cancelReason.name,
+        manualConfirmed: true,
+      },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(refundDialog(el)).toBeNull();
+  });
+
+  it("a hand-keyed give-back the server still wants approved asks a PIN", async () => {
+    const refundBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "bill.manual_refund_pin_required",
+        status: 403,
+        paymentId: keyed.id,
+      })
+      .mockResolvedValue(givenBack);
+    const el = await giveBackKeyed({ refundBillPayment }, "5.00");
+
+    inRefund(el, "[data-refund-terminal-done]")!.click();
+    await flush(el);
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+    expect(approval(el)).not.toBeNull();
+    await pinPad(el, "1234");
+
+    const sent = refunds();
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).not.toHaveProperty("override");
+    expect(sent[1]).toMatchObject({
+      manualConfirmed: true,
+      override: { personId: "m-1", pin: "1234" },
+    });
+    expect(sent[1]!.submissionId).toBe(sent[0]!.submissionId);
+    expect(refundDialog(el)).toBeNull();
+  });
+
+  it("any other hand-keyed refund asks the PIN first, as today", async () => {
+    const el = await giveBackKeyed(
+      { refundBillPayment: vi.fn().mockResolvedValue(givenBack) },
+      "0.00",
+    );
+
+    inRefund(el, "[data-refund-terminal-done]")!.click();
+    await flush(el);
+
+    expect(refunds()).toEqual([]);
+    expect(approval(el)).not.toBeNull();
   });
 });
