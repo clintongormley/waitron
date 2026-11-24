@@ -104,6 +104,8 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       const report = JSON.parse(stdout.trim().split("\n").at(-1));
       if (!Array.isArray(report) || report.length === 0)
         throw new Error(`the ${check} check reported nothing`);
+      if (report.length !== 1 || report[0].name !== check)
+        throw new Error(`the ${check} check did not report itself`);
       return report;
     };
     started.push(readiness);

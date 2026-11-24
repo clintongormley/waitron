@@ -374,6 +374,21 @@ describe("an attempt that changes the producer", () => {
     expect(await fs.readdir(f.live)).toEqual([]);
   });
 
+  it.each([
+    ["a readiness report from the sale command", [{ name: "readiness", ok: true }]],
+    [
+      "two passing entries from the sale command",
+      [
+        { name: "sale", ok: true },
+        { name: "sale", ok: true },
+      ],
+    ],
+  ])("fails, and writes no live note, on %s", async (_, stdout) => {
+    const f = await noted({ reply: answers("sale", stdout) });
+    await expect(f.check()).rejects.toThrow("the sale check did not report itself");
+    expect(await fs.readdir(f.live)).toEqual([]);
+  });
+
   it("does not write through links left under the note's names", async () => {
     const f = await noted();
     const outside = join(f.root, "outside");
