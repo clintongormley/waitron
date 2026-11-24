@@ -23,7 +23,12 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
-import { verifactuSubmissions, verifactuIdentities, verifactuRecords, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import {
+  verifactuSubmissions,
+  verifactuIdentities,
+  verifactuRecords,
+  VerifactuBackend,
+} from "@waitron/fiscal-verifactu";
 import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { mintBreakGlassKey } from "../break-glass.js";
 import { ALL_MODULES } from "../modules.js";

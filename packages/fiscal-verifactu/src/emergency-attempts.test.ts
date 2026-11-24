@@ -119,9 +119,7 @@ it("retains an unfinished attempt before activation and its returned result afte
   expect(record.attempts[0].id).toMatch(/^[0-9a-f-]{36}$/);
   expect(Number.isNaN(Date.parse(record.attempts[0].startedAt))).toBe(false);
   expect(Number.isNaN(Date.parse(record.attempts[0].finishedAt))).toBe(false);
-  expect(record.allocation).toEqual(
-    (await allocationRows(suite.db))[0]?.allocation,
-  );
+  expect(record.allocation).toEqual((await allocationRows(suite.db))[0]?.allocation);
   expect((await fs.stat(incidentPath)).mode & 0o777).toBe(0o600);
   expect(await fs.readdir(outside)).toHaveLength(3);
 });

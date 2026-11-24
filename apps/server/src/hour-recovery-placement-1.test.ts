@@ -854,9 +854,10 @@ describe("selected-hour admission before archive placement", () => {
           ),
         ).toEqual(rows);
         expect(
-          (await allocationRows(replay.venue)).map(
-            ({ eventKey, installationIdentity }) => ({ eventKey, installationIdentity }),
-          ),
+          (await allocationRows(replay.venue)).map(({ eventKey, installationIdentity }) => ({
+            eventKey,
+            installationIdentity,
+          })),
         ).toEqual(allocations);
       } finally {
         await replay.close();

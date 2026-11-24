@@ -16,7 +16,11 @@ import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { WAITRON_ID_SISTEMA as SOFTWARE_ID, VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
+import {
+  WAITRON_ID_SISTEMA as SOFTWARE_ID,
+  VerifactuBackend,
+  verifactuRecords,
+} from "@waitron/fiscal-verifactu";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { readCloudAllocationReceipt } from "@waitron/fiscal-verifactu/src/cloud-evidence.js";
 import { cloudReceiptFixture } from "@waitron/fiscal-verifactu/test/cloud-fixture.js";
