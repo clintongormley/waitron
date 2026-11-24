@@ -4,7 +4,10 @@ Status: plan, written 2026-11-24 on `docs/give-money-back-plan` at `cc4fc8a1b7`,
 day after one fresh-context read (`~/waitron-campaign-l/receipts/give-money-back-plan-read-1.md`:
 1 Critical, 10 Important, 11 Minor; section 11 says what was done with each). No product code yet.
 Every `file:line` below was read on this branch; every result marked "run" came from the command
-named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part.
+named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part. Cleared by the
+watcher 2026-11-24 12:28 with every default; the owner said yes to O2's words (12:36, "yes to 1
+and 2"), and O1 is settled (section 4, the watcher's 13:06 note on the owner's 12:0x "Keep the
+rule, no warning screen").
 The queue entry asked for "a plan (one page)"; the driver's brief asked for the full task format,
 which is what this is.
 
@@ -169,7 +172,7 @@ A venue that takes no tips stores none (`bill.tip_not_allowed`, `bill-allocation
 printed receipt calls it "Propina" and the payment window "Tip". So the owner is right: in ways 2 and
 5 nobody chose it as a tip, and in ways 3 and 4 staff chose the word, not necessarily the guest.
 
-**O2, proposed words (mine):**
+**O2's words (proposed by the plan writer; the owner said yes, 2026-11-24 12:36):**
 
 | Where | English | Spanish |
 | --- | --- | --- |
@@ -243,9 +246,14 @@ waits because #4192 made a plain refund wait wherever Correct invoice only waits
 `correction-admission.ts:58-59`; no source found says what AEAT does with a corrective of a refused
 record, so "it would be refused" is a reading, not a receipt.
 
-**O1 for the owner: what should staff see in cases 1–10?** This plan builds only the window's
-ordinary bottom message (the form contract: one message above the buttons, nothing moves), with one
-plain sentence per case. Choices, none built beyond (a):
+**O1, settled (watcher 2026-11-24 13:06, on the owner's 12:0x "Keep the rule, no warning screen"):
+in the window, a choice that must wait is shown unavailable with one plain line saying why; every
+other choice works at once.** In case 1 that means **Goodwill** is unavailable, and under **A dish**
+only lines with money still owed for a cancel can be ticked (up to that money); the extra stays
+available. Cases 5–7 make all three choices unavailable with the same line. The read carries this
+(5.1, `choices` and each line's `available`); the till draws it (Task 7). The bottom message stays
+for a refusal only the write can find (a change since the read, a wrong PIN). The options the
+owner was shown, kept for the record:
 
 - (a) as built: the window opens as normal; pressing **Give back** shows the sentence, nothing moves;
 - (b) the same sentence as soon as the window opens, before staff type anything;
@@ -286,8 +294,23 @@ mounted beside `mountInvoiceCorrectionApi`).
   ways: { way: "cash" | string /* tenderId of a card */; last4: string | null; manual: boolean;
           moneyLeft: string; extraLeft: string; pending: boolean; allowedHere: boolean }[];
   underWay: InvoiceCorrectionView | null;
+  /** O1 (watcher 13:06): whether each choice can be used now and, when not, why */
+  choices: Record<"dishes" | "goodwill" | "extra", { available: boolean; reason: WaitReason | null }>;
 }
+/** the code (and params) the write would answer, from section 4's cases */
+type WaitReason = { code: string; params?: Record<string, string> };
 ```
+
+Each line also carries `available: boolean` and `reason: WaitReason | null`; `ways` each carry
+`reason` too (case 3's `tender.refund_in_progress`, case 8's `tender.refund_unavailable`).
+`choices` and the lines' `available` are worked out by the same functions the preview and the write
+call (`correctableNow`, `refuseUntilRefundable`, the pending-refund reads, `requireEconomicWrite`'s
+check), never a second copy of the rules: an unavailable choice is exactly one whose preview would
+answer that code. `dishes` is available when at least one line is; in cases 1 and 2 a line is
+available only while its cancel still owes money, and only up to `owed`. A choice with nothing left
+to give back (no extra paid, every line's `left` 0) is `available: false` with `reason: null`; the
+till shows it quiet with no sentence. Case 4 (`invoice_correction.already_open`) makes all three
+unavailable; the button opens the under-way view instead.
 
 `cancelled` comes from the order's cancels with Refund ticked (`readCancelsForRefund`,
 `packages/adjustments/src/refund-links.ts:54-89`; `owed = refundValue − linked`, `back = linked`),
@@ -571,8 +594,8 @@ counts. Use `pnpm exec vitest run <file> -t "<name>"`, never `pnpm test <file> -
 implementer well under 100 tool calls; one that passes about 150 stops at a passing point, commits and
 hands over.
 
-**Which tasks wait on an open question:** Tasks 8 and 13 hold O1 (a)'s sentences, and Tasks 7 and 13
-hold O2's words; an answer changes only those strings. Task 7's labels hold Q1; Task 10 holds Q5.
+**Open questions:** none; O1 and O2 are answered (sections 3 and 4) and the watcher cleared Q1–Q5
+with their defaults (12:28).
 
 ### PR 1 — server (Tasks 1–6)
 
@@ -593,7 +616,15 @@ Files: new `apps/server/src/give-back.ts`, `give-back.test.ts`.
    - a hand-keyed card: `manual: true`; a device whose profile takes no cards: `allowedHere: false`;
    - a receipt filed by another box, and one AEAT refused (`refusedByAeat` as
      `invoice-correction-api.test.ts:1305-1312` builds it): lines listed with `left` from `gross` (I3);
-   - an open correction: `underWay` is its view.
+   - an open correction: `underWay` is its view, and all three `choices` unavailable with
+     `invoice_correction.already_open`;
+   - O1's availability (watcher 13:06): on the AEAT-refused receipt `goodwill` is unavailable with
+     `sale.correction_not_admitted` (reason `filing_refused`), the paella (owing 18.50) is available
+     and the cheesecake is not, and `extra` is available; with another payment's refund pending,
+     `goodwill` is unavailable with `invoice_correction.refund_pending` and that way's `reason` names
+     it; with the box's time unconfirmed, all three unavailable with `clock.unconfirmed`; no tip paid:
+     `extra` unavailable with `reason: null`. For each unavailable choice, a preview of it answers
+     the same code (one assertion per case, so the two cannot drift).
    Run, watch them fail (no module).
 2. Write `readGiveBack` from `readRefundableTenders`, `readCancelsForRefund`, the portion bindings,
    `readCorrectableLines` (any `AppError` → `gross`), `openCorrectionOf` + `readInvoiceCorrection`,
@@ -730,7 +761,9 @@ Files: new `apps/till/src/widgets/give-back-dialog.ts`, `.test.ts`, `.a11y.test.
 1. Tests first: the three choices, the extra's row showing its amount and absent with no extra; **A
    dish** lists the lines with D11's labels, the given-free one without a switch; ticking sets the
    amount from `left` (a cancelled line from `owed`), and an edit is kept; raising it up to the
-   receipt's money left is accepted; the switch and O2's words; the summary box and the PIN line from
+   receipt's money left is accepted; an unavailable choice or line (the read's `choices`, a line's
+   `available`) cannot be chosen and shows its one plain line from `codes.ts`, the others work at
+   once (O1); a choice with nothing to give back is quiet with no line; the switch and O2's words; the summary box and the PIN line from
    the preview; **Give back** disabled until valid; English and Spanish; axe in both themes for each
    step; leaving with a typed amount asks first (as `tender-refund-dialog.unsaved.test.ts`).
    Run, watch them fail.
@@ -750,8 +783,9 @@ Files: new `apps/till/src/state/give-back.ts` and test; `give-back-dialog.ts`; `
    list asks for every right in `needs`; a wrong PIN shows its error in place; a hand-keyed payment
    shows the terminal step (picture g) only after the preview answered, and sends `manualConfirmed`;
    the outcome for cash, card, pending, `rest`, `refusal` and `leftUnderWay` (moving to the under-way
-   view); `give_back.changed` shows its message and the new preview; each case of section 4 shows its
-   sentence at the bottom and nothing else changes (O1 (a)). Run, watch them fail.
+   view); `give_back.changed` shows its message and the new preview; a case of section 4 that the
+   read did not show (the state changed after the window opened) shows its sentence at the bottom
+   and nothing moves. Run, watch them fail.
 2. Write the state, the send, the approver step (`till-supervisor-override-dialog`, as
    `till-app.ts:10071-10100` uses it) and the outcome; `give_back.changed` and the case sentences in
    `codes.ts`.
@@ -885,8 +919,7 @@ window, the messages and the guides change together. A1564 (custom item) edits
 `apps/till/src/till-app.ts` in lane L; expect rebases. No open pull request touches the other files
 (`gh pr list`, run).
 
-**For the owner:** **O1** — what staff see when a give-back must wait (section 4; built meanwhile:
-(a)). **O2** — the words for the extra paid on top (section 3).
+**For the owner:** none open. O1 settled (section 4); O2's words approved (12:36).
 
 **For the watcher** (each has a default the plan builds):
 
