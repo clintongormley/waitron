@@ -711,7 +711,7 @@ ties, disables diet-empty sections, and opens a section without changing the bas
   Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name
   with a new id. Deleting a course clears product defaults, including archived products;
   recorded draft and order choices keep the original course. Courses and stations left as
-  history are excluded from configuration exports; archived products still travel.
+  history are excluded from configuration exports; being archived does not leave a product behind.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to

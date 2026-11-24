@@ -117,7 +117,8 @@ export const products = table(
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
-    // The main reporting category; null is Uncategorised, and on a variant means its parent's.
+    // The main reporting category; null is Uncategorised (except where `custom_item_key` is set), and
+    // on a variant means its parent's.
     categoryId: id("category_id").references(() => categories.id),
     courseId: id("course_id").references(() => kitchenCourses.id),
     // Staff-facing product name, shown on the dashboard, till buttons/basket and reports.

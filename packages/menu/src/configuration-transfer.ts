@@ -95,8 +95,8 @@ function checkMenuShells(tables: Readonly<Record<string, Rows>>): void {
       throw new AppError("setup.request_invalid", { field: "sections.owner_menu_id" });
 }
 
-/** Every top-level product has one takeaway rate from the beginning; a variant may have none and
- * takes its parent's, but one with rows of its own has one from the beginning, since its own rows
+/** In a file, every top-level product has one takeaway rate from the beginning; a variant may have
+ * none and takes its parent's, but one with rows of its own has one from the beginning, since its own rows
  * replace its parent's. No product has two rates from one day, and every day is a calendar date. */
 function checkTakeawayVatRates(tables: Readonly<Record<string, Rows>>): void {
   const rates = tables.product_takeaway_vat_rates;

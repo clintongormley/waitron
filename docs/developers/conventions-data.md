@@ -2253,8 +2253,9 @@ remaps the remaining IDs. A pass view with no display choice shows other station
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`; the hidden product behind a custom item, `custom_item_key`), or whose
-`leaveBehindWhenFalse` column holds false or 0 (a deleted course or station, `active`). Being
-archived does not leave a product behind: its `active` field has no leave-behind selector. The export
+`leaveBehindWhenFalse` column holds false or 0 (a deleted course or station, `active`). `custom_item_key` is also in
+`omit`, so no exported row carries it and an import refuses one that does. Being archived does not
+leave a product behind: its `active` field has no leave-behind selector. The export
 then excludes every row of a transferred table whose foreign key names a row left behind, repeating
 until nothing more is left behind (`exportConfigurationTables`,
 `packages/provisioning/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,

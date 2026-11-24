@@ -52,7 +52,7 @@ export interface RecordSaleLine {
   listGross?: string | null;
   /** VAT-inclusive unit price per priceQuantity before any discount, frozen for receipt replay. */
   listUnitPriceGross?: string | null;
-  /** The product's reporting chain, as the line recorded it when it was added. */
+  /** The line's reporting snapshot, recorded when it was added. */
   classification?: SaleLineClassification | null;
   /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`
    * stores it (`recordSale` and `recordSubstitution` store null), and it refuses one that is not a

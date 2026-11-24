@@ -170,6 +170,9 @@ PR 1 landed as #4047.
   products through `createProduct`. A product line with no rate is refused `vat_rate.unavailable`,
   never guessed — no venue can reach it. A variant with no rows takes its parent's (the spec's "my
   call", kept). An extra is a product and has its own. *Recommended.*
+  (2026-11-24: A1564's hidden product for a custom item whose rate nobody chose has no rate row; the
+  import's rule is unchanged, because an export leaves hidden products behind; so "no venue can reach
+  it" here, and in D15, no longer holds for that product.)
 - **D4. In piece A, saving a product's or a variant's takeaway rate replaces its whole list with one
   row from the beginning of time** — a correction, which is what the one field means until piece C.
   Consequences: a takeaway meal ended on an earlier day and ticketed after the edit files at the new
@@ -393,10 +396,12 @@ Every place piece A touches. Every task's requirements include this list.
   `pnpm exec prettier --check <changed files>`, `pnpm --filter <pkg> typecheck` for each changed
   package, and the task's focused suites. Browser suites: check `memory_pressure | grep free` first.
 - **A1564 (custom item on the Counter, `docs/superpowers/plans/2026-11-21-counter-custom-item.md`,
-  not built) — what piece A changes in its Global Constraints:**
+  not built when this was written; its first pull request was, on 2026-11-24, without
+  `customItemRatesOn`) — what piece A changes in its Global Constraints:**
   - Hidden products' `vat_class = 'reduced'` and the `"unchosen"` one's `takeaway_vat_class = NULL`:
     after PR 2 each rate product has one `product_takeaway_vat_rates` row from the beginning at its
-    key's rate and the `"unchosen"` one the venue default (D3); PR L drops the labels. The rate
+    key's rate and the `"unchosen"` one the venue default (D3; as built on 2026-11-24 it has none); PR L
+    drops the labels. The rate
     products cover `readVenueVatRates(tx).pickable` (0, 4, 10, 21 under D18(a)).
   - `customItemProduct`/`customItemRatesOn` (its Task 1) and the till's `customItemRates` (Task 8)
     take the pick list from `readVenueVatRates(tx).pickable` (the till from the setup read), not

@@ -4784,6 +4784,53 @@ it("leaves the hidden products behind a custom item and their takeaway rates out
   expect(imported).toEqual([{ name: "Water", key: null, rate: 1000 }]);
 });
 
+it("leaves the custom-item key out of every exported product and refuses a file that carries one", async () => {
+  const source = await applyVenue(planVenue(venue("B42424243"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    createProduct(tx, { categoryId: null, name: "Water", unitId: null, unitPrice: "1.00" }),
+  );
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const clean = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-11-24T12:00:00Z"),
+    versions,
+  );
+  expect(clean.tables.products).toHaveLength(1);
+  expect(clean.tables.products![0]).not.toHaveProperty("custom_item_key");
+
+  const importInto = (taxId: string, bundle: ConfigurationBundle) =>
+    applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+    });
+  for (const key of ["2100", null]) {
+    const edited: ConfigurationBundle = {
+      ...clean,
+      tables: {
+        ...clean.tables,
+        products: clean.tables.products!.map((row) => ({ ...row, custom_item_key: key })),
+      },
+    };
+    await expect(importInto("B42424244", edited)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "products.custom_item_key" },
+    });
+    expect(await targetSuite.db.select().from(products)).toEqual([]);
+  }
+  await importInto("B42424244", clean);
+  expect(
+    await targetSuite.db
+      .select({ name: products.name, key: products.customItemKey })
+      .from(products),
+  ).toEqual([{ name: "Water", key: null }]);
+});
+
 it("refuses a leave-behind name the table has no column for", async () => {
   for (const column of ["no_such_column", 'retired_at" or "1']) {
     const module = {

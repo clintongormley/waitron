@@ -204,7 +204,9 @@ test, `packages/menu/src/index.ts`; changed checks below.
 - `clearTakeawayVatRates(tx, productId)` in `takeaway-vat-rates.ts`, used for `"unchosen"` only.
 - `notCustomItem: SQL` — `products.custom_item_key is null`; `unchosenCustomLines(tx, workingOrderId):
   Promise<string[]>` — the order's line ids on `"unchosen"` (used in 7b).
-- As built (2026-11-24): `unchosenCustomLines` is left to 7b, its only user.
+- As built (2026-11-24): `unchosenCustomLines` is left to 7b, its only user; the rate is compared through
+  `stringToBasisPoints`; `notCustomItem` is in `variant-fallback.ts`; a comment in `product-editor.ts`
+  changed too.
 
 - [ ] **Failing tests** (`custom-item-products.test.ts`, `useVenueDb`, a Spanish venue seeded as in
   `takeaway-vat-rates.test.ts`): "creates the hidden product once and finds it after" (two calls with
@@ -218,7 +220,8 @@ test, `packages/menu/src/index.ts`; changed checks below.
 - [ ] Implement: `customItemKey: label("custom_item_key")`, `uniqueIndex("products_custom_item_key")`,
   a one-line comment pointing at the spec; `pnpm --filter @waitron/server migration-baseline rebuild
   --set core`. One transaction writes at a time, so find-then-create needs no conflict clause. Not
-  `createProduct`: its name check refuses the second hidden product (`product.name_taken`, ran).
+  `createProduct`: its name check would refuse a hidden product where a manager's product already has
+  that name.
   Permission area `"sales"`; label "Add custom items" / "Añadir artículos libres"; help "Ring up
   something that is not on the menu, with a name and price typed at the till. Without this, a person
   who has it can enter their PIN." and its Spanish.
@@ -254,6 +257,9 @@ product in it (ran), so this lands with Task 1.
 - [ ] Run; FAIL (without the export line the import is refused `setup.request_invalid`
   `product_takeaway_vat_rates.product_id`, ran). Implement; run the touched suites; PASS. Commit
   `Custom item: hidden products stay off lists and out of exports`.
+  As built (2026-11-24): `custom_item_key` is also in the table's `omit`, so an import refuses a row that
+  carries one. `projectProductItems` still reads every top-level product; its caller asks it only about
+  rows `activeProducts` found.
 
 ### Task 3: Reports show a "Custom items" row
 
@@ -632,7 +638,7 @@ refusal needs the code added there to show 7b's words.
 the menu {#counter-custom-item}` / Spanish after the "Share a Counter bill" section (there is no
 Counter page) — what it is for, the permission or a PIN, the takeaway VAT; `guide/{en,es}/products.md` only if it names
 who can sell; `docs/backlog/till.md` — delete "Custom item on the Counter (A738 residual)" (2248) and fix
-316-318 (a link to it), 1519-1520 and 2213 ("undecided"), leaving A738's dated boards as they are;
+the three other links to it (316-318, 1519-1520, 2213), leaving A738's dated boards as they are;
 `docs/backlog.md:661` — delete the bullet.
 
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and, from the root,

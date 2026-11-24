@@ -68,6 +68,13 @@ describe("the hidden products behind a custom item", () => {
       app((tx) => updateProduct(tx, cola, { name: "custom item" })),
     ).rejects.toMatchObject(taken("name", "custom item"));
   });
+
+  it("are made where a manager's product already has their name", async () => {
+    await make("Custom item");
+    const rated = await app((tx) => customItemProduct(tx, 2100));
+    const unchosen = await app((tx) => customItemProduct(tx, null));
+    expect(unchosen).not.toBe(rated);
+  });
 });
 
 describe("relative variant names", () => {

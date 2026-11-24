@@ -23,7 +23,7 @@ Park opens an optional-name dialog and preserves the order's existing name/numbe
 
 2026-10-20, A738: these controls replace the earlier lists-under-products layout described in the
 historical slice notes below. The [current UI contract](../../docs/developers/design-system.md#counter-basket-and-payment-space)
-gives the status, line-window and draft rules. Custom items remain undecided; the separate A739
+gives the status, line-window and draft rules. The separate A739
 payment redesign remains open.
 
 ## Table ordering

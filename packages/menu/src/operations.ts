@@ -981,7 +981,8 @@ export async function createProduct(
   return insertProduct(tx, input, true, undefined, rates);
 }
 
-/** Skips the row's name check because the editor checks the whole family before writing. */
+/** Skips the row's name check: the editor checks the whole family before writing, and a hidden
+ * product behind a custom item may share its name with a manager's product. */
 export async function createProductSkippingNameCheck(
   tx: Transaction,
   input: CreateProductInput,
@@ -1168,8 +1169,8 @@ export async function updateProduct(
   await patchProduct(tx, id, patch, true, personId);
 }
 
-/** {@link updateProduct} without the unique-name check, for the reason
- * {@link createProductSkippingNameCheck} gives. Left out of the package's exports (`index.ts`). */
+/** {@link updateProduct} without the unique-name check, because the editor checks the whole family
+ * before writing. Left out of the package's exports (`index.ts`). */
 export async function updateProductSkippingNameCheck(
   tx: Transaction,
   id: string,

@@ -661,7 +661,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; two of three pull requests to come).**
   A dashed + Custom item tile for the rare thing not on the menu: typed name and price, the
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
-  a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
+  a hidden product per takeaway rate, or on one whose rate nobody chose; a new permission,
+  `order.custom_item`, or a supervisor's PIN.
   Nobody can sell one yet: what exists is the hidden products (`customItemProduct`, which nothing calls),
   the permission, which nothing checks, and the "Custom items" row of the category report. To come: the
   server's order lines (Tasks 4a to 7b) and the till (Tasks 8 to 10c). The watcher cleared Tasks 4a to 7a
