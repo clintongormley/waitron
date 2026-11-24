@@ -44,6 +44,7 @@ import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
+import "../src/components/wt-master-key-box.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 import "../src/components/wt-theme-chooser.js";
@@ -106,6 +107,20 @@ const panel = (theme: "light" | "dark") => `
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
     <wt-banner tone="error" message="Disk full: the tills cannot save anything." action-label="Open Box status"></wt-banner>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
+    <wt-master-key-box
+      .masterKey=${"88DP 74BA YPVB RRM5 XFV2 WPQY B5M5"}
+      .keyName=${"2026-11-23 · QZJV"}
+      .pdfUrl=${"about:blank"}
+      .copy=${{
+        name: (name: string) => `Master key · ${name}`,
+        download: "Download",
+        print: "Print",
+        copy: "Copy",
+        copied: "Copied.",
+        copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
+        printFailed: "Print did not open. Use Download, or allow pop-ups and try again.",
+      }}
+    ></wt-master-key-box>
     <p>
       Updated
       <wt-relative-time
