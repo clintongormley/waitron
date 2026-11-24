@@ -39,6 +39,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
+import { decodeMasterKeyCode } from "@waitron/shared";
 import { readStagedConfigurationImport } from "./configuration-import.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
@@ -1063,11 +1064,19 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000010W") }),
         });
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({
+        const reply = (await response.json()) as { masterKey: string; recoveryPackPdf: string };
+        expect(reply).toEqual({
           provisioned: true,
           restarting: true,
           contactUrl: ownContactUrl("https://waitron.local", committed.nodeId),
+          masterKey: expect.stringMatching(/^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/),
+          masterKeyName: expect.stringMatching(/^\d{4}-\d{2}-\d{2} · [2-9A-HJKMNP-Z]{4}$/),
+          recoveryPackPdf: expect.stringMatching(/^[A-Za-z0-9+/]+={0,2}$/),
         });
+        expect(decodeMasterKeyCode(reply.masterKey)).toHaveLength(16);
+        expect(Buffer.from(reply.recoveryPackPdf, "base64").subarray(0, 4).toString("latin1")).toBe(
+          "%PDF",
+        );
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         expect(trading.WAITRON_NODE_ID).toBe(committed.nodeId);
         expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
@@ -1277,7 +1286,18 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             }),
           });
           expect(response.status, await response.clone().text()).toBe(200);
-          expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+          const reply = (await response.json()) as { masterKey: string; recoveryPackPdf: string };
+          expect(reply).toEqual({
+            provisioned: true,
+            restarting: true,
+            masterKey: expect.stringMatching(/^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/),
+            masterKeyName: expect.stringMatching(/^\d{4}-\d{2}-\d{2} · [2-9A-HJKMNP-Z]{4}$/),
+            recoveryPackPdf: expect.stringMatching(/^[A-Za-z0-9+/]+={0,2}$/),
+          });
+          expect(decodeMasterKeyCode(reply.masterKey)).toHaveLength(16);
+          expect(
+            Buffer.from(reply.recoveryPackPdf, "base64").subarray(0, 4).toString("latin1"),
+          ).toBe("%PDF");
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
           await cp(stateDir, keptStateDir, { recursive: true });
