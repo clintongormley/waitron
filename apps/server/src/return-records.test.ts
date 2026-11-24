@@ -2119,7 +2119,14 @@ it("after a restart with its own records confirmed, an unreachable main box answ
 it("a second-part payment difference stores no clash, answers accounted, and the pass confirms", async () => {
   const seat = modules[0]!.handover!.returnRecords!;
   const inspect = vi.spyOn(seat, "inspect");
-  const receive = receiveByPart(async () => true);
+  // The earlier box's payment row differs: taken as own records the batch is incomplete, as a
+  // payment difference is; taken as another box's, only its invoice records count.
+  const receive = vi
+    .spyOn(seat, "receive")
+    .mockImplementation(async (_tx, _source, batch, _now, _accepted, part) => {
+      received.push(batch);
+      return batch !== "earlier" || part !== undefined;
+    });
   try {
     const app = destination();
     const receipts: unknown[] = [];
@@ -2140,7 +2147,7 @@ it("a second-part payment difference stores no clash, answers accounted, and the
       suite.node.all(sql`select * from node_handover_events where kind = 'return-clash-evidence'`),
     ).toEqual([]);
   } finally {
-    receive.restore();
+    receive.mockRestore();
     inspect.mockRestore();
   }
 });
