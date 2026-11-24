@@ -1,6 +1,6 @@
 # Inherited values: an empty setting inherits, shown once and quietly
 
-Status: approved by the owner, 2026-11-24 ("y"), as A1568. The approach (option 4) was chosen from
+Status: approved by the owner, 2026-11-24 ("y"), as A1570. The approach (option 4) was chosen from
 mock-ups on the demo's own screens, and a fresh reader checked the document against the code. Points
 marked **my call** were the session's; the eight that matter were read out to the owner with the
 document.
