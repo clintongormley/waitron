@@ -6,11 +6,12 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { and, eq, inArray } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
   nodes,
+  sales,
   withTransaction,
   workingOrders,
   nextInvoiceNumberOf,
@@ -18,7 +19,13 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, nodeId, seriesId } from "@waitron/shared";
-import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
+import {
+  checkedInvoiceRecipient,
+  deliversAsFullInvoice,
+  deliversAsFullInvoiceSql,
+  readOrderInvoiceChoice,
+  selectOrderInvoice,
+} from "./invoice-selection.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -71,6 +78,7 @@ async function bill(full = false, withHistory = false) {
       id: order.id,
       seriesId: seriesId(standard!.id),
       fullSeriesId: fullSeries!.id,
+      correctiveSeriesId: corrective!.id,
       cfg: {
         nodeId: nodeId(node!.id),
         simplifiedInvoiceLimit: decimal("3000.00"),
@@ -79,7 +87,100 @@ async function bill(full = false, withHistory = false) {
   });
 }
 
+it("selects only original sales with a recipient in JavaScript and SQLite", async () => {
+  const order = await bill();
+  const fullId = randomUUID();
+  const ticketId = randomUUID();
+  const fullCorrectionId = randomUUID();
+  const ticketCorrectionId = randomUUID();
+  const header = {
+    nodeId: order.cfg.nodeId,
+    source: "operator_script" as const,
+    issuedAt: "2026-10-16T09:00:00.000Z",
+    issuedOffsetMinutes: 0,
+    total: 1000,
+    vatBreakdown: [],
+    locale: "en",
+    invoiceLocales: ["en"],
+    fiscalBackend: "none",
+    fiscalState: "not_applicable" as const,
+  };
+  const customer = {
+    counterpartyTaxId: recipient.taxId,
+    counterpartyLegalName: recipient.legalName,
+    counterpartyCountryCode: recipient.countryCode,
+    counterpartyAddress: recipient.address,
+  };
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(sales).values([
+      { ...header, id: fullId, seriesId: order.fullSeriesId, invoiceNumber: 1, ...customer },
+      { ...header, id: ticketId, seriesId: order.seriesId, invoiceNumber: 1 },
+    ]);
+    await tx.insert(sales).values([
+      {
+        ...header,
+        id: fullCorrectionId,
+        seriesId: order.correctiveSeriesId,
+        invoiceNumber: 1,
+        correctsSaleId: fullId,
+        ...customer,
+      },
+      {
+        ...header,
+        id: ticketCorrectionId,
+        seriesId: order.correctiveSeriesId,
+        invoiceNumber: 2,
+        correctsSaleId: ticketId,
+      },
+    ]);
+  });
+
+  const fixtureSales = inArray(sales.id, [fullId, ticketId, fullCorrectionId, ticketCorrectionId]);
+  const rows = await suite.db.select().from(sales).where(fixtureSales);
+  expect(rows.filter(deliversAsFullInvoice).map(({ id }) => id)).toEqual([fullId]);
+  const filtered = await suite.db
+    .select({ id: sales.id })
+    .from(sales)
+    .where(and(fixtureSales, deliversAsFullInvoiceSql()));
+  expect(filtered).toEqual([{ id: fullId }]);
+});
+
 describe("stored bill invoice selection", () => {
+  it("carries the order's saved receipt language into issuance", async () => {
+    const order = await bill();
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ receiptLocale: "es-ES" })
+        .where(eq(workingOrders.id, order.id));
+      const selected = await selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00"));
+      expect(selected.receiptLocale).toBe("es-ES");
+    });
+  });
+
+  it("uses a choice already read in the same transaction", async () => {
+    const order = await bill(true);
+    await withTransaction(suite.db, async (tx) => {
+      const choice = await readOrderInvoiceChoice(tx, order.id);
+      expect(choice).toBeDefined();
+      const select = vi.spyOn(tx, "select");
+      try {
+        const selected = await selectOrderInvoice(
+          tx,
+          policy,
+          order.cfg,
+          order.id,
+          decimal("3.00"),
+          choice,
+        );
+        expect(selected.sale.seriesId).toBe(order.fullSeriesId);
+        expect(select).toHaveBeenCalledTimes(1);
+      } finally {
+        select.mockRestore();
+      }
+    });
+  });
+
   it("reads the standard series activated earlier in the issuance transaction", async () => {
     const order = await bill();
     const selected = await withTransaction(suite.db, async (tx) => {
@@ -320,6 +421,34 @@ describe("stored bill invoice selection", () => {
 });
 
 describe("country-free recipient validation", () => {
+  it("accepts a long recipient name only when the backend allows it", () => {
+    const cappedName = "𐐀".repeat(120);
+    expect(
+      checkedInvoiceRecipient(policy, { ...recipient, legalName: `  ${cappedName}  ` }).legalName,
+    ).toBe(cappedName);
+
+    const legalName = "𐐀".repeat(121);
+    expect(
+      checkedInvoiceRecipient({ recipientNameMaxLength: null }, { ...recipient, legalName })
+        .legalName,
+    ).toBe(legalName);
+    expect(() => checkedInvoiceRecipient(policy, { ...recipient, legalName })).toThrowError(
+      expect.objectContaining({
+        code: "invoice.recipient_invalid",
+        params: { field: "legalName" },
+      }),
+    );
+  });
+
+  it("refuses a whitespace-only recipient name", () => {
+    expect(() => checkedInvoiceRecipient(policy, { ...recipient, legalName: " " })).toThrowError(
+      expect.objectContaining({
+        code: "invoice.recipient_invalid",
+        params: { field: "legalName" },
+      }),
+    );
+  });
+
   it("accepts country-free input and keeps the country code separate", () => {
     expect(
       checkedInvoiceRecipient(policy, {

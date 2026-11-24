@@ -1671,6 +1671,18 @@ importers:
 
   packages/orders-sales:
     dependencies:
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../core
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
       '@waitron/layouts':
         specifier: workspace:*
         version: link:../layouts
@@ -1683,6 +1695,9 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(pg@8.23.1)
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -1690,6 +1705,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
       typescript:
         specifier: ^7.0.0
         version: 7.0.2

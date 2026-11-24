@@ -648,7 +648,6 @@
   "src/invoice-raster.test.ts": 21,
   "src/invoice-recipient-builder.test.ts": 2.9,
   "src/invoice-recipient-flow.e2e.test.ts": 4.1,
-  "src/invoice-selection.test.ts": 1.4,
   "src/issuance-pass.fiscal-identity.test.ts": 2.6,
   "src/issuance-pass.test.ts": 5.7,
   "src/issue-moment.test.ts": 0.7,

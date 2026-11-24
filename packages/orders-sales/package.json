@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./errors.js": "./src/errors.ts",
+    "./invoice-selection.js": "./src/invoice-selection.ts",
     "./receipt-dates.js": "./src/receipt-dates.ts",
     "./receipt-logo.js": "./src/receipt-logo.ts",
     "./receipt-money.js": "./src/receipt-money.ts",
@@ -17,14 +19,20 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@waitron/core": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
+    "@waitron/db": "workspace:*",
+    "@waitron/fiscal": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/media": "workspace:*",
     "@waitron/printing": "workspace:*",
-    "@waitron/shared": "workspace:*"
+    "@waitron/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^4.1.12",
+    "@waitron/migrations": "workspace:*",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
   }
