@@ -590,6 +590,20 @@ describe("Download the old main box's data", () => {
     expect(dialog(el, "reset").open).toBe(true);
   });
 
+  it("saves under a fallback name when the server gives none", async () => {
+    const saving = spyOnSaving();
+    const el = await mount(
+      stubApi(resettable, {
+        downloadOldBoxData: vi.fn().mockResolvedValue({ blob: file.blob, fileName: null }),
+      }),
+    );
+    await openAction(el, "reset");
+    downloadButton(el)!.click();
+    await flush(el);
+    await flush(el);
+    expect(saving.links.map((link) => link.download)).toEqual(["waitron-old-main-box.xlsx"]);
+  });
+
   it("does not order the wipe when Wipe and remove is pressed while the download runs", async () => {
     spyOnSaving();
     let answer!: (value: typeof file) => void;
