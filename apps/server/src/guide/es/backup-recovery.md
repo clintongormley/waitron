@@ -234,8 +234,8 @@ Si, después de elegir el botón de restaurar, el servidor necesita que vuelvas 
 la página donde lo elegiste muestra la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**, o **Este dispositivo** si la hora del servidor está
 mal. Si esa página se cerró, abre cualquier página del servidor en un móvil, ordenador o caja de la
-red del local y escribe la clave maestra de la copia elegida en **Clave maestra**, o elige
-**Elegir el PDF del paquete de recuperación** y el paquete que la tiene, para ver el mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
+red del local y escribe la clave maestra de la copia elegida en **Clave maestra** para ver el
+mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
 dice que no pudo crear sus nuevas series de facturas, elige **Reintentar un arranque normal**, o
 **Descartar esta restauración** donde esa página lo ofrece y vuelve a restaurar.
 

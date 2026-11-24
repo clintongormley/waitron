@@ -213,8 +213,7 @@ If, after you choose the restore button, the box needs its time confirmed again,
 you chose it shows the box's time and this device's: check that both are right, then choose
 **Confirm the time**, or **This device** if the box's time is wrong. If that page was closed, open
 any of the box's pages on a phone, computer or till on the venue's network and type the selected
-backup's master key in **Master key**, or choose **Choose the recovery pack PDF** and pick the pack
-that holds it, to see the same step. The restore then carries on by
+backup's master key in **Master key** to see the same step. The restore then carries on by
 itself. If the box instead shows a page saying it could not make its new invoice series, choose
 **Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 

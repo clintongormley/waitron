@@ -4646,10 +4646,9 @@ setting nothing"). Staging records the backup's current master key's name beside
 field `masterKeyName`, read from the copy staging's checks open), and the refusal carries it as
 `keyName` (`restore-request.node-key.test.ts`, "staging a master key stages its name; staging none
 stages no name"; `start-clock-waiting.test.ts`, "/restore-clock/%s refuses a wrong typed key naming
-the staged key"). The page's recovery pack PDF goes to `/restore-clock/pack`, which reads it on
-the box and answers its master key only when that key is the staged one (`start-clock-waiting.test.ts`,
-"the restore clock page takes the master key and the pack PDF" and "refuses another key's pack as a
-wrong key"). The done screen shows both times with **Confirm the time** and **This device**;
+the staged key"). The page takes the key typed only: it offers no recovery pack PDF, and the box
+reads none (`start-clock-waiting.test.ts`, "answers POST /restore-clock/pack with
+server.waiting_for_clock"). The done screen shows both times with **Confirm the time** and **This device**;
 a browser that lost the key types it on the waiting page, as printed or as the secret, which
 shows the same step (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the
 done screen's step with both times and their dates" and "takes the master key as printed on the

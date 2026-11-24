@@ -266,14 +266,9 @@ selected backup's master key: the waiting page then shows the same step
 with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
 secret the setup page sends (the same file's "takes the master key as printed on the recovery pack,
 typed in lower case without spaces"; `start-clock-waiting.test.ts`, "the clock page accepts the master key
-typed %s"). The page also takes the recovery pack PDF: the box reads it at
-`/restore-clock/pack` and the page uses its master key as if typed, or says the file is not a pack,
-is damaged, does not hold the master key, or could not be read by the box (`start-clock-waiting-page.test.ts`, "it offers Choose
-the recovery pack PDF, whose master key fills the field and shows the clock step" and "says what is
-wrong with a chosen PDF that is not a pack, damaged, or without the master key" and "says so when
-a chosen PDF's upload %s, and the same PDF can be chosen again";
-`start-clock-waiting.test.ts`, "the restore clock page takes the master key and the pack PDF").
-Every clock route refuses a missing or wrong key
+typed %s"). The page takes the key typed only; it offers no recovery pack PDF
+(`start-clock-waiting-page.test.ts`, "the page labels the field Master key with no hint, says 'type
+the master key below' and offers no PDF (%s)"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
 setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
 file's "/restore-clock/%s refuses the right key from another site's page (%o)"), and the box's own

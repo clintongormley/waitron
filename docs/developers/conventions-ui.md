@@ -227,9 +227,8 @@ file or a response), or with its tag name split across a `${…}` is invisible t
 the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
 second field added inside one passes; and some files are allowed by name (the hidden username
 input for the browser's password manager, in `packages/ui/src/autofill-username.ts`, the print agent's setup page, the
-recovery page's password box, the restore clock page's master-key field and its recovery pack PDF
-chooser, and the carry-on form on the page a box serves while it waits for
-its peers), each
+recovery page's password box, the restore clock page's master-key field, and the carry-on form on
+the page a box serves while it waits for its peers), each
 held to the number of LINES it draws a field on, so a field swapped for another, a hidden input
 made visible, or a field added on a line that already has one passes. See design-system.md → Forms.
 
