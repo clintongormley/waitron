@@ -14,6 +14,7 @@ import {
   tableInService,
   needsMoving,
   statementChunks,
+  newId,
 } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
 import type { ServiceMode, ZoneOffers } from "@waitron/module";
@@ -25,7 +26,6 @@ import {
   AppError,
 } from "@waitron/shared";
 import { eq, and, sql } from "drizzle-orm";
-import { newId } from "@waitron/db";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";

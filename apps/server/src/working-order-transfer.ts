@@ -6,6 +6,7 @@ import {
   ticketItems,
   orderGroups,
   ticketItemMoves,
+  newId,
 } from "@waitron/db";
 import { assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/menu";
 import {
@@ -22,7 +23,6 @@ import {
   decimalToThousandths,
 } from "@waitron/shared";
 import { or, eq, and, inArray, sql, isNull, isNotNull, exists } from "drizzle-orm";
-import { newId } from "@waitron/db";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { refusePaidLines } from "./bill-payments.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
@@ -734,9 +734,7 @@ async function splitTicketItem(
   if (moves.length) {
     await tx
       .insert(ticketItemMoves)
-      .values(
-        moves.map((move) => ({ ...move, id: newId(), workingOrderLineId: splitLineId })),
-      );
+      .values(moves.map((move) => ({ ...move, id: newId(), workingOrderLineId: splitLineId })));
   }
   return id;
 }

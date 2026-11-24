@@ -1,5 +1,5 @@
 import "./errors.js";
-import { workingOrderLines, type Transaction, kitchenStations } from "@waitron/db";
+import { workingOrderLines, newId, type Transaction, kitchenStations } from "@waitron/db";
 import {
   type ResolvedExtraList,
   readProductModifiers,
@@ -41,7 +41,6 @@ import {
 } from "@waitron/shared";
 import { offeredKey } from "@waitron/venue-service";
 import { and, inArray, eq } from "drizzle-orm";
-import { newId } from "@waitron/db";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {

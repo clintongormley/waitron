@@ -1,5 +1,11 @@
 import "./errors.js";
-import { type Transaction, workingOrderLines, ticketItems, insertInChunks } from "@waitron/db";
+import {
+  type Transaction,
+  newId,
+  workingOrderLines,
+  ticketItems,
+  insertInChunks,
+} from "@waitron/db";
 import { readContentLanguages, assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/menu";
 import type { ZoneMenuOffer, TicketAllergyCopy } from "@waitron/module";
 import {
@@ -15,7 +21,6 @@ import {
   decimalToCents,
 } from "@waitron/shared";
 import { eq, inArray, or, sql, and } from "drizzle-orm";
-import { newId } from "@waitron/db";
 import {
   readBillExcess,
   readPaidQuantities,
