@@ -536,6 +536,41 @@ describe("the handover's preparation route", () => {
     expect(selected.body).toMatchObject({ status: "selected", identity: "0CNQR" });
   });
 
+  it.each([
+    ["planned handover", controlledAtFilingAssumed],
+    ["emergency switch", emergencyDeclared],
+  ] as const)("requires a person to confirm the device time for %s", async (_scenario, begin) => {
+    await begin();
+    external.internet.mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "offline",
+    });
+    const app = route(service());
+    const challenge = await post(app, request({ action: "clock-challenge" }));
+    expect(challenge.status).toBe(200);
+    const compared = await post(
+      app,
+      request({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.body.id, instantMs: Date.now() },
+      }),
+    );
+    expect(compared.status).toBe(200);
+    expect(compared.body.clock.secondClock).toBe(true);
+    const selection = { action: "select", comparisonId: compared.body.id };
+    expect(await post(app, request(selection))).toMatchObject({
+      status: 400,
+      body: {
+        error: { code: "sif.allocation_invalid", params: { reason: "confirmation_required" } },
+      },
+    });
+    expect(await post(app, request({ ...selection, confirmed: true }))).toMatchObject({
+      status: 200,
+      body: { status: "selected" },
+    });
+  });
+
   it("a body that sets oldMachineRelinquished is ignored: the context comes from the record", async () => {
     const s = service();
     await emergencyDeclared();
