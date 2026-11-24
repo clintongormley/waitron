@@ -1,8 +1,8 @@
 import type { SupportedLocale } from "@waitron/shared";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 /** The words of the page a restore's start shows while it waits to confirm its time. The key
- * field's are every master-key field's; the clock step's are the done screen's. */
+ * field's are every master-key field's (`@waitron/recovery-pack`'s `MASTER_KEY_FIELD_WORDS`), copied
+ * so this module imports only types; the clock step's are the done screen's. */
 export const START_CLOCK_WAITING_WORDS: Readonly<
   Record<
     SupportedLocale,
@@ -14,7 +14,9 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       packButton: string;
       notPack: string;
       damaged: string;
-      elsewhere: (heldBy: number | null) => string;
+      elsewhere: string;
+      /** `{heldBy}` stands for the number of the pack holding the master key. */
+      elsewhereOn: string;
       keyContinue: string;
       waitingForClock: string;
       deviceTime: string;
@@ -30,11 +32,14 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   "en-GB": {
     title: "The box is restoring your backup and is waiting to confirm its time.",
     why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
-    keyLabel: MASTER_KEY_FIELD_WORDS.en.label,
-    packButton: MASTER_KEY_FIELD_WORDS.en.button,
-    notPack: MASTER_KEY_FIELD_WORDS.en.notPack,
-    damaged: MASTER_KEY_FIELD_WORDS.en.damaged,
-    elsewhere: MASTER_KEY_FIELD_WORDS.en.elsewhere,
+    keyLabel: "Master key",
+    packButton: "Choose the recovery pack PDF",
+    notPack: "This PDF is not a recovery pack.",
+    damaged: "This recovery pack PDF is damaged. Type the key.",
+    elsewhere:
+      "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it.",
+    elsewhereOn:
+      "This recovery pack does not hold the master key. It is on recovery pack {heldBy}: choose that pack, or type the key from it.",
     keyRefused: "Enter the selected backup’s master key.",
     keyContinue: "Continue",
     waitingForClock:
@@ -52,11 +57,14 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   "es-ES": {
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
     why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
-    keyLabel: MASTER_KEY_FIELD_WORDS.es.label,
-    packButton: MASTER_KEY_FIELD_WORDS.es.button,
-    notPack: MASTER_KEY_FIELD_WORDS.es.notPack,
-    damaged: MASTER_KEY_FIELD_WORDS.es.damaged,
-    elsewhere: MASTER_KEY_FIELD_WORDS.es.elsewhere,
+    keyLabel: "Clave maestra",
+    packButton: "Elegir el PDF del paquete de recuperación",
+    notPack: "Este PDF no es un paquete de recuperación.",
+    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
+    elsewhere:
+      "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.",
+    elsewhereOn:
+      "Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación {heldBy}: elige ese paquete o introduce su clave.",
     keyRefused: "Introduce la clave maestra de la copia elegida.",
     keyContinue: "Continuar",
     waitingForClock:

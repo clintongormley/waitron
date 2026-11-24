@@ -25,8 +25,6 @@ import type { SetupClockSetter } from "./setup-clock-set.js";
 
 const CHALLENGES = 64;
 const RETRY_AFTER_SECONDS = "60";
-/** Stands for the number of the pack holding the master key in the words the page fills in. */
-const HELD_BY_MARK = 987_654_321;
 
 export interface StartClockWaitingOptions {
   /** The state folder holding the staged authority key every clock route's master key is checked
@@ -225,8 +223,8 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
   const packLines = {
     notPack: words.notPack,
     damaged: words.damaged,
-    elsewhere: words.elsewhere(null),
-    elsewhereOn: words.elsewhere(HELD_BY_MARK).replace(String(HELD_BY_MARK), "{heldBy}"),
+    elsewhere: words.elsewhere,
+    elsewhereOn: words.elsewhereOn,
   };
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
