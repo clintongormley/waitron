@@ -2,9 +2,10 @@
 
 **Watcher decision, 24 November 2026 at 14:22.** This branch removes only the unused in-process
 local-secondary promotion, its boot handle, type and error, and A1279. Keep the inactive-secondary
-filing check and the payment check for a replaced box listed as `sell-only`. At 14:24 the watcher
-recorded the owner's approval to remove the HTTP routes in a separate pull request. That pull request
-gets its own revised plan. The three steps below record the original proposal.
+filing check and the payment check for a replaced box listed as `sell-only`. Lane K's `questions.md`
+records the owner's "yes" to removing the HTTP routes at 14:24 on 24 November. The separate HTTP
+pull request owns the key wording and gets its own revised plan. The three steps below record the
+original proposal.
 
 1. Remove `/management-api/promote` and `/management-api/promote/preparation` and the test-only `StartedServer.promoteLocalSecondaryToPrimary`, subject to the watcher's decision on the box key. Remove `promote-api.ts`, its mount and read-only exemptions, and the `local-secondary` arm of `makeStartedServer` and its helper in `promote.ts`. Move `PromoteRunResult` to `promote.ts`. Keep both arms of `promoteRun` in `boot.ts` so handover and emergency switch retain mirror promotion, fenced refusal and recovery after a completed promotion. Retire the old route's `promotion-operation.ts` adapter and its claim on handover offers while keeping the offer checks. Keep `nodePreparation.prepare` for A1323 and keep the box-key verifier used by active recovery tests. Remove errors and translations exclusive to the retired route or local-secondary helper after tracing their consumers.
 2. Start with real-boot checks in `boot.promote-endpoint.test.ts` for 404 on a primary and 403 `node.read_only` on a mirror or fenced box, for both routes. Watch them fail before removal. Retire the route-only tests and update peer routes, duration and root guard inventories. Keep the mixed suites' assertions by using the surviving activation route or helper. Preserve the inactive secondary's filing check in `boot.promote.test.ts`, the replacement primary's `sell-only` payment-ownership check in `payments-api.stuck.test.ts`, and the role-write repair, dormant admission, installation-name choice and post-restart allocation checks. Preserve the no-certificate pending submission check on the surviving path or identify its equivalent. Drive the existing till reroute test through a fixture role change. Run every changed suite, the handover preparation, activation, activation repair, controlled and two-box tests, and the unedited fiscal golden and immutability tests. Record the retired checks in the PR.
