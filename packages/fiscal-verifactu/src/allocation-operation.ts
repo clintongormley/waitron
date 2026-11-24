@@ -17,6 +17,7 @@ import {
   activateAuthenticatedHourStandbyAllocation,
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import { admitsAllocationAction } from "./identity-change-authority.js";
 import type { ActivationResult } from "./schema/allocations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
@@ -119,7 +120,13 @@ export async function withCollectedModuleAllocation<T>(
   if (
     operator === undefined ||
     binding.module !== "fiscal-verifactu" ||
-    !["setup", "restore", "promote", "conflict-switch"].includes(binding.action)
+    !admitsAllocationAction(authority, binding.action, [
+      "setup",
+      "restore",
+      "promote",
+      "conflict-switch",
+      "identity-change",
+    ])
   )
     return refuse("reauthentication_required");
   const input = snapshotAllocationInput(binding, operation.input);

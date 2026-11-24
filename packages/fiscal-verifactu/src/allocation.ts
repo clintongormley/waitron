@@ -20,6 +20,7 @@ import {
   type AllocationValidation,
 } from "./allocation-envelope.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
+import { admitsAllocationAction } from "./identity-change-authority.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { currentSif } from "./registro-sif.js";
@@ -167,9 +168,13 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
     const verified = readOperationAuthority(authority, binding);
     if (
       !isDeepStrictEqual(verified?.operatorId, operatorId) ||
-      (mode === "initial-setup"
-        ? action !== "setup"
-        : !["restore", "promote", "conflict-switch"].includes(action))
+      !admitsAllocationAction(
+        authority,
+        action,
+        mode === "initial-setup"
+          ? ["setup"]
+          : ["restore", "promote", "conflict-switch", "identity-change"],
+      )
     )
       throw new AppError("sif.allocation_invalid", { reason: "reauthentication_required" });
   };
