@@ -7357,6 +7357,7 @@ export class TillTableOrderScreen extends LitElement {
       {
         copies: [...(result?.copies ?? []), ...source.copies],
         recorded: result?.recorded ?? {},
+        exact: result?.exact ?? true,
         setMenus: [
           ...targetMenus,
           ...carried.map((menu, index) => ({ ...menu, lineNo: lastLine + index + 1 })),

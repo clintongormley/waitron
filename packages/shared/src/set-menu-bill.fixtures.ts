@@ -58,6 +58,7 @@ export function bill(...menus: (readonly [lineId: string, copy: SetMenuCopy])[])
     recorded: Object.fromEntries(copies.map((copy) => [copy.setMenuId, copy.id])),
     setMenus: menus.map(([lineId, copy], lineNo) => ({ lineId, copyId: copy.id, lineNo })),
     dishes: [],
+    exact: true,
   };
 }
 

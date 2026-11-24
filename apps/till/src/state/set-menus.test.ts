@@ -29,6 +29,7 @@ it("uses the recorded version and adds only the newest copies actually on sale",
   const state = {
     setMenus: {
       recorded: { Daily: "yesterday" },
+      exact: true,
       copies: [setMenuCopyOf(recorded, "yesterday")],
       setMenus: [],
       dishes: [],
@@ -54,6 +55,7 @@ const daily = {
 };
 const bill: BillSetMenuState = {
   recorded: { Daily: "v1" },
+  exact: true,
   copies: [daily],
   setMenus: ["first", "second", "third"].map((lineId, lineNo) => ({
     lineId,

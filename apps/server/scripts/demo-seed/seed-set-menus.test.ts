@@ -120,6 +120,7 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
     const state = {
       copies,
       recorded: {},
+      exact: true,
       dishes: [],
       setMenus: [
         { lineId: "daily-1", copyId: day!.id, lineNo: 1 },

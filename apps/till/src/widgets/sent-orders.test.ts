@@ -1178,6 +1178,7 @@ it("combines covered soups of the same type but separates a surcharge and anothe
       dishes: [],
     })),
     recorded: {},
+    exact: true,
     setMenus: types.map(([id, type], index) => ({
       lineId: id,
       copyId: `${type}-copy`,

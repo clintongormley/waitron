@@ -86,7 +86,13 @@ type MenuPick = {
   confirmed?: ModifierConfirmDetail;
   existing?: OrderLine;
 };
-const EMPTY_SET_MENUS: BillSetMenuState = { copies: [], dishes: [], setMenus: [], recorded: {} };
+const EMPTY_SET_MENUS: BillSetMenuState = {
+  copies: [],
+  dishes: [],
+  setMenus: [],
+  recorded: {},
+  exact: true,
+};
 function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
   return members.some((member) =>
     member.kind === "set_menu"

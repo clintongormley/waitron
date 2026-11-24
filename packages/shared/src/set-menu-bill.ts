@@ -107,8 +107,8 @@ export interface BillSetMenuState {
   recorded: Readonly<Record<string, string>>;
   setMenus: readonly BillSetMenu[];
   dishes: readonly PlacedDish[];
-  /** Whether the saved grouping was proven cheapest; absent reads as true. */
-  exact?: boolean;
+  /** Whether the saved grouping was proven cheapest. */
+  exact: boolean;
 }
 
 export interface DishToPlace {

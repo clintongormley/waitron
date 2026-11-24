@@ -259,7 +259,7 @@ export async function readBillsSetMenus(
               copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
             })),
             dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
-            exact: exact.get(billId) ?? true,
+            exact: exact.get(billId)!,
           },
           setMenuCopies: [...copies.values()].map(({ copy }) => copy),
         },

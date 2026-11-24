@@ -3372,6 +3372,7 @@ it.each(["recorded", "live"] as const)(
             setMenus: {
               copies: [setMenuCopyOf(copy, "retired")],
               recorded: { daily: "retired" },
+              exact: true,
               setMenus: [],
               dishes: [],
             },
