@@ -28,14 +28,8 @@ export interface CertMaterial {
 }
 
 /**
- * Validates the decrypted payload at the READ site and throws `credentials.unusable` when a
- * declared field is absent or unusable — including a `pfxBase64` that is PRESENT but decodes to
- * nothing usable, not merely one that is missing or the empty string.
- *
- * Reads do not validate, so a row sealed before `certKind` joined the registry decrypts to a
- * payload missing it; defaulting would send a sello certificate to the non-sello host and fail
- * every submission with nothing explaining why. Validated HERE rather than in the store, which
- * would take the whole vault offline.
+ * The vault does not revalidate fields on read. Check the certificate kind here so an absent
+ * or unrecognised kind cannot select the wrong AEAT host.
  */
 export function certMaterialFrom(
   payload: Record<string, string | undefined>,
