@@ -265,8 +265,8 @@ available to refund.
 In the bill's payment window, choose **Refund** beside the payment. The **Refund a payment**
 window asks how much to refund and why. For **Part of it**, enter the **Amount to refund**. Choose
 the **Reason** from the list. A reason that needs a note, such as **Other**, asks you to type one,
-and the note is recorded as the reason. A payment for particular items is refunded in full, and
-those items can then be paid for again.
+and the note is recorded as the reason. On a printed bill, a payment for particular items is
+refunded in full, and those items can then be paid for again.
 
 While the bill has no invoice, **Refund** beside a payment that has a ticket of its own opens
 **Correct invoice** on that ticket instead.
@@ -443,7 +443,8 @@ on the terminal: Waitron cannot record the refund while the stop holds.
 
 For a card payment keyed from a separate terminal, refund on that terminal only when the window
 asks you to, and complete that refund before confirming it in the window. A supervisor
-or manager then approves recording it in Waitron with their PIN.
+or manager then approves recording it in Waitron with their PIN, unless it gives back no more than
+the bill was paid over its total.
 
 If a refund gets no answer, check the bill's payments before trying again. The first request may
 already have succeeded.
@@ -597,8 +598,8 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill. Dis
 bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
-name, what it still owes or **Paid ✓** (**Deferred payment** for a bill closed as a deferred
-payment), and a line such as **Ana has an unsent order: 3 items** for each person with dishes on that bill not yet sent. When another bill holds dishes you have not
+name, what it still owes, how much it was paid over its total, such as **€5.00 over**, or
+**Paid ✓** (**Deferred payment** for a bill closed as a deferred payment), and a line such as **Ana has an unsent order: 3 items** for each person with dishes on that bill not yet sent. When another bill holds dishes you have not
 sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.
 Choose a row to put that bill on screen. A paid
 bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
@@ -757,24 +758,20 @@ weighed dish has a tick only, because it moves whole.
 
 Some ticks are grey, with the reason under the dish:
 
-- **Has a payment**: the dish has a payment in progress or received, so it stays on this bill.
-  Wait for a payment in progress to finish; refund a received payment before moving its dish.
 - **Payments keep €40.00 on this bill: move fewer dishes**: choose fewer dishes so the bill keeps
   enough for its payments, including any still in progress. The other dishes can still go.
 
 Under **Move to**, choose where the dishes go: one of the table's other open bills, or **+ New
 bill**. A bill that has already taken a payment simply owes more afterwards. **Move** stays quiet until you have ticked a dish and chosen where it goes.
 After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
-Each dish keeps its course and stays sent, fired or served as it was. Moving the last unpaid
-dishes off a part-paid bill leaves it paid in full, and its invoice is issued.
+Each dish keeps its course and stays sent, fired or served as it was. Moving dishes off a
+part-paid bill until its payments cover what is left leaves it paid in full, and its invoice is
+issued.
 
 If a bill is set for a full invoice and you move every dish to a bill that does not name the same
 customer, the till asks first: choose the customer the dishes are invoiced to, or **Do not move**.
 
-If someone pays a dish on another till while the panel is open, its row turns **Has a payment** when the
-till next reads the bill, and that dish drops out of what you picked. If you tap **Move** before
-then, the move is refused with the reason, such as **This item has already been paid for, so it
-cannot be changed, moved or charged again. Refund its payment first**, and nothing moves. If the
+If the
 move would leave the bill owing less than has been paid, the till says how much and offers a
 **Refund** button for that amount. If the move is refused because a card payment or refund is
 still going through on the bill you chose, or because that bill was presented or paid in the
@@ -964,7 +961,8 @@ particular dishes. For an equal share, enter how many people are still to pay, i
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
 on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
-**Cancel payment**, the dishes go back to this bill. While their card is still out, the till that
+**Cancel payment**, the dishes go back to this bill, unless it was printed or paid in full in the
+meantime: then they stay on their own bill, listed in the bill switcher, to be paid there. While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, items are still paid on that bill. A printed bill offers these choices for what
 it still owes. If the bill is presented for collection and its invoice has yet to be issued,
@@ -975,8 +973,8 @@ bill changes before you confirm, check the revised figures before confirming aga
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
-offers no **Pay**. Choose **Give back** to refund the extra; no manager's PIN is needed for that
-amount. If the venue takes tips, **Keep as tip** keeps it as a tip instead.
+offers no **Pay**. Choose **Give back €5.00** to refund the extra; no manager's PIN is needed for
+that amount. If the venue takes tips, **Keep €5.00 as tip** keeps it as a tip instead.
 
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
 for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket

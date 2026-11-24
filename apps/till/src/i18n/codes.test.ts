@@ -55,10 +55,10 @@ it("words Keep as tip refused on a bill that comes to nothing, saying why and to
 
 it("words a bill paid more than it comes to without promising Keep as tip where the bill does not offer it", () => {
   expect(codeMessage("bill.overpaid", "en")).toBe(
-    "This bill has been paid more than it comes to. First give back the extra, or keep it as a tip if the bill shows Keep as tip.",
+    "This bill has been paid more than it comes to. First give back the extra on the bill, or keep it as a tip where the bill offers that.",
   );
   expect(codeMessage("bill.overpaid", "es")).toBe(
-    "Esta cuenta se ha pagado de más. Primero devuelve lo que sobra o, si la cuenta muestra Dejar de propina, déjalo de propina.",
+    "Esta cuenta se ha pagado de más. Primero devuelve en la cuenta lo que sobra, o guárdalo como propina si la cuenta lo ofrece.",
   );
 });
 
