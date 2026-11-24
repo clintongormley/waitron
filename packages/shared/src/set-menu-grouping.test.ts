@@ -424,7 +424,7 @@ it("opens a useful menu at the limit and closes it after a cancellation without 
 }, 15_000);
 
 it("moves a released dish into a saved place immediately at the limit", () => {
-  const large = table(21, 5);
+  const large = compactCountLimitBill();
   const starter = dish("lunch-starter", "starter", 900);
   const main = dish("other-main", "main", 1600);
   const lunch = offer("lunch", 1400, [starter]);
@@ -444,7 +444,7 @@ it("moves a released dish into a saved place immediately at the limit", () => {
 });
 
 it("keeps the larger discount on the surviving menu at the limit", () => {
-  const large = table(21, 5);
+  const large = compactCountLimitBill();
   const first = dish("first", "main", 1700);
   const second = { ...first, id: "second", aLaCarteCents: 800 };
   const lunch = offer("lunch", 1400, [first]);
@@ -522,7 +522,7 @@ it("leaves enough search to price an eight-diner bill with two percentage discou
 });
 
 it("keeps a free place usable when a saved menu empties at the limit", () => {
-  const large = table(21, 5);
+  const large = compactCountLimitBill();
   const comped = { ...dish("a1", "starter", 0), eligible: false };
   const starter = dish("b1", "starter", 1800);
   const inexpensive = dish("c1", "starter", 300);
@@ -569,9 +569,21 @@ it.each([
   15_000,
 );
 
+function compactPercentageDiscountBill() {
+  const dishes = [dish("first-main", "main", 1500), dish("second-main", "main", 1500)];
+  return {
+    dishes,
+    offers: [
+      offer("offer-0", 1000, dishes, { "first-main": 5, "second-main": 4 }),
+      offer("offer-1", 1010, dishes, { "first-main": 6, "second-main": 5 }),
+    ],
+  };
+}
+
 it("bounds the work on forty diners with two percentage discounts", () => {
+  const underMutation = process.env.STRYKER_MUTATOR_WORKER !== undefined;
   const input = {
-    ...table(40, 2),
+    ...(underMutation ? compactPercentageDiscountBill() : table(40, 2)),
     discounts: [
       { id: "first", offerId: "offer-0", kind: "percent", basisPoints: 1000 },
       { id: "second", offerId: "offer-1", kind: "percent", basisPoints: 1000 },
@@ -580,10 +592,9 @@ it("bounds the work on forty diners with two percentage discounts", () => {
   const start = process.cpuUsage();
   const first = group(input);
   const elapsed = process.cpuUsage(start);
-  expect(first.totalCents).toBe(83327);
-  if (process.env.STRYKER_MUTATOR_WORKER === undefined) {
-    expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
-  }
+  // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
+  expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
+  if (!underMutation) expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
 }, 15_000);
 
 it("finds the zero-cent price on the first call when several discounts cover all supplements", () => {
@@ -732,7 +743,7 @@ it.each([
 });
 
 it("charges separately for a cheap dish when one fixed discount covers only one supplement", () => {
-  const large = table(21, 5);
+  const large = compactCountLimitBill();
   const starter = dish("starter", "starter", 220);
   const main = dish("main", "main", 40);
   const lunch = offer("lunch", 1400, [starter, main], { starter: 100, main: 100 });
@@ -775,7 +786,7 @@ it("proves prices with two discounts that only yield whole-cent supplements", ()
 });
 
 it("fills a free saved place without using a fixed discount allowance twice", () => {
-  const large = table(21, 5);
+  const large = compactCountLimitBill();
   const starter = dish("starter", "starter", 900);
   const main = dish("main", "main", 40);
   const dessert = dish("dessert", "dessert", 50);
