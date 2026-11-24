@@ -38,7 +38,6 @@ import {
   FISCAL_PROVISIONING,
   FISCAL_OPERATIONS,
   FISCAL_RESTORE,
-  FISCAL_RECOVERY_PACK,
   FISCAL_RECOVERY_PACK_PAGE,
   FISCAL_SERVER_KEY_AS_TYPED,
   encodeRecoveryKey,
@@ -332,7 +331,6 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     permissions: FISCAL_PERMISSIONS,
     backup: {
       restore: FISCAL_RESTORE,
-      recoveryPack: FISCAL_RECOVERY_PACK,
       recoveryPackPage: FISCAL_RECOVERY_PACK_PAGE,
       serverKeyAsTyped: FISCAL_SERVER_KEY_AS_TYPED,
       formatServerKey: encodeRecoveryKey,

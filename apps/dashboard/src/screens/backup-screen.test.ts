@@ -77,7 +77,6 @@ it("does not offer key replacement without system.manage", async () => {
     canManage: false,
   });
   expect(el.shadowRoot!.querySelector("dashboard-recovery-pack-card")).toBeNull();
-  expect(el.shadowRoot!.querySelector("dashboard-node-recovery")).toBeNull();
 });
 
 it.each([

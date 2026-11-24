@@ -1438,12 +1438,6 @@ export interface ModuleBackupContribution {
   readonly verification?: BackupVerificationContribution;
   readonly nonDbState?: readonly NonDbSource[];
   readonly restore?: RestoreHook;
-  /** Validate and return public recovery material; no private signing key or claim authority. */
-  readonly recoveryPack?: (
-    tx: Transaction,
-    node: import("./provisioning.js").ProvisionedNode,
-    input: unknown,
-  ) => Promise<unknown>;
   /** Describe the recovery pack's server-key page; the host draws it and commits `newKey` only after. */
   readonly recoveryPackPage?: (
     tx: Transaction,

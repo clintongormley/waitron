@@ -194,6 +194,8 @@ marks; the pack still identifies its generation and block and states that its sn
 
 ## Download and print a node recovery pack
 
+> **2026-11-24, A1323 PR 2c:** the node recovery pack was removed; this section describes it as it was.
+
 To give the venue a signed register file it can upload, use the same reserved block and signing
 key on the custodian's machine:
 
