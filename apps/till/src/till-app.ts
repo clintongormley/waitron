@@ -8198,7 +8198,7 @@ export class TillApp extends LitElement {
   }
 
   readonly #counterOverpaid = new CounterOverpaidRead(
-    (billId) => this.api.getBillBalance(billId),
+    (billId, signal) => this.api.getBillBalance(billId, { signal }),
     () => this.requestUpdate(),
   );
 

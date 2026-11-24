@@ -1,18 +1,20 @@
 import { compareDecimal, decimal } from "@waitron/shared";
 import type { BillBalance, HeldOrderSummary } from "../api/client.js";
+import { TABLE_REQUEST_LIMIT_MS, limited } from "./draft-sync.js";
 
 /**
  * The bill balance of the Counter's retrieved order while the held list says it is paid over its
  * total. The overpaid notice shows, and Keep as tip sends, the balance's `overpaid`, the figure the
  * server compares Keep as tip's amount with, rather than one worked out from the held list. Read
- * once for each held-list row, so a refreshed list reads it again.
+ * once for each held-list row, so a refreshed list reads it again; a read with no answer within a
+ * request's time limit counts as failed.
  */
 export class CounterOverpaidRead {
   #row: HeldOrderSummary | undefined;
   #balance: BillBalance | null | undefined = null;
 
   constructor(
-    private readonly read: (billId: string) => Promise<BillBalance>,
+    private readonly read: (billId: string, signal: AbortSignal) => Promise<BillBalance>,
     private readonly answered: () => void,
   ) {}
 
@@ -26,10 +28,13 @@ export class CounterOverpaidRead {
     if (row !== this.#row) {
       this.#row = row;
       this.#balance = undefined;
-      this.read(row.id).then(
-        (balance) => this.#answer(row, balance),
-        () => this.#answer(row, null),
-      );
+      const limit = limited(TABLE_REQUEST_LIMIT_MS);
+      this.read(row.id, limit.signal)
+        .then(
+          (balance) => this.#answer(row, balance),
+          () => this.#answer(row, null),
+        )
+        .finally(limit.done);
     }
     return this.#balance;
   }

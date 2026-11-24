@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BillBalance, HeldOrderSummary } from "../api/client.js";
 import { CounterOverpaidRead } from "./counter-overpaid.js";
+import { TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 
 const row = (outstanding: string, id = "wo-1") => ({ id, outstanding }) as HeldOrderSummary;
 const balance = (overpaid: string) => ({ workingOrderId: "wo-1", overpaid }) as BillBalance;
@@ -25,7 +26,7 @@ describe("CounterOverpaidRead", () => {
     expect(counter.balanceFor(listed)).toBeUndefined();
     await vi.waitFor(() => expect(answered).toHaveBeenCalledOnce());
     expect(counter.balanceFor(listed)).toEqual(balance("7.00"));
-    expect(read).toHaveBeenCalledExactlyOnceWith("wo-1");
+    expect(read).toHaveBeenCalledExactlyOnceWith("wo-1", expect.any(AbortSignal));
 
     expect(counter.balanceFor(row("-5.00"))).toBeUndefined();
     expect(read).toHaveBeenCalledTimes(2);
@@ -40,6 +41,35 @@ describe("CounterOverpaidRead", () => {
     await vi.waitFor(() => expect(answered).toHaveBeenCalledOnce());
 
     expect(counter.balanceFor(listed)).toBeNull();
+  });
+
+  it("gives up on a read with no answer at a request's time limit, as a failed read", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const read = vi.fn(
+        (_billId: string, signal: AbortSignal) =>
+          new Promise<BillBalance>((_resolve, reject) =>
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      );
+      const answered = vi.fn();
+      const counter = new CounterOverpaidRead(read, answered);
+      const listed = row("-5.00");
+
+      expect(counter.balanceFor(listed)).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      expect(answered).not.toHaveBeenCalled();
+      expect(counter.balanceFor(listed)).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(answered).toHaveBeenCalledOnce();
+      expect(counter.balanceFor(listed)).toBeNull();
+      expect(read).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("drops an answer for a row the basket has moved past", async () => {

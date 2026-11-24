@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   balanceOf,
   bill120,
@@ -32,6 +32,7 @@ import { cancelReason, cleanupWidgets, mountWidget } from "./widgets/test-helper
 import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
+import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { fill, setLocale, t } from "./i18n/t.js";
 import type { BillBalance, BillPaymentResult, BillPaymentView, TillApi } from "./api/client.js";
 import type {
@@ -816,16 +817,14 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           .mockResolvedValue([
             { ...heldWo1, total: "90.00", outstanding: "-5.00", hasPayments: true },
           ]),
-        getBillBalance: vi
-          .fn()
-          .mockResolvedValue(
-            balanceOf({
-              workingOrderId: "wo-1",
-              total: "90.00",
-              received: "95.00",
-              overpaid: "5.00",
-            }),
-          ),
+        getBillBalance: vi.fn().mockResolvedValue(
+          balanceOf({
+            workingOrderId: "wo-1",
+            total: "90.00",
+            received: "95.00",
+            overpaid: "5.00",
+          }),
+        ),
       });
 
       expect(text(el.shadowRoot!.querySelector(".error"))).toBe(
@@ -1084,6 +1083,70 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       await flush(el, 6);
 
       expect(keepOverpaidAsTip.mock.calls[0]![2]).toBe("7.00");
+    });
+
+    it("at the Counter Pay returns once an unanswered bill balance read reaches its time limit", async () => {
+      let paid = false;
+      // Only the Counter's own read of the overpaid order is left unanswered; the Pay window's
+      // reads, which send no signal, answer.
+      const getBillBalance = vi.fn(
+        (_billId: string, options?: { signal?: AbortSignal }) =>
+          new Promise<BillBalance>((resolve, reject) => {
+            if (paid && options?.signal !== undefined) {
+              options.signal.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+              return;
+            }
+            resolve(
+              balanceOf({
+                workingOrderId: "wo-1",
+                total: paid ? "90.00" : "120.00",
+                received: "95.00",
+                outstanding: paid ? "0.00" : "25.00",
+                overpaid: paid ? "5.00" : "0.00",
+                payments: [paymentOf({ applied: "95.00", tendered: "95.00" })],
+              }),
+            );
+          }),
+      );
+      // Faked before the read starts, so its time limit runs on the fake clock; flush's own
+      // zero-length waits still pass as real time does.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const el = await leftOverpaid({
+        listWorkingOrders: vi.fn(async () => [
+          paid
+            ? { ...heldWo1, total: "90.00", outstanding: "-5.00", hasPayments: true }
+            : { ...heldWo1, outstanding: "25.00", hasPayments: true },
+        ]),
+        getBillBalance,
+        payForItems: vi.fn(async () => {
+          paid = true;
+          return paidOnWo9();
+        }),
+      });
+      const payButton = () =>
+        counter(el)
+          .shadowRoot!.querySelector("till-tender-pay")!
+          .shadowRoot!.querySelector("[data-counter-pay]");
+      await flush(el, 4);
+      expect(counter(el).shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+      expect(payButton()).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
+      await flush(el, 4);
+      expect(payButton()).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush(el, 4);
+
+      expect(payButton()).not.toBeNull();
+      expect(
+        counter(el).shadowRoot!.querySelector("[data-counter-bill-payments]")!.textContent,
+      ).toContain(t("table.bill_to_pay").replace("{amount}", money("0.00")));
     });
 
     it("at the Counter giving back the whole excess starts a new sale", async () => {
