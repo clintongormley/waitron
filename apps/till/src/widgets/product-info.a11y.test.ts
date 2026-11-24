@@ -223,7 +223,9 @@ it.each([
     expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     reject({ code });
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
-    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(expected);
+    const message = el.shadowRoot!.querySelector('[role="alert"]')!.textContent;
+    expect(message).toBe(expected);
+    expect(message).not.toBe(codeMessage("unknown.code"));
     await expectNoA11yViolations(host);
   },
 );

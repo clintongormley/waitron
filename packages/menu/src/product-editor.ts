@@ -165,7 +165,7 @@ export async function saveProductEditor(
   const value = parseProductEditorInput(input, { isVariant });
   if (value.parentId !== undefined && value.parentId !== storedParentId)
     throw new AppError("product.invalid", { field: "parentId" });
-  // Deleting keeps the saved details even when the editor sends a changed draft.
+  // Deleting ignores the rest of the editor draft.
   if (productId !== null && !value.active) {
     await deleteProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);

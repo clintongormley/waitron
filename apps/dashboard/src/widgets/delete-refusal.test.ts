@@ -56,7 +56,9 @@ describe.each([
     expect(refusalText("product.offered_as_extra", params)).toBe(
       `${codeMessage("product.offered_as_extra")} Sauces, Toppings`,
     );
-    expect(refusalText("product.deleted", params)).toBe(codeMessage("product.deleted"));
+    const deleted = refusalText("product.deleted", params);
+    expect(deleted).toBe(codeMessage("product.deleted"));
+    expect(deleted).not.toBe(codeMessage("unknown.code"));
   });
 
   it.each([

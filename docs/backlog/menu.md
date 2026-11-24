@@ -637,10 +637,10 @@ so this is expected only while the dashboard's category list is behind.
 
 **Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05). (2026-10-20, A655: the Made at column and this note were deleted.)
 
-**Products: Show archived replaces the Status filter, and the Status column becomes Availability (A463, owner
-2026-10-10).** Show archived starts off; on, archived products and variants are listed too, with View in place of Edit and Archive.
-Availability is blank for an ordinary product, Unavailable when sold out, and Archived when archived,
-also when it is sold out; the owner chose this column over badges beside the name. The Allergens filter
+**Products: Availability replaces Status (A463, owner, 2026-10-10).** The 24 November permanent
+Delete design retired A463's Show archived filter and View action. Availability is blank for an
+available product or variant and reads Unavailable when sold out. The owner chose this column
+over badges beside the name. The Allergens filter
 offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
 so a product never checked stays apart from one checked and allergen-free. A668-3 (2026-10-16) renames the displayed Pending label to Not reviewed and applies each variant's effective state to its cell and filter; inherited badges are italic. Dietary info's "Has" means a
 Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
@@ -652,8 +652,6 @@ choices. The switched-off-station example above records A463's earlier decision;
 integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
 column and filter were deleted.)
 (2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: Unavailable is a label beside the name, and Available a switch.)
-**2026-11-24 update:** The permanent Delete design removes Show archived and its View action.
-Availability stays on Products for current products and variants.
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

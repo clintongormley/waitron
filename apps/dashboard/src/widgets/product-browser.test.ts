@@ -3393,7 +3393,7 @@ it.each([1, 2])(
     );
   },
 );
-const ARCHIVE_PRODUCTS =
+const DELETE_PRODUCTS =
   "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.";
 const deleteBody = (el: ProductBrowser) =>
   dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
@@ -3408,9 +3408,9 @@ async function openBulkDelete(keys: string[], menus: () => Promise<number>) {
   return el;
 }
 it.each([
-  [3, `${ARCHIVE_PRODUCTS} They come off the 3 menus they are on.`],
-  [1, `${ARCHIVE_PRODUCTS} They come off the one menu they are on.`],
-  [0, ARCHIVE_PRODUCTS],
+  [3, `${DELETE_PRODUCTS} They come off the 3 menus they are on.`],
+  [1, `${DELETE_PRODUCTS} They come off the one menu they are on.`],
+  [0, DELETE_PRODUCTS],
 ] as const)(
   "says how many menus the products come off when they are on %i",
   async (menus, body) => {
@@ -3431,7 +3431,7 @@ it("says every menu while the products' count loads and when it cannot be read, 
     ["bread", "cola"],
     () => new Promise<number>((_, reject) => (fail = reject)),
   );
-  const unknown = `${ARCHIVE_PRODUCTS} They come off every menu they are on.`;
+  const unknown = `${DELETE_PRODUCTS} They come off every menu they are on.`;
   expect(deleteBody(el)).toBe(unknown);
   fail({ code: "server.internal" });
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3461,7 +3461,7 @@ it("never shows an earlier Archive dialog's late count in the next one", async (
   answers[0]!(4);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(deleteBody(el)).toBe(ARCHIVE_PRODUCTS);
+  expect(deleteBody(el)).toBe(DELETE_PRODUCTS);
 });
 it("forgets the last Archive dialog's count while the next one's is still being read", async () => {
   const answers: Array<(menus: number) => void> = [];
@@ -3481,7 +3481,7 @@ it("forgets the last Archive dialog's count while the next one's is still being 
   await el.updateComplete;
   await press(el, "delete");
   expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["bread"]);
-  expect(deleteBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
+  expect(deleteBody(el)).toBe(`${DELETE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
@@ -3577,7 +3577,7 @@ it("shows one count below Delete contents when the folder holds only empty subfo
   expect(choice.nextElementSibling?.textContent?.trim()).toBe(
     "Deleted products come off the 2 menus they are on.",
   );
-  expect(deleteBody(el)).toBe(ARCHIVE_PRODUCTS);
+  expect(deleteBody(el)).toBe(DELETE_PRODUCTS);
 });
 it("says products picked beside a category come off every menu when their count cannot be read", async () => {
   const el = await mountBrowser();
@@ -3589,7 +3589,7 @@ it("says products picked beside a category come off every menu when their count 
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(deleteBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
+  expect(deleteBody(el)).toBe(`${DELETE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("says Delete for products alone and with categories in Spanish", async () => {
   setLocale("es");
