@@ -370,6 +370,8 @@ describe("unit management routes", () => {
       for (const name of ["A", "B"]) {
         ids.push(await seedProduct(tx, name, from.id));
       }
+      const deleted = await seedProduct(tx, "Deleted", from.id);
+      await tx.update(products).set({ active: false }).where(eq(products.id, deleted));
       return ids;
     });
 

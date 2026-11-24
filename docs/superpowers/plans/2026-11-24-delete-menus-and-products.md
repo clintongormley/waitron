@@ -12,7 +12,7 @@
 ## 2. Products, variants and categories
 
 - Managers can permanently delete saved products and variants, including products selected with categories. An unsaved variant still says Remove. Drop Show archived and its details panel. Filter the product and translation lists. Keep internal save checks, category-key moves and the existing unit and photo refusals for current products.
-- Reuse `archive.ts`, `operations.ts`, `variants.ts`, `product-editor.ts` and `product-items.ts`. Trace stored order lines, kitchen papers, reports, refunds, reprints and past invoices before clearing product `image` and `unitId` in `markInactive`. Leave the unsent draft badge lookup alone. If both a dish and its unit are deleted, the badge can show 2 instead of 1. Record that case in the PR.
+- Reuse `archive.ts`, `operations.ts`, `variants.ts`, `product-editor.ts` and `product-items.ts`. Trace stored order lines, kitchen papers, reports, refunds, reprints and past invoices before clearing product `image` in `markInactive`. Keep the product’s unit link until Unit Delete and leave the draft badge lookup alone. Record in the PR that the badge can overcount an unsent measured dish once its unit has been deleted separately.
 - Update the dashboard client, Products, Units, widgets, till, errors, activities and translations. Count current products in category and course impact. Test separate unit and photo removal once per resource, with live-use controls. Test saved and unsaved choices and bulk Delete in the browser.
 
 ## Both slices

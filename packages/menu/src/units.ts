@@ -258,23 +258,15 @@ export async function clearProductUnit(tx: Transaction, productId: string): Prom
   await tx.update(products).set({ unitId: null }).where(eq(products.id, productId));
 }
 
-/** The products that assign this unit, ordered by product id. A row a variant still stores is not
- * listed: a variant always reads its parent's unit. */
+/** Current products that assign this unit, ordered by product id. A variant inherits its parent's unit. */
 export async function productsUsingUnit(
   tx: Transaction,
   unitId: string,
-  { activeOnly = false }: { activeOnly?: boolean } = {},
 ): Promise<ProductUsingUnit[]> {
   return tx
     .select({ id: products.id, name: products.name, active: products.active })
     .from(products)
-    .where(
-      and(
-        eq(products.unitId, unitId),
-        isTopLevelProduct,
-        activeOnly ? eq(products.active, true) : undefined,
-      ),
-    )
+    .where(and(eq(products.unitId, unitId), isTopLevelProduct, eq(products.active, true)))
     .orderBy(asc(products.id));
 }
 
@@ -294,7 +286,7 @@ export async function countProductsWithAttachedExtras(
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
   const [existing] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (existing === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await productsUsingUnit(tx, unitId, { activeOnly: true });
+  const references = await productsUsingUnit(tx, unitId);
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
