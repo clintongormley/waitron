@@ -51,6 +51,7 @@ import {
   type SeededNode,
 } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
+import { queueSubmission } from "@waitron/fiscal-verifactu/src/queue-submission.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu/src/drain.js";
 import {
   readReturnedOriginals,
@@ -704,6 +705,17 @@ it("returns an earlier box's records the main box lacks before the old box's own
     await old.db.execute(sql`update verifactu_identities
       set nif = ${identity!.nif}, numero_instalacion = ${installation} where id = ${node.sifId}`);
   await stampDeployment(old.db, "preproduction");
+  const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
+  const file = (db: Database, minutes = 0, tax = aeat) =>
+    drain(
+      {
+        db,
+        resolveClient: async () => tax.client(),
+        environment: "preproduction",
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      },
+      new Date(now.getTime() + minutes * 60_000),
+    );
   const earlierRecords: { saleId: SaleId; recordId: string }[] = [];
   for (let invoice = 1; invoice <= 3; invoice++) {
     const saleId = await seedSale(old.db, earlier, invoice);
@@ -711,31 +723,64 @@ it("returns an earlier box's records the main box lacks before the old box's own
     pending.input.IDEmisorFactura = identity!.nif;
     pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
     pending.input.NumSerieFactura = `Earlier/${invoice}`;
-    await withTransaction(old.db, (tx) => appendToChain(tx, earlier.nodeId, pending));
-    const [record] = old.db.all<{ id: string }>(
-      sql`select id from verifactu_records where sale_id = ${saleId}`,
-    );
-    earlierRecords.push({ saleId, recordId: record!.id });
+    const record = await withTransaction(old.db, async (tx) => {
+      const appended = await appendToChain(tx, earlier.nodeId, pending);
+      await queueSubmission(tx, { registroId: appended.id, proximoIntentoEn: now });
+      return appended;
+    });
+    earlierRecords.push({ saleId, recordId: record.id });
     if (invoice === 2) {
-      await old.db.execute(sql`update verifactu_submissions set estado = 'aceptado',
-        csv = 'accepted-earlier' where registro_id in
-        (${earlierRecords[0]!.recordId}, ${earlierRecords[1]!.recordId})`);
+      expect((await file(old.db)).recordsAccepted).toBe(2);
       await copyBase(["sales", "verifactu_records", "verifactu_submissions"]);
     }
   }
   const third = earlierRecords[2]!;
+  aeat.reject(`${identity!.nif}|Earlier/3|20-07-2026`, 1161, "Wrong detail");
+  expect((await file(old.db, 2)).recordsHalted).toBe(1);
   await recordTakeover(old.db, earlier.nodeId, source.nodeId);
-  const correction = altaFor(source, third.saleId, 3, 4, "preproduction");
-  correction.input.IDEmisorFactura = identity!.nif;
-  correction.input.SistemaInformatico.NumeroInstalacion = "source";
-  correction.input.NumSerieFactura = "Earlier/3";
-  correction.input.Subsanacion = "S";
-  await withTransaction(old.db, (tx) =>
-    appendToChain(tx, source.nodeId, { ...correction, correctsRegistroId: third.recordId }),
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const token = await withTransaction(old.db, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: "Administrator", role: "admin" });
+    const session = await startManagementSession(tx, { method: "password", personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
+  });
+  const remedies = new Hono();
+  mountRecordRemedies(
+    remedies,
+    {
+      db: old.db,
+      recordGeneration: {
+        nodeId: source.nodeId,
+        environment: "preproduction",
+        clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: now }) },
+        requireClockConfirmed: () => {},
+        requireWritable: () => {},
+        returnSource: async () => earlier.nodeId,
+      },
+    },
+    () => {},
   );
-  const [corrected] = old.db.all<{ id: string }>(
-    sql`select id from verifactu_records where corrects_registro_id = ${third.recordId}`,
-  );
+  const remedy = await remedies.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify(
+      remedyRequestBody({
+        kind: "record-correction",
+        caseRecordId: third.recordId,
+        recordId: third.recordId,
+        actionKey: "return-correction",
+        reason: "Correct the description",
+        facts: { description: "Corrected restaurant service" },
+      }),
+    ),
+  });
+  expect(remedy.status, await remedy.clone().text()).toBe(200);
+  const corrected = { id: ((await remedy.json()) as { registroId: string }).registroId };
+  expect(
+    old.db.all(sql`select node_id, corrects_registro_id from verifactu_records
+      where id = ${corrected.id}`),
+  ).toEqual([{ node_id: source.nodeId, corrects_registro_id: third.recordId }]);
 
   await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
   await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
@@ -827,26 +872,26 @@ it("returns an earlier box's records the main box lacks before the old box's own
       fetch: async (url, init) => app.request(String(url), init),
     }),
   ).toBe("confirmed");
-  const returned = [third.recordId, corrected!.id];
-  expect(
+  const delivery = () =>
     current.db.all<{ id: string; estado: string }>(sql`select r.id, s.estado
       from verifactu_records r join verifactu_submissions s on s.registro_id = r.id
-      where r.id in (${third.recordId}, ${corrected!.id}) order by r.node_id = ${source.nodeId}`),
-  ).toEqual(returned.map((id) => ({ id, estado: "pendiente" })));
-  const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
-  const filed = await drain(
-    {
-      db: current.db,
-      resolveClient: async () => aeat.client(),
-      environment: "preproduction",
-      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
-    },
-    now,
+      where r.id in (${third.recordId}, ${corrected.id}) order by r.node_id = ${source.nodeId}`);
+  expect(delivery()).toEqual([
+    { id: third.recordId, estado: "rechazado" },
+    { id: corrected.id, estado: "pendiente" },
+  ]);
+  // The fake refuses a key it was told to refuse for good, so the correction goes to a fresh one.
+  const filed = await file(
+    current.db,
+    4,
+    createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 }),
   );
-  expect(filed.recordsSubmitted).toBe(2);
-  expect(
-    current.db.all(sql`select registro_id from verifactu_submissions where estado = 'pendiente'`),
-  ).toEqual([]);
+  expect(filed.recordsSubmitted).toBe(1);
+  expect(filed.recordsAccepted).toBe(1);
+  expect(delivery()).toEqual([
+    { id: third.recordId, estado: "rechazado" },
+    { id: corrected.id, estado: "aceptado" },
+  ]);
 
   const [person] = await withTransaction(current.db, (tx) =>
     seedPersons(tx, { displayName: "Owner", role: "admin" }),
