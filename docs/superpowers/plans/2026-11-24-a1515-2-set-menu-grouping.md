@@ -12,7 +12,7 @@ Later pieces handle persistence, whole-bill adjustments, screens, payments and f
 Extend `set-menu-fit.ts`, `set-menu-search.ts` and `set-menu-placement.ts` in that folder. Reuse
 offer/place types, product/variant matching, counted dish classes, the mix search and the
 placement solver. Keep the fixed-count till caller through piece 4. Take each portion's canonical
-course, adjusted à la carte charge, grouping eligibility, extras and resolved takeaway rate. Take
+course, adjusted à la carte charge, grouping eligibility and extras. Take
 typed discounts by ID and offer, plus the saved menu IDs, dish places and discount holders.
 Return priced menus, each dish's nullable place and charge, extras, unused discounts, total and
 `exact` for proven cheapest cents.
@@ -20,13 +20,16 @@ Return priced menus, each dish's nullable place and charge, extras, unused disco
 **Menu counts and placement.** Allow an unused, zero-price, zero-place count and up to one menu
 per eligible portion. Skip mixes whose discounted bases alone cost more than those portions à la
 carte. Give each class its own à la carte cost. Match exact variants and canonical courses.
-Measured and individually adjusted dishes stay à la carte. Split offers by takeaway rate and
-solve rates independently when no discounts link them. A nonempty menu pays its full base with
+Measured and individually adjusted dishes stay à la carte. Group takeaway dishes by the same
+rules as eat-in dishes (owner decision relayed by the watcher, 24 November at 11:21).
+A nonempty menu pays its full base with
 any open places. Compare cents first. On price ties, rank saved IDs by surviving dishes and use
 individual slots for those IDs in one final placement. Keep that result only at the same price.
 Prefer retaining dish places, including à la carte, then menu IDs and discount holders, then ID order.
 
-**Menu discounts.** Limit each discount to one use across rates on its offer. Each menu's discount
+**Menu discounts.** Each discount can be used once on its offer. A set menu holds one discount.
+A new discount can name the one it replaces, which is returned as unused (owner decision relayed by
+the watcher, 24 November at 11:21). Each menu's discount
 covers its base and actual supplements, with whole-cent rounding once per percentage reduction.
 Extras stay separate. Comps and fixed reductions up to the base price are additive. Use basis-point
 costs for a single percentage and compare the final rounded price. When several percentages can
@@ -51,7 +54,7 @@ keep their à la carte charges.
   hake 1,500¢ and flan 500¢ cost 1,400¢ grouped or 1,850¢ after halving the hake. Check comps and variants.
 - Base 1,401¢, supplement 300¢ and extras 200¢ cost 1,050¢ at half off, 401¢ at 1,500¢ off, or
   200¢ comped. With one fixed discount and two menus, the supplemented one wins at 1,802¢ total.
-- A 1,000¢ starter at 10% and 1,000¢ main at 21% group for 1,400¢ eat-in or cost 2,000¢ takeaway.
+- A 1,000¢ starter at 10% and 1,000¢ main at 21% group for 1,400¢ on a takeaway bill.
   A pair at each rate forms two takeaway menus at 2,800¢.
 - Two 1,400¢ menus hold a 900¢ starter and 1,500¢ main each. Cancel one main and keep the other
   menu and both its dishes at 2,300¢. Show a different tie without the saved layout, retain a

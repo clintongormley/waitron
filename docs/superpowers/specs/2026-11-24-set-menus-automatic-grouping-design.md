@@ -164,6 +164,10 @@ What changes:
 
 ### 4. The calculation
 
+**24 November 2026, 11:21 watcher note relaying the owner:** Takeaway dishes may group across VAT
+rates. Divide the set menu's price across its dishes in proportion to their à la carte prices and
+apply each dish's own takeaway VAT rate. VAT-rates piece B handles that division.
+
 A shared function, the same in the till and the server, extending the one on `main`
 (`packages/shared/src/set-menu-fit.ts`, `set-menu-search.ts`, `set-menu-placement.ts`). Today it
 places dishes into a number of set menus fixed by the waiter. It has to:
@@ -174,10 +178,7 @@ places dishes into a number of set menus fixed by the waiter. It has to:
   supplement where a dish fills a place that carries one, and every dish left out at its à la carte
   price. Paid extras on a dish are charged as usual whether or not the dish is in a set menu;
 - leave out of the grouping every dish carrying a comp or discount of its own (section 6);
-- on a takeaway bill, form a set menu only from dishes that share one takeaway VAT rate that day.
-  Dishes with mixed rates stay à la carte. Nothing is refused (**owner**, 24 November, keeping the
-  21 November limit until the adviser confirms the "main item's rate" rule; when he does, this rule
-  is replaced);
+- use the same grouping rules for eat-in and takeaway;
 - between equally cheap answers, keep the one closest to the saved grouping, so dishes do not jump
   between set menus for no saving. The function on `main` already prefers the arrangement closest to
   the current one;
@@ -226,6 +227,9 @@ be cancelled or edited by hand.
   of that type on the bill; the calculation counts that one as cheaper, so it does not break it up
   for no reason. If the bill ends up with no set menu of that type, the discount falls away and the
   till says so (**my call**).
+- **24 November 2026, 11:21 watcher note relaying the owner:** A set menu carries one discount.
+  A new discount replaces the old one and the till says so. If two discounted menus of the same
+  type become one, keep the larger saving in cents and tell staff which discount fell away.
 - **Comps** work the same way: a comped dish leaves the grouping; a comped set menu is one set menu
   of that type at no charge.
 - **What a set-menu comp or discount covers:** the set menu's price and the supplements of the

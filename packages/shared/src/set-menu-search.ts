@@ -85,6 +85,7 @@ interface MixVectors {
   readonly bases: Float64Array;
   readonly solve: (counts: number[], base: number) => MixSearchResult;
   readonly cutoff: () => number;
+  readonly canSolve?: () => boolean;
   readonly accept: (candidate: MixSearchResult) => boolean;
 }
 
@@ -96,6 +97,7 @@ export function searchMixVectors({
   bases,
   solve,
   cutoff,
+  canSolve,
   accept,
 }: MixVectors): boolean {
   const bounds = bases.slice();
@@ -110,6 +112,7 @@ export function searchMixVectors({
       }
     }
     if (next === -1) return true;
+    if (canSolve && !canSolve()) return false;
 
     const start = next * offerCount;
     const candidate = solve(Array.from(vectors.subarray(start, start + offerCount)), bases[next]!);

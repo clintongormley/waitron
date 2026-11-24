@@ -867,7 +867,7 @@ _2026-11-24: The Menus list is to have a tab for menus and a tab for set menus, 
 
 _2026-11-24: Before those tabs, menus, set menus, products and variants are to say Delete, not Archive, and a deleted one is listed nowhere, approved by the owner: [spec](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-24: The owner reworked set menus: [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes; the bill groups them into set menus at the cheapest price on every change; a set menu no longer changes a dish's course; paying for items moves them to a bill of their own. Its six pieces replace the counts, the no-place question and the per-set-menu course described below. Plans to follow._
+_2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes are ordered,

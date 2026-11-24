@@ -19,7 +19,6 @@ function dish(
     aLaCarteCents,
     extrasCents: 0,
     eligible: true,
-    takeawayRateBps: 1000,
   };
 }
 
@@ -46,7 +45,7 @@ function offer(
 }
 
 function savedMenu(id: string, offerId: string, discountId: string | null = null) {
-  return { id, offerId, discountId, takeawayRateBps: null };
+  return { id, offerId, discountId };
 }
 
 function savedDish(id: string, setMenuId: string, lineIndex: number) {
@@ -57,7 +56,7 @@ function group(
   input: Pick<SetMenuGroupingInput, "offers" | "dishes"> & Partial<SetMenuGroupingInput>,
 ) {
   expect(typeof shared.groupSetMenus, "shared calculation export").toBe("function");
-  return shared.groupSetMenus({ takeaway: false, discounts: [], previous: null, ...input });
+  return shared.groupSetMenus({ discounts: [], previous: null, ...input });
 }
 
 it("selects a partly filled menu and leaves an expensive supplement à la carte", () => {
@@ -181,31 +180,29 @@ it("keeps only the more valuable discount when one of two menus closes", () => {
   });
 });
 
-it("groups dishes by their takeaway rate rather than refusing a mixed bill", () => {
-  const starter = dish("starter", "starter", 1000);
+it("groups takeaway dishes with different VAT rates into the same set menu", () => {
+  const starter = { ...dish("starter", "starter", 1000), takeawayRateBps: 1000 };
   const main = { ...dish("main", "main", 1000), takeawayRateBps: 2100 };
   const lunch = offer("lunch", 1400, [starter, main]);
-  expect(group({ offers: [lunch], dishes: [starter, main] }).totalCents).toBe(1400);
-  expect(group({ offers: [lunch], dishes: [starter, main], takeaway: true })).toMatchObject({
+  expect(group({ offers: [lunch], dishes: [starter, main] })).toMatchObject({
     exact: true,
-    totalCents: 2000,
-    setMenus: [],
+    totalCents: 1400,
+    setMenus: [{ offerId: "lunch" }],
+    dishes: [
+      { id: "main", place: { lineIndex: 1 } },
+      { id: "starter", place: { lineIndex: 0 } },
+    ],
   });
-  expect(
-    group({
-      offers: [lunch],
-      dishes: [
-        starter,
-        main,
-        { ...starter, id: "starter-high", takeawayRateBps: 2100 },
-        { ...main, id: "main-low", takeawayRateBps: 1000 },
-      ],
-      takeaway: true,
-    }),
-  ).toMatchObject({
+  const fourDishes = [
+    starter,
+    main,
+    { ...starter, id: "starter-high", takeawayRateBps: 2100 },
+    { ...main, id: "main-low", takeawayRateBps: 1000 },
+  ];
+  expect(group({ offers: [lunch], dishes: fourDishes })).toMatchObject({
     exact: true,
     totalCents: 2800,
-    setMenus: [{ takeawayRateBps: 1000 }, { takeawayRateBps: 2100 }],
+    setMenus: [{ offerId: "lunch" }, { offerId: "lunch" }],
   });
 });
 
@@ -289,24 +286,82 @@ it("keeps equal-priced dish places and the saved discount holder on a repeat", (
   });
 });
 
-it("spends one menu discount across two takeaway rates only once", () => {
-  const starter = dish("starter", "starter", 1800);
+it("charges one discount on a mixed-rate menu and its supplement", () => {
+  const starter = { ...dish("starter", "starter", 1800), takeawayRateBps: 1000 };
   const main = { ...dish("main", "main", 2200), takeawayRateBps: 2100 };
   const lunch = offer("lunch", 1401, [starter, main], { main: 300 });
   const result = group({
     offers: [lunch],
     dishes: [starter, main],
-    takeaway: true,
     discounts: [{ id: "grant", offerId: "lunch", kind: "percent", basisPoints: 5000 }],
   });
   expect(result).toMatchObject({
     exact: true,
-    totalCents: 2251,
-    setMenus: [
-      { takeawayRateBps: 1000, discountId: null },
-      { takeawayRateBps: 2100, discountId: "grant", discountCents: 851 },
-    ],
+    totalCents: 850,
+    setMenus: [{ offerId: "lunch", discountId: "grant", discountCents: 851 }],
   });
+});
+
+it("replaces a saved menu's discount even when the previous discount was larger", () => {
+  const first = dish("first", "main", 1700);
+  const second = { ...first, id: "second" };
+  const lunch = offer("lunch", 1400, [first]);
+  const discounts = [
+    { id: "before", offerId: "lunch", kind: "amount", cents: 500 },
+    { id: "after", offerId: "lunch", kind: "amount", cents: 200, replacesDiscountId: "before" },
+  ] as const;
+  const result = group({
+    offers: [lunch],
+    dishes: [first, second],
+    discounts,
+    previous: {
+      setMenus: [savedMenu("A", "lunch"), savedMenu("B", "lunch", "before")],
+      dishes: [savedDish(first.id, "A", 0), savedDish(second.id, "B", 0)],
+    },
+  });
+  expect(result).toMatchObject({
+    exact: true,
+    totalCents: 2600,
+    setMenus: [
+      { id: "A", discountId: null },
+      { id: "B", discountId: "after" },
+    ],
+    unusedDiscountIds: ["before"],
+  });
+});
+
+it("keeps a proven price at the limit for choosing between equally priced places", () => {
+  const main = dish("main", "main", 900);
+  const offers = Array.from({ length: 160 }, (_, i) => offer(`lunch-${i}`, 500, [main]));
+  const result = group({
+    offers,
+    dishes: [main],
+    previous: { setMenus: [], dishes: [{ id: main.id, place: null }] },
+  });
+  expect(result).toMatchObject({ exact: true, totalCents: 500 });
+});
+
+it("keeps the cheaper complete bill found before the discount search reaches its limit", () => {
+  const dishes = [
+    dish("0", "starter", 2),
+    dish("1", "starter", 4),
+    dish("2", "main", 1),
+    dish("3", "main", 11),
+  ];
+  const input = {
+    dishes,
+    offers: [
+      offer("lunch", 1, dishes, { "0": 5, "1": 4, "2": 6, "3": 6 }),
+      offer("special", 1, dishes.slice(1), { "1": 6, "2": 6, "3": 5 }),
+    ],
+    discounts: [
+      { id: "one", offerId: "lunch", kind: "percent", basisPoints: 5000 },
+      { id: "two", offerId: "special", kind: "amount", cents: 7 },
+      { id: "three", offerId: "lunch", kind: "percent", basisPoints: 7500 },
+    ] as const,
+  };
+  // Two dishes cost 3¢ à la carte. The discounted menus cost 0¢ and 1¢.
+  expect(group(input).totalCents).toBe(4);
 });
 
 function table(seats: number, offerCount: number) {

@@ -12,10 +12,13 @@ export interface SetMenuGroupingDish extends Pick<SetMenuDish, "id" | "productId
   readonly aLaCarteCents: number;
   readonly extrasCents: number;
   readonly eligible: boolean;
-  readonly takeawayRateBps: number | null;
 }
 
-export type SetMenuGroupingDiscount = { readonly id: string; readonly offerId: string } & (
+export type SetMenuGroupingDiscount = {
+  readonly id: string;
+  readonly offerId: string;
+  readonly replacesDiscountId?: string;
+} & (
   | { readonly kind: "comp" }
   | { readonly kind: "amount"; readonly cents: number }
   | { readonly kind: "percent"; readonly basisPoints: number }
@@ -24,7 +27,6 @@ export type SetMenuGroupingDiscount = { readonly id: string; readonly offerId: s
 interface SavedMenu {
   readonly id: string;
   readonly offerId: string;
-  readonly takeawayRateBps: number | null;
   readonly discountId: string | null;
 }
 
@@ -42,7 +44,6 @@ export interface SetMenuGroupingInput {
   readonly offers: readonly SetMenuOffer[];
   readonly dishes: readonly SetMenuGroupingDish[];
   readonly discounts: readonly SetMenuGroupingDiscount[];
-  readonly takeaway: boolean;
   readonly previous: SetMenuGroupingPrevious | null;
 }
 
@@ -62,7 +63,6 @@ export interface SetMenuGrouping extends SetMenuGroupingPrevious {
 
 interface Choice {
   readonly offer: SetMenuOffer;
-  readonly rate: number | null;
   readonly discount: SetMenuGroupingDiscount | undefined;
   readonly baseCost: number;
   readonly factor: number;
@@ -102,11 +102,7 @@ function reduction(discount: SetMenuGroupingDiscount | undefined, gross: number)
   }
 }
 
-function choice(
-  offer: SetMenuOffer,
-  rate: number | null,
-  discount?: SetMenuGroupingDiscount,
-): Choice {
+function choice(offer: SetMenuOffer, discount?: SetMenuGroupingDiscount): Choice {
   const net = offer.priceCents - (discount?.kind === "amount" ? discount.cents : 0);
   const factor =
     discount?.kind === "comp"
@@ -115,7 +111,6 @@ function choice(
   const round = factor > 0 && factor < SCALE;
   return {
     offer,
-    rate,
     discount,
     factor,
     round,
@@ -137,7 +132,6 @@ function selectCounts(
   const vectors: number[] = [];
   const bases: number[] = [];
   const counts = choices.map(() => 0);
-  const used = new Set<string>();
   const prices = choices.map(({ baseCost }) => baseCost);
   const minimumLeft = [0];
   for (let i = choices.length - 1; i >= 0; i--) {
@@ -151,17 +145,14 @@ function selectCounts(
       vectors.push(...counts);
       return bases.push(base) < MAX_SET_MENU_MIXES;
     }
-    const id = option.discount?.id;
-    const limit = id && used.has(id) ? 0 : Math.min(left, limits[index]!);
+    const limit = Math.min(left, limits[index]!);
     counts[index] = 0;
     if (!visit(index + 1, left, base)) return false;
-    if (id && limit > 0) used.add(id);
     for (let count = 1; count <= limit; count++) {
       counts[index] = count;
       if (!visit(index + 1, left - count, base + count * prices[index]!)) return false;
     }
     counts[index] = 0;
-    if (id && limit > 0) used.delete(id);
     return true;
   }
 
@@ -174,46 +165,35 @@ type Menu = { readonly id: string; readonly option: number };
 type Assignment = readonly [menu: number, line: number, supplement: number];
 
 export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
-  if (input.takeaway && input.discounts.length === 0) {
-    const parts = new Map<number | null, SetMenuGroupingDish[]>();
-    for (const dish of input.dishes) {
-      if (!parts.has(dish.takeawayRateBps)) parts.set(dish.takeawayRateBps, []);
-      parts.get(dish.takeawayRateBps)!.push(dish);
-    }
-    // Each rate uses only its own portions and saved IDs.
-    if (parts.size > 1) {
-      const results = [...parts.values()].map((dishes) => groupRate({ ...input, dishes }));
-      return {
-        exact: results.every(({ exact }) => exact),
-        totalCents: results.reduce((sum, { totalCents }) => sum + totalCents, 0),
-        setMenus: results.flatMap(({ setMenus }) => setMenus).sort(byId),
-        dishes: results.flatMap(({ dishes }) => dishes).sort(byId),
-        unusedDiscountIds: [],
-      };
-    }
-  }
-  return groupRate(input);
-}
-
-function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
   const dishes = [...input.dishes].sort(byId);
   const offers = [...input.offers].sort(byId);
-  const discounts = [...input.discounts].sort(byId);
-  const oldMenu = new Map(input.previous?.setMenus.map((menu) => [menu.id, menu]));
-  const oldPlace = new Map(input.previous?.dishes.map(({ id, place }) => [id, place]));
-  const rates = input.takeaway
-    ? [...new Set(dishes.map((dish) => dish.takeawayRateBps))]
-        .filter((rate) => rate !== null)
-        .sort((a, b) => a - b)
-    : [null];
-  const choices = rates.flatMap((rate) =>
-    offers.flatMap((offer) => [
-      choice(offer, rate),
-      ...discounts
-        .filter(({ offerId }) => offerId === offer.id)
-        .map((discount) => choice(offer, rate, discount)),
+  const submitted = [...input.discounts].sort(byId);
+  const replacements = new Map(
+    submitted.flatMap(({ id, replacesDiscountId }) =>
+      replacesDiscountId === undefined ? [] : [[replacesDiscountId, id] as const],
+    ),
+  );
+  const discounts = submitted.filter(({ id }) => !replacements.has(id));
+  const discountIds = [
+    ...new Set([...submitted.map(({ id }) => id), ...replacements.keys()]),
+  ].sort();
+  const discountsById = new Map(discounts.map((discount) => [discount.id, discount]));
+  const oldMenu = new Map(
+    input.previous?.setMenus.map((menu) => [
+      menu.id,
+      {
+        ...menu,
+        discountId: replacements.get(menu.discountId ?? "") ?? menu.discountId,
+      },
     ]),
   );
+  const oldPlace = new Map(input.previous?.dishes.map(({ id, place }) => [id, place]));
+  const choices = offers.flatMap((offer) => [
+    choice(offer),
+    ...discounts
+      .filter(({ offerId }) => offerId === offer.id)
+      .map((discount) => choice(offer, discount)),
+  ]);
   const pairs = choices.flatMap(({ offer }, index) =>
     offer.lines.map(({ count }, line): Pair => ({ choice: index, line, capacity: count })),
   );
@@ -232,9 +212,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
     return pairs.flatMap(({ choice: index, line }, pair) => {
       const option = choices[index]!;
       const supplement = listings[index]!.get(key);
-      return supplement !== undefined &&
-        (!input.takeaway || dish.takeawayRateBps === option.rate) &&
-        option.offer.lines[line]!.courseIds.includes(dish.courseId)
+      return supplement !== undefined && option.offer.lines[line]!.courseIds.includes(dish.courseId)
         ? [{ pair, supplement }]
         : [];
     });
@@ -255,55 +233,45 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
   let serial = 0;
   function newMenu(option: number): Menu {
     let id: string;
-    do id = `new-menu-${choices[option]!.rate ?? "eat-in"}-${++serial}`;
+    do id = `new-menu-${++serial}`;
     while (oldMenu.has(id));
     return { id, option };
   }
 
-  function menuType(offerId: string, rate: number | null): string {
-    return JSON.stringify([offerId, rate]);
-  }
   const byType = new Map<string, number[]>();
-  choices.forEach(({ offer, rate }, index) => {
-    const type = menuType(offer.id, rate);
-    const options = byType.get(type);
+  choices.forEach(({ offer }, index) => {
+    const options = byType.get(offer.id);
     if (options) options.push(index);
-    else byType.set(type, [index]);
+    else byType.set(offer.id, [index]);
   });
 
   const ranked = new Map<string, number>();
-  dishes.forEach(({ id }, i) => {
+  const savedSlots = dishes.map(({ id }, i) => {
     const place = oldPlace.get(id);
     const menu = place && oldMenu.get(place.setMenuId);
-    if (
-      menu &&
-      arcs[i]!.some(({ pair }) => {
-        const { choice, line } = pairs[pair]!;
-        return (
-          line === place.lineIndex &&
-          choices[choice]!.offer.id === menu.offerId &&
-          choices[choice]!.rate === menu.takeawayRateBps
-        );
-      })
-    )
-      ranked.set(menu.id, (ranked.get(menu.id) ?? 0) + 1);
+    if (!menu) return undefined;
+    const arc = arcs[i]!.find(({ pair }) => {
+      const { choice, line } = pairs[pair]!;
+      return line === place.lineIndex && choices[choice]!.offer.id === menu.offerId;
+    });
+    if (!arc) return undefined;
+    ranked.set(menu.id, (ranked.get(menu.id) ?? 0) + 1);
+    return { ...place, supplement: arc.supplement };
   });
   const saved = [...oldMenu.values()].sort(
     (a, b) => (ranked.get(b.id) ?? 0) - (ranked.get(a.id) ?? 0) || byId(a, b),
   );
-  const optionsFor = (menu: SavedMenu) =>
-    byType.get(menuType(menu.offerId, menu.takeawayRateBps)) ?? [];
+  const optionsFor = (menu: SavedMenu) => byType.get(menu.offerId) ?? [];
   const grantOf = (option: number) => choices[option]!.discount?.id ?? null;
 
   function candidates(counts: readonly number[]): Menu[] {
     const remaining = [...counts];
     const chosen = new Map<string, SavedMenu[]>();
     for (const menu of saved) {
-      const type = menuType(menu.offerId, menu.takeawayRateBps);
-      const prior = chosen.get(type) ?? [];
+      const prior = chosen.get(menu.offerId) ?? [];
       if (prior.length >= optionsFor(menu).reduce((sum, i) => sum + counts[i]!, 0)) continue;
       prior.push(menu);
-      chosen.set(type, prior);
+      chosen.set(menu.offerId, prior);
     }
     const selected: Menu[] = [];
     const unassigned = new Set([...chosen.values()].flat());
@@ -328,7 +296,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
   function materialize(
     menus: readonly Menu[],
     assigned: readonly (Assignment | undefined)[],
-    reprice = false,
+    reprice?: { readonly changedOfferId: string; readonly prior: SetMenuGrouping } | "all",
   ): SetMenuGrouping {
     const gross = menus.map(({ option }) => choices[option]!.offer.priceCents);
     const places = dishes.map((_, i) => {
@@ -339,12 +307,15 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
       return { setMenuId: menus[menu]!.id, lineIndex };
     });
     const occupied = new Set(assigned.flatMap((match) => (match ? [match[0]] : [])));
+    const replaceGrant = (offerId: string) =>
+      reprice === "all" || offerId === reprice?.changedOfferId;
+    const grantsToMatch = discounts.filter(({ offerId }) => replaceGrant(offerId));
     const granted =
-      reprice && discounts.length > 0
+      grantsToMatch.length > 0
         ? solvePlacement({
             capacities: menus.map((_, i) => Number(occupied.has(i))),
             uncoveredCost: 0,
-            classes: discounts.map((discount) => ({
+            classes: grantsToMatch.map((discount) => ({
               count: 1,
               arcs: menus.flatMap(({ option, id }, pair) =>
                 choices[option]!.offer.id === discount.offerId
@@ -363,17 +334,25 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
           }).flows
         : undefined;
     const earned = new Map(
-      granted?.flatMap((flows, i) => flows.map(({ pair }) => [pair, discounts[i]!] as const)),
+      granted?.flatMap((flows, i) => flows.map(({ pair }) => [pair, grantsToMatch[i]!] as const)),
+    );
+    const priorGrants = new Map(
+      reprice && reprice !== "all"
+        ? reprice.prior.setMenus.map(({ id, discountId }) => [id, discountId])
+        : [],
     );
     const chargedMenus = menus.flatMap(({ id, option }, i) => {
       if (!occupied.has(i)) return [];
-      const { offer, rate } = choices[option]!;
-      const discount = reprice ? earned.get(i) : choices[option]!.discount;
+      const { offer } = choices[option]!;
+      const discount = replaceGrant(offer.id)
+        ? earned.get(i)
+        : reprice
+          ? discountsById.get(priorGrants.get(id) ?? "")
+          : choices[option]!.discount;
       return [
         {
           id,
           offerId: offer.id,
-          takeawayRateBps: rate,
           discountId: discount?.id ?? null,
           baseCents: offer.priceCents,
           discountCents: reduction(discount, gross[i]!),
@@ -394,7 +373,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
         pricedDishes.reduce((total, dish) => total + dish.chargeCents, 0),
       setMenus: chargedMenus.sort(byId),
       dishes: pricedDishes,
-      unusedDiscountIds: discounts.filter(({ id }) => !used.has(id)).map(({ id }) => id),
+      unusedDiscountIds: discountIds.filter((id) => !used.has(id)),
     };
   }
 
@@ -492,18 +471,15 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
     layout: ReturnType<typeof menuPlacement>,
   ): (Assignment | undefined)[] {
     const room = layout.slots.map(({ capacity }) => capacity);
-    return dishes.map(({ id }, i) => {
-      const old = oldPlace.get(id);
+    return savedSlots.map((old) => {
       if (!old) return undefined;
-      const arc = layout.matches[i]!.find(
-        ({ pair }) =>
-          room[pair]! > 0 &&
-          menus[layout.slots[pair]!.menu]!.id === old.setMenuId &&
-          layout.slots[pair]!.line === old.lineIndex,
+      const slot = layout.slots.findIndex(
+        ({ menu, line }, pair) =>
+          room[pair]! > 0 && menus[menu]!.id === old.setMenuId && line === old.lineIndex,
       );
-      if (!arc) return undefined;
-      room[arc.pair]!--;
-      return [layout.slots[arc.pair]!.menu, old.lineIndex, arc.supplement];
+      if (slot === -1) return undefined;
+      room[slot]!--;
+      return [layout.slots[slot]!.menu, old.lineIndex, old.supplement];
     });
   }
 
@@ -523,17 +499,21 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
   function fallback(): SetMenuGrouping {
     const menus = [...savedFit];
     let assigned = pins;
-    let current = materialize(menus, assigned, true);
+    let current = materialize(menus, assigned, "all");
     const closed = new Set<number>();
-    for (const [menu] of menus.entries()) {
+    for (const [menu, { option }] of menus.entries()) {
+      if (!assigned.some((place) => place?.[0] === menu)) continue;
       const released = assigned.map((place) => (place?.[0] === menu ? undefined : place));
-      const alternative = materialize(menus, released, true);
+      const alternative = materialize(menus, released, {
+        changedOfferId: choices[option]!.offer.id,
+        prior: current,
+      });
       if (alternative.totalCents >= current.totalCents) continue;
       closed.add(menu);
       assigned = released;
       current = alternative;
     }
-    const layout = menuPlacement(menus);
+    const layout = savedLayout;
     const filled = assign(
       menus,
       layout,
@@ -541,7 +521,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
       undefined,
       ({ pair }) => !closed.has(layout.slots[pair]!.menu),
     );
-    const withNewDishes = materialize(menus, filled, true);
+    const withNewDishes = materialize(menus, filled, "all");
     if (withNewDishes.totalCents < current.totalCents) {
       assigned = filled;
       current = withNewDishes;
@@ -554,7 +534,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
       .sort((a, b) => choices[a]!.baseCost - choices[b]!.baseCost)
       .slice(0, FALLBACK_LIMIT / 2);
     for (const option of options) {
-      const { discount } = choices[option]!;
+      const { discount, offer } = choices[option]!;
       if (discount && current.setMenus.some(({ discountId }) => discountId === discount.id))
         continue;
       // An offer that cannot save money on the remaining portions cannot after another offer takes some.
@@ -567,7 +547,10 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
           const dish = added[i];
           return assigned[i] ?? (dish && [menus.length, dish[1], dish[2]]);
         });
-        const alternative = materialize([...menus, menu], placed, true);
+        const alternative = materialize([...menus, menu], placed, {
+          changedOfferId: offer.id,
+          prior: current,
+        });
         if (alternative.totalCents >= current.totalCents) break;
         menus.push(menu);
         assigned = placed;
@@ -621,8 +604,7 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
     solves++;
     const candidate = materialize(menus, first);
     consider(candidate);
-    if (candidate.totalCents <= priceFloor || priceFloor > best.totalCents)
-      return solves < PLACEMENT_LIMIT;
+    if (candidate.totalCents <= priceFloor || priceFloor > best.totalCents) return true;
 
     const pending = layout.matches.flatMap((matches, i) => {
       const options = matches.filter(special);
@@ -631,8 +613,8 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
     const fixed: (Assignment | undefined)[] = [];
     const available = layout.slots.map(({ capacity }) => capacity);
     function visit(at: number): boolean {
-      if (solves >= PLACEMENT_LIMIT) return false;
       if (best.totalCents <= priceFloor) return true;
+      if (solves >= PLACEMENT_LIMIT) return false;
       const item = pending[at];
       if (!item) {
         solves++;
@@ -659,7 +641,11 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
     pairOffer: pairs.map(({ choice }) => choice),
     pairPlaces: pairs.map(({ capacity }) => capacity),
     ...mixes,
-    cutoff: () => (best.totalCents - extras - constant - (oldPlace.size ? 0 : 1)) * SCALE + 1,
+    cutoff: () => {
+      const includeTies = oldPlace.size > 0 && solves + 1 < PLACEMENT_LIMIT;
+      return (best.totalCents - extras - constant - Number(!includeTies)) * SCALE + 1;
+    },
+    canSolve: () => solves + 1 < PLACEMENT_LIMIT,
     solve: (counts, base) => {
       const solved = solvePlacement({
         ...placement,
@@ -673,5 +659,9 @@ function groupRate(input: SetMenuGroupingInput): SetMenuGrouping {
       return menus.length === 0 || refine(menus, Math.ceil(cost / SCALE) + extras + constant);
     },
   });
-  return exact ? { ...best, exact } : fallback();
+  if (exact) return { ...best, exact };
+  const anchored = fallback();
+  return pins.every((pin) => pin === undefined) && best.totalCents < anchored.totalCents
+    ? best
+    : anchored;
 }
