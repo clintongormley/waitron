@@ -1,8 +1,8 @@
 # A bill that has been paid more than it comes to
 
 Status: design approved by the owner, 24 November 2026 at 23:2x in the watcher's window: "yes build it,
-and make the cash back an assignable permission". The owner had read the first draft whole, and of this second
-one the watcher's summary (which named the PIN and the occupied table) and two of its seven pictures.
+and make the cash back an assignable permission". The owner was shown the watcher's summaries of both drafts and five of the seven pictures, not this
+text whole; what the summaries did not name is the writer's, for the owner to overrule.
 Queued as OVERPAID-BILLS in lane L. The pictures (drawn) are
 not committed: `~/waitron-campaign-shared/desk/overpaid-bill/`.
 
