@@ -140,6 +140,21 @@ describe("move-ts-declarations", () => {
     );
   });
 
+  it("keeps an inline object type when adding export wraps its members", async () => {
+    write(".prettierrc.json", '{"printWidth":100,"trailingComma":"all"}');
+    const body = "{\n  return group.displayNumber;\n}";
+    write(
+      "original.ts",
+      `function groupNumberIdentity(group: { displayNumber: number; numberPartyId: string | null }): number ${body}\n\nexport const number = groupNumberIdentity({ displayNumber: 7, numberPartyId: null });\n`,
+    );
+
+    await move("original.ts", { "numbers.ts": ["groupNumberIdentity"] }, ["number"]);
+
+    expect(read("numbers.ts")).toBe(
+      `export function groupNumberIdentity(group: {\n  displayNumber: number;\n  numberPartyId: string | null;\n}): number ${body}\n`,
+    );
+  });
+
   it("drops an intermediate import when two declarations move to the same destination", async () => {
     write(
       "original.ts",

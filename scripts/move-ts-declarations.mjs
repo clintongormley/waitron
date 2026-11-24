@@ -89,6 +89,19 @@ function span(source, node) {
 }
 
 function tokens(text) {
+  const source = parse("signature.ts", text);
+  const optionalSemicolons = new Set();
+  function visit(node) {
+    if (ts.isTypeLiteralNode(node)) {
+      const last = node.members.at(-1)?.getLastToken(source);
+      if (last?.kind === ts.SyntaxKind.SemicolonToken) {
+        optionalSemicolons.add(last.getStart(source));
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+
   const scanner = ts.createScanner(
     ts.ScriptTarget.Latest,
     false,
@@ -97,6 +110,8 @@ function tokens(text) {
   );
   const result = [];
   for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+    // Prettier adds a final type member's semicolon when the type wraps.
+    if (optionalSemicolons.has(scanner.getTokenStart())) continue;
     if (kind !== ts.SyntaxKind.WhitespaceTrivia && kind !== ts.SyntaxKind.NewLineTrivia) {
       const token = scanner.getTokenText();
       // Adding export can make Prettier wrap a list and add its trailing comma.
