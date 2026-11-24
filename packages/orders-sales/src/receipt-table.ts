@@ -57,8 +57,29 @@ export function tableLines(table: ReceiptTable, columns: number): TableLine[] {
     if (!unitsFit(row))
       return [...wrapText(row.units, columns), ...rowLines({ ...row, units: "" })];
     const indent = row.itemIndent ?? 0;
-    const [first = "", ...rest] = wrapText(" ".repeat(indent) + row.item, itemWidth, indent);
+    const item = " ".repeat(indent) + row.item;
+    const [first = "", ...rest] = wrapText(item, itemWidth, indent);
     const lead = row.units.padStart(unitsWidth) + " ";
+    const itemAndPriceWidth = itemWidth + 1 + priceWidth;
+    if (
+      !twoLines &&
+      table.withRate &&
+      indent > 0 &&
+      row.price === "" &&
+      row.amount !== "" &&
+      rest.length > 0 &&
+      item.length <= itemAndPriceWidth
+    ) {
+      const caption = wrapText(item, itemAndPriceWidth, indent)[0]!;
+      return [
+        (
+          lead +
+          caption.padEnd(itemAndPriceWidth) +
+          " " +
+          figures(row, figureCells.slice(1))
+        ).trimEnd(),
+      ];
+    }
     const continuation = rest.map((line) => itemColumn + line);
     if (!twoLines) {
       return [(lead + first.padEnd(itemWidth) + " " + figures(row)).trimEnd(), ...continuation];

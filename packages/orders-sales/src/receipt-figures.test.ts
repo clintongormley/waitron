@@ -226,6 +226,41 @@ describe("invoiceDiscounts", () => {
   });
   const under = (result: InvoiceDiscounts) => Object.fromEntries(result.under);
   const own = (amount: string): ReceiptAdjustment => ({ ...TEN, amount });
+  const free = (price: string, rate: string, ...adjustments: ReceiptAdjustment[]) =>
+    filed({
+      listGross: price,
+      listUnitPriceGross: price,
+      net: net("0.00", "0.00", rate),
+      adjustments,
+    });
+  const comp = (amount: string): ReceiptAdjustment => ({ kind: "comp", amount });
+
+  it.each([
+    [
+      "two reductions",
+      [free("12.00", "21", { kind: "discount", percentBp: 5000, amount: "6.00" }, comp("6.00"))],
+      [],
+      "9.92",
+    ],
+    [
+      "two full comps",
+      [free("12.00", "21", comp("12.00")), free("2.00", "21", comp("2.00"))],
+      [],
+      "11.57",
+    ],
+    [
+      "two dish reductions and a bill comp",
+      [free("12.00", "21", own("1.20"), own("6.80"))],
+      [comp("4.00")],
+      "6.61",
+    ],
+  ] as const)("keeps a merged row plain for %s", (_name, lines, bill, amount) => {
+    const result = invoiceDiscounts([group(0, 0, ...lines)], bill);
+    expect(under(result)).toEqual({ 0: [{ rate: "21", amount, comp: false, named: null }] });
+    expect(result.atEnd).toEqual(
+      bill.length === 0 ? [] : [{ rate: "21", amount: "3.31", comp: false, named: comp("4.00") }],
+    );
+  });
 
   const rioja = filed({
     gross: "27.00",
@@ -238,6 +273,48 @@ describe("invoiceDiscounts", () => {
     listGross: "2.50",
     listUnitPriceGross: "2.50",
     net: net("2.05", "2.05", "10.00"),
+  });
+
+  it.each([
+    ["a full comp", comp("13.10"), false, true],
+    ["a 100% discount", { kind: "discount", percentBp: 10000, amount: "13.10" }, false, true],
+    ["a bill discount followed by a comp", comp("11.79"), true, false],
+  ] as const)("labels both rates after %s", (_name, adjustment, includeFamilyInBill, full) => {
+    const result = invoiceDiscounts(
+      [group(0, 0, free("12.00", "21", adjustment), free("1.10", "10")), group(1, 1, bread)],
+      [own(includeFamilyInBill ? "1.56" : "0.25")],
+    );
+    expect(under(result)).toEqual({
+      0: [
+        { rate: "21", amount: "9.92", comp: full, named: null },
+        { rate: "10", amount: "1.00", comp: full, named: null },
+      ],
+    });
+  });
+
+  it("keeps 100% on each rate when a separate comp took its whole amount", () => {
+    const extra = { ...free("3.00", "10", comp("3.00")), parentLineNo: 1 };
+    const result = invoiceDiscounts([group(0, 0, free("9.00", "21", comp("9.00")), extra)], []);
+    expect(under(result)).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: true, named: null },
+        { rate: "10", amount: "2.73", comp: true, named: null },
+      ],
+    });
+  });
+
+  it("keeps both rates plain when the bill and a comp share the loss at each rate", () => {
+    const extra = { ...free("3.00", "10"), parentLineNo: 1 };
+    const result = invoiceDiscounts(
+      [group(0, 0, free("9.00", "21", comp("9.00")), extra)],
+      [{ kind: "discount", percentBp: 2500, amount: "3.00" }],
+    );
+    expect(under(result)).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: false, named: null },
+        { rate: "10", amount: "2.73", comp: false, named: null },
+      ],
+    });
   });
 
   // S5: a whole-bill 10% and nothing of a dish's own.

@@ -175,6 +175,21 @@ describe("receiptFigures", () => {
     ]);
   });
 
+  it("prints one plain discount caption for two steps that take a dish to zero", () => {
+    const input = ownPartCompUnderBillComp();
+    input.invoiceLocale = "es-ES";
+    delete input.result.billAdjustments;
+    input.result.lines[0]!.adjustments = [
+      { kind: "discount", percentBp: 5000, amount: "5.00" },
+      { kind: "comp", amount: "5.00" },
+    ];
+    const [section] = receiptFigures(input).sections;
+    expect(
+      section?.kind === "filed" &&
+        section.rows.filter((row) => row.kind === "discount").map((row) => row.item),
+    ).toEqual(["Descuento"]);
+  });
+
   it("caps a dish's own row at what the dish lost when its adjustment says more", () => {
     expect(charged(receiptFigures(ownAdjustmentAboveWhatTheDishLost()))).toEqual([
       "10.00",

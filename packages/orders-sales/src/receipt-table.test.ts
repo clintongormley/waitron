@@ -139,6 +139,59 @@ describe("tableLines", () => {
     ).toEqual(["      Descuento          -1,36", "      por", "      cliente", "      habitual"]);
   });
 
+  const reduction = {
+    units: "",
+    item: "Regular customer applies",
+    itemIndent: 2,
+    price: "",
+    amount: "-1,36",
+    rate: "10%",
+  };
+  const reductionLines = (row: ReceiptTableRow, columns = 42, withRate = true) =>
+    tableLines({ header: HEADER, withRate, rows: [row] }, columns)
+      .filter((line) => !line.header)
+      .map(({ text }) => text);
+
+  it.each([
+    ["Regular customer applies", "      Regular customer applies   -1,36 10%"],
+    ["Regular customer offer", "      Regular customer offer     -1,36 10%"],
+  ])("keeps the amount and rate aligned beside %s", (item, expected) => {
+    expect(reductionLines({ ...reduction, item })).toEqual([expected]);
+  });
+
+  it.each([
+    [
+      "one character too long",
+      { item: "Regular customer applies!" },
+      42,
+      true,
+      ["Regular customer -1,36 10%", "applies!"],
+    ],
+    ["priced", { price: "1,36" }, 42, true, ["Regular customer 1,36 -1,36 10%", "applies"]],
+    ["without an amount", { amount: "", rate: "" }, 42, true, ["Regular customer", "applies"]],
+    [
+      "without an indent",
+      { item: "Regular customer applies!", itemIndent: 0 },
+      42,
+      true,
+      ["Regular customer -1,36 10%", "applies!"],
+    ],
+    ["without a rate column", {}, 42, false, ["Regular customer -1,36", "applies"]],
+    [
+      "on two lines",
+      { item: "Regular customer applies!" },
+      30,
+      true,
+      ["Regular customer", "applies!", "-1,36 10%"],
+    ],
+  ] as const)("keeps the normal layout when %s", (_label, changes, columns, withRate, expected) => {
+    expect(
+      reductionLines({ ...reduction, ...changes }, columns, withRate).map((line) =>
+        line.trim().replace(/ +/g, " "),
+      ),
+    ).toEqual(expected);
+  });
+
   it("falls back to two lines a row when the item column would be under 10 on 58 mm", () => {
     const lines = tableLines(table(true), 30).map((l) => l.text);
     expect(lines).toContain("  1 Bloody Mary");

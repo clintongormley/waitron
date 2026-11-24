@@ -275,7 +275,7 @@ it.each(
       ],
       billAdjustments: [{ kind: "discount" as const, amount: "0.50" }],
     };
-    const render = (invoiceType: "F1" | "F2") =>
+    const renderLines = (invoiceType: "F1" | "F2") =>
       drawn(
         formatReceipt({
           result: { ...invoice, invoiceType },
@@ -284,10 +284,9 @@ it.each(
           invoiceLocale: locale,
           printer,
         }),
-      )
-        .join(" ")
-        .replace(/\s+/g, " ");
-    const full = render("F1");
+      ).map((line) => line.trim().replace(/\s+/g, " "));
+    const fullLines = renderLines("F1");
+    const full = fullLines.join(" ");
     // Before VAT: the dish's list price 12,00 at 21% is 9,92; its own 10% and the
     // bill's 0,50 come to one row down to the filed base 8,51; the comped extra's 1,10 at 10% is
     // 1,00, taken off in full.
@@ -296,16 +295,11 @@ it.each(
     expect(full).toContain(`1 Plato ${figure("9.92")} ${figure("9.92")} 21%`);
     expect(full).toContain(`1 Extra ${figure("1.00")} ${figure("1.00")} 10%`);
     expect(full).toContain(`${discount} -${figure("1.41")} 21%`);
-    // At 80 mm in Basque the VAT-rate column leaves the item column 14 wide, and the 2-character
-    // indent leaves no room for «Deskontua 100%», so the table wraps «100%» under the figures, as
-    // it does for any 100% percentage there.
-    expect(full).toContain(
-      locale === "eu-ES" && printer.paperWidth === "80mm"
-        ? "Deskontua -1,00 10% 100%"
-        : `${discount} 100% -${figure("1.00")} 10%`,
-    );
+    const comp = `${discount} 100% -${figure("1.00")} 10%`;
+    if (locale === "eu-ES" && printer.paperWidth === "80mm") expect(fullLines).toContain(comp);
+    else expect(full).toContain(comp);
     expect(full).toMatch(/10[,.]?0?%/);
-    expect(render("F2")).not.toContain(`(${included})`);
+    expect(renderLines("F2").join(" ")).not.toContain(`(${included})`);
   },
 );
 
