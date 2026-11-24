@@ -1,8 +1,8 @@
 import type { SupportedLocale } from "@waitron/shared";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 /** The words of the page a restore's start shows while it waits to confirm its time. The key
- * field's label and refusal are the restore page's (`apps/setup` `restore.allocation_node_key`,
- * `restore.allocation_key_missing`); the clock step's are the done screen's. */
+ * field's are every master-key field's; the clock step's are the done screen's. */
 export const START_CLOCK_WAITING_WORDS: Readonly<
   Record<
     SupportedLocale,
@@ -25,8 +25,8 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
 > = {
   "en-GB": {
     title: "The box is restoring your backup and is waiting to confirm its time.",
-    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
-    keyLabel: "Selected backup’s box key",
+    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
+    keyLabel: MASTER_KEY_FIELD_WORDS.en.label,
     keyRefused: "Enter the selected backup’s master key.",
     keyContinue: "Continue",
     waitingForClock:
@@ -43,8 +43,8 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   },
   "es-ES": {
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
-    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, introduce abajo la clave maestra de la copia para confirmar la hora desde este dispositivo.",
-    keyLabel: "Clave del servidor de la copia elegida",
+    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
+    keyLabel: MASTER_KEY_FIELD_WORDS.es.label,
     keyRefused: "Introduce la clave maestra de la copia elegida.",
     keyContinue: "Continuar",
     waitingForClock:

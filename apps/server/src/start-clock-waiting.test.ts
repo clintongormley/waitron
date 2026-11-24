@@ -6,11 +6,14 @@ import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/modul
 import { authorityKey } from "@waitron/credentials";
 import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { escapeHtml } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import type { SetupClockPerson } from "./setup-clock-set.js";
 import { createStartClockWaiting, type StartClockWaitingOptions } from "./start-clock-waiting.js";
+import { recoveryPackPdf as packPdf } from "./testing/recovery-pack-pdf.js";
 
 const BOX_MS = Date.parse("2026-11-13T10:00:00.000Z");
 const KEY = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => i * 13 + 5));
@@ -102,10 +105,10 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
         ),
       );
-      expect(body).toContain(escapeHtml("Selected backup’s box key"));
+      expect(body).toContain(escapeHtml("Master key"));
       expect(body).toMatch(/<input [^>]*type="password"[^>]*name="node-recovery-key"/);
     },
   );
@@ -315,6 +318,95 @@ describe("the restore's waiting app: the master key as printed on the recovery p
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(refused);
     }
+  });
+});
+
+describe("the restore's waiting app: the recovery pack PDF", () => {
+  const sendPack = (
+    w: Awaited<ReturnType<typeof waiting>>,
+    bytes: Uint8Array,
+    headers: Record<string, string> = {},
+  ) =>
+    w.app.request("/restore-clock/pack", {
+      method: "POST",
+      headers: { "content-type": "application/pdf", ...headers },
+      body: new Uint8Array(bytes),
+    });
+
+  it("the restore clock page takes the master key and the pack PDF", async () => {
+    const w = await waiting();
+    const res = await sendPack(w, await packPdf(KEY));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ key: KEY });
+    // The key it answers opens the clock routes, as a typed one does.
+    expect((await w.post("challenge", { key: KEY })).status).toBe(200);
+  });
+
+  it("refuses another key's pack as a wrong key", async () => {
+    const log = vi.fn();
+    const w = await waiting({ log });
+    const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+    const res = await sendPack(w, await packPdf(other));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual(refused);
+    expect(log).toHaveBeenLastCalledWith(
+      "warn",
+      "http.request",
+      expect.objectContaining({ errorCode: "promotion.break_glass_invalid" }),
+    );
+  });
+
+  it("says a PDF that is not a pack, or a file that is not a PDF, is not a pack", async () => {
+    const w = await waiting();
+    const plain = await PDFDocument.create();
+    plain.addPage();
+    for (const bytes of [await plain.save(), new TextEncoder().encode(KEY), new Uint8Array()]) {
+      const res = await sendPack(w, bytes);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: "not_a_pack" });
+    }
+  });
+
+  it("says a pack whose digest is broken is damaged", async () => {
+    const w = await waiting();
+    const pdf = await PDFDocument.load(await packPdf(KEY));
+    const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
+    info.set(PDFName.of("WaitronRecoveryDigest"), PDFString.of(`sha256-v1:${"0".repeat(64)}`));
+    const res = await sendPack(w, await pdf.save());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ result: "damaged" });
+  });
+
+  it("says a pack without the master key holds it elsewhere, naming the pack that holds it", async () => {
+    const w = await waiting();
+    for (const heldBy of [1, null]) {
+      const res = await sendPack(w, await packPdf(null, heldBy));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ result: "elsewhere", heldBy });
+    }
+  });
+
+  it("refuses the right pack from another site's page", async () => {
+    const w = await waiting();
+    const res = await sendPack(w, await packPdf(KEY), { origin: "https://elsewhere.example" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: { code: "restore.clock_origin_refused", params: {} },
+    });
+  });
+
+  it("refuses a body over 8 MiB", async () => {
+    const w = await waiting();
+    const res = await sendPack(w, new Uint8Array(MAX_PACK_PDF + 1));
+    expect(res.status).toBe(413);
+  });
+
+  it("refuses the right pack when no key is staged", async () => {
+    const w = await waiting({ staged: null });
+    const res = await sendPack(w, await packPdf(KEY));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual(refused);
   });
 });
 

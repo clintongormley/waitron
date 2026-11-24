@@ -8,6 +8,8 @@ import {
   type KeptClockConfirmation,
 } from "@waitron/module";
 import { bootReader, type BootReading } from "./boot-reader.js";
+import { RecoveryPackFileError } from "@waitron/recovery-pack/src/pack-file.js";
+import { MAX_PACK_PDF, readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import "./errors.js";
 import { pageReturnPath } from "./waiting-page.js";
@@ -73,6 +75,14 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
     });
   };
 
+  const refuse = (
+    c: Context,
+    code: "restore.clock_origin_refused" | "promotion.break_glass_invalid",
+  ) => {
+    const err = new AppError(code, {});
+    c.set("refusalCode", err.code);
+    return c.json({ error: { code: err.code, params: err.params } }, 403);
+  };
   /** Each clock route: refused from another site's page or without the key, otherwise `answer`
    * with the body and its time. */
   const keyed = (
@@ -85,18 +95,37 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       const sent =
         typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
       c.header("Cache-Control", "no-store");
-      if (!sentFromThisOrigin(c)) {
-        const err = new AppError("restore.clock_origin_refused", {});
-        c.set("refusalCode", err.code);
-        return c.json({ error: { code: err.code, params: err.params } }, 403);
-      }
-      if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) {
-        const err = new AppError("promotion.break_glass_invalid", {});
-        c.set("refusalCode", err.code);
-        return c.json({ error: { code: err.code, params: err.params } }, 403);
-      }
+      if (!sentFromThisOrigin(c)) return refuse(c, "restore.clock_origin_refused");
+      if (!(await matchesStagedNodeKey(options.stateDir, sent.key)))
+        return refuse(c, "promotion.break_glass_invalid");
       return answer(c, sent, received);
     });
+
+  /** The recovery pack PDF the page's person chose: its master key when it is the staged one, so
+   * the page fills the field with it, or what is wrong with the file. One PDF is read at a time. */
+  let packTurn: Promise<unknown> = Promise.resolve();
+  app.post("/restore-clock/pack", bodyLimit({ maxSize: MAX_PACK_PDF }), async (c) => {
+    c.header("Cache-Control", "no-store");
+    if (!sentFromThisOrigin(c)) return refuse(c, "restore.clock_origin_refused");
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const read = packTurn.then(() => readRecoveryPackPdf(bytes));
+    packTurn = read.catch(() => {});
+    let masterKey: string | null;
+    let heldBy: number | null;
+    try {
+      ({ masterKey, masterKeyHeldBy: heldBy } = await read);
+    } catch (error) {
+      const notAPack =
+        error instanceof RecoveryPackFileError &&
+        (error.reason === "not_a_pack" || error.reason === "size");
+      return c.json({ result: notAPack ? "not_a_pack" : "damaged" });
+    }
+    if (masterKey === null) return c.json({ result: "elsewhere", heldBy });
+    if (!(await matchesStagedNodeKey(options.stateDir, masterKey)))
+      return refuse(c, "promotion.break_glass_invalid");
+    return c.json({ key: masterKey });
+  });
+
   /** This device's time against the challenge it names, which answers once. */
   const measure = (c: Context, sent: Record<string, unknown>, received: ClockMoment) => {
     const id = typeof sent.challengeId === "string" ? sent.challengeId : undefined;

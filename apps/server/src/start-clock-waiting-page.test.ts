@@ -162,6 +162,29 @@ async function withPage(locale: string, run: (page: Page) => Promise<void>) {
   }
 }
 
+it.each([
+  [
+    "en-GB",
+    "Master key",
+    "If that page is closed, type the master key below to confirm the time from this device.",
+  ],
+  [
+    "es-ES",
+    "Clave maestra",
+    "Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
+  ],
+])(
+  "the page labels the field Master key with no hint and says 'type the master key below' (%s)",
+  (locale, label, sentence) =>
+    withPage(locale, async (page) => {
+      await open(page, 0);
+      const field = page.getByLabel(label);
+      expect(await field.getAttribute("type")).toBe("password");
+      expect(await field.getAttribute("placeholder")).toBeNull();
+      expect(await page.locator("p", { hasText: sentence }).count()).toBe(1);
+    }),
+);
+
 it("shows nothing of the clock until the key is entered, and refuses a wrong key beside its field", () =>
   withPage("en-GB", async (page) => {
     await open(page, 0);
