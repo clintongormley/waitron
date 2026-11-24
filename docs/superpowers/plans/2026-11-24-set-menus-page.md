@@ -72,5 +72,7 @@ Run the guide links and content checks. Give the watcher screenshots of both pag
 desktop and phone widths in both themes and languages before landing. Finish the branch with its
 normal reviews and CI, then tell Lane D when it lands.
 
-Estimate 480 production lines added and 245 removed, and 365 test lines added and 80 removed.
-The watcher cleared the expected scope up to about 1,250 changed lines.
+The watcher accepted about 1,650 changed lines of code and tests on 24 November. Expect about
+755 production lines added and 320 removed, and about 425 test lines added and 135 removed.
+The layout extraction moves 86 lines out of Menus. The separate list and its editor wrapper,
+the list and translation response fields, and checks for both pages account for the rest.
