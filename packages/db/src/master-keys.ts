@@ -1,4 +1,5 @@
 import { desc, max } from "drizzle-orm";
+import type { BackupQuery } from "@waitron/store";
 import type { Database, Transaction } from "./client.js";
 import { masterKeys } from "./schema/master-keys.js";
 
@@ -28,4 +29,11 @@ export async function readCurrentMasterKey(
 ): Promise<MasterKeyRecord | null> {
   const [row] = await db.select().from(masterKeys).orderBy(desc(masterKeys.number)).limit(1);
   return row ?? null;
+}
+
+/** {@link readCurrentMasterKey}'s name, read from a backup copy. */
+export async function readCurrentMasterKeyName(query: BackupQuery): Promise<string | null> {
+  for await (const row of query.rows("select name from master_keys order by number desc limit 1"))
+    return String(row.name);
+  return null;
 }

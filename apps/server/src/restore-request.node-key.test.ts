@@ -15,7 +15,6 @@ import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/sha
 import { masterKeyAuthorising } from "./operation-authentication.js";
 import * as operations from "./recovery-module-operation.js";
 import {
-  readBackupMasterKeyName,
   readStagedMasterKeyName,
   stageRestoreRequest,
   runStagedRestore,
@@ -436,18 +435,6 @@ it("refuses a start whose staged key name is not a name, or is staged without th
     await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toThrow();
     expect(restore).not.toHaveBeenCalled();
   }
-});
-
-it("reads the copy's current master key name, or none before its first", async () => {
-  const dir = await fresh();
-  const empty = join(dir, "no-key.db");
-  await suite.db.archiveTo(empty);
-  expect(await readBackupMasterKeyName(empty)).toBeNull();
-  await mintMasterKey(suite.db, { madeAt: new Date("2026-11-01T10:00:00Z") });
-  const current = await mintMasterKey(suite.db, { madeAt: new Date("2026-11-20T10:00:00Z") });
-  const keyed = join(dir, "keyed.db");
-  await suite.db.archiveTo(keyed);
-  expect(await readBackupMasterKeyName(keyed)).toBe(current.name);
 });
 
 it("restaging without a node credential removes the old credential", async () => {

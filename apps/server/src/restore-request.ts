@@ -1,9 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createArchiveKeySlot, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { errnoOf } from "./errno.js";
+import { readCurrentMasterKeyName } from "@waitron/db";
 import { listAdminHolders } from "@waitron/identity";
 import {
   openBackupQuery,
+  type BackupQuery,
   SCRATCH_DIR,
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
@@ -711,26 +713,16 @@ async function runHeld(
   return true;
 }
 
-/** The copy's current master key's name, as `readCurrentMasterKey` picks it (the highest-numbered
- * row), or null before its first. */
-export async function readBackupMasterKeyName(databasePath: string): Promise<string | null> {
+async function readStagingChecks(databasePath: string): Promise<StagingChecks> {
   const opened = await openBackupQuery(databasePath);
   try {
-    for await (const row of opened.query.rows(
-      "select name from master_keys order by number desc limit 1",
-    ))
-      return typeof row.name === "string" ? row.name : null;
-    return null;
+    return {
+      adminVerifiers: await adminVerifiersIn(opened.query),
+      masterKeyName: await readCurrentMasterKeyName(opened.query),
+    };
   } finally {
     await opened.close();
   }
-}
-
-async function readStagingChecks(databasePath: string): Promise<StagingChecks> {
-  return {
-    adminVerifiers: await readRestoreAdminVerifiers(databasePath),
-    masterKeyName: await readBackupMasterKeyName(databasePath),
-  };
 }
 
 /** The name staged beside the master key's authority key, if any; an unreadable record names none. */
@@ -746,17 +738,21 @@ export async function readStagedMasterKeyName(stateDir: string): Promise<string 
 export async function readRestoreAdminVerifiers(databasePath: string): Promise<readonly string[]> {
   const opened = await openBackupQuery(databasePath);
   try {
-    const hashes: string[] = [];
-    for (const person of await listAdminHolders(opened.query, { status: "active" })) {
-      if (person.passwordHash !== null && person.passwordHash !== "")
-        hashes.push(person.passwordHash);
-    }
-    // An unfinished flow without a password cannot offer authenticated discard.
-    if (hashes.length === 0) throw new AppError("restore.administrator_password_missing", {});
-    return hashes;
+    return await adminVerifiersIn(opened.query);
   } finally {
     await opened.close();
   }
+}
+
+async function adminVerifiersIn(query: BackupQuery): Promise<readonly string[]> {
+  const hashes: string[] = [];
+  for (const person of await listAdminHolders(query, { status: "active" })) {
+    if (person.passwordHash !== null && person.passwordHash !== "")
+      hashes.push(person.passwordHash);
+  }
+  // An unfinished flow without a password cannot offer authenticated discard.
+  if (hashes.length === 0) throw new AppError("restore.administrator_password_missing", {});
+  return hashes;
 }
 
 /** The setup page's checks on an archive before staging it; answers what staging keeps of it. */
