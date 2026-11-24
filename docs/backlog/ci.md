@@ -269,8 +269,9 @@ before retrying and reproduce the pending operation before assigning a cause.
 
 [Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
 has no retained assertion trace. The PDF case passed five focused local runs unchanged.
-`recovery-hour.browser.test.ts` was assigned only 14.224 s before the 420 s shard deadline.
-Whether that file hung remains unknown.
+After the long history-file run, `recovery-hour.browser.test.ts` was assigned only 14.224 s
+before the 420 s shard deadline. Whether that file hung remains unknown.
+[History-file timing](#fiscal-backup-history-fixture-edits-use-one-transaction-per-copy).
 Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
 before retrying; locate the pending operation before changing test or product behaviour.
 Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
@@ -279,7 +280,7 @@ Vitest's final assertion trace. The complete failed log and process report are r
 `receipts/a1308-5h/ci-rebased-fiscal.log`. Recovery-reader began 20.8 s before the deadline.
 The unchanged first-hour file passed all 142 cases locally. The key-only PDF case also passed in
 the [24 November job](https://github.com/clintongormley/waitron/actions/runs/45330023321/job/138229178179).
-Its 14 November failure still needs an assertion trace.
+Both 14 November PDF failures still need an assertion trace.
 
 ## Bundle: Qualify CI's server routing and action setup
 
