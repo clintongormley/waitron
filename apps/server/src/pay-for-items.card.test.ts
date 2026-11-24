@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
 import {
   deviceProfiles,
   devices,
@@ -13,7 +14,7 @@ import {
 import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { payments } from "@waitron/payments";
+import { SimulatorPaymentProvider, payments } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -35,6 +36,7 @@ import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { mountTillApi } from "./till-api.js";
 import "./errors.js";
 
 // Pay for items on the card reader (A1515 D2): the items move to a bill of their own before the
@@ -667,5 +669,108 @@ describe("A1515 pay for items on the card reader", () => {
       state: "pending",
     });
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
+  });
+
+  it("charges the reader the request names when it names one", async () => {
+    const sourceId = await coffeeAndTarta();
+    const [other] = venue.db.all<{ id: string }>(
+      sql`select id from card_readers where provider_ref = 'reader-2'`,
+    );
+    // The paying till holds the reader it names; the second till gets it back afterwards.
+    const holdOther = (deviceId: string) =>
+      venue.db.run(
+        sql`update card_readers set held_by_device_id = ${deviceId} where id = ${other!.id}`,
+      );
+    holdOther(venue.deviceId);
+    try {
+      const paid = await sendItemsPayment(sourceId, {
+        ...(await tartaByReaderBody(sourceId)),
+        readerId: other!.id,
+      });
+
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      expect(venue.card.collectCalls.at(-1)).toMatchObject({ readerRef: "reader-2" });
+    } finally {
+      holdOther(venue.device2Id);
+    }
+  });
+
+  it.each([
+    ["captured", "received", ["3.00"]],
+    ["declined", "declined", ["3.00", "18.00"]],
+  ] as const)(
+    "answers a practice %s card as the simulator was told",
+    async (simulationOutcome, outcome, left) => {
+      const sourceId = await coffeeAndTarta();
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: "es-ES",
+          cardProvider: new SimulatorPaymentProvider(venue.db),
+        },
+        () => {},
+      );
+
+      const paid = await sendItemsPayment(
+        sourceId,
+        { ...(await tartaByReaderBody(sourceId)), simulationOutcome },
+        app,
+      );
+
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      expect(paid.json.payment).toMatchObject({ outcome });
+      expect(await lineTotals(sourceId)).toEqual(left);
+    },
+  );
+
+  it("refuses a practice outcome outside practice mode", async () => {
+    const sourceId = await coffeeAndTarta();
+    const calls = venue.card.collectCalls.length;
+
+    const paid = await sendItemsPayment(sourceId, {
+      ...(await tartaByReaderBody(sourceId)),
+      simulationOutcome: "captured",
+    });
+
+    expect(paid.status).toBe(400);
+    expect(paid.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "simulationOutcome" },
+    });
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "18.00"]);
+  });
+
+  it.each([
+    [
+      "a reader named on a hand-keyed card",
+      { entry: undefined, readerId: randomUUID() },
+      "readerId",
+    ],
+    [
+      "a practice outcome on a hand-keyed card",
+      { entry: undefined, simulationOutcome: "captured" },
+      "simulationOutcome",
+    ],
+    ["a reader id that is not an id", { readerId: "nope" }, "readerId"],
+    ["an unknown practice outcome", { simulationOutcome: "maybe" }, "simulationOutcome"],
+  ] as const)("refuses %s, naming the field", async (_name, change, field) => {
+    const sourceId = await coffeeAndTarta();
+
+    const paid = await sendItemsPayment(sourceId, {
+      ...(await tartaByReaderBody(sourceId)),
+      ...change,
+    });
+
+    expect(paid.status).toBe(400);
+    expect(paid.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "18.00"]);
   });
 });

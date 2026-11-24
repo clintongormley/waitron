@@ -275,6 +275,8 @@ export interface PayForItemsRequest {
   tendered?: string;
   addedTip?: string;
   entry?: "reader";
+  /** A reader card only, passed to the provider's `collect`. */
+  simulationOutcome?: "captured" | "declined" | "attempting";
 }
 
 /** The request as its retry fingerprint reads it: amounts at the money scale, an absent added tip
@@ -346,6 +348,7 @@ export async function payForItems(
       ? { tendered: req.tendered! }
       : { entry: req.entry === "reader" ? ("reader" as const) : ("manual" as const) }),
     ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
+    ...(req.simulationOutcome === undefined ? {} : { simulationOutcome: req.simulationOutcome }),
   });
   /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {

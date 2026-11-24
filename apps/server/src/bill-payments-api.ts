@@ -235,6 +235,19 @@ function parseItemsPayment(body: Record<string, unknown>): PayForItemsRequest {
     if (request.method !== "card") throw invalid("entry");
     request.entry = oneOf(body.entry, ["reader"] as const, "entry");
   }
+  if (request.entry === "reader") {
+    if (body.simulationOutcome !== undefined)
+      request.simulationOutcome = oneOf(
+        body.simulationOutcome,
+        ["captured", "declined", "attempting"] as const,
+        "simulationOutcome",
+      );
+  } else {
+    const stray = (["readerId", "simulationOutcome"] as const).find(
+      (field) => body[field] !== undefined,
+    );
+    if (stray !== undefined) throw invalid(stray);
+  }
   return request;
 }
 
@@ -485,7 +498,8 @@ export function mountBillPaymentsApi(
       const { personId, sessionId } = session;
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
-      const request = parseItemsPayment(asObject(await readRawJsonBody<unknown>(c)));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const request = parseItemsPayment(body);
       assertTakesTender(
         session.device,
         request.method === "cash"
@@ -500,11 +514,14 @@ export function mountBillPaymentsApi(
         return c.json(
           await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, operator),
         );
+      if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
+        throw invalid("simulationOutcome");
+      }
       const reading = await readerDeps(
         session,
         saleCfg,
         `${id}/${request.submissionId}`,
-        undefined,
+        parseReaderId(body),
       );
       const paid = await payForItems(reading.deps, saleCfg, id, request, operator).finally(
         reading.done,
