@@ -8,7 +8,11 @@ import type { VenueAction } from "../src/venue-plan.js";
 
 // Existing-sale fixtures retain their recorded identities and series; setup-contract cases use
 // applyAllocatedTestVenue instead, with an independently signed initial allocation.
-export function applyHistoricalTestVenue(actions: readonly VenueAction[], deps: VenueApplyDeps) {
+export function applyHistoricalTestVenue(
+  actions: readonly VenueAction[],
+  deps: VenueApplyDeps,
+  installationIdentity?: string,
+) {
   return applyVenue(actions, {
     ...deps,
     modules: deps.modules.map((module) =>
@@ -26,6 +30,7 @@ export function applyHistoricalTestVenue(actions: readonly VenueAction[], deps: 
                     nodeId: node.nodeId,
                     nif: taxpayer.taxId,
                     idSistemaInformatico: "W1",
+                    numeroInstalacion: installationIdentity,
                   });
                   return `SIF ${sif.id} (installation ${sif.numeroInstalacion})`;
                 },
