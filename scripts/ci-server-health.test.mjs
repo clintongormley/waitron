@@ -757,7 +757,7 @@ describe("server health recovery", () => {
       { method: "POST", body: { ref: "main", inputs: { server_probe: true } } },
     ]);
   });
-  it("uses GitHub for a new run while an old server queue is stuck", async () => {
+  it("uses GitHub for a new run without first-batch families while an old queue is stuck", async () => {
     const f = fixture();
     expect(await health.serverRoute(f.options)).toMatchObject({ route: "hosted" });
   });

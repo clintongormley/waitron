@@ -269,10 +269,14 @@ guards and lint first, followed by ascending server shards, the stream job, and 
 families in their listed order. Other legs use GitHub. The existing repository, head and hosted-mode
 checks still apply. A failed planner leaves lint and root guards on GitHub.
 
-The first batch uses the capacity snapshot and the server-health inventory. A stuck queue or an
-unreadable required server input sends that batch to GitHub. The planner skips the separate GitHub
-queue count on the first attempt. Dependent merges and the mutation aggregate use GitHub, since
-the planner's available slots describe the initial batch.
+The first batch uses the capacity snapshot and the server-health inventory. With a readable
+inventory and a capacity snapshot less than five minutes old and dated no later than now, a stuck
+queue leaves the remaining slots available after the published waiting jobs are counted. The
+planner reports the stall. If a required server input is unreadable, or a stall coincides with an
+outdated snapshot, the batch uses GitHub. The planner skips the separate GitHub queue count on
+the first attempt. Dependent merges and the mutation aggregate use GitHub, since the planner's
+available slots describe the initial batch. A PR's `changes` planner still uses GitHub when its
+run-creation snapshot shows any server jobs waiting.
 
 A rerun that runs the planner again keeps the whole-route decision. Idle positive server capacity
 wins without a hosted count. Otherwise CI reads this repository's queued and running workflows,
@@ -314,7 +318,10 @@ page may change its count; a changing count within the second read still refuses
 `Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
 (watcher, 2026-11-15 15:10). The run records below include natural acceptance of this queued-list exception.
 Different short rows still select hosted. Outside the discovery exceptions below, other
-lists discard earlier rows and retain strict count completeness. Duplicate/excess rows
+lists discard earlier rows and retain strict count completeness. In routing, if a job list still
+changes its count during the reread, the planner logs both counts, waits 10 seconds and reads
+that list again from page 1. It uses that extra read once across the entire route decision and requires a complete,
+consistent result. Duplicate/excess rows
 take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
@@ -335,11 +342,12 @@ window; planner discovery may end short, while its cancellation reads require co
 `started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
 If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
-minutes, this run uses GitHub and records the reason in its summary. An unverifiable
+minutes, the summary records the stall. GitHub takes the batch unless it is the first-attempt split
+and the planner can use the remaining slots as described above. An unverifiable
 server-health inventory makes routing continue checking the other readable runs, then choose GitHub
 (owner, 2026-11-10, A1470). The watcher's 2026-11-15 15:55 clarification treats the
 queued CI-workflow list's two agreeing row sets as readable; both reads could miss the
-same run. Other routing lists stay strict. Degraded reads can leave the server idle. The summary
+same run. Degraded reads can leave the server idle. The summary
 names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
 When the retry record and previous attempt can be read, an unassigned server job cancelled

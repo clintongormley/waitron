@@ -13,9 +13,10 @@ async function inventory(
   key,
   limit,
   pageSize = 100,
-  reread = true,
+  read = 1,
   staleCount,
   plannerShortfall,
+  retryJobCountDrift,
 ) {
   const entries = [];
   let total;
@@ -32,7 +33,7 @@ async function inventory(
               .join(",")
           : "invalid";
       return new InventoryUnavailable(
-        `${message}; path=${requestPath}; page=${page}; read=${reread ? 1 : 2}; ` +
+        `${message}; path=${requestPath}; page=${page}; read=${read}; ` +
           `starting_total=${total ?? "none"}; ` +
           `reply_total=${Number.isSafeInteger(answer.total_count) ? answer.total_count : "invalid"}; ` +
           `rows=${entries.length}; ids=${ids(entries)}; page_ids=${ids(answer[key])}`,
@@ -52,35 +53,44 @@ async function inventory(
       new Set(entries.map((entry) => entry.id)).size === entries.length,
       new InventoryUnavailable("Duplicate server inventory"),
     );
-    if (answer.total_count !== total && reread)
-      return inventory(
-        request,
-        path,
-        key,
-        limit,
-        pageSize,
-        false,
-        !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
-        plannerShortfall,
-      );
-    if (answer.total_count !== total) throw unavailable("Incomplete server inventory");
-    if (entries.length >= Math.min(total, limit ?? total))
-      return entries.slice(0, limit ?? entries.length);
-    if (!answer[key].length) {
-      if (plannerShortfall && !reread) {
-        plannerShortfall(unavailable("discovery count shortfall").message);
-        return entries;
-      }
-      if (reread)
+    if (answer.total_count !== total) {
+      if (read === 1)
         return inventory(
           request,
           path,
           key,
           limit,
           pageSize,
-          false,
+          2,
+          !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
+          plannerShortfall,
+          retryJobCountDrift,
+        );
+      if (read === 2 && retryJobCountDrift) {
+        const message = `CI job count changed on reread; path=${requestPath}; starting_total=${total}; reply_total=${answer.total_count}`;
+        if (await retryJobCountDrift(message))
+          return inventory(request, path, key, limit, pageSize, 3);
+      }
+      throw unavailable("Incomplete server inventory");
+    }
+    if (entries.length >= Math.min(total, limit ?? total))
+      return entries.slice(0, limit ?? entries.length);
+    if (!answer[key].length) {
+      if (plannerShortfall && read === 2) {
+        plannerShortfall(unavailable("discovery count shortfall").message);
+        return entries;
+      }
+      if (read === 1)
+        return inventory(
+          request,
+          path,
+          key,
+          limit,
+          pageSize,
+          2,
           staleCount && { ...staleCount, entries, total },
           plannerShortfall,
+          retryJobCountDrift,
         );
       const byId = (a, b) => a.id - b.id;
       if (
@@ -118,6 +128,10 @@ async function runJobs(options, run, attempt = run.run_attempt) {
     "jobs",
     undefined,
     30,
+    1,
+    undefined,
+    undefined,
+    options.retryJobCountDrift,
   );
   assert.ok(
     jobs.every(
@@ -173,7 +187,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
           "workflow_runs",
           undefined,
           100,
-          true,
+          1,
           status === "queued" ? staleQueuedCount : undefined,
           options.plannersOnly || status === "queued" ? plannerShortfall : undefined,
         ),
@@ -285,8 +299,16 @@ function validCapacity(capacity) {
 export async function serverRoute(options) {
   // The run-created cutoff also omits queued retries of older runs.
   const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
+  let retriedJobCountDrift = false;
   const recent = {
     ...options,
+    retryJobCountDrift: async (message) => {
+      if (retriedJobCountDrift) return false;
+      retriedJobCountDrift = true;
+      options.report?.(message);
+      await (options.wait ?? delay)(10_000);
+      return true;
+    },
     request: (path, requestOptions) =>
       options.request(
         path.includes("/runs?status=queued")
@@ -301,7 +323,7 @@ export async function serverRoute(options) {
     const cancelled = await readInventory(async () => {
       const run = await request(`/repos/${repository}/actions/runs/${runId}`);
       assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
-      const jobs = await serverJobs(options, run, attempt - 1);
+      const jobs = await serverJobs(recent, run, attempt - 1);
       return jobs.filter(
         (job) =>
           job.status === "completed" &&
@@ -320,25 +342,41 @@ export async function serverRoute(options) {
   const state = await serverHealth(recent, unavailable, {
     report: (message) => options.report?.(`${message}; created>=${since}`),
   });
-  if (state.stuck.length)
-    return {
-      route: "hosted",
-      reason: `No running or recently progressing server work was observed in readable runs; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.${unavailable.length ? ` Other CI inventory could not be verified: ${unavailable.join("; ")}` : ""}`,
-    };
+  const firstBatch = attempt === 1 && options.families;
+  const stalled = state.stuck.length
+    ? `No running or recently progressing server work was observed in readable runs; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.`
+    : "";
+  if (stalled && (!firstBatch || unavailable.length)) {
+    const unreadable = unavailable.length
+      ? ` Other CI inventory could not be verified: ${unavailable.join("; ")}`
+      : "";
+    return { route: "hosted", reason: stalled + unreadable };
+  }
   if (unavailable.length)
     return {
       route: "hosted",
       blind: true,
       reason: `CI inventory could not be verified; using GitHub: ${unavailable.join("; ")}`,
     };
-  const capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
-  assert.ok(validCapacity(capacity), "Unknown server capacity");
-  const capacitySummary = `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, (options.now ?? Date.now()) - capacity.observedAt)} ms.`;
-  if (attempt === 1 && options.families)
+  const now = options.now ?? Date.now();
+  let capacity;
+  try {
+    capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
+    assert.ok(validCapacity(capacity), "Unknown server capacity");
+    if (stalled) {
+      const age = now - capacity.observedAt;
+      assert.ok(age >= 0 && age < 300_000, "Capacity snapshot is out of date");
+    }
+  } catch (error) {
+    if (stalled) return { route: "hosted", reason: `${stalled} ${error.message}.` };
+    throw error;
+  }
+  const capacitySummary = `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, now - capacity.observedAt)} ms.`;
+  if (firstBatch)
     return {
       route: "hosted",
       freeSlots: Math.max(0, capacity.slots - capacity.serverRunning - capacity.serverWaiting),
-      reason: `${capacitySummary} Dependent jobs use GitHub on the first attempt.`,
+      reason: `${stalled ? stalled + " " : ""}${capacitySummary} Dependent jobs use GitHub on the first attempt.`,
     };
   if (capacity.slots > 0 && capacity.serverRunning === 0 && capacity.serverWaiting === 0)
     return {
@@ -359,7 +397,7 @@ export async function serverRoute(options) {
   let running = 0,
     queued = 0;
   for (const run of runs.values()) {
-    for (const job of await runJobs(options, run)) {
+    for (const job of await runJobs(recent, run)) {
       if (!job.labels.length || job.labels.includes("self-hosted")) continue;
       if (job.status === "in_progress") running++;
       if (["queued", "pending", "waiting", "requested"].includes(job.status)) queued++;
