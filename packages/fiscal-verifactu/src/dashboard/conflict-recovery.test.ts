@@ -289,13 +289,81 @@ it("a key refused twice shows the wrong-key line both times", async () => {
   await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(line));
 });
 
-it("Stop forgets the refused key's name, so the field expects no key", async () => {
+it("after a refusal that named an older key, the current pack's key is taken and sent", async () => {
+  const currentKey = printedKey("rotated-key");
+  const { screen, calls } = await mount(async (body) => {
+    if (body.recoveryKey !== currentKey)
+      throw {
+        code: "promotion.break_glass_invalid",
+        params: { keyName: REFUSED_NAME },
+        status: 401,
+      };
+    return { kind: "status", active: [active], event: { kind: "none" } };
+  });
+  await key(screen, "first-key");
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(REFUSED_NAME));
+  expect(keyField(screen).keyName).toBeUndefined();
+  await choosePack(screen, await packFor(currentKey, "2026-11-24 · AB23"));
+  expect(nativeKey(screen).value).toBe(currentKey);
+  expect(keyInput(screen).shadowRoot!.textContent).not.toContain(REFUSED_NAME);
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(calls).toHaveLength(2));
+  expect(calls[1]!.recoveryKey).toBe(currentKey);
+});
+
+/** A recovery pack PDF holding `masterKey` under `masterKeyName`, as the box prints it. */
+async function packFor(masterKey: string, masterKeyName: string): Promise<Uint8Array<ArrayBuffer>> {
+  const { renderRecoveryPack } = await import("@waitron/recovery-pack");
+  const { default: regularUrl } = await import("../assets/register-noto-sans.ttf?url");
+  const { default: monoUrl } = await import("../assets/register-noto-sans-mono.ttf?url");
+  const madeAt = "2026-11-24T12:00:00.000Z";
+  return renderRecoveryPack({
+    locale: "en",
+    timeZone: "Europe/Madrid",
+    loadFonts: async () => ({
+      regular: new Uint8Array(await (await fetch(regularUrl)).arrayBuffer()),
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
+    pack: { venueName: "Olivo Centro", madeAt, number: 4 },
+    parts: [],
+    file: {
+      kind: "waitron-recovery-pack",
+      version: 2,
+      number: 4,
+      madeAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      serverKey: null,
+      serverKeyName: null,
+      serverKeyHeldBy: null,
+      masterKey,
+      masterKeyName,
+      masterKeyHeldBy: null,
+    },
+  });
+}
+/** Chooses `bytes` through the field's own file input and waits until the field shows the result. */
+async function choosePack(screen: ConflictRecovery, bytes: Uint8Array<ArrayBuffer>) {
+  const field = keyField(screen);
+  const chooser = field.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const files = new DataTransfer();
+  files.items.add(new File([bytes], "current.pdf", { type: "application/pdf" }));
+  chooser.files = files.files;
+  chooser.dispatchEvent(new Event("change", { bubbles: true }));
+  await field.pdfRead;
+  await settled(screen);
+  await keyInput(screen).updateComplete;
+}
+
+it("Stop forgets the refused key's name and its line", async () => {
   const { screen } = await mount(async () => {
     throw { code: "promotion.break_glass_invalid", params: { keyName: REFUSED_NAME }, status: 401 };
   });
   await key(screen, "first-key");
   await click(screen, "inspect");
-  await vi.waitFor(() => expect(keyField(screen).keyName).toBe(REFUSED_NAME));
+  await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(REFUSED_NAME));
   await click(screen, "stop");
   await keyField(screen).updateComplete;
   expect(keyField(screen).keyName).toBeUndefined();

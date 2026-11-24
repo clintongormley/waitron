@@ -449,11 +449,10 @@ export class ConflictRecovery extends LitElement {
                   .copy=${keyWords}
                   .readPack=${readPack}
                   .maxPdfBytes=${MAX_PACK_PDF}
-                  .keyName=${this.refusedKeyName}
                   .wrongKey=${this.keyRefused}
                   .attempted=${this.attempted}
                   .disabled=${this.busy}
-                  .error=${invalid || (this.keyRefused && this.refusedKeyName === undefined) ? this.t("conflict_recovery.key_required") : ""}
+                  .error=${this.keyRefused && this.refusedKeyName !== undefined ? keyWords.wrongKey(this.refusedKeyName) : invalid || this.keyRefused ? this.t("conflict_recovery.key_required") : ""}
                   @wt-master-key-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
                     this.key = event.detail.masterKey ?? "";
                     this.keyRefused = false;
