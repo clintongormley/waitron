@@ -34,8 +34,8 @@ call; the owner's answers are still wanted where the last section says so.
 6. **Bill it the cheap way.** Google's list on 24 November 2026: Address Validation Pro, 5,000 free a
    month then USD 17 per 1,000; Validation Enterprise, 1,000 free then USD 25; Autocomplete, 10,000
    free then USD 2.83. Today's client passes a session token to both calls, which Google's session
-   pages bill as Enterprise. The Cloud lane confirms that on the bill of the trial and drops the token if calling without it
-   bills as Pro. For 100 venues at 30 addresses a month that is about USD 6 instead of about USD 50
+   pages bill as Enterprise. The Cloud lane drops the token; the owner reads Google's report for 16 October (no token then)
+   and the trial's day to confirm it bills as Pro. For 100 venues at 30 addresses a month that is about USD 6 instead of about USD 50
    (assuming four autocomplete calls an address).
 7. **Not built:** a map, an address database, a cache, showing balances in the Cloud account, anything
    outside Spain.
@@ -44,7 +44,7 @@ call; the owner's answers are still wanted where the last section says so.
 
 | Piece | Where | What it delivers |
 | --- | --- | --- |
-| ADDRESS-TRIAL | Cloud, lane J | Real Google on the Amazon test Cloud for the test box, and about 40 real-looking public addresses (restaurants, shops, flats, rural, Canaries, Ceuta, with and without a postcode) tried through the box's signed route. Report: how many fill every field right, what is wrong with the rest, calls and billed type per address. Fix the mapping faults it finds, such as the missing street lines. |
+| ADDRESS-TRIAL | Cloud, lane J | 40 public addresses (restaurants, shops, flats, rural, Canaries, Ceuta, with and without a postcode) through Cloud's own Google client from the owner's Mac, without a session token. Report: how many fill every field right, what is wrong with the rest, calls per address. Fix the mapping faults it finds, such as the missing street lines. No deploy: the signed route answered a real search on 7 November, and ADDRESS-PROOF tries the whole path. The billed type is read from Google's report by the owner. |
 | ADDRESS-SERVICE | Cloud, lane J, after ADDRESS-TRIAL | The route as a normal service: any connected box in good standing, the two caps, a stop switch, Google's key from the same place Cloud keeps its other keys. The trial's one-box list and its counted-abandonment exception go: every call counts, as "Keeping it from being abused" says. Off in production until the owner turns it on. Privacy notice, processor list and subprocessor wording name Google. |
 | ADDRESS-BOX | Waitron, lane E | The box asks Cloud with its own signed connection: one server function, a dashboard route and a till route (each needs the form's own permission). The dashboard's two forms get the supplier. Hidden when the box is not connected or Cloud says unavailable. The dashboard recognises a province by its other official names (A1171's second point). |
 | ADDRESS-TILL | Waitron, lane E, after ADDRESS-BOX | The till's full-invoice window gets the supplier. |
