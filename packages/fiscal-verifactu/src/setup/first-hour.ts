@@ -79,7 +79,7 @@ export const firstHourStrings = {
       "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
     next: "Recovery pack",
     packLead:
-      "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+      "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
     packWarning: "This is the only time the master key is shown.",
     showKey: "Show the master key",
     masterKey: "Master key",
@@ -109,7 +109,7 @@ export const firstHourStrings = {
       "Sigue sola cuando el servidor se ponga en hora por internet, o en el móvil si sigues allí.",
     next: "Paquete de recuperación",
     packLead:
-      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+      "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
     packWarning: "Esta es la única vez que se muestra la clave maestra.",
     showKey: "Mostrar la clave maestra",
     masterKey: "Clave maestra",

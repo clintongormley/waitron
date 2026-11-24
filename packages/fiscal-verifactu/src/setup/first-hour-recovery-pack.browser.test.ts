@@ -158,7 +158,7 @@ it("a Live setup ends with the Recovery pack step: after the password, the key b
   const { el } = await mount();
   expect(text(el, "pack-heading")).toBe("Recovery pack");
   expect(text(el, "pack-lead")).toBe(
-    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+    "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
   );
   expect(text(el, "pack-warning")).toBe("This is the only time the master key is shown.");
   expect(text(el, "prepare-pdf")).toBe("Show the master key");
@@ -339,7 +339,7 @@ it("shows the Recovery pack step in Spanish", async () => {
   const { el } = await mount("es");
   expect(text(el, "pack-heading")).toBe("Paquete de recuperación");
   expect(text(el, "pack-lead")).toBe(
-    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+    "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
   );
   expect(text(el, "pack-warning")).toBe("Esta es la única vez que se muestra la clave maestra.");
   expect(text(el, "prepare-pdf")).toBe("Mostrar la clave maestra");

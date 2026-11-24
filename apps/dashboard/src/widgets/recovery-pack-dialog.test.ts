@@ -234,7 +234,7 @@ describe("the new master key", () => {
     [
       "en-GB",
       "Recovery pack",
-      "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+      "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
       "This is the only time the master key is shown.",
       `Master key · ${NAME}`,
       ["Download", "Print", "Copy"],
@@ -242,7 +242,7 @@ describe("the new master key", () => {
     [
       "es-ES",
       "Paquete de recuperación",
-      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+      "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
       "Esta es la única vez que se muestra la clave maestra.",
       `Clave maestra · ${NAME}`,
       ["Descargar", "Imprimir", "Copiar"],

@@ -22,9 +22,9 @@ export interface MasterKeyUsedDetail {
 
 /**
  * A master key shown once: its name above the key as printed, and Download and Print for its pack's
- * PDF (when there is one) and Copy for the key. It fires `wt-master-key-used` only for a press that
- * worked; a Copy the browser refused or a Print it blocked is said in an alert instead. The screen
- * decides which presses let the person carry on.
+ * PDF (when there is one) and Copy for the key. It fires `wt-master-key-used` for Download, for a
+ * Print whose window opened and for a Copy the browser accepted; a refused Copy or a blocked Print
+ * is said in an alert instead. The screen decides which presses let the person carry on.
  */
 @customElement("wt-master-key-box")
 export class WtMasterKeyBox extends LitElement {
