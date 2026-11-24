@@ -172,7 +172,7 @@ export class ProductList extends LitElement {
         display: block;
       }
       wt-data-table::part(inherited-allergens) {
-        font-style: italic;
+        color: var(--wt-color-text-muted);
       }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);

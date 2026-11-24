@@ -482,7 +482,8 @@ it.each(["Winter standard hours", ""])(
     expect(slot).not.toBeNull();
     expect(slot.getRootNode()).toBe(box.shadowRoot);
     const detail = box.shadowRoot!.querySelector("dd")!;
-    expect(getComputedStyle(detail).fontStyle).toBe("italic");
+    box.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(detail).color).toBe("rgb(7, 8, 9)");
     expect(detail.textContent).toContain("as Restaurant");
     expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       detail.getBoundingClientRect().top,
@@ -530,8 +531,9 @@ it("groups departments and prep stations, wraps between ranges and keeps own hou
   expect(Number(getComputedStyle(terms[1]!).fontWeight)).toBeLessThan(600);
   expect(Number(getComputedStyle(terms[4]!).fontWeight)).toBeLessThan(600);
   const details = [...root.querySelectorAll("dd")];
-  expect(getComputedStyle(details[1]!).fontStyle).toBe("normal");
-  expect(getComputedStyle(details[2]!).fontStyle).toBe("italic");
+  box.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(details[1]!).color).not.toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(details[2]!).color).toBe("rgb(7, 8, 9)");
   const ranges = [...details[0]!.querySelectorAll(".range")];
   expect(ranges.map((range) => range.textContent)).toEqual([
     "08:00–11:00\u00a0·",

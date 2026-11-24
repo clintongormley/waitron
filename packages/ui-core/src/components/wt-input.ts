@@ -2,7 +2,14 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
-import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
+import {
+  fieldLabel,
+  fieldLabelState,
+  fieldStyles,
+  inheritArrow,
+  inheritedDescription,
+  type InheritedFieldValue,
+} from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import { formatDecimalInput, readDecimalInput } from "../decimal-input.js";
 
@@ -97,6 +104,7 @@ export class WtInput extends LitElement {
   override autocorrect = true;
   @property() override autocapitalize = "";
   @property() placeholder = "";
+  @property({ attribute: false }) inherited?: InheritedFieldValue;
   @property({ type: Number }) maxlength?: number;
   @property({ type: Number }) step?: number;
   @property() error = "";
@@ -130,6 +138,8 @@ export class WtInput extends LitElement {
   protected get fieldDecoration(): InputFieldDecoration | undefined {
     return undefined;
   }
+
+  private readonly inheritedId = uniqueId("wt-input-inherited");
 
   private onInput(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -173,6 +183,10 @@ export class WtInput extends LitElement {
     this.shadowRoot?.querySelector("input")?.select();
   }
 
+  protected renderInheritedCue(): TemplateResult {
+    return inheritArrow();
+  }
+
   protected renderFieldContents(
     label: TemplateResult | typeof nothing,
     input: TemplateResult,
@@ -186,8 +200,11 @@ export class WtInput extends LitElement {
     const locale = this.inputLocale;
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
+    const inherited = this.inherited;
+    const inherits = inherited !== undefined && this.value === "";
     const describedBy = [
       ...(hasHint ? [this.hintId] : []),
+      ...(inherits ? [this.inheritedId] : []),
       ...(hasError ? [this.errorId] : []),
       ...(decoration?.extraDescriptionIds ?? []),
     ];
@@ -195,7 +212,7 @@ export class WtInput extends LitElement {
     const labelState = fieldLabelState({
       value: this.value,
       hint: this.hint,
-      placeholder: this.placeholder,
+      placeholder: inherited?.value ?? this.placeholder,
       type: this.type,
     });
     const showLabel = this.label !== "" && !this.hideLabel;
@@ -204,6 +221,8 @@ export class WtInput extends LitElement {
     const hasEnd = !decoration?.endClass && (this.hasEnd || passwordVisibility || decoration?.end);
     const fieldClass = decoration?.fieldClass || (hasEnd ? "has-end" : undefined);
     const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
+    const placeholder =
+      decoration?.placeholder ?? inherited?.value ?? (this.placeholder || this.hint);
     const input = html`
       <input
         class="field-control"
@@ -217,7 +236,7 @@ export class WtInput extends LitElement {
         autocapitalize=${this.autocapitalize || nothing}
         autocorrect=${this.autocorrect ? nothing : "off"}
         spellcheck=${this.spellcheck ? nothing : "false"}
-        placeholder=${decoration?.placeholder ?? (this.placeholder || this.hint)}
+        placeholder=${decoration?.placeholder ?? inherited?.value ?? (this.placeholder || this.hint)}
         maxlength=${this.maxlength ?? nothing}
         step=${this.step ?? nothing}
         aria-label=${this.hideLabel && this.label ? this.label : nothing}
@@ -228,6 +247,7 @@ export class WtInput extends LitElement {
         aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
         @input=${this.onInput}
       />
+      ${inherited && !inherited.inTable ? this.renderInheritedCue() : nothing}
     `;
     const end = html`
       <slot class=${decoration?.endClass ?? "end"} name="end" @slotchange=${this.onEndSlotChange}>
@@ -272,6 +292,7 @@ export class WtInput extends LitElement {
           : nothing
       }
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
+      ${inherits ? inheritedDescription(this.inheritedId, typeof placeholder === "string" ? placeholder : inherited.value, inherited.suffix) : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }

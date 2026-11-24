@@ -827,11 +827,6 @@ test("the value paints from the field-value token", async () => {
   expect(getComputedStyle(parts(el).input).color).toBe("rgb(31, 32, 33)");
 });
 
-test("a hint shown as the placeholder is italic", async () => {
-  const el = await mount('<wt-input label="Price" hint="Optional"></wt-input>');
-  expect(getComputedStyle(parts(el).input, "::placeholder").fontStyle).toBe("italic");
-});
-
 test("hide-label draws no label, names the input by its label, and makes the field compact", async () => {
   const el = await mount('<wt-input label="Search" hide-label></wt-input>');
   host.style.setProperty("--wt-tap-min", "47px");
@@ -1116,4 +1111,58 @@ test("a plain field leaves autocorrect, capitals and spellcheck to the browser",
     expect(input.hasAttribute("autocorrect")).toBe(false);
     expect(input.hasAttribute("spellcheck")).toBe(false);
   }
+});
+
+test("an inherited value floats the label and comes back when the same explicit value is cleared", async () => {
+  const el = (await mount(
+    '<wt-input label="Name" placeholder="Example" hint="Staff name"></wt-input>',
+  )) as WtInput;
+  el.inherited = { value: "Kitchen", suffix: "inherited" };
+  await el.updateComplete;
+  const { field, input } = parts(el);
+  const description = () =>
+    input
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => el.shadowRoot!.getElementById(id)!.textContent!.trim());
+  const arrow = () => el.shadowRoot!.querySelector('wt-icon[name="inherit"]');
+  expect(input.value).toBe("");
+  expect(input.placeholder).toBe("Kitchen");
+  expect(field.dataset.label).toBe("float");
+  expect(arrow()?.checkVisibility()).toBe(true);
+  expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
+  expect(description()).toEqual(["Staff name", "Kitchen inherited"]);
+
+  el.value = "Kitchen";
+  await el.updateComplete;
+  expect(input.value).toBe("Kitchen");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Staff name"]);
+
+  el.value = "";
+  await el.updateComplete;
+  expect(arrow()?.checkVisibility()).toBe(true);
+  expect(description()).toEqual(["Staff name", "Kitchen inherited"]);
+
+  el.inherited = { value: "Kitchen", suffix: "inherited", inTable: true };
+  await el.updateComplete;
+  expect(input.placeholder).toBe("Kitchen");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Staff name", "Kitchen inherited"]);
+});
+
+test("an inheritance arrow leaves a partially typed native number clear", async () => {
+  const el = (await mount('<wt-input label="Count" type="number"></wt-input>')) as WtInput;
+  el.inherited = { value: "12" };
+  await el.updateComplete;
+  const { input } = parts(el);
+  const arrow = el.shadowRoot!.querySelector('wt-icon[name="inherit"]');
+  expect(arrow?.checkVisibility()).toBe(true);
+  const withArrow = parseFloat(getComputedStyle(input).paddingInlineStart);
+  input.focus();
+  await userEvent.keyboard("-");
+  expect(input.value).toBe("");
+  expect(input.matches(":placeholder-shown")).toBe(false);
+  expect(arrow?.checkVisibility()).toBe(false);
+  expect(parseFloat(getComputedStyle(input).paddingInlineStart)).toBeLessThan(withArrow);
 });

@@ -4862,15 +4862,16 @@ it.each([
   },
 );
 
-it("draws inherited nutritional values as quiet italic chips with read-only allergens", async () => {
+it("draws inherited nutritional values as muted chips with read-only allergens", async () => {
   const el = await mountVariant();
   await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   el.style.setProperty("--wt-color-surface-lifted", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-color-text-muted", "rgb(10, 11, 12)");
   for (const choice of ["allergen-milk", "diet-vegetarian"]) {
     const shown = picker.shadowRoot!.querySelector<HTMLButtonElement>(`[data-choice="${choice}"]`)!;
-    expect(getComputedStyle(shown).fontStyle, choice).toBe("italic");
+    expect(getComputedStyle(shown).color, choice).toBe("rgb(10, 11, 12)");
     expect(getComputedStyle(shown).backgroundColor, choice).toBe("rgb(7, 8, 9)");
     expect(shown.disabled).toBe(choice === "allergen-milk");
     expect(shown.getAttribute("aria-pressed")).toBe("true");
@@ -6462,7 +6463,7 @@ it("Variants and Modifiers never fold, so they have no summary line", async () =
   }
 });
 
-it("a variant's Details line shows inherited values in italic", async () => {
+it("a variant's Details line shows inherited values", async () => {
   const el = await mountVariant();
   const inherited = summaryOf(el, "details").filter((field) => field.placeholder);
   expect(inherited).toEqual(
@@ -6483,7 +6484,6 @@ it("a variant's Details line shows inherited values in italic", async () => {
   expect(drawn.map((value) => value.textContent)).toEqual(
     expect.arrayContaining(["Mains", "EN: Roasted in house", allergenName("milk")]),
   );
-  for (const value of drawn) expect(getComputedStyle(value).fontStyle).toBe("italic");
 });
 
 it("each Details row is cut after two lines at phone width", async () => {
@@ -6667,7 +6667,7 @@ it("shows a variant's own values folded as its own, never as placeholders", asyn
   ]);
 });
 
-it("shows a variant's takeaway VAT folded as its product's rate in italic, or its own upright", async () => {
+it("shows a variant's takeaway VAT folded as its product's rate, or its own rate", async () => {
   inLocale("en-GB");
   const takeawayOf = (el: ProductEditor) =>
     summaryOf(el, "details").filter(({ label }) => label === t("editor.takeaway_vat"));
@@ -6702,7 +6702,7 @@ it("names a product's course missing from the course list as unavailable on the 
   ]);
 });
 
-it("draws a variant's inherited folded values in grey italic, its own upright", async () => {
+it("draws a variant's inherited folded values in muted ink", async () => {
   const el = await mountVariant();
   el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const details = folded(el, "details");
@@ -6710,7 +6710,6 @@ it("draws a variant's inherited folded values in grey italic, its own upright", 
   await details.updateComplete;
   const inherited = details.shadowRoot!.querySelector(".summary-placeholder")!;
   expect(inherited.textContent).toBe("Mains");
-  expect(getComputedStyle(inherited).fontStyle).toBe("italic");
   expect(getComputedStyle(inherited).color).toBe("rgb(7, 8, 9)");
   expect(details.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(
     summaryOf(el, "details").filter((field) => "placeholder" in field && field.placeholder).length,

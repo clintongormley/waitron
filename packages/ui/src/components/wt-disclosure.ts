@@ -9,7 +9,7 @@ import "./wt-icon.js";
 export interface SummaryField {
   label: string;
   value: string;
-  /** Drawn in italic, as a field's placeholder is: what a blank field will use, not its own value. */
+  /** The value comes from a fallback outside the section. */
   placeholder?: boolean;
   /** Drawn in the warning colour, for a value that needs someone's attention. */
   warning?: boolean;
@@ -108,10 +108,6 @@ export class WtDisclosure extends LitElement {
         grid-column: 1 / -1;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .summary-placeholder {
-        font-style: italic;
       }
 
       .summary-warning {

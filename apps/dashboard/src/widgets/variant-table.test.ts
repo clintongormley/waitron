@@ -834,7 +834,7 @@ it.each([
   },
 );
 
-it("draws the base price a variant sells at in grey italic, like a field's hint", async () => {
+it("draws the base price a variant sells at in muted ink, like a field's hint", async () => {
   const el = await mountTable({
     basePrice: "9.00",
     variants: threeVariants().map((variant, index) =>
@@ -847,12 +847,8 @@ it("draws the base price a variant sells at in grey italic, like a field's hint"
     el.shadowRoot!.querySelector('[data-test="stacked-price-0"]')!,
   ]) {
     const amount = at.querySelector(".amount")!;
-    expect(getComputedStyle(amount).fontStyle).toBe("italic");
     expect(getComputedStyle(amount).color).toBe("rgb(7, 8, 9)");
   }
-  expect(getComputedStyle(rows(el)[1]!.children[2]!.querySelector(".amount")!).fontStyle).toBe(
-    "normal",
-  );
   expect(getComputedStyle(rows(el)[1]!.children[2]!.querySelector(".amount")!).color).not.toBe(
     "rgb(7, 8, 9)",
   );

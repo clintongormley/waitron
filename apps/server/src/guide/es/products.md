@@ -270,7 +270,7 @@ o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una f
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
-comprobado de uno que sí. Una variante muestra su estado efectivo; la cursiva indica que sigue a su
+comprobado de uno que sí. Una variante muestra su estado efectivo; el color gris indica que sigue a su
 producto. El filtro de Alérgenos usa ese mismo estado para cada variante. Las columnas
 **Alérgenos** e **Info dietética** empiezan ocultas. Para mostrarlas, pulsa el botón de columnas al
 final de la búsqueda de la lista; en **Personalizar**, pulsa el ojo junto a cada columna y luego

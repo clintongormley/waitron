@@ -2,7 +2,7 @@
 
 ## Check a day's hours {#day-hours}
 
-Open a date to see when each department and zone is open. The Month and the day pop-up combine periods that touch: **09:00–00:00** means continuous opening. Grey italic times follow the department's hours.
+Open a date to see when each department and zone is open. The Month and the day pop-up combine periods that touch: **09:00–00:00** means continuous opening. Grey times follow the department's hours.
 
 For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or any of its bars to open that day's hours. A gap in a zone's bars means it is closed then.
 

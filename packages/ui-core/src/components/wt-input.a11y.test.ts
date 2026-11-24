@@ -26,6 +26,22 @@ function contrastRatio(a: string, b: string): number {
 }
 
 describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) => {
+  test("inherited value is readable", async () => {
+    const el = (await mountThemed(
+      '<wt-input label="Name"></wt-input>',
+      theme,
+    )) as HTMLElementTagNameMap["wt-input"];
+    el.inherited = { value: "Mains", suffix: "inherited" };
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    const text = getComputedStyle(root.querySelector("input")!, "::placeholder").color;
+    const arrow = getComputedStyle(root.querySelector('wt-icon[name="inherit"]')!).color;
+    const fill = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+    expect(contrastRatio(text, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(arrow, fill)).toBeGreaterThanOrEqual(3);
+    await expectNoA11yViolations(host);
+  });
+
   test("labelled input", async () => {
     await mountThemed('<wt-input label="Weight (kg)" value="1.25"></wt-input>', theme);
     await expectNoA11yViolations(host);

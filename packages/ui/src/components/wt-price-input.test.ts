@@ -383,7 +383,7 @@ const settled = () =>
   );
 
 async function mountPrice(html: string) {
-  const el = await mount(html);
+  const el = (await mount(html)) as WtPriceInput;
   await settled();
   const input = el.shadowRoot!.querySelector("input")!;
   const currency = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]');
@@ -404,11 +404,11 @@ function contentBox(input: HTMLInputElement) {
 }
 
 /** The typed value's box: the text's measured width, placed where the input aligns it. */
-function typedTextBox(input: HTMLInputElement) {
+function typedTextBox(input: HTMLInputElement, text = input.value) {
   const s = getComputedStyle(input);
   const ctx = document.createElement("canvas").getContext("2d")!;
   ctx.font = s.font;
-  const width = ctx.measureText(input.value).width;
+  const width = ctx.measureText(text).width;
   const content = contentBox(input);
   const alignedEnd = s.textAlign === "end" || s.textAlign === "right";
   return alignedEnd
@@ -814,23 +814,13 @@ test("an overriding field draws its value bold and upright, with a primary bar a
   expect(parseFloat(bar.height)).toBeCloseTo(box.getBoundingClientRect().height, 1);
 });
 
-test("an overriding field keeps its value upright inside italic text, where an ordinary field's value turns italic", async () => {
-  const el = await mount(
-    '<wt-price-input label="Set" value="2.50" overriding></wt-price-input><wt-price-input label="Plain" value="3.00"></wt-price-input>',
-  );
-  host.style.fontStyle = "italic";
-  const plain = host.querySelector<WtPriceInput>('wt-price-input[label="Plain"]')!;
-  await plain.updateComplete;
-  expect(getComputedStyle(field(plain).input).fontStyle).toBe("italic");
-  expect(getComputedStyle(field(el).input).fontStyle).toBe("normal");
-});
-
-test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
+test("a field that is not overriding draws no bar and its placeholder muted, its value at the inherited weight", async () => {
   const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
   const { field: box, input } = field(el);
   expect(el.hasAttribute("overriding")).toBe(false);
   expect(getComputedStyle(box, "::before").content).toBe("none");
-  expect(getComputedStyle(input, "::placeholder").fontStyle).toBe("italic");
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
   // The control takes `font: inherit` (packages/ui-core/src/field-styles.ts:73).
   expect(getComputedStyle(input).fontWeight).toBe(getComputedStyle(el).fontWeight);
 });
@@ -1466,5 +1456,47 @@ test.each([false, true])(
     context.font = getComputedStyle(input).font;
     const content = contentBox(input);
     expect(context.measureText(shown).width).toBeLessThanOrEqual(content.right - content.left);
+  },
+);
+
+test.each([
+  ["en-GB", "12.50", false],
+  ["es-ES", "12,50", true],
+] as const)(
+  "puts the inherited %s amount and arrow between its currency and unit",
+  async (locale, shown, fixed) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input label="Price" placeholder="Example" unit="kg" locale="${locale}" ${fixed ? "fixed-unit" : ""}></wt-price-input>`,
+    );
+    el.inherited = { value: "12.50", suffix: "inherited" };
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    const arrow = root.querySelector('wt-icon[name="inherit"]');
+    const unit = root.querySelector("slot[name=end] .unit")!;
+    expect(input.placeholder).toBe(shown);
+    expect(input.value).toBe("");
+    expect(arrow?.checkVisibility()).toBe(true);
+    const cue = arrow!.getBoundingClientRect();
+    const amount = typedTextBox(input, shown);
+    const sign = currency!.getBoundingClientRect();
+    expect(cue.right).toBeLessThanOrEqual(amount.left);
+    expect(cue.left).toBeGreaterThanOrEqual(input.getBoundingClientRect().left);
+    if (fixed) expect(amount.right).toBeLessThanOrEqual(sign.left);
+    else expect(sign.right).toBeLessThanOrEqual(cue.left);
+    expect(Math.max(amount.right, sign.right)).toBeLessThanOrEqual(
+      unit.getBoundingClientRect().left,
+    );
+    const description = input
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => root.getElementById(id)!.textContent!.trim());
+    expect(description).toEqual(
+      fixed ? [`${shown} inherited`, "€", "kg"] : [`${shown} inherited`, "€"],
+    );
+
+    el.inherited = { value: "12.50", inTable: true };
+    await el.updateComplete;
+    expect(input.placeholder).toBe(shown);
+    expect(root.querySelector('wt-icon[name="inherit"]')?.checkVisibility() ?? false).toBe(false);
   },
 );

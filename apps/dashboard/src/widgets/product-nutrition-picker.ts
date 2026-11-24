@@ -75,8 +75,8 @@ export class ProductNutritionPicker extends LitElement {
       .chip:disabled {
         cursor: default;
       }
-      .inherited {
-        font-style: italic;
+      .chip.inherited[aria-pressed="true"] {
+        color: var(--wt-color-text-muted);
       }
       .busy {
         opacity: var(--wt-opacity-disabled);

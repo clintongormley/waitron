@@ -1,5 +1,24 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { visuallyHiddenStyles } from "./base-styles.js";
+import "./components/wt-icon.js";
+
+export interface InheritedFieldValue {
+  value: string;
+  suffix?: string;
+  inTable?: boolean;
+}
+
+export function inheritArrow(widthText?: string): TemplateResult {
+  return html`<span class="inherit-cue" aria-hidden="true"
+    ><wt-icon name="inherit" size="sm" aria-hidden="true"></wt-icon>${
+      widthText ? html`<span class="inherit-width">${widthText}</span>` : nothing
+    }</span
+  >`;
+}
+
+export function inheritedDescription(id: string, value: string, suffix?: string): TemplateResult {
+  return html`<span id=${id} class="hint">${value}${suffix ? ` ${suffix}` : ""}</span>`;
+}
 
 const ALWAYS_FLOAT = new Set(["date", "time", "datetime-local", "month", "week"]);
 
@@ -79,7 +98,29 @@ export const fieldStyles = css`
   }
   .field-control::placeholder {
     color: var(--wt-color-text-muted);
-    font-style: italic;
+  }
+  .field-control:placeholder-shown:has(+ .inherit-cue) {
+    padding-inline-start: calc(var(--wt-space-3) + var(--wt-font-size-sm) + var(--wt-space-1));
+  }
+  .inherit-cue {
+    display: none;
+    position: absolute;
+    inset-inline-start: var(--wt-space-3);
+    inset-block: calc(var(--wt-space-3) + var(--wt-font-size-sm)) var(--wt-space-2);
+    align-items: center;
+    gap: var(--wt-space-1);
+    color: var(--wt-color-text-muted);
+    pointer-events: none;
+  }
+  .inherit-cue wt-icon {
+    flex: none;
+    color: inherit;
+  }
+  .field[data-compact] .inherit-cue {
+    inset-block: var(--wt-space-2);
+  }
+  .field-control:placeholder-shown + .inherit-cue {
+    display: inline-flex;
   }
   .field-control:autofill {
     background-clip: text;

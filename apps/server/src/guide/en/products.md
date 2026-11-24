@@ -253,7 +253,7 @@ suitability of its own, because it is a way of asking for the same dish rather t
 to eat. The till and station show each item's own list.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
-checked from one you have checked. A variant shows its effective state; italic means it follows
+checked from one you have checked. A variant shows its effective state; grey means it follows
 its parent. The Allergens filter uses that same state for each variant. The **Allergens** and
 **Dietary info** columns start hidden. To show them, select the columns button at the right-hand
 end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.

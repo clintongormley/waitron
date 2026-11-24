@@ -43,6 +43,8 @@ export interface ComboboxOption {
   /** The closed trigger's text when this option is chosen, and the row's text and what it is
    * matched on while something is searched for; `label` otherwise. */
   valueLabel?: string;
+  /** The single-choice row with value "" that restores inheritance. */
+  inherited?: true;
 }
 
 /** What the closed trigger shows for an option, and what a search matches. */
@@ -171,7 +173,6 @@ export class WtCombobox extends LitElement {
 
       .value.placeholder {
         color: var(--wt-color-text-muted);
-        font-style: italic;
       }
 
       .chevron {
@@ -296,6 +297,11 @@ export class WtCombobox extends LitElement {
       .option[aria-disabled="true"] .icon {
         color: var(--wt-color-text-muted);
         cursor: not-allowed;
+      }
+
+      .inherit-icon {
+        flex: none;
+        color: var(--wt-color-text-muted);
       }
 
       .icon,
@@ -435,6 +441,8 @@ export class WtCombobox extends LitElement {
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
+  @property({ attribute: "inherited-suffix" }) inheritedSuffix = "";
+  @property({ type: Boolean, attribute: "in-table" }) inTable = false;
   @property({ attribute: false }) countLabel: (count: number) => string = (count) =>
     `${count} selected`;
   @property({ type: Boolean, reflect: true, attribute: "allow-add" }) allowAdd = false;
@@ -471,6 +479,7 @@ export class WtCombobox extends LitElement {
   private readonly valueId = uniqueId("wt-combobox-value");
   private readonly errorId = uniqueId("wt-combobox-error");
   private readonly hintId = uniqueId("wt-combobox-hint");
+  private readonly inheritedId = uniqueId("wt-combobox-inherited");
   constructor() {
     super();
     new ChangeObserver(this, subscribePageLanguage);
@@ -479,6 +488,7 @@ export class WtCombobox extends LitElement {
     options: ComboboxOption[];
     language: string;
     preserve: boolean;
+    multiple: boolean;
     rows: ComboboxOption[];
   };
 
@@ -487,10 +497,13 @@ export class WtCombobox extends LitElement {
     if (
       this.order?.options === this.options &&
       this.order.language === language &&
-      this.order.preserve === this.preserveOrder
+      this.order.preserve === this.preserveOrder &&
+      this.order.multiple === this.multiple
     )
       return this.order.rows;
     const rows = [...this.options];
+    const inherited = rows.findIndex((option) => this.isInheritedOption(option));
+    if (inherited > 0) rows.unshift(...rows.splice(inherited, 1));
     if (!this.preserveOrder) {
       const compare = createLabelComparator(language);
       const fixed = (option: ComboboxOption) =>
@@ -511,7 +524,13 @@ export class WtCombobox extends LitElement {
         start = end;
       }
     }
-    this.order = { options: this.options, language, preserve: this.preserveOrder, rows };
+    this.order = {
+      options: this.options,
+      language,
+      preserve: this.preserveOrder,
+      multiple: this.multiple,
+      rows,
+    };
     return rows;
   }
 
@@ -531,17 +550,20 @@ export class WtCombobox extends LitElement {
   }
 
   private filter(options: ComboboxOption[]): ComboboxOption[] {
+    const inherited = this.isInheritedOption(options[0]) ? options[0] : undefined;
     const search = searchFor(this.searchText);
     // Ranked inside each run of one group, so a group's heading is still drawn once.
     const runs: ComboboxOption[][] = [];
     for (const option of options) {
+      if (option === inherited) continue;
       const run = runs.at(-1);
       if (run !== undefined && run[0]!.group === option.group) run.push(option);
       else runs.push([option]);
     }
-    return runs.flatMap((run) =>
+    const matches = runs.flatMap((run) =>
       search(run.map((option) => [option, this.foldedText(option)] as const)),
     );
+    return inherited ? [inherited, ...matches] : matches;
   }
 
   private get trimmedSearch(): string {
@@ -561,7 +583,13 @@ export class WtCombobox extends LitElement {
   }
 
   private get firstRowIndex(): number {
-    return this.rowCount > 0 ? 0 : -1;
+    const options = this.filteredOptions;
+    const first = this.trimmedSearch && this.isInheritedOption(options[0]) ? 1 : 0;
+    return first < options.length + Number(this.showAddRow) ? first : -1;
+  }
+
+  private isInheritedOption(option: ComboboxOption | undefined): boolean {
+    return !this.multiple && option?.value === "" && option.inherited === true && !option.action;
   }
 
   private isSelected(option: ComboboxOption): boolean {
@@ -582,7 +610,10 @@ export class WtCombobox extends LitElement {
       if (this.values.length === 0) return this.showEmptyOption ? find("") : undefined;
       return this.values.length === 1 ? find(this.values[0]!) : undefined;
     }
-    if (this.value === "" && !this.showEmptyOption) return undefined;
+    if (this.value === "") {
+      const inherited = this.options.find((option) => this.isInheritedOption(option));
+      return inherited ?? (this.showEmptyOption ? find("") : undefined);
+    }
     return find(this.value);
   }
 
@@ -979,7 +1010,8 @@ export class WtCombobox extends LitElement {
   }
 
   private renderOptionText(option: ComboboxOption) {
-    const text = this.trimmedSearch ? closedText(option) : option.label;
+    const text =
+      this.trimmedSearch && !this.isInheritedOption(option) ? closedText(option) : option.label;
     if (!option.description) {
       return html`<span class="option-label">${text}</span>`;
     }
@@ -997,7 +1029,7 @@ export class WtCombobox extends LitElement {
       <li
         id=${rowId}
         style=${depth > 0 ? `--option-depth: ${depth}` : nothing}
-        class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary), muted: Boolean(option.muted) })}
+        class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary), muted: Boolean(option.muted) || this.isInheritedOption(option) })}
         role="option"
         aria-selected=${selected}
         aria-disabled=${option.disabled ? "true" : nothing}
@@ -1011,9 +1043,8 @@ export class WtCombobox extends LitElement {
             ? html`<span class=${selected ? "check checked" : "check"} aria-hidden="true"></span>`
             : nothing
         }
-        ${option.iconPosition !== "end" ? this.renderIcon(option) : nothing}
-        ${this.renderOptionText(option)}
-        ${option.iconPosition === "end" ? this.renderIcon(option) : nothing}
+        ${this.renderIcon(option, false)} ${this.renderOptionText(option)}
+        ${this.renderIcon(option, true)}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`
@@ -1031,7 +1062,7 @@ export class WtCombobox extends LitElement {
     let index = 0;
     while (index < options.length) {
       const group = options[index]!.group;
-      if (!group) {
+      if (!group || this.isInheritedOption(options[index])) {
         rows.push(this.renderOption(options[index]!, index));
         index += 1;
         continue;
@@ -1131,7 +1162,7 @@ export class WtCombobox extends LitElement {
               ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
               : nothing
           }
-          ${this.chosenOption?.iconPosition !== "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
+          ${this.renderIcon(this.chosenOption, false, `${this.valueId}-icon`)}
           <span
             id=${this.valueId}
             class=${classMap({ value: true, placeholder: !selectedText, muted })}
@@ -1142,7 +1173,7 @@ export class WtCombobox extends LitElement {
               (text) => html`<span class="width-option" aria-hidden="true">${text}</span>`,
             ),
           )}
-          ${this.chosenOption?.iconPosition === "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
+          ${this.renderIcon(this.chosenOption, true, `${this.valueId}-icon`)}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>
@@ -1152,7 +1183,11 @@ export class WtCombobox extends LitElement {
   /** A combobox takes no name from its content; its labelled parts follow the visual order. */
   private triggerLabelledBy(labelId: string): string {
     const iconId =
-      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "";
+      !this.isInheritedOption(this.chosenOption) &&
+      this.chosenOption?.icon &&
+      this.chosenOption.iconLabel
+        ? `${this.valueId}-icon`
+        : "";
     return [
       labelId,
       ...(this.chosenOption?.iconPosition === "end"
@@ -1163,8 +1198,18 @@ export class WtCombobox extends LitElement {
       .join(" ");
   }
 
-  private renderIcon(option = this.chosenOption, id?: string) {
-    return option?.icon
+  private renderIcon(option: ComboboxOption | undefined, end: boolean, id?: string) {
+    if (this.isInheritedOption(option)) {
+      return end || (id && this.inTable)
+        ? nothing
+        : html`<wt-icon
+            class="inherit-icon"
+            name="inherit"
+            size="sm"
+            aria-hidden="true"
+          ></wt-icon>`;
+    }
+    return option?.icon && (option.iconPosition === "end") === end
       ? html`<wt-icon
           id=${id ?? nothing}
           class="icon"
@@ -1202,14 +1247,14 @@ export class WtCombobox extends LitElement {
       @click=${this.onTriggerClick}
       @keydown=${this.onTriggerKeydown}
     >
-      ${this.chosenOption?.iconPosition !== "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}<span
+      ${this.renderIcon(this.chosenOption, false, `${this.valueId}-icon`)}<span
         id=${this.valueId}
         class="link-text"
         >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
           class=${selectedText ? "value" : "value placeholder"}
           >${shownText}</span
         >${this.actionLabel ? html` <span class="action">${this.actionLabel}</span>` : nothing}</span
-      >${this.chosenOption?.iconPosition === "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
+      >${this.renderIcon(this.chosenOption, true, `${this.valueId}-icon`)}
     </button>`;
   }
 
@@ -1218,13 +1263,18 @@ export class WtCombobox extends LitElement {
     const hasHint = this.hint !== "";
     const chosen = this.chosenOption;
     const selectedText = this.selectedText(chosen);
+    const describeInheritance = this.isInheritedOption(chosen) && this.inheritedSuffix !== "";
     const trigger: TriggerParts = {
       id: this.name || this.generatedTriggerId,
       invalid: this.invalid || hasError,
-      describedBy: [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])],
+      describedBy: [
+        ...(hasHint ? [this.hintId] : []),
+        ...(describeInheritance ? [this.inheritedId] : []),
+        ...(hasError ? [this.errorId] : []),
+      ],
       selectedText,
       shownText: selectedText || this.placeholder || this.hint,
-      muted: Boolean(chosen?.muted),
+      muted: Boolean(chosen?.muted) || this.isInheritedOption(chosen),
     };
     return html`
       <div class="row">
@@ -1303,12 +1353,11 @@ export class WtCombobox extends LitElement {
         ${
           // Outside the listbox, not a row inside it: a role="presentation" child is not one of the
           // children role="listbox" requires, which axe reports as aria-required-children.
-          this.filteredOptions.length === 0 && !this.showAddRow
-            ? html`<div class="empty">${this.noResultsLabel}</div>`
-            : nothing
+          this.firstRowIndex < 0 ? html`<div class="empty">${this.noResultsLabel}</div>` : nothing
         }
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
+      ${describeInheritance ? html`<span id=${this.inheritedId} class="hint">${this.inheritedSuffix}</span>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }

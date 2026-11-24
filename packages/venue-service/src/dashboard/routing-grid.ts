@@ -335,10 +335,6 @@ export class RoutingGrid extends LitElement {
       .line.inherited {
         color: var(--wt-color-text-muted);
       }
-      .station.differs,
-      .line.differs {
-        font-style: italic;
-      }
       .line {
         font-size: var(--wt-font-size-sm);
       }

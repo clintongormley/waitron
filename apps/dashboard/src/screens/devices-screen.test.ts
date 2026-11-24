@@ -2929,7 +2929,7 @@ describe("the Edit dialog", () => {
     }
 
     it.each(["light", "dark"] as const)(
-      "paints inherited equipment itself in grey italics and explicit choices normally in %s",
+      "paints inherited equipment in muted ink and explicit choices normally in %s",
       async (theme) => {
         const device: DeviceRow = {
           ...onDefault,
@@ -2988,7 +2988,6 @@ describe("the Edit dialog", () => {
             expect(style.position).toBe("absolute");
             expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
           } else expect(spoken).not.toContain(t("devices.from_profile"));
-          expect(getComputedStyle(cell).fontStyle).toBe(inherited ? "italic" : "normal");
           if (inherited) expect(getComputedStyle(cell).color).toBe(muted);
           else expect(getComputedStyle(cell).color).not.toBe(muted);
         }
@@ -3006,7 +3005,6 @@ describe("the Edit dialog", () => {
           const value = control.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
           expect(control.value).toBe("");
           expect(value.textContent!.trim()).toBe(name);
-          expect(getComputedStyle(value).fontStyle).toBe("italic");
           expect(getComputedStyle(value).color).toBe(muted);
         }
         for (const id of ["edit-receipt-printer", "edit-reader"]) {
@@ -3031,7 +3029,7 @@ describe("the Edit dialog", () => {
         expect(getComputedStyle(explicit).color).not.toBe(muted);
         await chooseOption(receipt, "");
         await flush(el);
-        expect(getComputedStyle(explicit).fontStyle).toBe("italic");
+        expect(getComputedStyle(explicit).color).toBe(muted);
         expect(q(el, "[data-test=edit-save]")!.hasAttribute("disabled")).toBe(true);
       },
     );
@@ -3161,9 +3159,9 @@ describe("the Edit dialog", () => {
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
           `${name}${test.a4 ? " · A4" : ""}`,
         );
-        expect(
-          getComputedStyle(dq(el.shadowRoot!, "[data-test=device-invoice-t1]")!).fontStyle,
-        ).toBe(test.defaulted ? "italic" : "normal");
+        el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+        const invoiceName = dq(el.shadowRoot!, "[data-test=device-invoice-t1]")!;
+        expect(getComputedStyle(invoiceName).color === "rgb(7, 8, 9)").toBe(test.defaulted);
         const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
         expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
       });

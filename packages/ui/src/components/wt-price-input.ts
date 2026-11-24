@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
 import { WtInput, type InputFieldDecoration } from "@waitron/ui-core/components/wt-input";
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
+import { inheritArrow } from "@waitron/ui-core/field-styles";
 import { disabledStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -78,6 +79,33 @@ export class WtPriceInput extends WtInput {
           var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
         );
         text-align: end;
+      }
+
+      .before .inherit-cue {
+        inset-inline-start: calc(
+          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
+        );
+      }
+
+      .before .field-control:placeholder-shown:has(+ .inherit-cue) {
+        padding-inline-start: calc(
+          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1) +
+            var(--wt-font-size-sm) + var(--wt-space-1)
+        );
+      }
+
+      .after .inherit-cue {
+        inset-inline: var(--wt-space-3)
+          calc(var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1));
+        justify-content: flex-end;
+        font-size: var(--wt-text-control-font-size);
+        overflow: hidden;
+      }
+
+      .inherit-width {
+        visibility: hidden;
+        text-wrap: nowrap;
+        overflow: hidden;
       }
 
       /* The sign and a fixed unit take the amount's block padding, so they sit on its text line. */
@@ -181,7 +209,6 @@ export class WtPriceInput extends WtInput {
 
       :host([overriding]) .field-control {
         font-weight: var(--wt-font-weight-bold);
-        font-style: normal;
       }
 
       :host([overriding]) .field:not([data-disabled])::before {
@@ -315,7 +342,11 @@ export class WtPriceInput extends WtInput {
       fieldClass: this.showsFixedUnit ? "fixed" : undefined,
       inputPart: "amount",
       autocomplete: "off",
-      placeholder: formatDecimalInput(this.placeholder || this.hint, this.inputLocale) || nothing,
+      placeholder:
+        formatDecimalInput(
+          this.inherited?.value ?? (this.placeholder || this.hint),
+          this.inputLocale,
+        ) || nothing,
       extraDescriptionIds: [
         ...(this.locale ? [this.currencyId] : []),
         ...(this.showsFixedUnit ? [this.unitId] : []),
@@ -323,6 +354,15 @@ export class WtPriceInput extends WtInput {
       endClass: "price-end",
       end: this.renderUnit(),
     };
+  }
+
+  protected override renderInheritedCue(): TemplateResult {
+    const after = this.locale && currencySymbol(this.locale).side === "after";
+    const widthText =
+      after && this.inherited
+        ? formatDecimalInput(this.inherited.value, this.inputLocale)
+        : undefined;
+    return inheritArrow(widthText);
   }
 
   protected override renderFieldContents(

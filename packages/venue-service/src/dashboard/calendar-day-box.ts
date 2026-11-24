@@ -80,7 +80,6 @@ export class CalendarDayBox extends LitElement {
       }
       .inherited {
         color: var(--wt-color-text-muted);
-        font-style: italic;
       }
       .visually-hidden {
         ${visuallyHiddenStyles}

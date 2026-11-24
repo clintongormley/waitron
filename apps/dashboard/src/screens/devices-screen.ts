@@ -350,7 +350,6 @@ export class DevicesScreen extends LitElement {
       }
       wt-data-table::part(inherited) {
         color: var(--wt-color-text-muted);
-        font-style: italic;
       }
       .made-here {
         min-inline-size: 0;

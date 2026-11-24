@@ -57,7 +57,7 @@ In an options list and each option's own window, you see **Name**, then **Prep s
 plain **Customer-facing names** heading with every language's field already shown. You can compare
 and edit the names without opening a section. An extras list keeps its customer-facing names in a
 folded section: open **Customer-facing names** to edit them. Its closed line shows each language's
-name, or its fallback in italic; the section opens when a name needs correcting. See
+name, or the name it uses when that field is blank; the section opens when a name needs correcting. See
 [content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or

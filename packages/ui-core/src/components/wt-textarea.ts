@@ -1,7 +1,14 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
-import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
+import {
+  fieldLabel,
+  fieldLabelState,
+  fieldStyles,
+  inheritArrow,
+  inheritedDescription,
+  type InheritedFieldValue,
+} from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-textarea")
@@ -35,6 +42,11 @@ export class WtTextarea extends LitElement {
         resize: vertical;
       }
 
+      .field .inherit-cue {
+        inset-block-end: auto;
+        margin-block-start: var(--wt-space-1);
+      }
+
       /* A resting label sits where the first line of text will go, not in the middle of a tall box. */
       .field[data-label="rest"]:not(:focus-within):not(:has(:autofill)) .field-label {
         top: calc(var(--wt-field-height) / 2);
@@ -48,6 +60,7 @@ export class WtTextarea extends LitElement {
   @property({ type: Number }) rows = 3;
   @property({ type: Number }) maxlength?: number;
   @property() placeholder = "";
+  @property({ attribute: false }) inherited?: InheritedFieldValue;
   @property() error = "";
   /** Shown as the placeholder unless one is given, and kept as the textarea's description because a
    * placeholder disappears once the field holds a value. */
@@ -70,6 +83,8 @@ export class WtTextarea extends LitElement {
   private readonly errorId = uniqueId("wt-textarea-error");
   private readonly hintId = uniqueId("wt-textarea-hint");
 
+  private readonly inheritedId = uniqueId("wt-textarea-inherited");
+
   private onInput(event: Event): void {
     this.value = (event.target as HTMLTextAreaElement).value;
     dispatchWtChange(this, event, { value: this.value });
@@ -78,12 +93,18 @@ export class WtTextarea extends LitElement {
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
-    const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
+    const inherited = this.inherited;
+    const inherits = inherited !== undefined && this.value === "";
+    const describedBy = [
+      ...(hasHint ? [this.hintId] : []),
+      ...(inherits ? [this.inheritedId] : []),
+      ...(hasError ? [this.errorId] : []),
+    ];
     const id = this.name || this.generatedId;
     const labelState = fieldLabelState({
       value: this.value,
       hint: this.hint,
-      placeholder: this.placeholder,
+      placeholder: inherited?.value ?? this.placeholder,
     });
     const showLabel = this.label !== "" && !this.hideLabel;
     return html`
@@ -104,7 +125,7 @@ export class WtTextarea extends LitElement {
             name=${this.name || nothing}
             rows=${this.rows}
             .value=${this.value}
-            placeholder=${this.placeholder || this.hint}
+            placeholder=${inherited?.value ?? (this.placeholder || this.hint)}
             maxlength=${this.maxlength ?? nothing}
             spellcheck=${this.spellcheck ? "true" : "false"}
             autocapitalize=${this.autocapitalize || nothing}
@@ -117,10 +138,12 @@ export class WtTextarea extends LitElement {
             aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
             @input=${this.onInput}
           ></textarea>
+          ${inherited && !inherited.inTable ? inheritArrow() : nothing}
         </div>
         <slot name="help"></slot>
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
+      ${inherits ? inheritedDescription(this.inheritedId, inherited.value, inherited.suffix) : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }

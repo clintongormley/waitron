@@ -730,19 +730,7 @@ test("summary rows win over summary fields and a summary string given beside the
   expect(el.shadowRoot!.querySelector(".summary")!.textContent!.trim()).toBe("VAT: Reduced (10%)");
 });
 
-/** Each shown value's text and whether it is drawn in italic. */
-function valueStyles(line: Element): [string, string][] {
-  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-  const shown: [string, string][] = [];
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent!.replace(/\s+/g, " ").trim();
-    if (!text || text === "·" || node.parentElement!.classList.contains("summary-label")) continue;
-    shown.push([text, getComputedStyle(node.parentElement!).fontStyle]);
-  }
-  return shown;
-}
-
-test("a summary field marked as a placeholder draws its value in italic, its name and the others upright", async () => {
+test("a summary field marked as a placeholder keeps its value in the muted summary", async () => {
   const el = (await mount(
     '<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>',
   )) as import("./wt-disclosure.js").WtDisclosure;
@@ -756,17 +744,12 @@ test("a summary field marked as a placeholder draws its value in italic, its nam
   expect(summary.textContent!.replace(/\s+/g, " ").trim()).toBe(
     "Kitchen name: GLS · Course: Mains",
   );
-  expect(valueStyles(summary)).toEqual([
-    ["GLS", "normal"],
-    ["Mains", "italic"],
-  ]);
-  const names = [...summary.querySelectorAll(".summary-label")];
-  expect(names.map((name) => getComputedStyle(name).fontStyle)).toEqual(["normal", "normal"]);
   const placeholder = summary.querySelector(".summary-placeholder")!;
+  expect(placeholder.textContent).toBe("Mains");
   expect(getComputedStyle(placeholder).color).toBe("rgb(9, 9, 9)");
 });
 
-test("a summary row marked as a placeholder draws its value in italic, its name upright", async () => {
+test("a summary row marked as a placeholder includes its value alongside the name", async () => {
   const el = await withRows([
     { fields: [{ label: "Name", value: "EN: A glass" }], lines: 1 },
     {
@@ -779,11 +762,8 @@ test("a summary row marked as a placeholder draws its value in italic, its name 
     "Name: EN: A glass",
     "Description: EN: Roasted in house",
   ]);
-  expect(rows.map(valueStyles)).toEqual([
-    [["EN: A glass", "normal"]],
-    [["EN: Roasted in house", "italic"]],
-  ]);
-  expect(getComputedStyle(rows[1]!.querySelector(".summary-label")!).fontStyle).toBe("normal");
+  expect(rows[0]!.querySelector(".summary-placeholder")).toBeNull();
+  expect(rows[1]!.querySelector(".summary-placeholder")!.textContent).toBe("EN: Roasted in house");
 });
 
 test("a height transition of the content's own ending does not cut the section's opening short", async () => {

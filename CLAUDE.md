@@ -361,6 +361,8 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
   `scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name
   ([limits](docs/developers/conventions-ui.md#no-hardcoded-chrome)), and
   `scripts/style-token-names.test.ts`, weaker than its name.
+- **App and package styles keep text upright**, including placeholders and inherited values (owner, 2026-11-24, A1570).
+  Guard: `scripts/no-italic-styles.test.ts`, weaker than its name: it reads written CSS declarations as text.
 - **Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills,
   lines and icons.** Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name. What it misses is in
   [design-system.md](docs/developers/design-system.md).
