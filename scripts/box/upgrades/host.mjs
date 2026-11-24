@@ -12,6 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
 import { createServer, createConnection } from "node:net";
 import { once } from "node:events";
+import { clearTimeout, setTimeout } from "node:timers";
 import { createHash } from "node:crypto";
 
 const execute = promisify(execFile);
@@ -831,7 +832,7 @@ export async function clockStatusRelay({
         return;
       }
       source = createConnection(socketPath);
-      if (answerSynchronised) source.setTimeout(HOST_ANSWER_MS, () => source.destroy());
+      const limit = answerSynchronised && setTimeout(() => source.destroy(), HOST_ANSWER_MS);
       let answered = false;
       const answer = (reply) => {
         if (answered) return;
@@ -849,7 +850,10 @@ export async function clockStatusRelay({
         } else if (reply.length > 4096) source.destroy();
       });
       source.on("error", () => answer('{"ok":false,"reason":"unavailable"}\n'));
-      source.on("close", () => answer(""));
+      source.on("close", () => {
+        clearTimeout(limit);
+        answer("");
+      });
     });
   });
   const path = join(directory, "box.sock");

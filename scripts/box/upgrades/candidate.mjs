@@ -100,10 +100,16 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       envFile,
       ...mounts,
     ];
-    const result = (stdout) => JSON.parse(stdout.trim().split("\n").at(-1));
+    const result = (check, stdout) => {
+      const report = JSON.parse(stdout.trim().split("\n").at(-1));
+      if (!Array.isArray(report) || report.length === 0)
+        throw new Error(`the ${check} check reported nothing`);
+      return report;
+    };
     started.push(readiness);
     reports.push(
       ...result(
+        "readiness",
         (
           await run("docker", [
             "run",
@@ -178,6 +184,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
     await run("docker", ["stop", "--time", "10", agent]);
     reports.push(
       ...result(
+        "sale",
         (await run("docker", ["exec", app, "node", "/app/upgrade-checks.js", "sale"])).stdout,
       ),
     );

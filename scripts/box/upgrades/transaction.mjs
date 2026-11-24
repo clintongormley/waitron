@@ -242,7 +242,7 @@ export async function recoverUpgrade({ directory, host, choice, resultPath }) {
     if ((await savedIdentityNote(directory)) !== null)
       throw new Error(
         "This upgrade changes the software producer, so it cannot be kept. " +
-          "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.",
+          "Run `waitron.sh restore` to put the previous version back, then try the upgrade again.",
       );
     await host.stop();
     await host.installCandidate(marker.images.candidate);

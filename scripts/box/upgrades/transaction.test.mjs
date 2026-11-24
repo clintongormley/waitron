@@ -1,9 +1,10 @@
 import * as fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { applyUpgrade, recoverUpgrade, upgradeStatus } from "./transaction.mjs";
+import { applyUpgrade, recoverUpgrade, upgradeStatus, writeFileDurable } from "./transaction.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import {
   IDENTITY_CHANGE_FILE,
@@ -689,7 +690,7 @@ it.each(["prepare", "marker"])(
 describe("an attempt that changes the producer", () => {
   const REFUSAL =
     "This upgrade changes the software producer, so it cannot be kept. " +
-    "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.";
+    "Run `waitron.sh restore` to put the previous version back, then try the upgrade again.";
   const tree = async (folder) =>
     Object.fromEntries(
       await Promise.all(
@@ -780,3 +781,33 @@ describe("an attempt that changes the producer", () => {
     },
   );
 });
+
+it.each([
+  ["link", (outside, temporary) => fs.symlink(outside, temporary)],
+  ["file", (outside, temporary) => fs.link(outside, temporary)],
+])(
+  "refuses a %s left under an owned folder's temporary name after clearing it",
+  async (_, plant) => {
+    const f = await fixture();
+    const outside = join(f.root, "outside");
+    const path = join(f.state, IDENTITY_CHANGE_FILE);
+    await fs.writeFile(outside, "outside");
+    const { rm } = fs.default;
+    const spy = vi.spyOn(fs.default, "rm").mockImplementation(async (...args) => {
+      await rm(...args);
+      if (args[0] === `${path}.tmp`) await plant(outside, args[0]);
+    });
+    onTestFinished(() => {
+      spy.mockRestore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    await expect(writeFileDurable(path, "note", await fs.stat(f.state))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+
+    expect(await fs.readFile(outside, "utf8")).toBe("outside");
+    await expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);

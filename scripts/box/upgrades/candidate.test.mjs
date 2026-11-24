@@ -241,6 +241,9 @@ describe("an attempt that changes the producer", () => {
     return { ...f, live, state, seen, check };
   }
 
+  const answers = (check, stdout) => (args) =>
+    args.at(-1) === check ? { stdout: JSON.stringify(stdout) } : undefined;
+
   it("gives the note to the copy both checks read, and to the live state only when they have passed", async () => {
     const f = await noted();
     expect(await f.check()).toEqual([
@@ -289,6 +292,12 @@ describe("an attempt that changes the producer", () => {
     expect(await fs.readdir(f.live)).toEqual([]);
   });
 
+  it("fails an attempt without a note on an empty sale report", async () => {
+    const f = await noted({ note: null, reply: answers("sale", []) });
+    await expect(f.check()).rejects.toThrow("the sale check reported nothing");
+    expect(await fs.readdir(f.live)).toEqual([]);
+  });
+
   it("leaves an earlier upgrade's unused note as it is when this attempt has none", async () => {
     const f = await noted({ note: null });
     for (const folder of [f.live, join(f.directory, "copies", "0")])
@@ -311,8 +320,6 @@ describe("an attempt that changes the producer", () => {
     );
   });
 
-  const answers = (check, stdout) => (args) =>
-    args.at(-1) === check ? { stdout: JSON.stringify(stdout) } : undefined;
   it.each([
     [
       "a refused readiness check",
@@ -354,11 +361,16 @@ describe("an attempt that changes the producer", () => {
     expect(await fs.readdir(f.live)).toEqual([]);
   });
 
-  it("writes no live note when neither check reported anything", async () => {
-    const f = await noted({
-      reply: (args) => (["readiness", "sale"].includes(args.at(-1)) ? { stdout: "[]" } : undefined),
-    });
-    expect(await f.check()).toEqual([]);
+  const emptyChecks = (args) =>
+    ["readiness", "sale"].includes(args.at(-1)) ? { stdout: "[]" } : undefined;
+  it.each([
+    ["an empty readiness report", answers("readiness", []), "readiness"],
+    ["an empty sale report", answers("sale", []), "sale"],
+    ["a sale report that is not a list", answers("sale", { name: "sale", ok: true }), "sale"],
+    ["an empty report from both checks", emptyChecks, "readiness"],
+  ])("fails, and writes no live note, on %s", async (_, reply, check) => {
+    const f = await noted({ reply });
+    await expect(f.check()).rejects.toThrow(`the ${check} check reported nothing`);
     expect(await fs.readdir(f.live)).toEqual([]);
   });
 

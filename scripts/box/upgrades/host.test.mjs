@@ -16,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { createConnection, createServer } from "node:net";
 import { once } from "node:events";
+import { clearInterval, setInterval } from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1225,6 +1226,13 @@ describe("the clock relay told to answer synchronised", () => {
     ["answers too much", (socket) => socket.end(" ".repeat(5000))],
     ["hangs up", (socket) => socket.end()],
     ["never answers", () => {}],
+    [
+      "keeps sending without finishing a line",
+      (socket) => {
+        const drip = setInterval(() => socket.write(" "), 300);
+        socket.on("close", () => clearInterval(drip));
+      },
+    ],
     ["is not there", undefined],
   ])(
     "tells the copy its time is synchronised, and says so once, when the host %s",
