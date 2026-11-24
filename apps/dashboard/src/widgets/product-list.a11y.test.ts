@@ -411,7 +411,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await showArchived(el);
     const toggle = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="show-archived"]')!;
     expect(toggle.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(4);
+    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
     await expectNoA11yViolations(host);
   });
 
@@ -655,6 +655,8 @@ describe.each(["light", "dark"] as const)("product media link a11y (%s)", (theme
         );
         await expectNoA11yViolations(host);
         media.focus();
+        await userEvent.tab({ shift: true });
+        await userEvent.tab();
         expect(table.shadowRoot!.activeElement).toBe(media);
         expect(getComputedStyle(media).outlineStyle).not.toBe("none");
         await expectNoA11yViolations(host);
