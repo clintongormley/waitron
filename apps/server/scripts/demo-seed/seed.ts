@@ -140,7 +140,7 @@ export async function seedDemoRestaurant(
     takeawayVatClass: p.takeawayVatClass,
     takeawayVatRate: takeawayVatRateOf(p.id),
   }));
-  // Products can share a `created_at` (all do under a frozen clock) and then tie on random ids, so
+  // Products can share a `created_at` (all do under a frozen clock) and then sort by their IDs, so
   // read order can vary between runs, while seedSales draws by position: sort by everything a sale
   // line reads.
   const saleKey = (p: SeedSalesDeliProduct) =>

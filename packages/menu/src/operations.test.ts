@@ -328,8 +328,8 @@ describe("menu operations", () => {
   // Two rows with the SAME `created_at`, the earlier insert carrying the LEXICALLY GREATER id, so
   // insert order and id order disagree. `created_at` is at millisecond resolution, so ties are
   // ordinary. Weaker than it looks: the `group by products.id` settles the tie, so this pins the
-  // ORDER the read returns and nothing pins the `id` in `listProducts`'s `orderBy`. And `id` is a
-  // random v4 UUID, so a caller that needs creation order cannot get it from these two columns.
+  // ORDER the read returns and nothing pins the `id` in `listProducts`'s `orderBy`. Rows with the same
+  // minting time can sort in either ID order.
   it("settles a created_at tie on the product id rather than on insert order", async () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });

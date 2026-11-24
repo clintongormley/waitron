@@ -20,8 +20,8 @@ function plainName(kind: string, name: string): string {
 /**
  * A fresh UUID, generated in SQL.
  *
- * A trigger bypasses the column’s Drizzle default. The change rows are deleted in the same
- * transaction, so their IDs can use SQLite’s random bytes with the version-4 and variant bits.
+ * A trigger bypasses Drizzle. Nothing reads the ID of a change notice, so the trigger can
+ * use SQLite's random bytes with the version-4 and variant bits.
  * The mask handles every draw, including the smallest 64-bit integer that `abs()` cannot take.
  */
 const NEW_ID_SQL =

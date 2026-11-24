@@ -36,6 +36,8 @@ import { drawerOpens } from "./drawer-opens.js";
 import * as publicSurface from "../index.js";
 import { binary as doorBinary, day as doorDay, table as doorTable } from "../index.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { signInChallenges } from "./identity/sign-in-challenges.js";
+import { nodes } from "./nodes.js";
 
 const probe = table("probe", {
   pk: id("pk").primaryKey().$defaultFn(newId),
@@ -58,6 +60,15 @@ const probe = table("probe", {
 });
 
 describe("row IDs written by Drizzle", () => {
+  it.each([
+    ["box identity", nodes.id],
+    ["sign-in challenge", signInChallenges.id],
+  ])("keeps the %s default random", (_name, column) => {
+    expect(column.defaultFn?.()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
   const rows = table("row_id_probe", { id: id("id").primaryKey().$defaultFn(newId) });
   const venue = useVenueDb({
     migrations: [],

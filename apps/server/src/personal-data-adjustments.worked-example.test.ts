@@ -196,7 +196,7 @@ async function voidLine(
       operatorId,
     );
   });
-  // Two cancels in one millisecond would tie on `created_at` and be ordered by their random ids.
+  // Two cancels in one millisecond would tie on `created_at`, so their IDs could sort in either order.
   await new Promise((resolve) => setTimeout(resolve, 2));
   const [row] = await inTx(venue, (tx) =>
     tx

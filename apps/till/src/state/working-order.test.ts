@@ -5,7 +5,6 @@ import { toDraftLineInput } from "./draft-lines.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
-// A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // A gross-1.50 espresso at the general rate.

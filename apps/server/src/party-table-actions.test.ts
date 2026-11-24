@@ -1,3 +1,4 @@
+import { mockRowIdOrder } from "./testing/descending-ids.js";
 import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson, seedZone } from "@waitron/db/testing/seed.js";
@@ -2172,23 +2173,26 @@ describe("A803 no main bill (join)", () => {
 describe("A803 split", () => {
   const whole = (...wholeBillIds: string[]) => ({ wholeBillIds, loose: [] });
 
-  async function threeBills(prefix: string) {
+  async function threeBills(prefix: string, reverseSplitIds = false) {
     const [m4, m5] = await tables(prefix, 4, 5);
     const anna = await seat(v, m4);
     await joinFree(anna.partyId, m5);
     await order(v, anna.tabId, "Burger", "Red wine bottle", "Flan");
-    const b2 = await splitOff(anna.partyId, anna.tabId, [2]);
-    const b3 = await splitOff(anna.partyId, anna.tabId, [3]);
-    return { anna, m4, m5, b1: anna.tabId, b2, b3 };
+    const restoreIds = reverseSplitIds ? mockRowIdOrder("descending") : undefined;
+    try {
+      const b2 = await splitOff(anna.partyId, anna.tabId, [2]);
+      const b3 = await splitOff(anna.partyId, anna.tabId, [3]);
+      return { anna, m4, m5, b1: anna.tabId, b2, b3 };
+    } finally {
+      restoreIds?.();
+    }
   }
 
   /** {@link threeBills} with Bill 2's id sorting after Bill 3's, so ids answer against numbers. */
   async function threeBillsWithIdsAgainstNumbers(prefix: string) {
-    for (let attempt = 1; attempt <= 40; attempt++) {
-      const bills = await threeBills(`${prefix} ${attempt}`);
-      if (bills.b2 > bills.b3) return bills;
-    }
-    throw new Error("no two bills with ids sorting against their numbers in 40 tries");
+    const bills = await threeBills(prefix, true);
+    expect(bills.b2 > bills.b3).toBe(true);
+    return bills;
   }
 
   /** Every stored fact of the bill but the lines' group, which a split gives a new one. */

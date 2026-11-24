@@ -16,10 +16,10 @@ export function descendingIds() {
 export function mockRowIdOrder(order: "ascending" | "descending"): () => void {
   const random = globalThis.crypto.randomUUID();
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
-  let sequence = 0x800;
+  let sequence = 0x80000000;
   const tail = vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
     sequence += order === "ascending" ? 1 : -1;
-    return `00000000-0000-4${sequence.toString(16).padStart(3, "0")}-${random.slice(19, 23)}-${random.slice(24)}`;
+    return `00000000-0000-4${random.slice(15, 18)}-${random.slice(19, 23)}-${random.slice(24, 28)}${sequence.toString(16).padStart(8, "0")}`;
   });
   return () => {
     tail.mockRestore();

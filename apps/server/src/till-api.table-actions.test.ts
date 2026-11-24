@@ -1,3 +1,4 @@
+import { mockRowIdOrder } from "./testing/descending-ids.js";
 import { addFixtureExtra } from "./testing/portion-bill.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
@@ -638,13 +639,8 @@ describe("A803 action results:", () => {
   }
 
   it("Move guests to a free table answers the party's bills in number order", async () => {
-    // Bill ids are random, so seat again until Bill 1's id sorts after Bill 2's: only then does
-    // number order differ from id order.
-    let arranged = await annaAtTwo();
-    for (let tries = 1; tries < 20 && arranged.anna.tabId < arranged.billId; tries++) {
-      arranged = await annaAtTwo();
-    }
-    const { anna, billId } = arranged;
+    const restoreIds = mockRowIdOrder("descending");
+    const { anna, billId } = await annaAtTwo().finally(restoreIds);
     expect(anna.tabId > billId).toBe(true);
     expect((await numbersOf(venue, anna.partyId)).map(([id, n]) => [id, n])).toEqual([
       [anna.tabId, 1],

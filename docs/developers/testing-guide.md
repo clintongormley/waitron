@@ -227,7 +227,7 @@ the ones whose fixes are on `main`.
   everything before the event too; that fix made it 30 seconds.
 - **"The latest row" picked by time alone.** Rows written in the same millisecond share a time, so
   a read ordered by time alone returns them in either order. A tie broken by id does not help here:
-  ids are random UUIDs, so the order says nothing about which row was written last. A846 (#1896,
+  older IDs are random UUIDs, and time-ordered IDs still have random ties within a millisecond. A846 (#1896,
   inner commit "Pick the newer of two alerts handled at the same moment as the last one handled"):
   ordering by handling time then id sometimes picked the older alert. A533 (#1606, "Orders:
   same-moment rows keep their writing order, …") breaks such ties with SQLite's `rowid`, the order

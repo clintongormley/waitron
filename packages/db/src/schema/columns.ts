@@ -177,6 +177,7 @@ export const labelList = (name: string) => text(name, { mode: "json" }).$type<st
  * `now` and `nowIso` are two functions so the typechecker refuses a `ts` column paired with
  * `nowIso` and a `tsString` column paired with `now`.
  */
+/** The minting time is visible in a row ID. Use a separate random value for credentials. */
 export const newId = newRowId;
 export const now = () => new Date();
 export const nowIso = () => new Date().toISOString();

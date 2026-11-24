@@ -211,7 +211,7 @@ async function snapshot(t: Table) {
   };
 }
 
-/** Print job ids are random, so the jobs since a point are told by rowid. */
+/** Use rowid to read print jobs in the order they were inserted, including ties on minting time. */
 function lastJobRow() {
   return (
     venue.db.all<{ row: number | null }>(sql`select max(rowid) as row from print_jobs`)[0]!.row ?? 0

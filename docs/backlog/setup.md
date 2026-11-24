@@ -250,8 +250,9 @@ representative year's size. The `print_jobs` controls reached the 1 GiB containe
 points if a capture is dominated by one of the four tables.
 See the [Cloud transfer plan](../superpowers/plans/2026-11-17-cloud-snapshot-stream.md).
 
-Revisit content-named pieces, a read-only archive database and continuous Cloud copies after
-time-ordered IDs and real venue measurements (owner, 17 November 2026, 23:16 and 23:19).
+The owner asked on 17 November 2026 at 23:16 and 23:19 for time-ordered IDs and real venue
+measurements before revisiting content-named pieces, a read-only archive database and continuous
+Cloud copies. The remaining input is a real venue measurement.
 The [time-ordered ID plan](../superpowers/plans/2026-11-24-time-ordered-row-ids.md) covers the synthetic
 comparison. Measure a live venue before using its result to choose a copy format.
 Lane M's LEAN-BACKUPS investigation, `lean-backups-and-live-db.md`, found that one day touched
