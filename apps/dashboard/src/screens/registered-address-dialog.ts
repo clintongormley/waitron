@@ -134,9 +134,6 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
           grid-template-columns: minmax(0, 1fr);
         }
       }
-      wt-address-lookup {
-        margin-block-end: var(--wt-space-3);
-      }
       .switch-hint {
         margin: calc(-1 * var(--wt-space-2)) 0 var(--wt-space-1);
         color: var(--wt-color-text-muted);
@@ -254,7 +251,6 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     const rest = later.filter((line) => line.trim() !== "");
     this.replaceDraft((draft) => ({
       ...draft,
-      sameAsVenue: false,
       street,
       // A Line 2 typed (a floor, a unit) stays unless the address brings one.
       ...(rest.length > 0 ? { line2: rest.join(", ") } : {}),
@@ -344,30 +340,30 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     view: TaxpayerFieldsView<RegisteredAddressDraft>,
   ): TemplateResult {
     const hint = t("venue_details.registered_same_hint");
-    return html`${this.#addressSearch(view.busy)}
-      <div class="fields">
-        <wt-switch
-          name=${SAME_AS_VENUE}
-          label=${t("venue_details.registered_same")}
-          description=${hint}
-          .checked=${view.draft.sameAsVenue}
-          ?disabled=${view.busy}
-          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-            event.stopPropagation();
-            view.change({ ...view.draft, sameAsVenue: event.detail.checked });
-          }}
-        ></wt-switch>
-        <p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">${hint}</p>
-        ${
-          view.draft.sameAsVenue
-            ? nothing
-            : html`${this.#field(view, "street")} ${this.#field(view, "line2")}
-                <div class="pair">
-                  ${this.#field(view, "postalCode")} ${this.#field(view, "city")}
-                </div>
-                ${this.#field(view, "province")}`
-        }
-      </div>`;
+    return html`<div class="fields">
+      <wt-switch
+        name=${SAME_AS_VENUE}
+        label=${t("venue_details.registered_same")}
+        description=${hint}
+        .checked=${view.draft.sameAsVenue}
+        ?disabled=${view.busy}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          view.change({ ...view.draft, sameAsVenue: event.detail.checked });
+        }}
+      ></wt-switch>
+      <p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">${hint}</p>
+      ${
+        view.draft.sameAsVenue
+          ? nothing
+          : html`${this.#addressSearch(view.busy)} ${this.#field(view, "street")}
+              ${this.#field(view, "line2")}
+              <div class="pair">
+                ${this.#field(view, "postalCode")} ${this.#field(view, "city")}
+              </div>
+              ${this.#field(view, "province")}`
+      }
+    </div>`;
   }
 }
 
