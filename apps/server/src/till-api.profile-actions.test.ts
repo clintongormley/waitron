@@ -595,6 +595,13 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   },
   {
     proof: "matching request (source)",
+    actions: ["take-cash", "hand-keyed-card-payment"],
+    basis:
+      'Conditional on the way chosen: cash needs take-cash, a separate terminal hand-keyed-card-payment, as POST /api/transactions/:saleId/refunds checks the payment it gives back; give-back.test.ts: "refuses a profile that takes no cash, a till outside the receipt\'s zone and a kitchen screen, writing nothing"',
+    routes: ["POST /api/transactions/:saleId/give-back"],
+  },
+  {
+    proof: "matching request (source)",
     actions: ["print-receipt"],
     basis:
       'File now files the corrective for money its refunds already gave back; it moves no money and opens no drawer. print-receipt never refuses: the corrective\'s receipt is queued only when the profile allows print-receipt; invoice-correction-api.test.ts: "File now files the corrective but prints nothing on a till that cannot print receipts"; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
@@ -728,6 +735,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/transactions/:saleId/deliveries",
       "GET /api/transactions/:saleId/receipt-print",
       "GET /api/transactions/:saleId/refundable-tenders",
+      "GET /api/transactions/:saleId/give-back",
       "GET /api/transactions/:saleId/corrections/lines",
       "GET /api/unpaid-departure-authorizers",
       "GET /api/working-orders",
@@ -742,6 +750,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/dead-ends/order",
       "POST /api/dead-ends/sale",
       "POST /api/transactions/:saleId/corrections/preview",
+      "POST /api/transactions/:saleId/give-back/preview",
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
       "POST /api/working-orders/:id/item-payments/preview",

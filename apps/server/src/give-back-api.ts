@@ -1,29 +1,55 @@
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
-import { readPersonAuthority } from "@waitron/identity";
-import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
+import { readPersonAuthority, type PinThrottle } from "@waitron/identity";
+import { codeOf, createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { refundProvidersOf } from "./bill-refunds.js";
-import { giveBack, planGiveBack, readGiveBack, type GiveBackWriteDeps } from "./give-back.js";
+import {
+  giveBack,
+  planGiveBack,
+  readGiveBack,
+  readGiveBackOutcome,
+  type GiveBackWriteDeps,
+} from "./give-back.js";
+import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
 import type { Logger } from "./logger.js";
+import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
-import { checkAccess, pathId } from "./tender-refund-api.js";
-import { STATUS, type TillApiDeps } from "./till-api.js";
+import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
+import type { TenderRefundDeps } from "./tender-refunds.js";
+import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";
 import "./errors.js";
 
 /** The Give money back window's read and preview, which write nothing, and its write. */
-export function mountGiveBackApi(app: Hono, deps: TillApiDeps, log: Logger): void {
+export function mountGiveBackApi(
+  app: Hono,
+  deps: TillApiDeps,
+  log: Logger,
+  pinThrottle: PinThrottle,
+): void {
+  const refundProviderFor = refundProvidersOf({
+    simulator: deps.refundSimulator ?? deps.cardProvider,
+    pool: deps.pool,
+  });
   const giveBackDeps: GiveBackWriteDeps = {
     backend: deps.backend,
     admission: deps.admission,
     clock: deps.clock,
     attendance: deps.attendance,
-    refundProviderFor: refundProvidersOf({
-      simulator: deps.refundSimulator ?? deps.cardProvider,
-      pool: deps.pool,
-    }),
+    refundProviderFor,
+  };
+  const filingDeps: TenderRefundDeps = {
+    db: deps.db,
+    backend: deps.backend,
+    admission: deps.admission,
+    cfg: deps.cfg,
+    clock: deps.clock,
+    attendance: deps.attendance,
+    refundProviderFor,
+    clockUnconfirmed: deps.clockUnconfirmed,
+    log,
   };
   const run = createErrorBoundary(
     {
@@ -93,24 +119,53 @@ export function mountGiveBackApi(app: Hono, deps: TillApiDeps, log: Logger): voi
       const cfg = requestCfg(deps.cfg, session),
         id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
       const body = asObject(await readRawJsonBody<unknown>(c));
-      const result = await withTransaction(deps.db, async (tx) => {
-        const device = await checkAccess(tx, session, id);
-        const authority = await readPersonAuthority(tx, session.personId);
-        return giveBack(
-          tx,
-          giveBackDeps,
-          cfg,
-          id,
-          {
-            device,
-            authority,
-            personId: session.personId,
-            sessionId: session.sessionId,
-          },
-          body,
-        );
+      const override = overrideOf(body);
+      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
+      // Checked whoever is signed in: the rights needed are known only inside the transaction, and
+      // a separate terminal asks the PIN of a person holding them too.
+      const toCheck = await overrideToCheck(
+        deps.db,
+        { sessionId: session.sessionId, permission: "sale.refund" },
+        override,
+        true,
+      );
+      const { outcome, fileAfter } = await withPinCheckAhead(
+        deps.db,
+        toCheck,
+        attempts,
+        (checked) =>
+          withTransaction(deps.db, async (tx) => {
+            const device = await checkAccess(tx, session, id);
+            const authority = await readPersonAuthority(tx, session.personId);
+            return giveBack(
+              tx,
+              giveBackDeps,
+              cfg,
+              id,
+              {
+                device,
+                authority,
+                personId: session.personId,
+                sessionId: session.sessionId,
+                override: withCheck(override, checked),
+                attempts,
+              },
+              body,
+            );
+          }),
+      );
+      if (fileAfter === null) return c.json(outcome);
+      await fileCorrectionAutomatically(filingDeps, fileAfter).catch((error: unknown) => {
+        log("error", "invoice_correction.automatic_filing_failed", {
+          correctionId: fileAfter,
+          errorCode: codeOf(error),
+        });
       });
-      return c.json(result);
+      return c.json(
+        await withTransaction(deps.db, (tx) =>
+          readGiveBackOutcome(tx, giveBackDeps, cfg, id, body),
+        ),
+      );
     }),
   );
 }

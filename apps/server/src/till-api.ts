@@ -1402,7 +1402,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountTransactionReceiptApi(app, deps, log, run);
   mountTenderRefundApi(app, deps, log, pinThrottle);
   mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
-  mountGiveBackApi(app, deps, log);
+  mountGiveBackApi(app, deps, log, pinThrottle);
   mountDeferredCloseApi(app, deps, log, run);
   mountDrawerApi(app, deps, log, run);
 

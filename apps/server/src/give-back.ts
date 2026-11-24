@@ -12,7 +12,15 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
-import { authorize, holds, type PersonAuthority } from "@waitron/identity";
+import {
+  authorize,
+  holds,
+  type Authorization,
+  type Override,
+  type PersonAuthority,
+  type PinAttempts,
+  type SecretCheck,
+} from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   addDecimal,
@@ -33,7 +41,11 @@ import type { RefundProviderFor } from "./bill-refunds.js";
 import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
 import { giveCorrectionCash } from "./invoice-correction-cash.js";
-import { correctionOpenRefusal, openCorrectionOf } from "./invoice-correction-legs.js";
+import {
+  correctionOpenRefusal,
+  openCorrectionOf,
+  readCorrectionLegs,
+} from "./invoice-correction-legs.js";
 import {
   openInvoiceCorrection,
   previewInvoiceCorrection,
@@ -45,18 +57,20 @@ import {
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
 import { enqueueRefundDrawer } from "./receipt-print.js";
+import { confirmManualRefundAuthority } from "./tender-refund-authorization.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { carryNewTenderRefund, refuseUntilRefundable } from "./tender-refund-completion.js";
 import {
   allocateToCancels,
+  authorizeStoredTenderRefund,
   cancelsStillOwedBy,
   isPartPayment,
   moneyCents,
   reserveTenderRefund,
 } from "./tender-refund-reservation.js";
 import type { RefundableTender } from "./tender-refund-types.js";
-import { sendsRefunds } from "./tender-refunds.js";
+import { captureFor, sendsRefunds } from "./tender-refunds.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import "./errors.js";
@@ -650,8 +664,38 @@ export async function planGiveBack(
   who: { device: DeviceBinding | null; authority: PersonAuthority },
   body: object,
 ): Promise<GiveBackPlan> {
+  const { plan, rights } = await planWithRights(tx, deps, cfg, reading, saleId, who.device, body);
+  return { ...plan, needs: rights.filter((right) => !holds(who.authority, right)) };
+}
+
+/** The rights a give-back's parts need, whoever holds them (5.4, D9): `sale.refund` for a plain
+ * refund the cancel's approval does not cover, for an extra and for a correction's leg on this way;
+ * `sale.rectify` for a correction. */
+function rightsFor(parts: {
+  refund: boolean;
+  refundCovered: boolean;
+  extra: boolean;
+  correction: boolean;
+  leg: boolean;
+}): GiveBackRight[] {
+  const refund = (parts.refund && !parts.refundCovered) || parts.extra || parts.leg;
+  return [
+    ...(refund ? ["sale.refund" as const] : []),
+    ...(parts.correction ? ["sale.rectify" as const] : []),
+  ];
+}
+
+async function planWithRights(
+  tx: Transaction,
+  deps: GiveBackDeps,
+  cfg: DeviceRequestConfig,
+  reading: TrustedReading,
+  saleId: SaleId,
+  device: DeviceBinding | null,
+  body: object,
+): Promise<{ plan: Omit<GiveBackPlan, "needs">; rights: GiveBackRight[] }> {
   const request = parseGiveBackRequest(body as Record<string, unknown>);
-  const facts = await readFacts(tx, deps, cfg, reading, saleId, who.device);
+  const facts = await readFacts(tx, deps, cfg, reading, saleId, device);
   const { view, waits } = facts;
   refuseUnless(view.choices[request.purpose], "amount");
   const ticked = (request.lineIds ?? []).map((id) => {
@@ -666,7 +710,7 @@ export async function planGiveBack(
   const tenders = facts.tenders.filter((row) =>
     way.way === "cash" ? row.method === "cash" : row.tenderId === way.way,
   );
-  assertTakesTender(who.device, tenderKind(tenders[0]!));
+  assertTakesTender(device, tenderKind(tenders[0]!));
   const amount = cents(request.amount);
   const extra = request.purpose === "extra" ? amount : cents(request.extra);
   const wayMoney = cents(way.moneyLeft);
@@ -734,21 +778,17 @@ export async function planGiveBack(
   if (extra > 0) parts.push({ kind: "extra", amount: centsToDecimal(extra), way: way.way });
   if (correction !== undefined) parts.push(correction);
 
-  const needed = new Set<GiveBackRight>();
-  if (refund > 0 && !(await coveredByCancel(tx, saleId, request, cancellationIds, refund, way)))
-    needed.add("sale.refund");
-  if (extra > 0) needed.add("sale.refund");
-  if (correction !== undefined) {
-    needed.add("sale.rectify");
-    if (rest - leftUnderWay > 0) needed.add("sale.refund");
-  }
+  const rights = rightsFor({
+    refund: refund > 0,
+    refundCovered:
+      refund > 0 && (await coveredByCancel(tx, saleId, request, cancellationIds, refund, way)),
+    extra: extra > 0,
+    correction: correction !== undefined,
+    leg: correction !== undefined && rest - leftUnderWay > 0,
+  });
   return {
-    parts,
-    leftUnderWay: centsToDecimal(leftUnderWay),
-    needs: (["sale.refund", "sale.rectify"] as const).filter(
-      (right) => needed.has(right) && !holds(who.authority, right),
-    ),
-    manual: way.manual,
+    plan: { parts, leftUnderWay: centsToDecimal(leftUnderWay), manual: way.manual },
+    rights,
   };
 }
 
@@ -818,6 +858,8 @@ interface GiveBackWrite {
   note: string | null;
   ids: GiveBackSubmissionIds;
   expected: ComparablePart[];
+  /** Staff have already refunded the money on the separate terminal. */
+  manualConfirmed: boolean;
 }
 
 function parseGiveBackWrite(body: Record<string, unknown>): GiveBackWrite {
@@ -835,7 +877,10 @@ function parseGiveBackWrite(body: Record<string, unknown>): GiveBackWrite {
     leg: uuidOf(given.leg, "submissionIds"),
   };
   if (new Set(Object.values(ids)).size !== 4) throw invalid("submissionIds");
+  if (body.manualConfirmed !== undefined && typeof body.manualConfirmed !== "boolean")
+    throw invalid("manualConfirmed");
   return {
+    manualConfirmed: body.manualConfirmed === true,
     request,
     reasonId,
     note: note === null || note.trim() === "" ? null : note.trim(),
@@ -1010,6 +1055,7 @@ async function checkResend(
           appliedAmount: centsToDecimal(row.appliedAmount),
           tipAmount: centsToDecimal(row.tipAmount),
           reason,
+          ...(row.manual ? { manualConfirmed: true } : {}),
           ...(part.cancellationIds === null ? {} : { cancellationIds: part.cancellationIds }),
         },
         { requestedBy: personId, authorizedBy: row.authorizedBy },
@@ -1020,7 +1066,7 @@ async function checkResend(
 }
 
 /** Fills `amount` cents from `payments` in order, each up to what `left` says it holds. */
-function fromCashPayments(
+function fromPayments(
   amount: number,
   payments: readonly RefundableTender[],
   left: (payment: RefundableTender) => number,
@@ -1037,94 +1083,234 @@ function fromCashPayments(
   return legs;
 }
 
+/** Who gives back, and the supervisor's PIN when one was typed, checked ahead of the transaction. */
+export interface GiveBackActor {
+  device: DeviceBinding | null;
+  authority: PersonAuthority;
+  personId: string;
+  sessionId: string;
+  override?: Override & { checked?: SecretCheck };
+  attempts: PinAttempts;
+}
+
+/** What the write answers, and the correction the route files once it has committed: a separate
+ * terminal's money is already gone, so a refused filing must not undo its record. */
+export interface GiveBackResult {
+  outcome: GiveBackOutcome;
+  fileAfter: string | null;
+}
+
+/** Each of `rights` granted to the signed-in person or the supervisor whose PIN `who` carries,
+ * refusing the first neither holds. On a separate terminal the refund also needs a fresh PIN
+ * (`confirmManualRefundAuthority`). */
+async function authorizeRights(
+  tx: Transaction,
+  who: GiveBackActor,
+  rights: readonly GiveBackRight[],
+  manual: { tenderId: string } | null,
+): Promise<{ refund?: Authorization; rectify?: Authorization }> {
+  const granted: { refund?: Authorization; rectify?: Authorization } = {};
+  for (const right of rights) {
+    const authorization = await authorize(
+      tx,
+      { sessionId: who.sessionId, permission: right, override: who.override },
+      who.attempts,
+    );
+    if (right === "sale.rectify") granted.rectify = authorization;
+    else
+      granted.refund =
+        manual === null
+          ? authorization
+          : await confirmManualRefundAuthority(
+              tx,
+              authorization,
+              who.override,
+              who.attempts,
+              () =>
+                new AppError("tender.manual_refund_pin_required", { tenderId: manual.tenderId }),
+            );
+  }
+  return granted;
+}
+
+/** The authority a plain refund the cancel's approval covers is recorded under, as Refund a payment
+ * records it: the person, when they hold `sale.refund`, else the cancel's approver. */
+function coveredRefundActor(who: GiveBackActor) {
+  return async (cancelledBy?: string): Promise<Authorization> => {
+    if (holds(who.authority, "sale.refund"))
+      return { authorizedBy: who.personId, permission: "sale.refund", viaOverride: false };
+    if (cancelledBy === undefined)
+      throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+    return {
+      authorizedBy: cancelledBy,
+      permission: "sale.refund",
+      viaOverride: cancelledBy !== who.personId,
+    };
+  };
+}
+
+/** The rights a resend of `ask` needs, worked out from the same body and the rows its first send
+ * wrote, so it needs what that send needed. */
+async function resendRights(
+  tx: Transaction,
+  ask: GiveBackWrite,
+  stored: StoredGiveBack,
+  legs: readonly RefundRow[],
+  manual: boolean,
+): Promise<GiveBackRight[]> {
+  const refund = ask.expected.find((part) => part.kind === "refund");
+  let refundCovered =
+    refund !== undefined &&
+    ask.request.fromCancel !== undefined &&
+    refund.cancellationIds !== null &&
+    sameIds(ask.request.fromCancel, refund.cancellationIds) &&
+    cents(ask.request.extra) === 0 &&
+    !manual;
+  for (const row of refundCovered ? stored.refund : [])
+    await authorizeStoredTenderRefund(tx, row, async (cancelledBy) => {
+      if (cancelledBy === undefined) refundCovered = false;
+      return { authorizedBy: row.authorizedBy, permission: "sale.refund", viaOverride: false };
+    });
+  return rightsFor({
+    refund: refund !== undefined,
+    refundCovered,
+    extra: ask.expected.some((part) => part.kind === "extra"),
+    correction: stored.correction !== undefined,
+    leg: legs.length > 0,
+  });
+}
+
+/** The refunds the press `ask` wrote as its correction's leg. */
+async function legsOf(
+  tx: Transaction,
+  stored: StoredGiveBack,
+  ask: GiveBackWrite,
+): Promise<RefundRow[]> {
+  if (stored.correction === undefined) return [];
+  const legs = await readCorrectionLegs(tx, stored.correction.id);
+  return legs.refunds.filter((_, index) => legs.requestIds[index] === ask.ids.leg);
+}
+
 /**
- * Gives `body` back on the receipt `saleId` in cash (5.3), in the caller's one transaction: the
- * plain refunds of what cancels still owe, the extra, then one correction of the rest with its
- * cash leg, filed here once all its money is back; a refused filing undoes every part. The drawer
- * opens once, on the last cash write. A resend of the same ids answers its first result and
- * writes nothing; parts other than `body.expected` refuse `give_back.changed`.
+ * Gives `body` back on the receipt `saleId` (5.3), in the caller's one transaction: the plain
+ * refunds of what cancels still owe, the extra, then one correction of the rest with its leg. In
+ * cash the correction is filed here once all its money is back, and a refused filing undoes every
+ * part; the drawer opens once, on the last cash write. On a separate terminal every refund is
+ * recorded completed and the correction is left for the caller to file after commit. The rights
+ * asked are the ones the preview works out (5.4, D9). A resend of the same ids answers its first
+ * result and writes nothing; parts other than `body.expected` refuse `give_back.changed`.
  */
 export async function giveBack(
   tx: Transaction,
   deps: GiveBackWriteDeps,
   cfg: DeviceRequestConfig,
   saleId: SaleId,
-  who: {
-    device: DeviceBinding | null;
-    authority: PersonAuthority;
-    personId: string;
-    sessionId: string;
-  },
+  who: GiveBackActor,
   body: object,
-): Promise<GiveBackOutcome> {
+): Promise<GiveBackResult> {
   const ask = parseGiveBackWrite(body as Record<string, unknown>);
   const reading = deps.clock.now();
   await requireEconomicWrite(tx, cfg, deps.admission);
-  const authorizeFor = (permission: GiveBackRight) =>
-    authorize(tx, { sessionId: who.sessionId, permission });
-  const kinds = new Set(ask.expected.map((part) => part.kind));
+  const manualFor = (manual: boolean) => {
+    if (!manual) return null;
+    if (!ask.manualConfirmed) throw invalid("manualConfirmed");
+    return { tenderId: ask.request.way };
+  };
   const earlier = await readStoredGiveBack(tx, saleId, ask.ids);
   if (earlier !== undefined) {
-    await authorizeFor("sale.refund");
-    if (kinds.has("correction")) await authorizeFor("sale.rectify");
+    const legs = await legsOf(tx, earlier, ask);
+    const manual = [...earlier.refund, ...earlier.extra, ...legs].some((row) => row.manual);
+    const rights = await resendRights(tx, ask, earlier, legs, manual);
+    await authorizeRights(tx, who, rights, manualFor(manual));
     await checkResend(tx, deps, cfg, reading, saleId, ask, earlier, who.personId);
-    return outcomeOf(tx, deps, cfg, earlier, ask.expected);
+    return {
+      outcome: await outcomeOf(tx, deps, cfg, earlier, ask.expected),
+      fileAfter: manual && earlier.correction?.state === "open" ? earlier.correction.id : null,
+    };
   }
 
-  const plan = await planGiveBack(tx, deps, cfg, reading, saleId, who, ask.request);
+  const { plan, rights } = await planWithRights(
+    tx,
+    deps,
+    cfg,
+    reading,
+    saleId,
+    who.device,
+    ask.request,
+  );
   if (partsKey(comparablePartsOf(plan.parts)) !== partsKey(ask.expected))
     throw new AppError("give_back.changed", { saleId });
-  if (plan.parts.some((part) => part.way !== "cash")) throw invalid("way");
+  if (!plan.manual && plan.parts.some((part) => part.way !== "cash")) throw invalid("way");
+  const manual = manualFor(plan.manual);
   const reason = await reasonTextOf(tx, ask);
-  const refundAuthorization = await authorizeFor("sale.refund");
+  const granted = await authorizeRights(tx, who, rights, manual);
   const correction = plan.parts.find((part) => part.kind === "correction");
-  const rectifyAuthorization =
-    correction === undefined ? undefined : await authorizeFor("sale.rectify");
   const leg = correction === undefined ? 0 : cents(correction.amount) - cents(plan.leftUnderWay);
 
-  const cash = (await readRefundableTenders(tx, saleId)).filter((row) => row.method === "cash");
+  const payments = (await readRefundableTenders(tx, saleId)).filter((row) =>
+    ask.request.way === "cash" ? row.method === "cash" : row.tenderId === ask.request.way,
+  );
   const writes = plan.parts.flatMap((part) => {
     if (part.kind === "correction") return [];
     const isExtra = part.kind === "extra";
     const submissionId = isExtra ? ask.ids.extra : ask.ids.refund;
-    return fromCashPayments(cents(part.amount), cash, (payment) =>
+    return fromPayments(cents(part.amount), payments, (payment) =>
       cents(isExtra ? payment.tipRemaining : payment.appliedRemaining),
     ).map((share, index) => ({
       submissionId: partSubmissionId(submissionId, index),
       tenderId: share.tenderId,
       appliedAmount: centsToDecimal(isExtra ? 0 : share.cents),
       tipAmount: centsToDecimal(isExtra ? share.cents : 0),
+      ...(manual === null ? {} : { manualConfirmed: true }),
       ...(part.kind === "refund" && part.cancellationIds !== undefined
         ? { cancellationIds: part.cancellationIds }
         : {}),
     }));
   });
   const createdAt = reading.instant.toISOString();
+  const manualPaymentRef = async (reserved: RefundRow) =>
+    (await captureFor(tx, reserved))!.paymentRef;
+  const carry = (reserved: RefundRow, opensDrawer: boolean) =>
+    carryNewTenderRefund(
+      tx,
+      deps,
+      cfg.nodeId,
+      reading,
+      reserved,
+      manual !== null
+        ? { manualPaymentRef }
+        : opensDrawer
+          ? {
+              openDrawer: (done, printers) =>
+                enqueueRefundDrawer(
+                  tx,
+                  cfg,
+                  done.id,
+                  who.personId,
+                  {
+                    authorizedBy: done.authorizedBy,
+                    viaOverride: done.authorizedBy !== who.personId,
+                  },
+                  printers,
+                ),
+            }
+          : {},
+    );
   for (const [index, write] of writes.entries()) {
     const { refund: reserved } = await reserveTenderRefund(
       tx,
       cfg,
       saleId,
       { ...write, reason },
-      { requestedBy: who.personId, authorizedBy: refundAuthorization.authorizedBy },
+      granted.refund === undefined
+        ? { requestedBy: who.personId, authorize: coveredRefundActor(who) }
+        : { requestedBy: who.personId, authorizedBy: granted.refund.authorizedBy },
       createdAt,
       { backend: deps.backend, reading },
     );
-    const opensDrawer = leg === 0 && index === writes.length - 1;
-    await carryNewTenderRefund(
-      tx,
-      deps,
-      cfg.nodeId,
-      reading,
-      reserved,
-      opensDrawer
-        ? {
-            openDrawer: (done, printers) =>
-              enqueueRefundDrawer(tx, cfg, done.id, who.personId, refundAuthorization, printers),
-          }
-        : {},
-    );
+    await carry(reserved, leg === 0 && index === writes.length - 1);
   }
+  let fileAfter: string | null = null;
   if (correction !== undefined) {
     const lineIds = correction.kind === "correction" ? correction.lineIds : [];
     const selection = {
@@ -1145,9 +1331,9 @@ export async function giveBack(
         note: ask.note,
         expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
       },
-      { personId: who.personId, authorization: rectifyAuthorization! },
+      { personId: who.personId, authorization: granted.rectify! },
     );
-    if (leg > 0)
+    if (leg > 0 && manual === null)
       await giveCorrectionCash(
         tx,
         deps,
@@ -1156,10 +1342,61 @@ export async function giveBack(
         { submissionId: ask.ids.leg, amount: centsToDecimal(leg) },
         {
           personId: who.personId,
-          authz: { sessionId: who.sessionId },
-          authorization: refundAuthorization,
+          authz: { sessionId: who.sessionId, override: who.override },
+          authorization: granted.refund!,
         },
       );
+    if (leg > 0 && manual !== null) {
+      const { refund: reserved } = await reserveTenderRefund(
+        tx,
+        cfg,
+        saleId,
+        {
+          submissionId: ask.ids.leg,
+          tenderId: manual.tenderId,
+          appliedAmount: centsToDecimal(leg),
+          tipAmount: "0.00",
+          reason,
+          manualConfirmed: true,
+          invoiceCorrection: { id: opened.correction.id, requestId: ask.ids.leg },
+        },
+        { requestedBy: who.personId, authorizedBy: granted.refund!.authorizedBy },
+        createdAt,
+        { backend: deps.backend, reading },
+      );
+      await carry(reserved, false);
+      fileAfter = opened.correction.id;
+    }
   }
+  return {
+    outcome: await readGiveBackOutcomeOf(tx, deps, cfg, saleId, ask),
+    fileAfter,
+  };
+}
+
+async function readGiveBackOutcomeOf(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  ask: GiveBackWrite,
+): Promise<GiveBackOutcome> {
   return outcomeOf(tx, deps, cfg, (await readStoredGiveBack(tx, saleId, ask.ids))!, ask.expected);
+}
+
+/** What the press `body` wrote on `saleId` answers now, as its write answered it. Writes nothing. */
+export function readGiveBackOutcome(
+  tx: Transaction,
+  deps: GiveBackWriteDeps,
+  cfg: DeviceRequestConfig,
+  saleId: SaleId,
+  body: object,
+): Promise<GiveBackOutcome> {
+  return readGiveBackOutcomeOf(
+    tx,
+    deps,
+    cfg,
+    saleId,
+    parseGiveBackWrite(body as Record<string, unknown>),
+  );
 }

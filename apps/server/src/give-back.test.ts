@@ -5,6 +5,7 @@ import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@wai
 import {
   deviceProfiles,
   devices,
+  floorZones,
   invoiceCorrections,
   parties,
   refunds,
@@ -15,6 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   createCategory,
@@ -24,6 +26,7 @@ import {
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { authorityForRoles, loginWithPin, type PersonAuthority } from "@waitron/identity";
+import type { ProfileAction } from "@waitron/layouts";
 import { recordReplacement } from "@waitron/core";
 import {
   AppError,
@@ -34,6 +37,11 @@ import {
   seriesId as brandSeriesId,
   type SaleId,
 } from "@waitron/shared";
+import {
+  createDepartment,
+  createServiceZone,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -62,6 +70,9 @@ import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { personHolding } from "./testing/session-holding.js";
 import { TradingAdmission } from "./trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
@@ -77,6 +88,33 @@ vi.mock("@waitron/core", async (importOriginal) => {
         return Promise.reject(new Error("filing refused"));
       }
       return real.recordCorrection(...args);
+    },
+  };
+});
+
+/** The credentials `withPinCheckAhead` was handed, in order. */
+const pinChecks = vi.hoisted(() => ({ credentials: [] as unknown[] }));
+vi.mock("./pin-check-ahead.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./pin-check-ahead.js")>();
+  return {
+    ...real,
+    withPinCheckAhead: (...args: Parameters<typeof real.withPinCheckAhead>) => {
+      pinChecks.credentials.push(args[1]);
+      return real.withPinCheckAhead(...args);
+    },
+  };
+});
+
+/** The corrections `fileCorrectionAutomatically` was asked to file; with `refuse`, it throws. */
+const automaticFiling = vi.hoisted(() => ({ refuse: false, asked: [] as string[] }));
+vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./invoice-correction-alerts.js")>();
+  return {
+    ...real,
+    fileCorrectionAutomatically: (...args: Parameters<typeof real.fileCorrectionAutomatically>) => {
+      automaticFiling.asked.push(args[1]);
+      if (automaticFiling.refuse) return Promise.reject(new Error("automatic filing refused"));
+      return real.fileCorrectionAutomatically(...args);
     },
   };
 });
@@ -1455,5 +1493,410 @@ describe("POST …/give-back in cash", () => {
     });
     expect(await give(saleId, body)).toEqual(first);
     expect(effects()).toEqual(after);
+  });
+});
+
+/** A till cookie for `personId` on the first till. */
+async function tillCookieFor(personId: string, pin: string): Promise<string> {
+  const session = await inTx(venue, (tx) =>
+    loginWithPin(tx, { deviceId: venue.deviceId, personId, pin }),
+  );
+  return `${SESSION_COOKIE}=${session.token}; ${deviceProofOf(venue.cookie)}`;
+}
+
+/** A new person holding only `permissions`, PIN `pin`, and their cookie on the first till. */
+async function signedInHolding(permissions: string[], pin: string) {
+  const personId = await personHolding(venue.db, permissions, { pinHash: fixturePinHash(pin) });
+  return { personId, cookie: await tillCookieFor(personId, pin) };
+}
+
+/** The ids `withPinCheckAhead` was handed a PIN for while `run` ran. */
+async function pinsCheckedDuring<T>(run: () => Promise<T>): Promise<{ answer: T; pins: string[] }> {
+  pinChecks.credentials.length = 0;
+  const answer = await run();
+  const pins = pinChecks.credentials
+    .filter((credential) => credential !== undefined)
+    .map((credential) => (credential as { personId: string }).personId);
+  return { answer, pins };
+}
+
+async function refundRowsOf(saleId: string) {
+  return venue.db
+    .select()
+    .from(refunds)
+    .where(eq(refunds.saleId, saleId))
+    .orderBy(asc(refunds.createdAt), asc(refunds.appliedAmount));
+}
+
+describe("POST …/give-back on a separate terminal", () => {
+  it("records the goodwill refunded on the terminal, then files the corrective after commit (5.3)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "10.00", way: card, lineIds: [] },
+    ]);
+    const before = effects();
+    automaticFiling.asked.length = 0;
+    const answer = await give(saleId, { ...body, manualConfirmed: true, override: supervisor() });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "10.00", state: "completed" }],
+      refusal: null,
+      underWay: null,
+      rest: null,
+    });
+    const correctionId = (answer.json as { parts: { correctionId: string }[] }).parts[0]!
+      .correctionId;
+    expect(automaticFiling.asked).toEqual([correctionId]);
+    const [correction] = await venue.db
+      .select()
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, correctionId));
+    expect(correction).toMatchObject({ state: "filed", gross: 1000 });
+    expect(correction!.correctiveSaleId).not.toBeNull();
+    const [leg] = await refundRowsOf(saleId);
+    expect(leg).toMatchObject({
+      tenderId: card,
+      appliedAmount: 1000,
+      tipAmount: 0,
+      manual: true,
+      state: "completed",
+      authorizedBy: venue.adminId,
+    });
+    expect(effects()).toEqual({
+      ...before,
+      refunds: before.refunds + 1,
+      corrections: before.corrections + 1,
+      sales: before.sales + 1,
+    });
+  });
+
+  it("keeps the terminal's refund completed and the correction under way when filing it after commit is refused (case 11)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    const before = effects();
+    automaticFiling.refuse = true;
+    onTestFinished(() => {
+      automaticFiling.refuse = false;
+    });
+    const logged: unknown[][] = [];
+    const answer = await give(
+      saleId,
+      { ...body, manualConfirmed: true, override: supervisor() },
+      adminCookie,
+      venue.appWith({ log: (...line: unknown[]) => void logged.push(line) }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "10.00", state: "pending" }],
+      refusal: null,
+      underWay: { state: "open", gross: "10.00", moneyBack: "10.00", left: "0.00" },
+      rest: null,
+    });
+    expect(logged).toContainEqual([
+      "error",
+      "invoice_correction.automatic_filing_failed",
+      expect.objectContaining({
+        correctionId: (answer.json as { parts: { correctionId: string }[] }).parts[0]!.correctionId,
+      }),
+    ]);
+    const [leg] = await refundRowsOf(saleId);
+    expect(leg).toMatchObject({ appliedAmount: 1000, manual: true, state: "completed" });
+    expect(effects()).toEqual({
+      ...before,
+      refunds: before.refunds + 1,
+      corrections: before.corrections + 1,
+    });
+    expect((await read(saleId)).underWay).toMatchObject({ state: "open", moneyBack: "10.00" });
+  });
+
+  it("writes the paella's refund and the cheesecake's leg as two completed refunds on the one capture (section 10)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const ticked = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    const body = await giveBody(saleId, ask("dishes", "24.50", { lineIds: ticked, way: card }));
+    const before = effects();
+    const answer = await give(saleId, { ...body, manualConfirmed: true, override: supervisor() });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "correction", state: "completed" },
+      ],
+      refusal: null,
+      underWay: null,
+    });
+    const written = await refundRowsOf(saleId);
+    expect(written.map((row) => [row.tenderId, row.manual, row.state])).toEqual([
+      [card, true, "completed"],
+      [card, true, "completed"],
+    ]);
+    expect(written.reduce((sum, row) => sum + row.appliedAmount, 0)).toBe(2450);
+    const links = await venue.db.all<{ adjustment_id: string; amount: number }>(
+      sql`select adjustment_id, amount from adjustment_refunds where refund_id = ${(answer.json as { parts: { refundId: string }[] }).parts[0]!.refundId}`,
+    );
+    expect(links).toEqual([{ adjustment_id: cancelId, amount: 1850 }]);
+    expect(effects()).toEqual({
+      ...before,
+      refunds: before.refunds + 2,
+      corrections: before.corrections + 1,
+      sales: before.sales + 1,
+    });
+  });
+
+  it("refuses a give-back the terminal's refund was not confirmed for, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    const before = effects();
+    const answer = await give(saleId, { ...body, override: supervisor() });
+    expectRefusedUnwritten(answer, "management.request_invalid", before);
+    expect(answer.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "manualConfirmed" },
+    });
+  });
+
+  it("asks a fresh PIN even of a person holding both rights, writing nothing without one", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: card }));
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, { ...body, manualConfirmed: true }),
+      "tender.manual_refund_pin_required",
+      before,
+    );
+  });
+});
+
+describe("POST …/give-back: one PIN for the rights it needs (5.4)", () => {
+  it("refuses a person holding only refund rights, naming sale.rectify; a supervisor holding both lets it through, the PIN checked once", async () => {
+    const refunder = await signedInHolding(["sale.refund"], "2468");
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const before = effects();
+    const refusedAnswer = await give(saleId, body, refunder.cookie);
+    expectRefusedUnwritten(refusedAnswer, "authorization.not_permitted", before);
+    expect(refusedAnswer.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.rectify" },
+    });
+    const { answer, pins } = await pinsCheckedDuring(() =>
+      give(saleId, { ...body, override: supervisor() }, refunder.cookie),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(pins).toEqual([venue.adminId]);
+    const correctionId = (answer.json as { parts: { correctionId: string }[] }).parts[0]!
+      .correctionId;
+    const [correction] = await venue.db
+      .select()
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, correctionId));
+    expect(correction).toMatchObject({
+      state: "filed",
+      authorizedBy: venue.adminId,
+      viaOverride: true,
+    });
+    const [leg] = await refundRowsOf(saleId);
+    expect(leg).toMatchObject({ state: "completed", authorizedBy: refunder.personId });
+  });
+
+  it("refuses a supervisor whose PIN holds only sale.refund, writing nothing", async () => {
+    const refunder = await signedInHolding(["sale.refund"], "1357");
+    const approver = await personHolding(venue.db, ["sale.refund"], {
+      pinHash: fixturePinHash("9753"),
+    });
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const before = effects();
+    const answer = await give(
+      saleId,
+      { ...body, override: { personId: approver, pin: "9753" } },
+      refunder.cookie,
+    );
+    expectRefusedUnwritten(answer, "authorization.not_permitted", before);
+    expect(answer.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.rectify" },
+    });
+  });
+});
+
+describe("POST …/give-back: a cancel's approval covers its money only from the filled window (D9)", () => {
+  it("gives the cancelled paella back for a person holding neither right, with no PIN, recording the cancel's approver; a resend without fromCancel is refused", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const [cancelRow] = await venue.db
+      .select()
+      .from(adjustments)
+      .where(eq(adjustments.id, cancelId));
+    const approver = cancelRow!.approvedBy ?? cancelRow!.requestedBy;
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "18.50", { lineIds: paella, fromCancel: [cancelId] }),
+    );
+    const { answer, pins } = await pinsCheckedDuring(() => give(saleId, body, venue.cookie));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(pins).toEqual([]);
+    const [refund] = await refundRowsOf(saleId);
+    expect(refund).toMatchObject({
+      appliedAmount: 1850,
+      state: "completed",
+      authorizedBy: approver,
+      requestedBy: venue.operatorId,
+    });
+    const after = effects();
+    expect(await give(saleId, body, venue.cookie)).toEqual(answer);
+    const withoutCancel = { ...body } as Record<string, unknown>;
+    delete withoutCancel.fromCancel;
+    const resent = await give(saleId, withoutCancel, venue.cookie);
+    expectRefusedUnwritten(resent, "authorization.not_permitted", after);
+    expect(resent.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+  });
+
+  it("asks refund rights for the same cancelled paella without fromCancel, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    await cancel(b, "Paella", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const body = await giveBody(saleId, ask("dishes", "18.50", { lineIds: paella }));
+    const before = effects();
+    const answer = await give(saleId, body, venue.cookie);
+    expectRefusedUnwritten(answer, "authorization.not_permitted", before);
+    expect(answer.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+  });
+
+  it("asks only sale.rectify of a correction with no cash share beside a covered refund, as the preview names, on the first send and a resend", async () => {
+    const corrector = await signedInHolding(["sale.rectify"], "8642");
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "18.50" }, { card: "15.50" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const ticked = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    const request = ask("dishes", "25.00", { lineIds: ticked, fromCancel: [cancelId] });
+    const previewed = await send(
+      venue.app,
+      corrector.cookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      request,
+    );
+    expect(previewed.json).toMatchObject({ needs: [], leftUnderWay: "6.50" });
+    const body = await giveBody(saleId, request);
+    const before = effects();
+    const answer = await give(saleId, body, corrector.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "correction", amount: "6.50", state: "pending" },
+      ],
+      underWay: { state: "open", gross: "6.50", moneyBack: "0.00", left: "6.50" },
+    });
+    expect(effects()).toMatchObject({
+      refunds: before.refunds + 1,
+      corrections: before.corrections + 1,
+    });
+    expect(await give(saleId, body, corrector.cookie)).toEqual(answer);
+  });
+});
+
+/** A till of its own whose profile allows `capabilities`, the administrator signed in on it;
+ * `zoned`, it serves only a zone where no test sells. */
+async function ownTill(capabilities: ProfileAction[], { zoned = false } = {}) {
+  const profileId = await inTx(venue, async (tx) => {
+    const [profile] = await seedDeviceProfiles(tx, {
+      name: `Own till ${randomUUID()}`,
+      formFactor: "till",
+      capabilities,
+    });
+    if (zoned) {
+      const department = await createDepartment(tx, {
+        name: `Interior ${randomUUID()}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, {
+        name: `Interior ${randomUUID()}`,
+        departmentId: department.id,
+      });
+      const [policy] = await tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, zone.id));
+      await setProfileServiceAccess(tx, profile!.id, {
+        departmentId: policy!.departmentId,
+        allowedZoneIds: [zone.id],
+        startingZoneId: zone.id,
+      });
+    }
+    return profile!.id;
+  });
+  const device = await enrolDeviceForTest(venue.db, venue.cfg, {
+    name: `Own till ${randomUUID().slice(0, 8)}`,
+    profileId,
+  });
+  const session = await inTx(venue, (tx) =>
+    loginWithPin(tx, { deviceId: device.deviceId, personId: venue.adminId, pin: "1234" }),
+  );
+  return {
+    deviceId: device.deviceId,
+    cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+  };
+}
+
+describe("POST …/give-back: the devices Refund a payment refuses", () => {
+  const cashTill: ProfileAction[] = ["take-orders", "open-cash-drawer", "take-cash"];
+
+  it("refuses a profile that takes no cash, a till outside the receipt's zone and a kitchen screen, writing nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const noCash = await ownTill(["take-orders", "hand-keyed-card-payment"]);
+    const zoned = await ownTill(cashTill, { zoned: true });
+    const kitchen = await ownTill(cashTill);
+    const [screen] = await seedDeviceProfiles(venue.db, {
+      name: `Kitchen ${randomUUID()}`,
+      formFactor: "kds",
+      capabilities: cashTill,
+    });
+    await venue.db
+      .update(devices)
+      .set({ deviceProfileId: screen!.id })
+      .where(eq(devices.id, kitchen.deviceId));
+    const before = effects();
+    const answers = [
+      await give(saleId, body, noCash.cookie),
+      await give(saleId, body, zoned.cookie),
+      await give(saleId, body, kitchen.cookie),
+    ];
+    expect(
+      answers.map((answer) => [answer.status, (answer.json as { code: string }).code]),
+    ).toEqual([
+      [403, "device.cash_not_allowed"],
+      [403, "service_zone.not_allowed"],
+      [401, "session.required"],
+    ]);
+    expect(effects()).toEqual(before);
+    expect((await give(saleId, body, (await ownTill(cashTill)).cookie)).status).toBe(200);
   });
 });

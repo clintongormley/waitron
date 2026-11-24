@@ -39,7 +39,8 @@ export function toTenderRefundView(row: RefundRow): TenderRefundView {
   };
 }
 
-async function captureFor(tx: Transaction, refund: RefundRow) {
+/** The capture `refund`'s payment was taken with. */
+export async function captureFor(tx: Transaction, refund: RefundRow) {
   const originals = await tx.select().from(tenders).where(eq(tenders.saleId, refund.saleId!));
   const tender = originals.find((row) => row.id === refund.tenderId)!;
   const captures = await tx
