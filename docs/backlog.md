@@ -1482,7 +1482,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `receipt-adjustments`, `invoice-document`, `invoice-layout`, `receipt-document`,
   `invoice-document.set-menus`, `receipt-document.set-menus`, `receipt-ticket`, `invoice-language`
   and `free-item-share` suites. Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
-  When changing receipt issuer or invoice typing, also run the server's `receipt-issuer` (real till and fiscal backend), `full-invoice-creation-date`, `invoice-recipient-flow.e2e`, `invoice-document`, `invoice-email` and `receipt-facts` for saved and issued documents, and `tender-refund-receipt`, `transaction-receipt-api` and `bill-payments` for refunds, original receipts and payment replay.
+  When changing receipt issuer or invoice typing, also run the server's `receipt-issuer` (real till and fiscal backend), `full-invoice-creation-date`, `invoice-recipient-flow.e2e`, `invoice-document`, `invoice-email` and `receipt-facts` for saved and issued documents, and `tender-refund-receipt`, `transaction-receipt-api` and `bill-payments` for refunds, original receipts and payment replay, plus `receipt-device-evidence` for the till's stored invoice evidence.
   The Find a bill routes and readers remain in the server. When changing the parser, also run
   the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
   and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing

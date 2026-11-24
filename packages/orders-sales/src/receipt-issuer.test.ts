@@ -14,12 +14,20 @@ const filed = {
   vatBreakdown: [],
   issuer: { legalName: "Saved Venue", taxId: "B12345674" },
 } satisfies FiledReceipt;
+const evidence = {
+  taxpayerId: "B12345674",
+  environment: "preproduction",
+  series: "F",
+  invoiceNumber: "F/3",
+  issuedDate: "2026-10-17",
+  recordEvidence: "stored record evidence",
+};
 const customer = {
   counterpartyTaxId: "AB123456",
   counterpartyLegalName: "Saved Customer",
   counterpartyCountryCode: "FR",
   counterpartyIdentifierType: "passport",
-  counterpartyIdentifierCountryCode: "FR",
+  counterpartyIdentifierCountryCode: "GB",
   counterpartyAddress: "2 Main Street",
 };
 
@@ -58,27 +66,33 @@ async function insertSales(tx: Transaction) {
         ...header,
         ...customer,
         seriesId: full!.id,
-        invoiceNumber: 1,
+        invoiceNumber: 3,
         supplyDay: "2026-10-16",
         taxpayerDomicile: "8 Registered Street",
       },
-      { ...header, seriesId: standard!.id, invoiceNumber: 1 },
+      { ...header, seriesId: standard!.id, invoiceNumber: 2, supplyDay: "2026-10-17" },
     ])
     .returning();
+  const correctiveHeader = {
+    ...header,
+    issuedAt: "2026-10-18T09:00:00.000Z",
+    issuedOffsetMinutes: 60,
+  };
   const [replacement, refund] = await tx
     .insert(sales)
     .values([
       {
-        ...header,
+        ...correctiveHeader,
         ...customer,
         seriesId: corrective!.id,
         invoiceNumber: 1,
         correctsSaleId: invoice!.id,
         replacesOriginal: true,
         supplyDay: "2026-10-17",
+        taxpayerDomicile: "9 Registered Street",
       },
       {
-        ...header,
+        ...correctiveHeader,
         seriesId: corrective!.id,
         invoiceNumber: 2,
         correctsSaleId: ticket!.id,
@@ -90,19 +104,12 @@ async function insertSales(tx: Transaction) {
 }
 
 it("combines a preloaded full sale with the filed issuer and its evidence", async () => {
-  const evidence = {
-    taxpayerId: "B12345674",
-    environment: "preproduction",
-    series: "F",
-    invoiceNumber: "F/1",
-    issuedDate: "2026-10-17",
-    recordEvidence: "stored record evidence",
-  };
   const fiscal = backend(filed);
-  fiscal.invoiceEvidenceFor = async () => evidence;
   await withTransaction(suite.db, async (tx) => {
     const { invoice } = await insertSales(tx);
-    expect(await readReceiptIssuer(fiscal, tx, saleId(invoice.id), invoice)).toEqual({
+    const id = saleId(invoice.id);
+    fiscal.invoiceEvidenceFor = async (_tx, requested) => (requested === id ? evidence : undefined);
+    expect(await readReceiptIssuer(fiscal, tx, id, invoice)).toEqual({
       invoiceEvidence: evidence,
       issuedOffsetMinutes: 120,
       invoiceType: "F1",
@@ -112,11 +119,12 @@ it("combines a preloaded full sale with the filed issuer and its evidence", asyn
         legalName: "Saved Customer",
         countryCode: "FR",
         identifierType: "passport",
-        identifierCountryCode: "FR",
+        identifierCountryCode: "GB",
         address: "2 Main Street",
       },
       issuer: { venueName: "Saved Venue", nif: "B12345674", domicile: "8 Registered Street" },
     });
+    expect(fiscal.filedReceiptFor).toHaveBeenCalledExactlyOnceWith(tx, id);
   });
 });
 
@@ -124,17 +132,29 @@ it("reads saved ticket and corrective types by sale id", async () => {
   const fiscal = backend(filed);
   await withTransaction(suite.db, async (tx) => {
     const { ticket, replacement, refund } = await insertSales(tx);
+    const replacementId = saleId(replacement.id);
+    const replacementEvidence = {
+      ...evidence,
+      series: "R",
+      invoiceNumber: "R/1",
+      issuedDate: "2026-10-18",
+      recordEvidence: "stored corrective evidence",
+    };
+    fiscal.invoiceEvidenceFor = async (_tx, requested) =>
+      requested === replacementId ? replacementEvidence : undefined;
     const issuer = { venueName: "Saved Venue", nif: "B12345674" };
     expect(await readReceiptIssuer(fiscal, tx, saleId(ticket.id))).toEqual({
       issuedOffsetMinutes: 120,
       invoiceType: "F2",
       issuer,
     });
-    expect(await readReceiptIssuer(fiscal, tx, saleId(replacement.id))).toEqual({
-      issuedOffsetMinutes: 120,
+    expect(await readReceiptIssuer(fiscal, tx, replacementId)).toEqual({
+      issuedOffsetMinutes: 60,
+      invoiceEvidence: replacementEvidence,
       invoiceType: "R4",
+      saleDay: "2026-10-17",
       corrects: {
-        invoiceNumber: "F/1",
+        invoiceNumber: "F/3",
         issuedAt: "2026-10-16T23:30:00.000Z",
         issuedOffsetMinutes: 120,
         inFull: true,
@@ -144,16 +164,16 @@ it("reads saved ticket and corrective types by sale id", async () => {
         legalName: "Saved Customer",
         countryCode: "FR",
         identifierType: "passport",
-        identifierCountryCode: "FR",
+        identifierCountryCode: "GB",
         address: "2 Main Street",
       },
-      issuer,
+      issuer: { ...issuer, domicile: "9 Registered Street" },
     });
     expect(await readReceiptIssuer(fiscal, tx, saleId(refund.id))).toEqual({
-      issuedOffsetMinutes: 120,
+      issuedOffsetMinutes: 60,
       invoiceType: "R5",
       corrects: {
-        invoiceNumber: "T/1",
+        invoiceNumber: "T/2",
         issuedAt: "2026-10-16T23:30:00.000Z",
         issuedOffsetMinutes: 120,
       },
