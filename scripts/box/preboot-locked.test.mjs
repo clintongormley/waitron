@@ -130,15 +130,33 @@ const from = (name) => new X509Certificate(cert(name)).validFromDate.getTime();
 /** @param {string} name */
 const to = (name) => new X509Certificate(cert(name)).validToDate.getTime();
 
+/** @param {unknown} certificate */
+function certificateStart(certificate) {
+  // Malformed certificate fixtures still need a finite clock to reach the certificate checks.
+  if (typeof certificate !== "string") return 0;
+  try {
+    return new X509Certificate(certificate).validFromDate.getTime();
+  } catch {
+    return 0;
+  }
+}
+
 /** @param {Partial<Record<string, unknown>>} [overrides] */
 function input(overrides = {}) {
-  return {
+  const values = {
     installationId: "a1b2",
     caCertificate: cert("ca"),
     recoveryCertificate: cert("recovery"),
     redirectCertificate: cert("redirect"),
-    now: from("recovery") + 1000,
     ...overrides,
+  };
+  return {
+    now:
+      Math.max(
+        certificateStart(values.caCertificate),
+        certificateStart(values.recoveryCertificate),
+      ) + 1000,
+    ...values,
   };
 }
 
