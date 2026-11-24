@@ -25,17 +25,18 @@ import {
 import "./errors.js";
 
 /**
- * The permission a give-back of `amount` from a bill payment needs (owner, 2026-11-24): on a bill
- * Pay for items left holding more than it owes, handing back no more than that excess is money just
- * taken on this bill, so `payment.take`; any other refund `sale.refund`.
+ * The permission a give-back of `applied` money from a bill payment needs (owner, 2026-11-24): on
+ * a bill Pay for items left holding more than it owes, handing back no more than that excess is
+ * money just taken on this bill, so `payment.take`; any other refund `sale.refund`. A tip given
+ * back with it is not counted: the excess is applied money only.
  */
 export async function refundPermission(
   tx: Transaction,
   workingOrderId: string,
-  amount: Decimal,
+  applied: Decimal,
 ): Promise<"payment.take" | "sale.refund"> {
   const excess = (await billExcesses(tx, [workingOrderId])).get(workingOrderId);
-  return excess !== undefined && compareDecimal(amount, excess) <= 0
+  return excess !== undefined && compareDecimal(applied, excess) <= 0
     ? "payment.take"
     : "sale.refund";
 }
@@ -44,7 +45,7 @@ export async function refundPermission(
  * Keep what an open or placed bill was paid over its total as a tip, then issue the bill if that
  * leaves it paid: the excess moves from `applied` to `tip` on its received payments, the newest
  * first, each giving up no more than its refunds have left of its applied money. A payment that
- * paid an advance, or already has a tender, keeps its money as it is.
+ * paid an advance, already has a tender, or paid for chosen items keeps its money as it is.
  *
  * `bill.not_overpaid` when nothing is paid over the total; `bill.tip_not_allowed` while the venue
  * takes no tips. Nothing records `submissionId`, so a retry after a lost answer is refused, as the
@@ -96,8 +97,9 @@ export async function keepOverpaidAsTip(
         .where(inArray(billAdvances.billPaymentId, ids))
     ).map(({ id }) => id),
   ]);
+  // An items payment's applied money is what its paid lines record, so it keeps it.
   const newestFirst = held
-    .filter(({ row }) => !settled.has(row.id))
+    .filter(({ row }) => !settled.has(row.id) && row.kind !== "items")
     .sort((a, b) => b.row.receivedAt!.localeCompare(a.row.receivedAt!));
   let left = decimalToCents(excess);
   const moved: { billPaymentId: string; amount: string }[] = [];

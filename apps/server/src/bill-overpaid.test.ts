@@ -68,7 +68,12 @@ function lineIdOf(billId: string, lineNo: number): string {
   return row!.id;
 }
 
-async function take(billId: string, method: "cash" | "card", amount: string) {
+async function take(
+  billId: string,
+  method: "cash" | "card" | "hand-keyed",
+  amount: string,
+  tip = "0.00",
+) {
   const answer = await send(
     venue.app,
     venue.cookie,
@@ -78,10 +83,15 @@ async function take(billId: string, method: "cash" | "card", amount: string) {
       submissionId: randomUUID(),
       kind: "contribution",
       amount,
-      method,
-      ...(method === "cash" ? { tendered: amount } : { entry: "reader" }),
+      method: method === "cash" ? "cash" : "card",
+      ...(method === "cash"
+        ? { tendered: (Number(amount) + Number(tip)).toFixed(2) }
+        : method === "card"
+          ? { entry: "reader" }
+          : { entry: "manual" }),
       applied: amount,
-      tip: "0.00",
+      tip,
+      ...(tip === "0.00" ? {} : { addedTip: tip }),
     },
   );
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -94,7 +104,7 @@ async function take(billId: string, method: "cash" | "card", amount: string) {
  * bill of its own: the bill is left owing 5.00 less than it was paid.
  */
 async function overpaidBill(
-  method: "cash" | "card" = "cash",
+  method: "cash" | "card" | "hand-keyed" = "cash",
   extra = false,
   amounts = [extra ? "18.00" : "15.00"],
 ) {
@@ -104,6 +114,12 @@ async function overpaidBill(
   const paymentIds: string[] = [];
   for (const amount of amounts) paymentIds.push(await take(billId, method, amount));
   const paymentId = paymentIds[0]!;
+  await payForCroquettes(party.partyId, billId);
+  return { billId, partyId: party.partyId, paymentId, paymentIds };
+}
+
+/** One Croquettes of line 1, 10.00, paid for in cash on a bill of its own. */
+async function payForCroquettes(partyId: string, billId: string) {
   const paid = await send(
     venue.app,
     venue.cookie,
@@ -112,7 +128,7 @@ async function overpaidBill(
     {
       submissionId: randomUUID(),
       picks: [{ lineId: lineIdOf(billId, 1), quantity: "1" }],
-      partyId: party.partyId,
+      partyId,
       expectedPartyRevision: await partyRevisionOf(venue, billId),
       expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, billId))],
       method: "cash",
@@ -122,7 +138,6 @@ async function overpaidBill(
     },
   );
   expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  return { billId, partyId: party.partyId, paymentId, paymentIds };
 }
 
 async function balanceOf(billId: string) {
@@ -163,7 +178,13 @@ function keepAsTip(billId: string, submissionId = randomUUID()) {
 }
 
 /** A give-back by the signed-in waiter, who may take payments but not give refunds, with no PIN. */
-function giveBack(billId: string, paymentId: string, applied: string, submissionId = randomUUID()) {
+function giveBack(
+  billId: string,
+  paymentId: string,
+  applied: string,
+  submissionId = randomUUID(),
+  more: { tip?: string; manualConfirmed?: true } = {},
+) {
   return send(
     venue.app,
     venue.cookie,
@@ -172,8 +193,9 @@ function giveBack(billId: string, paymentId: string, applied: string, submission
     {
       submissionId,
       appliedAmount: applied,
-      tipAmount: "0.00",
+      tipAmount: more.tip ?? "0.00",
       reason: "Paid more than the bill",
+      ...(more.manualConfirmed === undefined ? {} : { manualConfirmed: true }),
     },
   );
 }
@@ -312,6 +334,79 @@ describe("A1515 a bill left owing less than it was paid", () => {
       json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
     });
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
+  });
+
+  it("a waiter gives back the excess of a card keyed on a separate terminal with no approver's PIN", async () => {
+    const { billId, paymentId } = await overpaidBill("hand-keyed");
+
+    const given = await giveBack(billId, paymentId, "5.00", randomUUID(), {
+      manualConfirmed: true,
+    });
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.json).toMatchObject({
+      refund: { state: "completed" },
+      balance: { status: "settled" },
+    });
+    expect(await invoicesOf(billId)).toEqual(["10.00"]);
+  });
+
+  it("giving back more than the excess of a card keyed on a separate terminal still needs the refund permission", async () => {
+    const { billId, paymentId } = await overpaidBill("hand-keyed");
+
+    const given = await giveBack(billId, paymentId, "6.00", randomUUID(), {
+      manualConfirmed: true,
+    });
+
+    expect(given).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
+  });
+
+  it("gives back a payment's tip with applied money within the excess, needing no refund permission", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    await take(billId, "cash", "11.00");
+    const tipped = await take(billId, "cash", "4.00", "2.00");
+    await payForCroquettes(party.partyId, billId);
+
+    const given = await giveBack(billId, tipped, "4.00", randomUUID(), { tip: "2.00" });
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "1.00" });
+  });
+
+  it("keeps as a tip none of a payment for chosen items taken the old way", async () => {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    const billId = party.tabId;
+    const contribution = await take(billId, "cash", "5.00");
+    const items = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: 2 }],
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+    );
+    expect(items.status, JSON.stringify(items.json)).toBe(200);
+    const itemsId = (items.json.payment as { id: string }).id;
+    await payForCroquettes(party.partyId, billId);
+    expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
+
+    const kept = await keepAsTip(billId);
+
+    expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+    expect(await paymentOf(itemsId)).toEqual({ applied: "10.00", tip: "0.00" });
+    expect(await paymentOf(contribution)).toEqual({ applied: "0.00", tip: "5.00" });
   });
 
   it("adding a dish uses up the excess", async () => {

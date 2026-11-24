@@ -145,8 +145,8 @@ export async function refundTender(
 /**
  * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
  * needing from the operator or the override the permission {@link refundPermission} names:
- * `payment.take` for no more than what Pay for items left the bill paid over its total, else
- * `sale.refund`. A completed refund issues the bill if it leaves it paid. A payment gives back up to its net
+ * `payment.take` for applied money no more than what Pay for items left the bill paid over its
+ * total, else `sale.refund`; with `payment.take` a hand-keyed card needs no approver's PIN. A completed refund issues the bill if it leaves it paid. A payment gives back up to its net
  * applied money; its tip comes back only with the whole of what is left of it; an item payment only
  * whole, which frees its lines.
  *
@@ -187,11 +187,7 @@ export async function refundBillPayment(
             personId: operator.personId,
             sessionId: operator.sessionId,
           });
-          const permission = await refundPermission(
-            tx,
-            workingOrderId,
-            centsToDecimal(applied + tip),
-          );
+          const permission = await refundPermission(tx, workingOrderId, centsToDecimal(applied));
           const authorization = await authorize(
             tx,
             { sessionId: operator.sessionId, permission, override },
@@ -263,15 +259,17 @@ export async function refundBillPayment(
           }
 
           const manual = provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true;
-          const approver = manual
-            ? await confirmManualRefundAuthority(
-                tx,
-                authorization,
-                override,
-                operator.attempts,
-                () => new AppError("bill.manual_refund_pin_required", { paymentId }),
-              )
-            : authorization;
+          // Money just taken on this bill goes back with no approver's PIN (owner, 2026-11-24).
+          const approver =
+            manual && permission === "sale.refund"
+              ? await confirmManualRefundAuthority(
+                  tx,
+                  authorization,
+                  override,
+                  operator.attempts,
+                  () => new AppError("bill.manual_refund_pin_required", { paymentId }),
+                )
+              : authorization;
           const connected = payment.method === "card" && !manual;
           const provider =
             connected && provided !== undefined

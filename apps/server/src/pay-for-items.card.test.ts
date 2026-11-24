@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
   sales,
   workingOrderLines,
+  withTransaction,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
+import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
@@ -24,17 +26,20 @@ import {
   provisionBillVenue,
   send,
   statusOf,
-  tabWith,
   type BillVenue,
 } from "./testing/bill-venue.js";
 import type { Logger } from "./logger.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
+import { createTable } from "./testing/live-table.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
 // Pay for items on the card reader (A1515 D2): the items move to a bill of their own before the
 // card is asked, and go back to the table's bill when it charges nothing.
 let venue: BillVenue;
+let coffee: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -57,11 +62,40 @@ useVenueDb({
         .set({ capabilities: [...(profile!.capabilities as string[]), "print-receipt"] })
         .where(eq(deviceProfiles.id, device!.profileId!));
     });
+    coffee = await inTx(venue, async (tx) => {
+      const [{ categoryId }] = await tx.all<{ categoryId: string }>(
+        sql`select category_id as categoryId from products where name = 'Tarta'`,
+      );
+      const product = await createProduct(tx, {
+        categoryId: categoryId!,
+        name: "Coffee",
+        customerName: { es: "Coffee (customer)" },
+        kitchenName: "COFFEE",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      return (await offerProducts(tx, { zone: "tables" })).offerFor(product.id);
+    });
   },
 });
 
-/** A table's bill holding a Caña (3.00) and a Tarta (18.00). */
-const canaAndTarta = () => tabWith(venue, "Caña", "Tarta");
+/** A table's bill holding a coffee (3.00) and a Tarta (18.00). */
+const coffeeAndTarta = () =>
+  withTransaction(venue.db, async (tx) => {
+    const table = await createTable(tx, {
+      label: `M-${randomUUID().slice(0, 8)}`,
+      zoneId: venue.zoneId,
+    });
+    const { tabId } = await openPartyTab(tx, venue.cfg, {
+      tableId: table.id,
+      lines: [coffee, venue.offerFor("Tarta")].map((menuItemId) => ({
+        menuItemId,
+        quantity: "1",
+      })),
+    });
+    return tabId;
+  });
 
 async function lineIdOf(billId: string, lineNo: number): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
@@ -198,7 +232,7 @@ async function stuckThenFailed(sourceId: string): Promise<{ newBill: string; pay
 
 describe("A1515 pay for items on the card reader", () => {
   it("a captured card issues the new bill's ticket", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
 
     const paid = await payTartaByReader(sourceId);
 
@@ -215,7 +249,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("a declined card puts the items back", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const { answer, release, newBill } = await heldTartaPayment(sourceId);
     const partyDuring = await partyRevisionOf(venue, sourceId);
     venue.card.failNextCollect();
@@ -239,7 +273,7 @@ describe("A1515 pay for items on the card reader", () => {
 
   it("a declined card is logged as a failed collection", async () => {
     const log = vi.fn<Logger>();
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     venue.card.failNextCollect();
 
     await sendItemsPayment(sourceId, await tartaByReaderBody(sourceId), venue.appWith({ log }));
@@ -252,7 +286,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("while the card is awaited the items are on the new bill", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const { answer, release, newBill } = await heldTartaPayment(sourceId);
 
     const during = await balance(sourceId);
@@ -263,7 +297,7 @@ describe("A1515 pay for items on the card reader", () => {
         .where(eq(workingOrders.id, newBill)),
     );
     const write = inTx(venue, (tx) =>
-      addTabRound(tx, venue.cfg, newBill, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
+      addTabRound(tx, venue.cfg, newBill, [{ menuItemId: coffee, quantity: "1" }]),
     );
     await expect(write).rejects.toMatchObject({ code: "order.payment_in_flight" });
     release();
@@ -277,7 +311,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("a stuck card settled later as failed puts the items back", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const { newBill, paymentId } = await stuckThenFailed(sourceId);
 
     await settle();
@@ -309,7 +343,7 @@ describe("A1515 pay for items on the card reader", () => {
   ])(
     "a source %s while the card is awaited keeps the items on their own bill",
     async (_, close) => {
-      const sourceId = await canaAndTarta();
+      const sourceId = await coffeeAndTarta();
       const { answer, release, newBill } = await heldTartaPayment(sourceId);
       venue.card.failNextCollect();
       const closed = await close(sourceId);
@@ -326,7 +360,7 @@ describe("A1515 pay for items on the card reader", () => {
   );
 
   it("the same request sent again after an accepted card answers the same bill, charged once", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const body = await tartaByReaderBody(sourceId);
     const calls = venue.card.collectCalls.length;
 
@@ -343,7 +377,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("the same request sent again after a declined card answers the same bill, charged once", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const body = await tartaByReaderBody(sourceId);
     const calls = venue.card.collectCalls.length;
     venue.card.failNextCollect();
@@ -367,7 +401,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("a refused put-back still fails the payment", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const { newBill, paymentId } = await stuckThenFailed(sourceId);
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -396,7 +430,7 @@ describe("A1515 pay for items on the card reader", () => {
   });
 
   it("a full disk during the put-back escapes, never absorbed as a refusal", async () => {
-    const sourceId = await canaAndTarta();
+    const sourceId = await coffeeAndTarta();
     const { newBill, paymentId } = await stuckThenFailed(sourceId);
 
     const failing = inTx(venue, (tx) => {
