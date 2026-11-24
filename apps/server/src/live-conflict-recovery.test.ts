@@ -307,7 +307,12 @@ it("the conflict switch on a spare takes the master key", async () => {
   const refused = await m.send(request({ recoveryKey: WRONG_MASTER_KEY }));
   expect([refused.status, await refused.json()]).toEqual([
     401,
-    { error: { code: "promotion.break_glass_invalid", params: {} } },
+    {
+      error: {
+        code: "promotion.break_glass_invalid",
+        params: { keyName: (await db.readCurrentMasterKey(suite.db))!.name },
+      },
+    },
   ]);
   const input = await selected(m);
   expect(
@@ -423,7 +428,10 @@ it("refuses a key replaced while comparing clocks and writes no activation", asy
   const refused = await pending;
   expect(refused.status).toBe(401);
   expect(await refused.json()).toEqual({
-    error: { code: "promotion.break_glass_invalid", params: {} },
+    error: {
+      code: "promotion.break_glass_invalid",
+      params: { keyName: (await db.readCurrentMasterKey(suite.db))!.name },
+    },
   });
   expect(await allocationRows(suite.db)).toHaveLength(1);
 });
@@ -452,7 +460,10 @@ it("rechecks the current key in the activation commit after preparation", async 
   const refused = await m.send(request({ command: { kind: "activate", input } }));
   expect(refused.status).toBe(401);
   expect(await refused.json()).toEqual({
-    error: { code: "promotion.break_glass_invalid", params: {} },
+    error: {
+      code: "promotion.break_glass_invalid",
+      params: { keyName: (await db.readCurrentMasterKey(suite.db))!.name },
+    },
   });
   expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual(before);
   expect(await allocationRows(suite.db)).toHaveLength(1);

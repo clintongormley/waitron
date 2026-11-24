@@ -57,7 +57,13 @@ export async function withRecoveryKeyAuthority<T>(
   if (binding.targetNodeId !== targetNodeId || !allowedActions.includes(binding.action))
     return refuse();
   const checked = await masterKeyAuthorising(deps.db, secret);
-  if (checked === null) return refuse();
+  if (checked === null) {
+    const current = await readCurrentMasterKey(deps.db);
+    throw new AppError(
+      "promotion.break_glass_invalid",
+      current === null ? {} : { keyName: current.name },
+    );
+  }
   return withOperationAuthority(
     binding,
     { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
@@ -88,8 +94,12 @@ export async function withMasterKeyStillCurrent<R>(
   body: (tx: Transaction) => Promise<R>,
 ): Promise<R> {
   return withVenueAndNodeTransaction(deps.db, deps.node, async (tx) => {
-    if ((await readCurrentMasterKey(tx))?.number !== checked.number)
-      throw new AppError("promotion.break_glass_invalid", {});
+    const current = await readCurrentMasterKey(tx);
+    if (current?.number !== checked.number)
+      throw new AppError(
+        "promotion.break_glass_invalid",
+        current === null ? {} : { keyName: current.name },
+      );
     return body(tx);
   });
 }

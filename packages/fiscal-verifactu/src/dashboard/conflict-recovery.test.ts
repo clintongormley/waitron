@@ -9,6 +9,8 @@ import {
   type DashboardRequest,
   type DashboardScreenHandle,
 } from "@waitron/dashboard-kit";
+import type { WtMasterKeyInput } from "@waitron/ui";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { ConflictRecovery } from "./conflict-recovery.js";
 import { parseConflictResult, type ConflictRequest } from "../conflict-recovery-contract.js";
@@ -62,9 +64,9 @@ it("opens key-only recovery without a session or disclosing conflicts before key
   };
   expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
   expect(title!.textContent).toBe("Recover from an invoice identity conflict");
-  const input = screen.shadowRoot!.querySelector("wt-input[name=recoveryKey]")!;
-  await (input as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  const native = input.shadowRoot!.querySelector("input")!;
+  await keyField(screen as ConflictRecovery).updateComplete;
+  await keyInput(screen as ConflictRecovery).updateComplete;
+  const native = nativeKey(screen as ConflictRecovery);
   expect(native.type).toBe("password");
   expect(native.value).toBe("");
   expect(native.autocomplete).toBe("off");
@@ -85,7 +87,10 @@ it("makes the inspect action primary only after the key is entered", async () =>
   expect(action().variant).toBe("primary");
 });
 
-async function mount(answer: (body: ConflictRequest) => Promise<unknown>) {
+async function mount(
+  answer: (body: ConflictRequest) => Promise<unknown>,
+  locale: "en" | "es" = "en",
+) {
   const calls: ConflictRequest[] = [];
   const request: DashboardRequest = async <T>(_path: string, _method: string, body?: unknown) => {
     calls.push(structuredClone(body as ConflictRequest));
@@ -94,17 +99,42 @@ async function mount(answer: (body: ConflictRequest) => Promise<unknown>) {
   const host = document.createElement("div");
   document.body.append(host);
   hosts.push(host);
-  render(VERIFACTU_DASHBOARD.publicPages![0]!.create({ request, locale: "en" }).render(), host);
+  render(VERIFACTU_DASHBOARD.publicPages![0]!.create({ request, locale }).render(), host);
   const screen = host.querySelector("vf-conflict-recovery") as ConflictRecovery;
-  await screen.updateComplete;
+  await settled(screen);
   return { screen, calls };
 }
-async function key(screen: ConflictRecovery, value: string) {
-  const field = screen.shadowRoot!.querySelector("wt-input[name=recoveryKey]")!;
-  field.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
+/** A whole printed master key standing for `label`, so each case names its keys. */
+function printedKey(label: string): string {
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < label.length; i++)
+    bytes[i % 16] = (bytes[i % 16]! * 31 + label.charCodeAt(i)) & 0xff;
+  return encodeMasterKeyCode(bytes);
+}
+function keyField(screen: ConflictRecovery): WtMasterKeyInput {
+  return screen.shadowRoot!.querySelector("wt-master-key-input")!;
+}
+function keyInput(screen: ConflictRecovery): HTMLElement & { updateComplete: Promise<boolean> } {
+  return keyField(screen).shadowRoot!.querySelector("wt-input")!;
+}
+function nativeKey(screen: ConflictRecovery): HTMLInputElement {
+  return keyInput(screen).shadowRoot!.querySelector("input")!;
+}
+async function settled(screen: ConflictRecovery) {
   await screen.updateComplete;
+  await keyField(screen)?.updateComplete;
+  await screen.updateComplete;
+}
+async function typeKey(screen: ConflictRecovery, text: string) {
+  const input = keyInput(screen);
+  await input.updateComplete;
+  input.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: text }, bubbles: true, composed: true }),
+  );
+  await settled(screen);
+}
+async function key(screen: ConflictRecovery, label: string) {
+  await typeKey(screen, printedKey(label));
 }
 async function click(screen: ConflictRecovery, action: string) {
   const button = screen.shadowRoot!.querySelector<HTMLElement>(`[data-action=${action}]`);
@@ -141,7 +171,7 @@ it("validates the key before any network work and allows a corrected key", async
   }));
   await click(screen, "inspect");
   expect(calls).toEqual([]);
-  expect(screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.textContent).toContain(
+  expect(keyInput(screen).shadowRoot!.textContent).toContain(
     "Enter the venue's current master key.",
   );
   await key(screen, "paper-secret");
@@ -152,31 +182,128 @@ it("validates the key before any network work and allows a corrected key", async
     ),
   );
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.recoveryKey).toBe("paper-secret");
+  expect(calls[0]!.recoveryKey).toBe(printedKey("paper-secret"));
   expect(calls[0]!.command).toEqual({ kind: "status" });
-  expect(screen.shadowRoot!.innerHTML).not.toContain("paper-secret");
+  expect(screen.shadowRoot!.innerHTML).not.toContain(printedKey("paper-secret"));
 });
 
 it("clears a refused recovery key and lets the operator authenticate again", async () => {
   const { screen, calls } = await mount(async (body) => {
-    if (body.recoveryKey === "replaced-key")
+    if (body.recoveryKey === printedKey("replaced-key"))
       throw { code: "promotion.break_glass_invalid", status: 403 };
     return { kind: "status", active: [active], event: { kind: "none" } };
   });
   await key(screen, "replaced-key");
   await click(screen, "inspect");
-  await vi.waitFor(() =>
-    expect(
-      screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-    ).toBe(""),
-  );
+  await vi.waitFor(() => expect(nativeKey(screen).value).toBe(""));
   await key(screen, "current-key");
   await click(screen, "inspect");
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull(),
   );
-  expect(calls.map((c) => c.recoveryKey)).toEqual(["replaced-key", "current-key"]);
+  expect(calls.map((c) => c.recoveryKey)).toEqual([
+    printedKey("replaced-key"),
+    printedKey("current-key"),
+  ]);
 });
+
+it("the conflict page sends the decoded key", async () => {
+  const { screen, calls } = await mount(async () => ({
+    kind: "status",
+    active: [active],
+    event: { kind: "none" },
+  }));
+  await typeKey(screen, "88dp74baypvbrrm5xfv2wpqyb5m5");
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0]!.recoveryKey).toBe("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
+});
+
+it("a key that is not whole is not sent and the field says so", async () => {
+  const { screen, calls } = await mount(async () => ({
+    kind: "status",
+    active: [active],
+    event: { kind: "none" },
+  }));
+  await typeKey(screen, "88dp74baypvb");
+  await click(screen, "inspect");
+  await settled(screen);
+  expect(calls).toEqual([]);
+  expect(keyInput(screen).shadowRoot!.textContent).toContain(
+    "Not a whole master key. Check it against the recovery pack.",
+  );
+  expect(
+    (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+  ).toBe("Correct the highlighted fields to continue.");
+});
+
+const REFUSED_NAME = "2026-10-17 · K7QX";
+for (const [locale, line, invalid] of [
+  [
+    "en",
+    `Wrong master key. Use the one dated ${REFUSED_NAME}.`,
+    "Correct the highlighted fields to continue.",
+  ],
+  [
+    "es",
+    `Clave maestra incorrecta. Usa la del ${REFUSED_NAME}.`,
+    "Corrige los campos señalados para continuar.",
+  ],
+] as const)
+  it(`a refused key shows 'Wrong master key. Use the one dated {name}.' with the name the box sent (${locale})`, async () => {
+    const { screen, calls } = await mount(async (body) => {
+      if (body.recoveryKey === printedKey("replaced-key"))
+        throw {
+          code: "promotion.break_glass_invalid",
+          params: { keyName: REFUSED_NAME },
+          status: 401,
+        };
+      return { kind: "status", active: [active], event: { kind: "none" } };
+    }, locale);
+    await key(screen, "replaced-key");
+    await click(screen, "inspect");
+    await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(line));
+    expect(nativeKey(screen).value).toBe("");
+    const actions = screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+      error: string;
+    };
+    expect(actions.error).toBe(invalid);
+    expect(screen.shadowRoot!.textContent).not.toContain(line);
+    expect(calls).toHaveLength(1);
+  });
+
+it("a key refused twice shows the wrong-key line both times", async () => {
+  const { screen, calls } = await mount(async () => {
+    throw { code: "promotion.break_glass_invalid", params: { keyName: REFUSED_NAME }, status: 401 };
+  });
+  const line = `Wrong master key. Use the one dated ${REFUSED_NAME}.`;
+  await key(screen, "first-key");
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(line));
+  await key(screen, "second-key");
+  expect(keyInput(screen).shadowRoot!.textContent).not.toContain(line);
+  await click(screen, "inspect");
+  await vi.waitFor(() => expect(calls).toHaveLength(2));
+  await vi.waitFor(() => expect(keyInput(screen).shadowRoot!.textContent).toContain(line));
+});
+
+for (const [locale, label] of [
+  ["en", "Master key"],
+  ["es", "Clave maestra"],
+] as const)
+  it(`the field is labelled Master key, with no hint (${locale})`, async () => {
+    const { screen } = await mount(async () => {
+      throw new Error("No request");
+    }, locale);
+    const input = keyInput(screen) as ReturnType<typeof keyInput> & { label: string; hint: string };
+    await input.updateComplete;
+    expect(input.label).toBe(label);
+    expect(input.hint).toBe("");
+    expect(nativeKey(screen).placeholder).toBe("");
+    expect(input.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+    expect(screen.shadowRoot!.textContent).not.toMatch(/box key|clave del servidor/i);
+    expect(input.shadowRoot!.textContent).not.toMatch(/box key|clave del servidor/i);
+  });
 
 it("does not disclose conflict data from a reply outside the public response contract", async () => {
   const { screen } = await mount(async () => ({
@@ -209,9 +336,7 @@ it("Stop clears the native key and ignores a late status reply", async () => {
   finish({ kind: "status", active: [active], event: { kind: "none" } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await screen.updateComplete;
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("");
+  expect(nativeKey(screen).value).toBe("");
   expect(screen.shadowRoot!.querySelector("[data-conflict]")).toBeNull();
   expect(calls).toHaveLength(1);
 });
@@ -249,7 +374,7 @@ it("requires both isolation answers, compares clocks and switches only on explic
   expect(activation.conflict).toEqual({ registroId: "record-1", sifId: "sif-1" });
   expect(activation.oldMachineOffline).toBe(true);
   expect(activation.noParallelRecovery).toBe(true);
-  expect(screen.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
 });
 
 it("does not select or activate when the second clock disagrees", async () => {
@@ -531,7 +656,7 @@ it("retains only event and conflict across Stop and reopening, and authenticates
   await inspect(second.screen);
   expect(second.calls[0]!.eventId).toBe(before.eventId);
   expect(second.calls[0]!.conflict).toEqual(before.conflict);
-  expect(second.calls[0]!.recoveryKey).toBe("current-key");
+  expect(second.calls[0]!.recoveryKey).toBe(printedKey("current-key"));
 });
 
 it("requires a new event and key after an interrupted retained attempt", async () => {
@@ -561,9 +686,7 @@ it("requires a new event and key after an interrupted retained attempt", async (
   const original = calls[0]!.eventId;
   await click(screen, "again");
   retained = false;
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("");
+  expect(nativeKey(screen).value).toBe("");
   await inspect(screen);
   expect(calls.at(-1)!.eventId).not.toBe(original);
   expect(calls.filter((c) => c.command.kind === "activate")).toHaveLength(1);
@@ -583,9 +706,7 @@ it("keeps a rate-limit refusal actionable without starting an automatic retry lo
     ),
   );
   expect(calls).toHaveLength(1);
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("");
+  expect(nativeKey(screen).value).toBe("");
   await key(screen, "current-key");
   expect(
     (
@@ -721,9 +842,7 @@ it.each(["connection.failed", "promotion.break_glass_invalid"])(
     reject({ code });
     await new Promise((resolve) => setTimeout(resolve, 0));
     await screen.updateComplete;
-    expect(
-      screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-    ).toBe("new-key");
+    expect(nativeKey(screen).value).toBe(printedKey("new-key"));
     expect(screen.shadowRoot!.querySelector("[data-conflict]")).not.toBeNull();
     expect(
       (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
@@ -910,9 +1029,7 @@ it("refuses a committed result for another event without clearing the current ke
     ),
   );
   expect(screen.shadowRoot!.querySelector("[data-complete]")).toBeNull();
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("current-key");
+  expect(nativeKey(screen).value).toBe(printedKey("current-key"));
   expect(calls).toHaveLength(1);
 });
 

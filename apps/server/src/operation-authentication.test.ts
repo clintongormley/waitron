@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  readCurrentMasterKey,
   stampDeployment,
   withTransaction,
   withFoldedPersonChanges,
@@ -22,7 +23,7 @@ import {
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
 } from "./operation-authentication.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { personHolding } from "./testing/session-holding.js";
 import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
@@ -334,6 +335,43 @@ describe("a recovery key's authority", () => {
       printedBoxKey,
     ])
       expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
+  });
+
+  async function refusalParams(secret: unknown): Promise<unknown> {
+    try {
+      await withRecoveryKeyOperation(
+        { db: suite.db, node: suite.node, nodeId: NODE },
+        recovery,
+        secret,
+        async () => "committed",
+      );
+    } catch (error) {
+      expect(error).toMatchObject({ code: "promotion.break_glass_invalid" });
+      return (error as { params: unknown }).params;
+    }
+    throw new Error("the key was not refused");
+  }
+
+  it("a wrong key's refusal names the current master key", async () => {
+    await mintMasterKey(suite.db, { madeAt: new Date("2026-01-02T00:00:00Z") });
+    const own = await mintMasterKey(suite.db);
+    const current = (await readCurrentMasterKey(suite.db))!;
+    expect(current.name).toBe(own.name);
+    for (const secret of [WRONG_MASTER_KEY, changeOneSymbol(own.secret), "not a key"])
+      expect(await refusalParams(secret)).toStrictEqual({ keyName: current.name });
+  });
+
+  it("with no master key the refusal names none", async () => {
+    expect(await refusalParams(WRONG_MASTER_KEY)).toStrictEqual({});
+  });
+
+  it("a master key made while an authorised write waits is refused naming the new key", async () => {
+    const refusal: unknown = await waitingWrite(true).catch((error: unknown) => error);
+    const replacement = (await readCurrentMasterKey(suite.db))!;
+    expect(refusal).toMatchObject({
+      code: "promotion.break_glass_invalid",
+      params: { keyName: replacement.name },
+    });
   });
 
   it("the venue's current master key authorises, typed in lower case with dashes", async () => {

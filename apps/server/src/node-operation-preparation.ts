@@ -100,8 +100,14 @@ export function createNodeOperationPreparation(options: {
       readOperationAuthority(scope.authority, binding) === undefined
     )
       return invalid(binding);
-    if (scope.keyNumber !== undefined && (await currentKeyNumber()) !== scope.keyNumber)
-      throw new AppError("promotion.break_glass_invalid", {});
+    if (scope.keyNumber !== undefined) {
+      const current = await readCurrentMasterKey(options.db);
+      if ((current?.number ?? null) !== scope.keyNumber)
+        throw new AppError(
+          "promotion.break_glass_invalid",
+          current === null ? {} : { keyName: current.name },
+        );
+    }
     if (scope.isolation !== undefined) await assertLive();
   };
   const scoped = createRecoveryPreparationHost({

@@ -1463,8 +1463,11 @@ declare module "@waitron/shared" {
      * two submitters under one NIF (CLAUDE.md §5).
      */
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
-    /** This request could not use the venue’s master key. */
-    "promotion.break_glass_invalid": Record<string, never>;
+    /**
+     * This request could not use the venue’s master key. `keyName` is the name of the current master
+     * key of the database checked, when it has one.
+     */
+    "promotion.break_glass_invalid": { keyName?: string };
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.
