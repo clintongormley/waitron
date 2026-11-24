@@ -83,6 +83,7 @@ interface MixVectors {
   readonly vectors: Int32Array;
   readonly bases: Float64Array;
   readonly solve: (counts: number[], base: number) => MixSearchResult;
+  // This can only decrease as mixes are accepted.
   readonly cutoff: () => number;
   readonly canSolve?: () => boolean;
   readonly accept: (candidate: MixSearchResult) => void;
@@ -101,16 +102,22 @@ export function searchMixVectors({
 }: MixVectors): boolean {
   const bounds = bases.slice();
   const slopes = new Float64Array(offerCount);
-  for (;;) {
-    let next = -1;
-    let lowest = cutoff();
-    for (let mix = 0; mix < bases.length; mix++) {
-      if (bounds[mix]! < lowest) {
-        lowest = bounds[mix]!;
-        next = mix;
-      }
+  const remaining = new Int32Array(bases.length);
+  let remainingCount = 0;
+  let next = -1;
+  const initialLimit = cutoff();
+  let lowest = initialLimit;
+  for (let mix = 0; mix < bases.length; mix++) {
+    const bound = bounds[mix]!;
+    if (!(bound < initialLimit)) continue;
+    remaining[remainingCount++] = mix;
+    if (bound < lowest) {
+      lowest = bound;
+      next = mix;
     }
-    if (next === -1) return true;
+  }
+
+  while (next !== -1) {
     if (canSolve && !canSolve()) return false;
 
     const start = next * offerCount;
@@ -125,14 +132,27 @@ export function searchMixVectors({
     });
 
     const limit = cutoff();
-    for (let mix = 0; mix < bases.length; mix++) {
+    let kept = 0;
+    lowest = limit;
+    next = -1;
+    for (let row = 0; row < remainingCount; row++) {
+      const mix = remaining[row]!;
       if (bounds[mix]! >= limit) continue;
       let bound = bases[mix]! + candidate.placement.cost;
       for (let offer = 0; offer < offerCount; offer++) {
         const count = vectors[mix * offerCount + offer]!;
         bound -= slopes[offer]! * (count - candidate.counts[offer]!);
       }
-      bounds[mix] = Math.max(bounds[mix]!, bound);
+      bound = Math.max(bounds[mix]!, bound);
+      if (!(bound < limit)) continue;
+      bounds[mix] = bound;
+      remaining[kept++] = mix;
+      if (bound < lowest) {
+        lowest = bound;
+        next = mix;
+      }
     }
+    remainingCount = kept;
   }
+  return true;
 }
