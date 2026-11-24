@@ -151,4 +151,40 @@ describe("move-ts-declarations", () => {
     expect(read("amounts.ts")).toContain("const base = 7;");
     expect(read("consumer.ts")).toContain('import { total } from "./amounts.js";');
   });
+
+  it("checks the implementation body when moving overloads", async () => {
+    const source = [
+      "export function read(value: string): string;",
+      "export function read(value: number): number;",
+      "export function read(value: string | number) { return value }\n",
+    ].join("\n");
+    write("original.ts", source);
+
+    await expect(move("original.ts", { "reading.ts": ["read"] })).rejects.toThrow(/read.*body/i);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("reading.ts")).toThrow(/ENOENT/);
+  });
+
+  it("moves related declarations together even when another declaration separates them", async () => {
+    write(
+      "original.ts",
+      [
+        "export function bump() {",
+        "  return advance();",
+        "}",
+        "",
+        "export const limit = 7;",
+        "",
+        "export function advance() {",
+        "  return limit + 1;",
+        "}\n",
+      ].join("\n"),
+    );
+
+    await move("original.ts", { "ticket.ts": ["bump", "advance"] }, ["limit"]);
+
+    expect(read("ticket.ts")).toContain('import { limit } from "./original.js";');
+    expect(read("ticket.ts")).not.toContain("import { advance");
+    expect(read("original.ts")).toBe("export const limit = 7;\n");
+  });
 });

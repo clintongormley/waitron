@@ -123,13 +123,17 @@ function snapshot(source, node) {
 function verifyMoves(expected, readFile) {
   for (const [target, declarations] of expected) {
     const output = parse(target, readFile(target));
-    for (const [name, original] of declarations) {
-      const node = output.statements.find((statement) => nameOf(statement) === name);
-      if (!node) throw new Error(`${target}: missing moved declaration ${name}`);
-      const actual = snapshot(output, node);
-      if (actual.body !== original.body) throw new Error(`${target}: ${name} changed body`);
-      if (actual.signature !== original.signature) {
-        throw new Error(`${target}: ${name} changed signature or comments`);
+    for (const [name, originals] of declarations) {
+      const nodes = output.statements.filter((statement) => nameOf(statement) === name);
+      if (nodes.length !== originals.length)
+        throw new Error(`${target}: missing moved declaration ${name}`);
+      for (const [index, node] of nodes.entries()) {
+        const actual = snapshot(output, node);
+        const original = originals[index];
+        if (actual.body !== original.body) throw new Error(`${target}: ${name} changed body`);
+        if (actual.signature !== original.signature) {
+          throw new Error(`${target}: ${name} changed signature or comments`);
+        }
       }
     }
   }
@@ -149,7 +153,7 @@ function replace(text, edits) {
   return text;
 }
 
-function reexportEdits(program, source, name, target) {
+function reexportEdits(program, source, names, target) {
   const checker = program.getTypeChecker();
   const symbol = checker.getSymbolAtLocation(program.getSourceFile(source));
   const changes = [];
@@ -165,8 +169,8 @@ function reexportEdits(program, source, name, target) {
         checker.getSymbolAtLocation(node.moduleSpecifier) !== symbol
       )
         continue;
-      const moved = node.exportClause.elements.filter(
-        (item) => (item.propertyName ?? item.name).text === name,
+      const moved = node.exportClause.elements.filter((item) =>
+        names.has((item.propertyName ?? item.name).text),
       );
       if (!moved.length) continue;
       const staying = node.exportClause.elements.filter((item) => !moved.includes(item));
@@ -188,23 +192,42 @@ function reexportEdits(program, source, name, target) {
   return changes;
 }
 
-function moveDeclaration(project, source, name, target) {
+function groupForTypeScript(original, targets) {
+  const moves = new Map();
+  const cuts = [];
+  const destinationFor = new Map(
+    Object.entries(targets).flatMap(([target, names]) => names.map((name) => [name, target])),
+  );
+  for (const node of original.statements) {
+    const target = destinationFor.get(nameOf(node));
+    if (!target) continue;
+    const { start, end } = span(original, node);
+    const group = moves.get(target) ?? [];
+    group.push(original.text.slice(start, end));
+    moves.set(target, group);
+    cuts.push({ span: { start, length: end - start }, newText: "" });
+  }
+  // One move per destination keeps TypeScript from editing and deleting the same import.
+  const staying = replace(original.text, cuts).trimEnd();
+  const groups = Object.keys(targets).map((target) => (moves.get(target) ?? []).join("\n\n"));
+  return [staying, ...groups].filter(Boolean).join("\n\n") + "\n";
+}
+
+function moveDeclarations(project, source, names, target) {
   const file = parse(source, project.readFile(source));
-  const node = file.statements.find((statement) => nameOf(statement) === name);
+  const nodes = file.statements.filter((statement) => names.has(nameOf(statement)));
   const oldTarget = project.readFile(target);
   if (
     oldTarget &&
-    parse(target, oldTarget).statements.some((statement) => nameOf(statement) === name)
+    parse(target, oldTarget).statements.some((statement) => names.has(nameOf(statement)))
   ) {
-    throw new Error(`${target}: already contains ${name}`);
+    throw new Error(`${target}: already contains one of ${[...names].join(", ")}`);
   }
-  const { start, end } = span(file, node);
-  const declaration = file.text.slice(start, end);
-  const reexports = reexportEdits(project.service.getProgram(), source, name, target);
+  const reexports = reexportEdits(project.service.getProgram(), source, names, target);
   const { edits } = project.service.getEditsForRefactor(
     source,
     { quotePreference: "double", newLineCharacter: "\n" },
-    { pos: node.getStart(file), end: node.end },
+    { pos: nodes[0].getStart(file), end: nodes.at(-1).end },
     "Move to file",
     "Move to file",
     { importModuleSpecifierEnding: "js", quotePreference: "double" },
@@ -221,23 +244,25 @@ function moveDeclaration(project, source, name, target) {
     );
   }
   const output = parse(target, project.readFile(target));
-  const moved = output.statements.find((statement) => nameOf(statement) === name);
-  if (!moved) throw new Error(`${target}: TypeScript did not move ${name}`);
-  const outputSpan = span(output, moved);
-  const addedExport = isExported(moved) && !isExported(node);
-  const exportAt = node.getStart(file) - start;
-  const restored = addedExport
-    ? declaration.slice(0, exportAt) + "export " + declaration.slice(exportAt)
-    : declaration;
-  project.set(
-    target,
-    replace(output.text, [
-      {
-        span: { start: outputSpan.start, length: outputSpan.end - outputSpan.start },
-        newText: restored,
-      },
-    ]),
-  );
+  const moved = output.statements.filter((statement) => names.has(nameOf(statement)));
+  if (moved.length !== nodes.length)
+    throw new Error(`${target}: TypeScript did not move ${[...names].join(", ")}`);
+  const restored = moved.map((statement, index) => {
+    const original = nodes[index];
+    const { start, end } = span(file, original);
+    const declaration = file.text.slice(start, end);
+    const exportAt = original.getStart(file) - start;
+    const newText =
+      isExported(statement) && !isExported(original)
+        ? declaration.slice(0, exportAt) + "export " + declaration.slice(exportAt)
+        : declaration;
+    const outputSpan = span(output, statement);
+    return {
+      span: { start: outputSpan.start, length: outputSpan.end - outputSpan.start },
+      newText,
+    };
+  });
+  project.set(target, replace(output.text, restored));
 }
 
 export async function main([mapFile], root) {
@@ -245,6 +270,7 @@ export async function main([mapFile], root) {
   const project = createProject(root, resolve(root, map.tsconfig));
   try {
     const expected = new Map();
+    const operations = [];
     for (const { source, targets, keep = [] } of map.moves) {
       const file = resolve(root, source);
       const original = parse(file, project.readFile(file));
@@ -253,20 +279,18 @@ export async function main([mapFile], root) {
         const destination = resolve(root, target);
         const declarations = expected.get(destination) ?? new Map();
         for (const name of names) {
-          const node = original.statements.find((statement) => nameOf(statement) === name);
-          declarations.set(name, snapshot(original, node));
+          const nodes = original.statements.filter((statement) => nameOf(statement) === name);
+          declarations.set(
+            name,
+            nodes.map((node) => snapshot(original, node)),
+          );
         }
         expected.set(destination, declarations);
+        operations.push([file, new Set(names), destination]);
       }
+      project.set(file, groupForTypeScript(original, targets));
     }
-    for (const { source, targets } of map.moves) {
-      const file = resolve(root, source);
-      for (const [target, names] of Object.entries(targets)) {
-        for (const name of names) {
-          moveDeclaration(project, file, name, resolve(root, target));
-        }
-      }
-    }
+    for (const operation of operations) moveDeclarations(project, ...operation);
     verifyMoves(expected, project.readFile);
     const formatted = new Map();
     for (const [file, { text }] of project.changed) {
