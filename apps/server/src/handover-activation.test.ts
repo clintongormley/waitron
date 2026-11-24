@@ -625,7 +625,6 @@ describe("activating on a real placed copy", () => {
     const other = handoverPromotionContext({ scenario: "emergency" });
     const credentials = { personId: ADMIN, password: PASSWORD };
     const client = { onBox: false };
-    await selectName(app); // Writes the dormant setup; its name is not used.
     const challenge = (await service.prepareWithDormantSetup(
       binding,
       credentials,

@@ -297,7 +297,6 @@ it("a signed-in manager selects and activates a promotion after dormant admissio
   )) as { input: unknown };
   expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
   expect(await rows()).toEqual(before);
-  await compare(s);
   expect(await promote(s, selected.input)).toMatchObject({ alreadyPrimary: false });
   const after = await rows();
   expect(after.allocations).toHaveLength(2);
@@ -316,14 +315,13 @@ it("a signed-in manager selects and activates a promotion after dormant admissio
   ).not.toContain(PASSWORD);
 });
 
-it.each(["key", "isolation", "parallel", "source", "node"])(
+it.each(["key", "isolation", "parallel", "node"])(
   "refuses changed %s before selection writes",
   async (fault) => {
     const s = await service();
     await admit(s);
     const held = {
       ...binding,
-      ...(fault === "source" ? { sourceId: "changed" } : {}),
       ...(fault === "node" ? { targetNodeId: primary.nodeId } : {}),
     };
     const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");

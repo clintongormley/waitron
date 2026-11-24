@@ -1342,10 +1342,8 @@ describe("setting the spare's clock from this device", () => {
     await controlledAtFilingAssumed();
     await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary", "promote");
     const answer = await setFrom(route(s), 45_000);
-    expect(answer).toMatchObject({
-      status: 200,
-      body: { status: "refused", reason: "not_mirror" },
-    });
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ status: "refused", reason: "not_mirror" });
     expect(box.set).not.toHaveBeenCalled();
     expect(box.hostSets).toEqual([]);
   });
