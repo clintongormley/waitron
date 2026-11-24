@@ -727,5 +727,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     const place = best.dishes[i]!.place;
     return place?.setMenuId === savedFit[pin[0]]!.id && place.lineIndex === pin[1];
   });
-  return bestKeepsSavedPlaces && best.totalCents < anchored.totalCents ? best : anchored;
+  return (finished || bestKeepsSavedPlaces) && best.totalCents < anchored.totalCents
+    ? best
+    : anchored;
 }

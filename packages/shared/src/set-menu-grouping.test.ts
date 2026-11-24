@@ -650,8 +650,11 @@ it("keeps a saved dish when its extra half-cent rounds to the same price", () =>
   expect(result.dishes.find(({ id }) => id === second.id)?.place).toBeNull();
 });
 
-it("keeps a cheaper bill found at the limit when it uses the saved dish places", () => {
-  let seed = 2;
+it.each([
+  { diners: 8, seed: 2, totalCents: 13257, allPlacesKept: true },
+  { diners: 9, seed: 3, totalCents: 14836, allPlacesKept: false },
+])("keeps the cheaper complete bill at the limit for $diners diners", (sample) => {
+  let seed = sample.seed;
   const next = (max: number) => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return Math.floor((seed / 2 ** 32) * max);
@@ -664,7 +667,7 @@ it("keeps a cheaper bill found at the limit when it uses the saved dish places",
       courseId,
     })),
   );
-  const dishes = Array.from({ length: 8 }, (_, i) =>
+  const dishes = Array.from({ length: sample.diners }, (_, i) =>
     courses.map((courseId, course) => {
       const product = products[course * 4 + next(4)]!;
       return {
@@ -696,12 +699,16 @@ it("keeps a cheaper bill found at the limit when it uses the saved dish places",
   const previous = group({ offers, dishes: dishes.slice(0, -4), discounts, previous: null });
   const input = { offers, dishes, discounts, previous };
   const result = group(input);
-  expect(result).toMatchObject({ exact: false, totalCents: 13257 });
-  for (const saved of previous.dishes) {
-    if (saved.place)
-      expect(result.dishes.find(({ id }) => id === saved.id)?.place).toEqual(saved.place);
-  }
-  expect(group({ ...input, previous: result }).totalCents).toBe(13257);
+  expect(result).toMatchObject({ exact: false, totalCents: sample.totalCents });
+  const allPlacesKept = previous.dishes.every((saved) => {
+    if (!saved.place) return true;
+    const place = result.dishes.find(({ id }) => id === saved.id)?.place;
+    return place?.setMenuId === saved.place.setMenuId && place.lineIndex === saved.place.lineIndex;
+  });
+  expect(allPlacesKept).toBe(sample.allPlacesKept);
+  const repeat = group({ ...input, previous: result });
+  expect(repeat.totalCents).toBe(result.totalCents);
+  expect(repeat.dishes).toEqual(result.dishes);
 });
 
 it("can leave a cheap dish à la carte when one fixed discount covers only one supplement", () => {

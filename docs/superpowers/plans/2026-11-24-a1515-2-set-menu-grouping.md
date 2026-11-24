@@ -43,8 +43,9 @@ placement-solve budget for finding a complete fallback, and check it on the larg
 Start with valid saved places and compare whole-menu additions by the saving each actually delivers
 after supplements and discounts (watcher, 24 November at 12:08). Check 600 small bills against
 enumeration and unchanged replay, and compare a sample of 16–20-diner bills against raised limits.
-Use the best complete result found that keeps valid saved places when the exact price is still
-unknown. A proven cheapest price stands even if tie-breaking stops early. On an unchanged repeat,
+Keep valid saved places when the count search stops early. Once it finishes, keep a cheaper complete
+bill even if some rounding choices remain unproved (watcher, 24 November at 12:33).
+A proven cheapest price stands even if tie-breaking stops early. On an unchanged repeat,
 keep the saved fallback price and places. Close any saved menu that becomes dearer than its
 remaining dishes à la carte (watcher, 24 November at 10:38). Ineligible or over-limit portions
 keep their à la carte charges.
