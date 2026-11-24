@@ -5,7 +5,6 @@ import {
   workingOrders,
   readVenueClock,
   orderGroups,
-  kitchenNotices,
   tableNames,
   parties,
   partyTables,
@@ -13,6 +12,7 @@ import {
 } from "@waitron/db";
 import { enqueuePrintJob } from "@waitron/printing";
 import { partyTablesName } from "@waitron/shared";
+import { kitchenNotices } from "@waitron/venue-service";
 import { eq, inArray, and, sql } from "drizzle-orm";
 import { readKitchenLanguage } from "./kitchen-language.js";
 import { toNoticeItem, type CorrectionItem } from "./kitchen-ticket-corrections.js";

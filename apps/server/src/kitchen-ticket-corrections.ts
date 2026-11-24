@@ -8,14 +8,10 @@ import {
   readVenueClock,
   partySurvivors,
 } from "@waitron/db";
+import { kitchenPresentationName } from "@waitron/menu";
+import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import { enqueuePrintJob, type EscSetting } from "@waitron/printing";
-import {
-  type KitchenAllergyBlock,
-  compareStationNames,
-  type KitchenNoteChange,
-  kitchenPresentationName,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { compareStationNames, thousandthsToDecimal } from "@waitron/shared";
 import { eq, and, inArray, isNull, or, isNotNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";

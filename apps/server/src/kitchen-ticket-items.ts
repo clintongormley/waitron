@@ -8,14 +8,13 @@ import {
   workingOrders,
   orderTableLabels,
 } from "@waitron/db";
-import { optionSnapshotLabels } from "@waitron/menu";
+import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/menu";
 import type { LateSendMark } from "@waitron/module";
 import {
   thousandthsToDecimal,
   contentLanguageCode,
   type Decimal,
   perDishOptionQuantity,
-  kitchenPresentationName,
   type TicketGrouping,
 } from "@waitron/shared";
 import { eq, inArray } from "drizzle-orm";
