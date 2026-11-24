@@ -93,6 +93,7 @@ it.each(cases)(
         precision: 3,
         hardwareUnit: "kg",
       };
+      if (tiles === "thumbnails") measured.allergens = { milk: {} };
       measured.variants = ["12.50", "85.00"].map((unitPrice, index) => ({
         ...sellingValuesOf(measured),
         id: `v${index}`,
@@ -172,6 +173,15 @@ it.each(cases)(
         if (tile.dataset.kind === "product") {
           expect(tile.querySelector(".price")!.textContent).toContain("12,50");
           const name = tile.querySelector<HTMLElement>(".name")!;
+          if (tiles === "thumbnails" && tile.hasAttribute("data-nutrition")) {
+            const text = document.createRange();
+            text.selectNodeContents(name);
+            for (const line of text.getClientRects()) {
+              expect(
+                Math.abs(line.left + line.width / 2 - (box.left + box.width / 2)),
+              ).toBeLessThan(1);
+            }
+          }
           const canvas = document.createElement("canvas").getContext("2d")!;
           canvas.font = getComputedStyle(name).font;
           const walker = document.createTreeWalker(name, NodeFilter.SHOW_TEXT);

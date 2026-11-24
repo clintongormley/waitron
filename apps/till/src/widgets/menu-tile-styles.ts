@@ -16,6 +16,7 @@ export const menuTileStyles = css`
   }
 
   wt-icon.folder-badge {
+    box-sizing: content-box;
     position: absolute;
     inset-block-start: var(--wt-space-1);
     inset-inline-start: var(--wt-space-1);
@@ -50,7 +51,7 @@ export const menuTileStyles = css`
     inset-block-start: var(--wt-space-1);
     inset-inline-end: var(--wt-space-1);
   }
-  .tile[data-nutrition] .name {
+  .tile[data-nutrition]:not(:has(.thumb)) .name {
     padding-inline-end: var(--wt-space-5);
   }
 

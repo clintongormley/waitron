@@ -3,6 +3,8 @@ import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import type {
   DocumentMember,
   HomeDevice,
@@ -20,6 +22,8 @@ import {
   mountWidget,
 } from "./test-helpers.js";
 import { DeviceHomePreview } from "./device-home-preview.js";
+
+registerIcons(DASHBOARD_ICONS);
 
 const KILO = {
   id: "unit-kg",
@@ -480,6 +484,12 @@ describe("dashboard-device-home-preview", () => {
       expect(section.hasAttribute("data-painted")).toBe(false);
       const folder = section.querySelector('wt-icon[name="folder"]')!;
       expect(folder?.parentElement?.contains(image(section))).toBe(true);
+      expect(
+        folder.shadowRoot!.querySelector("svg")!.getBoundingClientRect().width,
+      ).toBeGreaterThanOrEqual(14);
+      expect(
+        section.querySelector(".section-kind")!.getBoundingClientRect().width,
+      ).toBeLessThanOrEqual(1);
       await expect
         .element(page.elementLocator(section.shadowRoot!.querySelector("button")!))
         .toHaveAccessibleName("Drinks para clientes Section");
@@ -1065,7 +1075,12 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const [cell] = tiles(el, "shortcuts");
     expect(cell!.dataset.state).toBe("hidden");
     expect(cell!.querySelector(".name")!.textContent!.trim()).toBe("Hidden");
-    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(en);
+    const reason = cell!.querySelector<HTMLElement>(".kind")!;
+    expect(reason.textContent!.trim()).toBe(en);
+    const size = getComputedStyle(reason).fontSize;
+    reason.style.fontSize = "var(--wt-font-size-sm)";
+    expect(size).toBe(getComputedStyle(reason).fontSize);
+    reason.style.removeProperty("font-size");
     setLocale("es-ES");
     await el.updateComplete;
     expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(es);

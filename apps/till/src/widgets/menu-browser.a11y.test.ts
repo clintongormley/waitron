@@ -8,6 +8,7 @@ import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 
 function product(key: string, name: string, available = true): TillProduct {
   return {
@@ -23,7 +24,7 @@ function product(key: string, name: string, available = true): TillProduct {
     unit: {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      id: "unit-each",
+      id: EACH_UNIT_ID,
       name: { en: "Each", es: "Unidad" },
       abbreviation: { en: "ea", es: "ud" },
       precision: 0,

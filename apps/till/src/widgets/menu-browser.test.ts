@@ -1238,6 +1238,12 @@ describe("till-menu-browser", () => {
         );
         const folder = sectionTile.querySelector('wt-icon[name="menu-section"]')!;
         expect(folder?.parentElement?.contains(image(sectionTile))).toBe(true);
+        expect(
+          folder.shadowRoot!.querySelector("svg")!.getBoundingClientRect().width,
+        ).toBeGreaterThanOrEqual(14);
+        expect(
+          sectionTile.querySelector(".section-kind")!.getBoundingClientRect().width,
+        ).toBeLessThanOrEqual(1);
         await expect
           .element(page.elementLocator(sectionTile.shadowRoot!.querySelector("button")!))
           .toHaveAccessibleName("Pictured (EN) Section");

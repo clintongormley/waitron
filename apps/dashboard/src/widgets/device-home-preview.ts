@@ -211,7 +211,8 @@ export class DeviceHomePreview extends LitElement {
 
       .note,
       .empty,
-      .price {
+      .price,
+      .kind {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -257,6 +258,7 @@ export class DeviceHomePreview extends LitElement {
       }
 
       wt-icon.folder-badge {
+        box-sizing: content-box;
         position: absolute;
         inset-block-start: var(--wt-space-1);
         inset-inline-start: var(--wt-space-1);
@@ -289,6 +291,7 @@ export class DeviceHomePreview extends LitElement {
       }
 
       wt-button.tile::part(button) {
+        position: relative;
         height: 100%;
         min-height: calc(var(--wt-tap-min) * 1.5);
         padding: var(--wt-space-2);
