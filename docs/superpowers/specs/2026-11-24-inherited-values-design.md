@@ -1,9 +1,9 @@
 # Inherited values: an empty setting inherits, shown once and quietly
 
-Status: waiting for the owner's approval of this document. A fresh reader checked it against the
-code, 2026-11-24, and its findings are in. The approach (option 4) was approved by
-the owner, 2026-11-24, from mock-ups on the demo's own screens. Points marked **my call** were the
-session's.
+Status: approved by the owner, 2026-11-24 ("y"), as A1568. The approach (option 4) was chosen from
+mock-ups on the demo's own screens, and a fresh reader checked the document against the code. Points
+marked **my call** were the session's; the eight that matter were read out to the owner with the
+document.
 
 ## Why
 
@@ -119,7 +119,7 @@ Looked at on the demo venue and in the code:
 | Extras editor, Price | italic placeholder in a grid | muted, upright |
 | Variants table and variant window, price | grey italic | table muted, upright; window arrow |
 | Product list, inherited allergens | italic badges | muted, upright |
-| Product list, variant's inherited price | unmarked | muted, upright (answers the open backlog question; **my call**) |
+| Product list, variant's inherited price | unmarked | muted, upright (**my call**) |
 | Menu Price overrides | italic placeholder | muted, upright; bold and bar stay |
 | Menu patch window, Edit translations | italic placeholder | arrow where the label shows |
 | Set menu, VAT when taken away | "Same as Eat-in VAT — …" | inherit row |

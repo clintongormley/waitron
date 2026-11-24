@@ -107,7 +107,8 @@ phone. The owner chose the first ("A").
 ### 3. Prices in the row
 
 - A product with no variants has a price box: a price set on this menu in bold with "usually €9.00"
-  beside it (under the name on a phone); otherwise the usual price in muted italics. Emptying the box
+  beside it (under the name on a phone); otherwise the usual price, muted and upright (it was in italics;
+  [inherited values](2026-11-24-inherited-values-design.md), owner, 2026-11-24). Emptying the box
   returns to the usual price.
 - A product with variants shows its price or range as **plain text**: it is derived (owner). Its
   variants open under it, each with a box. **The menu's own price on a product with variants goes,
