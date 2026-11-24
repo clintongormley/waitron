@@ -155,6 +155,19 @@ describe("move-ts-declarations", () => {
     );
   });
 
+  it("refuses a signature change outside the trailing type-literal delimiter exception", async () => {
+    write(".prettierrc.json", '{"printWidth":100,"trailingComma":"all"}');
+    const source =
+      'type CourseCaptionCopies = { [K in "starters course" | "mains course" | "dessert course"]: string };\n\nexport const captions: CourseCaptionCopies | undefined = undefined;\n';
+    write("original.ts", source);
+
+    await expect(
+      move("original.ts", { "captions.ts": ["CourseCaptionCopies"] }, ["captions"]),
+    ).rejects.toThrow(/CourseCaptionCopies changed signature or comments/);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("captions.ts")).toThrow(/ENOENT/);
+  });
+
   it("drops an intermediate import when two declarations move to the same destination", async () => {
     write(
       "original.ts",
