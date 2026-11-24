@@ -765,7 +765,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (source)",
     actions: [],
     basis:
-      'Keep as tip moves money the bill already received from its applied amount to its tip; it takes no payment and opens no drawer. bill-payments-api.ts; refusals: bill-overpaid.test.ts "keep as tip is refused when tips are off"',
+      'Keep as tip moves money the bill already received from its applied amount to its tip, so it takes no payment, hands none out and opens no drawer. When that leaves the bill paid it issues the bill\'s invoice through issueIfFullyPaid, as a completing payment does. print-receipt never refuses: issuing queues no receipt (enqueueSaleReceipt, receipt-print.ts, only reserves a full invoice staged for email or A4 and can print a prepaid order\'s collection number), and the receipt is its own request, POST /api/sales/:id/receipt, which requires print-receipt; bill-overpaid.test.ts "keeping the excess as a tip queues no receipt, whether or not the till may print receipts"; refusals: bill-overpaid.test.ts "keep as tip is refused when tips are off"',
     routes: ["POST /api/working-orders/:id/overpaid/keep-as-tip"],
   },
   {

@@ -272,6 +272,50 @@ describe("A1515 a bill left owing less than it was paid", () => {
     });
   });
 
+  it.each([false, true])(
+    "keeping the excess as a tip queues no receipt, whether or not the till may print receipts (may print: %s)",
+    async (printsReceipts) => {
+      const { billId } = await overpaidBill();
+      const jobs = () =>
+        venue.db.all<{ n: number }>(sql`select count(*) as n from print_jobs`)[0]!.n;
+      const before = jobs();
+      const profileId = venue.db.all<{ id: string }>(
+        sql`select device_profile_id as id from devices where id = ${venue.deviceId}`,
+      )[0]!.id;
+      const capabilities = () =>
+        JSON.parse(
+          venue.db.all<{ c: string }>(
+            sql`select capabilities as c from device_profiles where id = ${profileId}`,
+          )[0]!.c,
+        ) as string[];
+      const original = capabilities();
+      const setCapabilities = (next: string[]) =>
+        venue.db.run(
+          sql`update device_profiles set capabilities = ${JSON.stringify(next)} where id = ${profileId}`,
+        );
+      if (printsReceipts) setCapabilities([...original, "print-receipt"]);
+      try {
+        const kept = await keepAsTip(billId);
+
+        expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+        expect(await invoicesOf(billId)).toEqual(["10.00"]);
+        expect(jobs()).toBe(before);
+        // The receipt is its own request, which only a till that may print receipts is answered.
+        const receipt = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/sales/${billId}/receipt`,
+          {},
+        );
+        expect(receipt.status).toBe(printsReceipts ? 200 : 403);
+        expect(jobs()).toBe(printsReceipts ? before + 1 : before);
+      } finally {
+        setCapabilities(original);
+      }
+    },
+  );
+
   it("keeps as a tip only what a payment's refunds have left of it, the newest first", async () => {
     const { billId, paymentIds } = await overpaidBill("cash", false, ["12.00", "3.00"]);
     const [older, newer] = paymentIds;
