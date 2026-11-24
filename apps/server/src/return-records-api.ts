@@ -54,6 +54,8 @@ export function mountReturnRecordsApi(
       const { body, seat, chart, source } = await checkedReturn(deps, raw);
       const outcome = await withNodeTransaction(deps.node, async (node) => {
         const operation = await readOpenHandoverOperation(node, deps.nodeId);
+        const awaitingReturn =
+          operation?.state === "activated" || operation?.state === "return_pending";
         const result = await withTransaction(deps.db, async (tx) => {
           deps.requireWritable();
           const held = await readNodeMembership(tx);
@@ -92,11 +94,11 @@ export function mountReturnRecordsApi(
             complete,
             takeover,
             open: open !== undefined,
-            // Read only while node.db still waits for this takeover's return: a resend checks every
-            // batch, and once the takeover is closed nothing below reads this.
+            // Only read while the takeover waits for its return, the one time the answer is used;
+            // otherwise the check would read every recorded batch for nothing.
             returned:
               open !== undefined &&
-              (open.state === "activated" || open.state === "return_pending") &&
+              awaitingReturn &&
               takeover !== undefined &&
               (await returnCompletedFor(tx, takeover)),
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
@@ -111,11 +113,7 @@ export function mountReturnRecordsApi(
         if (result.open && BEFORE_ACTIVATION.some((step) => step === state))
           return "before activation";
         // A failure here sends no receipt, so the old box resends and the replay takes these steps.
-        if (
-          result.open &&
-          result.takeover !== undefined &&
-          (state === "activated" || state === "return_pending")
-        ) {
+        if (result.open && result.takeover !== undefined && awaitingReturn) {
           await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_pending", {});
           if (result.returned)
             await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_complete", {});

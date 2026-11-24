@@ -51,7 +51,7 @@ async function receive(batches: WorkforceReturnBatch[]) {
     ).toBe(true);
 }
 
-/** End-of-day looking again at the day the return re-queued. */
+/** Runs the day's end-of-day check directly, not through the queue. */
 const recheck = (facts: AttendanceFact[] = []) =>
   f.process({ facts, now: new Date("2026-01-06T06:00:00.000Z") });
 
@@ -88,9 +88,9 @@ const outcome = (action: Promise<unknown>) =>
   );
 
 /**
- * The worker asks and the manager approves, through the existing corrections. The fixes below land a
- * minute clear of the other box's entry: at the same instant, which entry sorts first depends on the
- * two boxes' ids, so the same request was accepted in one run and refused in another.
+ * The worker asks and the manager approves, through the existing corrections. Entries at the same
+ * instant are ordered by box id (`compareEvents`), and the ids are drawn fresh each run, so the fixes
+ * below land a minute clear of the other box's entry.
  */
 async function fixDay(target: CorrectionTarget, at: string) {
   const request = await f.run((tx) =>

@@ -9,7 +9,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import type { TimeEntryAppend } from "./chain.js";
 import { workforceHoldings, workforceLacking } from "./handover-holdings.js";
 import { WORKFORCE_HANDOVER } from "./handover-return.js";
-import { appendChainEntries, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
+import { appendChainEntries, copyRows, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
 const other = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
@@ -24,7 +24,11 @@ beforeEach(async () => {
   await seedTaxpayer(other.db);
   await seedFixtureVenue(other.db);
   personId = await seedPerson(suite.db);
-  await copyRows("persons", suite.db.all<Row>(sql`select * from persons where id = ${personId}`));
+  await copyRows(
+    other.db,
+    "persons",
+    suite.db.all<Row>(sql`select * from persons where id = ${personId}`),
+  );
 });
 
 function clockIn(minute: number): TimeEntryAppend {
@@ -38,30 +42,21 @@ function clockIn(minute: number): TimeEntryAppend {
   };
 }
 
-async function copyRows(table: string, copied: Row[]) {
-  for (const row of copied) {
-    const entries = Object.entries(row);
-    await other.db.run(sql`insert into ${sql.identifier(table)}
-      (${sql.join(
-        entries.map(([key]) => sql.identifier(key)),
-        sql`, `,
-      )}) values (${sql.join(
-        entries.map(([, value]) => sql`${value}`),
-        sql`, `,
-      )})`);
-  }
-}
-
 /** A box known to both databases, with its first `copied` entries in both. */
 async function sharedBox(entries: number, copied: number): Promise<string> {
   const nodeId = await seedNode(suite.db);
-  await copyRows("nodes", suite.db.all<Row>(sql`select * from nodes where id = ${nodeId}`));
+  await copyRows(
+    other.db,
+    "nodes",
+    suite.db.all<Row>(sql`select * from nodes where id = ${nodeId}`),
+  );
   await appendChainEntries(
     suite.db,
     nodeId,
     Array.from({ length: entries }, (_, minute) => clockIn(minute)),
   );
   await copyRows(
+    other.db,
     "time_entries",
     suite.db.all<Row>(
       sql`select * from time_entries where node_id = ${nodeId} and sequence_no <= ${copied}

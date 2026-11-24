@@ -2,7 +2,7 @@ import { attendanceDays } from "../src/schema/attendance.js";
 import type { AttendanceDay } from "../src/attendance-types.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { attendanceMailKey, attendanceMailOutcome } from "../src/attendance-mail.js";
 import { outgoingMail, enqueueMail, MAIL_LIFETIME_MS, type OutgoingMailStatus } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
@@ -60,6 +60,25 @@ export async function seedFixtureVenue(db: Database): Promise<void> {
       name: "Main",
       invoiceLocales: ["en"],
     });
+}
+
+/** Inserts `rows` into `table` of `db` as they are, column for column. */
+export async function copyRows(
+  db: Database,
+  table: string,
+  rows: Record<string, string | number | null>[],
+): Promise<void> {
+  for (const row of rows) {
+    const entries = Object.entries(row);
+    await db.run(sql`insert into ${sql.identifier(table)}
+      (${sql.join(
+        entries.map(([key]) => sql.identifier(key)),
+        sql`, `,
+      )}) values (${sql.join(
+        entries.map(([, value]) => sql`${value}`),
+        sql`, `,
+      )})`);
+  }
 }
 
 /** A person, PIN '1234'. Through the table definition for the same reason as {@link seedFixtureVenue}. */

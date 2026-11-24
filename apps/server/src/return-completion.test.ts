@@ -188,3 +188,12 @@ it("answers whether any inventory of the takeover has every batch recorded and d
   expect(await asked()).toBe(true);
   expect(await asked("other-takeover")).toBe(false);
 });
+
+it("counts the takeover as returned when an inventory sorting earlier has every batch but wrong digests", async () => {
+  const asked = () => withTransaction(suite.db, (tx) => returnCompletedFor(tx, operationId));
+  const earlier = "0".repeat(64);
+  expect(earlier < inventory).toBe(true);
+  for (const index of [0, 1, 2]) await record(index, { inventory: earlier });
+  for (const index of [0, 1, 2]) await record(index);
+  expect(await asked()).toBe(true);
+});

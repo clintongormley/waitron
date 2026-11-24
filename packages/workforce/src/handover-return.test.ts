@@ -17,7 +17,7 @@ import {
   WORKFORCE_RETURN_MAX_BYTES,
   WORKFORCE_RETURN_ROW_CAP,
 } from "./handover-return.js";
-import { appendChainEntries, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
+import { appendChainEntries, copyRows, seedFixtureVenue, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
 const main = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
@@ -195,20 +195,6 @@ describe("readWorkforceBatch", () => {
 const rows = (db: typeof suite.db, table: string, id: string) =>
   db.all<ReturnRow>(sql`select * from ${sql.identifier(table)} where id = ${id}`);
 
-async function copyRows(table: string, copied: ReturnRow[]) {
-  for (const row of copied) {
-    const entries = Object.entries(row);
-    await main.db.run(sql`insert into ${sql.identifier(table)}
-      (${sql.join(
-        entries.map(([key]) => sql.identifier(key)),
-        sql`, `,
-      )}) values (${sql.join(
-        entries.map(([, value]) => sql`${value}`),
-        sql`, `,
-      )})`);
-  }
-}
-
 const NOW = new Date("2026-01-06T12:00:00.000Z");
 const receive = (batch: WorkforceReturnBatch) =>
   main.db.transaction((tx) => receiveWorkforceBatch(tx, oldBox, batch, NOW));
@@ -229,7 +215,7 @@ describe("receiveWorkforceBatch", () => {
   beforeEach(async () => {
     await seedTaxpayer(main.db);
     await seedFixtureVenue(main.db);
-    await copyRows("nodes", rows(suite.db, "nodes", oldBox));
+    await copyRows(main.db, "nodes", rows(suite.db, "nodes", oldBox));
     mainBox = await seedNode(main.db);
     await seedDevice(main.db);
   });
@@ -241,8 +227,8 @@ describe("receiveWorkforceBatch", () => {
       [0, 1, 2, 3].map((minute) => clockIn(personId, minute)),
     );
     const batch = await readBatch();
-    await copyRows("persons", rows(suite.db, "persons", personId));
-    await copyRows("time_entries", batch.entries.slice(0, 2));
+    await copyRows(main.db, "persons", rows(suite.db, "persons", personId));
+    await copyRows(main.db, "time_entries", batch.entries.slice(0, 2));
     await appendChainEntries(main.db, mainBox, [clockIn(personId, 10)]);
 
     expect(await receive({ ...batch, entries: batch.entries.slice(2) })).toBe(true);
@@ -346,8 +332,8 @@ describe("receiveWorkforceBatch", () => {
       correction(inBatch!, 3),
     ]);
     const batch = await readBatch();
-    await copyRows("persons", rows(suite.db, "persons", personId));
-    await copyRows("time_entries", batch.entries.slice(0, 1));
+    await copyRows(main.db, "persons", rows(suite.db, "persons", personId));
+    await copyRows(main.db, "time_entries", batch.entries.slice(0, 1));
 
     expect(await receive({ ...batch, entries: batch.entries.slice(1) })).toBe(true);
 
@@ -370,7 +356,7 @@ describe("receiveWorkforceBatch", () => {
 
   type Arrange = (entries: ReturnRow[]) => Promise<ReturnRow[] | void>;
   const holdFirst = async (entries: ReturnRow[]) => {
-    await copyRows("time_entries", entries.slice(0, 1));
+    await copyRows(main.db, "time_entries", entries.slice(0, 1));
   };
   const swapThird = (change: ReturnRow) => (entries: ReturnRow[]) =>
     entries.slice(1).map((row, i) => (i === 1 ? { ...row, ...change } : row));
@@ -413,7 +399,7 @@ describe("receiveWorkforceBatch", () => {
       "attendance.return_entry_clash",
       async (entries) => {
         await holdFirst(entries);
-        await copyRows("time_entries", [
+        await copyRows(main.db, "time_entries", [
           { ...entries[2]!, recorded_at: "2026-01-05T09:30:00.000Z" },
         ]);
       },
@@ -424,7 +410,7 @@ describe("receiveWorkforceBatch", () => {
       "attendance.return_entry_clash",
       async (entries) => {
         await holdFirst(entries);
-        await copyRows("time_entries", [{ ...entries[2]!, id: "another" }]);
+        await copyRows(main.db, "time_entries", [{ ...entries[2]!, id: "another" }]);
       },
       [1, 2, 3],
     ],
@@ -488,7 +474,7 @@ describe("receiveWorkforceBatch", () => {
       clockIn(personId, 3),
     ]);
     const batch = await readBatch();
-    await copyRows("persons", rows(suite.db, "persons", personId));
+    await copyRows(main.db, "persons", rows(suite.db, "persons", personId));
     const entries = (await arrange(batch.entries)) ?? batch.entries.slice(1);
 
     expect(await receive({ ...batch, entries })).toEqual({ refusal: code });
