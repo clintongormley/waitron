@@ -3078,7 +3078,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - A card-reader payment checks the stop three times: the free-space read before its first
   transaction; inside it, refused when that read said full or a refusal has been noted since; and
   after it commits, just before the reader is asked, refused when a refusal has been noted, undoing
-  the bill payment's reservation (`takeReaderBillPayment` in `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
+  the bill payment's reservation, and putting Pay for items' items back (`collectBegunReaderPayment` in `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
   wait behind another till's write that then fails.
 - A card charged on a connected reader whose sale then fails for a full disk answers
   `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not

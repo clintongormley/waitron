@@ -553,7 +553,8 @@ export async function refusePaidLines(
 
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
- * plus the applied of its pending ones is at most its total. The line writers that take lines off
+ * plus the applied of its pending ones is at most its total, except on a bill Pay for items left
+ * above it, where a write may keep or lessen that excess (`allowed`) but not raise it. The line writers that take lines off
  * a bill or lower a quantity call it before they commit. No trigger stands behind it, because the
  * total is computed, not stored, so a writer that forgets it is seen only by its own tests.
  */

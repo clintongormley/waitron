@@ -437,7 +437,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("bill_payments_guard_update: the state moves one way, and received amounts stay fixed", () => {
+  describe("bill_payments_guard_update: the state moves one way, and a received payment's amounts change only as kept tip", () => {
     it("allows pending to received, stamping the time", async () => {
       const id = await insertPayment();
       await updatePayment(id, `state = 'received', received_at = '${AT}'`);
@@ -536,7 +536,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
 
     describe.each(["applied", "tip"] as const)(
-      "%s stays fixed outside card confirmation",
+      "%s does not change alone outside card confirmation",
       (column) => {
         it.each([
           ["a pending card payment", {}, "state = 'pending'"],

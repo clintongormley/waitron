@@ -869,7 +869,7 @@ _2026-11-24: Before that page, menus, set menus, products and variants are to sa
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 
-_2026-11-24: Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)), pull request 1 of 4, is built: the server can pay for chosen items on a bill of their own, put them back when the card fails, and give back or keep as a tip what that leaves the table's bill paid over its total. The till still pays for items the old way until pull request 2._
+_Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): the server can pay for chosen items on a bill of their own, put them back when the card fails, and give back or keep as a tip what that leaves the table's bill paid over its total; the till still pays for items the old way until piece 1's pull request 2._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes are ordered,
