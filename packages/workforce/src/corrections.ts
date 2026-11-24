@@ -80,10 +80,14 @@ export function recordInstant(
   if (!/^\d{4}-/.test(instant)) refuse();
   return instant;
 }
+const CORRECTION_REASON_MAX_LENGTH = 500;
 function reasonFor(reason: unknown): string {
   if (typeof reason !== "string" || !reason.trim())
     throw new AppError("correction.invalid", { reason: "blank_reason" });
-  return reason.trim();
+  const trimmed = reason.trim();
+  if (trimmed.length > CORRECTION_REASON_MAX_LENGTH)
+    throw new AppError("correction.invalid", { reason: "reason_too_long" });
+  return trimmed;
 }
 export async function recordEntryById(tx: Transaction, id: string): Promise<TimeEntryRecord> {
   const [row] = await readRecordedEntries(tx, { entryId: id });
