@@ -1,6 +1,6 @@
 import { outsideCardDetails } from "./outside-card.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
-import type { OptionSnapshot } from "@waitron/shared";
+import type { ReceiptAdjustment, TillSaleLine } from "./receipt-lines.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
@@ -59,6 +59,8 @@ import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { enqueueOriginalReceipt, enqueueReceiptReprint, printerLookup } from "./receipt-print.js";
 import { owesOriginal } from "./owed-receipts.js";
 
+export type { ReceiptAdjustment, TillSaleLine } from "./receipt-lines.js";
+
 export interface TillMoneyOperator {
   personId: string;
   sessionId: string;
@@ -81,82 +83,6 @@ export async function captureWholePayment(
     offsetMinutes: 0,
     outcome: "qualified",
   });
-}
-
-/**
- * One line of the FILED composition, for the receipt's goods-identification list (RD 1619/2012
- * art. 7.1.e). It comes from the lines the server filed, never a client basket, so the printed line
- * list cannot diverge from the invoice.
- */
-export interface TillSaleLine {
-  /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
-  net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
-  /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. */
-  descriptions: Record<string, string>;
-  /** Unit label frozen with the filed line, including a weighted extra child. */
-  unitName?: Record<string, string> | null;
-  unitPrecision?: number | null;
-  /** Presentation marker derived from the working line's stored unit identity. */
-  soldInEach?: true;
-  /** The filed quantity; weighted extra children retain the saved fractional scale for display. */
-  quantity: string;
-  /** The filed line's VAT rate, as a percentage. */
-  vatRate?: string;
-  /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */
-  gross: string;
-  /**
-   * The line's total at its price before a comp or a discount lowered it, present only when that
-   * differs from `gross`. F1 replay reads it from the saved sale line.
-   */
-  listGross?: string;
-  /**
-   * The unit price with VAT per price quantity before any comp or discount; present only with
-   * listGross. A full invoice reads it from the filed sale line, a simplified one from the order line.
-   */
-  listUnitPriceGross?: string;
-  /**
-   * Simplified receipts only: the unit price with VAT per price quantity the line was sold at, from
-   * the stored order line; absent when no stored order line of the same number still has the line's
-   * quantity, price quantity and total, and on a printed row merging lines sold at different prices.
-   */
-  unitPriceGross?: string;
-  /**
-   * Simplified receipts only: what `unitPriceGross` and `listUnitPriceGross` are priced per; absent
-   * means one. A full invoice's line keeps its price quantity in `net.priceQuantity`.
-   */
-  priceQuantity?: string;
-  /**
-   * Presentation only. On a full invoice's line whose order line an adjustment on this bill split
-   * into several dish rows: the index in lines of the family's first row. The family shares its
-   * own discount.
-   */
-  dishFamily?: number;
-  /** The comps and discounts printed beneath this row's dish; absent when there are none. */
-  adjustments?: ReceiptAdjustment[];
-  /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.
-   *  Presentation only: it groups already-filed lines and is no fiscal figure. */
-  parentLineNo?: number | null;
-  /** The diner's answers to this dish's OPTIONS lists, copied by value so a later menu edit
-   *  cannot rewrite what a completed sale says was ordered. An extras pick is a child line instead. */
-  optionSnapshots?: OptionSnapshot[];
-  /** On a line taking an advance off this invoice: the advance as its own ticket names it, read
-   *  through the line's `deducts_sale_id`. `issuedOn` is its issue day in the venue's zone. */
-  advance?: { invoiceNumber: string; issuedOn: string };
-  /** The filed line's set-menu role; absent on a line with none. */
-  setMenuRole?: "set_menu" | "dish";
-  /** Presentation only. On a correction's set-menu dish filed with a list price, which a
-   * whole-invoice credit copies from the line it corrects, though the receipt shows none: the set
-   * menu did not cover it. */
-  correctsPricedDish?: true;
-}
-
-/** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
-export interface ReceiptAdjustment {
-  /** `comp`: a full comp, printed as the discount word with 100%. */
-  kind: "comp" | "discount";
-  percentBp?: number;
-  /** The positive amount taken off, as a decimal string. */
-  amount: string;
 }
 
 export type TenderBlock =

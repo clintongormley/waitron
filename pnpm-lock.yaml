@@ -1689,6 +1689,9 @@ importers:
       '@waitron/media':
         specifier: workspace:*
         version: link:../media
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../menu
       '@waitron/printing':
         specifier: workspace:*
         version: link:../printing

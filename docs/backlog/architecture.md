@@ -177,7 +177,8 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   operation description "Venta en establecimiento". The receipt-lines suite
   (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
   keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
-  variant-name case joins.
+  variant-name case joins. On 2026-11-24 the suite moved to
+  `packages/orders-sales/src/receipt-lines.test.ts`.
   The receipt-preview suite (`apps/server/src/receipt-preview-api.test.ts`) gives English device
   and receipt-printer names to what it creates, in the same name order its tie-break cases read;
   it keeps the Spanish header and footer text it saves under the `es-ES` key, the Galician and
@@ -599,7 +600,8 @@ also qualifies the historical operation-description references in this section.
   operation description "Venta en establecimiento". The receipt-lines suite
   (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
   keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
-  variant-name case joins.
+  variant-name case joins. On 2026-11-24 the suite moved to
+  `packages/orders-sales/src/receipt-lines.test.ts`.
   The receipt-preview suite (`apps/server/src/receipt-preview-api.test.ts`) gives English device
   and receipt-printer names to what it creates, in the same name order its tie-break cases read;
   it keeps the Spanish header and footer text it saves under the `es-ES` key, the Galician and

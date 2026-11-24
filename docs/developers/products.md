@@ -255,7 +255,7 @@ Where each one surfaces:
 
 | Surface | Reads | Code |
 | --- | --- | --- |
-| Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `apps/server/src/receipt-lines.ts` |
+| Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `packages/orders-sales/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/menu/src/option-snapshot-labels.ts` |
 | Station ticket | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names; options answers read prep station names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the station screen's card — listing dishes at stations not on the ticket or card | the prep station names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |

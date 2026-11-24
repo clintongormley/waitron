@@ -928,7 +928,6 @@
   "src/receipt-guests.test.ts": 3.3,
   "src/receipt-issuer.test.ts": 4.2,
   "src/receipt-language.test.ts": 36.8,
-  "src/receipt-lines.test.ts": 0.7,
   "src/receipt-presentation.test.ts": 3.3,
   "src/receipt-preview-api.test.ts": 4.1,
   "src/receipt-preview-drafts.test.ts": 4,
