@@ -21,6 +21,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
+import { givesBackOverpaid } from "../state/bill-state.js";
 import {
   REASON_MAX,
   moneyPlus,
@@ -273,10 +274,7 @@ export class TillBillRefundDialog extends LitElement {
   /** Whether the amount asked is within {@link pinFreeUpTo}. */
   #pinFree(): boolean {
     if (this.pinFreeUpTo === null || (this.#part() && this.#partAmount() === null)) return false;
-    const ask = this.#ask();
-    return (
-      compareDecimal(moneyPlus(ask.appliedAmount, ask.tipAmount), decimal(this.pinFreeUpTo)) <= 0
-    );
+    return givesBackOverpaid({ overpaid: this.pinFreeUpTo }, this.#ask());
   }
 
   #nextStep(): TemplateResult | typeof nothing {
