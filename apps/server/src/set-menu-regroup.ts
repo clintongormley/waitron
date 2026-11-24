@@ -1,5 +1,6 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
+  insertInChunks,
   newId,
   nowIso,
   products,
@@ -94,7 +95,9 @@ export async function saveBillGrouping(
   if (plan.inserts.length > 0) {
     const locales = await readInvoiceLocales(tx);
     const now = nowIso();
-    await tx.insert(workingOrderLines).values(
+    await insertInChunks(
+      tx,
+      workingOrderLines,
       plan.inserts.map(({ id, lineNo, copy: { copy, versionId }, priceCents, creditedTo }) => ({
         id,
         workingOrderId: billId,
@@ -132,7 +135,10 @@ export async function saveBillGrouping(
       .where(
         and(
           eq(workingOrderLines.workingOrderId, billId),
-          inArray(workingOrderLines.id, plan.deletes),
+          inArray(
+            workingOrderLines.id,
+            sql`(select value from json_each(${JSON.stringify(plan.deletes)}))`,
+          ),
         ),
       );
   }
@@ -141,7 +147,8 @@ export async function saveBillGrouping(
     .select({ exact: workingOrders.setMenusExact })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  if (bill!.exact !== plan.exact) {
+  const exactFlipped = bill!.exact !== plan.exact;
+  if (exactFlipped) {
     await tx
       .update(workingOrders)
       .set({ setMenusExact: plan.exact })
@@ -149,19 +156,20 @@ export async function saveBillGrouping(
   }
   return {
     changed:
+      exactFlipped ||
       plan.inserts.length +
         plan.dishUpdates.length +
         plan.menuUpdates.length +
         plan.deletes.length >
-      0,
+        0,
     exact: plan.exact,
   };
 }
 
 /**
- * Regroups each open bill among `billIds`, in turn, and answers the bills whose lines changed. A
- * takeaway bill is grouped with no set menus (D14), so its set-menu rows go and its dishes are
- * charged à la carte.
+ * Regroups each open bill among `billIds`, in turn, and answers the bills whose lines or `exact`
+ * changed. A takeaway bill is grouped with no set menus (D14), so its set-menu rows go and its
+ * dishes are charged à la carte.
  */
 export async function regroupBills(
   tx: Transaction,

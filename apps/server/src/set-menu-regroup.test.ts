@@ -27,7 +27,7 @@ import { readOrderRevision } from "./working-order-context.js";
 import { parkOrder } from "./working-order-open.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { REASONS } from "./testing/adjustment-venue.js";
-import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
+import { cancelItemForTest, cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import {
   inTx,
   OPERATOR,
@@ -335,6 +335,15 @@ it("groups Soup and Hake into one Daily menu and answers it as exact", async () 
     vatClass: "reduced",
     takeawayVatClass: "general",
   });
+  const counted = await seated();
+  const [countedRow] = (await setSpecCount(spec, counted.tabId, spec.daily, 1)).setMenus;
+  const [written] = (await rows(counted.tabId)).filter(({ id }) => id === countedRow!.lineId);
+  expect({
+    name: row!.name,
+    descriptions: row!.descriptions,
+    unitPrecision: row!.unitPrecision,
+  }).toEqual({ name: "Daily menu", descriptions: written!.descriptions, unitPrecision: 0 });
+  expect(Object.keys(row!.descriptions).length).toBeGreaterThan(0);
   expect(await total(bill.tabId)).toBe(1400);
   expect(await exactOf(bill.tabId)).toBe(true);
 
@@ -462,12 +471,30 @@ it.each([
 );
 
 it("leaves a set menu whose included dish was comped for nothing as it is (D2)", async () => {
-  const { bill, soup } = await groupedSoupAndHake({ dish: "Soup", extras: [spec.bread] });
+  const { bill, daily, soup, hake } = await groupedSoupAndHake({
+    dish: "Soup",
+    extras: [spec.bread],
+  });
   await adjust(bill.tabId, soup.id, { action: "comp" });
   expect(
     await venue.db.select().from(adjustmentLines).where(eq(adjustmentLines.lineId, soup.id)),
   ).toEqual([]);
-  await expectFrozenThenNewPair(bill, await shape(bill.tabId));
+  const breadLineNo = (await rows(bill.tabId)).find(
+    ({ parentLineId }) => parentLineId === soup.id,
+  )!.lineNo;
+  await inTx(venue, (tx) => cancelLine(tx, venue.cfg, bill.tabId, breadLineNo));
+  const hakeLineNo = (await rows(bill.tabId)).find(({ id }) => id === hake.id)!.lineNo;
+  await inTx(venue, (tx) => cancelItemForTest(tx, venue.cfg, bill.tabId, hakeLineNo));
+  await regroup(bill.tabId);
+  const after = await shape(bill.tabId);
+  expect(after.find(({ id }) => id === daily.id)).toMatchObject({ price: 1400, total: 1400 });
+  expect(after.find(({ id }) => id === soup.id)).toMatchObject({
+    price: 0,
+    total: 0,
+    setMenuLineId: daily.id,
+    place: 0,
+  });
+  expect(await total(bill.tabId)).toBe(1400);
 });
 
 it("leaves a set menu whose dish's paid extra was discounted as it is (D2)", async () => {
@@ -607,8 +634,10 @@ it("saves a grouping the calculation could not prove cheapest, answering exact f
   expect(await exactOf(bill.tabId)).toBe(false);
   expect((await setMenusAnswer(bill.tabId)).exact).toBe(false);
 
-  await regroup(bill.tabId);
+  const grouped = await rows(bill.tabId);
+  expect(await regroup(bill.tabId)).toEqual(new Set([bill.tabId]));
   expect(await exactOf(bill.tabId)).toBe(true);
+  expect(await rows(bill.tabId)).toEqual(grouped);
 });
 
 it("saves a valid grouping a calculation hands it, even when not the cheapest", async () => {
