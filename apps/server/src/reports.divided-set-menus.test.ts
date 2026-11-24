@@ -26,8 +26,8 @@ import {
 } from "./testing/set-menu-spec-fixture.js";
 import "./errors.js";
 
-// VAT rates piece B, S11: the reports and the order detail of a takeaway set menu whose price was
-// divided between dishes at 10% and 21% (the plan's worked example), from the rows really filed.
+// The reports and the order detail of a takeaway Lunch menu at 14.00 whose price was divided
+// between soup (3.58) and hake (8.14) at 10% and lemonade (2.28) at 21%, from the rows really filed.
 let spec: SpecVenue;
 let venue: PartyVenue;
 let lunch: SpecLunch;

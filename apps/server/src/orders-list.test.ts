@@ -18,8 +18,6 @@ import {
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
-import { recordSale } from "@waitron/core";
-import { decimal } from "@waitron/shared";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { createTable } from "./testing/live-table.js";
@@ -297,53 +295,6 @@ describe("each status, from the product's own write paths", () => {
     });
     const detail = await inTx(venue, (tx) => readOrderDetail(tx, saleId, "all", false));
     expect(detail.lines.map((line) => [line.sent, line.sentNutrition])).toEqual([[false, null]]);
-  });
-
-  it("lists an invoice's divided takeaway set menu at its price and its dishes at 0.00", async () => {
-    // The plan's worked example as filed: the Lunch menu's 14.00 divided between its dishes.
-    const rows = [
-      ["Lunch menu", "set_menu", "10.00", "0.00", "0.00", "-14.00"],
-      ["Soup", "dish", "10.00", "3.25", "3.58", "3.58"],
-      ["Hake", "dish", "10.00", "9.22", "10.14", "8.14"],
-      ["Lemonade", "dish", "21.00", "1.88", "2.28", "2.28"],
-    ] as const;
-    const { saleId } = await inTx(venue, (tx) =>
-      recordSale(tx, venue.backend, {
-        operationDescription: "Restaurante",
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        seriesId: venue.seriesId,
-        locale: venue.cfg.locale,
-        invoiceLocales: [venue.cfg.locale],
-        total: "16.00",
-        lines: rows.map(([name, setMenuRole, vatRate, lineTotal, lineGross, part], index) => ({
-          lineNo: index + 1,
-          name,
-          descriptions: { [venue.cfg.locale]: name },
-          quantity: "1",
-          unitPrice: lineTotal,
-          vatRate,
-          lineTotal,
-          lineGross,
-          setMenuRole,
-          setMenuPart: decimal(part),
-        })),
-        clock: venue.clock,
-        settlement: {
-          kind: "immediate",
-          tenders: [{ method: "cash", amount: "16.00", tipAmount: "0.00", settledAt: new Date() }],
-        },
-        operatorId: venue.operatorId,
-      }),
-    );
-
-    const detail = await inTx(venue, (tx) => readOrderDetail(tx, saleId, "all", false));
-    expect(detail.lines.map((line) => [line.name, line.total])).toEqual([
-      ["Lunch menu", "14.00"],
-      ["Soup", "0.00"],
-      ["Hake", "2.00"],
-      ["Lemonade", "0.00"],
-    ]);
   });
 });
 

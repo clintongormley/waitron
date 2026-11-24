@@ -156,7 +156,7 @@ describe("computeCategorySales with set menus", () => {
   });
 });
 
-/** The plan's worked example as filed: a takeaway Lunch menu at 14.00 divided between soup (3.58,
+/** A takeaway Lunch menu at 14.00 as filed, divided between soup (3.58,
  * base 3.25) and hake (8.14, base 7.40) at 10% and lemonade (2.28, base 1.88) at 21%; hake can
  * carry a supplement on its row. */
 function lunchLines(hakeSupplement: "none" | "2.00" = "none", hakeId?: string): LineSpec[] {

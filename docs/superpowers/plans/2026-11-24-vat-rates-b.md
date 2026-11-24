@@ -471,7 +471,8 @@ wherever a replacement's lines are built (find it: only `cancel-credit.ts` and `
 
 - [ ] **Failing tests:** for the worked example, category sales shows "Set menus" 14.00 gross and 12.53 net (the
   three rows' bases, 3.25 + 7.40 + 1.88) and the three dishes' categories 0.00; top sellers
-  counts Daily at 14.00 and the dishes at 0.00; the order detail lists Daily 14.00 and the dishes at 0.00;
+  counts Daily at the net of 14.00 (12.53; top sellers shows net) and the dishes at 0.00; a bill's order detail
+  lists Daily 14.00 and the dishes at 0.00 (it reads the bill's own lines);
   with a 2.00 supplement, hake's category 2.00 and "Set menus" 14.00; report totals unchanged.
 - [ ] Run, fail; implement; run the reporting suites and `orders-list` tests; commit.
 

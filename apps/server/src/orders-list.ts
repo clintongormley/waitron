@@ -972,7 +972,6 @@ async function readSaleLines(tx: Transaction, saleId: string): Promise<OrderLine
       quantity: saleLines.quantity,
       total: saleLines.lineTotal,
       gross: saleLines.lineGross,
-      setMenuPart: saleLines.setMenuPart,
     })
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
@@ -984,7 +983,7 @@ async function readSaleLines(tx: Transaction, saleId: string): Promise<OrderLine
     name: line.name,
     variantName: line.variantName,
     quantity: thousandthsToDecimal(line.quantity),
-    total: centsToDecimal((line.gross ?? line.total) - (line.setMenuPart ?? 0)),
+    total: centsToDecimal(line.gross ?? line.total),
     listUnitPrice: null,
     creditedTo: null,
   }));

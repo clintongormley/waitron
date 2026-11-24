@@ -36,7 +36,7 @@ const divided = (
   ...(id === undefined ? {} : { id }),
 });
 
-/** The plan's worked example: a Lunch menu at 14.00 divided between soup (3.58, base 3.25) and
+/** A takeaway Lunch menu at 14.00 divided between soup (3.58, base 3.25) and
  * hake (8.14, base 7.40) at 10% and lemonade (2.28, base 1.88) at 21%; hake can carry a 2.00
  * supplement on its row. */
 const lunchRows = (hake: [string, string, string] = ["7.40", "8.14", "8.14"], hakeId?: string) => [
