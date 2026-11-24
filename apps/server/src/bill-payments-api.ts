@@ -1,5 +1,5 @@
 import { readOutsideCardDetails } from "./outside-card.js";
-import { parseBillEditExpected } from "./bill-editing.js";
+import { parseBillEditExpected, parseBillEditExpecteds } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
@@ -17,6 +17,13 @@ import {
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
+import {
+  payForItems,
+  previewPayForItems,
+  type ItemPick,
+  type PayForItemsAsk,
+  type PayForItemsRequest,
+} from "./pay-for-items.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertProfileAction, assertTakesTender } from "./device-session.js";
@@ -170,6 +177,59 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   } else {
     const stray = readerOnly.find((field) => body[field] !== undefined);
     if (stray !== undefined) throw invalid(stray);
+  }
+  return request;
+}
+
+function parsePicks(value: unknown): ItemPick[] {
+  if (!Array.isArray(value)) throw invalid("picks");
+  return value.map((entry: unknown) => {
+    const pick =
+      typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
+    if (
+      pick === null ||
+      typeof pick.lineId !== "string" ||
+      !isUuid(pick.lineId) ||
+      (pick.quantity !== undefined && typeof pick.quantity !== "string")
+    )
+      throw invalid("picks");
+    return pick.quantity === undefined
+      ? { lineId: pick.lineId.toLowerCase() }
+      : { lineId: pick.lineId.toLowerCase(), quantity: pick.quantity as string };
+  });
+}
+
+/** Pay for items' ask, shared by its preview and its payment. */
+function parseItemsAsk(body: Record<string, unknown>): PayForItemsAsk {
+  const method = oneOf(body.method, ["cash", "card"] as const, "method");
+  const ask: PayForItemsAsk = { picks: parsePicks(body.picks), method };
+  if (method === "cash") ask.tendered = moneyField(body.tendered, "tendered");
+  else if (body.tendered !== undefined) throw invalid("tendered");
+  const addedTip = optionalMoney(body.addedTip, "addedTip");
+  if (addedTip !== undefined) ask.addedTip = addedTip;
+  return ask;
+}
+
+function parseItemsPayment(body: Record<string, unknown>): PayForItemsRequest {
+  const request: PayForItemsRequest = {
+    ...parseItemsAsk(body),
+    submissionId: submissionIdOf(body),
+    expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+    applied: moneyField(body.applied, "applied"),
+    tip: moneyField(body.tip, "tip"),
+  };
+  if (body.expectedPartyRevision !== undefined)
+    request.expectedPartyRevision = requireRevision(
+      body.expectedPartyRevision,
+      "expectedPartyRevision",
+    );
+  if (body.partyId !== undefined) {
+    if (typeof body.partyId !== "string" || !isUuid(body.partyId)) throw invalid("partyId");
+    request.partyId = body.partyId.toLowerCase();
+  }
+  if (body.entry !== undefined) {
+    if (request.method !== "card") throw invalid("entry");
+    request.entry = oneOf(body.entry, ["reader"] as const, "entry");
   }
   return request;
 }
@@ -385,6 +445,42 @@ export function mountBillPaymentsApi(
         });
       }
       return c.json(outcome);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/item-payments/preview", (c) =>
+    runBodyLines(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const ask = parseItemsAsk(asObject(await readRawJsonBody<unknown>(c)));
+      return c.json(await previewPayForItems(deps.db, id, ask));
+    }),
+  );
+
+  app.post("/api/working-orders/:id/item-payments", (c) =>
+    runBodyLines(c, log, async () => {
+      const session = await requireSession(deps, c, { permission: "payment.take" });
+      await assertRequestDevice(deps, c, session);
+      const { personId, sessionId } = session;
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const request = parseItemsPayment(asObject(await readRawJsonBody<unknown>(c)));
+      assertTakesTender(
+        session.device,
+        request.method === "cash"
+          ? "cash"
+          : request.entry === "reader"
+            ? "reader-card"
+            : "hand-keyed-card",
+      );
+      const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      return c.json(
+        await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
+          personId,
+          sessionId,
+        }),
+      );
     }),
   );
 

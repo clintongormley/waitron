@@ -1,5 +1,14 @@
 import { and, count, eq, isNull } from "drizzle-orm";
-import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
+import { withIssuanceTransaction } from "@waitron/core";
+import {
+  billPayments,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { readPaymentsSettings } from "@waitron/payments";
 import {
   AppError,
   centsToDecimal,
@@ -20,9 +29,24 @@ import {
   type BillCommand,
 } from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
-import { money } from "./bill-allocation.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import {
+  invalid,
+  money,
+  previewAllocation,
+  ZERO,
+  type AllocationPreview,
+  type BillFunds,
+} from "./bill-allocation.js";
+import { readBillEditState } from "./bill-editing.js";
+import {
+  issueIfFullyPaid,
+  takeBillPaymentIn,
+  type BillPaymentDeps,
+  type BillPaymentRequest,
+  type BillPaymentResult,
+} from "./bill-payments.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import { fingerprint } from "./parties.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
@@ -60,6 +84,7 @@ async function readPicks(
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
       setMenuLineId: workingOrderLines.setMenuLineId,
+      name: workingOrderLines.name,
       quantity: workingOrderLines.quantity,
       lineTotal: workingOrderLines.lineTotal,
     })
@@ -110,11 +135,15 @@ async function readPicks(
           part: { quantity: pick.quantity, ofQuantity: row.quantity },
         };
   });
-  // A set menu's dish chosen with its set menu is already in the set menu's price.
+  // A set menu's dish chosen with its set menu is already in the set menu's price; chosen without
+  // it, the new bill has no set menu to place it in, as the move would find.
   const ids = new Set(picked.map((line) => line.id));
   return picked.map((line) => {
-    const menu = byId.get(line.id)!.setMenuLineId;
-    return menu !== null && ids.has(menu) ? { ...line, familyCents: 0 } : line;
+    const row = byId.get(line.id)!;
+    if (row.setMenuLineId === null) return line;
+    if (!ids.has(row.setMenuLineId))
+      throw new AppError("set_menu.no_place_on_target", { dishName: row.name });
+    return { ...line, familyCents: 0 };
   });
 }
 
@@ -220,4 +249,188 @@ export async function moveItemsToNewBill(
   await refuseBelowAdvances(tx, fromBillId);
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);
   return { billId, ...(invoice === null ? {} : { invoice }) };
+}
+
+/** What Pay for items is asked: the items, the move's party read, and the payment the till showed. */
+export interface PayForItemsRequest {
+  submissionId: string;
+  picks: ItemPick[];
+  expectedPartyRevision?: number;
+  partyId?: string;
+  expectedEdits: BillEditExpected[];
+  method: "cash" | "card";
+  applied: string;
+  tip: string;
+  tendered?: string;
+  addedTip?: string;
+  entry?: "reader";
+}
+
+/** The request as its retry fingerprint reads it: amounts at the money scale, an absent added tip
+ * as none, the picks in line order. */
+function retryPrintOf(req: PayForItemsRequest): string {
+  const scaled = (value: string | undefined) =>
+    value === undefined ? undefined : money(decimal(value));
+  return fingerprint({
+    itemPayment: {
+      ...req,
+      submissionId: undefined,
+      picks: req.picks
+        .map(({ lineId, quantity }) => ({
+          lineId,
+          quantity: quantity === undefined ? undefined : pickedThousandths(quantity),
+        }))
+        .sort((a, b) => a.lineId.localeCompare(b.lineId)),
+      applied: scaled(req.applied),
+      tip: scaled(req.tip),
+      tendered: scaled(req.tendered),
+      addedTip: scaled(req.addedTip ?? "0"),
+    },
+  });
+}
+
+/** The bill an earlier request with this submission id paid for items of `fromBillId` on (D6). */
+async function earlierItemsBill(
+  tx: Transaction,
+  fromBillId: string,
+  submissionId: string,
+): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ billId: billPayments.workingOrderId })
+    .from(billPayments)
+    .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+    .where(
+      and(eq(workingOrders.itemsPaidFrom, fromBillId), eq(billPayments.submissionId, submissionId)),
+    );
+  return row?.billId;
+}
+
+/**
+ * Pay for the chosen items, cash or a hand-keyed card, on a bill of their own: in one transaction
+ * they move to a new bill ({@link moveItemsToNewBill}) and the payment covers it whole, issuing its
+ * ticket. A resend of the same submission answers as the first did.
+ */
+export async function payForItems(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  fromBillId: string,
+  req: PayForItemsRequest,
+  operator: { personId: string; sessionId: string },
+): Promise<{ billId: string; payment: BillPaymentResult }> {
+  if (req.entry === "reader") throw invalid("entry");
+  if (req.method === "cash" ? req.tendered === undefined : req.tendered !== undefined)
+    throw invalid("tendered");
+  const print = retryPrintOf(req);
+  const payment = (expectedEdit: BillEditExpected | null): BillPaymentRequest => ({
+    submissionId: req.submissionId,
+    kind: "share",
+    shareOf: 1,
+    method: req.method,
+    applied: req.applied,
+    tip: req.tip,
+    expectedEdit,
+    ...(req.method === "cash" ? { tendered: req.tendered! } : { entry: "manual" as const }),
+    ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
+  });
+  // Awaited only while `since()` names a refusal, as `takeBillPayment` reads it.
+  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  return withIssuanceTransaction(
+    deps.db,
+    async (tx) => {
+      const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
+      if (earlier !== undefined) {
+        return {
+          billId: earlier,
+          payment: await takeBillPaymentIn(tx, deps, cfg, earlier, payment(null), operator, {
+            preRead,
+            print,
+          }),
+        };
+      }
+      const { billId } = await moveItemsToNewBill(
+        tx,
+        cfg,
+        fromBillId,
+        req.picks,
+        {
+          operatorId: operator.personId,
+          ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
+          ...(req.expectedPartyRevision === undefined
+            ? {}
+            : { expectedPartyRevision: req.expectedPartyRevision }),
+          expectedEdits: req.expectedEdits,
+          admission: deps.admission,
+        },
+        { deps, cfg },
+      );
+      const expectedEdit = await readBillEditState(tx, billId);
+      return {
+        billId,
+        payment: await takeBillPaymentIn(tx, deps, cfg, billId, payment(expectedEdit), operator, {
+          preRead,
+          print,
+        }),
+      };
+    },
+    deps.log,
+  );
+}
+
+/** What a preview of Pay for items is asked. */
+export interface PayForItemsAsk {
+  picks: ItemPick[];
+  method: "cash" | "card";
+  tendered?: string;
+  addedTip?: string;
+}
+
+/**
+ * What paying for the chosen items would take, writing nothing: their price as
+ * {@link priceItemPicks} reads it, allocated as a whole payment of a bill of that total.
+ */
+export async function previewPayForItems(
+  db: Database,
+  fromBillId: string,
+  ask: PayForItemsAsk,
+): Promise<{ total: string; applied: string; tip: string; change: string | null }> {
+  if (ask.method === "cash" ? ask.tendered === undefined : ask.tendered !== undefined)
+    throw invalid("tendered");
+  return withTransaction(db, async (tx) => {
+    const [bill] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, fromBillId));
+    if (bill === undefined) throw new AppError("tab.not_open", { tabId: fromBillId });
+    refuseClosedBill(fromBillId, bill.status);
+    if (ask.picks.length === 0) throw new AppError("sale.empty_basket", {});
+    const total = await priceItemPicks(tx, fromBillId, ask.picks);
+    const funds: BillFunds = {
+      workingOrderId: fromBillId,
+      total,
+      received: ZERO,
+      reserved: ZERO,
+      hasPending: false,
+    };
+    const addedTip = decimal(ask.addedTip ?? "0.00");
+    const { doc } = await readPaymentsSettings(tx);
+    // Only an items payment is offered a choice, so a share is always allocated.
+    const preview = previewAllocation(
+      funds,
+      {
+        kind: "share",
+        shareOf: 1,
+        payment:
+          ask.method === "cash"
+            ? { method: "cash", tendered: decimal(ask.tendered!), addedTip }
+            : { method: "card", addedTip },
+      },
+      { tipsEnabled: doc.tipsEnabled },
+    ) as Extract<AllocationPreview, { kind: "allocated" }>;
+    return {
+      total: money(total),
+      applied: money(preview.applied),
+      tip: money(preview.tip),
+      change: preview.change === null ? null : money(preview.change),
+    };
+  });
 }

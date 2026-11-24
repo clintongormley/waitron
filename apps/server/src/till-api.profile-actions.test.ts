@@ -166,6 +166,17 @@ const billPayment = (method: "cash" | "card", entry?: "manual" | "reader") => ({
   tip: "0.00",
 });
 
+const itemPayment = (method: "cash" | "card", entry?: "reader") => ({
+  submissionId: randomUUID(),
+  picks: [{ lineId: randomUUID() }],
+  expectedEdits: [],
+  method,
+  ...(entry === undefined ? {} : { entry }),
+  ...(method === "cash" ? { tendered: "1.00" } : {}),
+  applied: "1.00",
+  tip: "0.00",
+});
+
 type Row = readonly [
   method: string,
   path: string,
@@ -265,6 +276,27 @@ const ROUTES: readonly Row[] = [
     "integrated-card-payment",
     forbidden("pay"),
     billPayment("card", "reader"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "take-cash",
+    { status: 403, error: { code: "device.cash_not_allowed", params: {} } },
+    itemPayment("cash"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "hand-keyed-card-payment",
+    forbidden("hand-keyed-card-payment"),
+    itemPayment("card"),
+  ],
+  [
+    "POST",
+    `/api/working-orders/${id}/item-payments`,
+    "integrated-card-payment",
+    forbidden("pay"),
+    itemPayment("card", "reader"),
   ],
   [
     "POST",
@@ -712,6 +744,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/transactions/:saleId/corrections/preview",
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
+      "POST /api/working-orders/:id/item-payments/preview",
     ],
   },
   {

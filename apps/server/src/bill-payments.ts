@@ -1815,6 +1815,7 @@ async function beginBillPayment(
   refusals: { diskFull: () => boolean; log?: Logger },
   attendance?: AttendanceRecorder,
   basket?: CounterPayment,
+  printOverride?: string,
 ): Promise<
   | { replay: PaymentRow }
   | { payment: PaymentRow; figures: BillFigures; reading: TrustedReading }
@@ -1826,16 +1827,18 @@ async function beginBillPayment(
     sessionId: operator.sessionId,
     personId: operator.personId,
   });
-  const print = fingerprint({
-    ...retryShapeOf(req),
-    basket:
-      basket === undefined
-        ? undefined
-        : {
-            ...basket,
-            lateSend: undefined,
-          },
-  });
+  const print =
+    printOverride ??
+    fingerprint({
+      ...retryShapeOf(req),
+      basket:
+        basket === undefined
+          ? undefined
+          : {
+              ...basket,
+              lateSend: undefined,
+            },
+    });
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
     if (earlier.payment.fingerprint !== print) {
@@ -2051,73 +2054,114 @@ export async function takeBillPayment(
   const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
   return withIssuanceTransaction(
     deps.db,
-    async (tx) => {
-      const begun = await beginBillPayment(
-        tx,
-        deps,
-        cfg,
-        workingOrderId,
-        req,
-        operator,
-        "received",
-        () => deps.clock.now(),
-        { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-        deps.attendance,
-        basket,
-      );
-      if ("settled" in begun) return begun.settled;
-      if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
-      const { payment, reading } = begun;
-      const receivedAt = new Date(payment.receivedAt!);
-      const printers = printerLookup(tx, cfg.origin);
-      if (req.method === "card") {
-        await recordManualCardPayment(tx, {
-          origin: cfg.origin,
-          workingOrderId,
-          nodeId: cfg.nodeId,
-          amount: centsToDecimal(payment.applied + payment.tip),
-          settledAt: receivedAt,
-          externalRef: req.externalRef,
-          ...outsideCardDetails(req),
-          billPaymentId: payment.id,
-          requestedBy: operator.personId,
-        });
-        await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
-      } else {
-        await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
-      }
-      await recordBillDrawerPayment(tx, cfg, payment, printers);
-      const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
-      const { invoice, figures } = await issueWhenFullyPaid(
-        tx,
-        paidAt,
-        cfg,
-        workingOrderId,
-        operator.personId,
-        { figures: begun.figures, printers, guestCount: req.guestCount },
-      );
-      // An invoice issued or settled is answered, so with none `figures` still stand.
-      if (invoice === null) await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, figures);
-      const slip = await enqueueRequestedPaymentSlip(
-        tx,
-        cfg,
-        workingOrderId,
-        req.printCardSlip,
-        {
-          id: payment.id,
-          method: req.method,
-          charged: payment.applied + payment.tip,
-          tip: payment.tip,
-          paidAt: payment.receivedAt!,
-          reference: req.externalRef ?? null,
-          machine: outsideCardDetails(req).externalMachine ?? null,
-        },
-        printers,
-      );
-      return { ...(await resultOf(tx, deps, cfg, payment, invoice, figures?.meal)), ...slip };
-    },
+    (tx) =>
+      takeBillPaymentWithin(tx, deps, cfg, workingOrderId, req, operator, { preRead, basket }),
     deps.log,
   );
+}
+
+/** What {@link takeBillPaymentIn} may be told besides the request. */
+export interface TakeBillPaymentOptions {
+  /** The full-disk refusal {@link takeBillPayment} reads before it opens its transaction. */
+  preRead?: boolean;
+  /** The retry fingerprint to store and compare in place of the request's own. */
+  print?: string;
+}
+
+/** {@link takeBillPayment} of a bill with no counter basket, in the caller's issuance transaction. */
+export async function takeBillPaymentIn(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  options: TakeBillPaymentOptions = {},
+): Promise<BillPaymentResult> {
+  return (await takeBillPaymentWithin(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    options,
+  )) as BillPaymentResult;
+}
+
+async function takeBillPaymentWithin(
+  tx: Transaction,
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  req: BillPaymentRequest,
+  operator: { personId: string; sessionId: string },
+  { preRead = false, print, basket }: TakeBillPaymentOptions & { basket?: CounterPayment },
+): Promise<BillPaymentResult | SettledBill> {
+  const begun = await beginBillPayment(
+    tx,
+    deps,
+    cfg,
+    workingOrderId,
+    req,
+    operator,
+    "received",
+    () => deps.clock.now(),
+    { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+    deps.attendance,
+    basket,
+    print,
+  );
+  if ("settled" in begun) return begun.settled;
+  if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
+  const { payment, reading } = begun;
+  const receivedAt = new Date(payment.receivedAt!);
+  const printers = printerLookup(tx, cfg.origin);
+  if (req.method === "card") {
+    await recordManualCardPayment(tx, {
+      origin: cfg.origin,
+      workingOrderId,
+      nodeId: cfg.nodeId,
+      amount: centsToDecimal(payment.applied + payment.tip),
+      settledAt: receivedAt,
+      externalRef: req.externalRef,
+      ...outsideCardDetails(req),
+      billPaymentId: payment.id,
+      requestedBy: operator.personId,
+    });
+    await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operator.personId, printers);
+  } else {
+    await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
+  }
+  await recordBillDrawerPayment(tx, cfg, payment, printers);
+  const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
+  const { invoice, figures } = await issueWhenFullyPaid(
+    tx,
+    paidAt,
+    cfg,
+    workingOrderId,
+    operator.personId,
+    { figures: begun.figures, printers, guestCount: req.guestCount },
+  );
+  // An invoice issued or settled is answered, so with none `figures` still stand.
+  if (invoice === null) await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, figures);
+  const slip = await enqueueRequestedPaymentSlip(
+    tx,
+    cfg,
+    workingOrderId,
+    req.printCardSlip,
+    {
+      id: payment.id,
+      method: req.method,
+      charged: payment.applied + payment.tip,
+      tip: payment.tip,
+      paidAt: payment.receivedAt!,
+      reference: req.externalRef ?? null,
+      machine: outsideCardDetails(req).externalMachine ?? null,
+    },
+    printers,
+  );
+  return { ...(await resultOf(tx, deps, cfg, payment, invoice, figures?.meal)), ...slip };
 }
 
 /** The card bill payments at a reader in this process, by id: a pending payment missing here is

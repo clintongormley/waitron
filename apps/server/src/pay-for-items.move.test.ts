@@ -367,6 +367,20 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
     ]);
   });
 
+  it("prices no set menu's dish chosen without its set menu, as the move refuses it", async () => {
+    const { partyId, billId, dishId } = await setMenuParty();
+    await place({ partyId, tabId: billId }, [{ product: "soup" }]);
+    const picks = [{ lineId: dishId }];
+
+    await expect(inTx(v, (tx) => priceItemPicks(tx, billId, picks))).rejects.toMatchObject({
+      code: "set_menu.no_place_on_target",
+    });
+    await expect(payFor(partyId, billId, picks)).rejects.toMatchObject({
+      code: "set_menu.no_place_on_target",
+    });
+    expect(await billsNaming(billId)).toEqual([]);
+  });
+
   it("accepts leaving the bill owing exactly its advances", async () => {
     const { partyId, billId } = await seatedBill(
       { product: "salad" },
