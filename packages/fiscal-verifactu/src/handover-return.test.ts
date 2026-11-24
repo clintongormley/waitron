@@ -25,6 +25,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
+import { withoutIdentityTriggers } from "../test/sif-fixture.js";
 import { inspectReturnedPayments } from "./handover-return.js";
 import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -2045,9 +2046,11 @@ async function correctionOfAnEarlierBox(records = 1) {
   const [corrector, corrected] = [await seedNode(suite.db, "One"), await seedNode(suite.db, "Two")]
     .sort((a, b) => (a.nodeId < b.nodeId ? -1 : 1))
     .map((node) => node!);
-  await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'corrector',
-    nif = (select nif from verifactu_identities where id = ${corrected!.sifId})
-    where id = ${corrector!.sifId}`);
+  await withoutIdentityTriggers(suite.db, async (tx) => {
+    await tx.execute(sql`update verifactu_identities set numero_instalacion = 'corrector',
+      nif = (select nif from verifactu_identities where id = ${corrected!.sifId})
+      where id = ${corrector!.sifId}`);
+  });
   await copyBase();
   const targets = [];
   for (let invoice = 1; invoice <= records; invoice++)

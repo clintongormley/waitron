@@ -43,7 +43,10 @@ import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import {
+  seedFixtureSif,
+  withoutIdentityTriggers,
+} from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import {
   altaFor,
   seedNode,
@@ -698,12 +701,14 @@ it("returns an earlier box's records the main box lacks before the old box's own
   const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
     sql`select nif, numero_instalacion from verifactu_identities where id = ${earlier.sifId}`,
   );
-  for (const [node, installation] of [
-    [source, "source"],
-    [receiver, "receiver"],
-  ] as const)
-    await old.db.execute(sql`update verifactu_identities
-      set nif = ${identity!.nif}, numero_instalacion = ${installation} where id = ${node.sifId}`);
+  await withoutIdentityTriggers(old.db, async (tx) => {
+    for (const [node, installation] of [
+      [source, "source"],
+      [receiver, "receiver"],
+    ] as const)
+      await tx.execute(sql`update verifactu_identities
+        set nif = ${identity!.nif}, numero_instalacion = ${installation} where id = ${node.sifId}`);
+  });
   await stampDeployment(old.db, "preproduction");
   const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
   const file = (db: Database, minutes = 0, tax = aeat) =>
