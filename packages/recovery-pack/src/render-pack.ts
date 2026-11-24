@@ -72,19 +72,12 @@ export function packDates(locale: PackLocale, timeZone: string) {
     refuse("timeZone");
   }
   const longDay = new Intl.DateTimeFormat(language, { timeZone: "UTC", dateStyle: "long" });
-  const shortDay = new Intl.DateTimeFormat(language, {
-    timeZone: "UTC",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
   return {
     longAt: (instant: string) => long.format(new Date(instant)),
     shortAt: (instant: string) => short.format(new Date(instant)),
     timeAt: (instant: string) => time.format(new Date(instant)),
     /** A `YYYY-MM-DD` day, which names no time zone. */
     longDay: (day: string) => longDay.format(new Date(`${day}T00:00:00.000Z`)),
-    shortDay: (day: string) => shortDay.format(new Date(`${day}T00:00:00.000Z`)),
   };
 }
 

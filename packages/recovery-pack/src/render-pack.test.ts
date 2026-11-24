@@ -7,7 +7,12 @@ import { PDFDocument } from "pdf-lib";
 import type { RecoveryPackFile } from "./pack-file.js";
 import { MAX_PACK_PDF, readRecoveryPackPdf } from "./read-pack-pdf.js";
 import { PACK_WORDS } from "./i18n/pack-words.js";
-import { renderRecoveryPack, type PackPart, type RenderPackInput } from "./render-pack.js";
+import {
+  packDates,
+  renderRecoveryPack,
+  type PackPart,
+  type RenderPackInput,
+} from "./render-pack.js";
 
 const fontBytes = new Uint8Array(
   readFileSync(new URL("../../../apps/server/src/assets/invoice-noto-sans.ttf", import.meta.url)),
@@ -861,5 +866,19 @@ it.each(["en", "es"] as const)(
       expect(pages[i + 1]!.text).not.toContain("…");
       expect(squash(pages[i + 1]!.text)).toContain(bucketCode);
     }
+  },
+);
+
+it.each([
+  ["en", "2 July 2026", "00:30"],
+  ["es", "2 de julio de 2026", "0:30"],
+] as const)(
+  "prints an instant's day and time in the venue's time zone (%s)",
+  (locale, day, time) => {
+    // Madrid's 2 July, 00:30; UTC's 1 July, 22:30.
+    const instant = "2026-07-01T22:30:00.000Z";
+    const dates = packDates(locale, "Europe/Madrid");
+    expect(dates.longAt(instant)).toBe(day);
+    expect(dates.timeAt(instant)).toBe(time);
   },
 );
