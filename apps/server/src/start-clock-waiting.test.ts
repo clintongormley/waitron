@@ -137,7 +137,7 @@ describe("the restore's waiting app: pages", () => {
         ),
       );
       expect(body).toContain(escapeHtml("Master key"));
-      expect(body).toMatch(/<input [^>]*type="password"[^>]*name="node-recovery-key"/);
+      expect(body).toMatch(/<input [^>]*type="password"[^>]*name="master-key"/);
     },
   );
 

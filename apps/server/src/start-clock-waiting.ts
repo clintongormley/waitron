@@ -280,7 +280,7 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
     `<p>${escapeHtml(words.why)}</p>
 <form id="clock-key">
 <p><label for="clock-key-field">${escapeHtml(words.keyLabel)} *</label></p>
-<p><input type="password" id="clock-key-field" name="node-recovery-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
+<p><input type="password" id="clock-key-field" name="master-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
 <p id="clock-key-error" hidden>${escapeHtml(words.keyRefused)}</p>
 <p><label for="clock-pack">${escapeHtml(words.packButton)}</label></p>
 <p><input type="file" id="clock-pack" accept="application/pdf,.pdf" aria-describedby="clock-pack-error"></p>
