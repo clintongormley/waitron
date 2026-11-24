@@ -17,28 +17,26 @@ the order within each group. Capture the real dialog in both languages before la
 
 Write each named check first, see it fail for the expected behavior, implement and rerun.
 
-- **Box.** In `apps/server/src/{pairing-mode,join-requests,join-api,print-api}.ts`, reuse the
-  device discard rule for both kinds and keep the existing clock-step limit. Discard before
-  join cap, status, list, challenge, accept, deny and hold release. Check the opening before
-  reading the join body and again in the transaction. Each retry gets a new ID and challenge.
-  Keep live flags by request ID in the shared holder and the last 100 denied token hashes.
-  Record each inside the corresponding write. A pending row takes precedence over a matching
-  denied hash. Check closure and ordering in `join-api.db.test.ts` and admission and authenticated
-  denial status in `print-api.test.ts`. Update direct callers in `join-requests.test.ts`.
+- **Box.** Reuse the shared hold, pending table and manager routes in
+  `apps/server/src/{pairing-mode,join-requests,join-api,print-api}.ts`. Check the opening before
+  reading the body and in the write transaction. Keep the opening and display flag with the
+  live request ID in the holder. Discard old requests before join cap, status and manager routes. Each retry gets its
+  own ID and challenge. Keep the last 100 denied token hashes. Record the flag and hash inside their writes so the
+  next queued reader sees them. A pending row wins and only a matching token gets `denied: true`. A matching inactive agent gets
+  `revoked: true`. Both replies retain `status: "not_approved"`. Test closure, stale approval and
+  list order in `join-api.db.test.ts`, and admission and token-specific replies in `print-api.test.ts`.
 - **Agent.** In `packages/print-agent/src/{agent,client,host}.ts` and
-  `apps/print-agent/src/{host,state,setup-page}.ts`, save the flag on the new `denied` status.
-  A saved pending number means retry. Without one, keep the existing halt on refusal.
-  Clear the token before the old number. Wait at remote join after probe and self-enrol, re-arm
-  on failure, and show the existing pairing-closed copy with no old number. Clear both saved
-  fields on approval, self-enrol or reset. Check timing and fresh requests in `agent.test.ts`,
-  the wire reply in `client.test.ts`, storage in `state.test.ts` and `host.test.ts` and copy in
-  `setup-page.test.ts`.
+  `apps/print-agent/src/{host,state,setup-page}.ts`, save the denial flag, clear the token before
+  the old number and wait at the remote join step after probing and self-enrol. Re-arm until
+  a request lands. Show the existing retry message and clear the displayed number. Send the flag
+  with the next request. Clear both saved fields on approval, self-enrol or reset.
+  A revoked agent still halts. Test timing and fresh requests in `agent.test.ts`, wire fields in
+  `client.test.ts`, persistence and environment-pinned reads in `state.test.ts` and `host.test.ts`,
+  and retry copy in `setup-page.test.ts`.
 - **Dashboard.** Render the ordered rows and label in `api/client.ts`, `screens/printers-screen.ts`
   and `i18n/strings.ts`. Check labels and **Let in** in `printers-screen.test.ts`. Update both guides,
-  the clock-step notes in `conventions-data.md`, the A268 spec with a dated pointer and both A269
-  backlog references once verified.
+  the pairing notes and both A269 backlog references once verified.
 
-The flag survives restarts once the agent receives it. If approval and disable both happen before
-a pending agent polls, it can make a new request requiring fresh approval. Update remote agents
-with the box. The list keeps polling after Scan ends. About 150–240 production lines and 190–300
-test lines. Build after watcher clearance of this revision.
+The display flag survives restarts once the agent has received it. Update remote agents with
+the box. The list keeps polling after Scan ends. About 180–270 production lines and 190–300 test
+lines. Claude reviewed the plan and amendment. The watcher cleared the build at 11:49.
