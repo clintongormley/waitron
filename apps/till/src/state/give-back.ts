@@ -27,13 +27,13 @@ export interface GiveBackSent extends GiveBackAsk {
   /** The server's last refusal of this press, when it answered with one. */
   refusal: { code: string; params: Record<string, unknown> } | null;
 }
-/** A card refund waiting for the card company, and the part of the press to send once it is
- * through (`request`), when there is one. */
+/** A card refund waiting for the card company (`waitFor`), the part of the press still to send
+ * (`request`), or both. */
 export interface GiveBackRest {
   request: GiveBackRequest | null;
   reasonId: string;
   note: string | null;
-  waitFor: string;
+  waitFor?: string;
   /** What waits for the card company, and the payment it goes back to. */
   amount: string;
   way: string;
@@ -76,6 +76,7 @@ const FIRST_SEND_REFUSALS = new Set([
   "tender.manual_refund_pin_required",
   "pin.invalid",
   "pin.throttled",
+  "venue.time_zone_not_ready",
 ]);
 
 function fingerprint(ask: GiveBackAsk): string {
@@ -183,14 +184,15 @@ export class GiveBackSession {
     }
     try {
       this.#keep(saleId, sent, answer);
-    } catch {
+    } catch (error) {
       // The money's outcome is what staff must see; the press stays saved and is sent again.
+      if (!(error instanceof TenderRefundAttemptError && error.kind === "storage")) throw error;
     }
     return answer;
   }
 
-  /** What to keep once the server answered: a card refund still waiting (with any rest), or a
-   * press whose first send is still writing on the card reader (every part not started). */
+  /** What to keep once the server answered: a card refund still waiting, a rest, or a press whose
+   * first send is still writing on the card reader (every part not started). */
   #keep(saleId: string, sent: GiveBackSent, answer: GiveBackOutcome): void {
     if (
       answer.rest === null &&
@@ -203,7 +205,7 @@ export class GiveBackSession {
     );
     const waitFor = waiting.find((part) => part.refundId !== undefined)?.refundId;
     this.#write(
-      answer.refusal !== null || waitFor === undefined
+      answer.refusal !== null || (waitFor === undefined && answer.rest === null)
         ? null
         : {
             saleId,
@@ -212,7 +214,7 @@ export class GiveBackSession {
               request: answer.rest,
               reasonId: sent.reasonId,
               note: sent.note,
-              waitFor,
+              ...(waitFor === undefined ? {} : { waitFor }),
               amount: sumDecimals(waiting.map((part) => decimal(part.amount))),
               way: sent.request.way,
             },
@@ -262,12 +264,15 @@ export class GiveBackSession {
       this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
   }
 
-  /** Whether the waiting card refund is done and, once it is, what any rest would do. A settled
-   * refund with nothing to follow is forgotten. */
+  /** Whether the waiting card refund, if any, is done and, once it is, what any rest would do. A
+   * settled refund with nothing to follow is forgotten. */
   checkRest(saleId: string): Promise<RestCheck> {
     return this.#run(async () => {
       const rest = this.read(saleId)?.rest ?? fail("missing");
-      const { state } = await this.api.getTenderRefund(rest.waitFor, {});
+      const { state } =
+        rest.waitFor === undefined
+          ? { state: "completed" }
+          : await this.api.getTenderRefund(rest.waitFor, {});
       if (state === "pending") return { state };
       if (state === "failed" || rest.request === null) this.#write(null, saleId);
       if (state === "failed") return { state };

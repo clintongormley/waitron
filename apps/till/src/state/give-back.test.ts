@@ -439,3 +439,56 @@ it("keeps a press whose answer has every part still to start, as its first send 
   await session.submit("sale-1", ask);
   expect(session.read("sale-1")?.sent?.request).toEqual(request);
 });
+
+it("saves a rest with nothing waiting, and Check again sends it with fresh ids, also after reopening", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(
+    outcome({
+      parts: [
+        { kind: "refund", amount: "8.00", state: "completed", refundId: "refund-1" },
+        { kind: "correction", amount: "12.00", state: "not_started" },
+      ],
+      rest,
+    }),
+  );
+  await new GiveBackSession(scope, api).submit("sale-1", ask);
+  const reopened = new GiveBackSession(scope, api);
+  const saved = reopened.read("sale-1")!;
+  expect(saved.sent).toBeNull();
+  expect(saved.rest).toMatchObject({ request: rest, reasonId: "reason-1", way: "card-1" });
+  expect(saved.rest).not.toHaveProperty("waitFor");
+
+  expect(await reopened.checkRest("sale-1")).toEqual({ state: "completed", preview: restPreview });
+  expect(api.getTenderRefund).not.toHaveBeenCalled();
+  await reopened.sendRest("sale-1", restPreview);
+  expect(sent(api, 1)).toMatchObject({ request: rest, expected: restPreview.parts });
+  for (const id of Object.values(sent(api, 1).submissionIds))
+    expect(Object.values(sent(api, 0).submissionIds)).not.toContain(id);
+  expect(reopened.read("sale-1")).toBeNull();
+});
+
+it("lets a first press refused while the venue's time zone is not ready be changed", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "venue.time_zone_not_ready", status: 409 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "venue.time_zone_not_ready",
+  });
+  expect(session.read("sale-1")?.sent?.firstSendRefused).toBe(true);
+  await session.submit("sale-1", { ...ask, request: { ...request, amount: "19.00" } });
+  expect(sent(api, 1).submissionIds.refund).not.toBe(sent(api, 0).submissionIds.refund);
+});
+
+it("rejects an answer it cannot read, keeping the press to send again", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(
+    outcome({
+      parts: [{ kind: "refund", amount: "eight", state: "pending", refundId: "refund-1" }],
+    }),
+  );
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "shared.invalid_decimal",
+  });
+  expect(session.read("sale-1")?.sent?.submissionIds).toEqual(sent(api, 0).submissionIds);
+});

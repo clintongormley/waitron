@@ -48,8 +48,12 @@ import {
   NEEDS_APPROVER,
   APPROVER_PIN_REFUSALS,
   afterCheck,
+  approverRights,
   doneStep,
+  lostFor,
   lostStep,
+  restOutcome,
+  stillStarting,
   terminalStep,
   type Override,
   type Sending,
@@ -503,17 +507,9 @@ export class TillGiveBackDialog extends LitElement {
       if (!(error instanceof TenderRefundAttemptError)) throw error;
     }
     const { sent, rest } = saved ?? { sent: null, rest: null };
-    if (sent)
-      this.step = { kind: "lost", way: sent.request.way, needs: sent.needs, refusal: sent.refusal };
-    else if (rest) {
-      const waiting = { kind: "refund" as const, amount: rest.amount, state: "pending" as const };
-      this.step = {
-        kind: "done",
-        outcome: { parts: [waiting], refusal: null, underWay: null, rest: rest.request },
-        way: rest.way,
-        notice: null,
-      };
-    }
+    if (sent) this.step = lostFor(sent);
+    else if (rest)
+      this.step = { kind: "done", outcome: restOutcome(rest), way: rest.way, notice: null };
   }
   async #record(step: Extract<Step, { kind: "terminal" }>): Promise<void> {
     if (!step.confirmed) {
@@ -546,7 +542,9 @@ export class TillGiveBackDialog extends LitElement {
       this.approvers = null;
       this.#approval = undefined;
       this.#scope?.commit(this.draft);
-      this.step = { kind: "done", outcome, way: sending.way, notice: null };
+      this.step = stillStarting(outcome)
+        ? { kind: "lost", way: sending.way, needs: sending.needs, refusal: null }
+        : { kind: "done", outcome, way: sending.way, notice: null };
     } catch (error) {
       this.#sendFailed(sending, error, override);
     } finally {
@@ -561,18 +559,27 @@ export class TillGiveBackDialog extends LitElement {
     if (refusal.code === "network") {
       this.approvers = null;
       this.#approval = undefined;
-      this.step = { kind: "lost", way: sending.way, needs: sending.needs, refusal: null };
+      const kept = error instanceof TenderRefundAttemptError && error.kind === "locked";
+      const sent = kept ? this.#savedPress() : null;
+      this.step = sent
+        ? lostFor(sent)
+        : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null };
     } else if (override !== undefined && APPROVER_PIN_REFUSALS.has(refusal.code))
       this.pinError = approverRefusal(error, override.personId);
     else if (override === undefined && NEEDS_APPROVER.has(refusal.code))
       void this.#askApprover({
         ...sending,
-        rights:
-          sending.needs.length > 0
-            ? sending.needs
-            : [refusal.permission === "sale.rectify" ? "sale.rectify" : "sale.refund"],
+        rights: approverRights(sending.needs, refusal.permission),
       });
     else this.#refused(refusal);
+  }
+  /** The press an earlier send saved, which a changed press may not replace. */
+  #savedPress() {
+    try {
+      return this.session.read(this.saleId)?.sent ?? null;
+    } catch {
+      return null;
+    }
   }
   /** Nothing moved: a rest's refusal stays on its outcome; any other goes back to the form, or to
    * the choice when the window opened on a saved press, with the refusal at the bottom. */

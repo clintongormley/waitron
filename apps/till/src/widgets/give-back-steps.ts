@@ -9,6 +9,7 @@ import type {
   GiveBackRight,
   GiveBackWay,
 } from "../api/give-back-types.js";
+import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
@@ -233,4 +234,42 @@ export function afterCheck(
         : t("give_back.rest_failed"),
     outcome: { ...outcome, parts, rest: null },
   };
+}
+
+/** The lost step for a press saved earlier, with what the server answered it last. */
+export const lostFor = (sent: GiveBackSent): Extract<Step, { kind: "lost" }> => ({
+  kind: "lost",
+  way: sent.request.way,
+  needs: sent.needs,
+  refusal: sent.refusal,
+});
+
+/** The outcome a saved rest reopens on: the card refund it waits for, if any, and the rest. */
+export const restOutcome = (rest: GiveBackRest): GiveBackOutcome => ({
+  parts:
+    rest.waitFor === undefined
+      ? []
+      : [{ kind: "refund", amount: rest.amount, state: "pending", refundId: rest.waitFor }],
+  refusal: null,
+  underWay: null,
+  rest: rest.request,
+});
+
+/** An answer whose every part is still to start: the press's first send is still writing, so
+ * nothing is known yet. */
+export const stillStarting = (outcome: GiveBackOutcome) =>
+  outcome.rest === null &&
+  outcome.refusal === null &&
+  outcome.parts.every((part) => part.state === "not_started");
+
+/** The rights an approver must hold for a send refused for one: those the preview named, and the
+ * one the refusal names. */
+export function approverRights(
+  needs: readonly GiveBackRight[],
+  permission: unknown,
+): GiveBackRight[] {
+  const named: GiveBackRight[] =
+    permission === "sale.refund" || permission === "sale.rectify" ? [permission] : [];
+  const rights = [...new Set([...needs, ...named])];
+  return rights.length > 0 ? rights : ["sale.refund"];
 }
