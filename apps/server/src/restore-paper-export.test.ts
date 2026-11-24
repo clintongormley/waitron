@@ -88,9 +88,8 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
     expect(refusal).toMatchObject(expectedRefusal);
   },
 );
-it("refuses the archive encryption key as node authentication before changing the destination", async () => {
+it("refuses a staged key that is not the copy's master key before changing the destination", async () => {
   f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
-  // The archive encryption key, in the staged authority key's 64-hex form.
   const staged = createHash("sha256").update(f.encryptionKey).digest("hex");
   await writeFile(join(f.stateDir, "flows/restore/node-key"), staged);
   const destination = await f.seedDestination();

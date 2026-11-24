@@ -87,7 +87,6 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
 }
 
 /** Where cases that never read the log file let the entry write it. */
-const STAGED_MASTER_KEY = encodeMasterKeyCode(makeMasterKey());
 const SHARED_LOG_DIR = mkdtempSync(join(tmpdir(), "wt-entry-log-"));
 
 /** The recovery page's log file, one parsed line each. */
@@ -3121,6 +3120,8 @@ describe("a restore's start that waits to confirm its time", () => {
       timeService,
     };
   }
+
+  const STAGED_MASTER_KEY = encodeMasterKeyCode(makeMasterKey());
 
   /** A time confirmed through the waiting page with the staged key, `aheadMs` from the box's
    * own wall clock. */

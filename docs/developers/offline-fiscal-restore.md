@@ -87,7 +87,7 @@ the form. The box draws the actual identity later, after checking the selected b
 rereading that outside confirmation. The request download therefore contains no generated
 identity or activation result.
 
-Enter the venue's master key in its separate field. Check the source, event and target,
+Enter the selected backup's master key in its separate field. Check the source, event and target,
 isolate the former machine, then download and retain the public request with your outside
 records. A changed request clears its retention confirmation. The node secret stays out of that
 download. Missing fields and refusals appear beside their fields and above the restore action.
