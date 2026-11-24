@@ -55,12 +55,13 @@ function fakeProvider(
 async function mountLookup(
   provider: AddressLookupProvider | null = fakeProvider(),
   inShadow = false,
+  delay = 0,
 ): Promise<WtAddressLookup> {
   const markup =
     '<wt-address-lookup label="Find the address" placeholder="Street and number" country-code="ES" no-results-label="No address found." unavailable-label="Suggestions are not available."></wt-address-lookup>';
   const el = (await (inShadow ? mountInShadowRoot(markup) : mount(markup))) as WtAddressLookup;
   el.provider = provider ?? undefined;
-  el.delay = 0;
+  el.delay = delay;
   await el.updateComplete;
   return el;
 }
@@ -111,15 +112,14 @@ test("removing the provider hides it again", async () => {
   expect(el.hidden).toBe(true);
 });
 
-test("asks only after the typing pauses, with the form's country and a session token", async () => {
+test("waits 600 ms after the last input before asking with the country and a session token", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
-  const el = await mountLookup(provider);
-  el.delay = 300;
+  const el = await mountLookup(provider, false, 600);
   type(el, "Calle M");
-  vi.advanceTimersByTime(200);
+  vi.advanceTimersByTime(350);
   type(el, "Calle Ma");
-  vi.advanceTimersByTime(299);
+  vi.advanceTimersByTime(599);
   expect(provider.calls.suggest).toHaveLength(0);
   vi.advanceTimersByTime(1);
   expect(provider.calls.suggest).toHaveLength(1);
@@ -128,18 +128,18 @@ test("asks only after the typing pauses, with the form's country and a session t
   expect(provider.calls.suggest[0]!.sessionToken).toMatch(/^[0-9a-f]{32}$/);
 });
 
-test("the pause is 300 ms unless set", async () => {
+test("the pause is 600 ms unless set", async () => {
   const el = document.createElement("wt-address-lookup");
-  expect(el.delay).toBe(300);
+  expect(el.delay).toBe(600);
 });
 
-test("asks nothing for fewer than three characters, and a shorter text closes the list", async () => {
+test("asks nothing for fewer than four characters, and a shorter text closes the list", async () => {
   const provider = fakeProvider();
   const el = await mountLookup(provider);
-  type(el, "Ca");
+  type(el, " Cal ");
   await settle(el);
   expect(provider.calls.suggest).toHaveLength(0);
-  type(el, "Calle");
+  type(el, "Call");
   await settle(el);
   expect(options(el)).toHaveLength(2);
   type(el, "  C  ");
@@ -147,6 +147,42 @@ test("asks nothing for fewer than three characters, and a shorter text closes th
   expect(options(el)).toHaveLength(0);
   expect(input(el).getAttribute("aria-expanded")).toBe("false");
   expect(provider.calls.suggest).toHaveLength(1);
+});
+
+test("after five automatic searches, Enter searches the edited text without submitting the form", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider();
+  const el = await mountLookup(provider);
+  const automatic = ["Main", "Main S", "Main St", "Main Street", "Main Street 1"];
+  for (const query of automatic) {
+    type(el, query);
+    vi.advanceTimersByTime(600);
+  }
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(automatic);
+
+  el.cancelSearch();
+  type(el, "Main Street 12");
+  vi.advanceTimersByTime(600);
+  expect(provider.calls.suggest).toHaveLength(5);
+
+  const field = input(el);
+  const composing = new KeyboardEvent("keydown", { key: "Enter", isComposing: true });
+  field.dispatchEvent(composing);
+  expect(provider.calls.suggest).toHaveLength(5);
+
+  const enter = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
+  field.dispatchEvent(enter);
+  expect(enter.defaultPrevented).toBe(true);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual([
+    ...automatic,
+    "Main Street 12",
+  ]);
+  expect(field.getAttribute("enterkeyhint")).toBe("search");
+
+  type(el, "Mai");
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  vi.advanceTimersByTime(600);
+  expect(provider.calls.suggest).toHaveLength(6);
 });
 
 test("lists each suggestion with its second line and opens the field", async () => {

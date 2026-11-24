@@ -260,10 +260,10 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     }));
   }
 
-  #addressSearch(busy: boolean): TemplateResult {
+  #addressSearch(busy: boolean, sameAsVenue: boolean): TemplateResult {
     return html`<wt-address-lookup
       name="domicile-search"
-      .provider=${this.addressProvider}
+      .provider=${sameAsVenue ? undefined : this.addressProvider}
       country-code=${this.countryCode}
       label=${t("venue_details.address_lookup.label")}
       placeholder=${t("venue_details.address_lookup.placeholder")}
@@ -353,11 +353,11 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
         }}
       ></wt-switch>
       <p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">${hint}</p>
+      ${this.#addressSearch(view.busy, view.draft.sameAsVenue)}
       ${
         view.draft.sameAsVenue
           ? nothing
-          : html`${this.#addressSearch(view.busy)} ${this.#field(view, "street")}
-              ${this.#field(view, "line2")}
+          : html`${this.#field(view, "street")} ${this.#field(view, "line2")}
               <div class="pair">
                 ${this.#field(view, "postalCode")} ${this.#field(view, "city")}
               </div>

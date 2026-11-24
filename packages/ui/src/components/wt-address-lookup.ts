@@ -38,7 +38,8 @@ export interface AddressChosenDetail {
   readonly address: AddressLookupResult;
 }
 
-const MIN_QUERY = 3;
+const MIN_QUERY = 4;
+const AUTOMATIC_SEARCH_LIMIT = 5;
 
 /** `crypto.randomUUID` needs a secure context; a box reached over plain http has none. */
 function sessionToken(): string {
@@ -124,7 +125,7 @@ export class WtAddressLookup extends LitElement {
   @property() message = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** How long typing must pause, in milliseconds, before the provider is asked. */
-  @property({ type: Number }) delay = 300;
+  @property({ type: Number }) delay = 600;
 
   @state() private query = "";
   @state() private suggestions: readonly AddressLookupSuggestion[] = [];
@@ -136,6 +137,7 @@ export class WtAddressLookup extends LitElement {
   #resolving?: number;
   #messageCurrent = true;
   #timer?: ReturnType<typeof setTimeout>;
+  #automaticSearches = 0;
   #session = sessionToken();
   private readonly inputId = uniqueId("wt-address-lookup");
   private readonly listId = uniqueId("wt-address-lookup-list");
@@ -172,6 +174,10 @@ export class WtAddressLookup extends LitElement {
     this.activeIndex = -1;
   }
 
+  #canSearch(): boolean {
+    return !this.disabled && this.provider !== undefined && this.query.trim().length >= MIN_QUERY;
+  }
+
   private onInput(event: Event): void {
     event.stopPropagation();
     this.query = (event.target as HTMLInputElement).value;
@@ -179,9 +185,12 @@ export class WtAddressLookup extends LitElement {
     this.#forget();
     this.#close();
     this.notice = "";
-    if (this.disabled || this.query.trim().length < MIN_QUERY) return;
+    if (!this.#canSearch() || this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT) return;
     const generation = this.#generation;
-    this.#timer = setTimeout(() => void this.#ask(generation), this.delay);
+    this.#timer = setTimeout(() => {
+      this.#automaticSearches += 1;
+      void this.#ask(generation);
+    }, this.delay);
   }
 
   async #ask(generation: number): Promise<void> {
@@ -243,11 +252,21 @@ export class WtAddressLookup extends LitElement {
     if (belongsToComposition(event)) return;
     const count = this.suggestions.length;
     if (event.key === "Enter") {
-      // A form that submits on Enter skips a handled key; Enter here chooses, never submits.
+      // Enter acts on the address search, so the surrounding form must skip it.
       event.preventDefault();
       if (this.activeIndex >= 0) {
         event.stopPropagation();
         void this.#choose(this.activeIndex);
+      } else if (
+        !event.repeat &&
+        count === 0 &&
+        this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT &&
+        this.#resolving !== this.#generation &&
+        this.#canSearch()
+      ) {
+        this.#forget();
+        this.notice = "";
+        void this.#ask(this.#generation);
       }
       return;
     }
@@ -292,6 +311,7 @@ export class WtAddressLookup extends LitElement {
           name=${this.name || nothing}
           type="text"
           autocomplete="off"
+          enterkeyhint="search"
           role="combobox"
           aria-autocomplete="list"
           aria-expanded=${open ? "true" : "false"}

@@ -96,21 +96,32 @@ it("shows no address search without a provider", async () => {
 });
 
 it("checks Cloud on each opening and keeps manual entry while a reply is pending", async () => {
-  let answer!: (value: { available: boolean }) => void;
-  const addressLookup = vi
-    .fn()
-    .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
-    .mockResolvedValueOnce({ available: false });
+  const answers: ((value: { available: boolean }) => void)[] = [];
+  const addressLookup = vi.fn(
+    () => new Promise<{ available: boolean }>((resolve) => answers.push(resolve)),
+  );
   const el = await editing(Object.assign(apiFor(), { addressLookup }), null);
   expect(field(el, "addressLine1").value).toBe("Calle Mayor 1");
   expect(lookup(el)!.hidden).toBe(true);
   expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }]]);
-  answer({ available: true });
-  await expect.poll(() => lookup(el)!.hidden).toBe(false);
   await click(el, "[data-test=cancel]");
   await click(el, "[data-test=edit]");
   expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }], [{ kind: "available" }]]);
+  answers[0]!({ available: true });
+  await flush(el);
   expect(lookup(el)!.hidden).toBe(true);
+  answers[1]!({ available: true });
+  await expect.poll(() => lookup(el)!.hidden).toBe(false);
+});
+
+it("opens the address fields without asking Cloud at a venue outside Spain", async () => {
+  const model = venueDetailsFixture();
+  const addressLookup = vi.fn(async () => ({ available: true }));
+  const api = apiFor({ ...model, issuer: { ...model.issuer, country: "PT" } });
+  const el = await editing(Object.assign(api, { addressLookup }), null);
+  expect(field(el, "addressLine1").disabled).toBe(false);
+  expect(lookup(el)!.hidden).toBe(true);
+  expect(addressLookup).not.toHaveBeenCalled();
 });
 
 it.each(["Alicante", "03"])(

@@ -180,9 +180,10 @@ local. Las facturas que se emitan después
 muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirse.
 
 Cuando aparezca **Buscar la dirección** en cualquiera de los dos formularios, empieza a escribir
-la calle y el número, elige una sugerencia, revisa la dirección y guárdala. Waitron Cloud envía
-a Google lo que escribes en el buscador y la sugerencia que eliges. También puedes escribir
-directamente en los campos de la dirección.
+la calle y el número, elige una sugerencia, revisa la dirección y guárdala. Si las sugerencias
+dejan de actualizarse al escribir, pulsa Intro en el buscador. Waitron Cloud envía a Google lo
+que escribes en el buscador y la sugerencia que eliges. También puedes escribir directamente en
+los campos de la dirección.
 
 Para las cuentas cerradas como [pago aplazado](table-service.md#deferred-payment), indica tu cuenta bancaria con
 **Cambiar cuenta bancaria** en la misma tarjeta **Negocio**: introduce el **IBAN** y, si quieres,

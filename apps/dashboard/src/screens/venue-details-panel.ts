@@ -189,7 +189,6 @@ export class VenueDetailsPanel extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
   @property({ attribute: false }) readOnly = false;
-  /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @state() private registeredAddressProvider?: AddressLookupProvider;
   #registeredAddressLoad?: Promise<AddressLookupProvider | undefined>;

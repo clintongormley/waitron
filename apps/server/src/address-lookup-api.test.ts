@@ -4,6 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
+import type { CloudConnection } from "./cloud-client.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 
@@ -13,7 +14,7 @@ const available = { kind: "available" };
 
 it("checks venue permission, the primary and the exact body before calling Cloud", async () => {
   const { managerCookie, staffCookie } = await setupVenue(venue.db);
-  const addressLookup = vi.fn(async () => ({ available: true }));
+  const addressLookup = vi.fn<CloudConnection["addressLookup"]>(async () => ({ available: true }));
   const app = new Hono();
   let primary = true;
   mountVenueSettingsApi(
@@ -49,4 +50,13 @@ it("checks venue permission, the primary and the exact body before calling Cloud
     expect.any(Function),
     expect.any(AbortSignal),
   );
+
+  addressLookup.mockImplementationOnce(async (_input, authorize) => {
+    primary = false;
+    await authorize();
+    return { available: true };
+  });
+  const steppedDown = await post(available);
+  expect(steppedDown.status).toBe(409);
+  expect(await steppedDown.json()).toEqual({ error: { code: "cloud.not_primary", params: {} } });
 });

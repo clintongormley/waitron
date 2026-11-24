@@ -835,14 +835,53 @@ async function choose(panel: Panel, address: AddressLookupResult): Promise<void>
 }
 
 it("checks Cloud as the registered address opens and loads the search into that window", async () => {
-  const addressLookup = vi.fn(async () => ({ available: true }));
+  const answers: ((value: { available: boolean }) => void)[] = [];
+  const addressLookup = vi.fn(
+    () => new Promise<{ available: boolean }>((resolve) => answers.push(resolve)),
+  );
   const panel = await mount(Object.assign(stubApi(), { addressLookup }));
   expect(addressLookup).not.toHaveBeenCalled();
   await open(panel);
-  await expect
-    .poll(() => dialog(panel).querySelector<WtAddressLookup>("wt-address-lookup")?.hidden)
-    .toBe(false);
   expect(addressLookup).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
+  const closed = dialogClosed(dialog(panel));
+  dialogHost(panel).dismiss();
+  await closed;
+  await open(panel);
+  expect(addressLookup).toHaveBeenCalledTimes(2);
+  answers[0]!({ available: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(search(panel)!.hidden).toBe(true);
+  answers[1]!({ available: true });
+  await expect.poll(() => search(panel)?.hidden).toBe(false);
+});
+
+it("keeps the search limit when the separate address is hidden and shown again", async () => {
+  const suggest = vi.fn(provider.suggest);
+  const panel = await mountSearching(stubApi(), { ...provider, suggest });
+  await open(panel);
+  const lookup = search(panel)!;
+  lookup.delay = 0;
+  for (const query of ["Main", "Main S", "Main St", "Main Street", "Main Street 1"]) {
+    const input = lookup.shadowRoot!.querySelector("input")!;
+    input.value = query;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  await turn(panel, true);
+  await turn(panel, false);
+  const reopened = search(panel)!;
+  reopened.delay = 0;
+  const input = reopened.shadowRoot!.querySelector("input")!;
+  input.value = "Main Street 12";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(suggest.mock.calls.map(([request]) => request.query)).toEqual([
+    "Main",
+    "Main S",
+    "Main St",
+    "Main Street",
+    "Main Street 1",
+  ]);
 });
 
 it("aligns the address search with the street field, below the switch and its hint", async () => {
@@ -890,7 +929,7 @@ it("shows search only for a separate address, keeps a typed Line 2 and takes the
   const panel = await mountSearching(api);
   await open(panel);
   expect(same(panel).checked).toBe(true);
-  expect(search(panel)).toBeNull();
+  await expect.poll(() => search(panel)?.getBoundingClientRect().height).toBe(0);
   await turn(panel, false);
   await expect.poll(() => search(panel)?.hidden).toBe(false);
   await choose(panel, {

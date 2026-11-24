@@ -3966,9 +3966,9 @@ the form's own fields, which stay editable and keep their checks; the form's Sav
 confirmation. Address line 2 is replaced only when the chosen address has a second line. An
 address in another country fills nothing, and the form says why on the search's own line. The
 setup venue screen takes the province from the address's area code, else its postcode; the
-dashboard's Venue card never fills the province, which the server keeps, refuses an address whose
-area names another province, comparing the pack’s province codes,
-and offers the search only while the street, line 2, postcode and city can all
+dashboard's Venue card keeps the stored province. It uses the same area code or postcode lookup
+and refuses choices in a different province by comparing province codes. The card offers search
+only while the street, line 2, postcode and city can all
 change. The registered business address, on the setup screen and in Venue details' Change
 registered address dialog, is asked for in parts (street, line 2, postcode, city, province) behind
 a **Same as the venue's address** switch; while the switch is on the parts are hidden and the
