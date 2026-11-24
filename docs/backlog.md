@@ -593,8 +593,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A Make now instruction can disappear while the till checks its device again.**
-  [Detail](backlog/till.md#a-make-now-instruction-can-disappear-while-the-till-checks-its-device-again)
+- **A Make now instruction can disappear or come back while the till checks its device again.**
+  [Detail](backlog/till.md#a-make-now-instruction-can-disappear-or-come-back-while-the-till-checks-its-device-again)
 
 - **Let staff answer a required list on a withdrawn dish.** [Detail](backlog/till.md#options-on-a-withdrawn-dish)
 
