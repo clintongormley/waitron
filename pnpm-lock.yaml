@@ -1692,6 +1692,9 @@ importers:
       '@waitron/printing':
         specifier: workspace:*
         version: link:../printing
+      '@waitron/reporting':
+        specifier: workspace:*
+        version: link:../reporting
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

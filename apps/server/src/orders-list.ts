@@ -36,6 +36,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { FILTER_TEXT_MAX } from "./find-bill-query.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import { readPaymentsByBill } from "./bill-payments.js";
 import { optionAnswersKey } from "./receipt-lines.js";
@@ -232,7 +233,7 @@ interface RawRow extends Record<string, unknown> {
 /** A series code and an invoice number, as in `A/12`. */
 export const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
 const BARE_NUMBER = /^\d{1,9}$/;
-export const FILTER_TEXT_MAX = 100;
+export { FILTER_TEXT_MAX };
 
 /** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
 export function optionalSearch(raw: string | undefined, field = "q"): string | undefined {
