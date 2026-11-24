@@ -16,7 +16,7 @@ const COPY = {
   copy: "Copy",
   copied: "Copied.",
   copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
-  printFailed: "Print did not open. Use Download, or allow pop-ups and try again.",
+  printFailed: "Your browser blocked printing. Use Download instead.",
 };
 
 async function box(theme: "light" | "dark", pdf: boolean): Promise<WtMasterKeyBox> {

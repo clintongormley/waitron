@@ -1759,7 +1759,6 @@ export const en = {
   "master_key_dialog.heading": "Make a new master key?",
   "master_key_dialog.text":
     "Do this only if the master key is lost, or someone who should not have it may have seen it. Backups made before now still need the old key. Keep the old pack until {date}. The new key is shown once, in a new recovery pack.",
-  "master_key_dialog.note": "You may be asked to sign in again.",
   "master_key_dialog.make": "Make a new master key",
   "master_key_dialog.stop": "Stop",
   "master_key_shown.heading": "Recovery pack",
@@ -1772,8 +1771,7 @@ export const en = {
   "master_key_shown.copy": "Copy",
   "master_key_shown.copied": "Copied.",
   "master_key_shown.copy_failed": "Copy did not work. Use Download or Print.",
-  "master_key_shown.print_failed":
-    "Print did not open. Use Download, or allow pop-ups and try again.",
+  "master_key_shown.print_failed": "Your browser blocked printing. Use Download instead.",
   "master_key_shown.continue": "Continue",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
@@ -6602,7 +6600,6 @@ export const es: Record<StringKey, string> = {
   "master_key_dialog.heading": "¿Crear una clave maestra nueva?",
   "master_key_dialog.text":
     "Hazlo solo si la clave maestra se ha perdido o si alguien que no debía ha podido verla. Las copias anteriores siguen necesitando la clave antigua. Guarda el paquete antiguo hasta el {date}. La clave nueva se muestra una sola vez, en un paquete de recuperación nuevo.",
-  "master_key_dialog.note": "Puede que se te pida volver a iniciar sesión.",
   "master_key_dialog.make": "Crear una clave maestra nueva",
   "master_key_dialog.stop": "Parar",
   "master_key_shown.heading": "Paquete de recuperación",
@@ -6615,8 +6612,7 @@ export const es: Record<StringKey, string> = {
   "master_key_shown.copy": "Copiar",
   "master_key_shown.copied": "Copiada.",
   "master_key_shown.copy_failed": "No se ha podido copiar. Usa Descargar o Imprimir.",
-  "master_key_shown.print_failed":
-    "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
+  "master_key_shown.print_failed": "El navegador ha bloqueado la impresión. Usa Descargar.",
   "master_key_shown.continue": "Continuar",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",

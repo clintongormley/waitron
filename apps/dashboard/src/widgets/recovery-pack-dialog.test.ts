@@ -153,7 +153,6 @@ describe("the form", () => {
       "en-GB",
       "Make a new master key?",
       "Do this only if the master key is lost, or someone who should not have it may have seen it. Backups made before now still need the old key. Keep the old pack until 23 December 2026. The new key is shown once, in a new recovery pack.",
-      "You may be asked to sign in again.",
       "Make a new master key",
       "Stop",
     ],
@@ -161,13 +160,12 @@ describe("the form", () => {
       "es-ES",
       "¿Crear una clave maestra nueva?",
       "Hazlo solo si la clave maestra se ha perdido o si alguien que no debía ha podido verla. Las copias anteriores siguen necesitando la clave antigua. Guarda el paquete antiguo hasta el 23 de diciembre de 2026. La clave nueva se muestra una sola vez, en un paquete de recuperación nuevo.",
-      "Puede que se te pida volver a iniciar sesión.",
       "Crear una clave maestra nueva",
       "Parar",
     ],
   ] as const)(
     "Make a new master key asks first, in %s, with the day to keep the old pack until",
-    async (locale, heading, text, note, make, stop) => {
+    async (locale, heading, text, make, stop) => {
       setLocale(locale);
       const { el, dialog, api } = await open({
         at: status({ keepOldPackUntil: "2026-12-23T12:00:00.000Z" }),
@@ -175,7 +173,7 @@ describe("the form", () => {
       });
       expect(dialog.heading).toBe(heading);
       expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toBe(text);
-      expect(words(el.shadowRoot!.querySelector("[data-test=note]"))).toBe(note);
+      expect(el.shadowRoot!.querySelector("[data-test=note]")).toBeNull();
       expect(words(button(el, "make-pack"))).toBe(make);
       expect(button(el, "make-pack")!.variant).toBe("danger");
       expect(words(button(el, "cancel-pack"))).toBe(stop);
@@ -302,7 +300,7 @@ describe("the new master key", () => {
     inBox(el, "print")!.click();
     await expect.poll(() => inBox(el, "print-failed")).not.toBeNull();
     expect(words(inBox(el, "print-failed"))).toBe(
-      "Print did not open. Use Download, or allow pop-ups and try again.",
+      "Your browser blocked printing. Use Download instead.",
     );
     expect(button(el, "key-continue")).toBeNull();
   });
@@ -888,7 +886,6 @@ describe("the words", () => {
     "recovery_pack_dialog.stop",
     "master_key_dialog.heading",
     "master_key_dialog.text",
-    "master_key_dialog.note",
     "master_key_dialog.make",
     "master_key_dialog.stop",
     "master_key_shown.lead",

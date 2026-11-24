@@ -119,7 +119,7 @@ describe("setup's Recovery pack step", () => {
     await userEvent.click(q(el, "[data-test=print]")!);
     await vi.waitFor(() =>
       expect(text(el, "[data-test=print-failed]")).toBe(
-        "Print did not open. Use Download, or allow pop-ups and try again.",
+        "Your browser blocked printing. Use Download instead.",
       ),
     );
     expect(q(el, "[data-test=print-failed]")!.getAttribute("role")).toBe("alert");
@@ -134,7 +134,7 @@ describe("setup's Recovery pack step", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=print-failed]")).not.toBeNull());
     expect(text(el, "[data-test=print-failed]")).toBe(finishEs["done.pack.print_failed"]);
     expect(finishEs["done.pack.print_failed"]).not.toBe(
-      "Print did not open. Use Download, or allow pop-ups and try again.",
+      "Your browser blocked printing. Use Download instead.",
     );
   });
 

@@ -88,7 +88,7 @@ export const firstHourStrings = {
     copy: "Copy",
     copied: "Copied.",
     copyFailed: "Copy did not work. Use Download or Print.",
-    printFailed: "Print did not open. Use Download, or allow pop-ups and try again.",
+    printFailed: "Your browser blocked printing. Use Download instead.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
     keyLost: "The box no longer holds the master key it made. Make new keys to carry on.",
@@ -118,8 +118,7 @@ export const firstHourStrings = {
     copy: "Copiar",
     copied: "Copiada.",
     copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir.",
-    printFailed:
-      "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
+    printFailed: "El navegador ha bloqueado la impresión. Usa Descargar.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
     keyLost: "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",

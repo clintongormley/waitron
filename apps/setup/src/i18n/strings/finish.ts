@@ -83,7 +83,7 @@ export const finishEn = {
   "done.pack.copy": "Copy",
   "done.pack.copied": "Copied.",
   "done.pack.copy_failed": "Copy did not work. Use Download or Print, or write the key down.",
-  "done.pack.print_failed": "Print did not open. Use Download, or allow pop-ups and try again.",
+  "done.pack.print_failed": "Your browser blocked printing. Use Download instead.",
   "done.pack.continue": "Continue",
   "done.break_glass.heading": "Save your box key now",
   "done.break_glass.key_name": "Box key {date} · {code}",
@@ -227,8 +227,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.pack.copy": "Copiar",
   "done.pack.copied": "Copiada.",
   "done.pack.copy_failed": "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
-  "done.pack.print_failed":
-    "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
+  "done.pack.print_failed": "El navegador ha bloqueado la impresión. Usa Descargar.",
   "done.pack.continue": "Continuar",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",

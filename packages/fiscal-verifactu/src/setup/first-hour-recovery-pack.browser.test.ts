@@ -219,7 +219,7 @@ it("a Print the browser blocks does not count: it says so where a refused Copy d
   await userEvent.click(control(el, "print")!);
   await expect
     .poll(() => text(el, "print-failed"))
-    .toBe("Print did not open. Use Download, or allow pop-ups and try again.");
+    .toBe("Your browser blocked printing. Use Download instead.");
   expect(control(el, "kept")).toBeNull();
   expect((await axe.run(host)).violations).toEqual([]);
 });
@@ -232,9 +232,7 @@ it("says in Spanish when a Print is blocked", async () => {
   await userEvent.click(control(el, "print")!);
   await expect
     .poll(() => text(el, "print-failed"))
-    .toBe(
-      "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
-    );
+    .toBe("El navegador ha bloqueado la impresión. Usa Descargar.");
 });
 
 it("Copy puts the key on the clipboard exactly as printed, and Print opens the pack Download saves", async () => {

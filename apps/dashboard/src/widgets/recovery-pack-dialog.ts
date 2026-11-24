@@ -65,9 +65,6 @@ export class RecoveryPackDialog extends LitElement {
       p {
         margin: 0 0 var(--wt-space-3);
       }
-      .note {
-        color: var(--wt-color-text-muted);
-      }
       .warning {
         margin: var(--wt-space-3) 0;
         padding: var(--wt-space-3) var(--wt-space-4);
@@ -351,11 +348,10 @@ export class RecoveryPackDialog extends LitElement {
         ${
           this.kind === "master-key"
             ? html`<p data-test="intro">
-                  ${fill("master_key_dialog.text", {
-                    date: keepDate(this.status!.keepOldPackUntil, this.#zone),
-                  })}
-                </p>
-                <p class="note" data-test="note">${t("master_key_dialog.note")}</p>`
+                ${fill("master_key_dialog.text", {
+                  date: keepDate(this.status!.keepOldPackUntil, this.#zone),
+                })}
+              </p>`
             : html`<p data-test="intro">${t("recovery_pack_dialog.intro")}</p>`
         }
       </div>
