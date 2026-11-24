@@ -7,6 +7,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct } from "@waitron/menu";
 import { centsToDecimal } from "@waitron/shared";
 import type { RefundAnswer } from "@waitron/payments";
+import { clockAtIso, filedFor } from "./testing/later-sale-date-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { readBillEditState } from "./bill-editing.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { setTipsForTest } from "./testing/payment-settings.js";
@@ -480,5 +483,40 @@ describe("A1515 a bill left owing less than it was paid", () => {
       status: 409,
       json: { code: "bill.not_overpaid", params: { workingOrderId: party.tabId } },
     });
+  });
+
+  // Last in the file: its invoice is filed on a clock a day ahead, which later records would follow.
+  it("a card give-back completed by a recovery pass a day later files the day the payments were taken", async () => {
+    const { billId, paymentId } = await overpaidBill("card");
+    venue.card.scriptNextRefund({ made: "completed", answer: LOST });
+    const asked = await giveBack(billId, paymentId, "5.00");
+    expect(asked.json).toMatchObject({ refund: { state: "pending" } });
+    const [paid] = await inTx(venue, (tx) =>
+      tx
+        .select({ receivedAt: billPayments.receivedAt })
+        .from(billPayments)
+        .where(eq(billPayments.id, paymentId)),
+    );
+    const takenAt = Date.parse(paid!.receivedAt!);
+    const nextDay = new Date(takenAt + 24 * 60 * 60 * 1000).toISOString();
+
+    await recoverTenderRefunds({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: clockAtIso(nextDay),
+      cfg: venue.cfg,
+      refundProviderFor: (name) => venue.pool.get(name),
+    });
+
+    expect(await statusOf(venue, billId)).toBe("settled");
+    // The venue's business day in Madrid, which turns at 05:00.
+    const madridDay = (at: number) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(
+        new Date(at - 5 * 60 * 60 * 1000),
+      );
+    const { supplyDay, record } = await filedFor(venue, billId);
+    expect(supplyDay).toBe(madridDay(takenAt));
+    expect(record.operationDate).toBe(madridDay(takenAt));
   });
 });
