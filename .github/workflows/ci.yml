@@ -46,6 +46,16 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  ROOT_PROCESS_TESTS: >-
+    scripts/ci-setup-pnpm.test.mjs
+    scripts/deploy-image-env.test.ts
+    scripts/personal-log-params.test.ts
+    scripts/pre-push.test.mjs
+    scripts/tunnel-container.test.mjs
+    scripts/waitron-box-sh.test.mjs
+    scripts/waitron-sh.test.mjs
+
 jobs:
   # Package scope is shared with the push hook. Full verification also enables coverage.
   changes:
@@ -559,19 +569,70 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
-      # every package). Three reasons it belongs in this root job:
-      #
-      #   the two CLASSIFIERS under `scripts/` — if either is wrong, every gating decision below is
-      #   wrong, so they must run even on the paths they would otherwise skip;
-      #   the repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
-      #   every package's coverage bar included. The first two lived in
-      #   `packages/db` until 2026-08-01, where `test-heavy`'s own gate decided whether they ran —
-      #   so a pull request touching only `packages/payments` ran neither, and their first run was
-      #   the unfiltered `main` merge;
-      #   `scripts/check-signoff.test.mjs`, which covers the script the `changes` job's sign-off step
-      #   runs and runs that step itself, extracted from this file rather than transcribed.
-      - run: pnpm vitest run --coverage
+      # Keep root coverage in one report. The process suites run in root-process-guards.
+      - name: Run root coverage suites
+        run: |
+          read -r -a suites <<< "$ROOT_PROCESS_TESTS"
+          exclusions=()
+          for suite in "${suites[@]}"; do exclusions+=(--exclude "$suite"); done
+          pnpm vitest run --coverage "${exclusions[@]}"
+
+  root-process-guards:
+    needs: changes
+    if: ${{ always() && !cancelled() && !inputs.server_probe }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          cache: ${{ runner.environment == 'github-hosted' && 'pnpm' || '' }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run root process suites
+        run: |
+          read -r -a suites <<< "$ROOT_PROCESS_TESTS"
+          pnpm vitest run "${suites[@]}"
 
   # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is
   # gitignored, and typecheck and test run against TypeScript source. Gated on `code` because a
@@ -4366,6 +4427,7 @@ jobs:
       - changes
       - lint
       - root-guards
+      - root-process-guards
       - bundle-smoke
       - image
       - typecheck

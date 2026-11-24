@@ -2255,9 +2255,15 @@ not count, and a step an `if:` switches off does; a reporter counts only in a `-
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
 
-`lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) are enabled
-on workflows that have not been cancelled, except a `server_probe` dispatch, so a regression in
-a path the gated test jobs skip is caught there only as far as the root suites exercise it.
+`lint` (eslint and `format:check`) and both root guard jobs run on workflows that have not been
+cancelled, except a `server_probe` dispatch. `root-guards` writes the root coverage report and
+can run on the server. `root-process-guards` runs the seven suites in `ROOT_PROCESS_TESTS` on
+GitHub. The coverage job excludes that list, and `ci` waits for both jobs.
+
+Before moving another suite to the hosted job, run unfiltered root coverage and compare the
+per-file covered and total counts with that suite excluded. The initial split matched all 457
+coverage report entries from two unfiltered controls on the source at `e8df6f7699`.
+
 On a pull request or ordinary `main` push, `lint` restores results an earlier `main` run kept for the same inputs, if there are any
 (see "The lint job reuses earlier results except on a full run").
 
@@ -3309,7 +3315,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
 | ci.yml             | changes                           | 0.9                            | 5     |
 | ci.yml             | lint                              | 5.1 (root guards then included) | 8     |
-| ci.yml             | root-guards                       | not yet measured               | 8     |
+| ci.yml             | root-guards, root-process-guards  | see run timing                  | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
 | ci.yml             | ci                                | 0.7                            | 15    |
@@ -3327,9 +3333,9 @@ the `mutation-shared` row below records the earlier unsharded job.
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 | codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
 
-Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-guards` (8) are set
+Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and both root guard jobs (8) are set
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
-"bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
+workflow timeout cases in `scripts/ci-workflow.test.mjs` check for limits and pin the named job limits.
 
 **2026-11-13:** CodeQL now uses its [own nightly measurement and a 60-minute limit](#cache-docker-and-codeql-steps-have-measured-limits). Its row above records the earlier default setup.
 
