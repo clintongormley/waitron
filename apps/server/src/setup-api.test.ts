@@ -5,6 +5,7 @@ import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
@@ -24,7 +25,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
-import { createSetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
@@ -458,6 +459,7 @@ async function postProvision(
   app: Hono,
   body: unknown,
   headers: Record<string, string> = {},
+  env?: Record<string, unknown>,
 ): Promise<Response> {
   const socket = new TLSSocket(new Socket());
   try {
@@ -468,7 +470,7 @@ async function postProvision(
         headers: { "content-type": "application/json", ...headers },
         body: typeof body === "string" ? body : JSON.stringify(body),
       },
-      { incoming: { socket } },
+      { incoming: { socket }, ...env },
     );
   } finally {
     socket.destroy();
@@ -1818,6 +1820,19 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(requestRestart).toHaveBeenCalledTimes(1);
   });
 
+  it("restarts only once its reply has been written", async () => {
+    const app = new Hono();
+    const { deps, requestRestart } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+    const response = await postProvision(app, demoBody(), {}, { outgoing });
+    expect(response.status).toBe(200);
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+    outgoing.emit("finish");
+    expect(requestRestart).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the latch SET after a SUCCESSFUL provision — a second POST is 409 while the box restarts", async () => {
     // A second POST arriving while the box restarts must not start a second, unrecoverable chain.
     const app = new Hono();
@@ -2253,7 +2268,7 @@ function makeAdoptDeps(overrides: Partial<SetupDeps> & { adopt?: AdoptJoined | u
 async function fromOwnPage(
   app: Hono,
   path: string,
-  { body, handle }: { body?: unknown; handle?: string } = {},
+  { body, handle, env }: { body?: unknown; handle?: string; env?: Record<string, unknown> } = {},
 ): Promise<Response> {
   const socket = new TLSSocket(new Socket());
   try {
@@ -2268,7 +2283,7 @@ async function fromOwnPage(
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       },
-      { incoming: { socket } },
+      { incoming: { socket }, ...env },
     );
   } finally {
     socket.destroy();
@@ -2278,7 +2293,7 @@ async function fromOwnPage(
 const joinHandles = new WeakMap<Hono, string>();
 
 /** Finish joining on `app`, starting the page's join on its first call. */
-async function postAdopt(app: Hono): Promise<Response> {
+async function postAdopt(app: Hono, env?: Record<string, unknown>): Promise<Response> {
   let handle = joinHandles.get(app);
   if (handle === undefined) {
     const started = await fromOwnPage(app, "/setup-api/join/start", {
@@ -2288,23 +2303,32 @@ async function postAdopt(app: Hono): Promise<Response> {
     handle = ((await started.json()) as { handle: string }).handle;
     joinHandles.set(app, handle);
   }
-  return fromOwnPage(app, "/setup-api/adopt", { body: {}, handle });
+  return fromOwnPage(app, "/setup-api/adopt", {
+    body: {},
+    handle,
+    ...(env === undefined ? {} : { env }),
+  });
 }
 
 async function postRestore(
   app: Hono,
   body: Uint8Array,
   environment = "production",
+  env?: Record<string, unknown>,
 ): Promise<Response> {
-  return app.request("/setup-api/restore", {
-    method: "POST",
-    headers: {
-      "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "recovery-secret",
-      "x-waitron-restore-environment": environment,
+  return app.request(
+    "/setup-api/restore",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "recovery-secret",
+        "x-waitron-restore-environment": environment,
+      },
+      body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
     },
-    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
-  });
+    env,
+  );
 }
 
 async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response> {
@@ -2686,12 +2710,16 @@ describe("POST /setup-api/restore", () => {
   });
 });
 
-async function postBucketRestore(app: Hono, body: unknown): Promise<Response> {
-  return app.request("/setup-api/restore-bucket", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+async function postBucketRestore(
+  app: Hono,
+  body: unknown,
+  env?: Record<string, unknown>,
+): Promise<Response> {
+  return app.request(
+    "/setup-api/restore-bucket",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+    env,
+  );
 }
 
 describe("POST /setup-api/restore-bucket", () => {
@@ -3089,6 +3117,126 @@ describe("POST /setup-api/restore-bucket", () => {
   });
 });
 
+/** `store`, except that saving an operation as complete fails. */
+function completeFails(store: SetupOperationStore): SetupOperationStore {
+  return {
+    read: () => store.read(),
+    run: (kind, hash, fn, hold) =>
+      store.run(
+        kind,
+        hash,
+        (operation) => fn({ ...operation, complete: () => Promise.reject(new Error("disk gone")) }),
+        hold,
+      ),
+  };
+}
+
+describe("the restore routes restart only once their reply has been written", () => {
+  const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
+  const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+  const routes = [
+    [
+      "archive restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        postRestore(app, Uint8Array.from([1]), "production", env),
+    ],
+    [
+      "bucket restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        postBucketRestore(app, { kit: "k", environment: "production" }, env),
+    ],
+    [
+      "Cloud restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        app.request(
+          "/setup-api/cloud-recovery/restore",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pointId }),
+          },
+          env,
+        ),
+    ],
+  ] as const;
+  const mountRestores = (operations: SetupOperationStore) => {
+    const requestRestart = vi.fn();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        operations,
+        stageRestore: vi.fn(async () => {}),
+        stageBucketRestore: vi.fn(async () => {}),
+        cloudRecovery: {
+          binding: vi.fn(async () => ({ requestId, pointId })),
+          restore: vi.fn(async () => {}),
+        } as unknown as SetupDeps["cloudRecovery"],
+        requestRestart,
+      },
+      noopLog,
+    );
+    return { app, requestRestart };
+  };
+
+  it.each(routes)("%s restarts only once its reply has been written", async (_route, post) => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-written-"));
+    try {
+      const { app, requestRestart } = mountRestores(createSetupOperationStore(dir));
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await post(app, { outgoing });
+      expect(response.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(routes)(
+    "%s still restarts, after the error reply is written, when the restore is staged but its setup record is not",
+    async (_route, post) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-complete-fails-"));
+      try {
+        const { app, requestRestart } = mountRestores(
+          completeFails(createSetupOperationStore(dir)),
+        );
+        const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+        const response = await post(app, { outgoing });
+        expect(response.ok).toBe(false);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
+        outgoing.emit("finish");
+        expect(requestRestart).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("restarts a replayed Cloud restore only once its reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-cloud-replay-written-"));
+    try {
+      const [, , [, post]] = routes;
+      expect((await post(mountRestores(createSetupOperationStore(dir)).app, {})).status).toBe(202);
+      await tick();
+      const { app, requestRestart } = mountRestores(createSetupOperationStore(dir));
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const replay = await post(app, { outgoing });
+      expect(replay.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing provision's latch", () => {
   it("persists adoption completion without retaining the break-glass secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
@@ -3102,6 +3250,47 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
         adopted: true,
         restarting: true,
       });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts only once Finish joining's reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-written-"));
+    try {
+      const app = new Hono();
+      const { deps, requestRestart } = makeAdoptDeps({
+        operations: createSetupOperationStore(dir),
+      });
+      mountSetup(app, deps, noopLog);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postAdopt(app, { outgoing });
+      expect(response.status).toBe(200);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still restarts, after the error reply is written, when the join is saved but its setup record is not", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-complete-fails-"));
+    try {
+      const app = new Hono();
+      const { deps, adopt, requestRestart } = makeAdoptDeps({
+        operations: completeFails(createSetupOperationStore(dir)),
+      });
+      mountSetup(app, deps, noopLog);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postAdopt(app, { outgoing });
+      expect(adopt).toHaveBeenCalledTimes(1);
+      expect(response.ok).toBe(false);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -4259,8 +4448,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
   const unavailable = { error: { code: "setup.reset_unavailable", params: {} } };
 
-  const postReset = (app: Hono): Promise<Response> =>
-    fromOwnPage(app, "/setup-api/reset-incomplete-adopt");
+  const postReset = (app: Hono, env?: Record<string, unknown>): Promise<Response> =>
+    fromOwnPage(app, "/setup-api/reset-incomplete-adopt", env === undefined ? {} : { env });
 
   function writeRecord(dir: string, kind: string, phase: string, data = {}): void {
     mkdirSync(join(dir, "flows/setup"), { recursive: true });
@@ -4319,6 +4508,22 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       expect(requestRestart).not.toHaveBeenCalled();
       await tick();
       expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts only once its reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-written-"));
+    try {
+      const { app, requestRestart } = await halfAdopted(dir);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postReset(app, { outgoing });
+      expect(response.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
