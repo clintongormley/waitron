@@ -137,7 +137,7 @@ export const DEFAULT_HTTP_HOST = "127.0.0.1";
 export const MAX_HTTP_PORT = 65_535;
 /** Loopback passkey defaults, outside production only (`requiredInProduction`). The origin is the
  * dashboard's Vite dev server. */
-const DEFAULT_MANAGEMENT_RP_ID = "localhost";
+export const DEFAULT_MANAGEMENT_RP_ID = "localhost";
 const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
 export interface DutyTimings {

@@ -41,6 +41,7 @@ import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
+import { DEFAULT_MANAGEMENT_RP_ID } from "./config.js";
 import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
 import {
   joinAsBundleAnswer,
@@ -856,29 +857,32 @@ describe("the start check on a real start", () => {
     }, 60_000);
 
     it("the waiting page's download takes a passkey made at the dashboard's name", async () => {
+      const passkey = signingPasskey(DEFAULT_MANAGEMENT_RP_ID);
       await boot(suite, {
         spareUrl: OWN_URL,
         joined: true,
         seams: { ...seams(waitThen()), waitingStart: { intervalMs: 60_000, secure: () => true } },
+        beforeStart: async () => {
+          const [admin] = await suite.db
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.email, "owner@example.test"));
+          await withTransaction(suite.db, (tx) =>
+            tx.insert(webauthnCredentials).values({
+              personId: admin!.id,
+              credentialId: passkey.credentialId,
+              publicKey: passkey.publicKey,
+              counter: 0,
+            }),
+          );
+        },
       });
       const options = await fetch(`http://127.0.0.1:${httpPort()}/old-box-data/passkey-options`, {
         method: "POST",
       });
       expect(options.status).toBe(200);
       const { challenge, rpId } = (await options.json()) as { challenge: string; rpId: string };
-      const passkey = signingPasskey(rpId);
-      const [admin] = await suite.db
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.email, "owner@example.test"));
-      await withTransaction(suite.db, (tx) =>
-        tx.insert(webauthnCredentials).values({
-          personId: admin!.id,
-          credentialId: passkey.credentialId,
-          publicKey: passkey.publicKey,
-          counter: 0,
-        }),
-      );
+      expect(rpId).toBe(DEFAULT_MANAGEMENT_RP_ID);
       const answer = passkey.assert(challenge, "https://dashboard.example");
       const response = await fetch(`http://127.0.0.1:${httpPort()}/old-box-data`, {
         method: "POST",
