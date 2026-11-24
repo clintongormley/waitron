@@ -1488,6 +1488,9 @@ describe("the waiting start", () => {
           tls(),
         );
         expect(options.status).toBe(404);
+        const posted = await download({ passkey: "x" });
+        expect(posted.status).toBe(400);
+        expect(await posted.text()).toContain(escapeHtml(words.emailMissing));
       });
 
       it("draws the carry-on and download blocks in the waiting page's one section, over HTTPS and HTTP", async () => {
