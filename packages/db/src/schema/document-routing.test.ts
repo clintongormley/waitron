@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { CHECK_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { invoiceSeries } from "./series.js";
@@ -131,7 +131,7 @@ describe("document routing schema", () => {
     ]);
   });
 
-  it("page copy audit refuses changes and preserves the referenced work", async () => {
+  it("page audit needs a person and keeps one immutable record per retained job", async () => {
     await seedVenue(suite.db, {
       name: "Oak Room",
       invoiceLocales: ["es"],
@@ -168,9 +168,14 @@ describe("document routing schema", () => {
     await suite.db.execute(
       sql`insert into print_jobs (id, sale_id, printer_id, kind, page_document, page_language, page_designation, created_at) values (${job}, ${sale!.id}, ${printerId}, 'a4', 'receipt', 'es', 'duplicate', ${now})`,
     );
-    await suite.db.execute(
-      sql`insert into document_page_reprints (id, sale_id, print_job_id, person_id, requested_at) values (${audit}, ${sale!.id}, ${job}, ${person}, ${now})`,
-    );
+    const recordReprint = () =>
+      suite.db.execute(
+        sql`insert into document_page_reprints (id, sale_id, print_job_id, person_id, requested_at) values (${audit}, ${sale!.id}, ${job}, ${person}, ${now})`,
+      );
+    const missingPerson = await captureError(recordReprint);
+    expect(FOREIGN_KEY_VIOLATION).toContain((missingPerson as { errcode: number }).errcode);
+    await seedPerson(suite.db, { id: person });
+    await recordReprint();
     for (const statement of [
       sql`update document_page_reprints set person_id = ${randomUUID()} where id = ${audit}`,
       sql`delete from document_page_reprints where id = ${audit}`,

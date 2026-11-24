@@ -991,6 +991,7 @@ CREATE TABLE `receipt_reprints` (
 	`print_job_id` text NOT NULL,
 	`person_id` text NOT NULL,
 	`requested_at` text NOT NULL,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE restrict
 );
@@ -1002,6 +1003,7 @@ CREATE TABLE `invoice_pdf_downloads` (
 	`sale_id` text NOT NULL,
 	`person_id` text NOT NULL,
 	`requested_at` text NOT NULL,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
@@ -1025,6 +1027,9 @@ CREATE TABLE `invoice_corrections` (
 	`created_at` text NOT NULL,
 	`ended_at` text,
 	`ended_by` text,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`ended_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`original_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`corrective_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -1148,6 +1153,8 @@ CREATE TABLE `drawer_opens` (
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`tender_refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund', 'card_slip', 'tender_refund')),
 	CONSTRAINT "drawer_opens_target_ck" CHECK((
         "drawer_opens"."tender_refund_id" is null and (
@@ -1838,6 +1845,7 @@ CREATE TABLE `handover_activations` (
 	`activated_at` text NOT NULL,
 	FOREIGN KEY (`source_node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`destination_node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "handover_activations_scenario_ck" CHECK("handover_activations"."scenario" in ('controlled', 'emergency'))
 );
 --> statement-breakpoint
@@ -2837,7 +2845,8 @@ CREATE TABLE `document_page_reprints` (
 	`person_id` text NOT NULL,
 	`requested_at` text NOT NULL,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`print_job_id`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `document_page_reprints_job_uq` ON `document_page_reprints` (`print_job_id`);--> statement-breakpoint

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { receiptReprints } from "./receipt-reprints.js";
@@ -17,7 +17,7 @@ const PERSON = "cccccccc-0000-4000-8000-000000000001";
 describe("receipt reprint record", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  it("refuses an unknown sale and a second record of the same job", async () => {
+  it("requires a known sale and person and refuses a second record of the same job", async () => {
     const db = suite.db;
     await seedVenue(db, {
       name: "Fixture",
@@ -55,6 +55,16 @@ describe("receipt reprint record", () => {
         fiscalState: "recorded",
       })
       .returning({ id: sales.id });
+
+    const missingPerson = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx
+          .insert(receiptReprints)
+          .values({ saleId: sale!.id, printJobId: job!.id, personId: PERSON }),
+      ),
+    );
+    expect(FOREIGN_KEY_VIOLATION).toContain((missingPerson as { errcode: number }).errcode);
+    await seedPerson(db, { id: PERSON });
 
     const missing = await captureError(() =>
       withTransaction(db, (tx) =>

@@ -17,7 +17,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -107,6 +107,8 @@ async function seedDeletedAndReplaced() {
   const copy = await job({ status: "done", attempts: 1, saleId, receiptCopy: true });
   const ticket = await job({ status: "done", attempts: 1 });
   const waiting = await job({});
+  await seedPerson(suite.db, { id: "staff-one", displayName: "Staff operator" });
+  await seedPerson(suite.db, { id: "manager-one", displayName: "Manager" });
   await suite.db
     .insert(receiptReprints)
     .values({ saleId, printJobId: copy, personId: "staff-one" });

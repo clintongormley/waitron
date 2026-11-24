@@ -380,11 +380,14 @@ describe("a box killed while activating, then a real start with its old box swit
     await placed.close();
     const venue = new DatabaseSync(join(dirs().spareVenue, "venue.db"));
     try {
+      const person = venue.prepare("select id from persons where email = ?").get(ADMIN_EMAIL) as {
+        id: string;
+      };
       venue
         .prepare(
           "insert into handover_activations (operation_id, scenario, source_node_id, destination_node_id, evidence, person_id, activated_at) values (?, 'controlled', ?, ?, '{}', ?, '2026-10-16T12:40:00.000Z')",
         )
-        .run(OPERATION, primary.nodeId, standby.nodeId, OPERATION);
+        .run(OPERATION, primary.nodeId, standby.nodeId, person.id);
     } finally {
       venue.close();
     }

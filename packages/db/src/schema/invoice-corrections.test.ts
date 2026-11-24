@@ -100,8 +100,8 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
         gross: 400,
         lineIds: null,
         reason: "Wrong dish",
-        requestedBy: GHOST,
-        authorizedBy: GHOST,
+        requestedBy: refunder,
+        authorizedBy: refunder,
         viaOverride: false,
         source: "device",
         deviceId,
@@ -153,6 +153,22 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
     const [written] = await open();
     const refund = await captureError(() => link(written!.id, { tenderRefundId: GHOST }));
     expect(isRefusal(refund, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it.each(["requestedBy", "authorizedBy"] as const)("refuses an unknown %s", async (field) => {
+    const error = await captureError(() => open({ [field]: GHOST }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("refuses to discard a correction under an unknown person", async () => {
+    const [written] = await open();
+    const error = await captureError(() =>
+      db
+        .update(invoiceCorrections)
+        .set({ state: "discarded", endedAt: AT, endedBy: GHOST })
+        .where(eq(invoiceCorrections.id, written!.id)),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("links a sale refund to a correction and refuses a bill refund", async () => {
@@ -228,7 +244,7 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
     expect(isRefusal(filedWithoutSale, CHECK_VIOLATION)).toBe(true);
     await db
       .update(invoiceCorrections)
-      .set({ state: "discarded", endedAt: AT, endedBy: GHOST })
+      .set({ state: "discarded", endedAt: AT, endedBy: refunder })
       .where(eq(invoiceCorrections.id, written!.id));
     const reopen = await captureError(() =>
       db.run(
@@ -262,7 +278,7 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
   });
 
   it("names who ended a discarded or closed correction, and nobody while it is open", async () => {
-    const openedWithEnder = await captureError(() => open({ endedBy: GHOST }));
+    const openedWithEnder = await captureError(() => open({ endedBy: refunder }));
     expect(isRefusal(openedWithEnder, CHECK_VIOLATION)).toBe(true);
     const [written] = await open();
     for (const state of ["discarded", "closed"] as const) {

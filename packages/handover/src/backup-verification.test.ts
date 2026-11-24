@@ -7,7 +7,7 @@ import {
   handoverActivations,
   handoverReturnBatches,
 } from "@waitron/db";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
@@ -47,7 +47,7 @@ async function activate(db: Database, activatedAt = "2026-10-20T08:00:00.000Z"):
       signerNodeId: NODE_A,
       signature: "signature",
     },
-    personId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    personId: await seedPerson(db, { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }),
     activatedAt,
   });
 }

@@ -12,7 +12,7 @@ import {
   triggerRaised,
   handoverActivations,
 } from "../../index.js";
-import { seedNode, seedVenue } from "../../testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "../../testing/seed.js";
 import { migratedTableNames, useVenueDb } from "../../testing/venue-db.js";
 import * as barrel from "./index.js";
 
@@ -24,16 +24,22 @@ const ACTIVATED_AT = "2026-11-04T10:00:00.000Z";
 
 async function twoNodes(): Promise<{ source: string; destination: string }> {
   await seedVenue(suite.db);
+  await seedPerson(suite.db, { id: "person-1" });
   return { source: await seedNode(suite.db), destination: await seedNode(suite.db) };
 }
 
 /** A raw insert, so each case proves what the migration built rather than the declaration. */
-function insertRaw(values: { scenario?: string; source: string; destination: string }): unknown {
+function insertRaw(values: {
+  scenario?: string;
+  source: string;
+  destination: string;
+  personId?: string;
+}): unknown {
   return suite.db.execute(sql`
     insert into handover_activations
       (operation_id, scenario, source_node_id, destination_node_id, evidence, person_id, activated_at)
     values (${OPERATION}, ${values.scenario ?? "controlled"}, ${values.source},
-            ${values.destination}, '{}', 'person-1', ${ACTIVATED_AT})`);
+            ${values.destination}, '{}', ${values.personId ?? "person-1"}, ${ACTIVATED_AT})`);
 }
 
 describe("the handover table in core's set", () => {
@@ -80,6 +86,12 @@ describe("the handover table in core's set", () => {
         true,
       );
     }
+  });
+
+  it("refuses an activation under an unknown person", async () => {
+    const { source, destination } = await twoNodes();
+    const error = await captureError(() => insertRaw({ source, destination, personId: "missing" }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("lives in core's set, which protects it as append-only", () => {
@@ -155,14 +167,20 @@ describe("the handover_activations declaration", () => {
           foreignColumns: foreignColumns.map((column) => column.name),
         };
       }),
-    ).toEqual(
-      ["source", "destination"].map((side) => ({
+    ).toEqual([
+      ...["source", "destination"].map((side) => ({
         name: `handover_activations_${side}_node_fk`,
         columns: [`${side}_node_id`],
         foreignTable: getTableConfig(nodes).name,
         foreignColumns: ["id"],
       })),
-    );
+      {
+        name: "handover_activations_person_id_fk",
+        columns: ["person_id"],
+        foreignTable: "persons",
+        foreignColumns: ["id"],
+      },
+    ]);
     expect(config.indexes.map((index) => index.config.name)).toEqual([
       "handover_activations_destination_idx",
     ]);

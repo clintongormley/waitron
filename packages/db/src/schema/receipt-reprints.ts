@@ -1,5 +1,6 @@
 import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { id, newId, nowIso, table, tsString } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { printJobs } from "./print-jobs.js";
 import { sales } from "./sales.js";
 
@@ -10,11 +11,15 @@ export const receiptReprints = table(
     id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
     printJobId: id("print_job_id").notNull(),
-    // No key yet.
     personId: id("person_id").notNull(),
     requestedAt: tsString("requested_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "receipt_reprints_person_id_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.saleId],
       foreignColumns: [sales.id],

@@ -6,7 +6,7 @@ import {
   isRefusal,
   withTransaction,
 } from "@waitron/db";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   insertHandoverActivationTx,
@@ -28,6 +28,7 @@ const EVIDENCE: SignedHandoverEnvelope<unknown> = {
 
 async function nodes(): Promise<{ a: string; b: string; c: string }> {
   await seedVenue(suite.db);
+  await seedPerson(suite.db, { id: "person-1" });
   return {
     a: await seedNode(suite.db),
     b: await seedNode(suite.db),

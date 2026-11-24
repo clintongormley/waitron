@@ -833,10 +833,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 Include `menu_versions.created_by` when indexing the menu history. On a development Mac, the staff
 download's first write-lock turn took a median 25 ms with a seeded year and 216 ms with five years.
 
-- **Finish the remaining person-id foreign keys.**
-  Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
-  (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
-  migration set — ended when A760 moved it into core.
 - **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
   on the bench's first full year (built 2026-11-06, since rebuilt; the table was 8 GB of the 12 GB year).
   **2026-11-14, A1532:** that measurement predates the one-week payload sweep; eligible old rows

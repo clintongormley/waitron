@@ -16,7 +16,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, BUILT_IN_ROLE_KEYS, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -491,6 +491,10 @@ describe("mountReportApi — boxes taken over from", () => {
   }
 
   async function handover(source: string, destination: string, activatedAt: string) {
+    const personId = await seedPerson(suite.db, {
+      id: "handover-operator",
+      displayName: "Handover operator",
+    });
     await withTransaction(suite.db, (tx) =>
       insertHandoverActivationTx(tx, {
         operationId: randomUUID(),
@@ -498,7 +502,7 @@ describe("mountReportApi — boxes taken over from", () => {
         sourceNodeId: source,
         destinationNodeId: destination,
         evidence: {} as never,
-        personId: randomUUID(),
+        personId,
         activatedAt,
       }),
     );

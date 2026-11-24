@@ -1,5 +1,6 @@
 import { foreignKey, index } from "drizzle-orm/sqlite-core";
 import { id, newId, nowIso, table, tsString } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { sales } from "./sales.js";
 
 /** Who requested an invoice's PDF from the dashboard, and when; the PDF itself is not stored. */
@@ -8,11 +9,15 @@ export const invoicePdfDownloads = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
-    // No key yet.
     personId: id("person_id").notNull(),
     requestedAt: tsString("requested_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    foreignKey({
+      columns: [t.personId],
+      foreignColumns: [persons.id],
+      name: "invoice_pdf_downloads_person_id_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.saleId],
       foreignColumns: [sales.id],

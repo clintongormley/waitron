@@ -150,7 +150,7 @@ async function completedReturn(p: Primary, sourceNodeId: string): Promise<string
         signerNodeId: p.nodeId,
         signature: "signature",
       },
-      personId: "person",
+      personId: p.adminPersonId,
       activatedAt: "2026-11-12T10:00:00.000Z",
     });
     for (const [index, digest] of digests.entries()) {
