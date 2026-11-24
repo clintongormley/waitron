@@ -1547,13 +1547,40 @@ describe("the waiting start", () => {
           await stillWaiting();
         });
 
-        it("a refused passkey answer draws the waiting page with the refusal above the passkey button", async () => {
+        /** The passkey form's hidden fields, as its script's `form.submit()` posts them (values as
+         * drawn: the destinations here hold nothing `escapeHtml` changes). */
+        const passkeyFormFields = (html: string): Record<string, string> => {
+          const start = html.indexOf('id="old-box-data-passkey-form"');
+          expect(start).toBeGreaterThan(-1);
+          const form = html.slice(start, html.indexOf("</form>", start));
+          return Object.fromEntries(
+            [...form.matchAll(/<input type="hidden" name="(\w+)"(?: value="([^"]*)")?>/g)].map(
+              ([, name, value]) => [name!, value ?? ""],
+            ),
+          );
+        };
+
+        it("a refused passkey answer draws the waiting page with the refusal above the passkey button, keeping the till destination", async () => {
+          const till = "/till/tabs/counter?view=all";
+          const opened = await (
+            await h
+              .app()
+              .request(
+                `https://box.test${till}`,
+                { headers: { "accept-language": "en-GB", accept: "text/html" } },
+                tls(),
+              )
+          ).text();
+          const fields = passkeyFormFields(opened);
+          expect(fields.returnTo).toBe(till);
           const answer = signingPasskey("box.test").assert(await challenge(), "https://box.test");
-          const response = await download({ passkey: JSON.stringify(answer) });
+          const response = await download({ ...fields, passkey: JSON.stringify(answer) });
           expect(response.status).toBe(401);
           const html = await response.text();
           expect(html).toContain("<h1>This box is waiting for Spare</h1>");
           expect(html).toContain('action="/carry-on"');
+          expect(html).toContain(`const destination = ${JSON.stringify(till)};`);
+          expect(passkeyFormFields(html).returnTo).toBe(till);
           const section = html
             .slice(html.indexOf("<section"))
             .replace(/<script>[\s\S]*?<\/script>/g, "");

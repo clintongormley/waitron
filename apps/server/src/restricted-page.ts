@@ -391,7 +391,7 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
 
 /**
  * The download block, unwrapped so the page drawing it chooses its section: its heading,
- * `introText`, then the form, or over HTTP why not. The form carries `returnTo` when given;
+ * `introText`, then the form, or over HTTP why not. Each form carries `returnTo` when given;
  * `withPasskey` adds the passkey form and its script, which the page's answer must allow.
  */
 export function downloadForm(
@@ -427,16 +427,20 @@ export function downloadForm(
     shown.message === undefined
       ? ""
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
+  const returnField =
+    returnTo === undefined
+      ? ""
+      : `<input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">\n`;
   const passkeyForm = withPasskey
     ? `<form method="post" action="/old-box-data" class="box-form" id="old-box-data-passkey-form">
-<input type="hidden" name="passkey">
+${returnField}<input type="hidden" name="passkey">
 ${passkeyLine === undefined ? "" : `<p id="old-box-data-passkey-message" role="alert">${escapeHtml(passkeyLine)}</p>\n`}<p><button type="button" class="secondary" id="old-box-data-passkey" data-failed="${escapeHtml(words.passkeyCancelled)}" hidden>${escapeHtml(words.passkeyAction)}</button></p>
 </form>
 <script>${PASSKEY_SCRIPT}</script>
 `
     : "";
   return `${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
-${returnTo === undefined ? "" : `<input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">\n`}<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
+${returnField}<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("old-box-data-email", download?.email ?? "", invalid("email"))}</p>
 ${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
