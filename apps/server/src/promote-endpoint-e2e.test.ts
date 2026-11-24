@@ -52,7 +52,7 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
@@ -412,7 +412,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       // The refusals run first, on the still-unpromoted mirror.
       const wrongBg = await postPromote(mirrorBase, {
         oldNodeNeutralised: true,
-        breakGlass: "not-the-secret",
+        breakGlass: WRONG_MASTER_KEY,
       });
       expect(wrongBg.status).toBe(401);
       expect((await wrongBg.json()).error.code).toBe("promotion.break_glass_invalid");

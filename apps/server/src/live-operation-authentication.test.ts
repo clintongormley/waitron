@@ -4,7 +4,7 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readOperationAuthority } from "@waitron/module";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const binding = {
@@ -84,6 +84,22 @@ it.each([null, undefined, "", "wrong-key", { personId: "administrator", password
     expect(entered).toBe(false);
   },
 );
+
+it("refuses a master key that is not the venue's before operation entry", async () => {
+  let entered = false;
+  await expect(
+    withRecoveryKeyAuthority(
+      deps,
+      binding,
+      WRONG_MASTER_KEY,
+      async () => {
+        entered = true;
+      },
+      ["conflict-switch"],
+    ),
+  ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+  expect(entered).toBe(false);
+});
 
 it("rechecks a key replaced while the authenticated operation waits before commit", async () => {
   let committed = false;

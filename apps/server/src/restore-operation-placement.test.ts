@@ -24,7 +24,7 @@ import {
 } from "@waitron/module";
 import { fakeModule, fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { ALL_MODULES } from "./modules.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
@@ -180,7 +180,7 @@ it("the admission check's folder holds the backup's node copy, not an empty node
   }
 });
 
-it("refuses a wrong node key before hooks or restored identity are published", async () => {
+it("refuses a wrong master key before hooks or restored identity are published", async () => {
   let entered = false;
   const f = await fixture(
     regime(async () => {
@@ -188,7 +188,7 @@ it("refuses a wrong node key before hooks or restored identity are published", a
       return { report: "unexpected" };
     }),
   );
-  nodeKey = "wrong";
+  nodeKey = WRONG_MASTER_KEY;
   await expect(writeValidated(f.validated, f.deps)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
@@ -218,7 +218,7 @@ it("identifies the chosen backup's paper key before authentication can refuse it
       entries.push({ code, params });
     },
   };
-  nodeKey = "wrong";
+  nodeKey = WRONG_MASTER_KEY;
   await expect(writeValidated(f.validated, f.deps)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });

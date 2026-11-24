@@ -10,7 +10,7 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({
@@ -228,19 +228,22 @@ it("rolls back local writes if collection returns before its in-flight transacti
   expect(await suite.db.select().from(deployment)).toEqual(before);
 });
 
-it.each(["wrong", ""])("invalid keys never start outside consumption %#", async (invalid) => {
-  let collected = false;
-  await expect(
-    withRecoveryKeyOperation(
-      { db: suite.db, node: suite.node, nodeId: NODE },
-      binding,
-      invalid,
-      async () => undefined,
-      async (_authority, commit) => {
-        collected = true;
-        return commit();
-      },
-    ),
-  ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-  expect(collected).toBe(false);
-});
+it.each([WRONG_MASTER_KEY, "wrong", ""])(
+  "invalid keys never start outside consumption %#",
+  async (invalid) => {
+    let collected = false;
+    await expect(
+      withRecoveryKeyOperation(
+        { db: suite.db, node: suite.node, nodeId: NODE },
+        binding,
+        invalid,
+        async () => undefined,
+        async (_authority, commit) => {
+          collected = true;
+          return commit();
+        },
+      ),
+    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    expect(collected).toBe(false);
+  },
+);

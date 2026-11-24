@@ -9,7 +9,7 @@ import {
   type OperationAuthority,
   type OperationBinding,
 } from "@waitron/module";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import * as operations from "./operation-authentication.js";
 import * as shared from "@waitron/shared";
 import * as credentials from "@waitron/credentials";
@@ -81,7 +81,7 @@ describe("scoped recovery-key authority", () => {
     },
   );
 
-  it.each([undefined, null, 123, {}, "", "wrong"])(
+  it.each([undefined, null, 123, {}, "", "wrong", WRONG_MASTER_KEY])(
     "refuses an invalid key %# without entering the operation",
     async (secret) => {
       let entered = false;

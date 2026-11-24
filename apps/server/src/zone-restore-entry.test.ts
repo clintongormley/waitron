@@ -1,3 +1,4 @@
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
@@ -116,13 +117,13 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
 });
 
 it.each(["archive", "stream"] as const)(
-  "a wrong %s node key still refuses before placement with an invalid zone",
+  "a wrong %s master key still refuses before placement with an invalid zone",
   async (kind) => {
     await savedZone("Not/A_Zone");
     const f = await archiveHost(kind);
     const destination = join(f.roots.venueDir, "venue.db");
     await writeFile(destination, "original destination");
-    const service = createSelectedRecoveryPreparation({ ...f.options, secret: "wrong node key" });
+    const service = createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY });
     await expect(
       service.prepare({ action: "clock-challenge" }, { onBox: false }),
     ).rejects.toMatchObject({

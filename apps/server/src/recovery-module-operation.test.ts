@@ -17,7 +17,7 @@ import { readOperationAuthority, type ModuleOperationInput } from "@waitron/modu
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
 import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
@@ -101,7 +101,7 @@ it("does not consult outside evidence for a wrong recovery key", async () => {
   await expect(
     withRecoveryModuleOperation(
       { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
-      { binding, input, secret: "wrong-key" },
+      { binding, input, secret: WRONG_MASTER_KEY },
       async () => "unexpected",
     ),
   ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });

@@ -20,7 +20,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { invoiceSeries, openVenueDatabase, stampDeployment, withTransaction } from "@waitron/db";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -179,7 +179,7 @@ it("sets the box's clock from this device only under the backup's key, naming no
     );
   await expect(
     setClock(
-      createSelectedRecoveryPreparation({ ...f.options, secret: "wrong-key", setBoxClock }),
+      createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY, setBoxClock }),
       "any",
     ),
   ).rejects.toMatchObject({
@@ -197,7 +197,7 @@ it("sets the box's clock from this device only under the backup's key, naming no
 
 it("requires the backup's actual key before selecting or writing preparation history", async () => {
   const f = await host();
-  await expect(f.prepare({ action: "clock-challenge" }, "wrong-key")).rejects.toMatchObject({
+  await expect(f.prepare({ action: "clock-challenge" }, WRONG_MASTER_KEY)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);

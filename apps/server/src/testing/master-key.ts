@@ -27,3 +27,6 @@ export async function mintMasterKey(
   );
   return { secret: encodeMasterKeyCode(bytes), name, number };
 }
+
+/** A master key that decodes but is not the venue's. */
+export const WRONG_MASTER_KEY = encodeMasterKeyCode(makeMasterKey());

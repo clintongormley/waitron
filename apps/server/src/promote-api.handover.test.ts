@@ -41,7 +41,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 // The promote routes beside the offer route on one real database: the real sign-ins and the real
@@ -391,7 +391,7 @@ describe("the open-operation refusal comes after the sign-in", () => {
     const before = await recorded();
     const wrongPassword = { personId, password: "wrong" };
     const unknownPerson = { personId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", password: PASSWORD };
-    const wrongKey = { breakGlass: "not-the-key" };
+    const wrongKey = { breakGlass: WRONG_MASTER_KEY };
     const module = { moduleOperation: moduleOperation(), oldNodeNeutralised: true };
     const operation = { moduleOperation: moduleOperation(), ...answers };
     const usual = refusal(401, "password.invalid");

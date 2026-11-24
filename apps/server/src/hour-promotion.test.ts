@@ -34,7 +34,7 @@ import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifa
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -379,7 +379,7 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
     await expect(
       s.prepare(
         held,
-        { breakGlass: fault === "key" ? "wrong" : key.secret },
+        { breakGlass: fault === "key" ? WRONG_MASTER_KEY : key.secret },
         {
           ...context,
           ...(fault === "isolation" ? { oldNodeNeutralised: false } : {}),

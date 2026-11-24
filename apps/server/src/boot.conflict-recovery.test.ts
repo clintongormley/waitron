@@ -17,7 +17,7 @@ import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -117,7 +117,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
         command: { kind: "status" },
       }),
     });
-  const refused = await inspect("wrong-key");
+  const refused = await inspect(WRONG_MASTER_KEY);
   expect(refused.status).toBe(401);
   expect(await refused.json()).toMatchObject({ error: { code: "promotion.break_glass_invalid" } });
   const response = await inspect(key);

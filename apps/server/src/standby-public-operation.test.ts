@@ -31,7 +31,7 @@ import {
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -370,13 +370,13 @@ it("does not consult outside evidence when the account password is wrong", async
   expect(collected).toEqual([]);
   await untouched();
 });
-it("does not consult outside evidence when the node key is wrong, even with valid account credentials", async () => {
+it("does not consult outside evidence when the master key is wrong, even with valid account credentials", async () => {
   const app = await promotionApp();
   await mintMasterKey(suite.db);
   const response = await post(
     app,
     "/management-api/promote",
-    promoteBody({ breakGlass: "wrong", personId: ADMIN, password: PASSWORD }),
+    promoteBody({ breakGlass: WRONG_MASTER_KEY, personId: ADMIN, password: PASSWORD }),
   );
   expect(response.status).toBe(401);
   expect((await response.json()).error.code).toBe("promotion.break_glass_invalid");

@@ -16,7 +16,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { nodeId } from "@waitron/shared";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
@@ -138,7 +138,7 @@ it.each([
       reason === "password"
         ? { personId: "admin", password: secret }
         : reason === "wrong-key"
-          ? "wrong"
+          ? WRONG_MASTER_KEY
           : secret,
       isolation,
       async () => {

@@ -1,3 +1,4 @@
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { execFileSync } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -439,7 +440,7 @@ it.each(["en", "es"] as const)(
           withRecoveryKeyAuthority(
             { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
-            "wrong-key",
+            WRONG_MASTER_KEY,
             async () => true,
           ),
         ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
