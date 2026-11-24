@@ -45,12 +45,12 @@ describe("stepped-down page wording", () => {
     [
       "en-GB",
       "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
-      "The main box did not accept this box's invoice records and working hours. Keep this box switched on; it tries again by itself.",
+      "The main box did not accept some invoice records or working hours this box holds. Keep this box switched on; it tries again by itself.",
     ],
     [
       "es-ES",
       "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
-      "El servidor principal no ha aceptado los registros de facturación y horas trabajadas de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+      "El servidor principal no ha aceptado algunos registros de facturación u horas trabajadas que tiene este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
     ],
   ] as const)(
     "names working hours beside invoice records in the %s return's waiting, sending and needs-attention lines",
