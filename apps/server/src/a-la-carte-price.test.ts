@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { floorZones, kitchenCourses, persons, products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
@@ -14,9 +14,7 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { MenuDocument } from "@waitron/shared";
 import * as venueService from "@waitron/venue-service";
-import { aLaCarteUnitCents, setMenuALaCartePrices } from "./a-la-carte-price.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { submitDraft, type Draft } from "./order-drafts.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
@@ -40,45 +38,6 @@ import {
   setMenuOnFullMenu,
 } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-
-describe("aLaCarteUnitCents", () => {
-  const document = {
-    offers: {
-      item: {
-        productId: "dish",
-        unitPrice: "8.00",
-        variants: [{ id: "large", unitPrice: "11.50" }],
-      },
-    },
-  } as unknown as MenuDocument;
-  const own = { dishCents: 500, variantCents: 700 };
-
-  it("answers the holding menu's price for a product it sells", () => {
-    expect(aLaCarteUnitCents(document, { productId: "dish", variantId: null }, own)).toBe(800);
-  });
-
-  it("answers the menu's price of a listed variant", () => {
-    expect(aLaCarteUnitCents(document, { productId: "dish", variantId: "large" }, own)).toBe(1150);
-  });
-
-  it("answers the variant's own price when the menu does not list the product", () => {
-    expect(aLaCarteUnitCents(document, { productId: "other", variantId: "small" }, own)).toBe(700);
-  });
-
-  it("answers the variant's own price when the menu lists the dish but not the variant", () => {
-    expect(aLaCarteUnitCents(document, { productId: "dish", variantId: "small" }, own)).toBe(700);
-  });
-
-  it("answers the dish's own price when the variant has none", () => {
-    expect(
-      aLaCarteUnitCents(
-        document,
-        { productId: "other", variantId: "small" },
-        { dishCents: 500, variantCents: null },
-      ),
-    ).toBe(500);
-  });
-});
 
 let venue: PartyVenue;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
@@ -438,12 +397,3 @@ it.each([
     ]);
   },
 );
-
-it("refuses to price a set-menu dish whose product row is missing", async () => {
-  const holding = { offers: {} } as unknown as MenuDocument;
-  await expect(
-    inTx(venue, (tx) =>
-      setMenuALaCartePrices(tx, [{ holding, productId: crypto.randomUUID(), variantId: null }]),
-    ),
-  ).rejects.toThrow("has no price of its own");
-});

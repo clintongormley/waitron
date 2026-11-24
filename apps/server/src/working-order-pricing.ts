@@ -39,9 +39,9 @@ import {
   stringToThousandths,
   decimalToCents,
 } from "@waitron/shared";
+import { setMenuALaCartePrices } from "@waitron/orders-sales/a-la-carte-price.js";
 import { offeredKey } from "@waitron/venue-service";
 import { and, inArray, eq } from "drizzle-orm";
-import { setMenuALaCartePrices } from "./a-la-carte-price.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {

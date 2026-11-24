@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { stringToCents, type FrozenOffer, type MenuDocument } from "@waitron/shared";
 
@@ -8,25 +8,21 @@ function offersByProduct(document: MenuDocument): ReadonlyMap<string, FrozenOffe
   return new Map(Object.values(document.offers).map((offer) => [offer.productId, offer]));
 }
 
-function priceFrom(offer: FrozenOffer | undefined, variantId: string | null, own: OwnPrices) {
+/**
+ * What a dish costs à la carte: the holding menu's ordinary offer of it (its variant's price where
+ * the menu lists the variant), else the variant's own price, else the dish's own price.
+ */
+export function aLaCarteUnitCents(
+  offer: FrozenOffer | undefined,
+  variantId: string | null,
+  own: OwnPrices,
+): number {
   if (offer !== undefined) {
     if (variantId === null) return stringToCents(offer.unitPrice);
     const variant = offer.variants.find(({ id }) => id === variantId);
     if (variant !== undefined) return stringToCents(variant.unitPrice);
   }
   return own.variantCents ?? own.dishCents;
-}
-
-/**
- * What a dish costs à la carte: the holding menu's ordinary offer of it (its variant's price where
- * the menu lists the variant), else the variant's own price, else the dish's own price.
- */
-export function aLaCarteUnitCents(
-  document: MenuDocument,
-  product: { productId: string; variantId: string | null },
-  own: OwnPrices,
-): number {
-  return priceFrom(offersByProduct(document).get(product.productId), product.variantId, own);
 }
 
 /** Each named product's own price in cents; null where it sets none. */
@@ -39,7 +35,7 @@ async function readOwnPrices(
   const rows = await tx
     .select({ id: products.id, unitPrice: products.unitPrice })
     .from(products)
-    .where(inArray(products.id, ids));
+    .where(inArray(products.id, sql`(select value from json_each(${JSON.stringify(ids)}))`));
   return new Map(rows.map(({ id, unitPrice }) => [id, unitPrice]));
 }
 
@@ -65,7 +61,7 @@ export async function setMenuALaCartePrices(
     // `products_top_level_owns_ck` refuses a dish without a price; no product code deletes a product.
     const dishCents = own.get(productId);
     if (dishCents == null) throw new Error(`dish ${productId} has no price of its own`);
-    return priceFrom(byProduct.get(productId), variantId, {
+    return aLaCarteUnitCents(byProduct.get(productId), variantId, {
       dishCents,
       variantCents: variantId === null ? null : (own.get(variantId) ?? null),
     });
