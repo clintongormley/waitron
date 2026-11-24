@@ -10,7 +10,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       title: string;
       why: string;
       keyLabel: string;
+      /** A wrong key with no name staged for the backup. */
       keyRefused: string;
+      /** `{keyName}` stands for the backup's master key's name. */
+      wrongKey: string;
       packButton: string;
       notPack: string;
       damaged: string;
@@ -41,6 +44,7 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     elsewhereOn:
       "This recovery pack does not hold the master key. It is on recovery pack {heldBy}: choose that pack, or type the key from it.",
     keyRefused: "Enter the selected backup’s master key.",
+    wrongKey: "Wrong master key. Use the one dated {keyName}.",
     keyContinue: "Continue",
     waitingForClock:
       "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.",
@@ -66,6 +70,7 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     elsewhereOn:
       "Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación {heldBy}: elige ese paquete o introduce su clave.",
     keyRefused: "Introduce la clave maestra de la copia elegida.",
+    wrongKey: "Clave maestra incorrecta. Usa la del {keyName}.",
     keyContinue: "Continuar",
     waitingForClock:
       "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",

@@ -26,6 +26,9 @@ describe("restore's clock-waiting page wording", () => {
     ]);
     expect(words.elsewhere).toBe(field.elsewhere(null));
     expect(words.elsewhereOn.replace("{heldBy}", "3")).toBe(field.elsewhere(3));
+    expect(words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV")).toBe(
+      field.wrongKey("2026-11-23 · QZJV"),
+    );
   });
 
   it("ends its explanation asking for the master key", () => {

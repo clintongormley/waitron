@@ -43,6 +43,8 @@ async function open(
     setMovesClock?: boolean;
     /** The page's clock moves only when the test moves it. */
     paused?: boolean;
+    /** Absent, the suite's state folder, which names no key. */
+    stateDir?: string;
   } = {},
 ) {
   const started = Date.now();
@@ -52,7 +54,7 @@ async function open(
   const control = { finished: false, stallLooks: false, stalled: 0 };
   let ahead = aheadMs;
   const subject = createStartClockWaiting({
-    stateDir,
+    stateDir: options.stateDir ?? stateDir,
     clock: {
       wall: () => NOON_MS + ahead + (Date.now() - started),
       monotonic: () => performance.now(),
@@ -267,6 +269,53 @@ it("shows nothing of the clock until the key is entered, and refuses a wrong key
     expect(await page.getByLabel(words.keyLabel).getAttribute("aria-invalid")).toBe("");
     expect(await page.locator("#clock-step").isVisible()).toBe(false);
   }));
+
+it.each([
+  ["typed", "en-GB"],
+  ["from a pack", "en-GB"],
+  ["typed", "es-ES"],
+] as const)("a wrong key %s says which master key to use (%s)", (how, locale) =>
+  withPage(locale, async (page) => {
+    const named = await mkdtemp(join(tmpdir(), "waitron-start-clock-page-named-"));
+    try {
+      const keyPath = attachmentPath(named, "node-key");
+      await mkdir(dirname(keyPath), { recursive: true });
+      await writeFile(keyPath, authorityKey(decodeMasterKeyCode(KEY)).toString("hex"));
+      // What staging records beside the key: the backup's current master key's name.
+      await writeFile(
+        join(dirname(keyPath), "record.json"),
+        JSON.stringify({
+          version: 1,
+          phase: "placing",
+          request: { version: 1, nodeRecoveryKey: true, masterKeyName: "2026-11-23 · QZJV" },
+        }),
+      );
+      await open(page, 0, { stateDir: named });
+      const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+      const words = START_CLOCK_WAITING_WORDS[locale];
+      if (how === "typed") {
+        await page.getByLabel(words.keyLabel).fill(other);
+        await page.getByRole("button", { name: words.keyContinue }).click();
+      } else await choosePack(page, await recoveryPackPdf(other));
+      await expect.poll(() => page.locator("#clock-key-error").isVisible()).toBe(true);
+      expect(await page.locator("#clock-key-error").innerText()).toBe(
+        words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV"),
+      );
+      expect(await page.locator("#clock-step").isVisible()).toBe(false);
+      // A second wrong key keeps the line.
+      await page.getByLabel(words.keyLabel).fill(other);
+      await page.getByRole("button", { name: words.keyContinue }).click();
+      await expect.poll(() => page.locator("#clock-key-error").isVisible()).toBe(true);
+      // The right key clears it.
+      await page.getByLabel(words.keyLabel).fill(KEY);
+      await page.getByRole("button", { name: words.keyContinue }).click();
+      await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+      expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
+    } finally {
+      await rm(named, { recursive: true, force: true });
+    }
+  }),
+);
 
 it("with the key, shows the done screen's step with both times and their dates", () =>
   withPage("en-GB", async (page) => {

@@ -235,10 +235,17 @@ export interface StreamRestoreRequest {
 
 export type RestoreRequest = ArchiveRequest | StreamRestoreRequest;
 
+/** What staging's checks read from the copy being restored. */
+export interface StagingChecks {
+  adminVerifiers: readonly string[];
+  /** The copy's current master key's name, staged beside its key so the clock page can name it. */
+  masterKeyName: string | null;
+}
+
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
-  validate?: (request: R) => Promise<readonly string[] | void>,
+  validate?: (request: R) => Promise<StagingChecks | void>,
 ): Promise<void> {
   if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
   const archiveId = () =>
@@ -286,7 +293,8 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   const context = recoveryContext(request.recoveryContext);
   if (context !== undefined && (secret === undefined || recoveryOperation === undefined))
     invalidRecoveryContext();
-  const adminVerifiers = await validate?.(request);
+  const checked = await validate?.(request);
+  const keyName = secret === undefined ? null : (checked?.masterKeyName ?? null);
   if (secret !== undefined && recoveryOperation !== undefined) {
     assertSource(recoveryOperation, await archiveId());
   }
@@ -307,6 +315,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
             : { managedCloud: request.managedCloud }),
         ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
         ...(secret === undefined ? {} : { nodeRecoveryKey: true }),
+        ...(keyName === null ? {} : { masterKeyName: keyName }),
         ...(context === undefined ? {} : { recoveryContext: context }),
         ...(snapshot === undefined
           ? {}
@@ -334,7 +343,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       }
       await writeFileDurable(
         join(dir, "admin-verifiers"),
-        JSON.stringify(adminVerifiers ?? []),
+        JSON.stringify(checked?.adminVerifiers ?? []),
         0o600,
       );
       if (secret !== undefined) await writeFileDurable(join(dir, NODE_KEY), secret, 0o600);
@@ -380,7 +389,7 @@ export async function stageStreamRestore(
           deps,
         );
         try {
-          return await readRestoreAdminVerifiers(validated.databasePath);
+          return await readStagingChecks(validated.databasePath);
         } finally {
           await validated.discard();
         }
@@ -463,6 +472,7 @@ export async function runStagedRestore(
         "managedCloud",
         "recoveryOperation",
         "nodeRecoveryKey",
+        "masterKeyName",
         "recoveryContext",
         "snapshotVerification",
         "snapshotRequestKey",
@@ -475,6 +485,8 @@ export async function runStagedRestore(
         candidate.snapshotRequestKey !== snapshot.publicKey ||
         (candidate.nodeRecoveryKey !== undefined &&
           (candidate.nodeRecoveryKey !== true || candidate.recoveryOperation === undefined)) ||
+        (candidate.masterKeyName !== undefined &&
+          (typeof candidate.masterKeyName !== "string" || candidate.nodeRecoveryKey !== true)) ||
         Object.keys(candidate).some((key) => !allowed.includes(key))
       )
         cloudRecoveryUnavailable();
@@ -529,12 +541,15 @@ async function runHeld(
     managedCloud?: unknown;
     recoveryOperation?: unknown;
     nodeRecoveryKey?: unknown;
+    masterKeyName?: unknown;
     recoveryContext?: unknown;
   };
   if (
     (marker.version !== 1 && !(marker.version === 2 && snapshot)) ||
     (marker.nodeRecoveryKey !== undefined &&
       (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
+    (marker.masterKeyName !== undefined &&
+      (typeof marker.masterKeyName !== "string" || marker.nodeRecoveryKey !== true)) ||
     (marker.environment !== "production" && marker.environment !== "preproduction") ||
     (marker.kind !== undefined && marker.kind !== "stream") ||
     (marker.kind === "stream" && marker.managedCloud !== undefined) ||
@@ -696,6 +711,38 @@ async function runHeld(
   return true;
 }
 
+/** The copy's current master key's name, as `readCurrentMasterKey` picks it (the highest-numbered
+ * row), or null before its first. */
+export async function readBackupMasterKeyName(databasePath: string): Promise<string | null> {
+  const opened = await openBackupQuery(databasePath);
+  try {
+    for await (const row of opened.query.rows(
+      "select name from master_keys order by number desc limit 1",
+    ))
+      return typeof row.name === "string" ? row.name : null;
+    return null;
+  } finally {
+    await opened.close();
+  }
+}
+
+async function readStagingChecks(databasePath: string): Promise<StagingChecks> {
+  return {
+    adminVerifiers: await readRestoreAdminVerifiers(databasePath),
+    masterKeyName: await readBackupMasterKeyName(databasePath),
+  };
+}
+
+/** The name staged beside the master key's authority key, if any; an unreadable record names none. */
+export async function readStagedMasterKeyName(stateDir: string): Promise<string | undefined> {
+  try {
+    const name = (await readRestoreFlow(stateDir))?.request?.masterKeyName;
+    return typeof name === "string" ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function readRestoreAdminVerifiers(databasePath: string): Promise<readonly string[]> {
   const opened = await openBackupQuery(databasePath);
   try {
@@ -712,12 +759,12 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
   }
 }
 
-/** The setup page's checks on an archive before staging it; answers its administrators' hashes. */
+/** The setup page's checks on an archive before staging it; answers what staging keeps of it. */
 export async function validateArchiveForStaging(
   candidate: ArchiveRequest,
   deps: Pick<ValidationDeps, "stateDir" | "migrationsRoot" | "modules"> &
     Omit<Parameters<typeof refuseIfArchiveSourceLive>[0], "validated">,
-): Promise<readonly string[]> {
+): Promise<StagingChecks> {
   const validation = {
     recoveryKey: candidate.recoveryKey,
     stateDir: deps.stateDir,
@@ -733,7 +780,7 @@ export async function validateArchiveForStaging(
   try {
     await assertArchiveNotAhead(validated, deps);
     await refuseIfArchiveSourceLive({ ...deps, validated });
-    return await readRestoreAdminVerifiers(validated.databasePath);
+    return await readStagingChecks(validated.databasePath);
   } finally {
     await validated.discard();
   }

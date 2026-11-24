@@ -18,7 +18,7 @@ import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { requestFromBox } from "./request-from-box.js";
-import { matchesStagedNodeKey } from "./restore-request.js";
+import { matchesStagedNodeKey, readStagedMasterKeyName } from "./restore-request.js";
 import { requestIdMiddleware } from "./request-id.js";
 import type { Logger } from "./logger.js";
 import type { SetupClockSetter } from "./setup-clock-set.js";
@@ -76,13 +76,18 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
     });
   };
 
-  const refuse = (
-    c: Context,
-    code: "restore.clock_origin_refused" | "promotion.break_glass_invalid",
-  ) => {
-    const err = new AppError(code, {});
+  const refuse = (c: Context, err: AppError) => {
     c.set("refusalCode", err.code);
     return c.json({ error: { code: err.code, params: err.params } }, 403);
+  };
+  const refuseOrigin = (c: Context) => refuse(c, new AppError("restore.clock_origin_refused", {}));
+  /** A wrong key, naming the key staging recorded for the backup when it recorded one. */
+  const refuseKey = async (c: Context) => {
+    const keyName = await readStagedMasterKeyName(options.stateDir);
+    return refuse(
+      c,
+      new AppError("promotion.break_glass_invalid", keyName === undefined ? {} : { keyName }),
+    );
   };
   /** Each clock route: refused from another site's page or without the key, otherwise `answer`
    * with the body and its time. */
@@ -96,9 +101,8 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       const sent =
         typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
       c.header("Cache-Control", "no-store");
-      if (!sentFromThisOrigin(c)) return refuse(c, "restore.clock_origin_refused");
-      if (!(await matchesStagedNodeKey(options.stateDir, sent.key)))
-        return refuse(c, "promotion.break_glass_invalid");
+      if (!sentFromThisOrigin(c)) return refuseOrigin(c);
+      if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) return refuseKey(c);
       return answer(c, sent, received);
     });
 
@@ -107,7 +111,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   let packTurn: Promise<unknown> = Promise.resolve();
   app.post("/restore-clock/pack", bodyLimit({ maxSize: MAX_PACK_PDF }), async (c) => {
     c.header("Cache-Control", "no-store");
-    if (!sentFromThisOrigin(c)) return refuse(c, "restore.clock_origin_refused");
+    if (!sentFromThisOrigin(c)) return refuseOrigin(c);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     const read = packTurn.then(() => readRecoveryPackPdf(bytes));
     packTurn = read.catch(() => {});
@@ -122,8 +126,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       return c.json({ result: notAPack ? "not_a_pack" : "damaged" });
     }
     if (masterKey === null) return c.json({ result: "elsewhere", heldBy });
-    if (!(await matchesStagedNodeKey(options.stateDir, masterKey)))
-      return refuse(c, "promotion.break_glass_invalid");
+    if (!(await matchesStagedNodeKey(options.stateDir, masterKey))) return refuseKey(c);
     return c.json({ key: masterKey });
   });
 
@@ -225,6 +228,8 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
     damaged: words.damaged,
     elsewhere: words.elsewhere,
     elsewhereOn: words.elsewhereOn,
+    keyRefused: words.keyRefused,
+    wrongKey: words.wrongKey,
   };
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
@@ -274,12 +279,21 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
         body: JSON.stringify({ key: field.value, ...body }),
       })
     ).json();
+  // A refusal names the backup's master key when the box staged its name.
+  const keyLine = (refusal) => {
+    const keyName = refusal?.error?.params?.keyName;
+    $("clock-key-error").textContent =
+      typeof keyName === "string"
+        ? packLines.wrongKey.replace("{keyName}", keyName)
+        : packLines.keyRefused;
+    $("clock-key-error").hidden = refusal === null;
+    field.toggleAttribute("aria-invalid", refusal !== null);
+  };
   // This device's time against a fresh challenge; a refused key shows the key's refusal.
   const timed = async (path) => {
     const challenge = await post("challenge", {});
     const refused = typeof challenge.id !== "string";
-    $("clock-key-error").hidden = !refused;
-    field.toggleAttribute("aria-invalid", refused);
+    keyLine(refused ? challenge : null);
     if (refused) return null;
     return post(path, { challengeId: challenge.id, instantMs: Date.now() });
   };
@@ -318,9 +332,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     if (answer.error !== undefined) {
       packLine(null);
       field.value = "";
-      $("clock-key-error").hidden = false;
-      field.setAttribute("aria-invalid", "");
-      return;
+      return keyLine(answer);
     }
     packLine(
       answer.result === "elsewhere"

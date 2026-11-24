@@ -659,7 +659,7 @@ it("stages only the selected database's active administrator hashes, never reque
   await stageRestoreRequest(
     f.stateDir,
     { ...f.request, adminVerifiers: ["wire-hash"] },
-    async () => hashes,
+    async () => ({ adminVerifiers: hashes, masterKeyName: null }),
   );
   expect(
     JSON.parse(await readFile(join(f.stateDir, "flows/restore/admin-verifiers"), "utf8")),
@@ -676,9 +676,10 @@ it("refuses staging a backup with no active administrator password before replac
   await stageRestoreRequest(f.stateDir, f.request);
   const before = await f.marker();
   await expect(
-    stageRestoreRequest(f.stateDir, f.request, () =>
-      requestRuntime.readRestoreAdminVerifiers(databasePath),
-    ),
+    stageRestoreRequest(f.stateDir, f.request, async () => ({
+      adminVerifiers: await requestRuntime.readRestoreAdminVerifiers(databasePath),
+      masterKeyName: null,
+    })),
   ).rejects.toMatchObject({ code: "restore.administrator_password_missing" });
   expect(await f.marker()).toBe(before);
 });
