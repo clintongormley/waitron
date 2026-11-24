@@ -27,8 +27,8 @@ These are frozen installs and successful `/usr/bin/time -l pnpm --filter @waitro
 `519f7f1f7ebb` (19 Nov, 9.07 GiB) and `260e14bbb481` (20 Nov, 11.20 GiB). The 20 November
 revision peaked at 5.91 and 9.93 GiB on the two later runs. On current main,
 `--generateTrace` showed four workers creating types from shared libraries, and the heap profile
-put about 1.1 GiB under symbol-table instantiation. Leave the cause of growth open if the
-measurements do not isolate it. Logs and profile summaries are in Lane I's
+put about 1.1 GiB under symbol-table instantiation. The compiler reported 4.10 GiB of `Memory used`
+on 1 November and 5.17 GiB on 24 November, a rise of 26%. Logs and profile summaries are in Lane I's
 `receipts/typecheck-memory-20261124/`.
 
 On the failed merge in a four-CPU Linux arm64 container, default settings passed at a 12 GiB

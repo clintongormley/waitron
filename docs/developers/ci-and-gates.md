@@ -2768,14 +2768,6 @@ API access.
 
 ### What to do when CI fails
 
-The full CI typecheck gives the Go compiler a soft `GOMEMLIMIT=6GiB` target on disposable runners.
-The target tells Go when to collect memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
-In the [24 November probe](https://github.com/clintongormley/waitron/actions/runs/45492983300/job/138795935538),
-the previously failing `01ec75f7e0` passed `pnpm typecheck` in 94 seconds, with 123 seconds for the
-job. The runner session peaked at 11.39 GiB on a guest with 15.62 GiB of visible RAM and zero swap.
-Kernel logs and the recorded memory-kill counters showed zero kills. The original failures still
-lack kernel logs, and the source of the compiler's memory growth is under investigation.
-
 A passing re-run does not explain a failure. Before you retry, read the failed step, keep its
 log and record the error and whether any test ran. Check the same failure's history on `main`,
 other branches and the campaign failure lists, then write down what you found.
@@ -2812,6 +2804,18 @@ check to get past the failure. The rules for deliberately changed test expectati
 Do not leave an item parked indefinitely with an unknown cause: if you cannot reproduce it
 locally, reproduce it on the test box or add diagnostics in CI. Required checks must still pass
 on the branch's current head before you land it.
+
+### The disposable typecheck's memory target
+
+The full CI typecheck gives the Go compiler a soft `GOMEMLIMIT=6GiB` target on disposable runners.
+Go can exceed the target while it manages time spent collecting memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
+In the [24 November probe](https://github.com/clintongormley/waitron/actions/runs/45492983300/job/138795935538),
+the previously failing `01ec75f7e0` passed `pnpm typecheck` in 94 seconds, with 123 seconds for the
+job. The runner session peaked at 11.39 GiB on a guest with 15.62 GiB of visible RAM and zero swap.
+Kernel logs and the recorded memory-kill counters showed zero kills. Go's trace reported a Server
+heap peak of 8,155 MB, and Server's check took 30.3 seconds. Recheck the setting as Server's live
+heap grows. The original failures lack kernel logs, and the source of the compiler's memory
+growth is under investigation.
 
 ### A job far over its usual time on unchanged code: read the runner's setup times first
 
