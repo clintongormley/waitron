@@ -12,7 +12,7 @@ Before saving or removing a mail server, confirm your sign-in in the shared wind
 Outside Demo, open **System → Email**. With **Manage boxes** (Admin by default), choose
 **Set up mail server** or **Change mail server**, enter your provider's settings and send a test
 before saving. Enter fresh login details when changing an authenticated mail server. Waitron never
-shows the saved password. You need **Manage the system** to use the mail settings page.
+shows the saved password. Opening **Email** needs **Manage staff details**. The **Mail server** section also needs **Manage the system**.
 
 Mail sent through your saved mail server and the test on this page use your venue name alongside
 the sender address. If the page says the saved sender address is not valid, choose

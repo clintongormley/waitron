@@ -285,9 +285,9 @@ con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la h
 La salida es poner la hora bien. Si el [servicio de hora](box-status.md#clock-service) del servidor
 funciona, corrige la hora en cuanto contacta con un servidor de hora por internet; mientras tanto, o
 si el servicio no funciona, usa **Comprobar con la hora de este dispositivo** en la fila **Reloj**,
-o pon la hora desde una caja durante el [arranque](box-status.md#clock-at-start). Si necesitas
-**Gestionar servidores**, usa **Iniciar sesión como administrador** para cambiar de cuenta.
-La comprobación muestra las dos horas, **El reloj del servidor marca … Este dispositivo marca …**.
+o pon la hora desde una caja durante el [arranque](box-status.md#clock-at-start). Si tu cuenta no tiene
+**Gestionar servidores**, elige **Iniciar sesión como administrador**. Esto cierra primero tu sesión.
+La comprobación abre un diálogo con la hora del servidor y la de tu dispositivo.
 
 - Cuando están más separadas y el servidor puede poner su reloj en hora, el diálogo pregunta **El
   reloj del servidor marca … Tu dispositivo marca … ¿Usar la hora de tu dispositivo?** Pulsa **Usar
@@ -384,7 +384,7 @@ contacta con un servidor de hora por internet, o, salvo si espera por una venta
 rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 
-Un administrador puede confirmarla antes en esta página:
+Con **Gestionar servidores** puedes confirmarla antes en esta página.
 
 - Si la fecha y la hora que muestra la fila **Reloj** son correctas, pulsa **La fecha y la hora son
   correctas**.

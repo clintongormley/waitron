@@ -13,7 +13,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   printJobs,
   products,
-  roles,
   withTransaction,
   workingOrders,
   workingOrderLines,
@@ -1503,17 +1502,12 @@ describe("what the till reads", () => {
       { personId: venue.supervisorId, displayName: "Sara" },
     ]);
     expect((await approvers("?permission=sale.refund")).json).toEqual(comps.json);
-    await inTx(venue, async (tx) => {
-      const whereManager = eq(roles.builtInKey, "manager");
-      const [manager] = await tx
-        .select({ permissions: roles.permissions })
-        .from(roles)
-        .where(whereManager);
-      await tx
-        .update(roles)
-        .set({ permissions: [...manager!.permissions, "node.manage"] })
-        .where(whereManager);
-    });
+    expect((await approvers("?permission=node.manage")).json).toEqual([comps.json[0]]);
+    await inTx(venue, (tx) =>
+      tx.execute(
+        sql`update roles set permissions = json_insert(permissions, '$[#]', 'node.manage') where built_in_key = 'manager'`,
+      ),
+    );
     try {
       expect((await approvers("?permission=node.manage")).json).toEqual([
         comps.json[0],

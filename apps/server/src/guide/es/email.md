@@ -13,7 +13,7 @@ Fuera de Demostración, abre **Sistema → Correo**. Con **Gestionar servidores*
 (Admin de forma predeterminada), elige **Configurar servidor de correo** o **Cambiar servidor de
 correo**, introduce los ajustes de tu proveedor y envía una prueba antes de guardar. Introduce
 de nuevo los datos de acceso al cambiar un servidor con autenticación. Waitron nunca muestra la
-contraseña guardada. Para usar la página de ajustes del correo necesitas **Gestionar el sistema**.
+contraseña guardada. Para abrir **Correo** necesitas **Gestionar datos del personal**. La sección **Servidor de correo** también requiere **Gestionar el sistema**.
 
 Los mensajes enviados por tu servidor guardado y la prueba de esta página muestran el nombre del
 local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,

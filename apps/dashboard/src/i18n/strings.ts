@@ -62,7 +62,7 @@ export const en = {
   "permission.system.manage.help":
     "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions. Changing the clock or mail server needs Manage boxes.",
   "permission.node.manage.help":
-    "Prepare a spare or mirror, hand over service, take over with a spare, or remove, wipe or reset a box. Confirm or correct the clock and change the mail server. Opening Box status and using the mail settings page also need Manage the system. Opening Email needs Manage staff details.",
+    "Prepare a spare or mirror, hand over service, take over with a spare, or remove, wipe or reset a box. Confirm or correct the clock and change the mail server. Opening Box status needs Manage the system. To open Email, you need Manage staff details. Its Mail server section also needs Manage the system.",
 
   "access_roles.reload": "Reload",
   "access_roles.delete_message_one": "1 person holds {role}. Deleting it takes it away from them.",
@@ -4899,7 +4899,7 @@ export const es: Record<StringKey, string> = {
   "permission.system.manage.help":
     "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales. Para cambiar el reloj o el servidor de correo necesitas Gestionar servidores.",
   "permission.node.manage.help":
-    "Prepara un servidor de reserva o un espejo, traspasa el servicio, toma el relevo con un servidor de reserva o retira, borra o restablece un servidor. Confirma o corrige el reloj y cambia el servidor de correo. Para abrir Estado del servidor y usar la página de ajustes del correo también necesitas Gestionar el sistema. Para abrir Correo necesitas Gestionar datos del personal.",
+    "Prepara un servidor de reserva o un espejo, traspasa el servicio, toma el relevo con un servidor de reserva o retira, borra o restablece un servidor. Confirma o corrige el reloj y cambia el servidor de correo. Para abrir Estado del servidor necesitas Gestionar el sistema. Para abrir Correo necesitas Gestionar datos del personal. Su sección Servidor de correo también requiere Gestionar el sistema.",
 
   "access_roles.reload": "Recargar",
   "access_roles.delete_message_one": "1 persona tiene {role}. Al eliminarlo se le quita.",

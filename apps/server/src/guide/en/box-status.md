@@ -264,9 +264,9 @@ Nothing can confirm the clock then. The way out is to set the
 clock right. If the box's [time service](box-status.md#clock-service) is running, it puts the clock
 right once it reaches a time server over the internet; until then, or if the service is not running,
 use **Check with this device's time** on the **Clock** row, or set the time from a till during
-[start-up](box-status.md#clock-at-start). If you need **Manage boxes**, use **Sign in as an
-administrator** to switch accounts. The clock check shows both times, **The box's clock says …
-This device says …**.
+[start-up](box-status.md#clock-at-start). If your account lacks **Manage boxes**, choose **Sign in as an
+administrator**. This signs you out first. The clock check opens a dialog with the box's time and
+your device's time.
 
 - When they are further apart and the box can set its clock, the dialog asks **The box's clock
   says … Your device says … Use your device's time?** Press **Use this time**, and the box sets its
@@ -356,7 +356,7 @@ reaches a time server over the internet, or, unless it waits because
 of a refused sale or a new fiscal installation, once two tills or handhelds that are switched on and connected agree with its
 clock, even at the sign-in screen.
 
-An administrator can confirm it sooner on this page:
+With **Manage boxes**, you can confirm it sooner on this page.
 
 - If the date and time the **Clock** row shows are right, press **The date and time are right**.
 - Or press **Check with this device's time**. When your device is within a minute of the box, that

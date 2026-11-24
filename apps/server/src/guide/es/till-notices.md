@@ -40,8 +40,8 @@ arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar li
 
 **No se pueden registrar ventas: la hora del servidor es incorrecta · Consulta Estado del servidor en el panel** es rojo.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
-se corrija, el servidor también rechaza los cobros y las devoluciones. Un administrador puede poner
-la hora desde su propio móvil u ordenador, en la [página Estado del
+se corrija, el servidor también rechaza los cobros y las devoluciones. Con **Gestionar servidores** puedes ajustar
+la hora desde tu móvil u ordenador en la [página Estado del
 servidor](box-status.md#clock-own-device). Justo después de que el servidor arranque, la indicación puede
 decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
@@ -97,8 +97,8 @@ caja. Si el
 servidor se niega, el diálogo dice por qué encima de sus botones y, cuando volver a intentarlo puede
 servir, ofrece **Comprobar otra vez**. Si el [arranque](box-status.md#clock-at-start) del servidor termina con el
 diálogo abierto, y internet ha confirmado la hora del servidor, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
-ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
-la hora desde la misma caja.
+ofrece **Acceso de administrador**. Elige a alguien con **Gestionar servidores** y pídele que
+introduzca su PIN para ajustar la hora desde esa caja.
 
 **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo** es ámbar: el
 servidor mantiene su hora por internet, y el reloj de este terminal se aleja de ella más de un minuto.
