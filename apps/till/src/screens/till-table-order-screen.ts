@@ -3320,7 +3320,7 @@ export class TillTableOrderScreen extends LitElement {
    * Pay are fixed at the order pane's foot. The whole tender, fixed there, would cover the order. */
   #footFixed(): boolean {
     if (!this.handheld || this.wide) return false;
-    return !this.#takesPayment() || this.#paysOnSheet(this.#shownBill);
+    return !this.#payOffered() || this.#paysOnSheet(this.#shownBill);
   }
 
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
@@ -3328,8 +3328,8 @@ export class TillTableOrderScreen extends LitElement {
     if (!this.#footFixed())
       return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${notices}
         ${this.#totals(draft)}
-        <div data-bill-actions>${this.#takesPayment() ? this.#paySection() : nothing}</div>`;
-    const pays = this.#takesPayment();
+        <div data-bill-actions>${this.#payOffered() ? this.#paySection() : nothing}</div>`;
+    const pays = this.#payOffered();
     return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${notices}
       <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
   }
@@ -3338,7 +3338,7 @@ export class TillTableOrderScreen extends LitElement {
    * pay and Pay, held together at the window's foot while Order shows. */
   #orderDock(draft: WorkingOrderStore | null): TemplateResult | typeof nothing {
     if (!this.#footFixed()) return nothing;
-    const pays = this.#takesPayment();
+    const pays = this.#payOffered();
     return html`<div
       class="order-dock"
       data-order-dock
@@ -5209,7 +5209,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** An overpaid bill offers its excess back, or as a tip, rather than Pay. */
-  #takesPayment(): boolean {
+  #payOffered(): boolean {
     return this.canSettle && this.#chargeable() && overpaidOf(this.#balanceShown()) === null;
   }
 

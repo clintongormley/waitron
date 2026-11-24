@@ -1,7 +1,15 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { refunds as refundRows, type billPayments, type Transaction } from "@waitron/db";
-import { MONEY_SCALE, subtractDecimal, sumDecimals, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  compareDecimal,
+  negateDecimal,
+  subtractDecimal,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { ZERO } from "./bill-allocation.js";
 
 type PaymentRow = typeof billPayments.$inferSelect;
 type RefundRow = typeof refundRows.$inferSelect;
@@ -55,6 +63,14 @@ export async function completedRefundsOf(tx: Transaction, rows: readonly Pick<Pa
 /** A bill's `total` less what it has received, at the money scale. */
 export function outstandingOf(total: Decimal, received: Decimal | undefined): Decimal {
   return received === undefined ? total : toScale(subtractDecimal(total, received), MONEY_SCALE);
+}
+
+/** What a bill whose `outstanding` is below zero was paid over its total, at the money scale;
+ * undefined when nothing is over. */
+export function overpaidBy(outstanding: Decimal): Decimal | undefined {
+  return compareDecimal(outstanding, ZERO) < 0
+    ? toScale(negateDecimal(outstanding), MONEY_SCALE)
+    : undefined;
 }
 
 /** What an issued bill still owes: its amount due less what each received payment has kept of its

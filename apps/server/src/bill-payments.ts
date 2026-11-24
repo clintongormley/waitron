@@ -120,6 +120,7 @@ import { readBillTenderLines } from "./receipt-payments.js";
 import {
   completedRefundsOf,
   netOfRefunds,
+  overpaidBy,
   owedOf,
   type RefundMoney,
 } from "./bill-payment-money.js";
@@ -1029,9 +1030,8 @@ export async function readBillBalance(
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
     overpaid:
-      (order.status === "open" || order.status === "placed") &&
-      compareDecimal(outstanding, ZERO) < 0
-        ? money(subtractDecimal(ZERO, outstanding))
+      order.status === "open" || order.status === "placed"
+        ? (overpaidBy(outstanding) ?? ZERO)
         : ZERO,
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),

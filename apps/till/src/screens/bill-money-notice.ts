@@ -1,11 +1,9 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-button.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import type { BillBalance, PartyBill } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { billNumberLabel, overpaidOf } from "../state/bill-state.js";
-
-const ZERO = decimal("0.00");
 
 /** "Being paid on Bill 3" while the bill's chosen items wait for their card on a bill of their own. */
 export function beingPaidNotice(balance: BillBalance | null): TemplateResult | typeof nothing {
@@ -43,7 +41,7 @@ export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof 
         >${fill(t("table.give_back"), { amount })}</wt-button
       >
       ${
-        notice.tipsEnabled && compareDecimal(decimal(notice.balance!.total), ZERO) !== 0
+        notice.tipsEnabled && !isZeroDecimal(decimal(notice.balance!.total))
           ? html`<wt-button
               variant="secondary"
               size="sm"
@@ -68,7 +66,7 @@ export function finishOverpaidRefusal(
 ): TemplateResult {
   const name = billNumberLabel(bill);
   const words =
-    keepsTips && compareDecimal(decimal(bill.total), ZERO) !== 0
+    keepsTips && !isZeroDecimal(decimal(bill.total))
       ? t("table.finish_overpaid")
       : t("table.finish_overpaid_give_back");
   const amount = formatMoney(decimal(overpaidOf(bill) ?? "0"), currentLocale());

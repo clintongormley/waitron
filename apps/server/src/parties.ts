@@ -24,8 +24,6 @@ import type { StagedInvoiceDelivery, Transaction } from "@waitron/db";
 import type { CoreServices, TableRemoval } from "@waitron/module";
 import {
   AppError,
-  centsToDecimal,
-  compareDecimal,
   jobOrigin,
   normalisePartyName,
   rawCentsToDecimal,
@@ -41,7 +39,8 @@ import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { readOrderDinings, type DiningChoice } from "./order-dining.js";
 import { createOpenOrder, openTab } from "./working-order-open.js";
-import { outstandingOf } from "./bill-payment-money.js";
+import { outstandingOf, overpaidBy } from "./bill-payment-money.js";
+import { ZERO } from "./bill-allocation.js";
 import { readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -767,10 +766,8 @@ export async function readBillsOfParties(
         partyId: row.partyId!,
       });
     }
-    const outstanding = owing
-      ? outstandingOf(total, received.get(row.workingOrderId))
-      : centsToDecimal(0);
-    const over = compareDecimal(outstanding, centsToDecimal(0)) < 0;
+    const outstanding = owing ? outstandingOf(total, received.get(row.workingOrderId)) : ZERO;
+    const overpaid = overpaidBy(outstanding);
     return {
       workingOrderId: row.workingOrderId,
       partyId: row.partyId!,
@@ -780,8 +777,8 @@ export async function readBillsOfParties(
       status: row.status,
       leftUnpaid: row.leftUnpaid,
       total,
-      outstanding: over ? centsToDecimal(0) : outstanding,
-      ...(over ? { overpaid: outstandingOf(centsToDecimal(0), outstanding) } : {}),
+      outstanding: overpaid === undefined ? outstanding : ZERO,
+      ...(overpaid === undefined ? {} : { overpaid }),
       hasPayments: holding.has(row.workingOrderId),
       ...(holdingMoney.has(row.workingOrderId) ? { holdsMoney: true as const } : {}),
       ...(deferred.has(row.workingOrderId) ? { deferred: true as const } : {}),

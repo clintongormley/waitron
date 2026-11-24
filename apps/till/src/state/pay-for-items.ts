@@ -189,8 +189,8 @@ export async function takePayment(
   request: Confirmation & { submissionId: string },
   options: ReadOptions,
 ): Promise<BillPaymentResult & { paidOn?: string }> {
-  const { items, ...payment } = request;
-  if (items === undefined) return api.takeBillPayment(billId, payment, options);
+  const { items } = request;
+  if (items === undefined) return api.takeBillPayment(billId, request, options);
   const paid = await api.payForItems(billId, itemsRequestOf({ ...request, items }), options);
   return { ...paid.payment, paidOn: paid.billId };
 }
