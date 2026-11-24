@@ -671,6 +671,16 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     }
   });
 
+  it("refuses Last orders that are not a JSON array", async () => {
+    const v = await venue();
+    const error = await captureError(() =>
+      db.execute(sql`insert into menu_periods (id, department_id, name, menu_id, last_orders)
+        values (${randomUUID()}, ${v.departmentId}, 'Lunch', ${v.menuId}, '{}')`),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: menu_periods_last_orders_ck");
+  });
+
   it("defaults period colour and staff menus, and removes its list with the period", async () => {
     const v = await venue();
     const periodId = randomUUID();

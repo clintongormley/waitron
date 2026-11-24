@@ -3010,6 +3010,18 @@ for (const locale of ["en", "es"] as const) {
         columns: {},
         collect: { from: "menu_id", into: "staff_menu_ids", orderBy: "display_order" },
       };
+      function withLastOrders(semantics: CanonicalMadridSemantics) {
+        const menuPeriods = semantics.tables.menu_periods!;
+        menuPeriods.columns.push({
+          name: "last_orders",
+          type: "TEXT",
+          notnull: 1,
+          dflt_value: "'[]'",
+          pk: 0,
+        });
+        for (const period of Object.values(menuPeriods.rows)) period.last_orders = [];
+        return semantics;
+      }
       if (phase === "seeded") {
         const periods = madridWithPeriodChanges(expected.seeded, PERIOD_CHANGES[locale]);
         expected.seeded = periods.semantics;
@@ -3075,7 +3087,9 @@ for (const locale of ["en", "es"] as const) {
           },
         };
         const beforeOffers = madridWithDroppedColumns(
-          madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
+          madridWithPhotos(
+            withLastOrders(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
+          ),
           { products: ["catalogue_id", "name_key", "manual_allergens", "diet"] },
         );
         const { semantics, added, removed } = madridWithSharedOffers(
@@ -3154,7 +3168,7 @@ for (const locale of ["en", "es"] as const) {
       phases[phase] = byName(phases[phase]!);
 
       if (phase !== "seeded")
-        expected[phase] = madridWithFoldedTables(expected[phase], [staffMenuFold]);
+        expected[phase] = withLastOrders(madridWithFoldedTables(expected[phase], [staffMenuFold]));
       delete phases[phase]!.menu_period_staff_menus;
 
       for (const table of ["payment_resolutions", "payment_holds", "payment_hold_outcomes"]) {

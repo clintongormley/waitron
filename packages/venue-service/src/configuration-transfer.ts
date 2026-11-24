@@ -91,9 +91,7 @@ export function validateHolidayConfiguration(
 export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
   const ordinaryMenuIds = ids(tables.menus?.filter((row) => row.kind !== "set_menu"));
-  const activeStations = ids(
-    tables.kitchen_stations?.filter((row) => isActive(row, "kitchen_stations")),
-  );
+  const stations = ids(tables.kitchen_stations);
   const setDepartment = new Map<unknown, unknown>();
   const setNames = new Set<string>();
   const defaults = new Map<unknown, number>();
@@ -123,13 +121,11 @@ export function validateMenuTimetables(tables: Tables): void {
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
     if (!ordinaryMenuIds.has(row.menu_id)) refuse("menu_periods.menu_id");
     const lastOrdersField = "menu_periods.last_orders";
-    if (row.last_orders !== undefined) {
-      const raw = row.last_orders;
-      if (typeof raw !== "string") refuse(lastOrdersField);
-      const entries = parsedAs(lastOrdersField, () => parseLastOrders(JSON.parse(raw)));
-      if (entries.some((entry) => entry.kind === "station" && !activeStations.has(entry.stationId)))
-        refuse(lastOrdersField);
-    }
+    const raw = row.last_orders;
+    if (typeof raw !== "string") refuse(lastOrdersField);
+    const entries = parsedAs(lastOrdersField, () => parseLastOrders(JSON.parse(raw)));
+    if (entries.some((entry) => entry.kind === "station" && !stations.has(entry.stationId)))
+      refuse(lastOrdersField);
     const field = "menu_periods.staff_menu_ids";
     if (typeof row.staff_menu_ids !== "string") refuse(field);
     let staff: unknown;

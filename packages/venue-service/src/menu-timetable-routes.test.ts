@@ -569,7 +569,10 @@ describe("the opening-hours period API", () => {
 
   it("keeps Last orders through an omitted period patch and clears them with an empty list", async () => {
     const r = await routed();
-    const [bar] = await db.insert(kitchenStations).values({ name: "Bar" }).returning();
+    const [bar] = await db
+      .insert(kitchenStations)
+      .values({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Bar" })
+      .returning();
     const lastOrders = [
       { kind: "station", stationId: bar!.id, minutes: 60 },
       { kind: "no_preparation", minutes: -15 },
@@ -601,7 +604,13 @@ describe("the opening-hours period API", () => {
       204,
     );
     expect(await offsets()).toEqual([]);
-    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { lastOrders }), 204);
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, {
+        lastOrders: [{ kind: "station", stationId: bar!.id.toUpperCase(), minutes: 60 }],
+      }),
+      204,
+    );
+    expect(await offsets()).toEqual([{ kind: "station", stationId: bar!.id, minutes: 60 }]);
     await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { lastOrders: [] }), 204);
     expect(await offsets()).toEqual([]);
   });

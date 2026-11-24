@@ -28,6 +28,7 @@ export const menuPeriods = table(
     // validateMenuTimetables checks bundle IDs; jsonReferences remaps them on import.
     // Menus are only deactivated.
     staffMenuIds: json<string[]>("staff_menu_ids").notNull().default([]),
+    // Service-period saves and configuration imports check the station ids inside this array.
     lastOrders: json<
       (
         | { kind: "station"; stationId: string; minutes: number }

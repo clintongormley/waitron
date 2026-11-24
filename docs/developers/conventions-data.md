@@ -638,8 +638,9 @@ that impact again inside its transaction, so a preview does not grant permission
 Courses clear every product default; a course referenced before cleanup remains as history.
 Stations refuse the default, explicit effective KDS bindings (including off devices), and
 unfinished food. Fired ready food may remain. A permitted station delete removes its base
-routing rules and all their period children, clears incoming daily destinations without
-reopening those stations, clears its own "When closed, send to" choice and every other station's that names it, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
+routing rules and all their period children, removes its Last orders adjustments, clears incoming
+daily destinations without reopening those stations, clears its own "When closed, send to" choice
+and every other station's that names it, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
 order lines, draft events and groups stay unchanged.
 
 An Every station screen keeps the deleted station visible while its queue has dishes. The
@@ -2289,7 +2290,7 @@ bundle's `createdAt` (`refuseSkippedPaint`). The menu validator takes only the t
 
 ### Service-period configuration
 
-Configuration format 59 carries a period's nonzero Last orders offsets in `menu_periods.last_orders`.
+Configuration format 59 carries a period's Last orders offsets in `menu_periods.last_orders`.
 The transfer remaps each station ID and keeps the No preparation target. Deleting a station removes
 its offsets in the same transaction. The service-period round trip checks both kinds of target.
 
@@ -2299,8 +2300,7 @@ its offsets in the same transaction. The service-period round trip checks both k
 receives new menu ids in the same order.)
 
 (2026-10-21, A789: the period end offset is gone. The first measurement below tested it; the
-second's `-t` filter names a test since renamed "round-trips service periods with colours, ordered
-staff menus and remapped business-day ranges".)
+second's `-t` filter names the service-period round-trip test as it was named then.)
 
 Measured 2026-10-08 for A432 with `pnpm --filter @waitron/venue-service exec vitest run
 src/schema/schema-conformance.test.ts src/migrations.test.ts src/period-end-offset.test.ts

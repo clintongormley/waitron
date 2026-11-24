@@ -163,6 +163,7 @@ describe("the menu timetable rows of a bundle", () => {
           colour: "blue",
           menu_id: "m-desayunos",
           staff_menu_ids: '["m-cafe"]',
+          last_orders: "[]",
           floor_plan_set_id: "s-dinner",
         },
         {
@@ -172,6 +173,7 @@ describe("the menu timetable rows of a bundle", () => {
           colour: "red",
           menu_id: "m-copas",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
         {
           id: DELI_PERIOD,
@@ -180,6 +182,7 @@ describe("the menu timetable rows of a bundle", () => {
           colour: "blue",
           menu_id: "m-deli",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
       ],
       floor_plan_sets: [
@@ -657,6 +660,7 @@ describe("validateRoutingConfiguration", () => {
           name: "Lunch",
           menu_id: "m-empty",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
         {
           id: BREAKFAST,
@@ -664,6 +668,7 @@ describe("validateRoutingConfiguration", () => {
           name: "Breakfast",
           menu_id: "m-empty",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
       ];
       const terrace = tables.routing_cells!.find(
@@ -878,6 +883,7 @@ describe("service-period configuration", () => {
           colour: "blue",
           menu_id: "customer",
           staff_menu_ids: '["staff"]',
+          last_orders: "[]",
         },
       ],
     };
@@ -1091,6 +1097,7 @@ describe("season weeks in a configuration bundle", () => {
           colour: "blue",
           menu_id: "m-lunch",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
         {
           id: LATE,
@@ -1099,6 +1106,7 @@ describe("season weeks in a configuration bundle", () => {
           colour: "red",
           menu_id: "m-late",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
       ],
       seasons: [
@@ -1421,6 +1429,7 @@ describe("special days in a configuration bundle", () => {
           colour: "red",
           menu_id: "m-bar",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
         {
           id: LUNCH,
@@ -1429,6 +1438,7 @@ describe("special days in a configuration bundle", () => {
           colour: "blue",
           menu_id: "m-lunch",
           staff_menu_ids: "[]",
+          last_orders: "[]",
         },
       ],
       special_days: [{ id: "fiesta", name: "Festival", repeats_yearly: 1 }],
@@ -1944,38 +1954,54 @@ it.each([
           colour: "blue",
           menu_id: "customer",
           staff_menu_ids: staffMenuIds,
+          last_orders: "[]",
         },
       ],
     }),
   ).toThrowError(refusal("menu_periods.staff_menu_ids"));
 });
 
+const menuId = "11111111-1111-4111-8111-111111111111";
+const stationId = "22222222-2222-4222-8222-222222222222";
+
 it.each([
+  undefined,
   "not JSON",
   "null",
   '[{"kind":"station","stationId":null,"minutes":60}]',
   '[{"kind":"no_preparation","minutes":20}]',
-])("refuses malformed Last orders in a configuration row: %s", (last_orders) => {
+  '[{"kind":"no_preparation","minutes":30,"name":"Bar"}]',
+  JSON.stringify([{ kind: "no_preparation", stationId, minutes: 60 }]),
+  JSON.stringify([{ kind: "station", stationId: menuId, minutes: 60 }]),
+  JSON.stringify([{ kind: "station", stationId: "invalid", minutes: 60 }]),
+  JSON.stringify([
+    { kind: "station", stationId, minutes: 60 },
+    { kind: "station", stationId, minutes: 90 },
+  ]),
+  JSON.stringify([
+    { kind: "no_preparation", minutes: 60 },
+    { kind: "no_preparation", minutes: 90 },
+  ]),
+])("refuses invalid Last orders in a configuration row: %s", (last_orders) => {
   expect(() =>
     validateMenuTimetables({
       departments: [{ id: "department" }],
-      menus: [{ id: "menu" }],
+      menus: [{ id: menuId }],
+      kitchen_stations: [
+        { id: stationId, active: 1 },
+        { id: "invalid", active: 1 },
+      ],
       menu_periods: [
         {
           id: "period",
           department_id: "department",
           name: "Lunch",
-          menu_id: "menu",
+          menu_id: menuId,
           colour: "blue",
           staff_menu_ids: "[]",
           last_orders,
         },
       ],
     }),
-  ).toThrow(
-    expect.objectContaining({
-      code: "setup.request_invalid",
-      params: { field: "menu_periods.last_orders" },
-    }),
-  );
+  ).toThrowError(refusal("menu_periods.last_orders"));
 });
