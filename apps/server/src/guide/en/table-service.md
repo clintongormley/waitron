@@ -656,7 +656,9 @@ are unsent.
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
 unpaid bill on screen so you can take its payment. **Print the bill**, when offered, puts that bill on
-screen and prints it, or lists dishes not yet served.
+screen and prints it, or lists dishes not yet served. A bill paid more than it comes to also stops
+**Finish table**: the till names that bill and how much extra it holds, and **Go to** that bill puts
+it on screen to give the extra back or keep it as a tip.
 
 If a guest leaves without paying, select their bill, open **⋮**, then choose **Record unpaid
 departure** under that bill. Check its amount and give a reason. If approval is needed, choose a

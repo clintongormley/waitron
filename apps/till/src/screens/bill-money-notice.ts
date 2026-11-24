@@ -1,7 +1,7 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-button.js";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance } from "../api/client.js";
+import type { BillBalance, PartyBill } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { billNumberLabel } from "../state/bill-state.js";
 import { overpaidOf } from "../state/pay-for-items.js";
@@ -56,6 +56,34 @@ export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof 
           : nothing
       }
     </div>
+  </div>`;
+}
+
+/** Finish table's refusal when what stops it is a bill paid more than it comes to: that bill's
+ * excess is given back, or kept as a tip, on the bill itself. `go` is absent for the bill on screen,
+ * whose own notice offers both. */
+export function finishOverpaidRefusal(
+  bill: PartyBill,
+  keepsTips: boolean,
+  go?: () => void,
+): TemplateResult {
+  const name = billNumberLabel(bill);
+  const words =
+    keepsTips && compareDecimal(decimal(bill.total), ZERO) !== 0
+      ? t("table.finish_overpaid")
+      : t("table.finish_overpaid_give_back");
+  const amount = formatMoney(decimal(overpaidOf(bill) ?? "0"), currentLocale());
+  return html`<div class="finish-refusal" role="alert" data-finish-refusal>
+    <span>${fill(words, { bill: name, amount })}</span>
+    ${
+      go === undefined
+        ? nothing
+        : html`<div class="finish-refusal-actions">
+            <wt-button size="sm" variant="primary" data-show-overpaid-bill @click=${go}
+              >${fill(t("table.go_to_bill"), { bill: name })}</wt-button
+            >
+          </div>`
+    }
   </div>`;
 }
 

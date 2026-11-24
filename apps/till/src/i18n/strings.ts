@@ -1849,6 +1849,11 @@ export const en = {
   "table.overpaid": "Paid {amount} more than this bill comes to",
   "table.give_back": "Give back {amount}",
   "table.keep_as_tip": "Keep {amount} as tip",
+  "table.finish_overpaid":
+    "{bill} was paid {amount} more than it comes to. Give back the extra, or keep it as a tip, on that bill before finishing the table",
+  "table.finish_overpaid_give_back":
+    "{bill} was paid {amount} more than it comes to. Give back the extra on that bill before finishing the table",
+  "table.go_to_bill": "Go to {bill}",
   "table.bill_overpaid": "{amount} over",
   "table.finish": "Finish table",
   "table.finish_bill_holds_money":
@@ -4180,6 +4185,11 @@ export const es: Record<StringKey, string> = {
   "table.overpaid": "Se ha pagado {amount} más de lo que suma esta cuenta",
   "table.give_back": "Devolver {amount}",
   "table.keep_as_tip": "Dejar {amount} de propina",
+  "table.finish_overpaid":
+    "En la {bill} se han pagado {amount} más de lo que suma. Devuelve lo que sobra, o déjalo de propina, en esa cuenta antes de cerrar la mesa",
+  "table.finish_overpaid_give_back":
+    "En la {bill} se han pagado {amount} más de lo que suma. Devuelve lo que sobra en esa cuenta antes de cerrar la mesa",
+  "table.go_to_bill": "Ir a la {bill}",
   "table.bill_overpaid": "{amount} de más",
   "table.finish": "Cerrar mesa",
   "table.finish_bill_holds_money":

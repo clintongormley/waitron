@@ -239,7 +239,12 @@ import {
   type SplitGuestsDetail,
 } from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
-import { beingPaidNotice, billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
+import {
+  beingPaidNotice,
+  billMoneyNoticeStyles,
+  finishOverpaidRefusal,
+  overpaidNotice,
+} from "./bill-money-notice.js";
 import { overpaidOf } from "../state/pay-for-items.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the order show side by side.
@@ -5473,11 +5478,25 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Finish table's refusal while a bill is unpaid, with Take payment for another unpaid bill
-   * first, since the bill on screen is charged in the foot below. */
+   * first, since the bill on screen is charged in the foot below. A bill paid over its total comes
+   * after every unpaid one. */
   #finishRefusal(): TemplateResult | typeof nothing {
     if (this.party === null || !this.finishRefused) return nothing;
     const unpaid = this.#shownBills().filter((bill) => !bill.leftUnpaid && owing(bill));
-    const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
+    const offScreenFirst = (bills: PartyBill[]) =>
+      bills.find((bill) => bill.workingOrderId !== this.orderId) ?? bills[0];
+    const firstUnpaid =
+      offScreenFirst(unpaid.filter((bill) => overpaidOf(bill) === null)) ?? offScreenFirst(unpaid);
+    if (firstUnpaid !== undefined && overpaidOf(firstUnpaid) !== null) {
+      const id = firstUnpaid.workingOrderId;
+      return finishOverpaidRefusal(
+        firstUnpaid,
+        this.tipsEnabled && this.takesPayment,
+        id === this.orderId
+          ? undefined
+          : () => this.#dispatch("take-payment", { workingOrderId: id }),
+      );
+    }
     return html`<div class="finish-refusal" role="alert" data-finish-refusal>
       <span>${codeMessage("party.bill_outstanding")}</span>
       <div class="finish-refusal-actions">

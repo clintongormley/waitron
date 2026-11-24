@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -486,6 +486,89 @@ describe("till-table-order-screen: Finish table", () => {
     shadow(el).querySelector<HTMLElement>("[data-finish-refusal] [data-take-payment]")!.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
+  });
+
+  describe("a bill paid more than it comes to stops Finish", () => {
+    const overpaidCheck: PartyBill = {
+      ...check,
+      total: "10.00",
+      outstanding: "0.00",
+      overpaid: "5.00",
+      hasPayments: true,
+    };
+
+    it("says it holds more than it comes to and goes to it, offering no Take payment", async () => {
+      const el = await mountScreen({
+        finishRefused: true,
+        bills: [paidTab, overpaidCheck],
+        tipsEnabled: true,
+        takesPayment: true,
+      });
+      const asked = capture(el, "take-payment");
+
+      const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+      expect(refusal.textContent).toContain(
+        fill(t("table.finish_overpaid"), { bill: "Bill 2", amount: money("5.00") }),
+      );
+      expect(refusal.textContent).not.toContain(codeMessage("party.bill_outstanding"));
+      expect(refusal.textContent).not.toContain(t("departure.finish_hint"));
+      expect(refusal.querySelector("[data-take-payment]")).toBeNull();
+      expect(refusal.querySelector("[data-print-bill]")).toBeNull();
+      const go = refusal.querySelector<HTMLElement>("[data-show-overpaid-bill]")!;
+      expect(go.textContent!.trim()).toBe(fill(t("table.go_to_bill"), { bill: "Bill 2" }));
+      go.click();
+
+      expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
+    });
+
+    it("names only Give back when Keep as tip is not offered", async () => {
+      const el = await mountScreen({ finishRefused: true, bills: [paidTab, overpaidCheck] });
+
+      expect(shadow(el).querySelector("[data-finish-refusal]")!.textContent).toContain(
+        fill(t("table.finish_overpaid_give_back"), { bill: "Bill 2", amount: money("5.00") }),
+      );
+    });
+
+    it("on the bill on screen it points at the bill's own notice, with no button", async () => {
+      const el = await mountScreen({
+        finishRefused: true,
+        orderId: "wo-check",
+        bills: [paidTab, overpaidCheck],
+        billBalance: {
+          workingOrderId: "wo-check",
+          status: "open",
+          total: "10.00",
+          received: "15.00",
+          reserved: "0.00",
+          outstanding: "0.00",
+          overpaid: "5.00",
+          tips: "0.00",
+          payments: [],
+          paidLines: [],
+        },
+      });
+
+      const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+      expect(refusal.querySelector("wt-button")).toBeNull();
+      expect(shadow(el).querySelector("[data-overpaid] [data-give-back]")).not.toBeNull();
+    });
+
+    it("an unpaid bill is asked for first, with Take payment", async () => {
+      const el = await mountScreen({
+        finishRefused: true,
+        bills: [
+          { ...paidTab, billNumber: 2, status: "open", outstanding: "14.00" },
+          { ...overpaidCheck, billNumber: 1 },
+        ],
+      });
+      const asked = capture(el, "take-payment");
+
+      const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+      expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
+      refusal.querySelector<HTMLElement>("[data-take-payment]")!.click();
+
+      expect(asked).toEqual([{ workingOrderId: "wo-tab" }]);
+    });
   });
 
   it("directs staff from Finish to the selected bill’s existing menu action", async () => {

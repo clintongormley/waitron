@@ -701,7 +701,9 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
 una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, cuando aparece, pone esa cuenta
-en pantalla y la imprime, o muestra los platos aún sin servir.
+en pantalla y la imprime, o muestra los platos aún sin servir. Una cuenta pagada por encima de lo que
+suma también impide **Cerrar mesa**: la caja indica qué cuenta es y cuánto sobra, e **Ir a la**
+cuenta la pone en pantalla para devolver lo que sobra o dejarlo de propina.
 
 Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
