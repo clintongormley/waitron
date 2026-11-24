@@ -86,13 +86,10 @@ Left by Slice 2:
 - A streamed download leaves the gate's count when its response returns, before its body ends.
 - The close-deadline log does not name the step still running.
 - A drain stopped early reads as a successful pass to `/health`'s last-success time.
-- The four new server-starting test files (`boot.restricted*.test.ts`,
-  `handover-stepdown.real.test.ts`, `handover-stepdown.crash.test.ts`) each rebuild the boot
-  setup by hand; three carry their own clock-watch mock (`boot.restricted-quiet`,
-  `handover-stepdown.real`, `handover-stepdown.crash`) and three their own drain stand-in
-  (`boot.restricted`'s files nothing; the two `handover-stepdown` files fake AEAT's transport),
-  instead of sharing them through `apps/server/src/testing/` (`copyMigrationsRoot` already exists
-  there).
+- `boot.restricted-quiet.test.ts`, `handover-stepdown.real.test.ts` and
+  `handover-stepdown.crash.test.ts` each copy migrations and build their boot environment inline.
+  Share their repeated setup through `apps/server/src/testing/`. The two stepdown suites also
+  each define a fake AEAT transport.
 
 Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03)):
 - S2's row reads PASS (owner, 2026-11-03): its gate is read from the new parts F (return batch

@@ -1,6 +1,6 @@
 import { writeModuleConfig } from "../module-config.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import type { AddressInfo } from "node:net";
@@ -8,8 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Agent } from "undici";
+import { POLL_INTERVAL_MS, POLL_TRIES, poll } from "./boot-poll.js";
 import { nodes, openVenueDatabase, taxpayer, type Database, type VenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+
+export { POLL_INTERVAL_MS, POLL_TRIES, poll } from "./boot-poll.js";
+export { copyMigrationsRoot } from "./boot-trading-fixture.js";
 
 export const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -45,19 +49,6 @@ export async function seedSharedVenue(db: Database): Promise<void> {
     name: "Boot Node",
     filingModule: "verifactu",
   });
-}
-
-/**
- * Builds in `into` the layout `scripts/copy-migrations.mjs` builds beside the bundle, for
- * `WAITRON_MIGRATIONS_DIR`: `boot.ts`'s default migrations root exists only there.
- */
-export async function copyMigrationsRoot(into: string): Promise<void> {
-  const fromSource = migrationOptionsFor(manifestSets(), null);
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(fromSource[index]!.migrationsFolder, join(into, set.name), {
-      recursive: true,
-    });
-  }
 }
 
 /**
@@ -100,25 +91,6 @@ export function httpsVia(ca: string | Buffer): {
     via: { dispatcher } as RequestInit & { dispatcher: Agent },
     close: () => dispatcher.close(),
   };
-}
-
-export const POLL_TRIES = 200;
-export const POLL_INTERVAL_MS = 50;
-
-/**
- * Polls `predicate` for its first defined result, or `undefined` once `tries` are spent. A promise
- * it returns is awaited, so a promise cannot itself be the found value.
- */
-export async function poll<T>(
-  predicate: () => T | undefined | Promise<T | undefined>,
-  tries: number = POLL_TRIES,
-): Promise<T | undefined> {
-  for (let i = 0; i < tries; i += 1) {
-    const value = await predicate();
-    if (value !== undefined) return value;
-    await delay(POLL_INTERVAL_MS);
-  }
-  return undefined;
 }
 
 /** As `poll`, but throws once `tries` are spent, so a caller never proceeds on an unmet condition. */

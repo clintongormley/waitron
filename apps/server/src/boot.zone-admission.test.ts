@@ -1,3 +1,4 @@
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
@@ -9,7 +10,7 @@ import Stripe from "stripe";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
@@ -51,7 +52,6 @@ import { serverFixture } from "./testing/server-fixture.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { TEST_RELEASE, writeDeclarationFolder } from "./testing/declaration-folder.js";
 import {
-  copyMigrationsRoot,
   withMockedKill,
   startFakeSmtp,
   withCapturedStdout,
@@ -180,26 +180,19 @@ beforeEach(async () => {
     )
   ).token;
   scratch = await mkdtemp(join(tmpdir(), "waitron-zone-admission-"));
-  await copyMigrationsRoot(join(scratch, "migrations"));
+  const migrationsRoot = join(scratch, "migrations");
+  await copyMigrationsRoot(migrationsRoot);
   await mkdir(join(scratch, "dashboard"));
   await writeFile(
     join(scratch, "dashboard/index.html"),
     '<html lang="en"><title>Synthetic dashboard</title><body>Dashboard fixture</body></html>',
   );
   await seedModuleSettings(suite.db, { "fiscal-none": false });
-  const file = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   env = {
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...tradingBootEnv(suite.db, scratch, NODE, migrationsRoot),
     WAITRON_HTTP_PORT: "32123",
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_STATE_DIR: scratch,
-    WAITRON_VENUE_DIR: dirname(file),
-    WAITRON_NODE_ID: NODE,
-    WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
     WAITRON_DASHBOARD_APP_DIR: join(scratch, "dashboard"),
     WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
-    WAITRON_ENV: "preproduction",
   };
 });
 afterEach(async () => {

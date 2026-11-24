@@ -1,4 +1,13 @@
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Database } from "@waitron/db";
+import { expect, vi } from "vitest";
+import { seedModuleSettings } from "../../test/module-settings.js";
+import type { StartedServer } from "../boot.js";
+import { copyMigrationsRoot, tradingBootEnv } from "./boot-trading-fixture.js";
+import { freePorts } from "./free-ports.js";
 import { listener } from "./ephemeral-listener.js";
 import { serverFixture } from "./server-fixture.js";
 
@@ -33,4 +42,36 @@ export function ephemeralServerFixture() {
     }
   };
   return { ...fixture, startServer, startConfiguredServer, httpPort };
+}
+
+export async function withTradingBootServer(
+  options: {
+    db: Database;
+    nodeId: string;
+    scratchPrefix: string;
+    start: (env: Record<string, string>) => Promise<StartedServer>;
+    httpPort: () => number;
+  },
+  use: (base: string) => Promise<void>,
+): Promise<void> {
+  const [port] = await freePorts(1);
+  const scratch = await mkdtemp(join(tmpdir(), options.scratchPrefix));
+  let server: StartedServer | undefined;
+  try {
+    const migrationsRoot = join(scratch, "migrations");
+    await copyMigrationsRoot(migrationsRoot);
+    await seedModuleSettings(options.db, { "fiscal-none": false });
+    server = await options.start({
+      ...tradingBootEnv(options.db, scratch, options.nodeId, migrationsRoot),
+      WAITRON_HTTP_PORT: String(port),
+    });
+    const base = `http://127.0.0.1:${options.httpPort()}`;
+    await vi.waitFor(async () => {
+      expect((await fetch(`${base}/health`)).status).toBe(200);
+    });
+    await use(base);
+  } finally {
+    if (server !== undefined) await server.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
 }
