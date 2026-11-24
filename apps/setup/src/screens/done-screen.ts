@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { type MasterKeyUsedDetail, baseStyles, pageTitleStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
@@ -756,11 +756,6 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
-  /** Copy counts only when there is no pack: the pack also holds the box key, which Copy leaves out. */
-  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
-    if (event.detail.action !== "copy" || this.#recoveryPackUrl === undefined) this.packUsed = true;
-  }
-
   #recoveryPackStep(key: string): TemplateResult {
     return html`
       <h1>${t("done.pack.heading")}</h1>
@@ -780,7 +775,9 @@ export class SetupDoneScreen extends LitElement {
           copyFailed: t("done.pack.copy_failed"),
           printFailed: t("done.pack.print_failed"),
         }}
-        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+        @wt-master-key-used=${() => {
+          this.packUsed = true;
+        }}
       ></wt-master-key-box>
       ${
         this.packUsed

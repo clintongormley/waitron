@@ -81,9 +81,8 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the Recovery pack step, before and after Copy and Download, at phone and desktop widths in both languages", async () => {
+  it("has no violations on the Recovery pack step, before and after Copy, at phone and desktop widths in both languages", async () => {
     vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const { host, el } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
@@ -109,10 +108,10 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         }
       }
       q(el, "[data-test=copy]")!.click();
-      await vi.waitFor(() => expect(q(el, "[data-test=copied]")).not.toBeNull());
-      await expectNoA11yViolations(host);
-      q(el, "[data-test=download]")!.click();
-      await vi.waitFor(() => expect(q(el, "[data-test=pack-continue]")).not.toBeNull());
+      await vi.waitFor(() => {
+        expect(q(el, "[data-test=copied]")).not.toBeNull();
+        expect(q(el, "[data-test=pack-continue]")).not.toBeNull();
+      });
       await expectNoA11yViolations(host);
     } finally {
       vi.restoreAllMocks();

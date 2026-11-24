@@ -83,8 +83,8 @@ describe("setup's Recovery pack step", () => {
     },
   );
 
-  it.each(["download", "print"])(
-    "Continue is not shown until Download or Print has been used: %s",
+  it.each(["download", "print", "copy"])(
+    "Continue is not shown until Download, Print or Copy has been used: %s",
     async (control) => {
       captureHandovers();
       const el = await mountStep({ onboardingIntent: "prepare" });
@@ -101,14 +101,15 @@ describe("setup's Recovery pack step", () => {
     },
   );
 
-  it("Copy alone leaves Continue hidden while there is a pack, which holds more than the key", async () => {
-    captureHandovers();
+  it("Copy alone reveals Continue while there is a pack", async () => {
+    const { downloads, opened } = captureHandovers();
     const el = await mountStep();
+    expect(q(el, "[data-test=download]")).not.toBeNull();
     await userEvent.click(q(el, "[data-test=copy]")!);
     await vi.waitFor(() => expect(text(el, "[data-test=copied]")).toBe("Copied."));
-    expect(q(el, "[data-test=pack-continue]")).toBeNull();
-    await userEvent.click(q(el, "[data-test=download]")!);
     await vi.waitFor(() => expect(q(el, "[data-test=pack-continue]")).not.toBeNull());
+    expect(downloads).toEqual([]);
+    expect(opened).not.toHaveBeenCalled();
   });
 
   it("a Print the browser blocks does not count: it says so where a refused Copy does, and Continue stays hidden", async () => {
@@ -172,7 +173,7 @@ describe("setup's Recovery pack step", () => {
     await vi.waitFor(() => expect(text(el, "[data-test=copied]")).toBe("Copied."));
     expect(writes).toHaveBeenCalledTimes(2);
     expect(q(el, "[data-test=copy-failed]")).toBeNull();
-    expect(q(el, "[data-test=pack-continue]")).toBeNull();
+    expect(q(el, "[data-test=pack-continue]")).not.toBeNull();
   });
 
   it("says in Spanish when a Copy is refused", async () => {
@@ -229,7 +230,6 @@ describe("setup's Recovery pack step", () => {
     expect(text(el, "[data-test=copy]")).toBe("Copiar");
     await userEvent.click(q(el, "[data-test=copy]")!);
     await vi.waitFor(() => expect(text(el, "[data-test=copied]")).toBe("Copiada."));
-    await userEvent.click(q(el, "[data-test=download]")!);
-    await vi.waitFor(() => expect(text(el, "[data-test=pack-continue]")).toBe("Continuar"));
+    expect(text(el, "[data-test=pack-continue]")).toBe("Continuar");
   });
 });
