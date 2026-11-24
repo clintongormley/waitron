@@ -10,3 +10,5 @@ A developer who pushes general Waitron code sees the English-only guard's path, 
 - [ ] Update the hook and unknown-range descriptions and source inventory in `docs/developers/ci-and-gates.md`, the source inventory in `docs/developers/testing-guide.md`, `CLAUDE.md` §2 and the A1449 pointer in `docs/backlog.md`. No standalone backlog item matches the request. Use the normal push gate and current-head CI before landing.
 
 Estimate about 80 added and 10 removed hook/checker lines, and 65 added and 15 removed test lines. Use the installed server runner. The work adds no dependency, language rule or other local root guard.
+
+**2026-11-24, 12:37.** After the whole-branch review, the watcher cleared piping the hook's path list to the checker, filtering regular files there, and loading the vocabulary arrays directly. CI checks that the arrays still supply the same words as the module descriptors.

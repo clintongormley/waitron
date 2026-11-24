@@ -18,6 +18,16 @@ export const PRE_PUSH_WORDS = new Set([
   ...WORKFORCE_ES_VOCABULARY,
 ]);
 
+function isRegularFile(path: string): boolean {
+  try {
+    return lstatSync(path, { throwIfNoEntry: false })?.isFile() ?? false;
+  } catch (error) {
+    // A replaced directory leaves descendants in the diff without a directory to read them from.
+    if ((error as NodeJS.ErrnoException).code === "ENOTDIR") return false;
+    throw error;
+  }
+}
+
 if (isMainScript(import.meta.url)) {
   const [, , root, ...args] = process.argv;
   if (!root) throw new Error("Pass the repository root followed by repository-relative paths.");
@@ -27,7 +37,7 @@ if (isMainScript(import.meta.url)) {
   for (const path of [...new Set(paths)].sort()) {
     if (!/^(apps|packages)\//.test(path) || isHome(path)) continue;
     const absolute = join(root, path);
-    if (!lstatSync(absolute, { throwIfNoEntry: false })?.isFile()) continue;
+    if (!isRegularFile(absolute)) continue;
     const source = readText(absolute);
     if (source === undefined) continue;
 

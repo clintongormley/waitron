@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { STILL_TO_CLEAN } from "./english-only-still-to-clean.js";
 
 const root = join(import.meta.dirname, "..");
 const zero = "0".repeat(40);
@@ -212,7 +213,7 @@ const cheap = (...paths) => [
     ...paths,
   ],
 ];
-const english = (...paths) => [
+const englishCommand = [
   "--dir",
   "apps/server",
   "exec",
@@ -220,9 +221,8 @@ const english = (...paths) => [
   "--import",
   "tsx",
   "../../scripts/check-english-only.ts",
-  expect.any(String),
-  { changedPaths: paths },
 ];
+const english = (...paths) => [...englishCommand, expect.any(String), { changedPaths: paths }];
 const source = "packages/source/src/index.ts";
 const checks = [...cheap(source), english(source)];
 
@@ -356,31 +356,54 @@ describe("pre-push fast checks", () => {
   it("blocks non-English changes and accepts the correction within the pushed paths", () => {
     const changed = "packages/source/src/index.ts";
     const translation = "packages/source/src/i18n/words.ts";
-    const stillListed = "apps/dashboard/src/api/client.test.ts";
     const outside = "scripts/fixture-word.ts";
     const linked = "packages/source/src/linked.ts";
     const missing = "packages/source/src/missing.ts";
+    const replaced = "packages/source/src/former-directory";
+    const samples = [
+      translation,
+      outside,
+      missing,
+      replaced + "/index.ts",
+      ...STILL_TO_CLEAN.slice(0, 1),
+    ];
     fixture(
       changed,
       ({ invoke, dir, git, ref }) => {
-        for (const path of [translation, stillListed, outside, missing]) {
+        for (const path of samples) {
           mkdirSync(dirname(join(dir, path)), { recursive: true });
           writeFileSync(join(dir, path), "const mesa = 1;\n");
         }
         writeFileSync(join(dir, changed), "// Heading\nconst mesa = 1;\nconst huella = 2;\n");
         symlinkSync("../../../" + outside, join(dir, linked));
-        git("add", changed, translation, stillListed, outside, linked, missing);
+        git("add", changed, linked, ...samples);
         git("commit", "-qs", "--amend", "--no-edit");
         const push = ref(git("rev-parse", "HEAD"));
         rmSync(join(dir, missing));
+        rmSync(join(dir, replaced), { recursive: true });
+        writeFileSync(join(dir, replaced), "const table = 1;\n");
 
-        const bad = invoke(push);
+        const bad = invoke(push + push);
+        const finding = changed + ":2: mesa";
         expect(bad.status, bad.stdout + bad.stderr).toBe(1);
         expect(bad.stdout).toContain("'English-only check' failed");
-        expect(bad.stderr).toContain(`${changed}:2: mesa`);
+        expect(
+          bad.stderr.split("\n").filter((line) => line.startsWith(finding)),
+          bad.stderr,
+        ).toHaveLength(1);
         expect(bad.stderr).toContain(`${changed}:3: huella`);
         expect(bad.stderr).toContain("Use English");
+        expect(bad.stderr).toContain("move translated text to its translation home");
         expect(bad.stderr).toContain("KEEPS_NON_ENGLISH");
+
+        const reproduced = spawnSync("pnpm", [...englishCommand, dir, changed], {
+          cwd: root,
+          input: "",
+          encoding: "utf8",
+          timeout: HOOK_TIMEOUT_MS,
+        });
+        expect(reproduced.status, reproduced.stderr).toBe(1);
+        expect(reproduced.stderr).toContain(finding);
 
         writeFileSync(join(dir, changed), "const table = 1;\n");
         const fixed = invoke(push);
@@ -388,7 +411,7 @@ describe("pre-push fast checks", () => {
       },
       { realEnglish: true },
     );
-  }, 40_000);
+  }, 55_000);
   it("blocks unsigned commits before running pnpm", () => {
     fixture(
       "packages/source/src/index.ts",
