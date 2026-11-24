@@ -1801,6 +1801,35 @@ describe("POST …/give-back on a separate terminal", () => {
     expect((await read(saleId)).underWay).toMatchObject({ state: "open", moneyBack: "10.00" });
   });
 
+  it("files the corrective left open on an identical resend, writing no refund or correction, as Correct invoice's separate-terminal leg does on its resend", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ card: "34.00" }]);
+    const card = await tenderOf(saleId, "card");
+    const body = {
+      ...(await giveBody(saleId, ask("goodwill", "10.00", { way: card }))),
+      manualConfirmed: true,
+      override: supervisor(),
+    };
+    automaticFiling.refuse = true;
+    onTestFinished(() => {
+      automaticFiling.refuse = false;
+    });
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "correction", state: "pending" }] });
+    automaticFiling.refuse = false;
+    automaticFiling.asked.length = 0;
+    const before = effects();
+    const again = await give(saleId, body);
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json).toMatchObject({
+      parts: [{ kind: "correction", state: "completed" }],
+      underWay: null,
+      rest: null,
+    });
+    expect(automaticFiling.asked).toHaveLength(1);
+    expect(effects()).toEqual({ ...before, sales: before.sales + 1 });
+  });
+
   it("raises invoice_correction.filing_refused and keeps the terminal's refund completed when the filing after commit is refused (case 11)", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ card: "34.00" }]);

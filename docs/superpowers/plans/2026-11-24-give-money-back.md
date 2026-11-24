@@ -442,7 +442,9 @@ The route supplies the correction's VAT split itself, from `previewCorrectionAmo
   completed answers what went back and `refusal`; nothing is undone.
 - **A resend** never calls a completion step: `reserveTenderRefund` answering `replayed: true` returns
   the stored row, as `beginSettledTenderRefund` does today (`tender-refunds.ts:94-98`), so no second
-  drawer entry is written.
+  drawer entry is written. A separate terminal's resend still asks `fileCorrectionAutomatically` to
+  file a correction left open by a refused filing after commit, as `refundSettledTender` does on a
+  resend of Correct invoice's separate-terminal leg (it files the corrective and writes no refund).
 
 **`rest` lives only on the till that sent it** (in its saved attempt, like a refund attempt today,
 `apps/till/src/state/tender-refund.ts`). If that till is lost, the rest was simply not given back:
