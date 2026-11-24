@@ -269,9 +269,8 @@ before retrying and reproduce the pending operation before assigning a cause.
 
 [Run 43548232659, job 132304715811](https://github.com/clintongormley/waitron/actions/runs/43548232659/job/132304715811)
 has no retained assertion trace. The PDF case passed five focused local runs unchanged.
-After the long history-file run, `recovery-hour.browser.test.ts` was assigned only 14.224 s
-before the 420 s shard deadline. Whether that file hung remains unknown.
-[History-file timing](#fiscal-backup-history-fixture-edits-use-one-transaction-per-copy).
+`recovery-hour.browser.test.ts` was assigned only 14.224 s before the 420 s shard deadline.
+Whether that file hung remains unknown. See the [history-file timing record](#fiscal-backup-history-fixture-edits-use-one-transaction-per-copy).
 Keep diagnostics on. On recurrence, retain the assertion trace and unfinished-file/process report
 before retrying; locate the pending operation before changing test or product behaviour.
 Recurrence on 14 November: [run 43604245865, job 132475525462](https://github.com/clintongormley/waitron/actions/runs/43604245865/job/132475525462)
