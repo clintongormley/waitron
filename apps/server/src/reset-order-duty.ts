@@ -129,7 +129,8 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
     if (cause !== lastCause) deps.log("warn", event, fields);
     lastCause = cause;
   };
-  // A restricted start writes no venue data (`restricted-start.ts`), so one reading lasts it.
+  // A restricted start neither sells nor files (`restricted-start.ts`), so its invoice records stay
+  // as they are and one reading lasts it.
   let holdings: Record<string, CanonicalValue> | undefined;
   const holdingsOf = async () => (holdings ??= await readHoldings(deps.db, deps.modules));
   const attempt = async (ack?: ResetAcknowledgement): Promise<Asked | null> => {

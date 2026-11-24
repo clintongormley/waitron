@@ -55,8 +55,8 @@ function departmentIds(sales: ReturnRow[]) {
 /** The records one box wrote, or the named ranges of other boxes' chains. */
 function selectedRecords(select: string | readonly ChainRange[]) {
   if (typeof select === "string") return { where: sql`node_id = ${select}`, order: sql`secuencia` };
-  // `cross join` keeps the ranges as the outer loop, so each is a search of
-  // (node_id, secuencia) rather than a scan of every record.
+  // Each range is a search of the (node_id, secuencia) index; `cross join` pins the ranges as the
+  // outer loop.
   const where = sql`id in (select picked.id from json_each(${JSON.stringify(select)}) chosen
     cross join verifactu_records picked
       on picked.node_id = json_extract(chosen.value, '$.nodeId')
@@ -420,7 +420,8 @@ export async function receiveReturnedOriginals(
       .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
       .map((clash) => clash.saleId),
   );
-  // Another box's sale and payment rows stay as the receiver has them; only its records count.
+  // For another box's batch, a sale or payment row that differs from the receiver's leaves the
+  // receiver's in place without making the batch incomplete; only its records decide that.
   let saleRowsDiffer = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id)) {
