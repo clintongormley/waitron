@@ -269,6 +269,7 @@ export async function receiveReturnedOriginals(
   returned: ReturnedOriginals,
   now: Date,
   accepted: readonly string[] = [],
+  others?: { destinationNodeId: string },
 ): Promise<{ complete: boolean; refusal?: "fiscal.return_record_clash" }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
@@ -286,8 +287,16 @@ export async function receiveReturnedOriginals(
   }
   for (const record of returned.records) {
     if (
-      record.node_id !== sourceNodeId ||
-      held(tx, "verifactu_identities", record.sif_id)?.node_id !== sourceNodeId
+      others &&
+      (record.node_id === sourceNodeId ||
+        record.node_id === others.destinationNodeId ||
+        held(tx, "verifactu_identities", record.sif_id)?.node_id !== record.node_id)
+    )
+      throw new AppError("fiscal.return_invalid", { reason: "another box's record metadata" });
+    if (
+      !others &&
+      (record.node_id !== sourceNodeId ||
+        held(tx, "verifactu_identities", record.sif_id)?.node_id !== sourceNodeId)
     )
       throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
     const recordAt = String(record.fecha_hora_huso_gen_registro);
@@ -295,11 +304,16 @@ export async function receiveReturnedOriginals(
       throw new AppError("fiscal.return_clock_ahead", { recordAt, clockAt: now.toISOString() });
   }
   const allowed: ReturnRow[] = [];
-  let blocked = false;
+  const blocked = new Set<ReturnRow[string]>();
   for (const record of [...returned.records].sort(
-    (a, b) => Number(a.secuencia) - Number(b.secuencia),
+    (a, b) =>
+      (String(a.node_id) < String(b.node_id)
+        ? -1
+        : String(a.node_id) > String(b.node_id)
+          ? 1
+          : 0) || Number(a.secuencia) - Number(b.secuencia),
   )) {
-    if (blocked) continue;
+    if (blocked.has(record.node_id)) continue;
     const own = held(tx, "verifactu_records", record.id);
     const [collision] = tx.all<ReturnRow>(sql`select * from verifactu_records where
       (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
@@ -313,9 +327,8 @@ export async function receiveReturnedOriginals(
         ? own
         : undefined
       : collision;
-    if (conflict) {
-      blocked = true;
-    } else allowed.push(record);
+    if (conflict) blocked.add(record.node_id);
+    else allowed.push(record);
   }
   const needed = new Set(allowed.map((row) => row.sale_id));
   function includeParent(id: ReturnRow[string]) {
@@ -535,6 +548,7 @@ export async function receiveReturnedOriginals(
     ["sale_voids", returned.voids],
     ["sale_substitutions", returned.substitutions],
   ] as const) {
+    if (others && table !== "verifactu_records") continue;
     for (const row of rows) {
       if (
         ["tenders", "refunds", "sale_settlements"].includes(table) &&
@@ -555,7 +569,7 @@ export async function receiveReturnedOriginals(
       missing = true;
     }
   }
-  return blocked
+  return blocked.size
     ? { complete: false, refusal: "fiscal.return_record_clash" }
     : { complete: !missing };
 }

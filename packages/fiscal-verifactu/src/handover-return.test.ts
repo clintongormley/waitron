@@ -1737,3 +1737,212 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
     { state: "refunded" },
   ]);
 });
+
+const returnedAt = new Date("2026-07-20T17:22:00.000Z");
+
+async function boxesWithAnEarlierOne() {
+  const main = await seedNode(suite.db, "Main");
+  const sender = await seedNode(suite.db, "Sender");
+  const earlier = await seedNode(suite.db, "Earlier");
+  const other = await seedNode(suite.db, "Other");
+  await copyBase();
+  return { main, sender, earlier, other };
+}
+
+function receiveOthers(
+  source: string,
+  returned: Awaited<ReturnType<typeof readOtherBoxesOriginals>>,
+  destinationNodeId: string,
+) {
+  return withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source, returned, returnedAt, [], { destinationNodeId }),
+  );
+}
+
+function readTail(node: SeededNode, after: number) {
+  return withTransaction(suite.db, (tx) =>
+    readOtherBoxesOriginals(tx, [{ nodeId: node.nodeId, sifId: node.sifId, after }]),
+  );
+}
+
+async function receiveOwn(node: SeededNode) {
+  const own = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, node.nodeId));
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, node.nodeId, own, returnedAt),
+  );
+}
+
+function heldRecordIds() {
+  return receiver.db
+    .all<{ id: string }>(sql`select id from verifactu_records order by node_id, secuencia`)
+    .map((row) => row.id);
+}
+
+it("takes an earlier box's tail that extends the receiver's prefix, with a pending submission for the receiver's outbox", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await receiveOwn(earlier);
+  const second = await appendOriginal(earlier, "Earlier", 2);
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 1), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(heldRecordIds()).toEqual([first.recordId, second.recordId]);
+  expect(
+    receiver.db.all(sql`select estado, proximo_intento_en from verifactu_submissions
+      where registro_id = ${second.recordId}`),
+  ).toEqual([{ estado: "pendiente", proximo_intento_en: returnedAt.toISOString() }]);
+});
+
+it("takes a whole earlier chain when the receiver holds its identity", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  const second = await appendOriginal(earlier, "Earlier", 2);
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 0), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(heldRecordIds()).toEqual([first.recordId, second.recordId]);
+  expect(await withTransaction(receiver.db, (tx) => readChainHead(tx, earlier.nodeId))).toEqual(
+    expect.objectContaining({ secuencia: 2, ultimoRegistroId: second.recordId }),
+  );
+});
+
+it("refuses the sender's own record sent as another box's", async () => {
+  const { main, sender } = await boxesWithAnEarlierOne();
+  await appendOriginal(sender, "Sender", 1);
+
+  await expect(
+    receiveOthers(sender.nodeId, await readTail(sender, 0), main.nodeId),
+  ).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "another box's record metadata" },
+  });
+  expect(heldRecordIds()).toEqual([]);
+});
+
+it("refuses a record of the receiver's own box", async () => {
+  const { main, sender } = await boxesWithAnEarlierOne();
+  await appendOriginal(main, "Main", 1);
+
+  await expect(
+    receiveOthers(sender.nodeId, await readTail(main, 0), main.nodeId),
+  ).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "another box's record metadata" },
+  });
+  expect(heldRecordIds()).toEqual([]);
+});
+
+it("refuses a record whose identity belongs to another box", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  await appendOriginal(earlier, "Earlier", 1);
+  const returned = await readTail(earlier, 0);
+  returned.records[0]!.sif_id = sender.sifId;
+
+  await expect(receiveOthers(sender.nodeId, returned, main.nodeId)).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "another box's record metadata" },
+  });
+  expect(heldRecordIds()).toEqual([]);
+});
+
+it("refuses a changed tail on the chain check", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await receiveOwn(earlier);
+  await appendOriginal(earlier, "Earlier", 2);
+  const tail = await readTail(earlier, 1);
+  tail.records[0]!.importe_total = "123.46";
+
+  await expect(receiveOthers(sender.nodeId, tail, main.nodeId)).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "chain verification failed" },
+  });
+  expect(heldRecordIds()).toEqual([first.recordId]);
+});
+
+it("keeps the earlier box's accepted delivery state rather than queueing it again", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await suite.db.execute(sql`insert into verifactu_submissions
+    (registro_id, estado, proximo_intento_en, csv, confirmado_en)
+    values (${first.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z',
+      'earlier-csv', '2026-07-20T17:21:00.000Z')`);
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 0), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(receiver.db.all(sql`select registro_id, estado, csv from verifactu_submissions`)).toEqual([
+    { registro_id: first.recordId, estado: "aceptado", csv: "earlier-csv" },
+  ]);
+});
+
+it("a clash on one earlier chain leaves another chain's records accepted", async () => {
+  const { main, sender, earlier, other } = await boxesWithAnEarlierOne();
+  const a1 = await appendOriginal(earlier, "Earlier", 1);
+  const x1 = await appendOriginal(other, "Other", 2);
+  const a2 = await appendOriginal(earlier, "Earlier", 3);
+  const clashing = await readTail(other, 0);
+  clashing.records[0]!.id = "receiver-original";
+  clashing.records[0]!.sale_id = "receiver-sale";
+  clashing.sales[0]!.id = "receiver-sale";
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, other.nodeId, clashing, returnedAt),
+  );
+  const both = await withTransaction(suite.db, (tx) =>
+    readOtherBoxesOriginals(tx, [
+      { nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 },
+      { nodeId: other.nodeId, sifId: other.sifId, after: 0 },
+    ]),
+  );
+  const byId = (id: string) => both.records.find((row) => row.id === id)!;
+  both.records = [byId(a1.recordId), byId(x1.recordId), byId(a2.recordId)];
+
+  expect(await receiveOthers(sender.nodeId, both, main.nodeId)).toEqual({
+    complete: false,
+    refusal: "fiscal.return_record_clash",
+  });
+  expect(
+    receiver.db
+      .all<{ id: string }>(
+        sql`select id from verifactu_records
+        where node_id = ${earlier.nodeId} order by secuencia`,
+      )
+      .map((row) => row.id),
+  ).toEqual([a1.recordId, a2.recordId]);
+  expect(receiver.db.all(sql`select id from verifactu_records where id = ${x1.recordId}`)).toEqual(
+    [],
+  );
+});
+
+it("counts an earlier box's batch complete when its records went in but a payment row differs", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  const first = await appendOriginal(earlier, "Earlier", 1);
+  await suite.db.insert(tenders).values({
+    id: "earlier-payment",
+    saleId: first.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  const [sale] = await suite.db.select().from(sales).where(eq(sales.id, first.saleId));
+  await receiver.db.insert(sales).values(sale!);
+  await receiver.db.insert(tenders).values({
+    id: "earlier-payment",
+    saleId: first.saleId,
+    method: "cash",
+    amount: 300,
+    tipAmount: 300,
+    settledAt: "2026-07-20T17:21:30.000Z",
+  });
+
+  expect(await receiveOthers(sender.nodeId, await readTail(earlier, 0), main.nodeId)).toEqual({
+    complete: true,
+  });
+  expect(heldRecordIds()).toEqual([first.recordId]);
+  expect(receiver.db.all(sql`select id, amount from tenders`)).toEqual([
+    { id: "earlier-payment", amount: 300 },
+  ]);
+});
