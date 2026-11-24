@@ -4,6 +4,7 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
+  menuPeriods,
   routingCellPeriods,
   routingCells,
   removeIdFromJson,
@@ -42,6 +43,12 @@ async function settings(tx: Transaction, id: string) {
         ),
       ),
     );
+  const withLastOrders = await tx
+    .select({ id: menuPeriods.id, lastOrders: menuPeriods.lastOrders })
+    .from(menuPeriods).where(sql`exists (
+      select 1 from json_each(${menuPeriods.lastOrders}) as entry
+      where json_extract(entry.value, '$.stationId') = ${id}
+    )`);
   const profiles = await tx
     .select({ id: deviceProfiles.id, name: deviceProfiles.name })
     .from(deviceProfiles).where(sql`exists (
@@ -98,6 +105,7 @@ async function settings(tx: Transaction, id: string) {
   const removes: DeleteImpactItem[] = [
     { key: "station_routing_cells", count: cells.length, targets: [] },
     { key: "station_routing_periods", count: periods.length, targets: [] },
+    { key: "station_last_orders", count: withLastOrders.length, targets: [] },
     { key: "station_profile_screens", count: profileTargets.length, targets: profileTargets },
     { key: "station_daily_states", count: daily.length, targets: [] },
     {
@@ -114,6 +122,7 @@ async function settings(tx: Transaction, id: string) {
   return {
     cells,
     periods,
+    withLastOrders,
     daily,
     incoming,
     preferring,
@@ -144,6 +153,16 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
         rows.cells.map((row) => row.id),
       ),
     );
+  for (const period of rows.withLastOrders) {
+    await tx
+      .update(menuPeriods)
+      .set({
+        lastOrders: period.lastOrders.filter(
+          (entry) => entry.kind !== "station" || entry.stationId !== id,
+        ),
+      })
+      .where(eq(menuPeriods.id, period.id));
+  }
   await removeIdFromJson(tx, deviceProfiles.kitchenViews, id);
   await tx
     .update(kitchenStations)

@@ -249,7 +249,7 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
   },
   "packages/venue-service/src/dashboard/station-delete-copy.test.ts": {
     reason: SPANISH_SCREEN_WORDING,
-    findings: 30,
+    findings: 35,
   },
   "packages/venue-service/src/dashboard/station-show.test.ts": {
     reason: ACCENTED_INPUTS,

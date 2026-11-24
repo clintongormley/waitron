@@ -28,6 +28,15 @@ export const menuPeriods = table(
     // validateMenuTimetables checks bundle IDs; jsonReferences remaps them on import.
     // Menus are only deactivated.
     staffMenuIds: json<string[]>("staff_menu_ids").notNull().default([]),
+    // Service-period saves and configuration imports check the station ids inside this array.
+    lastOrders: json<
+      (
+        | { kind: "station"; stationId: string; minutes: number }
+        | { kind: "no_preparation"; minutes: number }
+      )[]
+    >("last_orders")
+      .notNull()
+      .default([]),
   },
   (t) => [
     foreignKey({
@@ -45,5 +54,6 @@ export const menuPeriods = table(
     check("menu_periods_name_ck", sql`trim(${t.name}) <> ''`),
     check("menu_periods_colour_ck", enumCheck(t.colour)),
     check("menu_periods_staff_menu_ids_ck", jsonShapeCheck(t.staffMenuIds, "array")),
+    check("menu_periods_last_orders_ck", jsonShapeCheck(t.lastOrders, "array")),
   ],
 );

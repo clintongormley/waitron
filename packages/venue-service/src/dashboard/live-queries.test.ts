@@ -134,6 +134,10 @@ it("refreshes a station's delete impact when a table or group is named for today
   );
 });
 
+it("refreshes a station's delete warning when a period's Last orders change", () => {
+  expect(QUERY_DEPENDENCIES["station-delete-impact"]).toContain("menu_periods");
+});
+
 it("reads the Opening hours month again on a change to anything its plan reads", () => {
   const watched: readonly string[] = QUERY_DEPENDENCIES["opening-hours-month"];
   expect(CALENDAR_MONTH_PLAN_READS.filter((table) => !watched.includes(table))).toEqual([]);

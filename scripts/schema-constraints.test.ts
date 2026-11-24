@@ -525,6 +525,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "menu_periods_name_ck",
   "menu_periods_colour_ck",
   "menu_periods_staff_menu_ids_ck",
+  "menu_periods_last_orders_ck",
   "seasons_name_ck",
   "seasons_starts_on_ck",
   "special_days_name_ck",

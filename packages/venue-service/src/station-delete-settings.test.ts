@@ -85,6 +85,62 @@ async function device(tx: Transaction, profileId: string, label: string, active 
   return deviceId;
 }
 
+it("reports and clears only the deleted station's Last orders settings", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const [department] = await tx
+      .insert(departments)
+      .values({ name: "Dining", tradingName: "Dining" })
+      .returning();
+    const [menu] = await tx.insert(menus).values({ name: "Menu" }).returning();
+    const period = { departmentId: department!.id, menuId: menu!.id };
+    await tx.insert(menuPeriods).values([
+      {
+        ...period,
+        name: "Breakfast",
+        lastOrders: [
+          { kind: "station", stationId: f.gone, minutes: 60 },
+          { kind: "no_preparation", minutes: 30 },
+          { kind: "station", stationId: f.other, minutes: -15 },
+        ],
+      },
+      {
+        ...period,
+        name: "Lunch",
+        lastOrders: [{ kind: "station", stationId: f.gone, minutes: -15 }],
+      },
+      {
+        ...period,
+        name: "Supper",
+        lastOrders: [{ kind: "station", stationId: f.other, minutes: 120 }],
+      },
+    ]);
+    expect((await module.readStationDeleteSettings(tx, f.gone)).removes).toEqual([
+      { key: "station_last_orders", count: 2, targets: [] },
+    ]);
+    await module.clearStationDeleteSettings(tx, f.gone);
+    expect(
+      await tx
+        .select({ name: menuPeriods.name, lastOrders: menuPeriods.lastOrders })
+        .from(menuPeriods)
+        .orderBy(menuPeriods.name),
+    ).toEqual([
+      {
+        name: "Breakfast",
+        lastOrders: [
+          { kind: "no_preparation", minutes: 30 },
+          { kind: "station", stationId: f.other, minutes: -15 },
+        ],
+      },
+      { name: "Lunch", lastOrders: [] },
+      {
+        name: "Supper",
+        lastOrders: [{ kind: "station", stationId: f.other, minutes: 120 }],
+      },
+    ]);
+  });
+});
+
 it("counts base and child routing rows once and clears only their union", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
