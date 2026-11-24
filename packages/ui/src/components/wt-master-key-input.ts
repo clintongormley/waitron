@@ -115,6 +115,7 @@ export class WtMasterKeyInput extends LitElement {
   @query('input[type="file"]') private chooser!: HTMLInputElement;
 
   #file?: File;
+  #pdfRead: Promise<void> | null = null;
   /** The PDF read in progress; anything that changes the field replaces it, so a late answer is dropped. */
   #reading?: object;
   #scope?: DraftScope<{ value: string; file?: File }>;
@@ -140,6 +141,15 @@ export class WtMasterKeyInput extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (this.hasUpdated && changed.has("keyName")) this.clear();
+  }
+
+  /**
+   * The latest chosen PDF's read, settled once the field shows its result: the key filled in, or
+   * its refusal line. `null` before any PDF is chosen; each new choice replaces it. It never
+   * rejects.
+   */
+  get pdfRead(): Promise<void> | null {
+    return this.#pdfRead;
   }
 
   /** Empties the field and forgets any chosen PDF. */
@@ -188,8 +198,7 @@ export class WtMasterKeyInput extends LitElement {
     input.setSelectionRange(...caret);
   }
 
-  async #choose(file: File | undefined): Promise<void> {
-    if (file === undefined) return;
+  async #choose(file: File): Promise<void> {
     const reading = this.#start();
     this.value = "";
     this.#file = file;
@@ -208,12 +217,12 @@ export class WtMasterKeyInput extends LitElement {
       problem = notAPack(error) ? "notPack" : "damaged";
     }
     if (reading !== this.#reading) return;
-    if (problem !== undefined) {
-      this.problem = problem;
-      return;
-    }
-    this.value = key!;
-    this.#notify(key);
+    if (problem === undefined) {
+      this.value = key!;
+      this.#notify(key);
+    } else this.problem = problem;
+    await this.updateComplete;
+    await this.renderRoot.querySelector("wt-input")!.updateComplete;
   }
 
   #line(copy: MasterKeyInputCopy): string {
@@ -267,7 +276,7 @@ export class WtMasterKeyInput extends LitElement {
           const input = event.target as HTMLInputElement;
           const file = input.files![0];
           input.value = "";
-          void this.#choose(file);
+          if (file !== undefined) this.#pdfRead = this.#choose(file);
         }}
       />
       <p class="visually-hidden" role="status">${fromPack ? line : nothing}</p>`;

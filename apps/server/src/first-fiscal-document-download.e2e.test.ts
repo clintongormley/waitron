@@ -334,6 +334,8 @@ it.each(["en", "es"] as const)(
       } finally {
         await task.destroy();
       }
+      // The allocation screen is mounted only to reach the shared master-key field: for a filing
+      // backup the app draws the restore review instead.
       await page.evaluate(
         async (preview) => {
           const allocation = document.createElement("setup-recovery-allocation") as HTMLElement & {
@@ -372,8 +374,14 @@ it.each(["en", "es"] as const)(
       const picker = page.locator(`${keyField} input[type="file"]`);
       const recovered = () =>
         page.evaluate(() => (window as unknown as { recovered?: string }).recovered);
-      await picker.setInputFiles(join(receipt, "wizard-original.pdf"));
-      await expect.poll(recovered).toBe(masterKey);
+      const choose = async (path: string) => {
+        await picker.setInputFiles(path);
+        await page
+          .locator(keyField)
+          .evaluate((field) => (field as HTMLElement & { pdfRead: Promise<void> | null }).pdfRead);
+      };
+      await choose(join(receipt, "wizard-original.pdf"));
+      expect(await recovered()).toBe(masterKey);
       const reprint = await PDFDocument.load(original);
       reprint.getPages()[0]!.drawText("SYNTHETIC ANNOTATION", { x: 42, y: 24, size: 8 });
       const annotated = await reprint.save();
@@ -396,8 +404,8 @@ it.each(["en", "es"] as const)(
       } finally {
         await annotatedTask.destroy();
       }
-      await picker.setInputFiles(annotatedPath);
-      await expect.poll(recovered).toBe(masterKey);
+      await choose(annotatedPath);
+      expect(await recovered()).toBe(masterKey);
       const printPage = await context.newPage();
       await printPage.setContent(
         `<img src="data:image/png;base64,${pagePng.toString("base64")}" style="width:100%">`,
@@ -408,18 +416,16 @@ it.each(["en", "es"] as const)(
       const printedPath = join(receipt, "wizard-printed.pdf");
       await printPage.pdf({ path: printedPath, format: "A4" });
       await printPage.close();
-      await picker.setInputFiles(printedPath);
-      await expect
-        .poll(() =>
-          page
-            .locator(`${keyField} wt-input[name="master-key"]`)
-            .evaluate((field) => (field as HTMLElement & { error: string }).error),
-        )
-        .toBe(
-          locale === "en"
-            ? "This PDF is not a recovery pack."
-            : "Este PDF no es un paquete de recuperación.",
-        );
+      await choose(printedPath);
+      expect(
+        await page
+          .locator(`${keyField} wt-input[name="master-key"]`)
+          .evaluate((field) => (field as HTMLElement & { error: string }).error),
+      ).toBe(
+        locale === "en"
+          ? "This PDF is not a recovery pack."
+          : "Este PDF no es un paquete de recuperación.",
+      );
       expect(await recovered()).toBeUndefined();
       await fill(
         `${keyField} wt-input[name="master-key"]`,

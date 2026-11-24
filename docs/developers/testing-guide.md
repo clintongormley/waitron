@@ -2495,9 +2495,10 @@ printer memberships independently for each station”, rather than relying on th
 
 ### Wait for the recovery PDF picker's import
 
-A PDF mismatch check must wait for `RecoveryKeyEntry.importFile` to finish before reading its
-rendered refusal. Track the promise started by the real file-picker event, keeping the real
-reader. A one-second assertion window is not the import's completion signal.
+A test that chooses a recovery pack PDF in `wt-master-key-input` awaits the field's `pdfRead`
+before reading the filled key or the refusal line. `pdfRead` is the read the real file-picker
+event started, with the real reader, and it settles once the field shows its result. A one-second
+assertion window is not the read's completion signal.
 
 On 19 October, A679's full fiscal run failed the wrong-key-name case with an empty error while
 its helper did not await the import. In an independently installed candidate, a controlled 1.5-second file

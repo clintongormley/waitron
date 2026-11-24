@@ -660,3 +660,45 @@ test("a host that keeps its bound flag set loses the second refusal", async () =
   expect(el.wrongKey).toBe(false);
   expect(message(el)).toBeUndefined();
 });
+
+test("pdfRead is null before any choice and settles once the PDF's line shows", async () => {
+  const { el } = await field();
+  expect(el.pdfRead).toBeNull();
+  el.readPack = async () => async () => Promise.reject(packRefusal("not_a_pack"));
+  await choose(el);
+  const read = el.pdfRead;
+  expect(read).toBeInstanceOf(Promise);
+  expect(message(el)).toBeUndefined();
+  await read;
+  expect(message(el)).toBe(EN.notPack);
+});
+
+test("pdfRead settles once a chosen PDF has filled the field", async () => {
+  const { el } = await field();
+  await choose(el);
+  await el.pdfRead;
+  expect(native(el).value).toBe(KEY);
+  expect(message(el)).toBeUndefined();
+});
+
+test("a second choice replaces pdfRead with its own read", async () => {
+  let finish!: (value: RecoveryPackReading) => void;
+  const { el } = await field();
+  const answers = [
+    () => new Promise<RecoveryPackReading>((resolve) => (finish = resolve)),
+    async () => reading(),
+  ];
+  el.readPack = async () => () => answers.shift()!();
+  await choose(el);
+  const first = el.pdfRead;
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  await choose(el);
+  const second = el.pdfRead;
+  expect(second).not.toBe(first);
+  await second;
+  expect(native(el).value).toBe(KEY);
+  finish(reading({ masterKeyName: "2026-01-02 · AAAA" }));
+  await first;
+  expect(el.pdfRead).toBe(second);
+  expect(message(el)).toBeUndefined();
+});

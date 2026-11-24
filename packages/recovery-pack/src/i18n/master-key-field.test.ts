@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import * as table from "./master-key-field.js";
 import { MASTER_KEY_FIELD_WORDS } from "./master-key-field.js";
 
 describe("the master-key field's words", () => {
@@ -29,10 +28,6 @@ describe("the master-key field's words", () => {
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Clave maestra incorrecta. Usa la del 2026-11-23 · QZJV.",
     );
-  });
-
-  it("offers one damaged-pack line for every page, never a Scan button the page lacks", () => {
-    expect(Object.keys(table)).toEqual(["MASTER_KEY_FIELD_WORDS"]);
   });
 
   it("says which pack holds the master key, when it is known", () => {

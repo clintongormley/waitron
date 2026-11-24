@@ -3459,15 +3459,32 @@ async function recoveryPack(
     },
   });
 }
-/** Chooses a PDF through the field's own file input, as the button's file dialog would. */
+/**
+ * Chooses a PDF through the field's own file input, as the button's file dialog would, and waits
+ * for the field to show what it read.
+ */
 async function choosePdf(el: Entry, bytes: Uint8Array<ArrayBuffer>) {
-  const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
+  const key = el.shadowRoot!.querySelector<LitElement & { pdfRead: Promise<void> | null }>(
+    "wt-master-key-input",
+  )!;
   await key.updateComplete;
   const chooser = key.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
   const files = new DataTransfer();
   files.items.add(new File([bytes], "recovery.pdf", { type: "application/pdf" }));
   chooser.files = files.files;
   chooser.dispatchEvent(new Event("change", { bubbles: true }));
+  await key.pdfRead;
+  await el.updateComplete;
+}
+/** The markup and text of a node and of every shadow root under it. */
+function markupWithin(node: Element): string {
+  const root = node.shadowRoot;
+  if (root === null) return "";
+  return [
+    root.innerHTML,
+    root.textContent,
+    ...[...root.querySelectorAll("*")].map(markupWithin),
+  ].join("\n");
 }
 const sentKeys = (prepare: Mock<(request: { proposal: unknown }) => Promise<unknown>>) =>
   prepare.mock.calls.map(
@@ -3500,7 +3517,14 @@ it("the restore review takes the master key, typed in any form, and sends its pr
 it("choosing a pack PDF fills the master key", async () => {
   const { el, prepare } = await mount();
   await choosePdf(el, await recoveryPack({}));
-  await vi.waitFor(async () => expect(field(await keyInput(el)).value).toBe(MASTER_KEY));
+  expect(field(await keyInput(el)).value).toBe(MASTER_KEY);
+  const shown = [el.outerHTML, markupWithin(el)].join("\n");
+  expect(shown, "the check reads the master-key field's own markup").toContain('name="master-key"');
+  for (const form of [MASTER_KEY, MASTER_KEY.replaceAll(" ", "")]) {
+    expect(el.outerHTML).not.toContain(form);
+    expect(el.shadowRoot!.textContent).not.toContain(form);
+    expect(shown).not.toContain(form);
+  }
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
   check(el, "recovery-details-confirmed");
@@ -3533,7 +3557,7 @@ it.each([
 ] as const)("choosing %s says so under the field and sends no key", async (_, bytes, line) => {
   const { el, prepare } = await mount();
   await choosePdf(el, await bytes());
-  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(line));
+  expect(await keyFieldError(el)).toBe(line);
   expect(field(await keyInput(el)).value).toBe("");
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
