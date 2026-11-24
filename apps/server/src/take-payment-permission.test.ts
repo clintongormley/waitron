@@ -13,6 +13,7 @@ import { parkOrder } from "./working-order.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   inTx,
+  partyRevisionOf,
   paymentRows,
   provisionBillVenue,
   fiscalRecordCount,
@@ -393,5 +394,133 @@ describe("POST /api/working-orders/:id/close-deferred needs payment.take", () =>
     expect(salesCount(id)).toBe(0);
     expect(fiscalRecordCount(venue, id)).toBe(0);
     expect(closures(id)).toEqual([]);
+  });
+});
+
+/** The bill's lines, in order, and its payments, as a refused request must leave them. */
+async function billState(billId: string) {
+  return {
+    lines: venue.db.all(
+      sql`select id, quantity, line_total from working_order_lines where working_order_id = ${billId} order by line_no`,
+    ),
+    payments: (await paymentRows(venue, billId)).map(({ id, applied, tip, state }) => ({
+      id,
+      applied,
+      tip,
+      state,
+    })),
+    itemBills: venue.db.all(sql`select id from working_orders where items_paid_from = ${billId}`),
+    sales: salesCount(billId),
+  };
+}
+
+function lineIdOf(billId: string, lineNo: number): string {
+  const [row] = venue.db.all<{ id: string }>(
+    sql`select id from working_order_lines where working_order_id = ${billId} and line_no = ${lineNo}`,
+  );
+  return row!.id;
+}
+
+/** Pay for items of line 1, one Croquettes (10.00), as the till sends it. */
+async function payForCroquettes(
+  party: { partyId: string; tabId: string },
+  body: Record<string, unknown>,
+) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${party.tabId}/item-payments`, {
+    submissionId: randomUUID(),
+    picks: [{ lineId: lineIdOf(party.tabId, 1) }],
+    partyId: party.partyId,
+    expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
+    expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, party.tabId))],
+    applied: "10.00",
+    tip: "0.00",
+    ...body,
+  });
+}
+
+describe("POST /api/working-orders/:id/item-payments needs payment.take on every entry", () => {
+  const entries: { name: string; body: Record<string, unknown> }[] = [
+    { name: "cash", body: { method: "cash", tendered: "10.00" } },
+    { name: "a hand-keyed card", body: { method: "card" } },
+    { name: "a card on the reader", body: { method: "card", entry: "reader" } },
+  ];
+
+  it.each(entries)("refuses $name, moving nothing and recording no payment", async ({ body }) => {
+    const party = await seatedWith(venue, "Croquettes", "Tarta");
+    const before = await billState(party.tabId);
+    const readerCalls = venue.card.collectCalls.length;
+    gate.deny = true;
+
+    expectRefused(await payForCroquettes(party, body));
+
+    expectAsked();
+    expect(await billState(party.tabId)).toEqual(before);
+    expect(before.itemBills).toEqual([]);
+    expect(await providerPaymentsOf(party.tabId)).toEqual([]);
+    expect(venue.card.collectCalls.length).toBe(readerCalls);
+  });
+
+  it.each(entries)("takes $name when the permission is held", async ({ body }) => {
+    const party = await seatedWith(venue, "Croquettes", "Tarta");
+
+    const answer = await payForCroquettes(party, body);
+
+    expect(answer).toMatchObject({ status: 200, json: { payment: { outcome: "received" } } });
+    expectAsked();
+    expect((await billState(party.tabId)).itemBills).toHaveLength(1);
+  });
+});
+
+describe("POST /api/working-orders/:id/overpaid/keep-as-tip needs payment.take", () => {
+  /** A 20.00 bill paid 15.00, whose first Croquettes (10.00) is then paid for on its own bill. */
+  async function overpaid() {
+    const party = await seatedWith(venue, "Croquettes", "Croquettes");
+    expect(
+      (
+        await billPayment(party.tabId, {
+          amount: "15.00",
+          applied: "15.00",
+          method: "cash",
+          tendered: "15.00",
+        })
+      ).status,
+    ).toBe(200);
+    expect((await payForCroquettes(party, { method: "cash", tendered: "10.00" })).status).toBe(200);
+    return party.tabId;
+  }
+
+  function keepAsTip(billId: string) {
+    return send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/overpaid/keep-as-tip`,
+      {
+        submissionId: randomUUID(),
+      },
+    );
+  }
+
+  it("refuses and leaves the bill's payments and lines as they were, with no invoice", async () => {
+    const billId = await overpaid();
+    const before = await billState(billId);
+    gate.deny = true;
+
+    expectRefused(await keepAsTip(billId));
+
+    expectAsked();
+    expect(await billState(billId)).toEqual(before);
+    expect(before.sales).toBe(0);
+    expect(await statusOf(venue, billId)).toBe("open");
+  });
+
+  it("keeps the overpayment as a tip when the permission is held", async () => {
+    const billId = await overpaid();
+
+    const answer = await keepAsTip(billId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expectAsked();
+    expect((await billState(billId)).payments).toMatchObject([{ applied: 1000, tip: 500 }]);
   });
 });
