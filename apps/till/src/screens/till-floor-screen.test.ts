@@ -126,7 +126,49 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("2");
   });
 
-  it("shows the ready-to-serve badge with the readyToServe count ('N listos')", async () => {
+  it.each([
+    ["en-GB", 1, "1 item"],
+    ["en-GB", 2, "2 items"],
+    ["es-ES", 1, "1 art."],
+    ["es-ES", 2, "2 art."],
+  ])("counts an open tab's items on its list card, in %s, for %i", async (locale, count, words) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount({
+        tables: [
+          table({ state: "open-tab", hasOpenTab: true, tabLineCount: count, tabTotal: "6.50" }),
+        ],
+      });
+      expect(el.shadowRoot!.querySelector(".lines")?.textContent?.trim()).toBe(words);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it.each([
+    ["en-GB", 1, "1 ready"],
+    ["en-GB", 2, "2 ready"],
+    ["es-ES", 1, "1 listo"],
+    ["es-ES", 2, "2 listos"],
+  ])(
+    "counts a table's ready dishes on its list card, in %s, for %i",
+    async (locale, count, words) => {
+      const previous = currentLocale();
+      try {
+        setLocale(locale);
+        const { el } = await mount({
+          tables: [table({ state: "open-tab", hasOpenTab: true, readyToServe: count })],
+        });
+        const ready = el.shadowRoot!.querySelector("[data-ready]")?.textContent;
+        expect(ready?.replace(/\s+/g, " ").trim()).toBe(words);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it("shows the ready-to-serve badge with the readyToServe count", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
       tables: [
@@ -144,9 +186,7 @@ describe("till-floor-screen", () => {
       ],
     });
     // readyToServe outranks pendingToServe, so only the ready badge renders.
-    const ready = el.shadowRoot!.querySelector("[data-ready]")!;
-    expect(ready.textContent).toContain("2");
-    expect(ready.textContent).toContain(t("floor.ready"));
+    expect(el.shadowRoot!.querySelector("[data-ready]")?.textContent?.trim()).toBe("2 ready");
   });
 
   it("renders no ready-to-serve badge when readyToServe is 0", async () => {
@@ -163,9 +203,7 @@ describe("till-floor-screen", () => {
       ],
     });
     expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
-    const ready = el.shadowRoot!.querySelector("[data-ready]")!;
-    expect(ready?.textContent).toContain("2");
-    expect(ready?.textContent).toContain(t("floor.ready"));
+    expect(el.shadowRoot!.querySelector("[data-ready]")?.textContent?.trim()).toBe("2 ready");
   });
 
   it("renders no en-camino badge when enRoute is 0", async () => {

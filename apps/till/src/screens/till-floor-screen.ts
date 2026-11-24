@@ -48,7 +48,7 @@ import {
   partyTablesName,
   type ServiceStepDue,
 } from "@waitron/shared";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -117,6 +117,7 @@ import {
   MAP_PRECEDENCE,
   mapKinds,
   mapLook,
+  readyText,
   reminderClock,
   topTabKind,
   type MapKind,
@@ -3166,9 +3167,7 @@ export class TillFloorScreen extends LitElement {
       if (signalOf(table.signals, "ready") !== undefined) return null;
       return {
         kind: "ready",
-        mark: html`<span class="badge ready" data-ready
-          >${table.readyToServe} ${t("floor.ready")}</span
-        >`,
+        mark: html`<span class="badge ready" data-ready>${readyText(table.readyToServe)}</span>`,
       };
     }
     if (table.pendingToServe > 0) {
@@ -3197,7 +3196,9 @@ export class TillFloorScreen extends LitElement {
           }
           ${
             table.hasOpenTab
-              ? html`<span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>`
+              ? html`<span class="lines"
+                  >${countText(table.tabLineCount!, "floor.line_count", "floor.line_count_one")}</span
+                >`
               : nothing
           }
           ${this.#party(table.party)}
