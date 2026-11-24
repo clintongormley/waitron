@@ -1503,7 +1503,7 @@ describe("what the till reads", () => {
     ]);
     expect((await approvers("?permission=sale.refund")).json).toEqual(comps.json);
     expect((await approvers("?permission=node.manage")).json).toEqual([comps.json[0]]);
-    await inTx(venue, (tx) =>
+    await withTransaction(venue.db, (tx) =>
       tx.execute(
         sql`update roles set permissions = json_insert(permissions, '$[#]', 'node.manage') where built_in_key = 'manager'`,
       ),
