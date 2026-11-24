@@ -459,6 +459,7 @@ async function postProvision(
   app: Hono,
   body: unknown,
   headers: Record<string, string> = {},
+  env?: Record<string, unknown>,
 ): Promise<Response> {
   const socket = new TLSSocket(new Socket());
   try {
@@ -469,7 +470,7 @@ async function postProvision(
         headers: { "content-type": "application/json", ...headers },
         body: typeof body === "string" ? body : JSON.stringify(body),
       },
-      { incoming: { socket } },
+      { incoming: { socket }, ...env },
     );
   } finally {
     socket.destroy();
@@ -1816,6 +1817,19 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const second = await postProvision(app, demoBody());
     expect(second.status).toBe(200);
     await tick();
+    expect(requestRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts only once its reply has been written", async () => {
+    const app = new Hono();
+    const { deps, requestRestart } = makeDeps();
+    mountSetup(app, deps, noopLog);
+    const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+    const response = await postProvision(app, demoBody(), {}, { outgoing });
+    expect(response.status).toBe(200);
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+    outgoing.emit("finish");
     expect(requestRestart).toHaveBeenCalledTimes(1);
   });
 
@@ -4434,8 +4448,8 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
   const unavailable = { error: { code: "setup.reset_unavailable", params: {} } };
 
-  const postReset = (app: Hono): Promise<Response> =>
-    fromOwnPage(app, "/setup-api/reset-incomplete-adopt");
+  const postReset = (app: Hono, env?: Record<string, unknown>): Promise<Response> =>
+    fromOwnPage(app, "/setup-api/reset-incomplete-adopt", env === undefined ? {} : { env });
 
   function writeRecord(dir: string, kind: string, phase: string, data = {}): void {
     mkdirSync(join(dir, "flows/setup"), { recursive: true });
@@ -4494,6 +4508,22 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       expect(requestRestart).not.toHaveBeenCalled();
       await tick();
       expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts only once its reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-written-"));
+    try {
+      const { app, requestRestart } = await halfAdopted(dir);
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await postReset(app, { outgoing });
+      expect(response.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

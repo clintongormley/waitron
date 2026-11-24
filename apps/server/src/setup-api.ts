@@ -188,7 +188,6 @@ export interface SetupDeps {
   seedMembership?: (nodeId: string) => Promise<void>;
   /** Persists `trading.env` so the next boot enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
-  /** Called on the next tick, so the wizard sees the success response before the box goes down. */
   requestRestart?: () => void;
   /** Notes the clock steps this process made whose note could not be written; throws while one
    * still cannot be. A finish that restarts into the full start calls it first, since the step
@@ -1193,7 +1192,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ...(recoveryPackPdf === undefined ? {} : { recoveryPackPdf }),
       });
     };
-    return runProvision(c, log, async () => {
+    const handle = async (mustRestart: () => void) => {
       let succeeded = false;
       try {
         const requestHash = createHash("sha256").update(await c.req.raw.clone().text());
@@ -1264,7 +1263,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             return c.json(operation.data as { provisioned: true; restarting: true });
           const result = await execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
           await clearHeldAdmin();
-          setTimeout(() => requestRestart(), 0);
+          mustRestart();
           return result;
         };
         const response =
@@ -1276,7 +1275,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } finally {
         if (!succeeded) provisioning = false;
       }
-    });
+    };
+    return runProvision(c, log, () => restartAfterReply(c, requestRestart, handle));
   });
 
   // The handle keeps the code on the page that started the join. Only its hash is kept.
@@ -1452,23 +1452,25 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    return runReset(c, log, async () => {
-      let succeeded = false;
-      try {
-        refuseJoinElsewhere(c);
-        const record = await operations.read();
-        if (!isUnfinishedAdopt(record)) {
-          throw new AppError("setup.reset_unavailable", {});
+    return runReset(c, log, () =>
+      restartAfterReply(c, requestRestart, async (mustRestart) => {
+        let succeeded = false;
+        try {
+          refuseJoinElsewhere(c);
+          const record = await operations.read();
+          if (!isUnfinishedAdopt(record)) {
+            throw new AppError("setup.reset_unavailable", {});
+          }
+          await stageReset(record.id);
+          const response = c.json({ resetStaged: true, restarting: true }, 202);
+          mustRestart();
+          succeeded = true;
+          return response;
+        } finally {
+          if (!succeeded) provisioning = false;
         }
-        await stageReset(record.id);
-        const response = c.json({ resetStaged: true, restarting: true }, 202);
-        setTimeout(() => requestRestart(), 0);
-        succeeded = true;
-        return response;
-      } finally {
-        if (!succeeded) provisioning = false;
-      }
-    });
+      }),
+    );
   });
 
   app.post("/setup-api/cloud-recovery/start", async (c) => {
