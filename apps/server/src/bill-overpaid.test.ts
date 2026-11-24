@@ -485,7 +485,6 @@ describe("A1515 a bill left owing less than it was paid", () => {
     });
   });
 
-  // Last in the file: its invoice is filed on a clock a day ahead, which later records would follow.
   it("a card give-back completed by a recovery pass a day later files the day the payments were taken", async () => {
     const { billId, paymentId } = await overpaidBill("card");
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });
