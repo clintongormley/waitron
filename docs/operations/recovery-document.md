@@ -35,7 +35,8 @@ or stop and change nothing.
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key and a
 new box key together, in a new pack. The dialog then shows the master key with its name: use
-**Download**, **Print** or **Copy**, then **Continue**. It is shown only this once, so **Stop**
+**Download** or **Print**, then **Continue**. **Copy** copies the master key alone, which is not
+enough while the pack also holds the new box key. It is shown only this once, so **Stop**
 and Escape do nothing while the box is making it. The button is offered only once the card has read
 the box's status and the box has a box key, since the master key is made with the box key's
 replacement until the box key goes.

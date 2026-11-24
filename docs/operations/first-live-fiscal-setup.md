@@ -168,9 +168,11 @@ you did not report.
 Choose **Show the master key** and enter the setup password. The page makes the keys and pack 1,
 then shows the master key, its name above it, with **Download**, **Print** and **Copy**; nothing
 downloads by itself. Download saves `waitron-recovery-pack-1.pdf`, and Print opens the same
-document; Copy copies the key as printed, with its spaces. If Copy does not work, the page says so.
-**Continue** appears once one of the three has worked
-(`first-hour-recovery-pack.browser.test.ts`). Check the business, venue, box ID and key name on
+document; Copy copies the key as printed, with its spaces. If Copy does not work, or the browser
+blocks Print, the page says so. **Continue** appears once Download or Print has worked; Copy alone
+is not enough, because the pack also holds the box key
+(`first-hour-recovery-pack.browser.test.ts`, "Copy alone leaves Continue hidden: the pack also
+holds the box key, which Copy leaves out"). Check the business, venue, box ID and key name on
 its box key page, then choose **Continue**.
 There is no separate signing key, custodian computer, register or downloadable tool.
 
