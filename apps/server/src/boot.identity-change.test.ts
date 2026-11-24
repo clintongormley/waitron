@@ -4,20 +4,26 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  stampDeployment,
+  withTransaction,
+  writeNodeMembership,
+  writeNodeMembershipTx,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { softwareVersion } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { startManagementSession } from "@waitron/identity";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setSingletonRole } from "@waitron/node-db";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
 import { installBenchClock, type BenchClock } from "../scripts/bench/bench-clock.js";
 import type { BoxHostClient } from "./box-host-client.js";
-import type { ClockWatch } from "./clock-watch.js";
+import type { ClockWatch, createClockWatch } from "./clock-watch.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { StartClockState } from "./start-clock-check.js";
 import {
@@ -75,6 +81,8 @@ const built = vi.hoisted(() => ({
   start: undefined as StartClockState | undefined,
   watch: undefined as ClockWatch | undefined,
   witnesses: undefined as ClockWitnessStore | undefined,
+  /** Boot's `read`: a transaction on the server's own handle, under its write lock. */
+  inServerTransaction: undefined as Parameters<typeof createClockWatch>[0]["read"] | undefined,
 }));
 vi.mock("./clock-witnesses.js", async (original) => {
   const actual = await original<typeof import("./clock-witnesses.js")>();
@@ -96,8 +104,10 @@ vi.mock("./clock-watch.js", async (original) => {
   const actual = await original<typeof import("./clock-watch.js")>();
   return {
     ...actual,
-    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) =>
-      (built.watch = actual.createClockWatch(...args)),
+    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
+      built.inServerTransaction = args[0].read;
+      return (built.watch = actual.createClockWatch(...args));
+    },
   };
 });
 
@@ -115,14 +125,14 @@ vi.mock("@waitron/fiscal-verifactu/src/identity-change.js", async (original) => 
   };
 });
 
-// One production venue whose chain is filed under FIRST, started in turn with a producer it has not
-// filed under. The cases run in order: the first opening leaves the chain under SECOND.
+// One production venue whose chain is first filed under FIRST, started in turn with a producer it has
+// not filed under. Each opening moves the chain to the other one, so a case reads the chain's latest.
 const FIRST = "00000000T";
 const SECOND = "12345678Z";
 const INSTALLATION = "0CNN8";
 const NOTE_FILE = "identity-change.json";
 
-const { startServer, httpPort } = ephemeralServerFixture();
+const { startServer, httpPort, beforeServerStarts } = ephemeralServerFixture();
 let venue: BillVenue;
 let counter: ZoneOffers;
 const suite = useVenueDb({
@@ -136,21 +146,18 @@ const suite = useVenueDb({
     renameFixtureInstallation(db, INSTALLATION);
     await stampDeployment(db, "production");
     await seedModuleSettings(db, { "fiscal-none": false });
-    await holdChart(db, 0, "serving-primary", []);
+    await writeNodeMembership(db, chart(0, "serving-primary", []));
   },
 });
 
 type Standing = MembershipNode["standing"];
-/** Saves a chart giving this venue's box `own` standing, beside `others`. */
-function holdChart(db: typeof suite.db, term: number, own: Standing, others: MembershipNode[]) {
+/** A chart giving this venue's box `own` standing, beside `others`. */
+function chart(term: number, own: Standing, others: MembershipNode[]) {
   const { nodeId } = venue.cfg;
-  return writeNodeMembership(
-    db,
-    signedMembershipDoc(term, {
-      signerNodeId: nodeId,
-      nodes: [{ nodeId, contactUrl: "", standing: own }, ...others],
-    }),
-  );
+  return signedMembershipDoc(term, {
+    signerNodeId: nodeId,
+    nodes: [{ nodeId, contactUrl: "", standing: own }, ...others],
+  });
 }
 
 const scratches: string[] = [];
@@ -180,17 +187,43 @@ const noteExists = (stateDir: string) =>
     () => false,
   );
 
-function writeNote(stateDir: string, overrides: Record<string, string> = {}) {
-  return writeFile(
-    noteIn(stateDir),
-    JSON.stringify({
-      version: 1,
-      release: softwareVersion(),
-      producerTaxId: SECOND,
-      fromProducerTaxId: FIRST,
-      ...overrides,
-    }),
-  );
+const producerAtHead = () => lastFiledProducer(venue.db);
+const otherThan = (producer: string) => (producer === FIRST ? SECOND : FIRST);
+
+type NoteFields = Partial<Record<"release" | "producerTaxId" | "fromProducerTaxId", string>>;
+async function writeNote(stateDir: string, producer: string, overrides: NoteFields) {
+  const note = {
+    version: 1,
+    release: softwareVersion(),
+    producerTaxId: producer,
+    fromProducerTaxId: otherThan(producer),
+    ...overrides,
+  };
+  await writeFile(noteIn(stateDir), JSON.stringify(note));
+  return producer;
+}
+
+/** A start of a release that files under the other producer, with the note naming the change. */
+const noteTheOtherProducer = (stateDir: string, overrides: NoteFields = {}) =>
+  writeNote(stateDir, otherThan(producerAtHead()), overrides);
+
+/** A start after that release's opening, with the note naming the change still there. */
+const noteLeftOver = (stateDir: string, overrides: NoteFields = {}) =>
+  writeNote(stateDir, producerAtHead(), overrides);
+
+/** The administrator's freshly proved session, as `serving` last made it. */
+let adminCookie: string;
+async function administratorCookie(): Promise<string> {
+  beforeServerStarts();
+  const token = await withTransaction(suite.db, async (tx) => {
+    const session = await startManagementSession(tx, {
+      method: "password",
+      personId: venue.adminId,
+    });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
+  });
+  return `${MANAGEMENT_COOKIE}=${token}`;
 }
 
 /** Starts a production server filing under `producer`, runs `during`, and closes it. */
@@ -202,6 +235,7 @@ async function serving<T>(
   await copyMigrationsRoot(migrationsRoot);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const [port] = await freePorts(1);
+  adminCookie = await administratorCookie();
   const env = {
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_HTTP_PORT: String(port),
@@ -264,33 +298,26 @@ const recordOf = (workingOrderId: string) => filedRecordOf(venue.db, workingOrde
 const installations = () =>
   venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_identities`)[0]!.n;
 
-async function administratorCookie(): Promise<string> {
-  const [admin] = await seedPersons(suite.db, {
-    displayName: `Alerts administrator ${randomUUID()}`,
-    role: "admin",
-    status: "active",
-  });
-  const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { method: "password", personId: admin!.id }),
-  );
-  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
-  return `waitron_management_session=${session.token}`;
-}
-
-async function alerts(): Promise<{ code: string; params: Record<string, unknown> }[]> {
+async function alerts(
+  cookie = adminCookie,
+): Promise<{ code: string; params: Record<string, unknown> }[]> {
   const answer = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
-    headers: { cookie: await administratorCookie() },
+    headers: { cookie },
   });
   expect(answer.status).toBe(200);
   return ((await answer.json()) as { alerts: never }).alerts;
 }
 
+let firstSale: Awaited<ReturnType<typeof sell>>;
+beforeAll(async () => {
+  const stateDir = await newStateDir();
+  firstSale = await serving({ producer: FIRST, host: synchronisedBoxHost(), stateDir }, sell);
+});
+
 describe("a production start whose chain is filed under another producer", () => {
-  it("sells under its own producer, as the control and to give the chain its head", async () => {
-    const stateDir = await newStateDir();
-    const sale = await serving({ producer: FIRST, host: synchronisedBoxHost(), stateDir }, sell);
-    expect(sale.status, sale.body).toBe(200);
-    expect(recordOf(sale.workingOrderId).producer).toBe(FIRST);
+  it("sold under its own producer before, the control", () => {
+    expect(firstSale.status, firstSale.body).toBe(200);
+    expect(recordOf(firstSale.workingOrderId).producer).toBe(FIRST);
   });
 
   it.each([
@@ -300,9 +327,10 @@ describe("a production start whose chain is filed under another producer", () =>
     ["with a note naming another earlier producer", { fromProducerTaxId: "11111111H" }],
   ])("refuses sif.producer_changed %s, and leaves the note", async (_label, overrides) => {
     const stateDir = await newStateDir();
-    if (overrides !== null) await writeNote(stateDir, overrides);
+    const producer = otherThan(producerAtHead());
+    if (overrides !== null) await noteTheOtherProducer(stateDir, overrides);
     const caught = await serving(
-      { producer: SECOND, host: synchronisedBoxHost(), stateDir },
+      { producer, host: synchronisedBoxHost(), stateDir },
       async () => undefined,
     ).catch((error: unknown) => error);
     expect(isAppError(caught) && caught.code).toBe("sif.producer_changed");
@@ -311,20 +339,18 @@ describe("a production start whose chain is filed under another producer", () =>
 
   it("refuses sif.producer_changed with a matching note on a box that files no records, and leaves the note", async () => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir);
+    const producer = await noteTheOtherProducer(stateDir);
     const records = fiscalRecordCount(venue);
+    beforeServerStarts();
     const handles = { venue: suite.db, node: suite.node };
     const { nodeId } = venue.cfg;
     await setSingletonRole(handles, nodeId, "secondary", "fenced");
     let outcome: unknown;
     try {
-      outcome = await serving(
-        { producer: SECOND, host: unsynchronisedHost(), stateDir },
-        async () => {
-          const { status, workingOrderId } = await sell();
-          return { sale: status, record: recordOf(workingOrderId) };
-        },
-      ).catch((error: unknown) => isAppError(error) && error.code);
+      outcome = await serving({ producer, host: unsynchronisedHost(), stateDir }, async () => {
+        const { status, workingOrderId } = await sell();
+        return { sale: status, record: recordOf(workingOrderId) };
+      }).catch((error: unknown) => isAppError(error) && error.code);
     } finally {
       await setSingletonRole(handles, nodeId, "primary", "promote");
     }
@@ -335,24 +361,21 @@ describe("a production start whose chain is filed under another producer", () =>
 
   it("with a note and the time service unsynchronised, stays up and waits, selling and opening nothing", async () => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir);
+    const producer = await noteTheOtherProducer(stateDir);
     const records = fiscalRecordCount(venue);
     const before = installations();
 
-    const seen = await serving(
-      { producer: SECOND, host: unsynchronisedHost(), stateDir },
-      async () => {
-        const sale = await sell();
-        // The clock watch's whole look: devices, the time service, the jump.
-        await built.watch!.check();
-        return {
-          sale,
-          health: (await fetch(`http://127.0.0.1:${httpPort()}/health`)).status,
-          alert: (await alerts()).find(({ code }) => code === "clock.unconfirmed"),
-          status: built.start!.status,
-        };
-      },
-    );
+    const seen = await serving({ producer, host: unsynchronisedHost(), stateDir }, async () => {
+      const sale = await sell();
+      // The clock watch's whole look: devices, the time service, the jump.
+      await built.watch!.check();
+      return {
+        sale,
+        health: (await fetch(`http://127.0.0.1:${httpPort()}/health`)).status,
+        alert: (await alerts()).find(({ code }) => code === "clock.unconfirmed"),
+        status: built.start!.status,
+      };
+    });
 
     expect(seen.sale.status, seen.sale.body).toBe(409);
     expect(JSON.parse(seen.sale.body)).toEqual({
@@ -368,7 +391,7 @@ describe("a production start whose chain is filed under another producer", () =>
 
   it("with a note and the time service synchronised, opens a new installation before the listener, deletes the note and sells under it", async () => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir);
+    const producer = await noteTheOtherProducer(stateDir);
     const before = installations();
     const synchronised = synchronisedBoxHost();
     const listeningAtRead: boolean[] = [];
@@ -380,7 +403,7 @@ describe("a production start whose chain is filed under another producer", () =>
       },
     };
 
-    const seen = await serving({ producer: SECOND, host, stateDir }, async () => ({
+    const seen = await serving({ producer, host, stateDir }, async () => ({
       opened: installations(),
       note: await noteExists(stateDir),
       start: { status: built.start!.status, held: built.start!.heldConfirmation },
@@ -397,7 +420,7 @@ describe("a production start whose chain is filed under another producer", () =>
     const first = recordOf(seen.first.workingOrderId);
     expect(first).toEqual({
       first: 1,
-      producer: SECOND,
+      producer,
       installation: expect.stringMatching(/^[0-9A-Z]{5}$/),
     });
     expect(recordOf(seen.second.workingOrderId)).toEqual({ ...first, first: 0 });
@@ -405,9 +428,9 @@ describe("a production start whose chain is filed under another producer", () =>
 
   it("deletes a note left over from an opening already made, and trades", async () => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir);
+    const producer = await noteLeftOver(stateDir);
     const before = installations();
-    const sale = await serving({ producer: SECOND, host: synchronisedBoxHost(), stateDir }, sell);
+    const sale = await serving({ producer, host: synchronisedBoxHost(), stateDir }, sell);
     expect(sale.status, sale.body).toBe(200);
     expect(await noteExists(stateDir)).toBe(false);
     expect(installations()).toBe(before);
@@ -415,11 +438,11 @@ describe("a production start whose chain is filed under another producer", () =>
 
   it("deletes a left-over note with the time service unsynchronised too, waiting for the time alone", async () => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir);
-    const seen = await serving(
-      { producer: SECOND, host: unsynchronisedHost(), stateDir },
-      async () => ({ note: await noteExists(stateDir), cause: built.start!.cause }),
-    );
+    const producer = await noteLeftOver(stateDir);
+    const seen = await serving({ producer, host: unsynchronisedHost(), stateDir }, async () => ({
+      note: await noteExists(stateDir),
+      cause: built.start!.cause,
+    }));
     expect(seen).toEqual({ note: false, cause: "start" });
   });
 
@@ -428,8 +451,8 @@ describe("a production start whose chain is filed under another producer", () =>
     ["another producer", { producerTaxId: "11111111H" }],
   ])("leaves a note naming %s alone, and trades", async (_label, overrides) => {
     const stateDir = await newStateDir();
-    await writeNote(stateDir, overrides);
-    const sale = await serving({ producer: SECOND, host: synchronisedBoxHost(), stateDir }, sell);
+    const producer = await noteLeftOver(stateDir, overrides);
+    const sale = await serving({ producer, host: synchronisedBoxHost(), stateDir }, sell);
     expect(sale.status, sale.body).toBe(200);
     expect(await noteExists(stateDir)).toBe(true);
   });
@@ -437,7 +460,8 @@ describe("a production start whose chain is filed under another producer", () =>
   it("trades when the note's name is a folder", async () => {
     const stateDir = await newStateDir();
     await mkdir(noteIn(stateDir));
-    const sale = await serving({ producer: SECOND, host: synchronisedBoxHost(), stateDir }, sell);
+    const producer = producerAtHead();
+    const sale = await serving({ producer, host: synchronisedBoxHost(), stateDir }, sell);
     expect(sale.status, sale.body).toBe(200);
   });
 });
@@ -461,18 +485,8 @@ function readClockAs(wallMs: number): void {
   boxClock = installBenchClock(new Date(wallMs));
 }
 
-const producerAtHead = () => lastFiledProducer(venue.db);
-
-/** A start of a release that files under the other producer, with the note naming the change. */
-async function noteTheOtherProducer(stateDir: string): Promise<string> {
-  const from = producerAtHead();
-  const to = from === FIRST ? SECOND : FIRST;
-  await writeNote(stateDir, { producerTaxId: to, fromProducerTaxId: from });
-  return to;
-}
-
-const clockAlerts = async () =>
-  (await alerts())
+const clockAlerts = async (cookie?: string) =>
+  (await alerts(cookie))
     .map(({ code }) => code)
     .filter((code) => code === "clock.unconfirmed" || code === "sif.identity_change_blocked");
 
@@ -560,6 +574,8 @@ describe("an opening refused at the start", () => {
 });
 
 describe("a chart that changes while the box waits to open its new installation", () => {
+  const onServer = (write: (tx: Transaction) => Promise<void>) => built.inServerTransaction!(write);
+
   it.each<[string, [own: Standing, other: Standing] | null, number]>([
     ["the chart lists a spare that joined", ["serving-primary", "serving-secondary"], 6],
     [
@@ -583,8 +599,14 @@ describe("a chart that changes while the box waits to open its new installation"
         clockStatus: async () => clockServiceAnswer(synchronised),
       };
       const seen = await serving({ producer, host, stateDir }, async () => {
-        if (standings === null) suite.db.run(sql`delete from node_membership`);
-        else await holdChart(suite.db, 1, standings[0], [{ ...box, standing: standings[1] }]);
+        await onServer(async (tx) => {
+          if (standings === null) await tx.run(sql`delete from node_membership`);
+          else
+            await writeNodeMembershipTx(
+              tx,
+              chart(1, standings[0], [{ ...box, standing: standings[1] }]),
+            );
+        });
         synchronised = true;
         await built.watch!.check();
         const blocked = {
@@ -593,7 +615,9 @@ describe("a chart that changes while the box waits to open its new installation"
           installations: installations(),
           note: await noteExists(stateDir),
         };
-        await holdChart(suite.db, 2, "serving-primary", [{ ...box, standing: "evicted" }]);
+        await onServer((tx) =>
+          writeNodeMembershipTx(tx, chart(2, "serving-primary", [{ ...box, standing: "evicted" }])),
+        );
         await built.watch!.check();
         return { blocked, sale: await sell(), alerts: await clockAlerts() };
       });
@@ -701,9 +725,8 @@ async function checkTheTime(aheadMs: number, keep: { keep?: true } = {}) {
 }
 
 async function confirmOnBoxStatus() {
-  const cookie = await administratorCookie();
-  const { challengeId } = await post("/api/box/clock-challenge", cookie, {});
-  await post("/api/box/clock-confirm", cookie, { challengeId, asShown: true });
+  const { challengeId } = await post("/api/box/clock-challenge", adminCookie, {});
+  await post("/api/box/clock-confirm", adminCookie, { challengeId, asShown: true });
 }
 
 describe("a person who confirms the time while the box waits to open its new installation", () => {
@@ -807,6 +830,9 @@ describe("a person's confirmation that cannot open the new installation", () => 
   }, 30_000);
 
   it("is dropped when it keeps a time before the release's, opens nothing, and leaves a set from the till to open it", async () => {
+    // A session does not outlive a set of the clock this far.
+    inMinute(24);
+    const cookieAfterTheSet = await administratorCookie();
     readClockAs(Date.parse("2026-10-01T10:00:30Z"));
     const stateDir = await newStateDir();
     const producer = await noteTheOtherProducer(stateDir);
@@ -841,7 +867,7 @@ describe("a person's confirmation that cannot open the new installation", () => 
       });
       await checkTheTime(middleOfMinute(24) - Date.now());
       await vi.waitFor(() => expect(built.start!.status).toBe("by_person"), { timeout: 8_000 });
-      return { sale: await sell(), alerts: await clockAlerts() };
+      return { sale: await sell(), alerts: await clockAlerts(cookieAfterTheSet) };
     });
 
     expect(seen.sale.status, seen.sale.body).toBe(200);
@@ -862,7 +888,7 @@ describe("two devices that agree with the box's time", () => {
     inMinute(20);
     const stateDir = await newStateDir();
     const status = await serving(
-      { producer: producerAtHead()!, host: unsynchronisedHost(), stateDir },
+      { producer: producerAtHead(), host: unsynchronisedHost(), stateDir },
       async () => {
         agree();
         await built.watch!.check();
