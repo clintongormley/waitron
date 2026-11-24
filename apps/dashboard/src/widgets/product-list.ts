@@ -979,6 +979,15 @@ export class ProductList extends LitElement {
       {
         key: "name",
         label: t("product.name"),
+        filter: {
+          label: t("editor.variants"),
+          allLabel: t("product.filter_any"),
+          value: ({ product }) => (product.variants.some(({ active }) => active) ? "has" : "none"),
+          options: [
+            { value: "has", label: t("product.has_variants") },
+            { value: "none", label: t("product.no_variants") },
+          ],
+        },
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
           [product.name, ...product.variants.map(({ name }) => name)].join(" "),

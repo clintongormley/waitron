@@ -5550,7 +5550,7 @@ describe("stable column inputs", () => {
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
     const filters = [...root.querySelectorAll<WtCombobox>("wt-combobox")];
-    expect(filters.length).toBe(4);
+    expect(filters.length).toBe(5);
     await Promise.all(filters.map((filter) => filter.updateComplete));
     const widths = filters.map((filter) =>
       vi.spyOn(filter as unknown as { widthTexts(): string[] }, "widthTexts"),
@@ -5559,7 +5559,7 @@ describe("stable column inputs", () => {
     await el.updateComplete;
     await table.updateComplete;
     await Promise.all(filters.map((filter) => filter.updateComplete));
-    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0]);
+    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0]);
     expect(table.columns).toBe(columns);
     setLocale("es");
     el.requestUpdate();
@@ -5738,6 +5738,7 @@ describe("product-list filters (A463)", () => {
       courses: [starters, mains],
     });
     expect(await filterKeys(el)).toEqual([
+      "name",
       "course",
       "modifiers",
       "ordering",
@@ -5925,6 +5926,38 @@ describe("product-list filters (A463)", () => {
     expect(rowKeys(root)).toEqual(["b-dressed", "b-dressed:small"]);
     await choose(el, "modifiers", "none");
     expect(rowKeys(root)).toEqual(["a-plain"]);
+  });
+
+  it("filters products by whether they have an active variant", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "plain", name: "A plain" }),
+        product({ id: "bun", name: "B bun", variants: [bunVariant] }),
+        product({
+          id: "archived-only",
+          name: "C archived-only",
+          variants: [{ ...bunVariant, id: "large", active: false }],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="name"]');
+    expect(filter?.label).toBe("Variants");
+    expect(filterOptions(root, "name")).toEqual([
+      ["", "Any"],
+      ["has", "Has variants"],
+      ["none", "No variants"],
+    ]);
+    await choose(el, "name", "has");
+    root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
+    await choose(el, "name", "none");
+    expect(rowKeys(root)).toEqual(["plain", "archived-only"]);
+    await choose(el, "name", "");
+    expect(rowKeys(root)).toEqual(["plain", "bun", "bun:small", "archived-only"]);
   });
 
   describe("matching category counts", () => {

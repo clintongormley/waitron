@@ -222,7 +222,8 @@ extra. Ese rechazo nombra las listas de extras de las que debes quitar primero e
 
 La lista de productos mantiene las variantes de cada producto plegadas bajo él. Un producto con
 variantes activas indica cuántas bajo su nombre, por ejemplo **2 variantes**, y la flecha pequeña
-delante de su nombre las abre. La lista muestra las variantes de un producto en el orden del propio
+delante de su nombre las abre. En **Filtros**, elige **Con variantes** o **Sin variantes** en **Variantes**.
+La lista muestra las variantes de un producto en el orden del propio
 producto, el de la lista de variantes del editor, sea cual sea la columna por la que se ordena la
 lista; arrástralas en el editor para cambiarlo. La fila de cada variante muestra su foto, su propio
 nombre, el precio al que se vende, su disponibilidad y su menú de fila. Una variante sin foto propia

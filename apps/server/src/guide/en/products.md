@@ -209,7 +209,8 @@ be an extra. That refusal names the extras lists to take the product off first.
 
 The products list keeps each product's variants folded away under it. A product with Active variants
 says how many under its name, such as **2 variants**, and the small arrow before its name opens
-them. The list shows a product's variants in the product's own order, the order of the variant list
+them. In **Filters**, choose **Has variants** or **No variants** under **Variants**.
+The list shows a product's variants in the product's own order, the order of the variant list
 in the product editor, whichever column the list is sorted by; drag them in the editor to change it.
 Each variant's row shows its photo, its own name, the price it sells at, its availability and its
 row menu. A variant with no photo of its own shows its product's or, when neither has one, the same
