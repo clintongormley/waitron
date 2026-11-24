@@ -5487,6 +5487,15 @@ export class DashboardApi {
     });
   }
 
+  downloadOldBoxData(nodeId: string): Promise<DownloadedFile> {
+    return this.#request<DownloadedFile>(
+      `/management-api/servers/${encodeURIComponent(nodeId)}/old-box-data`,
+      "POST",
+      undefined,
+      { as: "file" },
+    );
+  }
+
   /** Needs a fresh sign-in; writes nothing. */
   checkBoxJoin(requestId: string): Promise<BoxJoinCheck> {
     return this.#request(

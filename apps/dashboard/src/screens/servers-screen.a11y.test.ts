@@ -451,6 +451,41 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
     await expectNoA11yViolations(host);
   });
 
+  it("renders Wipe and remove's download button idle, loading and refused accessibly", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi
+            .fn()
+            .mockResolvedValue(withFormer({ canReset: true, returnScenario: "emergency" })),
+          downloadOldBoxData: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openOn(el, "reset");
+    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=reset-download-button]",
+    )!;
+    expect(button).not.toBeNull();
+    await expectNoA11yViolations(host);
+    button.click();
+    await flush(el);
+    expect(button.loading).toBe(true);
+    await expectNoA11yViolations(host);
+    refuse({ code: "handover.old_box_unreachable", status: 502 });
+    await flush(el);
+    await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-dialog[data-test=reset-dialog] wt-form-actions",
+    )!;
+    expect(await formMessageOf(actions)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders Wipe and remove when the return cannot complete, with its tick, accessibly", async () => {
     const { el, host } = await mountWidget<ServersScreen>(
       "dashboard-servers-screen",
