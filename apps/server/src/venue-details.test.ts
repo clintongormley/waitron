@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { VenueDetailPatch, VenueDetailWrite } from "./venue-detail-types.js";
 import { businessDayStart, computeDailyClose } from "@waitron/reporting";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";

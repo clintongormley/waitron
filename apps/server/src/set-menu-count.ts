@@ -12,12 +12,8 @@ import {
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
 import type { TradingContext } from "./trading-context.js";
-import {
-  bumpRevisionKeepingPayment,
-  refuseOrderOverSimplifiedLimit,
-  refusePaymentInFlight,
-  totalBeforeEdit,
-} from "./working-order.js";
+import { bumpRevisionKeepingPayment, refusePaymentInFlight } from "./working-order-edit-state.js";
+import { refuseOrderOverSimplifiedLimit, totalBeforeEdit } from "./stored-order-lines.js";
 import "./errors.js";
 
 export async function setSetMenuCount(

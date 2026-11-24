@@ -18,7 +18,7 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { readPassRows } from "./working-order.js";
+import { readPassRows } from "./working-order-pass.js";
 import { readPassCardRows, readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
 import { fireNewOrder } from "./testing/split-extras-venue.js";

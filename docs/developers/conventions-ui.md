@@ -570,7 +570,7 @@ from 1.00 to 9.00 when the request reordered JSON keys and modifier entries: the
 reading how the request was written instead of what it said.
 
 Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
-(`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW,
+(`apps/server/src/working-order-held-write.ts`). It rebuilds what the request's answers would freeze NOW,
 each in the language the stored answer was frozen in (`editLineOptions`,
 `apps/server/src/modifier-selection.ts`), and compares that with what the stored line holds, by
 value. The helper this replaces, `sameModifierSelections`, no longer exists.
@@ -1069,7 +1069,7 @@ status, full JSON body and asynchronous scrypt count for unknown, suspended and 
 Those four route cases do not cover pending people or missing stored credentials. The waiting
 box's carry-on (`waiting-start.test.ts`) tries a wrong password and an unknown email, so it rests
 on identity's cases for a suspended or pending person. The unpaid-departure override
-(`apps/server/src/unpaid-departure.ts`) and cancel override (`apps/server/src/working-order.ts`)
+(`apps/server/src/unpaid-departure.ts`) and cancel override (`apps/server/src/working-order-counter.ts`)
 have wrong-PIN cases, and the cancel also tries a malformed PIN; they rest on identity's cases
 for unknown, suspended or pending people. No listed suite inventories new sign-in routes.
 

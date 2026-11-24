@@ -13,7 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { fireAll } from "./testing/serve-line.js";
-import { insertTabRound, priceTabRound } from "./working-order.js";
+import { insertTabRound, priceTabRound } from "./working-order-open.js";
 import {
   fireNewOrder,
   setupSplitExtrasVenue,

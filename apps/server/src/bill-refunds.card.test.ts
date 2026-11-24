@@ -52,7 +52,7 @@ import {
 } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
 import { printSaleReceipt } from "./till-sale.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { printedLines, withoutRules } from "./testing/decode-ticket.js";
 import "./errors.js";

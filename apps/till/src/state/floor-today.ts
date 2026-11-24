@@ -365,7 +365,7 @@ export function sheetActions(table: TableState): SheetAction[] {
   if (today === null || today.placement === null || today.takenOff) return [];
   const merged = today.joinId !== null;
   const clearing = table.condition === "needs_clearing";
-  // A party-held table is `held`, never `free` (`tableCondition`, apps/server/src/working-order.ts).
+  // A party-held table is `held`, never `free` (`tableCondition`, apps/server/src/working-order-table-state.ts).
   const free = table.condition === "free" && table.pendingDeliveries === 0;
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing && !needsMovingToday(table)],

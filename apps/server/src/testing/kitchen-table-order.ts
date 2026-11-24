@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import type { OriginConfig } from "../trading-context.js";
 
-import { insertTabRound, priceTabRound } from "../working-order.js";
+import { insertTabRound, priceTabRound } from "../working-order-open.js";
 import { createTable } from "./live-table.js";
 import { fireAll, openPartyTab } from "./serve-line.js";
 import { offerProducts } from "./zone-offers.js";

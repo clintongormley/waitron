@@ -5,7 +5,7 @@ import {
   insertTabRound,
   priceTabRound,
   type TabRoundLine,
-} from "../working-order.js";
+} from "../working-order-open.js";
 
 /**
  * Append `lines` to an open order with each line stored once, as a counter order written before

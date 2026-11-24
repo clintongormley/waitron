@@ -13,7 +13,7 @@ import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleOrigin } fro
 import type { Logger } from "../logger.js";
 import { mountOrdersApi } from "../orders-api.js";
 import { SESSION_COOKIE } from "../till-session.js";
-import { parkOrder } from "../working-order.js";
+import { parkOrder } from "../working-order-open.js";
 import {
   cashPayment,
   inTx,

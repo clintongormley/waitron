@@ -26,14 +26,14 @@ import { carryBillSetMenuCopies } from "./set-menu-bill.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
-  createOpenOrder,
   lockPlacedOrder,
-  readInvoiceNumber,
   recordPlacedOrderCancelled,
   refusePlacedOrderMoney,
   withRectifyPinAhead,
-  type TillSaleDeps,
-} from "./working-order.js";
+} from "./working-order-counter.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { readInvoiceNumber } from "./stored-order-lines.js";
+import { type TillSaleDeps } from "./working-order-context.js";
 import "./errors.js";
 
 export interface SplitAfterPrint {

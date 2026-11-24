@@ -19,7 +19,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { discardPartyDrafts, moveDraftsToBill, submitDraft } from "./order-drafts.js";
 import { OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { newId } from "@waitron/db";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

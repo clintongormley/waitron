@@ -27,7 +27,8 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { fireGroup, fireHeldLine } from "./order-groups.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
-import { fireLines, fireOrderLines, routingOnce, unsentDishLines } from "./working-order.js";
+import { fireOrderLines } from "./working-order-kitchen-service.js";
+import { fireLines, routingOnce, unsentDishLines } from "./working-order-kitchen-fire.js";
 import "./errors.js";
 
 const suite = useVenueDb({

@@ -40,7 +40,7 @@ import { moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
 import { invalid } from "./bill-allocation.js";
 import { refuseBillHoldingMoney } from "./bill-payments.js";
-import type { OrderAttendance } from "./working-order.js";
+import type { OrderAttendance } from "./working-order-context.js";
 import {
   billOwes,
   finishTable,

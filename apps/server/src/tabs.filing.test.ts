@@ -30,7 +30,8 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { createOpenOrder, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order-station-queue.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { createCourse } from "./kitchen.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";

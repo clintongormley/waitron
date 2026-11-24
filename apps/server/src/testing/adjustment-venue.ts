@@ -45,13 +45,9 @@ import { ALL_MODULES } from "../modules.js";
 
 import { placeGroups } from "./group-submit-fixture.js";
 import { printHoldTickets, recordGroupEvent, startGroup } from "../order-groups.js";
-import {
-  bumpRevision,
-  fireLines,
-  insertTabRound,
-  priceTabRound,
-  type TabRoundLine,
-} from "../working-order.js";
+import { bumpRevision } from "../working-order-edit-state.js";
+import { insertTabRound, priceTabRound, type TabRoundLine } from "../working-order-open.js";
+import { fireLines } from "../working-order-kitchen-fire.js";
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";

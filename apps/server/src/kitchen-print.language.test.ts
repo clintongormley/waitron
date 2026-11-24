@@ -8,7 +8,8 @@ import { nameParty, OPERATOR } from "./testing/party-venue.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { fireLines, fireableLineColumns } from "./working-order-kitchen-fire.js";
 import { sql, eq } from "drizzle-orm";
 import {
   kitchenPrintJobs,

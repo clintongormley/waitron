@@ -12,7 +12,7 @@ import { mountTillApi } from "./till-api.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { splitLinesWithinOrder } from "./working-order.js";
+import { splitLinesWithinOrder } from "./working-order-transfer.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";

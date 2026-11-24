@@ -66,12 +66,10 @@ import {
 import { serveLine } from "./testing/serve-line.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import {
-  advanceTicketItem,
-  listHeldOrders,
-  markServed,
-  listTablesWithState,
-} from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
+import { listHeldOrders } from "./working-order-held-read.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 // The floor's attention signals (service spec §1; plan Task 10): several on one table at once, each

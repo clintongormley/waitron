@@ -13,7 +13,8 @@ import {
 import { AppError, PORTIONS_AT_ONCE } from "@waitron/shared";
 import type { PortionBinding } from "./portion-sale-projection.js";
 import "./errors.js";
-import type { OrderLineIdentity, PricedTabRound } from "./working-order.js";
+import type { PricedTabRound } from "./working-order-open.js";
+import type { OrderLineIdentity } from "./stored-order-lines.js";
 
 type Row = PricedTabRound["rows"][number];
 

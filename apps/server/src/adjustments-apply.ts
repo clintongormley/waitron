@@ -61,26 +61,23 @@ import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { TradingContext } from "./trading-context.js";
+import { splitLinesWithinOrder, type SplitRow } from "./working-order-transfer.js";
 import {
-  assertTabOpen,
-  bumpRevision,
-  captureOrderEdit,
-  extraQuantityFor,
-  isReleased,
-  keptExtrasOf,
   partyAfterEdit,
   quantityOfLine,
-  type OrderAttendance,
-  readLockedLines,
-  readOrderRevision,
-  refusePaymentInFlight,
   removeFromLine,
   removePortions,
-  splitLinesWithinOrder,
-  type SplitRow,
-  type StoredOrderLine,
   type VoidTarget,
-} from "./working-order.js";
+} from "./working-order-removal.js";
+import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
+import { assertTabOpen, readLockedLines, type StoredOrderLine } from "./stored-order-lines.js";
+import { isReleased } from "./working-order-serving.js";
+import { extraQuantityFor, keptExtrasOf } from "./order-line-quantities.js";
+import {
+  captureOrderEdit,
+  type OrderAttendance,
+  readOrderRevision,
+} from "./working-order-context.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
 import { readPortionBindings, readWholePortionLines } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";

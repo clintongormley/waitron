@@ -9,7 +9,7 @@ import {
 } from "../order-groups.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import type { TradingContext } from "../trading-context.js";
-import type { OrderAttendance } from "../working-order.js";
+import type { OrderAttendance } from "../working-order-context.js";
 import { observedGroupSubmitBody } from "./group-submit-fixture.js";
 export * from "../order-groups.js";
 export { placeGroupedRound, placeGroups, submitGroups } from "./group-submit-fixture.js";

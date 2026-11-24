@@ -186,7 +186,7 @@ export async function seedSales(
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
 
-  // Falls back to the content default, as a till sale does (`working-order.ts`): the demo writes its
+  // Falls back to the content default, as a till sale does (`working-order-pricing.ts`): the demo writes its
   // text in every content language, and the receipt language may not be one of them.
   const { defaultLanguage, dineIn } = await withTransaction(db, async (tx) => ({
     defaultLanguage: (await readContentLanguages(tx, invoiceLocale)).defaultLanguage,

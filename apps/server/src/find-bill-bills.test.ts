@@ -46,7 +46,7 @@ import { readBillBalance, readPaymentsByBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { endMeal } from "./meal-end.js";
 import { assignProductUnit, clearProductUnit, createUnit, setProductVariants } from "@waitron/menu";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";

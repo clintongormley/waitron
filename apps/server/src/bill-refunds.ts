@@ -43,8 +43,8 @@ import {
   refusePaymentInFlight,
   refusePendingPartPayment,
   refuseRefundInProgress,
-} from "./working-order.js";
-import type { TillSaleDeps } from "./working-order.js";
+} from "./working-order-edit-state.js";
+import type { TillSaleDeps } from "./working-order-context.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
 

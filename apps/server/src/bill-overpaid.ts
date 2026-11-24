@@ -25,8 +25,8 @@ import {
   refusePaymentInFlight,
   refusePendingPartPayment,
   refuseRefundInProgress,
-  type TillSaleDeps,
-} from "./working-order.js";
+} from "./working-order-edit-state.js";
+import { type TillSaleDeps } from "./working-order-context.js";
 import "./errors.js";
 
 /**

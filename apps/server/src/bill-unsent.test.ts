@@ -18,7 +18,7 @@ import {
   previewBillPayment,
   type BillPaymentAsk,
 } from "./testing/bill-payment-fixture.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import {
   inTx,
   paymentRows,

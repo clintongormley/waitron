@@ -37,7 +37,7 @@ import { releasePassItems, type PassActor } from "./pass-release.js";
 import { readPassCoverage, type PassCoverageGap } from "./pass-coverage.js";
 import { deleteStation } from "./station-delete.js";
 import { byText } from "./text-order.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 const suite = useVenueDb({

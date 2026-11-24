@@ -34,7 +34,8 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { readTenderBlock } from "./till-sale.js";
-import { createOpenOrder, priceStoredOrderForIssuance } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";

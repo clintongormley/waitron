@@ -12,7 +12,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
 import "./errors.js";
 

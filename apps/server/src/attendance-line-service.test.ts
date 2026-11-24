@@ -19,7 +19,7 @@ import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

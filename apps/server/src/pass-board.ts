@@ -21,7 +21,7 @@ import {
   type PassRow,
   type PassTarget,
 } from "./pass-card.js";
-import { readPassRows } from "./working-order.js";
+import { readPassRows } from "./working-order-pass.js";
 import { liveKitchenDish } from "./kitchen-print.js";
 
 /** null: every station (zone). */

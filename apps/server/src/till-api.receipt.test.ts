@@ -68,7 +68,7 @@ import {
   updatePrinter,
 } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import {
   startInvoiceEmail,
   settleInvoiceEmail,

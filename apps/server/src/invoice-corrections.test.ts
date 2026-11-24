@@ -44,7 +44,7 @@ import { insertCapturedPayment, recordRefund } from "@waitron/payments";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { refundSettledTender } from "./tender-refunds.js";

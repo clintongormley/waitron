@@ -57,7 +57,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
-import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
+import { markGroupServed, markServed, unmarkServed } from "./working-order-serving.js";
 import "./errors.js";
 import { cutParts, splitBill } from "./testing/bill-action-fixture.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";

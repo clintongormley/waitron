@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { workingOrders } from "@waitron/db";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { readBillEditState } from "../bill-editing.js";
-import { setOrderInvoiceChoice } from "../working-order.js";
+import { setOrderInvoiceChoice } from "../working-order-invoice.js";
 import { OPERATOR, billRow, inTx, type PartyVenue } from "./party-venue.js";
 
 export const ACME = {

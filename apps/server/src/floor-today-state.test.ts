@@ -23,7 +23,7 @@ import {
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { listTablesWithState, type TableState } from "./working-order.js";
+import { listTablesWithState, type TableState } from "./working-order-table-state.js";
 import "./errors.js";
 
 let v: PartyVenue;

@@ -78,7 +78,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { completeBillPayment, readBillBalance } from "./bill-payments.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";

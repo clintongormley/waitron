@@ -27,7 +27,7 @@ import {
 import { createExtraList, createMenu, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createTable } from "./testing/live-table.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

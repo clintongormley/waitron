@@ -3,14 +3,14 @@ import type { Transaction } from "@waitron/db";
 import { expandPortionRows } from "../order-portions.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
 
+import { bumpRevision } from "../working-order-edit-state.js";
 import {
-  bumpRevision,
-  fireLines,
   insertTabRound,
   priceTabRound,
   type PricedTabRound,
   type TabRoundLine,
-} from "../working-order.js";
+} from "../working-order-open.js";
+import { fireLines } from "../working-order-kitchen-fire.js";
 import { createTable } from "./live-table.js";
 import { openPartyTab } from "./serve-line.js";
 

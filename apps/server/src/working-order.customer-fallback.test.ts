@@ -20,7 +20,8 @@ import {
 } from "@waitron/menu";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { createOpenOrder, priceOrderLines } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { priceOrderLines } from "./working-order-pricing.js";
 import { readSettledTicket, reprintSale } from "./till-sale.js";
 import { resolveTranslationCells } from "@waitron/menu/src/content-translation-cells.js";
 import { saveContentTranslations } from "@waitron/menu/src/content-translations.js";

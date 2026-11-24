@@ -39,7 +39,7 @@ import {
   openTillSession,
 } from "./testing/session-device.js";
 import { paySavedBillInCash, takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { setOrderInvoiceChoice } from "./working-order.js";
+import { setOrderInvoiceChoice } from "./working-order-invoice.js";
 import { readBillEditState } from "./bill-editing.js";
 
 /**

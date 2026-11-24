@@ -22,14 +22,9 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { addGroupedTabRound, addTabRound } from "./testing/order-writer-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { fireGroup, readCurrentOrders, type CurrentOrders } from "./order-groups.js";
-import {
-  fireOrderLines,
-  isReleased,
-  markGroupServed,
-  markServed,
-  routingOnce,
-  unmarkServed,
-} from "./working-order.js";
+import { fireOrderLines } from "./working-order-kitchen-service.js";
+import { routingOnce } from "./working-order-kitchen-fire.js";
+import { isReleased, markGroupServed, markServed, unmarkServed } from "./working-order-serving.js";
 import "./errors.js";
 
 const suite = useVenueDb({

@@ -42,7 +42,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 
 import { deleteCourse } from "./course-delete.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { priceTabRound } from "./working-order.js";
+import { priceTabRound } from "./working-order-open.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import type { Draft } from "./order-drafts.js";
 import type { TradingContext } from "./trading-context.js";

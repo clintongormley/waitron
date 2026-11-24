@@ -38,13 +38,10 @@ import { mountTillApi } from "./till-api.js";
 import { createStation } from "./kitchen.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import {
-  parkOrder,
-  fireLines,
-  unsentDishLines,
-  advanceTicketItem,
-  markServed,
-} from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { parkOrder } from "./working-order-open.js";
+import { fireLines, unsentDishLines } from "./working-order-kitchen-fire.js";
+import { markServed } from "./working-order-serving.js";
 import {
   billWith,
   inTx,

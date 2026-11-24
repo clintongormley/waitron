@@ -13,7 +13,7 @@ import type { DishMove } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { cancelItem } from "./line-cancel.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { cancelItemForTest, cancelReasonId, observedCancelItem } from "./testing/cancel-line.js";
 import { mountTillApi } from "./till-api.js";
 import { send } from "./testing/bill-venue.js";

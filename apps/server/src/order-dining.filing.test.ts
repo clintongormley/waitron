@@ -22,7 +22,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 
 // Every read of an order's stored lines rates each line at the class for the order's way of selling
 // (A1522): a €1.80 cola is `reduced` served here and `general` taken away; a €4.00 cheese board is

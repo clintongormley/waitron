@@ -28,7 +28,8 @@ import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.j
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { parkOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { setOrderInvoiceChoice } from "./working-order-invoice.js";
+import { parkOrder } from "./working-order-open.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   OPERATOR,

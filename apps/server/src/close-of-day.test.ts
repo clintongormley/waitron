@@ -44,7 +44,7 @@ import {
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 const inFlightCheck = vi.hoisted(() => ({ refusal: undefined as Error | undefined }));

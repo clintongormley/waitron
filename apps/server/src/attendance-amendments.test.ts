@@ -13,7 +13,8 @@ import { createPinThrottle } from "@waitron/identity";
 import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
-import { cancelPlacedOrder, markOrderPlaced, parkOrder } from "./working-order.js";
+import { cancelPlacedOrder, markOrderPlaced } from "./working-order-counter.js";
+import { parkOrder } from "./working-order-open.js";
 
 import { overridePinAttempts } from "./till-api.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";

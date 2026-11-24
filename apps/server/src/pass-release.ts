@@ -16,7 +16,7 @@ import { heldPaperStations } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
 import { runServiceCommand, type CommandScope } from "./parties.js";
-import type { OrderAttendance } from "./working-order.js";
+import type { OrderAttendance } from "./working-order-context.js";
 
 export type PassActor =
   { deviceId: string; personId: null } | { deviceId: string; personId: string; sessionId: string };

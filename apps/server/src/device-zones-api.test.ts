@@ -26,7 +26,7 @@ import { createZone } from "./testing/service-zone.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);

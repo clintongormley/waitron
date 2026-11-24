@@ -19,7 +19,7 @@ import type { ProfileAction } from "@waitron/layouts";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import { inTx, placedCounterBillMovedTo, seatedWith, send } from "./testing/bill-venue.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createTable } from "./testing/live-table.js";

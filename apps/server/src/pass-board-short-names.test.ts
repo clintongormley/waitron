@@ -36,7 +36,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { fireLines } from "./working-order.js";
+import { fireLines } from "./working-order-kitchen-fire.js";
 import "./errors.js";
 
 let v: PartyVenue;

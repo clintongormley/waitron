@@ -31,13 +31,13 @@ import { readIssuedSales } from "./sale-due.js";
 import { refuseBillPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import type { TradingAdmission } from "./trading-admission.js";
 import type { SaleOriginConfig, TradingContext } from "./trading-context.js";
+import { markOrderPlaced } from "./working-order-counter.js";
 import {
   issueUnpaidInvoice,
-  markOrderPlaced,
-  ordersWithUnfiredDish,
   priceForIssuance,
   type PricedInvoice,
-} from "./working-order.js";
+} from "./working-order-invoice.js";
+import { ordersWithUnfiredDish } from "./working-order-serving.js";
 import "./errors.js";
 
 /** What "due" means for one call: bills counted as opened before `dayStartedAt` are due, and

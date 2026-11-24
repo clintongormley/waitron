@@ -10,7 +10,8 @@ import { inTx, provisionBillVenue, seatedWith, send } from "./testing/bill-venue
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { listStationQueue, readPassRows } from "./working-order.js";
+import { readPassRows } from "./working-order-pass.js";
+import { listStationQueue } from "./working-order-station-queue.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { printedLines } from "./testing/decode-ticket.js";
 

@@ -53,7 +53,7 @@ import { openPartyTab } from "./serve-line.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
-import { parkOrder } from "../working-order.js";
+import { parkOrder } from "../working-order-open.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./session-device.js";
 import { setTipsForTest } from "./payment-settings.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";

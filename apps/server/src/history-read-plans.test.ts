@@ -23,7 +23,7 @@ import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { readHeldCounts, readReleaseReminders, startGroup } from "./order-groups.js";
 import { readStepFacts } from "./service-step-signals.js";
-import { listStationQueues, stationHasWork } from "./working-order.js";
+import { listStationQueues, stationHasWork } from "./working-order-station-queue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

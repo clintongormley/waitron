@@ -42,16 +42,15 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { saleLanguageFor } from "./venue-locale.js";
+import { markOrderPlaced } from "./working-order-counter.js";
 import {
   issueUnpaidInvoice,
-  markOrderPlaced,
   type PricedInvoice,
   priceForIssuance,
-  readInvoiceNumbers,
-  refuseRefundInProgress,
-  refusePendingPartPayment,
   refuseUnavailableFullInvoice,
-} from "./working-order.js";
+} from "./working-order-invoice.js";
+import { refuseRefundInProgress, refusePendingPartPayment } from "./working-order-edit-state.js";
+import { readInvoiceNumbers } from "./stored-order-lines.js";
 import "./errors.js";
 
 export interface DeferredCloseDeps {

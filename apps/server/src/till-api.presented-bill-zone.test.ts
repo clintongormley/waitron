@@ -32,7 +32,7 @@ import {
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { priceStoredOrderForIssuance } from "./working-order.js";
+import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
 import "./errors.js";
 
 // A presented bill that moves with its party, or on its own to another table, takes the zone it

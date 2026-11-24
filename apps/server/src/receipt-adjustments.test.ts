@@ -39,7 +39,7 @@ import {
 import { readSettledTicket } from "./till-sale.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
-import { readStoredOrder } from "./working-order.js";
+import { readStoredOrder } from "./stored-order-lines.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { ReceiptAdjustment } from "./till-sale.js";
 import { closeZeroBill, completeBillPayment } from "./bill-payments.js";

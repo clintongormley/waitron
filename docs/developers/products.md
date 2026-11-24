@@ -138,7 +138,7 @@ invoice is issued; a set-menu line files at the takeaway class its set menu froz
   stored under exactly the venue's saved receipt languages (`settings.venue.invoiceLocales`), every
   key holding the venue's default content language's text, or that half's staff name where the
   default has none (`defaultLanguageDescriptions`, `packages/menu/src/default-language-text.ts`,
-  called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
+  called by `priceOrderLines`, `apps/server/src/working-order-pricing.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else, through
   `resolveSnapshotText`, its bare language and then the non-blank entry whose language code sorts first
   (`receiptFacts` in `packages/orders-sales/src/receipt-facts.ts`, which gathers what the paper receipt, the
@@ -159,7 +159,7 @@ invoice is issued; a set-menu line files at the takeaway class its set menu froz
   Keeping both sets is what lets a report group variant lines under their parent.
   An extras item naming a variant resolves the published parent and variant independently in
   the current default language, then composes them (`offerModifiers`,
-  `apps/server/src/working-order.ts`). Its child line carries that pair in its name fields,
+  `apps/server/src/working-order-pricing.ts`). Its child line carries that pair in its name fields,
   with no separate variant fields. The publication retains both original source maps, so a
   default-language change does not reuse wording composed under the previous default.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
@@ -187,7 +187,7 @@ line's rate. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
-`apps/server/src/working-order.ts`), which leaves a line without rates, and is filed from the
+`apps/server/src/working-order-pricing.ts`), which leaves a line without rates, and is filed from the
 lines it stored. Reading stored lines for a bill, payment or filing takes each line's rate list
 from `readLineVatRates`
 (`apps/server/src/line-vat-rates.ts`): eaten here, the venue area's dine-in list
@@ -265,10 +265,10 @@ Where each one surfaces:
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/menu/src/option-snapshot-labels.ts` |
 | Station ticket | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names; options answers read prep station names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the station screen's card — listing dishes at stations not on the ticket or card | the prep station names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
-| Prep station display and the expediter's pass | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
+| Prep station display and the expediter's pass | dishes, split-off extras and following extras read frozen prep station names, falling back to staff names; cross-references read prep station names | `readQueueSubItems` and `listStationQueue` in `apps/server/src/working-order-station-queue.ts` and `readPassRows` in `apps/server/src/working-order-pass.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name — followed by ` x<n>` when counted, or by its amount in the screen language's decimal mark and its recorded unit abbreviation when measured | `readMadeHereItems`, `apps/server/src/made-here.ts`, which sends each extra as data; written by `dishLine` and `extraLine`, `apps/till/src/widgets/dish-format.ts`; shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
-| A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
+| A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/stored-order-lines.ts` |
 | Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's informational chip for a held dish that cannot be added anew ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site, kitchen or staff; the settled ticket instead shows the server's receipt preview | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
@@ -281,7 +281,7 @@ A cook sees the same dish name, options answers and extras whether the order arr
 on a screen: the ticket, the station queue and the pass resolve those through their station
 wording. Each dish is
 added from a zone's menu offer, which carries the product's and the variant's prep station names as the
-menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a
+menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order-pricing.ts`), so a
 short dish prep station name typed after publishing reaches all three surfaces on lines added once the
 menu is published again. A blank prep station name shows the staff name, including the variant's staff
 name on a variant line.
@@ -333,7 +333,8 @@ or staff abbreviation under the default key, while its line context holds the fu
 The server prepares these through `prepareUnitSnapshot` and `newCustomerText`; the till uses
 the same preparation for previews. Changing a unit requires publication before new orders use
 it. Retained lines and reprints keep their recorded maps. The parent, added-extra, retained-pick
-cases in `apps/server/src/working-order.test.ts`, and the complete stored-row
+cases in `apps/server/src/working-order.test.ts` and `working-order-held-write.test.ts`,
+and the complete stored-row
 comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundaries.
 
 ## The translation gap report
@@ -767,7 +768,7 @@ lists). A variant itself may be an extra.
 line that rings it up without naming a variant is refused `product.variant_required`, and so is an
 extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVariant`
 (`packages/menu/src/variants.ts`) refuses a dish line that names no variant. An extras pick
-cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a pick of
+cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order-pricing.ts`) refuses a pick of
 such a product; a pick of a variant itself sells. That refusal comes from one read for the whole
 basket's picks (`parentsWithActiveVariants`, `packages/menu/src/variants.ts`). A product whose
 variants are all archived sells as itself.
@@ -775,7 +776,7 @@ variants are all archived sells as itself.
 On the server, an edit of a held order keeps each stored line it names, at its stored price —
 including one whose product, or one of whose extras, has since gained an Active variant — and
 prices only what the edit adds (menus plan D10; `updateHeldOrder`,
-`apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
+`apps/server/src/working-order-held-write.ts`). Lowering or keeping such a line's quantity is allowed; raising
 it is refused `product.variant_required`, as a raise of a line whose product has become archived or
 Unavailable is refused. An unsent line the edit names with a different variant is not kept: it
 becomes a new line, at that variant's price and name ("keeps a new variant sent for a saved,
@@ -815,7 +816,8 @@ row in the routing grid: the parent's product cells first, then its effective ca
 each parent category's, or the No category cells when the parent has no category, then All
 categories (`selectRoutingCell`). Its course, category, allergens and dietary labels
 are its effective values (`effectiveProductColumns`; `packages/venue-service/src/routing.ts`;
-`priceOrderLines`, `fireLines` and `readQueueSubItems`, `apps/server/src/working-order.ts`). The
+`priceOrderLines` in `working-order-pricing.ts`, `fireLines` in `working-order-kitchen-fire.ts`
+and `readQueueSubItems` in `working-order-station-queue.ts` under `apps/server/src/`). The
 till splits a tab line by the unit precision the line
 froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
 
@@ -985,7 +987,7 @@ Available switch changed. Omission preserves an existing row; a new row defaults
 also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans.
 Unavailable products remain visible in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`applyLiveFields` in `packages/menu/src/menu-document.ts` marks it on each
-served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
+served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order-pricing.ts` refuses
 what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
@@ -993,7 +995,7 @@ change to the note, options or extras of a line the station already has is refus
 `product.unavailable` too: `applyLineEdits` treats that change as new work).
 Stored-order pricing ignores the sold-out flag for recorded lines. A stored line never sent whose
 product or parent is archived is refused `product.unavailable`
-(`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`).
+(`priceStoredOrderForIssuance`, `apps/server/src/stored-order-lines.ts`).
 
 That stored-line check is separate from a table bill's **New order**. Before starting a new
 payment, the payment paths check the bill's editor observation, then refuse `bill.unsent_dishes`
@@ -1006,7 +1008,7 @@ refusal, other-bill and replay checks alongside the separate stored-pricing chec
 ```bash
 pnpm --filter @waitron/server exec vitest run src/bill-unsent.test.ts \
   src/bill-editing.payments.test.ts src/bill-editing.whole-payments.test.ts \
-  src/working-order.test.ts
+  src/working-order.test.ts src/working-order-pricing.test.ts src/working-order-held-write.test.ts
 ```
 
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is

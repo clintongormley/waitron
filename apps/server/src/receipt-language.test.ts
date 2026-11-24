@@ -56,7 +56,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { printSaleReceipt } from "./till-sale.js";
-import { createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";

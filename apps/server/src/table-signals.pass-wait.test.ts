@@ -18,7 +18,8 @@ import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { readBillSignals, readPartySignals } from "./table-signals.js";
 import type { FamilyBill } from "./parties.js";
-import { listTablesWithState, markServed, type TableParty } from "./working-order.js";
+import { listTablesWithState, type TableParty } from "./working-order-table-state.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 const suite = useVenueDb({

@@ -13,7 +13,7 @@ import type { OverdueOrder } from "./types.js";
 
 /**
  * Whole minutes from a stored ISO stamp to `nowMs`, floored. A copy of
- * `apps/server/src/working-order.ts`'s `minutesSince`, which this package cannot import.
+ * `apps/server/src/working-order-station-queue.ts`'s `minutesSince`, which this package cannot import.
  */
 function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);

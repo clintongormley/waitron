@@ -8060,7 +8060,7 @@ describe("till-app", () => {
   // The till cannot tell a list that withdrew a still-sellable extra from an extra that can no
   // longer be sold (both are simply absent from the live offer), nor whether the line has gone to
   // the kitchen, so the banner may not promise that the extra is charged: paying refuses an unsent
-  // one that can no longer be sold (`priceStoredOrderForIssuance`, apps/server/src/working-order.ts).
+  // one that can no longer be sold (`priceStoredOrderForIssuance`, apps/server/src/stored-order-lines.ts).
   it("warns that paying is refused if a no-longer-offered extra cannot be sold, in both languages", async () => {
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),

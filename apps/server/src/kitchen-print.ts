@@ -83,7 +83,7 @@ import type {
   OtherStationItem,
 } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
-import { passStationsByGroup } from "./working-order.js";
+import { passStationsByGroup } from "./working-order-pass-groups.js";
 import "./errors.js";
 
 /**

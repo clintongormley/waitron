@@ -98,7 +98,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { provisionBillVenue, send as sendBillRequest } from "./testing/bill-venue.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { readBillEditState } from "./bill-editing.js";
 import { workingOrderLines, workingOrders } from "@waitron/db";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";

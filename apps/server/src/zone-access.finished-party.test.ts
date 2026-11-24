@@ -17,7 +17,7 @@ import { mergeBills } from "./bill-actions.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { seatTable } from "./parties.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 
 import { createTable } from "./testing/live-table.js";

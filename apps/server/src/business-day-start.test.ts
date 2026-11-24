@@ -23,7 +23,7 @@ import {
   replaceMenuWeek,
   resolveDepartmentService,
 } from "@waitron/venue-service";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { randomUUID } from "node:crypto";
 import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";

@@ -15,12 +15,12 @@ import {
   type SubmitGroupsInput,
 } from "../order-groups.js";
 import { applyPartyAllergyPatch, assertPartyAllergyAnswered } from "../party-allergy.js";
-import { insertTabRound, priceTabRound } from "../working-order.js";
+import { insertTabRound, priceTabRound } from "../working-order-open.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { bumpPartyRevision, insertPartyBill } from "../parties.js";
 import { firstOpenBillOf } from "./party-bill-of.js";
 import type { OriginConfig } from "../trading-context.js";
-import type { OrderAttendance } from "../working-order.js";
+import type { OrderAttendance } from "../working-order-context.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
 
 const commands = new WeakMap<object, Map<string, BillEditExpected>>();

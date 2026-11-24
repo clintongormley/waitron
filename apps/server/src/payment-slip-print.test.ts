@@ -56,7 +56,7 @@ import {
   type LayOutSaleReceipt,
 } from "./receipt-print.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";

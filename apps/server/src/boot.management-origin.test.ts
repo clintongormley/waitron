@@ -27,7 +27,8 @@ import {
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { fireableLineColumns, fireLines } from "./working-order-kitchen-fire.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

@@ -13,7 +13,7 @@ import { loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 let venue: BillVenue;

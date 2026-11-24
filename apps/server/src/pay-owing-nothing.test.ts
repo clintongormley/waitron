@@ -20,7 +20,7 @@ import { createProduct } from "@waitron/menu";
 import { payments } from "@waitron/payments";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { zoneOf } from "./testing/party-venue.js";
 import {

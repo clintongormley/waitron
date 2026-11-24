@@ -14,7 +14,8 @@ import { resetZone } from "./floor-today-store.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listTables } from "./tables.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
-import { createOpenOrder, listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
+import { createOpenOrder } from "./working-order-open.js";
 import {
   activeTablesOf,
   billRow,

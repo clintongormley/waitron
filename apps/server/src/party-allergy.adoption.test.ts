@@ -9,7 +9,7 @@ import type { AllergyPatch } from "@waitron/module";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { moveBill, type MoveBillOptions } from "./move-bill.js";
 import { VENUE_SERVICE } from "./modules.js";
-import * as kitchenWriter from "./working-order.js";
+import * as workingOrderKitchenFire from "./working-order-kitchen-fire.js";
 import {
   OPERATOR,
   counterOrder,
@@ -94,8 +94,8 @@ it.each([false, true, "answered"] as const)(
   async (existing) => {
     const f = await fixture(existing);
     const atOutput: unknown[] = [];
-    const fire = kitchenWriter.fireLines;
-    vi.spyOn(kitchenWriter, "fireLines").mockImplementation(async (...args) => {
+    const fire = workingOrderKitchenFire.fireLines;
+    vi.spyOn(workingOrderKitchenFire, "fireLines").mockImplementation(async (...args) => {
       const [tx, , billId] = args;
       const [bill] = await tx
         .select({ partyId: workingOrders.partyId })

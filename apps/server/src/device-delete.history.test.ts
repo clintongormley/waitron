@@ -26,7 +26,7 @@ import { deleteDevice } from "./device-delete.js";
 import type { Logger } from "./logger.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { mountReportApi } from "./report-api.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";

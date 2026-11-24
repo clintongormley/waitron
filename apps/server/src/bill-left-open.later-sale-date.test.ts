@@ -22,7 +22,7 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 

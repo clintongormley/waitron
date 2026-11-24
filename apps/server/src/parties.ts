@@ -38,7 +38,7 @@ import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { readOrderDinings, type DiningChoice } from "./order-dining.js";
-import { createOpenOrder, openTab } from "./working-order.js";
+import { createOpenOrder, openTab } from "./working-order-open.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import { readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";

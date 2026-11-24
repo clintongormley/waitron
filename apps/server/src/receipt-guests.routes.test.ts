@@ -43,7 +43,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { fingerprint, seatTable } from "./parties.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 const suite = useVenueDb({

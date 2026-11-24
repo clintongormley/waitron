@@ -60,7 +60,9 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { markServed, readInvoiceNumbers, readOrderRevision } from "./working-order.js";
+import { readInvoiceNumbers } from "./stored-order-lines.js";
+import { markServed } from "./working-order-serving.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";

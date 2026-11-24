@@ -12,7 +12,8 @@ import { submitGroups, type GroupRelease } from "./order-groups.js";
 import { readPartyAllergyView } from "./party-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
-import * as orderWrites from "./working-order.js";
+import * as workingOrderKitchenFire from "./working-order-kitchen-fire.js";
+import * as workingOrderOpen from "./working-order-open.js";
 import {
   createMenu,
   createCategory,
@@ -376,14 +377,16 @@ describe("A669 atomic submit", () => {
           ? await directCommand(p, "fire", allergy)
           : await draftCommand(p, d, "fire", allergy);
       const before = await frozen();
-      const probe = vi.spyOn(orderWrites, "fireLines").mockImplementation(async (tx) => {
-        const saved = await VENUE_SERVICE.readPartyAllergy(tx, p.partyId);
-        expect(saved.answer).toBe("allergies");
-        expect(saved.ticks).toHaveLength(1);
-        expect(saved.ticks[0]!.guestId).toBe(saved.guests[1]!.id);
-        expect(saved.ticks[0]!.workingLineId).not.toBeNull();
-        throw new AppError("allergy.invalid", { field: "probe_before_output" });
-      });
+      const probe = vi
+        .spyOn(workingOrderKitchenFire, "fireLines")
+        .mockImplementation(async (tx) => {
+          const saved = await VENUE_SERVICE.readPartyAllergy(tx, p.partyId);
+          expect(saved.answer).toBe("allergies");
+          expect(saved.ticks).toHaveLength(1);
+          expect(saved.ticks[0]!.guestId).toBe(saved.guests[1]!.id);
+          expect(saved.ticks[0]!.workingLineId).not.toBeNull();
+          throw new AppError("allergy.invalid", { field: "probe_before_output" });
+        });
       try {
         await expect(
           inTx(v, (tx) =>
@@ -608,9 +611,9 @@ describe("A669 atomic submit", () => {
         },
       ],
     };
-    const insert = orderWrites.insertTabRound;
+    const insert = workingOrderOpen.insertTabRound;
     const probe = vi
-      .spyOn(orderWrites, "insertTabRound")
+      .spyOn(workingOrderOpen, "insertTabRound")
       .mockImplementation(async (...args) => (await insert(...args)).reverse());
     try {
       await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));

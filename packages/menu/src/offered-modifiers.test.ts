@@ -315,7 +315,7 @@ describe("what a product offers", () => {
           preselected: false,
           addAllergens: { milk: {} },
           // The dish's own line expands its declarations the same way (`readQueueSubItems`,
-          // apps/server/src/working-order.ts), so vegetarian implies no meat and no fish.
+          // apps/server/src/working-order-station-queue.ts), so vegetarian implies no meat and no fish.
           suitableFor: ["vegetarian", "no_meat", "no_fish"],
         },
         {

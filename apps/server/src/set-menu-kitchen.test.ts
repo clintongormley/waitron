@@ -12,7 +12,8 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { inTx } from "./testing/party-venue.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
-import { fireLines, fireableLineColumns, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order-station-queue.js";
+import { fireLines, fireableLineColumns } from "./working-order-kitchen-fire.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
 let stationId: string;

@@ -37,7 +37,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readDrafts } from "./order-drafts.js";
 import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
 import { fingerprint, partyFamily, partyZone } from "./parties.js";
-import { extraQuantityFor } from "./working-order.js";
+import { extraQuantityFor } from "./order-line-quantities.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { readLineCancellations } from "./line-service-state.js";
 import "./errors.js";

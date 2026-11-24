@@ -38,7 +38,7 @@ import {
 import { readSettledTicket, settleIssuedOrder } from "./till-sale.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 let venue: BillVenue;

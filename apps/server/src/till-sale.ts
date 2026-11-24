@@ -26,17 +26,15 @@ import { payments } from "@waitron/payments";
 import { formatInvoiceNumber, settleSale } from "@waitron/core";
 import type { SettleSaleTender } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
-import {
-  fireLines,
-  paysAfterSending,
-  readStoredOrder,
-  refusePendingPartPayment,
-  refuseRefundInProgress,
-  toVatBreakdown,
-  unsentDishLines,
-  lateUnsentDishes,
-} from "./working-order.js";
-import type { TillSaleDeps as BaseTillSaleDeps, WorkingOrderStatus } from "./working-order.js";
+import { refusePendingPartPayment, refuseRefundInProgress } from "./working-order-edit-state.js";
+import { lateUnsentDishes } from "./working-order-late-send.js";
+import { fireLines, unsentDishLines } from "./working-order-kitchen-fire.js";
+import { readStoredOrder, toVatBreakdown } from "./stored-order-lines.js";
+import { paysAfterSending } from "./working-order-context.js";
+import type {
+  TillSaleDeps as BaseTillSaleDeps,
+  WorkingOrderStatus,
+} from "./working-order-context.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 type TillSaleDeps = BaseTillSaleDeps & {
   attendance?: AttendanceRecorder;

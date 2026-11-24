@@ -8,7 +8,8 @@ import {
   saveDraftForTest as saveDraft,
   takeOverDraftForTest as takeOverDraft,
 } from "./testing/draft-command-fixture.js";
-import * as orderWrites from "./working-order.js";
+import * as workingOrderOpen from "./working-order-open.js";
+import * as workingOrderKitchenFire from "./working-order-kitchen-fire.js";
 import * as groupWrites from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
@@ -64,7 +65,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
-import { listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import type { GroupRelease } from "./order-groups.js";
@@ -334,7 +335,7 @@ async function saveOnSeparateBill(
       .from(workingOrders)
       .where(eq(workingOrders.partyId, partyId));
     const billId = randomUUID();
-    await orderWrites.createOpenOrder(tx, v.cfg, billId, [], "Separate bill", {
+    await workingOrderOpen.createOpenOrder(tx, v.cfg, billId, [], "Separate bill", {
       partyId,
       existingService: true,
       copyServiceContextFrom: source!.id,
@@ -908,7 +909,7 @@ describe("draft bill ownership", () => {
   async function otherBill(v: Venue, partyId: string, tabId: string): Promise<string> {
     const id = randomUUID();
     await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, id, [], "Bill 2", {
+      workingOrderOpen.createOpenOrder(tx, v.cfg, id, [], "Bill 2", {
         partyId,
         existingService: true,
         copyServiceContextFrom: tabId,
@@ -3895,9 +3896,9 @@ it("A669 uses preassigned dish ids when inserted rows return in reverse order", 
       { guestId: state.guests[1]!.id, draftLineId: draft.lines[1]!.id },
     ]),
   );
-  const insert = orderWrites.insertTabRound;
+  const insert = workingOrderOpen.insertTabRound;
   const spy = vi
-    .spyOn(orderWrites, "insertTabRound")
+    .spyOn(workingOrderOpen, "insertTabRound")
     .mockImplementation(async (...args) => (await insert(...args)).reverse());
   try {
     await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]);
@@ -4137,7 +4138,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const { partyId, tabId } = await seated(v);
     const intoId = randomUUID();
     await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
+      workingOrderOpen.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
         partyId,
         existingService: true,
         copyServiceContextFrom: tabId,
@@ -4234,7 +4235,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const { partyId, tabId } = await seated(v);
     const intoId = randomUUID();
     await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
+      workingOrderOpen.createOpenOrder(tx, v.cfg, intoId, [], "Bill 2", {
         partyId,
         existingService: true,
         copyServiceContextFrom: tabId,
@@ -4326,7 +4327,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const from = await seated(v);
     const billId = randomUUID();
     await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, billId, [], "Moving bill", {
+      workingOrderOpen.createOpenOrder(tx, v.cfg, billId, [], "Moving bill", {
         partyId: from.partyId,
         existingService: true,
         copyServiceContextFrom: from.tabId,
@@ -4862,7 +4863,7 @@ describe("fresh drafts alongside existing bill families", () => {
     const { draft, parentId } = await withBillFamily(v, partyId, tabId);
     const otherBill = randomUUID();
     await inTx((tx) =>
-      orderWrites.createOpenOrder(tx, v.cfg, otherBill, [], "Bill 2", {
+      workingOrderOpen.createOpenOrder(tx, v.cfg, otherBill, [], "Bill 2", {
         partyId,
         existingService: true,
         copyServiceContextFrom: tabId,
@@ -4922,13 +4923,15 @@ describe("fresh drafts alongside existing bill families", () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const { draft } = await withBillFamily(v, partyId, tabId);
-    const fire = orderWrites.fireLines;
+    const fire = workingOrderKitchenFire.fireLines;
     let calls = 0;
-    const probe = vi.spyOn(orderWrites, "fireLines").mockImplementation(async (...args) => {
-      const result = await fire(...args);
-      if (++calls === 2) throw new AppError("station.no_default", { dishes: "X" });
-      return result;
-    });
+    const probe = vi
+      .spyOn(workingOrderKitchenFire, "fireLines")
+      .mockImplementation(async (...args) => {
+        const result = await fire(...args);
+        if (++calls === 2) throw new AppError("station.no_default", { dishes: "X" });
+        return result;
+      });
     try {
       await refusedWritingNothing(
         () =>

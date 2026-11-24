@@ -13,7 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { readBillSignals } from "./table-signals.js";
-import { listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
 import {
   billWith,
   inTx,

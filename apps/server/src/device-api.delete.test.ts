@@ -13,7 +13,7 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { payments } from "@waitron/payments";
 import type { DeleteImpact } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { mountDeviceApi } from "./device-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {
