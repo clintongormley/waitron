@@ -10,6 +10,7 @@ import {
   deleteProductItems,
   projectProductItems,
   moveProductItems,
+  setProductAvailability,
   summariseFolders,
   type FolderContents,
 } from "./product-items.js";
@@ -70,6 +71,21 @@ async function product(id: string) {
     .where(eq(products.id, id));
   return row!;
 }
+
+it("sets a product and a variant's availability in one read and one write", async () => {
+  await app(async (tx) => {
+    const reads = vi.spyOn(tx, "select");
+    const writes = vi.spyOn(tx, "update");
+    try {
+      await setProductAvailability(tx, [cola, variant], false);
+      expect(reads).toHaveBeenCalledTimes(1);
+      expect(writes).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+      writes.mockRestore();
+    }
+  });
+});
 
 describe("moveProductItems", () => {
   it("checks cycles before moving any product, even before rollback", async () => {

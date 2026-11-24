@@ -136,6 +136,7 @@ export const PATH_PATTERNS = [
   "/api/sales/:id/deliveries/:id/to-receipt",
   "/api/sales/:id/reprint",
   "/management-api/products/menus",
+  "/management-api/products/availability",
   "/management-api/products/:id/editor",
   "/management-api/products/:id/extra-usage",
   "/management-api/products/:id/course",

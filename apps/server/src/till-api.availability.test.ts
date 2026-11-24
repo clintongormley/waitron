@@ -16,8 +16,10 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/menu";
-import { loginWithPin } from "@waitron/identity";
+import { loginWithPin, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { mountMenuApi } from "./menu-api.js";
 import { mountTillApi } from "./till-api.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -123,6 +125,54 @@ it("lets staff stop and restore a dish across menus without restoring its sold-o
   expect(
     await send(app, cookie, "PUT", path().replace(productId, variantId), { available: true }),
   ).toEqual({ status: 200, json: { available: true } });
+});
+it("applies dashboard product availability immediately to both published till zones", async () => {
+  const manager = await withTransaction(suite.db, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: "Menu Manager", role: "manager" });
+    return startManagementSession(tx, { personId: person!.id, method: "password" });
+  });
+  mountMenuApi(app, { db: suite.db, venueLocale: "es-ES" }, () => {});
+
+  async function expectOffers(productAvailable: boolean, variantAvailable: boolean) {
+    for (const zoneId of [v.counter.zoneId, v.tables.zoneId]) {
+      const { offers } = await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.listZoneOffers(tx, zoneId),
+      );
+      const offer = offers.find((entry) => entry.productId === productId);
+      expect(offer).toMatchObject({ unitPrice: "12.00", available: productAvailable });
+      expect(offer?.variants.find((variant) => variant.id === variantId)).toMatchObject({
+        unitPrice: "8.00",
+        available: variantAvailable,
+      });
+    }
+  }
+
+  await expectOffers(true, false);
+  const changes = [
+    { productIds: [variantId], available: true, expected: [true, true] },
+    { productIds: [productId], available: false, expected: [false, true] },
+    { productIds: [productId], available: true, expected: [true, true] },
+    { productIds: [productId, variantId], available: false, expected: [false, false] },
+    { productIds: [variantId], available: true, expected: [false, true] },
+  ] as const;
+  for (const [index, { productIds, available, expected }] of changes.entries()) {
+    const response = await app.request("/management-api/products/availability", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${MANAGEMENT_COOKIE}=${manager.token}`,
+      },
+      body: JSON.stringify({ productIds, available }),
+    });
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe("");
+    expect(JSON.parse(response.headers.get("x-waitron-menu-revision")!)).toEqual({
+      epoch: expect.any(String),
+      sequence: index + 1,
+    });
+    const [productAvailable, variantAvailable] = expected;
+    await expectOffers(productAvailable, variantAvailable);
+  }
 });
 it("stops and restores a published extra that is not itself a dish", async () => {
   for (const available of [false, true]) {
