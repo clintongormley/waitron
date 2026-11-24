@@ -7,7 +7,8 @@ import { refusalOf, serviceExchange, type OnRefusal } from "./cloud-translation.
 import "./errors.js";
 
 export function readSetupAddressLookup(input: Record<string, unknown>) {
-  const { tab: _tab, ...operation } = input;
+  const operation = { ...input };
+  delete operation.tab;
   const lookup = readAddressLookup(operation);
   return lookup.kind === "available" ? undefined : lookup;
 }
