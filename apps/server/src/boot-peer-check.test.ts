@@ -1878,3 +1878,48 @@ describe("askPeerStatus", () => {
     expect(onSilent).toHaveBeenCalledWith(SPARE, "unresolved");
   });
 });
+
+describe("postToBox's answer cap", () => {
+  const MIB = 1024 * 1024;
+  let server: ReturnType<typeof createHttpServer> | undefined;
+
+  afterEach(async () => {
+    if (server === undefined) return;
+    const closing = server;
+    server = undefined;
+    closing.closeAllConnections();
+    await new Promise<void>((done) => closing.close(() => done()));
+  });
+
+  async function answering(bytes: number): Promise<string> {
+    server = createHttpServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { "content-type": "application/octet-stream" });
+      res.end(Buffer.alloc(bytes, 0x61));
+    });
+    const listening = server;
+    await new Promise<void>((done) => listening.listen(0, "127.0.0.1", done));
+    return `http://127.0.0.1:${(listening.address() as AddressInfo).port}`;
+  }
+
+  it("refuses an answer one byte over the caller's cap as too large", async () => {
+    const url = await answering(4097);
+    await expect(
+      postToBox({ timeoutMs: 5000 }, SPARE, url, "{}", { maxBytes: 4096 }),
+    ).rejects.toBeInstanceOf(boxTransport.AnswerTooLarge);
+  });
+
+  it("keeps an answer exactly at the caller's cap", async () => {
+    const url = await answering(4096);
+    const answer = await postToBox({ timeoutMs: 5000 }, SPARE, url, "{}", { maxBytes: 4096 });
+    expect(answer.status).toBe(200);
+    expect(answer.text).toHaveLength(4096);
+  });
+
+  it("caps an answer at 1 MiB when the caller names no cap", async () => {
+    const url = await answering(MIB + 1);
+    await expect(postToBox({ timeoutMs: 5000 }, SPARE, url, "{}")).rejects.toBeInstanceOf(
+      boxTransport.AnswerTooLarge,
+    );
+  });
+});

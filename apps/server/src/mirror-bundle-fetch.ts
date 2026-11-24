@@ -269,6 +269,9 @@ interface BoxRequest {
 }
 
 /** Thrown when a connection failed before its handshake finished, so another address may be tried. */
+/** A box's answer ran past the cap its caller set. */
+export class AnswerTooLarge extends Error {}
+
 class NotConnected extends Error {
   constructor(readonly failure: unknown) {
     super("not connected");
@@ -491,7 +494,7 @@ export async function boxExchange(
     size += chunk.length;
     if (maxBytes !== undefined && size > maxBytes) {
       res.destroy();
-      throw new Error("answer too large");
+      throw new AnswerTooLarge("answer too large");
     }
     chunks.push(chunk);
   }
@@ -510,7 +513,7 @@ async function refusalText(res: IncomingMessage): Promise<string> {
   let size = 0;
   for await (const chunk of res as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > MAX_REFUSAL_BYTES) throw new Error("answer too large");
+    if (size > MAX_REFUSAL_BYTES) throw new AnswerTooLarge("answer too large");
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString("utf8");

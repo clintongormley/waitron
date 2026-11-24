@@ -27,7 +27,12 @@ import {
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
 import { caCertPath } from "./box-secrets.js";
-import { boxExchange, CheckedAddressUnreached, type BoxLookup } from "./mirror-bundle-fetch.js";
+import {
+  AnswerTooLarge,
+  boxExchange,
+  CheckedAddressUnreached,
+  type BoxLookup,
+} from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
 export type StartCheckResult = "proceed" | "superseded" | "wait";
@@ -394,6 +399,7 @@ export async function postToBox(
   nodeId: string,
   url: string,
   body: string,
+  { maxBytes = MAX_STATUS_BYTES }: { maxBytes?: number } = {},
 ): Promise<{ status: number; text: string }> {
   const signal = AbortSignal.timeout(deps.timeoutMs);
   let connected = false;
@@ -424,10 +430,10 @@ export async function postToBox(
           connected = true;
         },
       },
-      MAX_STATUS_BYTES,
+      maxBytes,
     );
   } catch (error) {
-    if (error instanceof PeerCertificateRefused) throw error;
+    if (error instanceof PeerCertificateRefused || error instanceof AnswerTooLarge) throw error;
     if (
       deps.fetch === undefined &&
       firstCodeInCauseChain(error, (code) => CERTIFICATE_REFUSALS.has(code)) !== null

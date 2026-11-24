@@ -1,6 +1,9 @@
 import { liveBackupQuery, type Database } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
+import { codeOf } from "@waitron/server-kit";
+import { emergencyCopyFrom } from "./handover-intervals.js";
+import type { Logger } from "./logger.js";
 
 type Holdings = Readonly<Record<string, CanonicalValue>>;
 
@@ -26,4 +29,33 @@ export async function readHoldings(
     if (seat) holdings[module.name] = await seat(liveBackupQuery(db));
   }
   return holdings;
+}
+
+/** This box's summary for the answer; left out when it cannot be read, so an order still goes. */
+export async function ownHoldings(
+  deps: { db: Database; modules: readonly WaitronModule[] },
+  log: Logger,
+  source: string,
+): Promise<{ holdings?: Record<string, CanonicalValue> }> {
+  try {
+    return { holdings: await readHoldings(deps.db, deps.modules) };
+  } catch (error) {
+    log("warn", "reset-order.holdings_unread", { nodeId: source, errorCode: codeOf(error) });
+    return {};
+  }
+}
+
+/** The copy's latest change for the answer; left out when it cannot be read, so an order still goes. */
+export async function copyTime(
+  deps: { db: Database },
+  log: Logger,
+  source: string,
+): Promise<{ lastChangeAtMs?: number | null }> {
+  try {
+    const copy = await emergencyCopyFrom(deps.db, source);
+    return copy === null ? {} : { lastChangeAtMs: copy.lastChangeAtMs };
+  } catch (error) {
+    log("warn", "reset-order.copy_unread", { nodeId: source, errorCode: codeOf(error) });
+    return {};
+  }
 }
