@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
-import { findAdjustmentReason, readCancelsForRefund } from "@waitron/adjustments";
+import {
+  adjustmentRefunds,
+  findAdjustmentReason,
+  readCancelsForRefund,
+} from "@waitron/adjustments";
 import { correctionTargetFor } from "@waitron/core";
 import {
   adjustments,
@@ -45,7 +49,6 @@ import type { RefundProviderFor } from "./bill-refunds.js";
 import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
 import { perDatabase } from "./live-in-process.js";
-import { fingerprint } from "./parties.js";
 import { giveCorrectionCash } from "./invoice-correction-cash.js";
 import {
   correctionOpenRefusal,
@@ -867,21 +870,6 @@ function comparablePartsOf(value: unknown): ComparablePart[] {
 
 const partsKey = (parts: readonly ComparablePart[]) => JSON.stringify(parts);
 
-/** The press `ask` as its refunds' fingerprints carry it, so its ids resent with another press are
- * refused even when that press's first parts match what was stored. */
-function pressPrintOf(ask: GiveBackWrite): string {
-  const { purpose, lineIds, amount, extra, way, fromCancel } = ask.request;
-  return fingerprint({
-    purpose,
-    lineIds: lineIds === undefined ? null : [...lineIds].sort(),
-    amount: cents(amount),
-    extra: cents(extra),
-    way: way.toLowerCase(),
-    fromCancel: fromCancel === undefined ? null : [...fromCancel].sort(),
-    expected: partsKey(ask.expected),
-  });
-}
-
 /** The ids of the reader presses running in this process, each until its last part has settled. */
 const readerPresses = perDatabase(() => new Set<string>());
 const pressIds = (ask: GiveBackWrite) => Object.values(ask.ids);
@@ -940,6 +928,15 @@ async function reasonTextOf(tx: Transaction, ask: GiveBackWrite): Promise<string
 }
 
 type RefundRow = typeof refundRows.$inferSelect;
+
+type Slot = "refund" | "extra";
+
+/** Which of the press's refund ids a part's refunds are written under: an extra given back alone
+ * takes the refund id, so its rows show the press was for the extra alone and a press reusing its
+ * ids for more is refused. */
+function slotOf(ask: Pick<GiveBackWrite, "request">, kind: string): Slot {
+  return kind === "extra" && ask.request.purpose !== "extra" ? "extra" : "refund";
+}
 
 interface StoredGiveBack {
   refund: RefundRow[];
@@ -1042,7 +1039,7 @@ async function outcomeOf(
       };
     }
     const kind = part.kind as "refund" | "extra";
-    const rows = kind === "extra" ? stored.extra : stored.refund;
+    const rows = stored[slotOf(ask, kind)];
     if (rows.length === 0) return { kind, amount, state: "not_started" };
     return { kind, amount, state: refundsState(rows), refundId: rows[0]!.id };
   });
@@ -1103,15 +1100,21 @@ async function checkResend(
   const reason = await reasonTextOf(tx, ask);
   const kinds = new Set(ask.expected.map((part) => part.kind));
   if (
-    (stored.refund.length > 0 && !kinds.has("refund")) ||
-    (stored.extra.length > 0 && !kinds.has("extra")) ||
+    (stored.refund.length > 0 &&
+      !ask.expected.some(
+        (part) => part.kind !== "correction" && slotOf(ask, part.kind) === "refund",
+      )) ||
+    (stored.extra.length > 0 &&
+      !ask.expected.some(
+        (part) => part.kind !== "correction" && slotOf(ask, part.kind) === "extra",
+      )) ||
     (stored.correction !== undefined && !kinds.has("correction"))
   )
     throw reused();
   const present = ask.expected.map((part) =>
     part.kind === "correction"
       ? stored.correction !== undefined
-      : (part.kind === "extra" ? stored.extra : stored.refund).length > 0,
+      : stored[slotOf(ask, part.kind)].length > 0,
   );
   // Only a reader's press stops between parts, and only ever before all the later ones.
   const missing = present.indexOf(false);
@@ -1121,6 +1124,27 @@ async function checkResend(
       present.slice(missing).some(Boolean))
   )
     throw reused();
+  const { way, fromCancel } = ask.request;
+  if (
+    ask.expected.some((part) => part.way !== way.toLowerCase()) ||
+    [...stored.refund, ...stored.extra, ...legs].some((row) =>
+      way === "cash" ? row.method !== "cash" : row.tenderId !== way.toLowerCase(),
+    )
+  )
+    throw reused();
+  if (fromCancel !== undefined && stored.refund.length > 0) {
+    const links = await tx
+      .select({ adjustmentId: adjustmentRefunds.adjustmentId })
+      .from(adjustmentRefunds)
+      .where(
+        inArray(
+          adjustmentRefunds.refundId,
+          stored.refund.map((row) => row.id),
+        ),
+      );
+    const linked = new Set(links.map((link) => link.adjustmentId));
+    if (fromCancel.some((id) => !linked.has(id))) throw reused();
+  }
   for (const [index, part] of ask.expected.entries()) {
     if (!present[index]) continue;
     if (part.kind === "correction") {
@@ -1133,7 +1157,7 @@ async function checkResend(
         throw new AppError("submission.id_reused", { submissionId: ask.ids.correction });
       continue;
     }
-    const rows = part.kind === "extra" ? stored.extra : stored.refund;
+    const rows = stored[slotOf(ask, part.kind)];
     const field = part.kind === "extra" ? "tipAmount" : "appliedAmount";
     if (rows.reduce((sum, row) => sum + row[field], 0) !== part.amount) throw reused();
     for (const row of rows)
@@ -1153,8 +1177,6 @@ async function checkResend(
         { requestedBy: personId, authorizedBy: row.authorizedBy },
         reading.instant.toISOString(),
         { backend: deps.backend, reading },
-        undefined,
-        pressPrintOf(ask),
       );
   }
 }
@@ -1348,7 +1370,7 @@ export async function giveBack(
   const writes = plan.parts.flatMap((part) => {
     if (part.kind === "correction") return [];
     const isExtra = part.kind === "extra";
-    const submissionId = isExtra ? ask.ids.extra : ask.ids.refund;
+    const submissionId = ask.ids[slotOf(ask, part.kind)];
     return fromPayments(cents(part.amount), payments, (payment) =>
       cents(isExtra ? payment.tipRemaining : payment.appliedRemaining),
     ).map((share, index) => ({
@@ -1379,7 +1401,6 @@ export async function giveBack(
     ...(manual === null ? {} : { manualConfirmed: true }),
     invoiceCorrection: { id: correctionId, requestId: ask.ids.leg },
   });
-  const pressPrint = pressPrintOf(ask);
   const open = (
     into: Transaction,
     reading: TrustedReading,
@@ -1396,7 +1417,6 @@ export async function giveBack(
       onReader: (refundDeps) =>
         giveBackOnReader(refundDeps, cfg, saleId, ask, {
           personId: who.personId,
-          pressPrint,
           // Each part's transaction asks the rights again, from the person's roles and session as
           // they are then; the supervisor's PIN checked ahead is not asked again.
           authorize: async (into, part) => {
@@ -1487,8 +1507,6 @@ export async function giveBack(
       refundActor,
       createdAt,
       { backend: deps.backend, reading },
-      undefined,
-      pressPrint,
     );
     await carry(reserved, leg === 0 && index === writes.length - 1);
   }
@@ -1517,8 +1535,6 @@ export async function giveBack(
         { requestedBy: who.personId, authorizedBy: granted.refund!.authorizedBy },
         createdAt,
         { backend: deps.backend, reading },
-        undefined,
-        pressPrint,
       );
       await carry(reserved, false);
       fileAfter = opened.correction.id;
@@ -1577,7 +1593,6 @@ type PartAuthority = {
 interface ReaderSequence {
   /** Who gives back; a correction whose leg fails is discarded under their name. */
   personId: string;
-  pressPrint: string;
   authorize: (
     tx: Transaction,
     part: GiveBackPart,
@@ -1712,8 +1727,6 @@ async function readerPart(
         actor,
         reading.instant.toISOString(),
         { backend: deps.backend, reading },
-        undefined,
-        sequence.pressPrint,
       );
       if (begun.replayed) return null;
       const carried = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {

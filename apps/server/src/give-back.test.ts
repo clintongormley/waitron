@@ -2325,3 +2325,77 @@ describe("POST …/give-back on a card reader: fix round 1", () => {
     expect(cardCallsSince(calls).refunds).toEqual(["18.50", "18.50", "6.00"]);
   });
 });
+
+describe("POST …/give-back on a card reader: fix round 2", () => {
+  it("refuses submission.id_reused when a reader press holding only a correction is resent as a cash press, writing nothing (P3)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "20.00" }, { cash: "14.00" }]);
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: reader }));
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "10.00", way: reader, lineIds: [] },
+    ]);
+    const first = await give(saleId, body);
+    expect(first.json).toMatchObject({ parts: [{ kind: "correction", state: "completed" }] });
+    const before = effects();
+    expectRefusedUnwritten(
+      await give(saleId, {
+        ...body,
+        way: "cash",
+        expected: [{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }],
+      }),
+      "submission.id_reused",
+      before,
+    );
+  });
+
+  it("gives each part back once when the same press is sent twice at once (P5)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00", way: reader }));
+    const calls = cardCallsNow();
+    const release = venue.card.holdNextRefund();
+    const both = Promise.all([give(saleId, body), give(saleId, body)]);
+    await vi.waitFor(() => expect(venue.card.refundCalls.length).toBe(calls.refunds + 1));
+    release();
+    const answers = await both;
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
+    for (const answer of answers) {
+      const rest = (answer.json as { rest: GiveBackRequest | null }).rest;
+      if (rest !== null) await give(saleId, await giveBody(saleId, rest));
+    }
+    expect(cardCallsSince(calls).refunds).toEqual(["3.00", "10.00"]);
+    expect((await correctionsOn(saleId)).map((row) => [row.state, row.gross])).toEqual([
+      ["filed", 1000],
+    ]);
+  });
+
+  it("leaves a goodwill refund that pays an unnamed cancel needing sale.refund on its retry (P6)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }]);
+    await cancel(b, "Paella", "1", true);
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "20.00", { way: reader }));
+    expect(body.expected).toEqual([
+      { kind: "refund", amount: "18.50", way: reader },
+      { kind: "correction", amount: "1.50", way: reader, lineIds: [] },
+    ]);
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+    const answer = await give(saleId, body);
+    expect(answer.json).toMatchObject({ parts: [{ state: "pending" }, { state: "not_started" }] });
+    const refundId = (answer.json as { parts: { refundId: string }[] }).parts[0]!.refundId;
+    const clerk = await signedInHolding([], "4826");
+    const retried = await send(
+      venue.app,
+      clerk.cookie,
+      "POST",
+      `/api/tender-refunds/${refundId}/retry`,
+      {},
+    );
+    expect(retried).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+  });
+});
