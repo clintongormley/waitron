@@ -182,14 +182,16 @@ it("finishes successful checks when Docker already removed their containers", as
 it("tells only the stopped checks' copy that its time is synchronised, whatever the host says", async () => {
   const f = await fixture();
   const relay = join(f.directory, "check", "clock");
-  let status;
+  const statuses = [];
   const run = async (file, args) => {
-    if (args.at(-1) === "sale")
-      status = await boxHostClient({ socketPath: join(relay, "box.sock") }).clockStatus();
+    if (["readiness", "sale"].includes(args.at(-1)))
+      statuses.push(await boxHostClient({ socketPath: join(relay, "box.sock") }).clockStatus());
     return f.run(file, args);
   };
+  const log = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  onTestFinished(() => log.mockRestore());
   await checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run });
-  expect(status).toMatchObject({ available: true, synchronised: true });
+  expect(statuses).toMatchObject(Array(2).fill({ available: true, synchronised: true }));
   const mount = `type=bind,src=${relay},dst=/run/waitron-box,readonly`;
   const given = f.calls.filter((args) => args.some((arg) => arg.includes("/run/waitron-box")));
   expect(given.map((args) => args.includes(mount))).toEqual([true, true]);
@@ -198,11 +200,7 @@ it("tells only the stopped checks' copy that its time is synchronised, whatever 
     expect.stringMatching(/-sale$/),
   ]);
   await expect(fs.access(relay)).rejects.toMatchObject({ code: "ENOENT" });
-  const told = (await fs.readdir(f.directory)).filter((name) => name.endsWith(".txt"));
-  expect(told).toEqual(["clock-answer.txt"]);
-  expect(await fs.readFile(join(f.directory, told[0]), "utf8")).toMatch(
-    /^The upgrade's checks .*\n$/,
-  );
+  expect(log.mock.calls).toEqual([[expect.stringMatching(/^The upgrade's checks .*\n$/)]]);
 });
 
 describe("an attempt that changes the producer", () => {

@@ -79,7 +79,6 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
     relay = await clockStatusRelay({
       directory: join(work, "clock"),
       answerSynchronised: true,
-      attemptDirectory: directory,
     });
     const environment = upgradeEnvironment(config.services.app.environment);
     const envFile = join(work, "app.env");

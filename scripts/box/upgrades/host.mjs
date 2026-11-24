@@ -803,22 +803,14 @@ export async function clockStatusRelay({
   directory,
   socketPath = "/run/waitron-box/box.sock",
   answerSynchronised = false,
-  attemptDirectory,
 }) {
   await fs.mkdir(directory, { mode: 0o755 });
   const clients = new Set();
-  let told;
-  const forCopy = async (reply) => {
+  let told = false;
+  const forCopy = (reply) => {
     if (saysSynchronised(reply)) return reply;
-    try {
-      await (told ??= writeFileDurable(
-        join(attemptDirectory, "clock-answer.txt"),
-        TOLD_SYNCHRONISED,
-      ));
-    } catch {
-      // An answer this attempt holds no record of is not given.
-      return reply;
-    }
+    if (!told) process.stderr.write(TOLD_SYNCHRONISED);
+    told = true;
     return synchronisedReply();
   };
   const server = createServer((client) => {
@@ -841,10 +833,10 @@ export async function clockStatusRelay({
       source = createConnection(socketPath);
       if (answerSynchronised) source.setTimeout(HOST_ANSWER_MS, () => source.destroy());
       let answered = false;
-      const answer = async (reply) => {
+      const answer = (reply) => {
         if (answered) return;
         answered = true;
-        client.end(answerSynchronised && !client.destroyed ? await forCopy(reply) : reply);
+        client.end(answerSynchronised && !client.destroyed ? forCopy(reply) : reply);
       };
       source.on("connect", () => source.write("clock.status\n"));
       let reply = "";
@@ -852,12 +844,12 @@ export async function clockStatusRelay({
         reply += chunk.toString();
         const end = reply.indexOf("\n");
         if (end >= 0) {
-          void answer(reply.slice(0, end + 1));
+          answer(reply.slice(0, end + 1));
           source.destroy();
         } else if (reply.length > 4096) source.destroy();
       });
-      source.on("error", () => void answer('{"ok":false,"reason":"unavailable"}\n'));
-      source.on("close", () => void answer(""));
+      source.on("error", () => answer('{"ok":false,"reason":"unavailable"}\n'));
+      source.on("close", () => answer(""));
     });
   });
   const path = join(directory, "box.sock");
@@ -870,7 +862,6 @@ export async function clockStatusRelay({
       await new Promise((done, reject) =>
         server.close((error) => (error ? reject(error) : done())),
       );
-      await told?.catch(() => {});
     },
   };
 }

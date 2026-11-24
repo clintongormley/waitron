@@ -1164,10 +1164,11 @@ describe("the clock relay told to answer synchronised", () => {
   const reply = (synchronised) =>
     `{"ok":true,"service":"on","unit":"chrony.service","synchronised":${synchronised},"lastSyncAt":null,"nowMs":1795420800000}\n`;
 
-  async function relayed({ answer, host = answer !== undefined, attempt = "attempt", ...told }) {
+  async function relayed({ answer, host = answer !== undefined, ...told }) {
     const root = await mkdtemp(join(tmpdir(), "upgrade-relay-"));
     onTestFinished(() => rm(root, { recursive: true, force: true }));
-    await mkdir(join(root, "attempt"));
+    const log = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    onTestFinished(() => log.mockRestore());
     const source = join(root, "host.sock");
     const received = [];
     const connections = new Set();
@@ -1191,7 +1192,6 @@ describe("the clock relay told to answer synchronised", () => {
       directory: join(root, "relay"),
       socketPath: source,
       answerSynchronised: true,
-      attemptDirectory: join(root, attempt),
       ...told,
     });
     onTestFinished(() => relay.close().catch(() => {}));
@@ -1207,12 +1207,7 @@ describe("the clock relay told to answer synchronised", () => {
         socket.on("end", () => done(text));
         socket.on("error", reject);
       });
-    const lines = async () =>
-      Promise.all(
-        (await readdir(join(root, "attempt"))).map((name) =>
-          readFile(join(root, "attempt", name), "utf8"),
-        ),
-      );
+    const lines = () => log.mock.calls.map(([text]) => text);
     return { relay, received, exchange, lines, client: boxHostClient({ socketPath }) };
   }
 
@@ -1244,7 +1239,7 @@ describe("the clock relay told to answer synchronised", () => {
           lastSyncAt: null,
         });
       expect(t.received).toEqual(answer ? ["clock.status\n", "clock.status\n"] : []);
-      expect(await t.lines()).toEqual([LINE]);
+      expect(t.lines()).toEqual([LINE]);
     },
   );
 
@@ -1252,7 +1247,7 @@ describe("the clock relay told to answer synchronised", () => {
     const t = await relayed({ answer: (socket) => socket.end(reply(true)) });
     expect(await t.exchange("clock.status\n")).toBe(reply(true));
     expect(t.received).toEqual(["clock.status\n"]);
-    expect(await t.lines()).toEqual([]);
+    expect(t.lines()).toEqual([]);
   });
 
   it.each([
@@ -1265,15 +1260,7 @@ describe("the clock relay told to answer synchronised", () => {
     const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
     expect(await t.exchange(line)).toBe('{"ok":false,"reason":"forbidden"}\n');
     expect(t.received).toEqual([]);
-    expect(await t.lines()).toEqual([]);
-  });
-
-  it("passes the host's own answer on when the line cannot be written", async () => {
-    const t = await relayed({
-      answer: (socket) => socket.end(reply(false)),
-      attempt: "missing",
-    });
-    expect(await t.exchange("clock.status\n")).toBe(reply(false));
+    expect(t.lines()).toEqual([]);
   });
 
   it("passes the host's own answer on, and writes nothing, without the option", async () => {
@@ -1282,7 +1269,7 @@ describe("the clock relay told to answer synchronised", () => {
       answerSynchronised: undefined,
     });
     expect(await t.exchange("clock.status\n")).toBe(reply(false));
-    expect(await t.lines()).toEqual([]);
+    expect(t.lines()).toEqual([]);
   });
 
   it("cuts no host short without the option", async () => {
@@ -1294,7 +1281,7 @@ describe("the clock relay told to answer synchronised", () => {
     const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
     const answers = await Promise.all([t.client.clockStatus(), t.client.clockStatus()]);
     expect(answers.map(({ synchronised }) => synchronised)).toEqual([true, true]);
-    expect(await t.lines()).toEqual([LINE]);
+    expect(t.lines()).toEqual([LINE]);
   });
 
   it("writes nothing for a copy that stopped waiting", async () => {
@@ -1310,41 +1297,7 @@ describe("the clock relay told to answer synchronised", () => {
     expect(await answered).toBe("");
     await left;
     await delay(200);
-    expect(await t.lines()).toEqual([]);
-  });
-
-  it("finishes writing its line before it closes", async () => {
-    const probe = await open(tmpdir(), "r");
-    const prototype = Object.getPrototypeOf(probe);
-    await probe.close();
-    let release;
-    const gate = new Promise((done) => {
-      release = done;
-    });
-    let begun;
-    const writing = new Promise((done) => {
-      begun = done;
-    });
-    const { sync } = prototype;
-    const spy = vi.spyOn(prototype, "sync").mockImplementation(async function () {
-      begun();
-      await gate;
-      return sync.call(this);
-    });
-    onTestFinished(() => spy.mockRestore());
-    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
-    const answered = t.exchange("clock.status\n");
-    await writing;
-    let closed = false;
-    const closing = t.relay.close().then(() => {
-      closed = true;
-    });
-    await delay(50);
-    expect(closed).toBe(false);
-    release();
-    await closing;
-    await answered;
-    expect(await t.lines()).toEqual([LINE]);
+    expect(t.lines()).toEqual([]);
   });
 });
 
