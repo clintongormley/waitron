@@ -283,7 +283,7 @@ product allergens and dietary suitability in **Products**.
 
 Use **Search menus** on the Menus list to find a menu by name.
 
-Check **Starts** to see which periods open on a menu and **Staff can switch** to see where staff can select it. Choose a period name to open its settings if you can edit periods.
+Check **Main menu** to see which periods open on a menu and **Staff menus** to see where staff can select it. Choose a period name to open its settings if you can edit periods.
 
 **Unpublished changes** under a menu's status means the tills do not have your latest edits yet:
 choose it to review them and publish. **Price clashes** there must be fixed before the menu can be

@@ -10119,71 +10119,83 @@ describe("publishing", () => {
     expect(reported).toEqual([]);
   });
 
-  it("shows starting and staff periods on desktop and phone, with Kind and Actions in view", async () => {
-    setLocale("es-ES");
-    const set = {
-      id: "set-daily",
-      name: "Daily menu",
-      active: true,
-      kind: "set_menu",
-      setPrice: "14.00",
-    };
-    const unused = { ...menus[0]!, id: "unused", name: "Unused menu" };
-    const client = api({ listMenus: vi.fn().mockResolvedValue([...menus, set, unused]) });
-    const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
-      api: client,
-      menuPeriodUsage: {
-        watch(publish) {
-          publish([
-            {
-              periodId: "lunch",
-              label: "Almuerzo",
-              menuId: "menu-lunch",
-              staffMenuIds: ["menu-dinner"],
-              href: "/periods/period/lunch",
-            },
-          ]);
-          return () => {};
-        },
-      } satisfies MenuPeriodUsageProvider,
-    });
-    const row = (id: string) => table(el)?.shadowRoot.querySelector(`tr[data-row-key="${id}"]`);
-    const headings = () =>
-      [...(table(el)?.shadowRoot.querySelectorAll("thead th") ?? [])].map(text);
-    for (const [width, stacked] of [
-      [1280, false],
-      [790, true],
-      [390, true],
-    ] as const) {
-      await page.viewport(width, 900);
-      await vi.waitFor(() => {
-        const lunch = row("menu-lunch");
-        const starting = lunch?.querySelector('a[href="/periods/period/lunch"]');
-        expect(starting?.textContent?.trim()).toBe("Almuerzo");
-        expect(starting?.closest("td")).toBe(lunch?.querySelectorAll("td")[stacked ? 0 : 2]);
-        expect(headings().includes(t("menus.period_starts"))).toBe(!stacked);
-        expect(headings().includes(t("menus.period_staff"))).toBe(!stacked);
-        expect(headings()).toContain("Tipo");
-        expect(text(row("menu-dinner"))).toContain("Almuerzo");
-        expect(text(row("menu-dinner"))).not.toContain(t("menus.period_unused"));
-        expect(text(row("unused"))).toContain(t("menus.period_unused"));
-        expect(text(row("set-daily"))).not.toContain(t("menus.period_unused"));
-        if (stacked) {
-          const unusedRow = row("unused")!;
-          const state = unusedRow.querySelector('[data-test="status-unused"]')!;
-          const periodState = [...unusedRow.querySelectorAll("[part]")].find(
-            (part) => text(part) === t("menus.period_unused"),
-          )!;
-          expect(periodState.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-            state.getBoundingClientRect().bottom,
-          );
-        }
-        const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
-        expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
-        expectRowMenusOnScreen(table(el), 4, "wt-row-actions", false);
+  it.each([
+    ["en-GB", "Main menu", "Staff menus", "Kind", "Lunch"],
+    ["es-ES", "Carta principal", "Cartas del personal", "Tipo", "Almuerzo"],
+  ] as const)(
+    "shows starting and staff periods on desktop and phone in %s, with Kind and Actions in view",
+    async (locale, mainHeading, staffHeading, kindHeading, periodName) => {
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      const set = {
+        id: "set-daily",
+        name: "Daily menu",
+        active: true,
+        kind: "set_menu",
+        setPrice: "14.00",
+      };
+      const unused = { ...menus[0]!, id: "unused", name: "Unused menu" };
+      const client = api({ listMenus: vi.fn().mockResolvedValue([...menus, set, unused]) });
+      const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
+        api: client,
+        menuPeriodUsage: {
+          watch(publish) {
+            publish([
+              {
+                periodId: "lunch",
+                label: periodName,
+                menuId: "menu-lunch",
+                staffMenuIds: ["menu-dinner"],
+                href: "/periods/period/lunch",
+              },
+            ]);
+            return () => {};
+          },
+        } satisfies MenuPeriodUsageProvider,
       });
-    }
-  });
+      const row = (id: string) => table(el)?.shadowRoot.querySelector(`tr[data-row-key="${id}"]`);
+      const headings = () =>
+        [...(table(el)?.shadowRoot.querySelectorAll("thead th") ?? [])].map(text);
+      for (const [width, stacked] of [
+        [1280, false],
+        [790, true],
+        [390, true],
+      ] as const) {
+        await page.viewport(width, 900);
+        await vi.waitFor(() => {
+          const lunch = row("menu-lunch");
+          const starting = lunch?.querySelector('a[href="/periods/period/lunch"]');
+          expect(starting?.textContent?.trim()).toBe(periodName);
+          expect(starting?.closest("td")).toBe(lunch?.querySelectorAll("td")[stacked ? 0 : 2]);
+          expect(headings().includes(mainHeading)).toBe(!stacked);
+          expect(headings().includes(staffHeading)).toBe(!stacked);
+          expect(headings()).toContain(kindHeading);
+          expect(text(row("menu-dinner"))).toContain(periodName);
+          expect(text(row("menu-dinner"))).not.toContain(t("menus.period_unused"));
+          expect(text(row("unused"))).toContain(t("menus.period_unused"));
+          expect(text(row("set-daily"))).not.toContain(t("menus.period_unused"));
+          if (stacked) {
+            expect(text(lunch?.querySelector('[part="period-label"]') ?? null)).toBe(mainHeading);
+            expect(text(row("menu-dinner")?.querySelector('[part="period-label"]') ?? null)).toBe(
+              staffHeading,
+            );
+            const unusedRow = row("unused")!;
+            const state = unusedRow.querySelector('[data-test="status-unused"]')!;
+            const periodState = [...unusedRow.querySelectorAll("[part]")].find(
+              (part) => text(part) === t("menus.period_unused"),
+            )!;
+            expect(periodState.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+              state.getBoundingClientRect().bottom,
+            );
+          }
+          const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+          expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+          expectRowMenusOnScreen(table(el), 4, "wt-row-actions", false);
+        });
+      }
+    },
+  );
 
   it("only a successful read can show that a menu is unused", async () => {
     let publish!: (rows: readonly MenuPeriodUsage[] | null) => void;
