@@ -3777,17 +3777,22 @@ export const en = {
   "menus.rename_heading": "Rename {name}",
   "menus.open": "Open",
   "menus.archived": "Archived",
+  "menus.filter_active": "Active",
+  "menus.filter_published": "Published",
+  "menus.filter_attention": "Requiring attention",
+  "menus.filter_archived": "Archived",
+  "menus.filter_all": "All",
   "menus.archive": "Archive…",
   "menus.archive_heading": "Archive {name}",
-  "menus.archive_warning":
-    "Archiving is permanent. You can view the archived menu or copy it into a new, unpublished menu.",
+  "menus.archive_warning": "Archiving is permanent.",
   "menus.archive_starting": "New main menu for {name}",
   "menus.archive_staff": "New staff menu for {name}",
   "menus.archive_remove_staff": "Staff will no longer be able to switch to this menu in {name}.",
   "menus.archive_period_blocked":
     "Archiving would leave {name} with no menu to sell from. Publish another menu first.",
-  "menus.archive_default_reason": "Guests and new departments use this menu.",
-  "menus.archive_default_blocked": "Publish another full menu before archiving this one.",
+  "menus.archive_default_reason":
+    "Customers see this menu on your online menu, and new departments start with it.",
+  "menus.archive_default_blocked": "Publish another full menu, then archive this one.",
   "menus.archive_default_choice": "New venue default menu",
   "menus.archive_dependants": "These menus will drop this menu the next time you publish them:",
   "menus.archive_permission":
@@ -8681,17 +8686,22 @@ export const es: Record<StringKey, string> = {
   "menus.rename_heading": "Cambiar el nombre de {name}",
   "menus.open": "Abrir",
   "menus.archived": "Archivada",
+  "menus.filter_active": "Activas",
+  "menus.filter_published": "Publicadas",
+  "menus.filter_attention": "Requieren atención",
+  "menus.filter_archived": "Archivadas",
+  "menus.filter_all": "Todas",
   "menus.archive": "Archivar…",
   "menus.archive_heading": "Archivar {name}",
-  "menus.archive_warning":
-    "El archivo es permanente. Puedes consultar la carta archivada o copiarla en una nueva sin publicar.",
+  "menus.archive_warning": "El archivo es permanente.",
   "menus.archive_starting": "Nueva carta principal para {name}",
   "menus.archive_staff": "Nueva carta del personal para {name}",
   "menus.archive_remove_staff": "El personal ya no podrá cambiar a esta carta en {name}.",
   "menus.archive_period_blocked":
     "Al archivar esta carta, {name} se quedaría sin carta para vender. Publica otra primero.",
-  "menus.archive_default_reason": "Los clientes y los nuevos departamentos usan esta carta.",
-  "menus.archive_default_blocked": "Publica otra carta completa antes de archivar esta.",
+  "menus.archive_default_reason":
+    "Los clientes ven esta carta en línea y los nuevos departamentos la usan al empezar.",
+  "menus.archive_default_blocked": "Publica otra carta completa y luego archiva esta.",
   "menus.archive_default_choice": "Nueva carta predeterminada del local",
   "menus.archive_dependants": "Estas cartas dejarán de incluirla la próxima vez que las publiques:",
   "menus.archive_permission":

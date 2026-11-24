@@ -47,7 +47,8 @@ export class MenuArchiveDialog extends LitElement {
   private lifetime?: AbortController;
   private scope?: DraftScope<Record<string, string>>;
 
-  protected override firstUpdated(): void {
+  override connectedCallback(): void {
+    super.connectedCallback();
     this.lifetime = new AbortController();
     const { scope } = draftScopeFor(this, {
       id: this,
@@ -149,6 +150,7 @@ export class MenuArchiveDialog extends LitElement {
     return html`<wt-combobox
       name=${key === "default" ? "default-menu" : "period-menu"}
       label=${label}
+      search="auto"
       required
       ?disabled=${this.busy}
       .value=${this.draft[key] ?? ""}
@@ -179,7 +181,7 @@ export class MenuArchiveDialog extends LitElement {
       }}
     >
       <div class="body">
-        <p>${t("menus.archive_warning")}</p>
+        <p data-test="archive-warning">${t("menus.archive_warning")}</p>
         ${!impact && !this.problem ? html`<p role="status">${t("menus.loading")}</p>` : nothing}
         ${impact?.periods.map((period) => {
           const name = `${period.departmentName} · ${period.name}`;

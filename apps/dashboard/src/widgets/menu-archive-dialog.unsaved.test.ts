@@ -1,11 +1,13 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, DROPDOWN_ICONS, registerIcons } from "@waitron/ui";
 import type { MenuArchiveImpact } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./menu-archive-dialog.js";
+
+registerIcons(DROPDOWN_ICONS);
 
 const impact: MenuArchiveImpact = {
   periods: [
@@ -55,6 +57,20 @@ it("requires a replacement and sends it with the archive", async () => {
     form.shadowRoot!.querySelector('[data-test="archive"]') as HTMLElementTagNameMap["wt-button"];
   await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-combobox")).not.toBeNull());
   expect(submit().disabled).toBe(true);
+  const picker = form.shadowRoot!.querySelector("wt-combobox")!;
+  expect(picker.search).toBe("auto");
+  await vi.waitFor(() =>
+    expect(
+      picker
+        .shadowRoot!.querySelector('wt-icon[name="chevron-down"]')
+        ?.shadowRoot?.querySelector("svg"),
+    ).toBeTruthy(),
+  );
+  expect(form.shadowRoot!.querySelector('[data-test="archive-warning"]')!.textContent).toBe(
+    ["Archiving is permanent.", "El archivo es permanente."].find(
+      (wording) => wording === t("menus.archive_warning"),
+    ),
+  );
   form.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "spring" },

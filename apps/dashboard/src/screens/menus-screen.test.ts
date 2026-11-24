@@ -13686,22 +13686,56 @@ it.each(
   },
 );
 
-it("finds an archived menu through Filters and opens its read-only view", async () => {
-  const retired = { id: "menu-lunch", name: "Winter menu", active: false };
-  const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([retired]) }));
-  const row = () => table(el)?.shadowRoot.querySelector('[data-row-key="menu-lunch"]');
-  await vi.waitFor(() => expect(table(el)).toBeTruthy());
-  expect(row()).toBeNull();
+it("filters menus by status and opens an archived menu read-only", async () => {
+  const retired = { ...menus[0]!, id: "menu-winter", name: "Winter menu", active: false };
+  const draft = { ...menus[0]!, id: "menu-draft", name: "Spring draft" };
+  const clash = { ...menus[0]!, id: "menu-clash", name: "Late lunch" };
+  const el = await mount(
+    api({
+      listMenus: vi.fn().mockResolvedValue([...menus, retired, draft, clash]),
+      getMenuStatuses: vi.fn().mockResolvedValue({
+        ...statuses(),
+        [draft.id]: { state: "unpublished", clashes: 0 },
+        [clash.id]: { ...statuses()["menu-dinner"], clashes: 1 },
+      }),
+    }),
+  );
+  const row = (id: string) => table(el)?.shadowRoot.querySelector(`[data-row-key="${id}"]`);
+  const rows = () =>
+    [...table(el).shadowRoot.querySelectorAll("tr[data-row-key]")]
+      .map((r) => r.getAttribute("data-row-key"))
+      .sort();
+  await vi.waitFor(() =>
+    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch"]),
+  );
   table(el).shadowRoot.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   await el.updateComplete;
-  const show = table(el).querySelector("wt-switch")!;
-  show.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  const filter = table(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="menu-status"]',
   );
-  await vi.waitFor(() => expect(text(row())).toContain(t("menus.archived")));
-  expect(row()?.querySelector('[data-test="rename-menu-lunch"]')).toBeNull();
-  expect(row()?.querySelector('[data-test="duplicate-menu-lunch"]')).not.toBeNull();
-  row()?.querySelector<HTMLElement>('[data-test="open-menu-lunch"]')!.click();
+  expect(filter).not.toBeNull();
+  expect(filter!.options.map(({ value }) => value)).toEqual([
+    "active",
+    "published",
+    "attention",
+    "archived",
+    "all",
+  ]);
+  for (const [value, expected] of [
+    ["published", ["menu-clash", "menu-dinner", "menu-lunch"]],
+    ["attention", ["menu-clash", "menu-draft", "menu-lunch"]],
+    ["all", ["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-winter"]],
+    ["archived", ["menu-winter"]],
+  ] as const) {
+    filter!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await vi.waitFor(() => expect(rows()).toEqual(expected));
+  }
+  expect(text(row(retired.id))).toContain(t("menus.archived"));
+  expect(row(retired.id)?.querySelector('[data-test="rename-menu-winter"]')).toBeNull();
+  expect(row(retired.id)?.querySelector('[data-test="duplicate-menu-winter"]')).not.toBeNull();
+  row(retired.id)?.querySelector<HTMLElement>('[data-test="open-menu-winter"]')!.click();
   await vi.waitFor(() =>
     expect(el.shadowRoot?.querySelector('[data-test="archived-menu"]')).not.toBeNull(),
   );

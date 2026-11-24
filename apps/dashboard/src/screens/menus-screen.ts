@@ -41,7 +41,6 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-slider.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { foldName } from "@waitron/menu/src/name-uniqueness.js";
 import { memberName } from "../widgets/member-names.js";
@@ -133,6 +132,25 @@ type PeriodUses = Record<PeriodUse, MenuPeriodUsage[]>;
 const PERIOD_LABELS = { starts: "menus.period_starts", staff: "menus.period_staff" } as const;
 
 /** Sorted by status, the menus needing a publish come first. */
+const MENU_STATUS_FILTERS = {
+  active: "menus.filter_active",
+  published: "menus.filter_published",
+  attention: "menus.filter_attention",
+  archived: "menus.filter_archived",
+  all: "menus.filter_all",
+} as const;
+type MenuStatusFilter = keyof typeof MENU_STATUS_FILTERS;
+
+function matchesMenuStatus(menu: MenuRow, filter: MenuStatusFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "archived") return !menu.active;
+  if (!menu.active) return false;
+  if (filter === "active") return true;
+  if (typeof menu.status === "string") return false;
+  if (filter === "published") return menu.status.state !== "unpublished";
+  return menu.status.state !== "current" || menu.status.clashes > 0;
+}
+
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
 /** The live version and when it went live; a menu never published says so instead. */
@@ -677,7 +695,7 @@ export class MenusScreen extends LitElement {
   /** Replaced by a test, so how long ago a menu was published reads the same on any day. */
   @property({ attribute: false }) now = (): Date => new Date();
   @state() private menus: MenuSummary[] = [];
-  @state() private showArchived = false;
+  @state() private statusFilter: MenuStatusFilter = "active";
   @state() private archivingMenu: MenuSummary | null = null;
   private get sections(): SectionDetails[] {
     const result: SectionDetails[] = [];
@@ -966,14 +984,14 @@ export class MenusScreen extends LitElement {
       changed.has("menus") ||
       changed.has("statuses") ||
       changed.has("statusesError") ||
-      changed.has("showArchived")
+      changed.has("statusFilter")
     )
       this.#rows = this.menus
-        .filter((menu) => menu.active || this.showArchived)
-        .map((menu) => ({
+        .map((menu): MenuRow => ({
           ...menu,
           status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
-        }));
+        }))
+        .filter((menu) => matchesMenuStatus(menu, this.statusFilter));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
@@ -2789,7 +2807,7 @@ export class MenusScreen extends LitElement {
     const loaded = !this.loading && !this.loadError;
     return html`<div class="header">
         <h1>${t("menus.title")}</h1>
-        ${loaded && this.#rows.length ? this.#renderAddMenu() : nothing}
+        ${loaded && (this.#rows.length || this.statusFilter !== "active") ? this.#renderAddMenu() : nothing}
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${loaded && this.statusesError ? this.#renderStatusesError() : nothing}
@@ -2823,25 +2841,28 @@ export class MenusScreen extends LitElement {
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t(menu.active ? "menus.open" : "product.view")}: ${menu.name}`}
-                .emptyMessage=${t("menus.empty")}
+                .emptyMessage=${this.menus.length ? tableNoMatches() : t("menus.empty")}
                 filtersLabel=${t("table.filters")}
                 filtersClearAllLabel=${t("table.filters_clear_all")}
                 filtersCloseLabel=${t("table.filters_close")}
-                .externalFilterCount=${Number(this.showArchived)}
+                .externalFilterCount=${Number(this.statusFilter !== "active")}
                 @wt-filters-clear=${() => {
-                  this.showArchived = false;
+                  this.statusFilter = "active";
                 }}
-                ><wt-switch
+                ><wt-combobox
                   slot="filters-start"
-                  name="show-archived"
-                  label=${t("product.show_archived")}
-                  .checked=${this.showArchived}
-                  @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                  name="menu-status"
+                  label=${t("menus.status")}
+                  search="never"
+                  preserve-order
+                  .value=${this.statusFilter}
+                  .options=${Object.entries(MENU_STATUS_FILTERS).map(([value, label]) => ({ value, label: t(label) }))}
+                  @wt-change=${(event: CustomEvent<{ value: MenuStatusFilter }>) => {
                     event.stopPropagation();
-                    this.showArchived = event.detail.checked;
+                    this.statusFilter = event.detail.value;
                   }}
-                ></wt-switch
-                >${this.#rows.length === 0 ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
+                ></wt-combobox
+                >${this.#rows.length === 0 && this.statusFilter === "active" ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
               >
             </div>`
           : nothing

@@ -18,3 +18,6 @@ Lane D's MENUS-ARCHIVE implements [spec Part 2](../specs/2026-11-23-menus-list-u
 
 
 **Decision, 24 November 2026.** The watcher cleared the plan at 11:03 and chose to keep the venue default until another full menu is published. The archive window explains that guests and new departments use the default. At 11:21 the watcher relayed the owner's “agreed” to the period and venue-default refusal rules.
+
+
+**Screenshot feedback, 24 November 2026, 12:02.** The watcher relayed the owner's request for replacement dropdowns, plainer venue-default wording and a shorter archive warning. The owner replaced the switch with a Status dropdown offering Active, Published, Requiring attention, Archived and All. Active remains the starting choice. This changes the filter from spec Part 2.

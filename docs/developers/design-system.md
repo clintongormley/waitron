@@ -2249,7 +2249,7 @@ Controls without selection keep their horizontal centering when `rowControlsAlig
 Put a full-width lower toolbar in the
 `toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
 a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
-Filters panel. Products and Menus put their Show archived switches there. Supply the badge count
+Filters panel. Products puts its Show archived switch there and Menus puts its Status dropdown there. Supply the badge count
 and handle Clear all in the screen. The table remembers column choices under `viewKey`.
 
 In Select mode, put selection checkboxes and drag grips together in the leading column, before

@@ -4,6 +4,8 @@ Status: approved by the owner, 2026-11-23 (interactive design session, choices q
 Part 2 corrected the same evening: no Restore (archive is for good, Copy brings a menu back).
 Builds on PR #4158 (the menus list's Status cell, Changes column removed); start after it lands.
 
+The owner's 24 November screenshot feedback replaces Part 2's Show archived switch with a Status dropdown. See the [implementation plan's dated decision](../plans/2026-11-24-menus-archive.md).
+
 ## Why
 
 A 2026-11-23 design critique of the Menus list found the row does not say where or when a menu is
