@@ -621,7 +621,7 @@ ties, disables diet-empty sections, and opens a section without changing the bas
 
 - **Courses and stations use permanent Delete (A435 step 5, owner, 2026-10-10).**
   Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name
-  with a new id. Deleting a course clears product defaults, including archived products;
+  with a new id. Deleting a course clears product defaults, including deleted products;
   recorded draft and order choices keep the original course. Courses and stations left as
   history are excluded from configuration exports. Products and variants now follow the same export
   rule when deleted (owner, 2026-11-24).
@@ -637,8 +637,8 @@ so this is expected only while the dashboard's category list is behind.
 
 **Products: a category's Made at (W86, #1203).** The "some items made elsewhere" note does not look at whether the categories involved hold any products, so it can claim items that do not exist yet; the owner chose to keep these words (2026-10-05). (2026-10-20, A655: the Made at column and this note were deleted.)
 
-**Products: Availability replaces Status (A463, owner, 2026-10-10).** The 24 November permanent
-Delete design retired A463's Show archived filter and View action. Availability is blank for an
+**Products: the Availability column replaces Status (A463, owner, 2026-10-10).** The 24 November
+permanent Delete design retired A463's Show archived switch and View action. Availability is blank for an
 available product or variant and reads Unavailable when sold out. The owner chose this column
 over badges beside the name. The Allergens filter
 offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
