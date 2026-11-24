@@ -180,7 +180,13 @@ it("does not read a menu document for an ordinary bill", async () => {
   await order(venue, id, "Burger");
   const { queries, restore } = observeMenuVersionReads();
   try {
-    expect(await read(id)).toEqual({ copies: [], recorded: {}, setMenus: [], dishes: [] });
+    expect(await read(id)).toEqual({
+      copies: [],
+      recorded: {},
+      setMenus: [],
+      dishes: [],
+      exact: true,
+    });
     expect(queries).toHaveLength(0);
   } finally {
     restore();
