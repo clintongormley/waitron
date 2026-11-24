@@ -319,7 +319,12 @@ ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.
 </section>`;
 }
 
-function renderPage(view: RestrictedView, locale: SupportedLocale, secure: boolean): string {
+/** The replaced box's page, its download section included. */
+export function renderRestrictedPage(
+  view: RestrictedView,
+  locale: SupportedLocale,
+  secure: boolean,
+): string {
   const text = RESTRICTED_PAGE_WORDS[locale];
   const line =
     view.reset !== undefined
@@ -357,7 +362,7 @@ export async function restrictedPageAnswer(
   try {
     return boxPageAnswer(
       c,
-      renderPage(await readView(deps, c.get("requestId"), download), locale, isSecure(c)),
+      renderRestrictedPage(await readView(deps, c.get("requestId"), download), locale, isSecure(c)),
       status,
       "no-store",
       { inline: [], connectSelf: false, formSelf: true },

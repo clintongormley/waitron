@@ -198,33 +198,20 @@ cursor: not-allowed;
 .box-form button:disabled { color: GrayText; border-color: GrayText; }
 }`;
 
-/** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw; the page's
- * body takes the box pages' typeface, text colour and background. */
-export const BOX_FORM_HEAD = `<style>:root {
-color-scheme: light dark;
-${tokenDeclarations()}
-}
-body {
-background: var(--wt-color-bg);
-color: var(--wt-color-text);
-font-family: var(--wt-font-family);
-font-size: var(--wt-font-size-md);
-line-height: 1.5;
-}${BOX_FORM_STYLE}</style>\n`;
-
-/** The guides' page look, shared with the `/legal/*` pages. */
+/** The guides' page look, shared with the `/legal/*` pages; `head` (escaped HTML) goes in `<head>`. */
 export function renderBoxPage(
   lang: GuideLanguage,
   title: string,
   body: string,
   extraStyle = "",
+  head = "",
 ): string {
   return `<!doctype html>
 <html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} · Waitron</title>
+${head}<title>${escapeHtml(title)} · Waitron</title>
 <style>${STYLE}${extraStyle}</style>
 <script>${THEME_SCRIPT}</script>
 </head>
@@ -246,12 +233,14 @@ export function renderLogoBoxPage(
   title: string,
   body: string,
   extraStyle = "",
+  head = "",
 ): string {
   return renderBoxPage(
     locale.startsWith("es") ? "es" : "en",
     title,
     `<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>\n${body}`,
     `${LOGO_PAGE_STYLE}${extraStyle}`,
+    head,
   );
 }
 

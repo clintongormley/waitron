@@ -31,9 +31,11 @@ function openPage(
   answer: (url: string, init: RequestInit) => Promise<Response>,
   destination = "/",
 ) {
-  const script = /<script>([\s\S]*)<\/script>/.exec(
-    renderWaitingPage("Spare", "en-GB", "", destination),
-  )?.[1];
+  const script = [
+    ...renderWaitingPage("Spare", "en-GB", "", destination).matchAll(
+      /<script>([\s\S]*?)<\/script>/g,
+    ),
+  ].at(-1)?.[1];
   if (script === undefined) throw new Error("the waiting page has no script");
   let now = 0;
   let nextId = 1;
@@ -88,6 +90,13 @@ describe("the waiting page", () => {
   it("names every box it waits for, escaped", async () => {
     const html = await page(["Bar <b>", "Terrace"], "en-GB");
     expect(html).toContain("<h1>This box is waiting for Bar &lt;b&gt; and Terrace</h1>");
+  });
+
+  it("puts a section it is given in a section element before the page's script, and draws none without one", () => {
+    expect(renderWaitingPage("Spare", "en-GB", "<p>Carry on</p>\n")).toContain(
+      "<section>\n<p>Carry on</p>\n</section>\n<script>",
+    );
+    expect(renderWaitingPage("Spare", "en-GB")).not.toContain("<section>");
   });
 
   it("a name read that fails still answers the page, waiting for the other box", async () => {

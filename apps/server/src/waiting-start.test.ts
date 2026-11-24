@@ -759,6 +759,15 @@ describe("the waiting start", () => {
         secure ? tls() : {},
       );
     const BOTH = { switchedOff: "yes", noOtherRecovery: "yes" };
+    /** A carry-on answer drawn as the waiting page is: the logo over `title`, any reload in the head. */
+    const expectLogoPage = (html: string, title: string, reloadTo?: string) => {
+      const [head = "", body = ""] = html.split("</head>");
+      expect(head).toContain(`<title>${title} · Waitron</title>`);
+      expect(body).toContain('<div class="logo">');
+      expect(body).toContain(`<h1>${title}</h1>`);
+      if (reloadTo === undefined) expect(html).not.toContain('http-equiv="refresh"');
+      else expect(head).toContain(`<meta http-equiv="refresh" content="5; url=${reloadTo}">`);
+    };
     const ADMIN = { email: "owner@example.test", password: "dashPass123" };
     const events = () => suite.node.select().from(nodeHandoverEvents);
     /** This box's held chart in its venue copy, where the known-handover sentence reads addresses. */
@@ -894,7 +903,8 @@ describe("the waiting start", () => {
     it("carry on with a correct sign-in and both statements restarts normally and records the decision", async () => {
       const answer = await post({ ...ADMIN, ...BOTH });
       expect(answer.status).toBe(200);
-      expect(await answer.text()).toContain("<h1>This box is carrying on as the main box</h1>");
+      expect(answer.headers.get("connection")).toBe("close");
+      expectLogoPage(await answer.text(), "This box is carrying on as the main box", "/");
       expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
       expect(h.closeListeners).toHaveBeenCalledTimes(1);
       expect(h.closeStore).not.toHaveBeenCalled();
@@ -925,7 +935,11 @@ describe("the waiting start", () => {
       expect(await refused.text()).toContain('name="returnTo" value="/till/tabs/counter?view=all"');
       const answer = await post(fields);
       expect(answer.status).toBe(200);
-      expect(await answer.text()).toContain('content="5; url=/till/tabs/counter?view=all"');
+      expectLogoPage(
+        await answer.text(),
+        "This box is carrying on as the main box",
+        "/till/tabs/counter?view=all",
+      );
       expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
     });
 
@@ -1107,14 +1121,14 @@ describe("the waiting start", () => {
       const sentence =
         "This box has already handed over to <strong>spare.example</strong>. It cannot carry on as the main box.";
       const shown = await page();
-      expect(shown).toContain("<h1>This box has already handed over</h1>");
+      expectLogoPage(shown, "This box has already handed over");
       expect(shown).toContain(sentence);
       expect(shown).not.toContain("This box is waiting for");
       expect(shown).not.toContain("<form");
       const answer = await post({ ...ADMIN, ...BOTH });
       expect(answer.status).toBe(409);
       const refused = await answer.text();
-      expect(refused).toContain("<h1>This box has already handed over</h1>");
+      expectLogoPage(refused, "This box has already handed over");
       expect(refused).toContain(sentence);
       expect(refused).not.toContain("This box is waiting for");
       expect(refused).not.toContain("<form");
@@ -1208,7 +1222,7 @@ describe("the waiting start", () => {
       });
       await holdChart();
       const english = await page();
-      expect(english).toContain("<title>This box is waiting for spare.example</title>");
+      expect(english).toContain("<title>This box is waiting for spare.example · Waitron</title>");
       expect(english).toContain("<strong>spare.example</strong>");
       expect(english).not.toContain("Bar Pepe");
       const spanish = await (
@@ -1266,7 +1280,7 @@ describe("the waiting start", () => {
       const answered = await post({ ...ADMIN, ...BOTH });
       expect(answered.status).toBe(200);
       const html = await answered.text();
-      expect(html).toContain("<h1>The other box answered</h1>");
+      expectLogoPage(html, "The other box answered", "/");
       expect(html).not.toContain("This box is carrying on as the main box");
       expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
       expect(await events()).toEqual([]);
@@ -1311,7 +1325,9 @@ describe("the waiting start", () => {
       const carried = await posted;
       expect(stepped.status).toBe(200);
       expect(carried.status).toBe(409);
-      expect(await carried.text()).not.toContain("This box is carrying on as the main box");
+      const restarting = await carried.text();
+      expect(restarting).not.toContain("This box is carrying on as the main box");
+      expectLogoPage(restarting, "This box is restarting");
       expect(await h.waiting.ended).toEqual({ kind: "stopped" });
       expect(await events()).toEqual([]);
     });
@@ -1356,9 +1372,11 @@ describe("the waiting start", () => {
       carryOnGoes();
       const carried = await posted;
       expect(carried.status).toBe(409);
-      expect(await carried.text()).toContain(
+      const recorded = await carried.text();
+      expect(recorded).toContain(
         "Your decision was recorded, but another box has taken over, or this box is shutting down, so it did not carry on.",
       );
+      expectLogoPage(recorded, "This box is restarting");
       expect((await stepped).status).toBe(200);
       expect(await h.waiting.ended).toEqual({ kind: "stopped" });
       expect(await events()).toHaveLength(1);
