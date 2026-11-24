@@ -19,6 +19,7 @@ import { createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { startClockGateHolds } from "./start-clock-gate.js";
 import { startClockState, type ChainHeads, type StartClockState } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const S = 1_000;
@@ -1091,12 +1092,21 @@ describe("a set at the start", () => {
     },
   );
 
-  it("sets, and logs the confirmation as unused, while a new fiscal installation waits to open", async () => {
+  it("sets, and logs the confirmation as unused, when the internet's was held while it set the clock and a new fiscal installation waits to open", async () => {
     const start = waitingStart(() => 0);
-    start.state.holdForIdentityChange();
-    const h = harness({ start });
+    const onHeld = vi.fn();
+    start.state.holdForIdentityChange(standingHold(onHeld));
+    const h = harness({
+      start,
+      anchors: [{ reanchor: async () => void start.state.confirm("by_internet", { "node-1": 2 }) }],
+    });
     expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
-    expect(start.state).toMatchObject({ status: "waiting", heldConfirmation: null, mark: null });
+    expect(start.state).toMatchObject({
+      status: "waiting",
+      heldConfirmation: { by: "by_internet", heads: { "node-1": 2 } },
+      mark: null,
+    });
+    expect(onHeld).not.toHaveBeenCalled();
     expect(h.log).toHaveBeenCalledWith("info", "clock_start.confirmation_unused", {
       source: "set",
     });
@@ -1133,6 +1143,7 @@ describe("a set at the start", () => {
     expect(heldAtAnchor).toEqual([false]);
     expect(start.state).toMatchObject({
       status: "waiting",
+      mark: null,
       heldConfirmation: { by: "by_person", heads: { "node-1": 7 } },
     });
     expect(earlier()).toBe(false);
@@ -1142,24 +1153,28 @@ describe("a set at the start", () => {
   });
 
   it.each([
-    ["a step the host verified", "start", "sets", {}, true],
-    ["a step the host verified", "unusable", "sets", {}, true],
-    ["a step that missed its target", "start", "sets", { missByMs: 10 * S }, true],
-    ["a step the host moved but did not answer for", "start", "times-out-after-moving", {}, true],
+    ["a step the host verified", "start", "sets", {}, "person's"],
+    ["a step the host verified", "unusable", "sets", {}, null],
+    ["a step that missed its target", "start", "sets", { missByMs: 10 * S }, null],
+    ["a step the host moved but did not answer for", "start", "times-out-after-moving", {}, null],
     [
       "a step the host moved but did not answer for",
       "unusable",
       "times-out-after-moving",
       {},
-      true,
+      null,
     ],
-    ["a step the host refused", "start", "refuses", {}, false],
-    ["a set the host did not answer, the clock unmoved", "unusable", "times-out", {}, false],
+    ["a step the host refused", "start", "refuses", {}, "internet's"],
+    ["a set the host did not answer, the clock unmoved", "unusable", "times-out", {}, "internet's"],
   ] as const)(
     "%s, asked for at reason %s (host %s), drops a held confirmation before re-anchoring only when the clock moved",
-    async (_label, reason, host, options, dropped) => {
+    async (_label, reason, host, options, heldAfter) => {
+      const after = {
+        "internet's": { by: "by_internet", heads: { "node-1": 7 } },
+        "person's": { by: "by_person", heads: { "node-1": 8 } },
+      };
       const state = startClockState();
-      state.holdForIdentityChange();
+      state.holdForIdentityChange(standingHold());
       state.confirm("by_internet", { "node-1": 7 });
       const heldAtAnchor: boolean[] = [];
       const h = harness({
@@ -1172,11 +1187,11 @@ describe("a set at the start", () => {
       });
       await h.correction.set(reason === "start" ? byStaff(h, { reason }) : byAdmin(h));
       expect(h.hostSets).toHaveLength(1);
-      expect(heldAtAnchor).toEqual([!dropped]);
+      expect(heldAtAnchor).toEqual([heldAfter === "internet's"]);
       expect(state).toMatchObject({
         status: "waiting",
         cause: "identity_change",
-        heldConfirmation: dropped ? null : { by: "by_internet", heads: { "node-1": 7 } },
+        heldConfirmation: heldAfter && after[heldAfter],
       });
     },
   );

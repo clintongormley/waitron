@@ -11,6 +11,7 @@ import {
   startClockState,
   type ChainHeads,
 } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 
 const BOX_WALL = Date.parse("2027-03-14T10:00:00.000Z");
@@ -352,7 +353,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
     onConfirmed.mockClear();
     const held = startClockState(onConfirmed);
     expect(held.cause).toBe("start");
-    held.holdForIdentityChange();
+    held.holdForIdentityChange(standingHold());
     expect(held.confirm("by_internet", HEADS)).toBe(false);
     expect(held).toMatchObject({
       status: "waiting",
@@ -366,34 +367,31 @@ describe("holding a confirmation for a new fiscal installation", () => {
 
   it("holds a synchronised time service's answer at each look, and the start's look answers waiting", async () => {
     const l = look(async () => clockServiceAnswer(true));
-    l.state.holdForIdentityChange();
+    l.state.holdForIdentityChange(standingHold());
     await expect(startClockCheck(l.deps)).resolves.toBe("waiting");
     await lookAtClockService(l.deps);
     expect(l.clockStatus).toHaveBeenCalledTimes(2);
     expect(l.state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
   });
 
-  it.each(["by_person", "by_devices"] as const)(
-    "takes nothing from a confirmation %s, and leaves one held for the internet",
-    (by) => {
-      const state = startClockState();
-      state.holdForIdentityChange();
-      expect(state.confirm(by, LATER)).toBe(false);
-      expect(state).toMatchObject({
-        status: "waiting",
-        mark: null,
-        heldConfirmation: null,
-        confirmedByPerson: false,
-      });
-      state.confirm("by_internet", HEADS);
-      expect(state.confirm(by, LATER)).toBe(false);
-      expect(state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
-    },
-  );
+  it("takes nothing from a confirmation by devices, and leaves one held for the internet", () => {
+    const state = startClockState();
+    state.holdForIdentityChange(standingHold());
+    expect(state.confirm("by_devices", LATER)).toBe(false);
+    expect(state).toMatchObject({
+      status: "waiting",
+      mark: null,
+      heldConfirmation: null,
+      confirmedByPerson: false,
+    });
+    state.confirm("by_internet", HEADS);
+    expect(state.confirm("by_devices", LATER)).toBe(false);
+    expect(state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
+  });
 
   it("confirms nothing by two agreeing devices, reading no heads, and does once the hold is released", async () => {
     const state = startClockState();
-    state.holdForIdentityChange();
+    state.holdForIdentityChange(standingHold());
     const heads = vi.fn(async () => HEADS);
     expect(await state.confirmDevices(agreeing(), heads)).toEqual([]);
     expect(heads).not.toHaveBeenCalled();
@@ -407,7 +405,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
   it("confirms nothing by devices when the hold begins while the heads are read", async () => {
     const state = startClockState();
     const heads = async () => {
-      state.holdForIdentityChange();
+      state.holdForIdentityChange(standingHold());
       return HEADS;
     };
     expect(await state.confirmDevices(agreeing(), heads)).toEqual([]);
@@ -419,7 +417,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
     (cause) => {
       const onConfirmed = vi.fn();
       const state = startClockState(onConfirmed);
-      state.holdForIdentityChange();
+      state.holdForIdentityChange(standingHold());
       for (let time = 0; time < 2; time++) {
         state.confirm("by_internet", HEADS);
         expect(state.heldConfirmation).not.toBeNull();
@@ -434,7 +432,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
 
   it("drops a held confirmation when told to", () => {
     const state = startClockState();
-    state.holdForIdentityChange();
+    state.holdForIdentityChange(standingHold());
     state.confirm("by_internet", HEADS);
     state.dropHeldConfirmation();
     expect(state.heldConfirmation).toBeNull();
@@ -445,7 +443,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
   it("applies the held confirmation, with the heads it was held with, and tells it once", () => {
     const onConfirmed = vi.fn();
     const state = startClockState(onConfirmed);
-    state.holdForIdentityChange();
+    state.holdForIdentityChange(standingHold());
     state.confirm("by_internet", HEADS);
     state.releaseIdentityChange();
     expect(state).toMatchObject({
@@ -462,7 +460,7 @@ describe("holding a confirmation for a new fiscal installation", () => {
 
   it("gives the alert the cause identity_change, with no refused date", () => {
     const state = startClockState();
-    state.holdForIdentityChange();
+    state.holdForIdentityChange(standingHold());
     state.backToWaiting("future_date_refused", "2027-03-15");
     expect(state).toMatchObject({ cause: "identity_change", refusedOn: null });
   });

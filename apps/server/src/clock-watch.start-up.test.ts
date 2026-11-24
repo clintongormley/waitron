@@ -8,6 +8,7 @@ import { CLOCK_WATCH_MS, clockWatchJob, createClockWatch } from "./clock-watch.j
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { createJobRunner } from "./job-runner.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { timeServiceRetry } from "./time-service-retry.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
@@ -451,7 +452,7 @@ describe("the clock watch restarting the time service while the start waits", ()
 describe("the clock watch and an identity change's opening", () => {
   function holding(): StartClockState {
     const state = startClockState();
-    state.holdForIdentityChange();
+    state.holdForIdentityChange(standingHold());
     return state;
   }
 

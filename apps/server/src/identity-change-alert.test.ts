@@ -5,12 +5,13 @@ import {
 } from "./identity-change-alert.js";
 import type { IdentityChangeRefusal } from "./identity-change-opening.js";
 import { startClockState } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 
 const NOW = new Date("2026-11-24T10:00:00.000Z");
 
 function blocked(refusal: IdentityChangeRefusal | null, held = true): boolean {
   const state = startClockState();
-  state.holdForIdentityChange();
+  state.holdForIdentityChange(standingHold());
   if (held) state.confirm("by_internet", {});
   return identityChangeBlocked({ state, latestRefusal: () => refusal });
 }

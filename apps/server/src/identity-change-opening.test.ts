@@ -7,6 +7,7 @@ import {
   identityChangeOpening,
 } from "./identity-change-opening.js";
 import { startClockState } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 
 const NODE = nodeId("33333333-3333-4333-8333-333333333333");
 const NOTE = {
@@ -25,7 +26,7 @@ function opening(
 ) {
   const onConfirmed = vi.fn();
   const state = startClockState(onConfirmed);
-  state.holdForIdentityChange({ standing: () => () => true, onHeld: () => {} });
+  state.holdForIdentityChange(standingHold());
   if (options.held !== false) state.confirm("by_internet", HEADS);
   const openIdentityChange = vi.fn<Open>(async () => open!());
   const deleteNote = vi.fn(options.deleteNote ?? (async () => {}));

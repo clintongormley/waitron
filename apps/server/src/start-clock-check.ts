@@ -54,8 +54,8 @@ export interface StartClockState {
   /** Grows by one each time a wait begins, the start's included. */
   waitsBegun(): number;
   /** Answers false when the box, holding for an identity change, stays waiting: the internet's
-   * confirmation is then held in place of any other, a person's in place of an earlier person's
-   * when the hold keeps one, and any other changes nothing. */
+   * confirmation is then held in place of any other, a person's in place of an earlier person's,
+   * and any other changes nothing. */
   confirm(by: StartClockConfirmation, heads: ChainHeads): boolean;
   /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. A
    * box waiting because AEAT refused a sale as dated in the future keeps that cause. A held
@@ -70,9 +70,8 @@ export interface StartClockState {
     heads: () => Promise<ChainHeads>,
   ): Promise<ClockWitness[]>;
   noteHost(answers: boolean): void;
-  /** Keeps a waiting box waiting until `releaseIdentityChange`. A person's confirmation is held
-   * only when `person` is given. */
-  holdForIdentityChange(person?: PersonHold): void;
+  /** Keeps a waiting box waiting until `releaseIdentityChange`. */
+  holdForIdentityChange(person: PersonHold): void;
   /** The confirmation that ends the wait at `releaseIdentityChange`; null without one. */
   readonly heldConfirmation: HeldConfirmation | null;
   dropHeldConfirmation(): void;
@@ -89,23 +88,22 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
   let hostAnswers = true;
   let waits = 1;
   let confirmedByPerson = false;
-  let holding = false;
-  let personHold: PersonHold | undefined;
+  let hold: PersonHold | null = null;
   let held: HeldConfirmation | null = null;
   const current = (): StartClockStatus => status;
 
   const confirm = (by: StartClockConfirmation, heads: ChainHeads): boolean => {
-    if (holding) {
+    if (hold !== null) {
       if (by === "by_internet") held = { by, heads: { ...heads } };
-      if (by === "by_person" && personHold !== undefined && held?.by !== "by_internet") {
-        const stands = personHold.standing();
+      if (by === "by_person" && held?.by !== "by_internet") {
+        const stands = hold.standing();
         const own: HeldConfirmation = {
           by,
           heads: { ...heads },
           standing: () => held === own && stands(),
         };
         held = own;
-        personHold.onHeld();
+        hold.onHeld();
       }
       return false;
     }
@@ -125,13 +123,13 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
       return status;
     },
     get cause() {
-      return holding ? "identity_change" : cause;
+      return hold !== null ? "identity_change" : cause;
     },
     get mark() {
       return mark;
     },
     get refusedOn() {
-      return holding ? null : refusedOn;
+      return hold !== null ? null : refusedOn;
     },
     get hostAnswers() {
       return hostAnswers;
@@ -151,7 +149,7 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
       refusedOn = next === "future_date_refused" ? (refusedDate ?? null) : null;
     },
     async confirmDevices(witnesses, heads) {
-      if (holding || status !== "waiting" || cause === "future_date_refused") return [];
+      if (hold !== null || status !== "waiting" || cause === "future_date_refused") return [];
       const group = agreeingDeviceGroup(witnesses, START_CLOCK_MARGIN_MS);
       if (group.length === 0) return [];
       const at = await heads();
@@ -163,8 +161,7 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
       hostAnswers = answers;
     },
     holdForIdentityChange(person) {
-      holding = true;
-      personHold = person;
+      hold = person;
     },
     get heldConfirmation() {
       return held;
@@ -174,7 +171,7 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
     },
     releaseIdentityChange() {
       const kept = held;
-      holding = false;
+      hold = null;
       held = null;
       if (kept !== null) confirm(kept.by, kept.heads);
     },

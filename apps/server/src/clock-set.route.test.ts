@@ -18,6 +18,7 @@ import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witness
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
@@ -614,15 +615,19 @@ it("sets a waiting start's clock that reads before 28-10-2024 at the start, conf
   expect(start.status).toBe("by_person");
 });
 
-it("changes nothing as the box's date and time stand while a new fiscal installation waits to open, and logs it as unused", async () => {
+it("changes nothing as the box's date and time stand while the internet's confirmation is held for a new fiscal installation, and logs it as unused", async () => {
   const start = startClockState();
-  start.holdForIdentityChange();
+  const onHeld = vi.fn();
+  start.holdForIdentityChange(standingHold(onHeld));
+  const internets = { by: "by_internet", heads: { "node-a": 1 } } as const;
+  start.confirm(internets.by, internets.heads);
   const box = await stoppedBox(0, { start });
 
   const answer = await confirmAsShown(box, mario.cookie);
 
   expect(answer.status).toBe(200);
-  expect(start).toMatchObject({ status: "waiting", heldConfirmation: null, mark: null });
+  expect(start).toMatchObject({ status: "waiting", heldConfirmation: internets, mark: null });
+  expect(onHeld).not.toHaveBeenCalled();
   const events = box.logs.map((line) => line.event);
   expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
   expect(events).not.toContain("clock_start.confirmed");
@@ -631,7 +636,7 @@ it("changes nothing as the box's date and time stand while a new fiscal installa
 it("holds a person's confirmation as the box's date and time stand while a new fiscal installation waits to open, and logs it as held", async () => {
   const start = startClockState();
   const onHeld = vi.fn();
-  start.holdForIdentityChange({ standing: () => () => true, onHeld });
+  start.holdForIdentityChange(standingHold(onHeld));
   const box = await stoppedBox(0, { start });
 
   const answer = await confirmAsShown(box, mario.cookie);
