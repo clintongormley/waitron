@@ -7,11 +7,10 @@ import {
   seedDeviceProfiles,
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -21,7 +20,6 @@ import {
   kitchenStations,
   openVenueDatabase,
   readNodeMembership,
-  readStandardSeriesId,
   readTaxpayer,
   stampDeployment,
   taxpayer,
@@ -52,13 +50,10 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
-import { invoiceSeries } from "@waitron/db";
-import { parseEnvFile } from "./env-file.js";
-import { writeTradingEnv } from "./trading-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -70,6 +65,8 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
+import { signedInPromotion } from "./testing/signed-in-promotion.js";
+import { ALL_MODULES } from "./modules.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -78,13 +75,6 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 useTestProducer();
-
-// The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
-// promote restarts the mirror as a primary that sells and chains on its own fiscal identity without
-// filing; the break-glass path; the refusals; and the read-only gate's exemption for the promote POST.
-//
-// Not covered: no case shows that a promote whose point-of-no-return write is refused fails closed,
-// and no test under `apps/server/src` asserts `promotion.failed`.
 
 // No background dial reaches a real host; Node's global `fetch`, a distinct module, still serves the
 // probes.
@@ -114,14 +104,6 @@ vi.mock("./promote.js", async (importOriginal) => {
     },
   };
 });
-
-// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
-// ask; these cases observe the ask itself.
-const restartAsked = vi.hoisted(() => vi.fn<() => void>());
-vi.mock("./run-server.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./run-server.js")>()),
-  restartProcess: restartAsked,
-}));
 
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-e2e-state-"));
 
@@ -373,29 +355,16 @@ async function readSubmissions(
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("promote endpoint e2e — the whole arc over HTTP", () => {
-  it("admin login → 200 restarting; restart into primary; sells + chains on its own fiscal identity; does NOT file", async () => {
+describe("a spare promoted through the signed-in runner or the old HTTP route", () => {
+  it("leaves a new primary submission waiting for a certificate", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main);
-    await mintMasterKey(db.main);
 
     const mirrorPort = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
 
-    // As the spare's join writes it (`adopt.ts`).
-    const tradingEnv = await writeTradingEnv(stateDir, {
-      nodeId: seed.nodeId,
-      environment: "production",
-    });
-    const joined = { ino: (await stat(tradingEnv)).ino, bytes: await readFile(tradingEnv, "utf8") };
-
-    restartAsked.mockClear();
-
     const mirror = await startServer(
-      {
-        ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
-        ...parseEnvFile(joined.bytes),
-      },
+      mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
       {},
       { timings: TIMINGS },
     ).catch(async (err: unknown) => {
@@ -403,70 +372,29 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       throw err;
     });
 
-    const mirrorBase = `http://127.0.0.1:${httpPort()}`;
-
     let primary: StartedServer | undefined;
     try {
       await pollOrThrow(async () => mirror.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
-      // The refusals run first, on the still-unpromoted mirror.
-      const wrongBg = await postPromote(mirrorBase, {
-        oldNodeNeutralised: true,
-        breakGlass: WRONG_MASTER_KEY,
-      });
-      expect(wrongBg.status).toBe(401);
-      expect((await wrongBg.json()).error.code).toBe("promotion.break_glass_invalid");
-      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("mirror");
-
-      const unattested = await postPromote(mirrorBase, {
-        oldNodeNeutralised: false,
-        personId: ADMIN_ID,
-        password: ADMIN_PW,
-      });
-      expect(unattested.status).toBe(400);
-      expect((await unattested.json()).error.code).toBe("promotion.fence_not_attested");
-      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("mirror");
-
-      // The gate is live, so the promote POST reaching its handler is the exemption's doing.
-      const write = await fetch(`${mirrorBase}/management-api/menus`, {
-        method: "POST",
-        body: "{}",
-      });
-      expect(write.status).toBe(403);
-      expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
-
-      const operation = seed.fixture();
-      const res = await postPromote(mirrorBase, {
-        moduleOperation: { binding: operation.binding, input: operation.input },
-        oldNodeNeutralised: true,
-        personId: ADMIN_ID,
-        password: ADMIN_PW,
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-
-      expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("primary");
-      expect((await readNodeMode(stores.main.node, seed.nodeId)).singletonRole).toBe("primary");
-      await delay(50);
-      expect(restartAsked).toHaveBeenCalled();
-
-      expect({
-        ino: (await stat(tradingEnv)).ino,
-        bytes: await readFile(tradingEnv, "utf8"),
-      }).toEqual(joined);
-      const activeSeriesId = await readStandardSeriesId(db.main, seed.nodeId);
       expect(
-        (await db.main.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)?.code,
-      ).toBe("FA-0CNPG");
-      expect(await readStandardSeriesId(db.main, seed.nodeId)).toBe(activeSeriesId);
+        await mirror.promoteMirrorToPrimary!(
+          { oldNodeNeutralised: true },
+          signedInPromotion({
+            stateDir,
+            venueDir: venueDir.main,
+            modules: ALL_MODULES,
+            operation: seed.fixture(),
+            credentials: { personId: ADMIN_ID, password: ADMIN_PW },
+          }),
+        ),
+      ).toMatchObject({ alreadyPrimary: false });
 
-      // `trading.env` names no venue directory, so it is supplied here.
       await mirror.close();
       const primaryPort = await freePort();
       primary = await startServer(
         {
           ...KEY_ENV,
-          ...parseEnvFile(joined.bytes),
+          WAITRON_NODE_ID: seed.nodeId,
           WAITRON_VENUE_DIR: venueDir.main,
           WAITRON_HTTP_PORT: String(primaryPort),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -478,13 +406,6 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       const primaryBase = `http://127.0.0.1:${httpPort()}`;
       await pollOrThrow(async () => primary!.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
-      const node = await (await fetch(`${primaryBase}/api/node`)).json();
-      expect(node.acceptingSales).toBe(true);
-
-      expect(
-        (await fetch(`${primaryBase}/api/device/me`, { headers: { cookie: DEVICE_COOKIE_HEADER } }))
-          .status,
-      ).toBe(200);
       const login = await fetch(`${primaryBase}/api/session`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: DEVICE_COOKIE_HEADER },
@@ -493,13 +414,6 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       expect(login.status).toBe(200);
       const sessionCookie = login.headers.get("set-cookie")!.split(";")[0]!;
       const bothCookies = `${sessionCookie}; ${DEVICE_COOKIE_HEADER}`;
-
-      const menu = (await (
-        await fetch(`${primaryBase}/api/default-service-zone/offers`, {
-          headers: { cookie: sessionCookie },
-        })
-      ).json()) as { offers: { id: string; pricingUnit: string }[] };
-      expect(menu.offers.find((offer) => offer.pricingUnit === "each")).toBeDefined();
 
       const billId = randomUUID();
       const saleRes = await fetch(`${primaryBase}/api/working-orders/${billId}/payments`, {
@@ -516,23 +430,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
         }),
       });
       expect(saleRes.status).toBe(200);
-      const { invoice: ticket } = await saleRes.json();
-      expect(ticket.total).toBe("3.00");
-      expect(typeof ticket.qr).toBe("string");
-      expect(ticket.qr.length).toBeGreaterThan(0);
-
-      // Chained on the node's own fiscal identity.
-      const reservedSif = await db.main.execute<{ id: string }>(
-        sql`select id from verifactu_identities where node_id = ${seed.nodeId} and revocado_en is null`,
-      );
-      const records = await db.main.execute<{
-        huella: string;
-        node_id: string;
-        sif_id: string;
-      }>(sql`select huella, node_id, sif_id from verifactu_records where node_id = ${seed.nodeId}`);
-      expect(records.rows).toHaveLength(1);
-      expect(records.rows[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
-      expect(records.rows[0]!.sif_id).toBe(reservedSif.rows[0]!.id);
+      await saleRes.json();
 
       // With no `fiscal.aeat` certificate the pass skips the due submission and box-status reports it.
       const mgmtLogin = await fetch(`${primaryBase}/management-api/session`, {

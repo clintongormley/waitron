@@ -27,6 +27,7 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashPassword, dashboardSessions } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readOperationAuthority } from "@waitron/module";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-corrected-incident.js";
@@ -51,6 +52,7 @@ import {
   ADMIN_EMAIL,
   OPERATION,
   PASSWORD,
+  bases,
   binding,
   fiscalModules,
   placedSpareFixture,
@@ -125,14 +127,14 @@ type Answer = {
 };
 type Service = ReturnType<typeof serviceFor>;
 
-function serviceFor(store: Store) {
+function serviceFor(store: Store, modules = fiscalModules) {
   return createNodeOperationPreparation({
     stateDir: dirs().spareState,
     venueDir: dirs().spareVenue,
     db: store.venue,
     nodeDb: store.node,
     node: standby,
-    modules: fiscalModules,
+    modules,
     credentialKeyRing: TOTP_KEY_RING,
     coordinator: createFirstSetupCoordinator(),
     environment: {},
@@ -484,7 +486,31 @@ describe("activating on a real placed copy", () => {
   }, 60_000);
   it("activates under a new SIF and series, with M1's SIF and series untouched", async () => {
     const store = await placedSpare();
-    const { app } = spareOn(store);
+    const collected = vi.fn();
+    const fiscal = fiscalModules[0]!;
+    const service = serviceFor(store, [
+      {
+        ...fiscal,
+        operations: {
+          ...fiscal.operations!,
+          configure(host) {
+            const configured = fiscal.operations!.configure!(host);
+            return {
+              ...configured,
+              prepare(operation, run) {
+                collected(
+                  operation.binding,
+                  operation.input,
+                  readOperationAuthority(operation.authority, operation.binding)?.operatorId,
+                );
+                return configured.prepare(operation, run);
+              },
+            };
+          },
+        },
+      },
+    ]);
+    const { app } = spareOn(store, service);
     const seriesOf = async (nodeId: string) =>
       store.venue.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, nodeId));
     const oldSif = (await sifRows(store)).filter((row) => row.nodeId === primary.nodeId);
@@ -492,8 +518,11 @@ describe("activating on a real placed copy", () => {
     expect(oldSif).toHaveLength(1);
     expect(oldSeries.length).toBeGreaterThan(0);
     const selected = await selectName(app);
+    collected.mockClear();
 
     const answer = await activate(app, selected.input);
+
+    expect(collected.mock.calls).toEqual([[binding, selected.input, ADMIN]]);
 
     expect(answer).toEqual({
       status: 200,
@@ -506,9 +535,11 @@ describe("activating on a real placed copy", () => {
     expect(own.map((row) => row.numeroInstalacion)).toEqual([selected.identity]);
     expect(own[0]!.numeroInstalacion).not.toBe(oldSif[0]!.numeroInstalacion);
     expect(await seriesOf(primary.nodeId)).toEqual(oldSeries);
-    const newCodes = (await seriesOf(standby.nodeId)).map((row) => row.code);
-    expect(newCodes.length).toBeGreaterThan(0);
-    for (const code of newCodes) {
+    const ownSeries = await seriesOf(standby.nodeId);
+    expect(ownSeries.map(({ code, purpose }) => ({ code, purpose }))).toEqual(
+      bases.map(({ code, purpose }) => ({ code: `${code}-${selected.identity}`, purpose })),
+    );
+    for (const { code } of ownSeries) {
       expect(oldSeries.map((row) => row.code)).not.toContain(code);
     }
   }, 60_000);
@@ -594,15 +625,14 @@ describe("activating on a real placed copy", () => {
     const other = handoverPromotionContext({ scenario: "emergency" });
     const credentials = { personId: ADMIN, password: PASSWORD };
     const client = { onBox: false };
-    await selectName(app); // Writes the dormant setup; its name is not used.
-    const challenge = (await service.prepare(
+    const challenge = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
       { action: "clock-challenge" },
       client,
     )) as { id: string };
-    const compared = (await service.prepare(
+    const compared = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
@@ -612,7 +642,7 @@ describe("activating on a real placed copy", () => {
       },
       client,
     )) as { id: string };
-    const { input } = (await service.prepare(
+    const { input } = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
@@ -921,21 +951,25 @@ describe("a chart that no longer has the old box as the main box", () => {
     60_000,
   );
 
-  it("a chart fencing this box itself answers the promotion's own refusal", async () => {
-    const store = await placedSpare();
-    const { app } = spareOn(store);
-    const { input } = await selectName(app);
-    await chartMovesOn(
-      store,
-      [node(primary.nodeId, "serving-primary"), node(standby.nodeId, "sell-only")],
-      4,
-    );
-    expect(await activate(app, input)).toMatchObject({
-      status: 409,
-      body: { error: { code: "promotion.node_fenced" } },
-    });
-    expect(await activations(store)).toEqual([]);
-  }, 60_000);
+  it.each(["planned handover", "emergency switch"] as const)(
+    "a chart fencing the mirror refuses activation for %s",
+    async (scenario) => {
+      const emergency = scenario === "emergency switch" ? await emergencySpare() : undefined;
+      const store = emergency?.store ?? (await placedSpare());
+      const app = emergency?.app ?? spareOn(store).app;
+      const { input } = await selectName(app);
+      const fenced = store.chart.body.nodes.map((entry) =>
+        entry.nodeId === standby.nodeId ? { ...entry, standing: "sell-only" as const } : entry,
+      );
+      await chartMovesOn(store, fenced, 4);
+      expect(await activate(app, input)).toMatchObject({
+        status: 409,
+        body: { error: { code: "promotion.node_fenced" } },
+      });
+      expect(await activations(store)).toEqual([]);
+    },
+    60_000,
+  );
 
   it("no chart at all is refused the same way", async () => {
     const store = await placedSpare();

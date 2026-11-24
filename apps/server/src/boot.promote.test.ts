@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
@@ -30,9 +31,8 @@ import { poll, withCapturedStdout } from "./testing/boot-harness.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { withPromotionModuleOperation } from "./promotion-operation.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { signedInPromotion } from "./testing/signed-in-promotion.js";
+import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
@@ -44,6 +44,25 @@ import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
+
+const manager = {
+  personId: "e1000000-0000-4000-8000-000000000004",
+  password: "mirror-promotion-manager",
+};
+
+function managerPromotion(
+  stateDir: string,
+  venueDir: string,
+  operation: ReturnType<Awaited<ReturnType<typeof establishDormantContract>>>,
+) {
+  return signedInPromotion({
+    stateDir,
+    venueDir,
+    modules: ALL_MODULES,
+    operation,
+    credentials: manager,
+  });
+}
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -306,8 +325,14 @@ async function seedMirrorIdentity(
     taxpayerNif: nif,
     standby,
     endorsement,
-    operatorId: "contract-administrator",
-    recoveryKey: true,
+    operatorId: manager.personId,
+  });
+
+  await seedPersons(db, {
+    id: manager.personId,
+    displayName: "Box manager",
+    role: "admin",
+    passwordHash: fixturePasswordHash(manager.password),
   });
 
   // A held term-3 chart: the outgoing primary serving, this node secondary — the promote bumps it to 4.
@@ -343,7 +368,6 @@ async function seedMirrorIdentity(
 describe("promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and leaves the trading.env its join wrote untouched", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
-    const secret = (await mintMasterKey(mirrorDb)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
 
@@ -377,19 +401,7 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
       const request = seed.fixture();
       const result = await server.promoteMirrorToPrimary!(
         { oldNodeNeutralised: true },
-        (context, consume) =>
-          withPromotionModuleOperation(
-            {
-              db: context.db,
-              node: context.nodeDb,
-              nodeId: seed.nodeId,
-              credentialKeyRing: TOTP_KEY_RING,
-              modules: ALL_MODULES,
-            },
-            { binding: request.binding, input: request.input },
-            { breakGlass: secret },
-            (runner) => runner(context, consume),
-          ),
+        managerPromotion(stateDir, mirrorVenueDir, request),
       );
       const activeSeriesId = await readStandardSeriesId(mirrorDb, seed.nodeId);
       expect(
@@ -499,7 +511,6 @@ describe("a mirror's promotion whose role write is lost", () => {
   it("a promotion whose role write is lost finishes at the next start, activating once", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = (await mintMasterKey(db)).secret;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
 
     await node.execute(
@@ -513,17 +524,12 @@ describe("a mirror's promotion whose role write is lost", () => {
       const first = await bootMirror(venueDir, stateDir, seed.nodeId);
       try {
         const request = seed.fixture();
-        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/promote`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            oldNodeNeutralised: true,
-            breakGlass: secret,
-            moduleOperation: { binding: request.binding, input: request.input },
-          }),
-        });
-        expect(response.status, await response.clone().text()).toBe(200);
-        expect(((await response.json()) as { alreadyPrimary: boolean }).alreadyPrimary).toBe(false);
+        expect(
+          await first.promoteMirrorToPrimary!(
+            { oldNodeNeutralised: true },
+            managerPromotion(stateDir, venueDir, request),
+          ),
+        ).toMatchObject({ alreadyPrimary: false });
         await delay(50);
         expect(restartAsked).toHaveBeenCalled();
       } finally {
@@ -604,7 +610,6 @@ describe("a mirror's promote and the backup room note", () => {
   it("is refused while the note cannot be deleted, and deletes it before promoting and before the restart", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -638,18 +643,7 @@ describe("a mirror's promote and the backup room note", () => {
           noteDuringPromotion = existsSync(note);
           // A backup reload while the promotion runs could write a note again.
           if (!noteDuringPromotion) writeFileSync(note, "{}");
-          return withPromotionModuleOperation(
-            {
-              db: context.db,
-              node: context.nodeDb,
-              nodeId: seed.nodeId,
-              credentialKeyRing: TOTP_KEY_RING,
-              modules: ALL_MODULES,
-            },
-            { binding: request.binding, input: request.input },
-            { breakGlass: secret },
-            (runner) => runner(context, consume),
-          );
+          return managerPromotion(stateDir, venueDir, request)(context, consume);
         });
 
       mkdirSync(note);
@@ -679,7 +673,6 @@ describe("a mirror's promote and the backup room note", () => {
   it("what a caller must record before the restart runs after the backup note's last deletion, and the restart comes through the seam", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -706,18 +699,7 @@ describe("a mirror's promote and the backup room note", () => {
           (context, consume) => {
             // Written after the promotion's first deletion, so only the last one can remove it.
             writeFileSync(note, "{}");
-            return withPromotionModuleOperation(
-              {
-                db: context.db,
-                node: context.nodeDb,
-                nodeId: seed.nodeId,
-                credentialKeyRing: TOTP_KEY_RING,
-                modules: ALL_MODULES,
-              },
-              { binding: request.binding, input: request.input },
-              { breakGlass: secret },
-              (runner) => runner(context, consume),
-            );
+            return managerPromotion(stateDir, venueDir, request)(context, consume);
           },
           beforeRestart,
         );
@@ -743,7 +725,6 @@ describe("a mirror's promote and the backup room note", () => {
   it("a failed record still restarts, so the start that follows can finish it", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
 
@@ -765,19 +746,7 @@ describe("a mirror's promote and the backup room note", () => {
       await expect(
         server.promoteMirrorToPrimary!(
           { oldNodeNeutralised: true },
-          (context, consume) =>
-            withPromotionModuleOperation(
-              {
-                db: context.db,
-                node: context.nodeDb,
-                nodeId: seed.nodeId,
-                credentialKeyRing: TOTP_KEY_RING,
-                modules: ALL_MODULES,
-              },
-              { binding: request.binding, input: request.input },
-              { breakGlass: secret },
-              (runner) => runner(context, consume),
-            ),
+          managerPromotion(stateDir, venueDir, request),
           async () => {
             throw new Error("record lost");
           },
@@ -797,7 +766,6 @@ describe("a mirror's promote and the backup room note", () => {
   it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -826,18 +794,7 @@ describe("a mirror's promote and the backup room note", () => {
           server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, (context, consume) => {
             // Something at the note's path that no unlink removes, appearing once promotion began.
             mkdirSync(note);
-            return withPromotionModuleOperation(
-              {
-                db: context.db,
-                node: context.nodeDb,
-                nodeId: seed.nodeId,
-                credentialKeyRing: TOTP_KEY_RING,
-                modules: ALL_MODULES,
-              },
-              { binding: request.binding, input: request.input },
-              { breakGlass: secret },
-              (runner) => runner(context, consume),
-            );
+            return managerPromotion(stateDir, venueDir, request)(context, consume);
           });
 
         expect((await promote()).alreadyPrimary).toBe(false);

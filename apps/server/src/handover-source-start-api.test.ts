@@ -1192,6 +1192,18 @@ describe("the same operation again", () => {
     expect(await start()).toEqual(first);
   });
 
+  it("keeps selling and replays an older spare's promotion-running refusal", async () => {
+    exchange = offerAnswers(() => answered(409, { error: { code: "handover.promotion_running" } }));
+    const refused = refusal(409, "handover.promotion_running");
+    expect(await start()).toEqual(refused);
+    await expectAbandoned("handover.promotion_running");
+
+    exchanged = [];
+    expect(await start()).toEqual(refused);
+    expect(exchanged).toEqual([]);
+    expect(events().map((event) => event.kind)).toEqual(["offer", "abandoned"]);
+  });
+
   it("other inputs are refused as a conflict, asking the spare nothing", async () => {
     await start();
     exchanged = [];

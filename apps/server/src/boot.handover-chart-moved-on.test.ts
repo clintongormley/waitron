@@ -1,6 +1,9 @@
-import { openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, openVenueDatabase } from "@waitron/db";
+import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { readModuleConfig } from "./module-config.js";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,7 +13,7 @@ import { enabledModules } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeMirrorLink } from "@waitron/node-db";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -117,6 +120,39 @@ async function post(
   );
   return { status: response.status, body: await response.json() };
 }
+
+it("a fenced former main box cannot prepare or activate a placed handover", async () => {
+  const copy = await fixture.placeRealCopy();
+  try {
+    await setNodeMode(copy, standby.nodeId, "primary", "promote");
+  } finally {
+    await copy.close();
+  }
+  const body = {
+    ...copy.chart.body,
+    term: copy.chart.body.term + 1,
+    nodes: copy.chart.body.nodes.map((node) =>
+      node.nodeId === standby.nodeId ? { ...node, standing: "sell-only" as const } : node,
+    ),
+  };
+  holdChart(join(dirs().spareVenue, "venue.db"), {
+    ...copy.chart,
+    body,
+    signature: signDocumentBody(body, copy.mainKey),
+  });
+  beforeServerStarts();
+  started = await startServer(await spareEnv(), undefined, {
+    peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
+  });
+  const operation = { moduleOperation: { binding, input: null }, signIn };
+  const refused = { status: 403, body: { error: { code: "node.read_only", params: {} } } };
+  expect(
+    await post("preparation", { ...operation, proposal: { action: "clock-challenge" } }),
+  ).toEqual(refused);
+  expect(await post("activate", operation)).toEqual(refused);
+  await started.close();
+  expect(readDisk()).toMatchObject({ chartTerm: body.term, ownSif: 0, activations: 0 });
+}, 180_000);
 
 let sentActivation: unknown;
 
@@ -258,6 +294,22 @@ describe("a real start over the old file a chart moved on in", () => {
 });
 
 describe("a real restart after activating, then the same request again", () => {
+  async function fiscalState(advance?: number) {
+    const { spareVenue, spareState } = dirs();
+    const { venue: db, close } = await openVenueDatabase(spareVenue);
+    try {
+      if (advance !== undefined) await advanceSeriesTo(db, standby.nodeId, advance);
+      return {
+        series: await db.select(seriesWithNextNumber).from(invoiceSeries).orderBy(invoiceSeries.id),
+        identities: await db.select().from(verifactuIdentities).orderBy(verifactuIdentities.id),
+        allocations: await allocationRows(db),
+        journal: await readFile(join(spareState, "module-records/fiscal-verifactu.json"), "utf8"),
+      };
+    } finally {
+      await close();
+    }
+  }
+
   const onNodeDb = (statements: string[]) => {
     const node = new DatabaseSync(join(dirs().spareVenue, "node.db"));
     try {
@@ -285,10 +337,14 @@ describe("a real restart after activating, then the same request again", () => {
       await fixture.stoppedBeforePlacing();
       const first = await startAndTryToActivate();
       expect(first.activation).toEqual({ activated: true, restarting: true });
+      const before = await fiscalState(47);
+      const ownSeries = before.series.filter((series) => series.nodeId === standby.nodeId);
+      expect(ownSeries.map((series) => series.nextNumber)).toEqual([47, 47, 47, 47]);
       onNodeDb(lost);
 
       const restarts: string[] = [];
       beforeServerStarts();
+      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
       started = await startServer(await spareEnv(), undefined, {
         timings: { minTickMs: 200, maxTickMs: 600_000 },
         peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
@@ -309,6 +365,7 @@ describe("a real restart after activating, then the same request again", () => {
         activations: 1,
       });
       expect(restarts).toEqual([]);
+      expect(await fiscalState()).toEqual(before);
     },
     180_000,
   );

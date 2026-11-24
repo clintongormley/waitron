@@ -69,7 +69,6 @@ import { createNodeOperationPreparation } from "./node-operation-preparation.js"
 import { establishNodeIdentity } from "./node-identity.js";
 import { startClockState } from "./start-clock-check.js";
 import { promoteMirrorToPrimary } from "./promote.js";
-import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
@@ -534,6 +533,41 @@ describe("the handover's preparation route", () => {
     await emergencyDeclared();
     const { selected } = await selectThrough(route(s));
     expect(selected.body).toMatchObject({ status: "selected", identity: "0CNQR" });
+  });
+
+  it.each([
+    ["planned handover", controlledAtFilingAssumed],
+    ["emergency switch", emergencyDeclared],
+  ] as const)("requires a person to confirm the device time for %s", async (_scenario, begin) => {
+    await begin();
+    external.internet.mockResolvedValue({
+      source: "internet",
+      result: "unavailable",
+      reason: "offline",
+    });
+    const app = route(service());
+    const challenge = await post(app, request({ action: "clock-challenge" }));
+    expect(challenge.status).toBe(200);
+    const compared = await post(
+      app,
+      request({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.body.id, instantMs: Date.now() },
+      }),
+    );
+    expect(compared.status).toBe(200);
+    expect(compared.body.clock.secondClock).toBe(true);
+    const selection = { action: "select", comparisonId: compared.body.id };
+    expect(await post(app, request(selection))).toMatchObject({
+      status: 400,
+      body: {
+        error: { code: "sif.allocation_invalid", params: { reason: "confirmation_required" } },
+      },
+    });
+    expect(await post(app, request({ ...selection, confirmed: true }))).toMatchObject({
+      status: 200,
+      body: { status: "selected" },
+    });
   });
 
   it("a body that sets oldMachineRelinquished is ignored: the context comes from the record", async () => {
@@ -1301,54 +1335,15 @@ describe("setting the spare's clock from this device", () => {
     expect(box.set).not.toHaveBeenCalled();
   });
 
-  it("on a box that is now primary, the older promote preparation route refuses not_mirror and never asks the setter", async () => {
+  it("a box that is now primary refuses to set the clock and never asks the setter", async () => {
     const box = setter();
     const s = service(fiscalModules, box.correction);
-    // The setup a join wrote while this box was a mirror stays in its state folder once promoted.
     await setupFromAJoin(s);
+    await controlledAtFilingAssumed();
     await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary", "promote");
-    const app = new Hono();
-    mountPromoteApi(app, {
-      appDb: suite.db,
-      nodeDb: suite.node,
-      nodeId: standby.nodeId,
-      credentialKeyRing: TOTP_KEY_RING,
-      nodePreparation: s,
-      requestFromBox: () => false,
-      isMirror: false,
-      run: async () => {
-        throw new Error("not promoting");
-      },
-    });
-    const socket = new TLSSocket(new Socket());
-    sockets.push(socket);
-    const send = async (proposal: unknown) => {
-      const response = await app.request(
-        "https://box.test/management-api/promote/preparation",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            oldNodeNeutralised: true,
-            noParallelRecovery: true,
-            ...credentials,
-            moduleOperation: { binding, input: null },
-            proposal,
-          }),
-        },
-        { incoming: { socket } },
-      );
-      const value = (await response.json()) as { id: string };
-      expect(response.status, JSON.stringify(value)).toBe(200);
-      return value;
-    };
-    const challenge = await send({ action: "clock-challenge" });
-    expect(
-      await send({
-        action: "set-clock",
-        browser: { challengeId: challenge.id, instantMs: Date.now() + 45_000 },
-      }),
-    ).toEqual({ status: "refused", reason: "not_mirror" });
+    const answer = await setFrom(route(s), 45_000);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ status: "refused", reason: "not_mirror" });
     expect(box.set).not.toHaveBeenCalled();
     expect(box.hostSets).toEqual([]);
   });

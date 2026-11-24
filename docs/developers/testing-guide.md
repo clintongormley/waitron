@@ -4540,6 +4540,8 @@ below records the earlier state; use the [current rule](#the-store-caps-the-valu
 
 ### Child process clock guard scope
 
+2026-11-24: the promotion restart checks moved from `hour-promotion.test.ts` to the in-process boots in `boot.handover-chart-moved-on.test.ts`.
+
 - **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
   refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the children of
   `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`

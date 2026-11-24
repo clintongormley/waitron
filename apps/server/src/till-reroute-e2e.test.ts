@@ -54,13 +54,13 @@ vi.mock("@waitron/db", async (original) => {
 });
 
 // This reroute fixture changes only the stored axes, through the mirror's server-side queue.
-vi.mock("./promote-api.js", async (original) => {
-  const actual = await original<typeof import("./promote-api.js")>();
+vi.mock("./handover-activation.js", async (original) => {
+  const actual = await original<typeof import("./handover-activation.js")>();
   return {
     ...actual,
-    mountPromoteApi: (...args: Parameters<typeof actual.mountPromoteApi>) => {
+    mountHandoverActivationApi: (...args: Parameters<typeof actual.mountHandoverActivationApi>) => {
       const [app, deps] = args;
-      app.post("/management-api/promote", async (c) => {
+      app.post("/api/node/handover/reroute/activate", async (c) => {
         const server = serverStores.find((s) => s.venue === deps.appDb);
         if (server === undefined) throw new Error("the promoted server's store was not captured");
         await setNodeMode({ venue: deps.appDb, node: server.node }, NODE_B, "primary", "promote");
@@ -381,7 +381,7 @@ describe("till reroute — two instances, one venue", () => {
       await expect(fetch(`http://127.0.0.1:${portA}/api/node`)).rejects.toThrow();
 
       // 5. Promote B at the DB level — the deployment flip a human's promote performs.
-      const promoted = await post(portB, "/management-api/promote", {});
+      const promoted = await post(portB, "/api/node/handover/reroute/activate", {});
       expect(promoted.status).toBe(204);
 
       // The boot-captured control: the STILL-RUNNING mirror keeps answering `acceptingSales:false`
