@@ -18,6 +18,7 @@ import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { requestFromBox } from "./request-from-box.js";
+import { wrongMasterKey } from "./operation-authentication.js";
 import { matchesStagedNodeKey, readStagedMasterKeyName } from "./restore-request.js";
 import { requestIdMiddleware } from "./request-id.js";
 import type { Logger } from "./logger.js";
@@ -82,13 +83,8 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   };
   const refuseOrigin = (c: Context) => refuse(c, new AppError("restore.clock_origin_refused", {}));
   /** A wrong key, naming the key staging recorded for the backup when it recorded one. */
-  const refuseKey = async (c: Context) => {
-    const keyName = await readStagedMasterKeyName(options.stateDir);
-    return refuse(
-      c,
-      new AppError("promotion.break_glass_invalid", keyName === undefined ? {} : { keyName }),
-    );
-  };
+  const refuseKey = async (c: Context) =>
+    refuse(c, wrongMasterKey(await readStagedMasterKeyName(options.stateDir)));
   /** Each clock route: refused from another site's page or without the key, otherwise `answer`
    * with the body and its time. */
   const keyed = (

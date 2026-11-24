@@ -26,6 +26,11 @@ import {
 import { inTurn } from "./attempt-turns.js";
 import { isUuid } from "./till-session.js";
 
+/** A wrong master key's refusal, naming the key it should have been when that key is known. */
+export function wrongMasterKey(keyName: string | undefined): AppError {
+  return new AppError("promotion.break_glass_invalid", keyName === undefined ? {} : { keyName });
+}
+
 export async function withRecoveryKeyOperation<T>(
   deps: { readonly db: Database; readonly node: NodeDatabase; readonly nodeId: string },
   operation: OperationBinding,
@@ -59,10 +64,7 @@ export async function withRecoveryKeyAuthority<T>(
   const check = await checkMasterKey(deps.db, secret);
   if (!check?.authorised) {
     const current = check === null ? await readCurrentMasterKey(deps.db) : check.current;
-    throw new AppError(
-      "promotion.break_glass_invalid",
-      current === null ? {} : { keyName: current.name },
-    );
+    throw wrongMasterKey(current?.name);
   }
   const checked = check.current;
   return withOperationAuthority(
@@ -96,11 +98,7 @@ export async function withMasterKeyStillCurrent<R>(
 ): Promise<R> {
   return withVenueAndNodeTransaction(deps.db, deps.node, async (tx) => {
     const current = await readCurrentMasterKey(tx);
-    if (current?.number !== checked.number)
-      throw new AppError(
-        "promotion.break_glass_invalid",
-        current === null ? {} : { keyName: current.name },
-      );
+    if (current?.number !== checked.number) throw wrongMasterKey(current?.name);
     return body(tx);
   });
 }

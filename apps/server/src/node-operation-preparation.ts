@@ -42,6 +42,7 @@ import {
   isSwitchSignedIn,
   withAuthenticatedOperation,
   withRecoveryKeyAuthority,
+  wrongMasterKey,
 } from "./operation-authentication.js";
 import type { RecoveryOperationInput } from "./recovery-module-operation.js";
 import type { PromotionOperationRunner } from "./promote.js";
@@ -102,11 +103,7 @@ export function createNodeOperationPreparation(options: {
       return invalid(binding);
     if (scope.keyNumber !== undefined) {
       const current = await readCurrentMasterKey(options.db);
-      if ((current?.number ?? null) !== scope.keyNumber)
-        throw new AppError(
-          "promotion.break_glass_invalid",
-          current === null ? {} : { keyName: current.name },
-        );
+      if ((current?.number ?? null) !== scope.keyNumber) throw wrongMasterKey(current?.name);
     }
     if (scope.isolation !== undefined) await assertLive();
   };

@@ -23,6 +23,7 @@ import {
   stagedAuthorityKey,
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
+  wrongMasterKey,
 } from "./operation-authentication.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
@@ -504,5 +505,16 @@ describe("a recovery key's authority", () => {
     const replaced = await replacement;
     expect(order).toEqual(["venue write committed", "key replaced"]);
     expect(await masterKeyAuthorising(suite.db, replaced.secret)).not.toBeNull();
+  });
+});
+
+describe("wrongMasterKey", () => {
+  it("names the master key a wrong key should have been, only when there is one", () => {
+    const unnamed: { code: string; params: unknown } = wrongMasterKey(undefined);
+    expect(unnamed.code).toBe("promotion.break_glass_invalid");
+    expect(unnamed.params).toEqual({});
+    const named: { code: string; params: unknown } = wrongMasterKey("2026-11-23 · QZJV");
+    expect(named.code).toBe("promotion.break_glass_invalid");
+    expect(named.params).toEqual({ keyName: "2026-11-23 · QZJV" });
   });
 });
