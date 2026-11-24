@@ -643,7 +643,9 @@ async function listRefundsWithoutCorrective(
   return rows.map(
     ({ applied, tip, code, number, customerName, customerTaxId, vatBreakdown, ...row }) => {
       const amount = centsToDecimal(applied);
-      const customer = [customerName, customerTaxId].filter((part) => part !== null).join(", ");
+      const customer = [customerName, customerTaxId]
+        .filter((part) => part !== null && part !== "")
+        .join(", ");
       return {
         ...row,
         amount,

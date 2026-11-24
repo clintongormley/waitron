@@ -1334,6 +1334,11 @@ describe("refunds without a corrective invoice", () => {
       "1.00",
       "2026-11-03T13:00:00.000Z",
     );
+    const emptyName = await refund(
+      await fullInvoice(4, { counterpartyLegalName: "", counterpartyTaxId: "B11111111" }),
+      "1.00",
+      "2026-11-03T13:30:00.000Z",
+    );
     const simplified = await refund(
       await seedRefundableSale(suite.db, venue, {
         method: "cash",
@@ -1352,9 +1357,10 @@ describe("refunds without a corrective invoice", () => {
     expect(rows.map((row) => [row.id, row.customer])).toEqual([
       [named, "Acme SL, B12345678"],
       [taxNumberOnly, "B87654321"],
+      [emptyName, "B11111111"],
       [simplified, undefined],
     ]);
-    expect(rows[2]).not.toHaveProperty("customer");
+    expect(rows.find((row) => row.id === simplified)).not.toHaveProperty("customer");
   });
 
   it("lists a plain refund of an ordinary card payment, but not a Correct invoice's refund nor one completed outside the period", async () => {

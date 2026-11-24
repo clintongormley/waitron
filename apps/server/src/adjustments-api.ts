@@ -312,7 +312,7 @@ export function mountAdjustmentsApi(
     run(c, log, async () => {
       await requireSession(deps, c);
       const asked = c.req.queries("permission") ?? [undefined];
-      const permissions = asked.map(requireApproverPermission);
+      const permissions = [...new Set(asked.map(requireApproverPermission))];
       const approvers = await withTransaction(deps.db, async (tx) => {
         const [first, ...rest] = permissions;
         let held = await listActivePersonsWithPermission(tx, first!);

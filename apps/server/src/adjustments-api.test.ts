@@ -1565,6 +1565,7 @@ describe("what the till reads", () => {
         { personId: venue.managerId, displayName: "Martha" },
       ]);
       expect(await approvers("?permission=sale.rectify&permission=sale.refund")).toEqual(both);
+      expect(await approvers("?permission=sale.refund&permission=sale.refund")).toEqual(refunds);
       expect(await approvers("?permission=sale.refund&permission=person.admin")).toEqual([
         400,
         { code: "management.request_invalid", params: { field: "permission" } },
