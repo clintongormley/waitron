@@ -26,7 +26,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { codeOf } from "@waitron/server-kit";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError, steadyNow } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_ENCRYPT_DIR_PREFIX,
@@ -125,6 +125,8 @@ export interface BackupSweepDeps {
   archive: (outFile: string, signal: AbortSignal) => Promise<void>;
   buildManifest?: ManifestBuilder;
   now?: () => Date;
+  /** Measures an interval schedule's wait, so a step of the wall clock neither delays nor hastens it. */
+  steadyNow?: () => number;
   /**
    * The venue database's current size. Before the copy, the tick budgets for the shared database copy,
    * Cloud ciphertext when enabled, and the box's ciphertext when it has other destinations.
@@ -571,6 +573,7 @@ export async function pruneBackend(
 
 export interface BackupSchedulePass {
   nextDueAt: Date | null;
+  waitMs?: number;
 }
 
 export interface ActiveBackupRun {
@@ -582,6 +585,8 @@ export function createBackupSchedule(
   deps: Omit<BackupSweepDeps, "sleep"> & { onRunChanged?: () => void },
 ) {
   const clockNow = deps.now ?? (() => new Date());
+  const steady = deps.steadyNow ?? steadyNow;
+  const interval = deps.schedule.kind === "interval";
   const scheduleClock = () =>
     deps.schedule.kind === "wall-clock"
       ? deps.readClock()
@@ -589,7 +594,16 @@ export function createBackupSchedule(
   let first = true;
   let fireAt: number | undefined;
   let computedAt = 0;
+  let steadyFireAt = 0;
+  let shownAt = 0;
   let active: { run: ActiveBackupRun; settled: Promise<void> } | undefined;
+
+  // `wallNow` and `steadyThen` must be read at the same moment.
+  function hold(at: number, wallNow: number, steadyThen: number): number {
+    steadyFireAt = steadyThen + (at - wallNow);
+    shownAt = at;
+    return at;
+  }
 
   function start(kind: ActiveBackupRun["kind"], signal: AbortSignal): Promise<void> | undefined {
     if (active !== undefined) return;
@@ -618,6 +632,7 @@ export function createBackupSchedule(
     async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
       if (signal.aborted) return { nextDueAt: null };
       const nowMs = now.getTime();
+      const steadyAtPass = steady();
       if (first && deps.resumeCloudDeadline !== false && deps.cloud?.target.readCaptureState) {
         const saved = await deps.cloud.target.readCaptureState().catch(() => undefined);
         if (saved?.storedAt != null && !saved.pending) {
@@ -631,13 +646,14 @@ export function createBackupSchedule(
           ) {
             first = false;
             computedAt = nowMs;
-            fireAt = resumed;
+            fireAt = hold(resumed, nowMs, steadyAtPass);
             deps.onScheduled?.(fireAt);
           }
         }
         if (signal.aborted) return { nextDueAt: null };
       }
-      if (first || (fireAt !== undefined && nowMs >= fireAt)) {
+      const due = fireAt !== undefined && (interval ? steady() >= steadyFireAt : nowMs >= fireAt);
+      if (first || due) {
         const running = start("scheduled", signal);
         if (running === undefined) return { nextDueAt: new Date(nowMs + 60_000) };
         first = false;
@@ -646,8 +662,9 @@ export function createBackupSchedule(
         fireAt = undefined;
       }
       if (signal.aborted) return { nextDueAt: null };
-      // A deadline stays fixed between copies; only a backwards clock step can replace it.
+      // A wall-clock deadline stays fixed between copies; only a backwards clock step can replace it.
       if (
+        !interval &&
         fireAt !== undefined &&
         nowMs < computedAt &&
         fireAt - nowMs > longestFireAheadMs(deps.schedule)
@@ -657,7 +674,11 @@ export function createBackupSchedule(
         try {
           const clock = await scheduleClock();
           computedAt = clockNow().getTime();
-          fireAt = nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed);
+          fireAt = hold(
+            nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed),
+            computedAt,
+            steady(),
+          );
         } catch (err) {
           if (signal.aborted) return { nextDueAt: null };
           deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
@@ -665,7 +686,14 @@ export function createBackupSchedule(
         }
         deps.onScheduled?.(fireAt);
       }
-      return { nextDueAt: new Date(fireAt) };
+      if (!interval) return { nextDueAt: new Date(fireAt) };
+      const waitMs = Math.max(0, steadyFireAt - steady());
+      const at = clockNow().getTime() + waitMs;
+      if (Math.abs(at - shownAt) > 1000) {
+        shownAt = at;
+        deps.onScheduled?.(at);
+      }
+      return { nextDueAt: new Date(at), waitMs };
     },
   };
 }

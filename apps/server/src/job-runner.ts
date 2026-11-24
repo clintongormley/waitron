@@ -4,7 +4,7 @@ import { codeOf } from "@waitron/server-kit";
 import { JOB_CATALOGUE, type JobName } from "./job-catalogue.js";
 import { closeAll } from "./close-all.js";
 import { createLoopWaker } from "./loop-wake.js";
-import { realSleep, sleepMsFor } from "./loop.js";
+import { clampSleepMs, realSleep, sleepMsFor } from "./loop.js";
 import type { Logger } from "./logger.js";
 
 export interface JobContext {
@@ -13,6 +13,9 @@ export interface JobContext {
 }
 export interface JobPassResult {
   nextDueAt: Date | null;
+  /** The wait the job measured itself, slept in place of `nextDueAt`'s, so a wall-clock step
+   * between the job's reading and the runner's cannot change it. */
+  waitMs?: number;
   degraded?: boolean;
   finished?: true;
 }
@@ -232,7 +235,10 @@ export function createJobRunner(deps: {
             }
             if (result.finished) break;
             view.state = "waiting";
-            wait = sleepMsFor(result.nextDueAt, deps.now(), def.minSleepMs, def.maxSleepMs);
+            wait =
+              result.waitMs === undefined
+                ? sleepMsFor(result.nextDueAt, deps.now(), def.minSleepMs, def.maxSleepMs)
+                : clampSleepMs(result.waitMs, def.minSleepMs, def.maxSleepMs);
           }
         } catch (error) {
           view.consecutiveFailures++;

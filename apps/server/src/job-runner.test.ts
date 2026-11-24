@@ -83,6 +83,35 @@ describe("job runner", () => {
     expect(times).toEqual([0, 30_000, 31_000, 91_000]);
   });
 
+  it("sleeps a pass's own measured wait in place of its due time, bounded by floor and ceiling", async () => {
+    const waits: Array<number | undefined> = [30_000, -1, 90_000, undefined];
+    runner.add(
+      job({
+        pass: async () => {
+          times.push(elapsed());
+          const waitMs = waits.length > 0 ? waits.shift() : 60_000;
+          return { nextDueAt: new Date(Date.now() + 45_000), waitMs };
+        },
+      }),
+    );
+    await advance(29_999);
+    expect(times).toEqual([0]);
+    await advance(1);
+    expect(times).toEqual([0, 30_000]);
+    await advance(999);
+    expect(times).toHaveLength(2);
+    await advance(1);
+    expect(times).toEqual([0, 30_000, 31_000]);
+    await advance(59_999);
+    expect(times).toHaveLength(3);
+    await advance(1);
+    expect(times).toEqual([0, 30_000, 31_000, 91_000]);
+    await advance(44_999);
+    expect(times).toHaveLength(4);
+    await advance(1);
+    expect(times).toEqual([0, 30_000, 31_000, 91_000, 136_000]);
+  });
+
   it.each([false, true])("delays the first pass, wakeable=%s", async (wake) => {
     runner.add(job({ firstPassAfterMs: 10_000 }));
     await advance(2_000);

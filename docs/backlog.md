@@ -1124,12 +1124,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Finish the clock work: a check at every start and every change** (bundle of 3, 1 go-live, 2 important, size L, waits for another entry). Holds A798. [Detail](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 
-- **One steady-clock helper instead of hand-written clock-step-back guards** (owner, 2026-11-01,
-  answering #2331). Move elapsed timers onto one shared helper, keeping each site's policy.
-  The backup schedule's interval fire still guards an in-process wait by hand. The other inventory
-  rows are saved dates, a heartbeat, orderings, calendar rules or declared limits.
-  [Detail and remaining-site inventory](backlog/box.md#one-steady-clock-helper-instead-of-hand-written-clock-step-back-guards).
-
 - **Closing a pay period trusts the box's clock.**
   [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)
 
