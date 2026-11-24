@@ -31,7 +31,8 @@ export const en = {
     "Could not send the report. Clear the description to try sending just the diagnostics, or download a copy.",
 
   "recovery.open": "Open recovery",
-  "recovery.issuance_stopped": "New invoices are stopped. Open recovery with the current box key.",
+  "recovery.issuance_stopped":
+    "New invoices are stopped. Open recovery with the current master key.",
   "recovery.charged": "Card charged. Do not charge again.",
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
@@ -2369,7 +2370,7 @@ export const es: Record<StringKey, string> = {
 
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
-    "La emisión de facturas está detenida. Abre la recuperación con la clave del servidor actual.",
+    "La emisión de facturas está detenida. Abre la recuperación con la clave maestra actual.",
   "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
   "recovery.manual_card":
     "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",

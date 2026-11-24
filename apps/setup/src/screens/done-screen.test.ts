@@ -549,11 +549,11 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "The box did not accept the box key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's box key there.",
+      "The box did not accept the master key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's master key there.",
     ],
     [
       "es-ES",
-      "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor de la copia elegida.",
+      "El servidor no ha aceptado la clave maestra que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave maestra de la copia elegida.",
     ],
   ] as const)(
     "if the server refuses the key, says where to enter it, since this screen has no key field, in %s",
@@ -1390,7 +1390,7 @@ describe("saving the server key as a file", () => {
       "key-on-paper",
       "",
       "You need it to promote this box if the primary is unreachable.",
-      "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
+      "The backup encryption key opens the copy.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
@@ -1419,7 +1419,7 @@ describe("saving the server key as a file", () => {
       "key-on-paper",
       "",
       "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
-      "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
+      "La clave de cifrado de copias abre la copia.",
       "",
       "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
       "",
@@ -1450,9 +1450,7 @@ describe("saving the server key as a file", () => {
       await userEvent.click(q(el, "[data-test=break-glass-save]")!);
       const lines = (await saves.blobs[0]!.text()).split("\n");
       expect(lines[4]).toBe(use);
-      expect(lines[5]).toBe(
-        "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
-      );
+      expect(lines[5]).toBe("The backup encryption key opens the copy.");
     },
   );
 
@@ -2302,7 +2300,7 @@ describe("the joining page", () => {
     const key = q(el, "[data-test=task-key]")!;
     expect(key.querySelector(".task-label")!.textContent!.trim()).toBe("Download the box key");
     expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer.",
+      "Save it as a file or write it down, and keep it off this computer.",
     );
     expect(key.querySelector("[data-test=break-glass-key-name]")!.textContent!.trim()).toBe(
       "Box key 15 Oct 2026 · K7QF",
@@ -2496,7 +2494,7 @@ describe("the joining page", () => {
       "Descargar la clave del servidor",
     );
     expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
+      "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
     );
     expect(q(el, "[data-test=break-glass-save]")!.textContent!.trim()).toBe(
       "Guardar en un archivo",

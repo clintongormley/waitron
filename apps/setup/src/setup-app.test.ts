@@ -1456,7 +1456,7 @@ describe("setup-app", () => {
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
     expect(await screenText(el, "done", "[data-test=break-glass-warning]")).toContain(
-      "restore this venue from its bucket",
+      "The recovery pack contains the box key. Keep it away from this box.",
     );
   });
 
@@ -2176,7 +2176,7 @@ describe("setup-app", () => {
     const warning = (await screenText(el, "done", "[data-test=key-why]"))
       ?.toLowerCase()
       .replace(/\s+/g, " ");
-    expect(warning).toContain("if this box ever has to take over from the main box");
+    expect(warning).toContain("save it as a file or write it down");
   });
 
   it("hands this box's own address from Finish joining to the done screen's label", async () => {

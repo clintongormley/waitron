@@ -54,7 +54,7 @@ export const finishEn = {
   "done.clock.set_refused":
     "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
   "done.clock.key_refused":
-    "The box did not accept the box key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's box key there.",
+    "The box did not accept the master key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's master key there.",
   "done.clock.unanswered":
     "This page could not get the two times from the box, so Confirm the time and This device stay off. Keep this page open: it asks the box again by itself.",
   "done.description.dashboard":
@@ -87,8 +87,7 @@ export const finishEn = {
   "done.pack.continue": "Continue",
   "done.break_glass.heading": "Save your box key now",
   "done.break_glass.key_name": "Box key {date} · {code}",
-  "done.break_glass.backups":
-    "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
+  "done.break_glass.backups": "The backup encryption key opens the copy.",
   "done.break_glass.warning":
     "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this box if the primary is unreachable.",
@@ -97,7 +96,7 @@ export const finishEn = {
   "done.break_glass.save": "Save as a file",
   "done.break_glass.download_pack": "Download recovery pack (PDF)",
   "done.break_glass.pack_keep":
-    "The recovery pack contains the box key. Keep it away from this box. You need the key to restore this venue from its bucket.",
+    "The recovery pack contains the box key. Keep it away from this box.",
   "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
   "done.break_glass.file_title": "Waitron box key",
   "done.break_glass.file_purpose": "You need it to restore this venue from its bucket.",
@@ -123,8 +122,7 @@ export const finishEn = {
   "done.task.to_do": "To do",
   "done.task.join": "Join the restaurant",
   "done.task.key": "Download the box key",
-  "done.task.key_why":
-    "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer.",
+  "done.task.key_why": "Save it as a file or write it down, and keep it off this computer.",
   "done.task.key_wrote": "I wrote it down",
   "done.task.key_file_purpose":
     "You will need it if this box ever has to take over from the main box.",
@@ -197,7 +195,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.clock.set_refused":
     "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
   "done.clock.key_refused":
-    "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor de la copia elegida.",
+    "El servidor no ha aceptado la clave maestra que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave maestra de la copia elegida.",
   "done.clock.unanswered":
     "Esta página no ha podido obtener las dos horas del servidor, así que Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
   "done.description.dashboard":
@@ -231,8 +229,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.pack.continue": "Continuar",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
-  "done.break_glass.backups":
-    "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
+  "done.break_glass.backups": "La clave de cifrado de copias abre la copia.",
   "done.break_glass.warning":
     "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
@@ -242,7 +239,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.save": "Guardar en un archivo",
   "done.break_glass.download_pack": "Descargar paquete de recuperación (PDF)",
   "done.break_glass.pack_keep":
-    "El paquete de recuperación contiene la clave del servidor. Guárdalo fuera de este servidor. Necesitas la clave para restaurar este local desde su bucket.",
+    "El paquete de recuperación contiene la clave del servidor. Guárdalo fuera de este servidor.",
   "done.break_glass.save_failed": "No se pudo guardar el archivo. Anota la clave.",
   "done.break_glass.file_title": "Clave del servidor de Waitron",
   "done.break_glass.file_purpose": "La necesitas para restaurar este local desde su bucket.",
@@ -269,8 +266,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.to_do": "Pendiente",
   "done.task.join": "Unirse al restaurante",
   "done.task.key": "Descargar la clave del servidor",
-  "done.task.key_why":
-    "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
+  "done.task.key_why": "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
   "done.task.key_wrote": "La he anotado",
   "done.task.key_file_purpose":
     "La necesitarás si algún día este servidor tiene que sustituir al servidor principal.",
