@@ -414,7 +414,7 @@ export const workingOrderLines = table(
     check(
       "working_order_lines_set_menu_ck",
       sql`(${t.setMenuRole} is null
-          and (${t.setMenuId} is null or ${t.parentLineId} is null)
+          and (${t.setMenuId} is null or (${t.parentLineId} is null and ${t.menuItemId} is not null))
           and ${t.setMenuVersionId} is null
           and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
           and ${t.setMenuCountsAsCourseId} is null)

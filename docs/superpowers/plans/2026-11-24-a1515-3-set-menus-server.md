@@ -616,7 +616,7 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
 
 ### PR 2a — The grouping writer (`feat/a1515-3-regroup-writer`)
 
-_2026-11-24, as built: D28 was dropped (see D28). The set-menu line check leaves `set_menu_id` free only on a top-level line with no role; an extras pick with no role still has none._
+_2026-11-24, as built: D28 was dropped (see D28). The set-menu line check lets a line with no role keep a `set_menu_id` only when it is a top-level line with a menu item; an extras pick, or a line with no menu item, has none._
 
 #### Task 2a.1: The schema
 

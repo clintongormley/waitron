@@ -136,6 +136,20 @@ describe("set menu storage on a bill", () => {
     await expectCheck(() => updateLine(DISH, "set_menu_version_id", VERSION));
   });
 
+  it("refuses a line in no set menu that keeps where it was ordered from without a menu item", async () => {
+    await addSetMenu();
+    await addDish({ role: null, setLine: null, place: null, course: null });
+    const withoutMenuItem = () =>
+      suite.db.execute(sql`update working_order_lines
+        set menu_item_id = null, menu_id = null, menu_name = null, offer_department_id = null,
+          department_name = null, unit_id = null, sold_in_each = null, offer_unit_name = null,
+          offer_unit_precision = null, offer_vat_class = null, offer_category_name = null
+        where id = ${DISH}`);
+    await expectCheck(withoutMenuItem);
+    await updateLine(DISH, "set_menu_id", null);
+    await withoutMenuItem();
+  });
+
   it("lets an ordinary extra belong to a set-menu dish without carrying its own set-menu values", async () => {
     await addSetMenu();
     await addDish();

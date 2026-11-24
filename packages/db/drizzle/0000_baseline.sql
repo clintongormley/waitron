@@ -155,7 +155,7 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_a_la_carte_price_ck" CHECK("working_order_lines"."a_la_carte_unit_price" is null or "working_order_lines"."a_la_carte_unit_price" >= 0),
 	CONSTRAINT "working_order_lines_set_menu_role_ck" CHECK("working_order_lines"."set_menu_role" in ('set_menu', 'dish')),
 	CONSTRAINT "working_order_lines_set_menu_ck" CHECK(("working_order_lines"."set_menu_role" is null
-          and ("working_order_lines"."set_menu_id" is null or "working_order_lines"."parent_line_id" is null)
+          and ("working_order_lines"."set_menu_id" is null or ("working_order_lines"."parent_line_id" is null and "working_order_lines"."menu_item_id" is not null))
           and "working_order_lines"."set_menu_version_id" is null
           and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
           and "working_order_lines"."set_menu_counts_as_course_id" is null)
