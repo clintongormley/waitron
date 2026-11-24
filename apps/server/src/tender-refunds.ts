@@ -1,10 +1,10 @@
-import { eq, or } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import { carryNewTenderRefund, refuseUntilRefundable } from "./tender-refund-completion.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import { payments } from "@waitron/payments";
+import { payments, type PaymentProvider } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
 import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
@@ -39,25 +39,77 @@ export function toTenderRefundView(row: RefundRow): TenderRefundView {
   };
 }
 
-async function captureFor(tx: Transaction, refund: RefundRow) {
-  const originals = await tx.select().from(tenders).where(eq(tenders.saleId, refund.saleId!));
-  const tender = originals.find((row) => row.id === refund.tenderId)!;
+/** The capture each of the sale `saleId`'s payments `tenderIds` was taken with; undefined for one
+ * no capture pairs with. */
+export async function capturesFor(
+  tx: Transaction,
+  saleId: string,
+  tenderIds: readonly string[],
+): Promise<Map<string, typeof payments.$inferSelect | undefined>> {
+  const found = new Map<string, typeof payments.$inferSelect | undefined>();
+  if (tenderIds.length === 0) return found;
+  const originals = await tx.select().from(tenders).where(eq(tenders.saleId, saleId));
+  const billIds = originals.flatMap((row) =>
+    row.billPaymentId === null ? [] : [row.billPaymentId],
+  );
   const captures = await tx
     .select()
     .from(payments)
     .where(
       or(
-        eq(payments.saleId, refund.saleId!),
-        tender.billPaymentId === null
-          ? undefined
-          : eq(payments.billPaymentId, tender.billPaymentId),
+        eq(payments.saleId, saleId),
+        billIds.length === 0 ? undefined : inArray(payments.billPaymentId, billIds),
       ),
     );
-  return matchTenderRefundCapture(
-    { ...tender, amount: centsToDecimal(tender.amount) },
-    captures,
-    originals.filter((row) => row.method === "card" && row.billPaymentId === null).length,
-  );
+  const directCards = originals.filter(
+    (row) => row.method === "card" && row.billPaymentId === null,
+  ).length;
+  for (const tenderId of tenderIds) {
+    const tender = originals.find((row) => row.id === tenderId);
+    found.set(
+      tenderId,
+      tender === undefined
+        ? undefined
+        : matchTenderRefundCapture(
+            { ...tender, amount: centsToDecimal(tender.amount) },
+            captures,
+            directCards,
+          ),
+    );
+  }
+  return found;
+}
+
+/** The capture `refund`'s payment was taken with. */
+export async function captureFor(tx: Transaction, refund: RefundRow) {
+  return (await capturesFor(tx, refund.saleId!, [refund.tenderId!])).get(refund.tenderId!);
+}
+
+/** Whether `provider`, looked up for a capture taken through `captureProvider`, can send its
+ * refund at all; whether it takes a part refund is a separate check. */
+export function sendsRefunds(
+  provider: PaymentProvider | undefined,
+  captureProvider: string,
+): boolean {
+  return provider?.provider === captureProvider && provider.sendRefund !== undefined;
+}
+
+/** Refuses `tender.refund_unavailable` when `reserved` is a reader card's refund its capture's
+ * provider cannot send, or a part refund it cannot take. */
+export async function refuseUnlessProviderRefunds(
+  tx: Transaction,
+  deps: Pick<TenderRefundDeps, "refundProviderFor">,
+  reserved: RefundRow,
+): Promise<void> {
+  if (reserved.method !== "card" || reserved.manual) return;
+  const capture = (await captureFor(tx, reserved))!;
+  const provider = await deps.refundProviderFor?.(capture.provider);
+  if (
+    !sendsRefunds(provider, capture.provider) ||
+    (!provider!.capabilities.partialRefund &&
+      reserved.appliedAmount + reserved.tipAmount !== capture.amount)
+  )
+    throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
 }
 
 // Connected refunds commit their reservation here; provider I/O belongs to the resolver afterwards.
@@ -98,18 +150,7 @@ export async function beginSettledTenderRefund(
       }
       const refund = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {
         manualPaymentRef: async (reserved) => (await captureFor(tx, reserved))!.paymentRef,
-        beforeCompletion: async (reserved) => {
-          if (reserved.method !== "card" || reserved.manual) return;
-          const capture = (await captureFor(tx, reserved))!;
-          const provider = await deps.refundProviderFor?.(capture.provider);
-          if (
-            provider?.provider !== capture.provider ||
-            provider.sendRefund === undefined ||
-            (!provider.capabilities.partialRefund &&
-              reserved.appliedAmount + reserved.tipAmount !== capture.amount)
-          )
-            throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
-        },
+        beforeCompletion: (reserved) => refuseUnlessProviderRefunds(tx, deps, reserved),
         openDrawer: (reserved, printers) =>
           enqueueRefundDrawer(
             tx,

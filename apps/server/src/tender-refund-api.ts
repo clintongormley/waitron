@@ -1,29 +1,16 @@
 import type { Hono } from "hono";
-import { and, eq, isNull } from "drizzle-orm";
-import {
-  devices,
-  deviceProfiles,
-  refunds,
-  receiptReprints,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
-import { canUseDeviceProfile, type PinThrottle, type Override } from "@waitron/identity";
+import { eq } from "drizzle-orm";
+import { refunds, receiptReprints, withTransaction, type Transaction } from "@waitron/db";
+import type { PinThrottle, Override } from "@waitron/identity";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, centsToDecimal, isUuid } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { asObject } from "./bill-payments-api.js";
 import { refundProvidersOf } from "./bill-refunds.js";
-import {
-  assertDeviceCapability,
-  deviceBindingColumns,
-  deviceProfileJoin,
-  toDeviceBinding,
-} from "./device-session.js";
-import { resolveTransactionScope } from "./find-bill-transactions.js";
+import { assertDeviceCapability } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
-import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
+import { checkAccess, withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import {
   authorizeStoredTenderRefund,
   readRefundableTendersWithLimits,
@@ -36,8 +23,7 @@ import {
 } from "./tender-refund-sends.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { overridePinAttempts, parseOverrideField, STATUS, type TillApiDeps } from "./till-api.js";
-import { assertRequestDevice, assertStillSignedIn, requireSession } from "./till-session.js";
-import { assertSubjectZones } from "./zone-access.js";
+import { assertRequestDevice, requireSession } from "./till-session.js";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveReceiptPrinter } from "./receipt-print.js";
 import {
@@ -47,7 +33,6 @@ import {
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import "./errors.js";
 
-type Session = Awaited<ReturnType<typeof requireSession>>;
 export function pathId(value: string, kind: "sale" | "refund"): string {
   if (!isUuid(value))
     throw kind === "sale"
@@ -56,34 +41,6 @@ export function pathId(value: string, kind: "sale" | "refund"): string {
   return value.toLowerCase();
 }
 
-export async function checkAccess(
-  tx: Transaction,
-  session: Pick<Session, "deviceId" | "personId" | "sessionId">,
-  parent: string | { workingOrderId: string },
-) {
-  await assertStillSignedIn(tx, session);
-  const [row] = await tx
-    .select(deviceBindingColumns)
-    .from(devices)
-    .innerJoin(deviceProfiles, deviceProfileJoin)
-    .where(and(eq(devices.id, session.deviceId), isNull(deviceProfiles.retiredAt)));
-  if (row === undefined) throw new AppError("device.unauthorized", {});
-  const device = toDeviceBinding(session.deviceId, row);
-  if (device.formFactor === "kds")
-    throw new AppError("device.forbidden_action", { action: "refund" });
-  if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
-    throw new AppError("device_profile.not_admitted", {});
-  const orderIds =
-    typeof parent === "string"
-      ? (await resolveTransactionScope(tx, parent)).workingOrderIds
-      : [parent.workingOrderId];
-  await assertSubjectZones(
-    tx,
-    device.deviceProfileId,
-    orderIds.map((orderId) => ({ orderId })),
-  );
-  return device;
-}
 async function readRefund(tx: Transaction, id: string) {
   const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
   if (row === undefined || row.saleId === null || row.tenderId === null)

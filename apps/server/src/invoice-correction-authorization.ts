@@ -9,7 +9,7 @@ import {
 import type { DeviceId } from "@waitron/shared";
 import { assertTakesTender, type TenderKind } from "./device-session.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { checkAccess } from "./tender-refund-api.js";
+import { checkAccess } from "./tender-refund-authorization.js";
 import "./errors.js";
 
 /**

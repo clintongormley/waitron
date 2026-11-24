@@ -2,7 +2,8 @@
 
 Status: plan, written 2026-11-24 on `docs/give-money-back-plan` at `cc4fc8a1b7`, revised the same
 day after one fresh-context read (`~/waitron-campaign-l/receipts/give-money-back-plan-read-1.md`:
-1 Critical, 10 Important, 11 Minor; section 11 says what was done with each). No product code yet.
+1 Critical, 10 Important, 11 Minor; section 11 says what was done with each). PR 1 (Tasks 1–6) built on `feat/give-money-back-server`;
+PRs 2 and 3 not started.
 Every `file:line` below was read on this branch; every result marked "run" came from the command
 named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part. Cleared by the
 watcher 2026-11-24 12:28 with every default; the owner said yes to O2's words (12:36, "yes to 1
@@ -112,7 +113,8 @@ stays the last word.
 route too. That is mitigated by the new route calling the same functions, not copying their rules.
 
 **True size** (estimates from the files each task names, not from a build): PR 1 about 550 server
-production lines added and 1,300 test lines. PR 2 about 950 till production lines added, 300
+production lines added and 1,300 test lines (as built: about 2,400 production and 3,100 test lines
+added, `git diff --numstat`). PR 2 about 950 till production lines added, 300
 changed, 1,600 test lines added or rewritten, about 120 guide lines per language, and the dashboard's
 two correction alerts reworded. PR 3 about 5,000 lines removed (the two old windows and their tests,
 `wc -l`, run) plus the `till-app.ts` code only they reach. No generated file, migration, schema
@@ -276,8 +278,10 @@ cancelados y lo pagado de más sí se pueden devolver."
 
 ### 5.1 D5: one read, one preview, one write
 
-In a new `apps/server/src/give-back.ts` (logic) and `apps/server/src/give-back-api.ts` (routes,
-mounted beside `mountInvoiceCorrectionApi`).
+In `apps/server/src/give-back-read.ts` (the read), `give-back-plan.ts` (routing and preview),
+`give-back.ts` (the write), `give-back-press.ts` (parsing, resends, the answer) and
+`give-back-reader.ts` (the card-reader sequence); routes in `give-back-api.ts` (mounted beside
+`mountInvoiceCorrectionApi`).
 
 **`GET /api/transactions/:saleId/give-back`** — what the window lists:
 
@@ -289,6 +293,8 @@ mounted beside `mountInvoiceCorrectionApi`).
            left: string;
            /** cancels on this line with Refund ticked */
            cancelled: { quantity: string; owed: string; back: string } | null;
+           /** a cancelled dish's extra: the dish's line it is given back with */
+           partOf: string | null;
            givenFree: boolean }[];
   /** "cash" is every cash payment together, as Correct invoice gives cash back today */
   ways: { way: "cash" | string /* tenderId of a card */; last4: string | null; manual: boolean;
@@ -298,15 +304,17 @@ mounted beside `mountInvoiceCorrectionApi`).
   choices: Record<"dishes" | "goodwill" | "extra", { available: boolean; reason: WaitReason | null }>;
 }
 /** the code (and params) the write would answer, from section 4's cases */
-type WaitReason = { code: string; params?: Record<string, string> };
+type WaitReason = { code: ErrorCode; params?: Record<string, unknown> };
 ```
 
 Each line also carries `available: boolean` and `reason: WaitReason | null`; `ways` each carry
 `reason` too (case 3's `tender.refund_in_progress`, case 8's `tender.refund_unavailable`).
 `choices` and the lines' `available` are worked out by the same functions the preview and the write
-call (`correctableNow`, `refuseUntilRefundable`, the pending-refund reads, `requireEconomicWrite`'s
-check), never a second copy of the rules: an unavailable choice is exactly one whose preview would
-answer that code. `dishes` is available when at least one line is; in cases 1 and 2 a line is
+call (`readCorrectableNow`, `refuseUntilRefundable`, the pending-refund reads, `requireEconomicWrite`'s
+check, `assertTakesTender`), never a second copy of the rules: an unavailable choice is exactly one
+whose preview would answer that code. A payment this device's profile does not take counts as held,
+with the code the preview answers (`device.cash_not_allowed`, `device.forbidden_action`); a
+correction may still leave money under way on it for another device. `dishes` is available when at least one line is; in cases 1 and 2 a line is
 available only while its cancel still owes money, and only up to `owed`. A choice with nothing left
 to give back (no extra paid, every line's `left` 0) is `available: false` with `reason: null`; the
 till shows it quiet with no sentence. Case 4 (`invoice_correction.already_open`) makes all three
@@ -316,10 +324,15 @@ unavailable; the button opens the under-way view instead.
 `packages/adjustments/src/refund-links.ts:54-89`; `owed = refundValue − linked`, `back = linked`),
 mapped to the receipt's lines through the portion bindings that
 `apps/server/src/cancellation-refund-value.ts:195-215` reads. A cancel paid back in full keeps its
-row (`owed: "0.00"`), so the dish still shows its money is back. `left` subtracts `back` because
+row (`owed: "0.00"`), so the dish still shows its money is back. A cancel's money is owed for the
+dish and its priced extras together (`refundValue` and `linked` are per cancel), so they are one
+selection: the dish's line carries the family's `cancelled` and `left`, and each extra's line
+carries `partOf: <the dish's line id>`, `left: "0.00"` and `cancelled: null`, is never available
+itself, and a correction of the ticked dish names the family's lines. `left` subtracts `back` because
 Correct invoice's `left` counts only earlier correctives (`packages/core/src/correction-history.ts:262-283`),
 never plain refunds: without it a dish whose cancel was paid back would offer its money again (the
-read's C1). `givenFree` uses the corrections workbook's test (`apps/server/src/free-items.ts:45`).
+read's C1). `givenFree` uses `isFree` (`apps/server/src/cancellation-refund-value.ts`): a line charged €0 whose
+menu price is above €0.
 `allowedHere` is the server's own tender-kind check (`assertTakesTender`) against this device's
 profile. A refusal from `readCorrectableLines` (a refused filing included, `correction-history.ts:113-114`)
 falls back to `gross`, so the window opens in case 1 (the read's I3).
@@ -349,8 +362,12 @@ manualConfirmed?, override? }`. In this order:
    (`invoice-correction-api.ts:102-127`, `tender-refund-api.ts:187-201`).
 2. **A resend answers, never re-routes:** if any of the submission ids already has a `refunds` or
    `invoice_corrections` row on this sale, the route answers from the stored rows (checking each
-   row's fingerprint, as today's replays do) and writes nothing. It is authorized as its first send
-   was, from the same body.
+   row's fingerprint, as today's replays do) and writes nothing. It is authorized from the same body and
+   the rows its first send wrote, as Refund a payment authorizes a resend, so it can ask for a right
+   its first send did not (`resendRights`). The rows keep the reason only as text, so the resend's reason is
+   checked against that text, never against today's settings: a reason renamed since still matches
+   an identical resend, but once no reason bears the stored name, which reason the resend names is
+   not checked (the note still is).
 3. Otherwise it plans again and refuses `give_back.changed` (409) when the parts differ from
    `expected` (what the preview showed). Then it writes (5.3).
 
@@ -363,6 +380,8 @@ It answers:
   underWay: InvoiceCorrectionView | null;
   rest: null | { purpose; lineIds?; amount; extra; way } }  // not sent yet; needs fresh ids
 ```
+
+A card refund the card company did not make answers `refusal` with `give_back.refund_failed`.
 
 **D16: the old routes stay**: `POST …/refunds`, `…/corrections`, `/cash`, `/file`, `/close` are the
 building blocks the new route calls, the under-way view's steps, and the fixtures of hundreds of
@@ -381,19 +400,20 @@ tests. The till stops calling `…/corrections` and the plain form of `…/refun
 3. **The extra** (purpose `extra`, or the switch on): a plain refund of the extra alone (payment
    money 0). #4192: a tip alone needs no correction (`tenderRefundAmountsFit`, `:277-284`).
 4. **The rest** (served dishes, goodwill, more than the ticked dishes): one correction. For
-   `dishes`, it names the ticked lines whose `left` is above 0. When the rest is more than those lines'
-   `left` together, or no such line is ticked, it names **no** lines: Correct invoice refuses more
+   `dishes`, it names the ticked lines with money beyond what their cancels owe, and each ticked
+   cancelled dish's extras' lines that Correct invoice still holds money on. When the rest is more
+   than those lines hold beyond what their cancels owe, or no such line is ticked, it names **no** lines: Correct invoice refuses more
    than the named lines hold (`packages/core/src/correction-allocation.ts:66-70`; the read's probe:
    ticked lines with too much answered `sale.correction_amount_invalid`, unticked answered none), and
    with none named it shares the amount over the receipt by menu price (#4192's O1). For `goodwill`
    it names no lines.
-5. **Where Correct invoice can never act** (`correctableNow` answers nothing correctable), the rest
+5. **Where Correct invoice can never act** (`readCorrectableNow` answers nothing correctable), the rest
    goes as a plain refund instead, as Refund a payment does today.
-6. **Where Correct invoice would only wait** (`correctableNow` throws: cases 1, 2, the clock), the
-   route refuses with that code. Steps 1–3 never reach `correctableNow` (case 1's probe).
+6. **Where Correct invoice would only wait** (`readCorrectableNow` answers `waiting`: cases 1, 2, the
+   clock), the route refuses with that code. Steps 1–3 never reach `readCorrectableNow` (case 1's probe).
 7. **More than one payment holds (D10):** steps 1–3 come from the chosen way only (cash: every cash
    payment, oldest first, as `giveCorrectionCash` takes it, `invoice-correction-cash.ts:50-56`); if
-   they need more, the preview refuses with a field error naming what that way holds. The correction
+   they need more, the preview refuses on the amount field; the till shows what that way holds from the read's `ways`. The correction
    is opened for the whole rest; its leg gives what the chosen way holds; what is left stays on the
    open correction (`leftUnderWay`), and the window moves to the under-way view with a step for each
    other payment. So a €45 give-back over €30 cash and €17 card is still **one** corrective invoice,
@@ -426,14 +446,18 @@ The route supplies the correction's VAT split itself, from `previewCorrectionAmo
   own transaction**, each followed by the card company's answer as `settleTenderRefund` waits for it
   (`tender-refunds.ts:155-176`). A correction is opened **in the same transaction as its leg's
   reservation**, and discarded by the route (`closeInvoiceCorrection` with nothing back) if that leg
-  fails, so a refused card refund never leaves a correction open by surprise. When a part comes back
+  fails, so a card refund declined while the route waits leaves no correction open; one left pending
+  and later failed by the background recovery, or whose discard is refused, stays open under way
+  (section 11, I5). When a part comes back
   completed the route goes on; when one stays pending it stops and answers `rest`. **This split
   across transactions is a commented decision** (CLAUDE.md §3), stated at the function: no
   transaction stays open across a card company's answer. A later part refused after an earlier one
   completed answers what went back and `refusal`; nothing is undone.
 - **A resend** never calls a completion step: `reserveTenderRefund` answering `replayed: true` returns
   the stored row, as `beginSettledTenderRefund` does today (`tender-refunds.ts:94-98`), so no second
-  drawer entry is written.
+  drawer entry is written. A separate terminal's resend still asks `fileCorrectionAutomatically` to
+  file a correction left open by a refused filing after commit, as `refundSettledTender` does on a
+  resend of Correct invoice's separate-terminal leg (it files the corrective and writes no refund).
 
 **`rest` lives only on the till that sent it** (in its saved attempt, like a refund attempt today,
 `apps/till/src/state/tender-refund.ts`). If that till is lost, the rest was simply not given back:
@@ -451,8 +475,9 @@ The route works out the rights its parts need: `sale.refund` for any plain refun
 cancel's approval (D9) and for every leg, `sale.rectify` to open a correction. For cash and a
 separate terminal it checks an approver's PIN once, ahead of the transaction (`overrideToCheck` with
 `checkedAnyway = true` and `withPinCheckAhead`, `apps/server/src/pin-check-ahead.ts:55-74`), then
-authorizes each right inside with that check (`withCheck`). On a card reader the PIN is typed once
-and checked once per part, since each part goes through `refundSettledTender`. The device checks are
+authorizes each right inside with that check (`withCheck`). On a card reader the PIN is typed and
+checked once, ahead of the first transaction; each part's own transaction then authorizes its rights
+again from the person's roles and session as they are then, reusing that PIN check (no second PIN). The device checks are
 today's, as `withTenderRefundAuthorization` makes them (`apps/server/src/tender-refund-authorization.ts:129-155`):
 still signed in on this device, not a kitchen screen, admitted to the device's profile, the receipt's
 zones, the profile taking that kind of payment. Task 4 moves those lines into one function both
@@ -470,8 +495,8 @@ window sends `fromCancel` (the cancel ids it was opened with); the route covers 
 the cancel's approver only when `fromCancel` equals the cancels it names and there is no extra, using
 `reserveTenderRefund`'s existing rule (`covered = …`, `tender-refund-reservation.ts:487-488`).
 Without `fromCancel` it passes no cover, so a later give-back of a cancelled dish asks for refund
-rights or a PIN, as Refund a payment does today. A resend is authorized from the same body, so it
-needs what its first send needed.
+rights or a PIN, as Refund a payment does today. A resend is authorized from the same body and the
+stored rows, so it may need more than its first send (`resendRights`, `apps/server/src/give-back.ts`).
 
 ### 5.6 The till
 
@@ -479,7 +504,8 @@ needs what its first send needed.
   `apps/till/src/state/give-back.ts` (the saved attempt: the request, its submission ids and any
   `rest`, kept as `state/tender-refund.ts` keeps a refund's, so a lost answer is sent again with the
   same ids; a `rest` gets fresh ids when first sent). Steps: the choice (`wt-choice-row`), the form,
-  the outcome; the under-way view is a fourth state.
+  the outcome; the under-way view is a fourth state. A line with `partOf` is drawn under its dish,
+  never tickable; a cancelled dish's `left` counts its extras, so it can exceed its own `gross`.
 - **The form** follows design-system.md → Forms: required fields marked; inline errors; one bottom
   message; **Give back** disabled until valid. The amount starts at the ticked lines' `left` (a
   cancelled line's starts at its `owed`) and may be raised up to all the money left on the receipt;
@@ -529,8 +555,9 @@ invoice naming a customer"). **Listed for the accountant** (the column is mine):
 no corrective invoice" (`apps/server/src/accountant-export.ts:413`, columns at
 `apps/server/src/i18n/accountant-export.ts:32-46`) names each refund's invoice number but not whether
 that invoice named a customer, so the accountant would have to cross-check every refund against the
-invoices sheet. It gains one column, **Customer on the invoice** (ES **Cliente de la factura**): the
-customer's name and tax number from the sale, empty for a simplified ticket, read at export time from
+invoices sheet. It gains two columns with the invoices sheet's headings, **Customer** and **Customer
+tax number** (ES **Cliente** and **NIF del cliente**): the customer's name and tax number from the
+sale, each empty where the sale has none (both, for a simplified ticket), read at export time from
 the immutable sale. CORRECT-FULL-INVOICE replaces this when it lands.
 
 ## 6. Fiscal boundary, and the checks every task runs
@@ -554,8 +581,9 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
 **Server (PR 1): no existing assertion changes;** the new routes are additions. New rows in guard
 lists: `apps/server/src/till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts` (the
 three routes' refusing cases and inventory rows, CLAUDE.md §3); `till-api.session-person.test.ts`
-(the two POST routes in `BODIES`); `adjustments-api.test.ts` (two permissions). One changed check:
-`accountant-export.test.ts` pins the refunds sheet's columns, which gain one.
+(the three routes in `NAMED_REFUSED`; none needs a `BODIES` entry, since each reads the sign-in
+before its body); `adjustments-api.test.ts` (two permissions). One changed check:
+`accountant-export.test.ts` pins the refunds sheet's columns, which gain two.
 
 **Till and dashboard (PR 2), each with its decision:**
 
@@ -658,7 +686,7 @@ Files: `give-back.ts`, new `give-back-api.ts`, their tests.
    - `needs`: refund rights only, goodwill: `["sale.rectify"]`; neither right, paella alone with
      `fromCancel`: `[]`; the same without `fromCancel`: `["sale.refund"]` (D9).
    Run, watch them fail.
-2. Write `planGiveBack` (5.2), calling `correctableNow` and `allocateToCancels`.
+2. Write `planGiveBack` (5.2), calling `readCorrectableNow` and `allocateToCancels`.
 3. Mount the read and `POST …/give-back/preview` in `give-back-api.ts` (`requireSession`, `passive:
    true` for the read, `checkAccess`, as `invoice-correction-api.ts:73-101`); route tests for 200, a
    409 wait, and a till outside the receipt's zone.
@@ -910,7 +938,7 @@ Delete the queue's backlog entry when PR 3 lands.
 
 | PR | Tasks | Production lines | Test lines | Risk |
 | --- | --- | --- | --- | --- |
-| 1 server | 1–6 | ~550 added | ~1,300 added | money, correctives, PINs |
+| 1 server | 1–6 | ~550 added (built: ~2,400) | ~1,300 added (built: ~3,100) | money, correctives, PINs |
 | 2 till, dashboard words | 7–14 | ~950 added, ~300 changed | ~1,600 added or rewritten | money, PINs |
 | 3 till | 15 | ~2,000 removed | ~3,000 removed | none new |
 
@@ -951,7 +979,8 @@ window, the messages and the guides change together. A1564 (custom item) edits
 - **I3** (the window could not open on a refused receipt): any refusal falls back to `gross`; Task 1.
 - **I4**: `carryNewTenderRefund`, `requireEconomicWrite`, `assertRequestDevice`; dish-only clock test.
 - **I5**: a correction opens in the same transaction as its leg and is discarded if the leg fails;
-  `rest` stated as kept on one till (5.3); Task 5.
+  `rest` stated as kept on one till (5.3); Task 5. Limit: a leg the card company leaves pending and
+  the background recovery later marks failed leaves its correction open, as Correct invoice does.
 - **I6** (D10 broke "what is filed does not change"): one correction, the rest under way (5.2 step 7).
 - **I7**: section 7 and the task files gained the listed tests and the dashboard alerts.
 - **I8**: cases 6 and 10 added; the never-a-wait list completed; the voided row's stand-in noted; the
@@ -960,7 +989,7 @@ window, the messages and the guides change together. A1564 (custom item) edits
 - **I10**: D9 now keeps today's rule (Q2).
 - **Minor:** decisions numbered in one table; section 4's rows are "Case n" and the watcher's
   questions "Qn"; the Spanish page name; `allowedHere` from the server's own check; cash as one way;
-  `refusal` in the answer; one PIN per part on a card reader; the route supplies `expectedSplit`; the
+  `refusal` in the answer; one PIN, checked once, on a card reader too (5.4); the route supplies `expectedSplit`; the
   checking-records path; section 3's way 3; why the accountant column; previews on the old triggers.
 
 Not folded: none. The read's size note on PR 3 is taken (about 5,000 lines in the two windows and

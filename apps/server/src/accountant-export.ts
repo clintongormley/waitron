@@ -95,6 +95,10 @@ export interface RefundWithoutCorrective {
   authorizedBy: string;
   saleId: string;
   invoiceNumber: string;
+  /** The customer the refunded invoice names; each absent where the invoice has none (a simplified
+   * ticket has neither). */
+  customerName?: string;
+  customerTaxId?: string;
   /** On a part payment's ticket, the table's ticket that took it off. */
   takenOffBy: string | null;
   /** The refund's share of each VAT rate of the ticket, as {@link refundVatShares} divides it. */
@@ -389,6 +393,8 @@ export async function renderAccountantWorkbook(
         refund.authorizedBy,
         refund.saleId,
         refund.invoiceNumber,
+        refund.customerName ?? null,
+        refund.customerTaxId ?? null,
         refund.takenOffBy,
         vat === null ? null : numeric(vat.rate),
         vat === null ? null : numeric(vat.base),
@@ -603,6 +609,8 @@ export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: 
       saleId: sql<string>`${refunds.saleId}`,
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
+      customerName: sales.counterpartyLegalName,
+      customerTaxId: sales.counterpartyTaxId,
       vatBreakdown: sales.vatBreakdown,
     })
     .from(sql`${refunds} indexed by refunds_completed_at_idx`)
@@ -635,15 +643,19 @@ async function listRefundsWithoutCorrective(
 ): Promise<RefundWithoutCorrective[]> {
   const rows = await refundsWithoutCorrectiveQuery(tx, window);
   const takenOff = await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]);
-  return rows.map(({ applied, tip, code, number, vatBreakdown, ...row }) => {
-    const amount = centsToDecimal(applied);
-    return {
-      ...row,
-      amount,
-      tip: centsToDecimal(tip),
-      invoiceNumber: formatInvoiceNumber(code, number),
-      takenOffBy: takenOff.get(row.saleId)?.invoiceNumber ?? null,
-      vat: refundVatShares(amount, vatBreakdown),
-    };
-  });
+  return rows.map(
+    ({ applied, tip, code, number, customerName, customerTaxId, vatBreakdown, ...row }) => {
+      const amount = centsToDecimal(applied);
+      return {
+        ...row,
+        amount,
+        tip: centsToDecimal(tip),
+        invoiceNumber: formatInvoiceNumber(code, number),
+        ...(customerName === null || customerName === "" ? {} : { customerName }),
+        ...(customerTaxId === null || customerTaxId === "" ? {} : { customerTaxId }),
+        takenOffBy: takenOff.get(row.saleId)?.invoiceNumber ?? null,
+        vat: refundVatShares(amount, vatBreakdown),
+      };
+    },
+  );
 }

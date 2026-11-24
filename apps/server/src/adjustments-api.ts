@@ -311,10 +311,19 @@ export function mountAdjustmentsApi(
   app.get("/api/adjustment-approvers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const permission = requireApproverPermission(c.req.query("permission"));
-      const approvers = await withTransaction(deps.db, (tx) =>
-        listActivePersonsWithPermission(tx, permission),
-      );
+      const asked = c.req.queries("permission") ?? [undefined];
+      const permissions = [...new Set(asked.map(requireApproverPermission))];
+      const approvers = await withTransaction(deps.db, async (tx) => {
+        const [first, ...rest] = permissions;
+        let held = await listActivePersonsWithPermission(tx, first!);
+        for (const permission of rest) {
+          const holders = new Set(
+            (await listActivePersonsWithPermission(tx, permission)).map((p) => p.personId),
+          );
+          held = held.filter((person) => holders.has(person.personId));
+        }
+        return held;
+      });
       return c.json(approvers);
     }),
   );

@@ -25,6 +25,7 @@ import {
   deviceBindingColumns,
   deviceProfileJoin,
   toDeviceBinding,
+  type DeviceBinding,
   type TenderKind,
 } from "./device-session.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
@@ -68,6 +69,37 @@ async function refundTenderKind(
     : capture.provider === MANUAL_PROVIDER
       ? "hand-keyed-card"
       : "reader-card";
+}
+
+/** Refused unless the person is still signed in on `session.deviceId`, the device is not a kitchen
+ * screen, its profile admits the person and serves every zone of `parent`'s orders. */
+export async function checkAccess(
+  tx: Transaction,
+  session: { deviceId: string; personId: string; sessionId: string },
+  parent: string | { workingOrderId: string },
+): Promise<DeviceBinding> {
+  await assertStillSignedIn(tx, session);
+  const [row] = await tx
+    .select(deviceBindingColumns)
+    .from(devices)
+    .innerJoin(deviceProfiles, deviceProfileJoin)
+    .where(and(eq(devices.id, session.deviceId), isNull(deviceProfiles.retiredAt)));
+  if (row === undefined) throw new AppError("device.unauthorized", {});
+  const device = toDeviceBinding(session.deviceId, row);
+  if (device.formFactor === "kds")
+    throw new AppError("device.forbidden_action", { action: "refund" });
+  if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+    throw new AppError("device_profile.not_admitted", {});
+  const orderIds =
+    typeof parent === "string"
+      ? (await resolveTransactionScope(tx, parent)).workingOrderIds
+      : [parent.workingOrderId];
+  await assertSubjectZones(
+    tx,
+    device.deviceProfileId,
+    orderIds.map((orderId) => ({ orderId })),
+  );
+  return device;
 }
 
 export async function withRefundPinCheck<T>(
@@ -127,27 +159,14 @@ export async function withTenderRefundAuthorization<T>(
     (await refundTenderKind(db, saleId, request.tenderId)) === "hand-keyed-card";
   return withRefundPinCheck(db, operator, request.override, confirmsManual, (checked) =>
     withTransaction(db, async (tx) => {
-      await assertStillSignedIn(tx, {
-        deviceId: cfg.origin.deviceId,
-        personId: operator.personId,
-        sessionId: operator.sessionId,
-      });
-      const [row] = await tx
-        .select(deviceBindingColumns)
-        .from(devices)
-        .innerJoin(deviceProfiles, deviceProfileJoin)
-        .where(and(eq(devices.id, cfg.origin.deviceId), isNull(deviceProfiles.retiredAt)));
-      if (row === undefined) throw new AppError("device.unauthorized", {});
-      const device = toDeviceBinding(cfg.origin.deviceId, row);
-      if (device.formFactor === "kds")
-        throw new AppError("device.forbidden_action", { action: "refund" });
-      if (!(await canUseDeviceProfile(tx, device.deviceProfileId, operator.personId)))
-        throw new AppError("device_profile.not_admitted", {});
-      const scope = await resolveTransactionScope(tx, saleId);
-      await assertSubjectZones(
+      const device = await checkAccess(
         tx,
-        device.deviceProfileId,
-        scope.workingOrderIds.map((orderId) => ({ orderId })),
+        {
+          deviceId: cfg.origin.deviceId,
+          personId: operator.personId,
+          sessionId: operator.sessionId,
+        },
+        saleId,
       );
       const kind = await refundTenderKind(tx, saleId, request.tenderId);
       if (kind === undefined)

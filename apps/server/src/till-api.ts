@@ -255,6 +255,7 @@ import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { mountFindBillApi } from "./find-bill-api.js";
 import { mountTransactionReceiptApi } from "./transaction-receipt-api.js";
 import { mountTenderRefundApi } from "./tender-refund-api.js";
+import { mountGiveBackApi } from "./give-back-api.js";
 import { mountInvoiceCorrectionApi } from "./invoice-correction-api.js";
 import { mountDrawerApi } from "./drawer-api.js";
 import { mountDeferredCloseApi } from "./deferred-close-api.js";
@@ -1401,6 +1402,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountTransactionReceiptApi(app, deps, log, run);
   mountTenderRefundApi(app, deps, log, pinThrottle);
   mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
+  mountGiveBackApi(app, deps, log, pinThrottle);
   mountDeferredCloseApi(app, deps, log, run);
   mountDrawerApi(app, deps, log, run);
 

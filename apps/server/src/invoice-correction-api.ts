@@ -25,7 +25,8 @@ import {
 import type { Logger } from "./logger.js";
 import { withCheck } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
-import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
+import { overrideOf, pathId } from "./tender-refund-api.js";
+import { checkAccess } from "./tender-refund-authorization.js";
 import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";

@@ -595,6 +595,16 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   },
   {
     proof: "matching request (source)",
+    actions: ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"],
+    basis:
+      'Conditional on the way chosen: cash needs take-cash, a separate terminal hand-keyed-card-payment, a card reader integrated-card-payment (refused as action pay), as POST /api/transactions/:saleId/refunds checks the payment it gives back; give-back.test.ts: "refuses a profile that takes no cash, a till outside the receipt\'s zone and a kitchen screen, writing nothing", "refuses a profile that may not take hand-keyed cards, writing nothing" and "refuses a profile that may not take reader cards, writing nothing, and sends once it may". The preview writes nothing but refuses the same way on the way chosen; give-back.test.ts: "refuses a preview of cash on a profile that takes no cash, writing nothing, and previews it on one that does"',
+    routes: [
+      "POST /api/transactions/:saleId/give-back",
+      "POST /api/transactions/:saleId/give-back/preview",
+    ],
+  },
+  {
+    proof: "matching request (source)",
     actions: ["print-receipt"],
     basis:
       'File now files the corrective for money its refunds already gave back; it moves no money and opens no drawer. print-receipt never refuses: the corrective\'s receipt is queued only when the profile allows print-receipt; invoice-correction-api.test.ts: "File now files the corrective but prints nothing on a till that cannot print receipts"; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
@@ -728,6 +738,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/transactions/:saleId/deliveries",
       "GET /api/transactions/:saleId/receipt-print",
       "GET /api/transactions/:saleId/refundable-tenders",
+      "GET /api/transactions/:saleId/give-back",
       "GET /api/transactions/:saleId/corrections/lines",
       "GET /api/unpaid-departure-authorizers",
       "GET /api/working-orders",

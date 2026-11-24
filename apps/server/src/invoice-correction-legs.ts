@@ -188,8 +188,12 @@ export async function openCorrectionOf(
 /** Refuses `invoice_correction.already_open` while the sale has an open correction. */
 export async function refuseWhileCorrectionOpen(tx: Transaction, saleId: string): Promise<void> {
   const correctionId = await openCorrectionOf(tx, saleId);
-  if (correctionId !== undefined)
-    throw new AppError("invoice_correction.already_open", { saleId, correctionId });
+  if (correctionId !== undefined) throw correctionOpenRefusal(saleId, correctionId);
+}
+
+/** {@link refuseWhileCorrectionOpen}'s refusal, for a caller that has read the open correction. */
+export function correctionOpenRefusal(saleId: string, correctionId: string): AppError {
+  return new AppError("invoice_correction.already_open", { saleId, correctionId });
 }
 
 export async function linkRefundToCorrection(
