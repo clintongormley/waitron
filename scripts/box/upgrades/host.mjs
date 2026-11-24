@@ -233,6 +233,7 @@ export async function createUpgradeHost({
   }
   const tags = [];
   let releaseState;
+  let identityNote = null;
   return {
     paths,
     host: {
@@ -280,12 +281,14 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
+          identityNote = await identityChangeNote(old.app, next.app, run);
           if (await appIsRunning(compose, run))
             await runOnlineTrial({
               work: trial,
               state: paths[0],
               image: next.app,
               environment: candidateConfig.services.app.environment,
+              identityNote,
               run,
             });
           else
@@ -310,6 +313,8 @@ export async function createUpgradeHost({
         await writeFileDurable(join(directory, "candidate-compose.json"), {
           compose: rawCandidate,
         });
+        if (identityNote !== null)
+          await writeFileDurable(join(directory, IDENTITY_CHANGE_FILE), identityNote);
         await stopUpgradeWriters({
           compose,
           run,
@@ -674,6 +679,43 @@ async function candidateReference(image, run) {
   return image.replace(/:[^/:]+$/, "") + "@" + descriptor.digest;
 }
 
+// Keep in step with scripts/box/release-list.mjs, which is not installed beside this file.
+const RELEASE_REF =
+  /^v(?=.{1,50}$)((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?)$/;
+const PRODUCER = "WAITRON_PRODUCER_TAX_ID=";
+// The name and shape apps/server/src/identity-change-note.ts reads.
+const IDENTITY_CHANGE_FILE = "identity-change.json";
+
+async function identityChangeNote(oldImage, nextImage, run) {
+  const configOf = async (image) =>
+    JSON.parse(
+      (await run("docker", ["image", "inspect", image, "--format", "{{json .Config}}"])).stdout,
+    );
+  // The server compares its setting trimmed (readSoftwareProducer), and otherwise exactly.
+  const producerOf = (config) =>
+    config.Env.find((entry) => entry.startsWith(PRODUCER))
+      ?.slice(PRODUCER.length)
+      .trim();
+  try {
+    const before = await configOf(oldImage);
+    const after = await configOf(nextImage);
+    const release = RELEASE_REF.exec(after.Labels["org.opencontainers.image.ref.name"])?.[1];
+    const fromProducerTaxId = producerOf(before);
+    const producerTaxId = producerOf(after);
+    if (!release || !fromProducerTaxId || !producerTaxId) return null;
+    if (producerTaxId === fromProducerTaxId) return null;
+    return { version: 1, release, producerTaxId, fromProducerTaxId };
+  } catch {
+    // Without a note the candidate refuses a changed producer, so a failed read opens nothing.
+    return null;
+  }
+}
+
+async function writeIdentityNote(stateDirectory, note) {
+  const owner = await fs.stat(stateDirectory);
+  await writeFileDurable(join(stateDirectory, IDENTITY_CHANGE_FILE), note, owner);
+}
+
 async function removeImageTag(tag, run) {
   try {
     await run("docker", ["image", "rm", tag]);
@@ -755,7 +797,7 @@ export function upgradeEnvironment(environment = {}) {
   );
 }
 
-async function runOnlineTrial({ work, state, image, environment, run }) {
+async function runOnlineTrial({ work, state, image, environment, identityNote, run }) {
   const prefix =
     "waitron-upgrade-trial-" + createHash("sha256").update(work).digest("hex").slice(0, 16);
   const started = [];
@@ -770,6 +812,8 @@ async function runOnlineTrial({ work, state, image, environment, run }) {
     const envFile = join(work, "app.env");
     await writeFileDurable(envFile, upgradeEnvironment(environment));
     for (operation of ["capture", "trial"]) {
+      if (operation === "trial" && identityNote !== null)
+        await writeIdentityNote(copy, identityNote);
       const name = `${prefix}-${operation}`;
       started.push(name);
       const mounts =

@@ -15,10 +15,13 @@ async function syncDirectory(path) {
 }
 
 // The host runtime is installed without workspace packages; this writer stays Node-only.
-export async function writeFileDurable(path, value) {
+/** With `owner`, the folder is that owner's, who may have left a link under the temporary name. */
+export async function writeFileDurable(path, value, owner) {
   const temporary = `${path}.tmp`;
-  const handle = await fs.open(temporary, "w", 0o600);
+  if (owner) await fs.rm(temporary, { force: true });
+  const handle = await fs.open(temporary, owner ? "wx" : "w", 0o600);
   try {
+    if (owner) await handle.chown(owner.uid, owner.gid);
     await handle.writeFile(typeof value === "string" ? value : JSON.stringify(value) + "\n");
     await handle.sync();
   } finally {

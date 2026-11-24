@@ -1,7 +1,18 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdtemp,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
@@ -25,6 +36,9 @@ import { PAYMENTS_MIGRATIONS } from "../../../packages/payments/src/migrations.j
 import { payments } from "../../../packages/payments/src/schema/payments.js";
 import { runUpgradeCli } from "./cli.mjs";
 import { offerTrustFixture } from "./offers.test-support.mjs";
+import { isNumberedVersion } from "../release-list.mjs";
+import { IDENTITY_CHANGE_FILE } from "../../../packages/store/src/state-layout.js";
+import { readIdentityChangeNote } from "../../../apps/server/src/identity-change-note.js";
 
 async function mountVenue(suite, boxDirectory) {
   const path = join(boxDirectory, "state", "venue", "venue.db");
@@ -424,6 +438,9 @@ async function imageFixture({
   beforeAutomaticStop,
   writers = false,
   onlineTrial,
+  imageConfigs = {},
+  onOnlineRun,
+  stoppable = Boolean(beforeAutomaticStop),
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -462,7 +479,7 @@ async function imageFixture({
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
   const resolved = new Map();
-  const shutdown = beforeAutomaticStop ? dockerFixture() : null;
+  const shutdown = stoppable ? dockerFixture() : null;
   let opened = false;
   const run = async (file, args, input, options) => {
     calls.push([file, ...args]);
@@ -476,6 +493,7 @@ async function imageFixture({
     if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
       expect(options.timeout).toBe(180_000);
       const mode = args.includes("capture") ? "capture" : "trial";
+      await onOnlineRun?.(mode, args);
       if (onlineTrial === "maxbuffer")
         throw Object.assign(new Error("output limit"), {
           killed: true,
@@ -578,6 +596,8 @@ async function imageFixture({
       };
     if (args[0] === "image" && args[1] === "inspect") {
       if (args[2] === "tunnel:dev") throw new Error("tunnel is not installed");
+      if (args.at(-1) === "{{json .Config}}" && imageConfigs[args[2]])
+        return { stdout: imageConfigs[args[2]]() };
       return {
         stdout: realCompose
           ? `sha256:${"1".repeat(64)}\n`
@@ -1400,4 +1420,235 @@ describe("the installed venue time zone", () => {
       expect(await installedVenueTimeZone(state, run)).toBe(timeZone);
     },
   );
+});
+
+describe("the note of a change of producer", () => {
+  const imageConfig = (ref, ...env) =>
+    JSON.stringify({
+      Env: ["PATH=/usr/bin", "WAITRON_PRODUCER_NAME=Producer", ...env, "NODE_ENV=production"],
+      Labels: { "org.opencontainers.image.ref.name": ref },
+    });
+  const producer = (taxId) => `WAITRON_PRODUCER_TAX_ID=${taxId}`;
+  const FROM = "B00000001";
+  const TO = "B00000002";
+  const OLD = imageConfig("v1.3.0", producer(FROM));
+  const NEXT = imageConfig("v1.4.0", producer(TO));
+  const NOTE = {
+    version: 1,
+    release: "1.4.0",
+    producerTaxId: TO,
+    fromProducerTaxId: FROM,
+  };
+
+  async function upgrade({ old = OLD, next = NEXT, onRun } = {}) {
+    const seen = {};
+    const t = await imageFixture({
+      prepare: false,
+      onlineTrial: "pass",
+      stoppable: true,
+      imageConfigs: {
+        // The id this fixture gives the image of any running container.
+        "sha256:running-tunnel": typeof old === "function" ? old : () => old,
+        "sha256:app:new": typeof next === "function" ? next : () => next,
+      },
+      onOnlineRun: async (mode, args) => {
+        const copy = args
+          .find((arg) => arg.startsWith("type=bind,") && !arg.endsWith(",readonly"))
+          .match(/src=([^,]+),/)[1];
+        await onRun?.(mode, copy);
+        seen[mode] = {
+          args,
+          environment: await readFile(args[args.indexOf("--env-file") + 1], "utf8"),
+          names: await readdir(copy),
+        };
+        if (mode === "capture" || !seen[mode].names.includes(IDENTITY_CHANGE_FILE)) return;
+        const path = join(copy, IDENTITY_CHANGE_FILE);
+        const entry = await lstat(path);
+        seen[mode].note = JSON.parse(await readFile(path, "utf8"));
+        seen[mode].read = await readIdentityChangeNote(copy);
+        seen[mode].regularFile = entry.isFile();
+        seen[mode].mode = entry.mode & 0o777;
+        seen[mode].owner = { uid: entry.uid, gid: entry.gid };
+        const folder = await stat(copy);
+        seen[mode].folder = { uid: folder.uid, gid: folder.gid };
+      },
+    });
+    const images = await t.f.host.prepareImages();
+    await mkdir(t.directory, { recursive: true });
+    await t.f.host.stop();
+    onTestFinished(() => t.f.host.resume(images.old));
+    return { ...t, images, seen };
+  }
+
+  it("gives a release by another producer the note, in the trial's copy and the attempt", async () => {
+    const t = await upgrade();
+    expect(t.seen.capture.names).toEqual([]);
+    expect(t.seen.trial.note).toEqual(NOTE);
+    expect(t.seen.trial.read).toEqual({
+      release: "1.4.0",
+      producerTaxId: TO,
+      fromProducerTaxId: FROM,
+    });
+    expect(JSON.parse(await readFile(join(t.directory, IDENTITY_CHANGE_FILE), "utf8"))).toEqual(
+      NOTE,
+    );
+    expect(await readIdentityChangeNote(t.directory)).toEqual(t.seen.trial.read);
+    expect(await readdir(join(t.root, "state"))).not.toContain(IDENTITY_CHANGE_FILE);
+    expect((await readdir(t.directory)).sort()).toEqual([
+      "candidate-compose.json",
+      IDENTITY_CHANGE_FILE,
+    ]);
+  });
+
+  it("reads the producers from the two images' own configuration", async () => {
+    const t = await upgrade();
+    expect(t.calls.filter((args) => args.at(-1) === "{{json .Config}}")).toEqual(
+      [t.images.old.app, t.images.candidate.app].map((id) => [
+        "docker",
+        "image",
+        "inspect",
+        id,
+        "--format",
+        "{{json .Config}}",
+      ]),
+    );
+  });
+
+  it("gives the trial's note the copy's owner, and nobody else access", async () => {
+    const probe = await open(join(tmpdir(), "."), "r");
+    const chown = vi.spyOn(Object.getPrototypeOf(probe), "chown");
+    onTestFinished(() => chown.mockRestore());
+    await probe.close();
+    let chowned;
+    const t = await upgrade({
+      onRun: async (mode) => {
+        if (mode === "trial") chowned = [...chown.mock.calls];
+      },
+    });
+    const { trial } = t.seen;
+    expect(trial.owner).toEqual(trial.folder);
+    expect(trial.mode).toBe(0o600);
+    expect(chowned).toEqual([[trial.folder.uid, trial.folder.gid]]);
+  });
+
+  it("does not write through a link the captured copy holds under the note's names", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "upgrade-note-outside-"));
+    onTestFinished(() => rm(outside, { recursive: true, force: true }));
+    const kept = join(outside, "kept");
+    await writeFile(kept, "kept");
+    const t = await upgrade({
+      onRun: async (mode, copy) => {
+        if (mode !== "capture") return;
+        await symlink(kept, join(copy, IDENTITY_CHANGE_FILE));
+        await symlink(kept, join(copy, `${IDENTITY_CHANGE_FILE}.tmp`));
+      },
+    });
+    expect(await readFile(kept, "utf8")).toBe("kept");
+    expect(t.seen.trial.regularFile).toBe(true);
+    expect(t.seen.trial.note).toEqual(NOTE);
+    expect(t.seen.trial.names).toEqual([IDENTITY_CHANGE_FILE]);
+  });
+
+  it("keeps the trial without a network or a clock relay", async () => {
+    const { args } = (await upgrade()).seen.trial;
+    expect(args[args.indexOf("--network") + 1]).toBe("none");
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(1);
+    expect(args.some((arg) => arg.includes("/run/waitron-box"))).toBe(false);
+  });
+
+  it.each([
+    ["the same producer", { next: imageConfig("v1.4.0", producer(FROM)) }],
+    [
+      "a producer differing only in the spaces around it",
+      { next: imageConfig("v1.4.0", producer(` ${FROM} `)) },
+    ],
+    ["a candidate built from main", { next: imageConfig("main", producer(TO)) }],
+    ["a candidate whose label has no v", { next: imageConfig("1.4.0", producer(TO)) }],
+    ["a candidate from a branch named like a release", { next: imageConfig("v1.4", producer(TO)) }],
+    ["a candidate with no label", { next: imageConfig(undefined, producer(TO)) }],
+    ["a candidate with no labels", { next: JSON.stringify({ Env: [producer(TO)] }) }],
+    ["a candidate naming no producer", { next: imageConfig("v1.4.0") }],
+    ["a candidate naming an empty producer", { next: imageConfig("v1.4.0", producer("")) }],
+    ["a candidate naming a blank producer", { next: imageConfig("v1.4.0", producer("  ")) }],
+    ["an old image naming no producer", { old: imageConfig("v1.3.0") }],
+    ["an old image naming an empty producer", { old: imageConfig("v1.3.0", producer("")) }],
+    ["an old image with no environment", { old: JSON.stringify({ Env: null, Labels: null }) }],
+    ["an answer that is not JSON", { next: "not json" }],
+    ["an answer that is null", { old: "null" }],
+    [
+      "a refused inspect",
+      {
+        next: () => {
+          throw new Error("No such image");
+        },
+      },
+    ],
+  ])("writes no note for %s", async (_case, configs) => {
+    const t = await upgrade(configs);
+    expect(t.seen.trial.names).toEqual([]);
+    expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
+  });
+
+  it.each([
+    ["letter case", "b00000001"],
+    ["inner spacing", "B 00000001"],
+  ])("names a producer that differs in %s, as the running producer does", async (_case, taxId) => {
+    const t = await upgrade({ next: imageConfig("v1.4.0", producer(taxId)) });
+    expect(t.seen.trial.note).toEqual({ ...NOTE, producerTaxId: taxId });
+  });
+
+  it("names the producers as the running producer reads them, without the spaces around", async () => {
+    const t = await upgrade({
+      old: imageConfig("v1.3.0", producer(` ${FROM}`)),
+      next: imageConfig("v1.4.0", producer(`${TO} `)),
+    });
+    expect(t.seen.trial.note).toEqual(NOTE);
+  });
+
+  it.each([
+    "1.4.0",
+    "1.4.0-rc.2",
+    "0.0.1-alpha.0",
+    "01.4.0",
+    "1.4.0-dev.1",
+    "1.4.0\n",
+    "1.4.0+abc",
+    `1.4.${"1".repeat(46)}`,
+    `1.4.${"1".repeat(47)}`,
+  ])("takes %j as a release exactly as the release list does", async (version) => {
+    const t = await upgrade({ next: imageConfig(`v${version}`, producer(TO)) });
+    expect(t.seen.trial.note?.release).toBe(isNumberedVersion(version) ? version : undefined);
+  });
+
+  it("saves the note for an app already stopped, which runs no trial", async () => {
+    const t = await imageFixture({
+      prepare: false,
+      imageConfigs: { "sha256:app:old": () => OLD, "sha256:app:new": () => NEXT },
+    });
+    const images = await t.f.host.prepareImages();
+    expect(t.calls.some((args) => args.includes("trial"))).toBe(false);
+    await mkdir(t.directory, { recursive: true });
+    await t.f.host.stop();
+    await t.f.host.resume(images.old);
+    expect(await readIdentityChangeNote(t.directory)).toMatchObject({ release: "1.4.0" });
+  });
+
+  it("never puts the note in Compose, .env, an environment file or a command", async () => {
+    const t = await upgrade();
+    await t.f.host.installCandidate(t.images.candidate);
+    await t.f.host.resume(t.images.candidate);
+    expect(t.calls.some((args) => args.includes("up"))).toBe(true);
+    const written = {
+      compose: await readFile(join(t.root, "compose.yml"), "utf8"),
+      env: await readFile(join(t.root, ".env"), "utf8"),
+      saved: await readFile(join(t.directory, "candidate-compose.json"), "utf8"),
+      captureEnvironment: t.seen.capture.environment,
+      trialEnvironment: t.seen.trial.environment,
+      commands: JSON.stringify(t.calls),
+    };
+    for (const text of Object.values(written))
+      for (const word of [FROM, TO, "fromProducerTaxId", IDENTITY_CHANGE_FILE])
+        expect(text).not.toContain(word);
+    expect(written.trialEnvironment).toContain("UPGRADE_SETTING");
+  });
 });
