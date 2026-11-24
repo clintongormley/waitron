@@ -24,7 +24,8 @@ it("sends a signed conditional PUT for bytes and reopens the full file after an 
   await writeFile(file, bytes);
   let status = 200;
   let stall = false,
-    earlyClosed = false;
+    earlyClosed = false,
+    earlyBytes = 0;
   let received!: (response: ServerResponse) => void;
   const arrived = new Promise<ServerResponse>((resolve) => {
     received = resolve;
@@ -43,10 +44,14 @@ it("sends a signed conditional PUT for bytes and reopens the full file after an 
         req.headers.authorization,
       ]);
       if (status === 412 || status === 307) {
-        if (status === 412)
+        if (status === 412) {
+          req.on("data", (chunk: Buffer) => {
+            earlyBytes += chunk.length;
+          });
           req.socket.once("close", () => {
             earlyClosed = true;
           });
+        }
         res.writeHead(status, { location: "/redirect-target" }).end();
         return;
       }
@@ -85,11 +90,13 @@ it("sends a signed conditional PUT for bytes and reopens the full file after an 
     status = 412;
     await expect(uploadCloudCaptureFile(grant, file, receipt, options)).resolves.toEqual(receipt);
     await vi.waitFor(() => expect(earlyClosed).toBe(true), { timeout: 1000 });
+    expect(earlyBytes).toBeLessThan(receipt.size);
     status = 307;
     await refuse(uploadCloudCapture(grant, bytes, options));
     status = 200;
     vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
     await refuse(uploadCloudCapture(grant, bytes, { ca: certificate().caCertPem }));
+    vi.unstubAllEnvs();
     const wrongObject = { ...grant, uploadUrl: grant.uploadUrl.replace("/incoming/", "/other/") };
     await refuse(uploadCloudCapture(wrongObject, bytes, options));
     expect(requests).toEqual(

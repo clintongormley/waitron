@@ -59,20 +59,16 @@ it("uses current installation proof and renews the same capture without saving u
         signedRequest,
       ]),
     );
+    const longToken = "token".repeat(1200);
     expect(first.uploadUrl).toBe(
-      `https://storage.test/venue-one/incoming/${id}?token=${"token".repeat(1200)}`,
+      `https://storage.test/venue-one/incoming/${id}?token=${longToken}`,
     );
     const restarted = createCloudConnection(f.options);
     const retried = await restarted.reserveCapture(id);
     expect(retried.id).toBe(id);
     expect(retried.recoveryKey).toBe(first.recoveryKey);
     const afterRetry = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
-    for (const secret of [
-      first.recoveryKey,
-      '"secretAccessKey"',
-      '"sessionToken"',
-      "token".repeat(1200),
-    ])
+    for (const secret of [first.recoveryKey, '"secretAccessKey"', '"sessionToken"', longToken])
       expect(afterRetry).not.toContain(secret);
   } finally {
     await f.close();
@@ -100,12 +96,13 @@ it("falls back once on the exact reservation refusal from older Cloud versions",
       },
     });
     expect(sent(id)).toEqual([signedRequest, "{}"]);
-    for (const patch of [
-      { credentials: { accessKeyId: "x", secretAccessKey: "y" } },
-      { uploadUrl: `https://storage.test/venue-one/incoming/${id}?token=x` },
-    ]) {
+    const mixedId = randomUUID();
+    for (const [id, patch] of [
+      [randomUUID(), { credentials: { accessKeyId: "x", secretAccessKey: "y" } }],
+      [mixedId, { uploadUrl: `https://storage.test/venue-one/incoming/${mixedId}?token=x` }],
+    ] as const) {
       legacyPatch = patch;
-      await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+      await expect(f.client.reserveCapture(id)).rejects.toMatchObject({
         code: "cloud.unavailable",
       });
     }
