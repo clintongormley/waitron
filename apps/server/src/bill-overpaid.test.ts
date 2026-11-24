@@ -123,8 +123,8 @@ async function overpaidBill(
   return { billId, partyId: party.partyId, paymentId, paymentIds };
 }
 
-/** One Croquettes of line 1, 10.00, paid for in cash on a bill of its own. */
-async function payForCroquettes(partyId: string, billId: string) {
+/** One Croquettes of line `lineNo`, 10.00, paid for in cash on a bill of its own. */
+async function payForCroquettes(partyId: string, billId: string, lineNo = 1) {
   const paid = await send(
     venue.app,
     venue.cookie,
@@ -132,7 +132,7 @@ async function payForCroquettes(partyId: string, billId: string) {
     `/api/working-orders/${billId}/item-payments`,
     {
       submissionId: randomUUID(),
-      picks: [{ lineId: lineIdOf(billId, 1), quantity: "1" }],
+      picks: [{ lineId: lineIdOf(billId, lineNo), quantity: "1" }],
       partyId,
       expectedPartyRevision: await partyRevisionOf(venue, billId),
       expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, billId))],
@@ -204,13 +204,14 @@ async function paymentOf(paymentId: string) {
   return { applied: centsToDecimal(row!.applied), tip: centsToDecimal(row!.tip) };
 }
 
-function keepAsTip(billId: string, submissionId = randomUUID()) {
+/** Keep as tip, as a till showing the bill paid `overpaid` over its total asks for it. */
+function keepAsTip(billId: string, overpaid: string, submissionId = randomUUID()) {
   return send(
     venue.app,
     venue.cookie,
     "POST",
     `/api/working-orders/${billId}/overpaid/keep-as-tip`,
-    { submissionId },
+    { submissionId, overpaid },
   );
 }
 
@@ -280,11 +281,11 @@ describe("A1515 a bill left owing less than it was paid", () => {
     const { billId, paymentId } = await overpaidBill();
 
     const submissionId = randomUUID();
-    const kept = await keepAsTip(billId, submissionId);
+    const kept = await keepAsTip(billId, "5.00", submissionId);
 
     expect(kept.status, JSON.stringify(kept.json)).toBe(200);
     expect(kept.json).toMatchObject({ status: "settled", overpaid: "0.00" });
-    const again = await keepAsTip(billId, submissionId);
+    const again = await keepAsTip(billId, "5.00", submissionId);
     expect(again.status).toBe(409);
     expect(await paymentOf(paymentId)).toEqual({ applied: "10.00", tip: "5.00" });
     expect(await statusOf(venue, billId)).toBe("settled");
@@ -314,7 +315,7 @@ describe("A1515 a bill left owing less than it was paid", () => {
         venue.db.all<{ n: number }>(sql`select count(*) as n from print_jobs`)[0]!.n;
       const before = jobs();
       await printingReceipts(printsReceipts, async () => {
-        const kept = await keepAsTip(billId);
+        const kept = await keepAsTip(billId, "5.00");
 
         expect(kept.status, JSON.stringify(kept.json)).toBe(200);
         expect(await invoicesOf(billId)).toEqual(["10.00"]);
@@ -338,7 +339,7 @@ describe("A1515 a bill left owing less than it was paid", () => {
     const [older, newer] = paymentIds;
     expect((await giveBack(billId, newer!, "2.00")).status).toBe(200);
 
-    const kept = await keepAsTip(billId);
+    const kept = await keepAsTip(billId, "3.00");
 
     expect(kept.status, JSON.stringify(kept.json)).toBe(200);
     expect(await paymentOf(newer!)).toEqual({ applied: "2.00", tip: "1.00" });
@@ -528,7 +529,7 @@ describe("A1515 a bill left owing less than it was paid", () => {
     await payForCroquettes(party.partyId, billId);
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
 
-    const kept = await keepAsTip(billId);
+    const kept = await keepAsTip(billId, "5.00");
 
     expect(kept.status, JSON.stringify(kept.json)).toBe(200);
     expect(await paymentOf(itemsId)).toEqual({ applied: "10.00", tip: "0.00" });
@@ -619,7 +620,7 @@ describe("A1515 a bill left owing less than it was paid", () => {
     const { billId, paymentId } = await overpaidBill();
     await setTipsForTest(venue.db, false);
     try {
-      const kept = await keepAsTip(billId);
+      const kept = await keepAsTip(billId, "5.00");
 
       expect(kept).toEqual({
         status: 409,
@@ -638,7 +639,7 @@ describe("A1515 a bill left owing less than it was paid", () => {
       sql`select id from bill_payments where working_order_id = ${billId}`,
     );
 
-    const kept = await keepAsTip(billId);
+    const kept = await keepAsTip(billId, "15.00");
 
     expect(kept).toEqual({
       status: 409,
@@ -666,12 +667,66 @@ describe("A1515 a bill left owing less than it was paid", () => {
     const party = await seatedWith(venue, "Croquettes", "Croquettes");
     await take(party.tabId, "cash", "15.00");
 
-    const kept = await keepAsTip(party.tabId);
+    const kept = await keepAsTip(party.tabId, "5.00");
 
     expect(kept).toEqual({
       status: 409,
       json: { code: "bill.not_overpaid", params: { workingOrderId: party.tabId } },
     });
+  });
+
+  it("keep as tip is refused, writing nothing, when the bill is paid over its total by more than the till showed", async () => {
+    const { billId, partyId, paymentId } = await overpaidBill("cash", true);
+    expect(await balanceOf(billId)).toMatchObject({ total: "13.00", overpaid: "5.00" });
+    await payForCroquettes(partyId, billId, 2);
+    expect(await balanceOf(billId)).toMatchObject({ total: "3.00", overpaid: "15.00" });
+
+    const stale = await keepAsTip(billId, "5.00");
+
+    expect(stale).toEqual({
+      status: 409,
+      json: {
+        code: "bill.overpaid_changed",
+        params: { workingOrderId: billId, overpaid: "15.00" },
+      },
+    });
+    expect(await paymentOf(paymentId)).toEqual({ applied: "18.00", tip: "0.00" });
+    expect(await balanceOf(billId)).toMatchObject({ status: "open", overpaid: "15.00" });
+    expect(await invoicesOf(billId)).toEqual([]);
+    const kepts = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(activityLog)
+        .where(
+          and(eq(activityLog.kind, "bill.overpaid_kept_as_tip"), eq(activityLog.subjectId, billId)),
+        ),
+    );
+    expect(kepts).toEqual([]);
+
+    const confirmed = await keepAsTip(billId, "15.00");
+
+    expect(confirmed.status, JSON.stringify(confirmed.json)).toBe(200);
+    expect(await paymentOf(paymentId)).toEqual({ applied: "3.00", tip: "15.00" });
+    expect(await invoicesOf(billId)).toEqual(["3.00"]);
+  });
+
+  it("keep as tip that names no amount is refused, and writes nothing", async () => {
+    const { billId, paymentId } = await overpaidBill();
+
+    const kept = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/overpaid/keep-as-tip`,
+      { submissionId: randomUUID() },
+    );
+
+    expect(kept.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "overpaid" },
+    });
+    expect(await paymentOf(paymentId)).toEqual({ applied: "15.00", tip: "0.00" });
+    expect(await invoicesOf(billId)).toEqual([]);
   });
 
   it("a card give-back completed by a recovery pass a day later files the day the payments were taken", async () => {

@@ -765,7 +765,7 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
     expect(seen[0]!.composed).toBe(true);
   });
 
-  it("Keep as tip asks for the excess to be kept", async () => {
+  it("Keep as tip asks for the excess it shows to be kept", async () => {
     const el = await mountScreen({
       bills: [overpaidBill],
       billBalance: overpaidBalance,
@@ -775,7 +775,7 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
 
     await press(el, "[data-keep-as-tip]");
 
-    expect(asked).toHaveLength(1);
+    expect(asked).toEqual([{ overpaid: "5.00" }]);
   });
 
   it("Keep as tip is quiet while it is out", async () => {

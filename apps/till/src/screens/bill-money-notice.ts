@@ -23,7 +23,7 @@ export interface OverpaidNotice {
   /** A Keep as tip is unanswered: both choices wait for it. */
   busy: boolean;
   onGiveBack: (excess: string) => void;
-  onKeepAsTip: () => void;
+  onKeepAsTip: (excess: string) => void;
 }
 
 /** What the bill was paid over its total, with Give back and, while the venue takes tips, Keep as
@@ -50,7 +50,7 @@ export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof 
               size="sm"
               data-keep-as-tip
               ?disabled=${notice.busy}
-              @click=${() => notice.onKeepAsTip()}
+              @click=${() => notice.onKeepAsTip(excess)}
               >${fill(t("table.keep_as_tip"), { amount })}</wt-button
             >`
           : nothing

@@ -925,6 +925,7 @@ const TABLE_REFUSALS = new Set([
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "bill.not_overpaid",
+  "bill.overpaid_changed",
   "bill.tip_not_allowed_on_excess",
   "bill.tip_needs_a_sale",
   "working_order.not_open",
@@ -22797,8 +22798,8 @@ export class TillApp extends LitElement {
   }
 
   /** The server records no submission, so each tap sends a new id and a lost answer is never sent
-   * again; the bill is read again whatever the answer. */
-  async #onKeepAsTip(): Promise<void> {
+   * again; the bill is read again whatever the answer, so a changed `overpaid` shows its new amount. */
+  async #onKeepAsTip(overpaid: string): Promise<void> {
     const billId = this.activeTabId;
     if (billId === undefined) return;
     const visit = this.#orderVisit;
@@ -22807,7 +22808,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     let kept: BillBalance | undefined;
     try {
-      kept = await this.api.keepOverpaidAsTip(billId, crypto.randomUUID(), {
+      kept = await this.api.keepOverpaidAsTip(billId, crypto.randomUUID(), overpaid, {
         signal: limit.signal,
       });
     } catch (error) {
@@ -25400,7 +25401,8 @@ export class TillApp extends LitElement {
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
         @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
-        @keep-as-tip=${() => void this.#onKeepAsTip()}
+        @keep-as-tip=${(event: CustomEvent<{ overpaid: string }>) =>
+          void this.#onKeepAsTip(event.detail.overpaid)}
         @dining-change=${(event: CustomEvent<{ dining: Dining }>) => void this.#onDiningChange(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}

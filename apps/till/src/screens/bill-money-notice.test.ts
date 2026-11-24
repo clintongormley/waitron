@@ -40,7 +40,7 @@ function overpaid(over: Partial<OverpaidNotice> = {}) {
       tipsEnabled: true,
       busy: false,
       onGiveBack: (excess) => asked.push(`give back ${excess}`),
-      onKeepAsTip: () => asked.push("keep as tip"),
+      onKeepAsTip: (excess) => asked.push(`keep ${excess} as tip`),
       ...over,
     }),
     host,
@@ -70,7 +70,7 @@ describe("bill money notices", () => {
     expect(text(host.querySelector("[data-keep-as-tip]"))).toBe(`Keep ${money("5.00")} as tip`);
     host.querySelector<HTMLElement>("[data-give-back]")!.click();
     host.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
-    expect(asked).toEqual(["give back 5.00", "keep as tip"]);
+    expect(asked).toEqual(["give back 5.00", "keep 5.00 as tip"]);
   });
 
   it("offers only Give back while the venue takes no tips", () => {

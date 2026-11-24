@@ -609,6 +609,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has nothing paid over what it comes to.",
     es: "Esta cuenta no tiene nada pagado de más.",
   },
+  "bill.overpaid_changed": {
+    en: "What this bill was paid over its total has changed. Check the new amount and choose again.",
+    es: "Lo pagado de más en esta cuenta ha cambiado. Revisa el nuevo importe y vuelve a elegir.",
+  },
   "bill.overpaid": {
     en: "This bill has been paid more than it comes to. First give back the extra, or keep it as a tip if the bill shows Keep as tip.",
     es: "Esta cuenta se ha pagado de más. Primero devuelve lo que sobra o, si la cuenta muestra Dejar de propina, déjalo de propina.",

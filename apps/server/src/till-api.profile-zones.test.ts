@@ -1400,7 +1400,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/overpaid/keep-as-tip",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/overpaid/keep-as-tip`,
-    () => ({ submissionId: randomUUID() }),
+    () => ({ submissionId: randomUUID(), overpaid: "5.00" }),
     deliOrderZone,
   ],
   [

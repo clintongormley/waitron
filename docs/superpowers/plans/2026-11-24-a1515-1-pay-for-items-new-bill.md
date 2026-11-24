@@ -524,7 +524,10 @@ controls or the "No place" question.
   The refund window drops its PIN sentence for such an amount.
 - **PR2-D10. Keep as tip is one tap, naming the amount** ("Keep €5.00 as tip"), with a fresh
   submission id each tap: the server records none and refuses a retry once the bill is no longer
-  overpaid (`bill-overpaid.ts:56-65`). After any answer or none, the till reads the bill again.
+  overpaid (`bill-overpaid.ts:56-65`). The request carries the amount the button named, and the
+  server refuses `bill.overpaid_changed`, writing nothing, when the bill's excess is no longer that
+  amount (found by the pre-merge review: another till's payment had raised it). After any answer or
+  none, the till reads the bill again, so staff see and confirm the new amount.
 - **PR2-D11. An overpaid bill offers no Pay, and no pay-section Full invoice.** The three pay gates
   (`till-table-order-screen.ts:3299,3306,3308,3317`) also require `overpaid` to be zero; `#chargeable`
   is left alone because Move a bill uses it too (`:7111`). Full invoice stays in the table ⋮.
@@ -617,7 +620,7 @@ it changes; a check on a printed bill's items payment stays as it is.
   `{ billId, payment: BillPaymentResult }`; reader Stop keyed by the SOURCE bill's id and the
   submission id, `bill-payments-api.ts:520-525` and `:542`, so today's
   `cancelBillReaderPayment(open.billId, …)` reaches it unchanged);
-  `POST /api/working-orders/:id/overpaid/keep-as-tip` (body `{ submissionId }`, answer `BillBalance`,
+  `POST /api/working-orders/:id/overpaid/keep-as-tip` (body `{ submissionId, overpaid }`, answer `BillBalance`,
   `bill-payments-api.ts:549-570`); `BillBalance.overpaid` and `beingPaidOn`
   (`apps/server/src/bill-payments.ts:292-301`).
 - Produces in `item-payment-types.ts`:

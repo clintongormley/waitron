@@ -5217,7 +5217,7 @@ export class TillTableOrderScreen extends LitElement {
       tipsEnabled: this.tipsEnabled && this.takesPayment,
       busy: this.overpaidBusy,
       onGiveBack: (excess) => this.#dispatch("refund-excess", { excess }),
-      onKeepAsTip: () => this.#dispatch("keep-as-tip", {}),
+      onKeepAsTip: (overpaid) => this.#dispatch("keep-as-tip", { overpaid }),
     })}`;
   }
 

@@ -100,18 +100,18 @@ describe("TillApi: Pay for items", () => {
     );
   });
 
-  it("keepOverpaidAsTip POSTs the submission id under the caller's signal and answers the balance", async () => {
+  it("keepOverpaidAsTip POSTs the submission id and the amount staff saw under the caller's signal and answers the balance", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(balance));
     const signal = new AbortController().signal;
 
     await expect(
-      new TillApi("", fetchStub).keepOverpaidAsTip("wo-4", "sub-7", { signal }),
+      new TillApi("", fetchStub).keepOverpaidAsTip("wo-4", "sub-7", "5.00", { signal }),
     ).resolves.toEqual(balance);
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo-4/overpaid/keep-as-tip",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ submissionId: "sub-7" }),
+        body: JSON.stringify({ submissionId: "sub-7", overpaid: "5.00" }),
         signal,
       }),
     );

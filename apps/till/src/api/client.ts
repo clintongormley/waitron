@@ -5238,17 +5238,18 @@ export class TillApi {
     );
   }
 
-  /** Keeps what an overpaid bill took above its total as a tip →
+  /** Keeps what an overpaid bill took above its total, `overpaid` as staff saw it, as a tip →
    * `POST /api/working-orders/:id/overpaid/keep-as-tip`. */
   keepOverpaidAsTip(
     billId: string,
     submissionId: string,
+    overpaid: string,
     options: ReadOptions = {},
   ): Promise<BillBalance> {
     return this.#request(
       `/api/working-orders/${billId}/overpaid/keep-as-tip`,
       "POST",
-      { submissionId },
+      { submissionId, overpaid },
       options.signal,
     );
   }

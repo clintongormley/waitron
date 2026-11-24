@@ -559,13 +559,15 @@ export function mountBillPaymentsApi(
       await assertRequestDevice(deps, c, session);
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
-      const submissionId = submissionIdOf(asObject(await readRawJsonBody<unknown>(c)));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const submissionId = submissionIdOf(body);
+      const overpaid = decimal(moneyField(body.overpaid, "overpaid"));
       const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
       return c.json(
         await withIssuanceTransaction(
           deps.db,
           (tx) =>
-            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, {
+            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, overpaid, {
               personId: session.personId,
               sessionId: session.sessionId,
             }),

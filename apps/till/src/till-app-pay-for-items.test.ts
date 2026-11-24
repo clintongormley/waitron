@@ -857,9 +857,14 @@ describe("till-app: a bill paid more than it comes to", () => {
     await flush(el, 6);
 
     expect(keepOverpaidAsTip).toHaveBeenCalledOnce();
-    const [billId, submissionId] = keepOverpaidAsTip.mock.calls[0]! as unknown as [string, string];
+    const [billId, submissionId, overpaid] = keepOverpaidAsTip.mock.calls[0]! as unknown as [
+      string,
+      string,
+      string,
+    ];
     expect(billId).toBe("wo-4");
     expect(submissionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(overpaid).toBe("5.00");
     expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
     const row = order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]');
     expect(text(row)).toContain(t("table.bill_paid"));
@@ -904,6 +909,36 @@ describe("till-app: a bill paid more than it comes to", () => {
     expect(text(banner(el))).toContain(codeMessage("bill.not_overpaid"));
     expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
     expect(order.overpaidBusy).toBe(false);
+  });
+
+  it("Keep as tip refused because the excess changed says so and shows the new amount to confirm", async () => {
+    let balance = overpaidBalance;
+    const keepOverpaidAsTip = vi.fn<TillApi["keepOverpaidAsTip"]>(async () => {
+      balance = balanceOf({
+        total: "3.00",
+        received: "18.00",
+        outstanding: "-15.00",
+        overpaid: "15.00",
+        payments: [paymentOf({ applied: "18.00", tendered: "18.00" })],
+      });
+      throw { code: "bill.overpaid_changed", status: 409 };
+    });
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([overpaidRow]),
+      getBillBalance: vi.fn(async () => balance),
+      keepOverpaidAsTip,
+    });
+    const order = await openTable(el, ["payment.take"]);
+    await flush(el);
+    const keep = () => order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!;
+    expect(text(keep())).toContain(money("5.00"));
+
+    keep().click();
+    await flush(el, 6);
+
+    expect(keepOverpaidAsTip.mock.calls[0]![2]).toBe("5.00");
+    expect(text(banner(el))).toContain(codeMessage("bill.overpaid_changed"));
+    expect(text(keep())).toContain(money("15.00"));
   });
 
   it("Keep as tip refused on a bill that comes to nothing says why in its own words", async () => {
