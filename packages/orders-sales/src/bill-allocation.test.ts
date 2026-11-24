@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError, addDecimal, decimal, type Decimal } from "@waitron/shared";
 import {
+  cashChange,
   confirmAllocation,
   equalShare,
   previewAllocation,
@@ -521,5 +522,11 @@ describe("confirmAllocation: the applied amount and tip the operator saw must st
       }),
     );
     expect(error.code).toBe("bill.nothing_outstanding");
+  });
+});
+
+describe("cashChange", () => {
+  it("subtracts the amount applied to the bill and the tip from cash tendered", () => {
+    expect(cashChange(5000, 4000, 250)).toBe("7.50");
   });
 });

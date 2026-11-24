@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./bill-allocation.js": "./src/bill-allocation.ts",
     "./errors.js": "./src/errors.ts",
     "./find-bill-dates.js": "./src/find-bill-dates.ts",
     "./find-bill-query.js": "./src/find-bill-query.ts",
