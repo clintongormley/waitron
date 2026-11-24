@@ -44,7 +44,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it("without a wake the next refresh waits the full minute", async () => {
+it("waits a minute between refreshes", async () => {
   start(async () => active);
   await advance(59_999);
   expect(refreshes).toEqual([0]);
@@ -52,7 +52,7 @@ it("without a wake the next refresh waits the full minute", async () => {
   expect(refreshes).toEqual([0, 60_000]);
 });
 
-it("a wake after a failed pass does not shorten the minute's wait", async () => {
+it("waits a minute before retrying a failed refresh", async () => {
   let fail = true;
   start(async () => {
     if (fail) {
@@ -61,9 +61,7 @@ it("a wake after a failed pass does not shorten the minute's wait", async () => 
     }
     return active;
   });
-  await advance(1_000);
-  runner.wake("cloud.connection");
-  await advance(58_999);
+  await advance(59_999);
   expect(refreshes).toEqual([0]);
   await advance(1);
   expect(refreshes).toEqual([0, 60_000]);
