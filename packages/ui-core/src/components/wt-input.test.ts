@@ -790,6 +790,37 @@ test("a focused invalid field keeps the danger line and label", async () => {
   expect(getComputedStyle(label).color).toBe("rgb(13, 14, 15)");
 });
 
+test.each([
+  ["light", "rgb(0, 115, 146)"],
+  ["dark", "rgb(113, 207, 235)"],
+])("marks keyboard focus on an invalid field in %s", async (theme, focusColour) => {
+  const el = await mount(
+    '<wt-input label="Email" value="owner" error="Enter a valid email address"></wt-input>',
+  );
+  host.setAttribute("data-theme", theme);
+  const { field, input } = parts(el);
+  const previous = document.createElement("button");
+  host.prepend(previous);
+  previous.focus();
+  const resting = getComputedStyle(field);
+  const dangerLine = resting.boxShadow;
+  expect(resting.outlineStyle).toBe("none");
+
+  await userEvent.tab();
+
+  expect(el.shadowRoot!.activeElement).toBe(input);
+  const focused = getComputedStyle(field);
+  expect(focused.outlineStyle).toBe("solid");
+  expect(focused.outlineColor).toBe(focusColour);
+  expect(focused.boxShadow).toBe(dangerLine);
+
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(31, 117, 186)");
+  host.style.setProperty("--wt-focus-offset", "4px");
+  expect(focused.outlineWidth).toBe("3px");
+  expect(focused.outlineColor).toBe("rgb(31, 117, 186)");
+  expect(focused.outlineOffset).toBe("4px");
+});
+
 test("the value paints from the field-value token", async () => {
   const el = await mount('<wt-input label="Name" value="Ann"></wt-input>');
   host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");

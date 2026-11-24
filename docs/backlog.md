@@ -890,7 +890,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **Form implementation leftovers:** eventual summary retirement; a focused invalid field's look. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
+- **Form implementation leftovers:** eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
 
 
