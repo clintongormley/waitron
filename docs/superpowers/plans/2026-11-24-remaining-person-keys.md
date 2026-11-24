@@ -1,17 +1,36 @@
 # Finish the remaining person ID foreign keys
 
-After a fresh setup, the database should refuse to record a drawer open, invoice correction, PDF download, receipt reprint or handover against a person who is absent from the venue. Add only the eight marked keys below, under [design U11](../specs/2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas). Lane H lands this under [slice rule 6](2026-11-08-a1308-slice-rules.md#6-who-lands). The PR opens with the venue reset requirement and says earlier backups cannot be restored.
+After a fresh setup, the database should refuse to record a drawer open, invoice correction, PDF download, receipt reprint or handover against a person absent from the venue. Add only the eight marked keys below, under [design U11](../specs/2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas). Lane H lands under [slice rule 6](2026-11-08-a1308-slice-rules.md#6-who-lands). PR first line follows rule 2: “Every venue is reset: core; backups and exports from before this cannot be restored or imported.”
 
 | Schema file under `packages/db/src/schema/` | Columns that gain a key |
 | --- | --- |
+| `drawer-opens.ts` | `person_id`, `authorized_by` |
+| `handover/activations.ts` | `person_id` |
+| `invoice-corrections.ts` | `requested_by`, `authorized_by`, `ended_by` |
 | `invoice-pdf-downloads.ts` | `person_id` |
 | `receipt-reprints.ts` | `person_id` |
-| `invoice-corrections.ts` | `requested_by`, `authorized_by`, `ended_by` |
-| `handover/activations.ts` | `person_id` |
-| `drawer-opens.ts` | `person_id`, `authorized_by` |
 
-The old comments at `eed41cc3c0^` trace four tables directly to the former identity set. At `de6a10330c` invoice corrections follow bill refunds, which follow bill payments for the same reason. Core already owns `persons`, and the replacement `refunds` table has three restrictive person keys. A baseline loaded into SQLite at `bc261063ad` showed no person keys on the five marked tables and three on `refunds`. Restricting deletion also preserves the audit rows named in the old PDF and reprint comments. The separately justified fiscal certificate exception and the fiscal migration stay out of this change.
+At `eed41cc3c0^`, drawer opens and handover say `persons` is in identity's separate or optional set. PDFs and receipt reprints say “Persons belong to identity's migration set; a removed person must not erase this audit row.” Restricting deletion preserves the row, subject to the watcher's reading of the ask. At `de6a10330c` the correction comments say “Plain ids, as on bill refunds: no key yet.” Those refunds follow bill payments, whose old comment names identity's migration set. The core baseline at `bc261063ad` has no person keys on these five tables and already has three restrictive person keys on `refunds`. The unmarked `document_page_reprints` key and the separately justified fiscal certificate exception are outside the queue wording. Edits to the fiscal package are limited to affected test fixtures.
 
-1. Extend the existing `invoice-pdf-downloads.test.ts`, `receipt-reprints.test.ts`, `invoice-corrections.test.ts`, `handover/migrations.test.ts` and `drawer-opens.test.ts` schema suites. Seed real people for successful writes with `seedPerson` and keep the original assertions. In each missing-person case leave the other columns valid and assert the SQLite foreign-key refusal. Exercise `ended_by` through a permitted transition and keep the recorded-person and null paths, including automatic filing and an unassisted drawer open. Observe the new cases fail before changing the schema.
-2. Declare named keys to `persons.id` with `onDelete("restrict")`, following `refunds.ts`. Keep each column's current nullability and leave existing triggers and write paths alone. Pin the eight keys and their delete action in `scripts/schema-constraints.test.ts` and extend the handover declaration expectation. Run `pnpm --filter @waitron/server migration-baseline rebuild --set core` and remove the completed bullet in `docs/backlog/architecture.md`.
-3. Rerun the five schema suites and the schema constraints, append-only, behavioural-trigger and starting-migration guards. Compare the base and candidate protection lists and require exactly these eight additions in each venue snapshot. Follow direct writers with focused tests for drawer, reprint, PDF download, correction and controlled/emergency handover in Server and handover, including the boot repair path. Cover direct-write fixtures in DB, Core, Server, Handover and Fiscal VeriFactu, using existing people or seeding their IDs and keeping the assertions. The shared fiscal takeover fixture and the direct backup-verification fixture may need setup changes. Run `write-path.e2e.test.ts` and `inmutabilidad.test.ts` unedited, plus Server's `till-api.sell-published.test.ts` and Till's `till-app-menu-refresh.test.ts`. Expect about 50 handwritten schema lines and 120–220 test and fixture lines, plus generated core migration files.
+1. Extend the five existing schema suites (`drawer-opens.test.ts`, `handover/migrations.test.ts`, `invoice-corrections.test.ts`, `invoice-pdf-downloads.test.ts`, `receipt-reprints.test.ts`). Seed real people in their default fixtures so existing missing-sale, node, device and printer tests still isolate those keys. For each new missing-person test, keep every other value valid and assert SQLite's foreign-key refusal. Exercise `ended_by` through a permitted transition. Retain success cases, including automatic filing and an unassisted drawer open with null actors in their optional fields. Observe the new refusals fail first.
+2. Declare eight named `onDelete("restrict")` keys to `persons.id` as in `refunds.ts`. Keep nullability, triggers and application writers. Add the eight expected child/parent entries in `scripts/schema-constraints.test.ts`. Prove delete refusal in an existing schema suite and verify all eight actions with the protection list. Rebuild via `pnpm --filter @waitron/server migration-baseline rebuild --set core`. Remove the finished bullet in `docs/backlog/architecture.md`, update its index in `docs/backlog.md` and remove the old drawer example in `packages/bookings/src/bookings.test.ts`.
+3. Run the five suites and the schema constraints, append-only, behavioural-trigger and starting-migration guards. Run the Madrid baseline test. Run the affected direct writers and fixtures listed in the Claude review. Start with Server's `orders-invoice-pdf`, `invoice-print-api`, `invoice-corrections`, `handover-controlled.e2e`, `handover-activation-repair` and `return-records{,.real}` suites, Core's `record-correction.approval`, Handover's `activations` and `backup-verification`, and the fiscal `backup-verification-secrets` and shared `test/takeover-fixture.ts` consumers. The shared fixture reuses a seeded actor or uses distinct names for distinct actors. Exercise the production drawer and reprint paths and run Server's `till-api.sell-published`, Till's `till-app-menu-refresh` and the unchanged fiscal `write-path.e2e` and `inmutabilidad` suites. Expect about 50 handwritten schema lines and 150–250 test and fixture lines, plus the generated core files.
+
+## Assertions that change, by design
+
+The handover migration test adds the actor key to its exact declaration expectation. `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` adds the new keys for drawer opens, PDF downloads and receipt reprints to its post-move projection via `personKey`, in the order a real run shows. Keep the frozen captures and existing behaviour assertions.
+
+## Expected protection-list difference
+
+Run the base and candidate lists per slice rule 3. These are the only additions under each of the six venue headers, from U11. Each key reports a restrictive delete action.
+
+```text
+extra table drawer_opens.foreignKeys[authorized_by->persons(id)]
+extra table drawer_opens.foreignKeys[person_id->persons(id)]
+extra table handover_activations.foreignKeys[person_id->persons(id)]
+extra table invoice_corrections.foreignKeys[authorized_by->persons(id)]
+extra table invoice_corrections.foreignKeys[ended_by->persons(id)]
+extra table invoice_corrections.foreignKeys[requested_by->persons(id)]
+extra table invoice_pdf_downloads.foreignKeys[person_id->persons(id)]
+extra table receipt_reprints.foreignKeys[person_id->persons(id)]
+```
