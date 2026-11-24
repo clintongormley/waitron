@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { CanonicalValue } from "@waitron/membership";
 import { MalformedHoldingsError } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { archiveTo, openBackupQuery, type BackupQuery } from "@waitron/store";
+import { archiveTo, openBackupQuery, type BackupQuery, type BackupValue } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { fiscalHoldings } from "./handover-holdings.js";
@@ -272,5 +272,35 @@ describe("otherChainsToReturn", () => {
     await append(earlier, 1);
 
     await expect(others({ holdings: [] })).rejects.toBeInstanceOf(MalformedHoldingsError);
+  });
+
+  it("compares only other boxes' chains with the main box's summary", async () => {
+    const sender = await seedNode(suite.db, "Sender");
+    const main = await seedNode(suite.db, "Main");
+    const earlier = await seedNode(suite.db, "Earlier");
+    await append(sender, 1);
+    await append(main, 101);
+    await append(earlier, 201);
+    const holdings = await reading(await copy(), fiscalHoldings);
+    await append(sender, 2);
+    await append(earlier, 202);
+    const compared: BackupValue[] = [];
+
+    const ranges = await reading(await copy(), (query) =>
+      otherChainsToReturn(
+        {
+          rows: (text, values) => {
+            if (text.includes("secuencia <= ?")) compared.push(values![0]!);
+            return query.rows(text, values);
+          },
+        },
+        holdings as unknown as CanonicalValue,
+        sender.nodeId,
+        main.nodeId,
+      ),
+    );
+
+    expect(ranges).toEqual([{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 1 }]);
+    expect(compared).toEqual([earlier.nodeId]);
   });
 });

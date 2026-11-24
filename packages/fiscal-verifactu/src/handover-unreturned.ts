@@ -30,16 +30,19 @@ async function matchesThrough(query: BackupQuery, held: ChainHolding): Promise<b
 type PastMain = { readonly head: ChainHead; readonly whole: boolean; readonly after: number };
 
 /**
- * Each chain in this database with records after the main box's last matching record. A chain
- * whose summary does not match is yielded whole under `"whole"`, and left out under `"skip"`.
+ * Each chain in this database, other than those of the boxes in `skipped`, with records after the
+ * main box's last matching record. A chain whose summary does not match is yielded whole under
+ * `"whole"`, and left out under `"skip"`.
  */
 async function* chainsPastMain(
   query: BackupQuery,
   held: readonly ChainHolding[],
   onMismatch: "whole" | "skip",
+  skipped: ReadonlySet<string> = new Set(),
 ): AsyncGenerator<PastMain> {
   const main = new Map(held.map((h) => [`${h.nodeId}\n${h.sifId}`, h]));
   for await (const head of chainHeads(query)) {
+    if (skipped.has(head.nodeId)) continue;
     const holding = main.get(`${head.nodeId}\n${head.sifId}`);
     const mismatch = holding !== undefined && !(await matchesThrough(query, holding));
     if (mismatch && onMismatch === "skip") continue;
@@ -107,9 +110,12 @@ export async function otherChainsToReturn(
   destinationNodeId: string,
 ): Promise<ChainRange[]> {
   const ranges: ChainRange[] = [];
-  for await (const { head, after } of chainsPastMain(query, readHoldings(mainHoldings), "skip")) {
-    if (head.nodeId === sourceNodeId || head.nodeId === destinationNodeId) continue;
+  for await (const { head, after } of chainsPastMain(
+    query,
+    readHoldings(mainHoldings),
+    "skip",
+    new Set([sourceNodeId, destinationNodeId]),
+  ))
     ranges.push({ nodeId: head.nodeId, sifId: head.sifId, after });
-  }
   return ranges;
 }
