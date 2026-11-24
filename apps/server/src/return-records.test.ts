@@ -2291,6 +2291,47 @@ it("with no main box in its chart and its own records confirmed, answers waiting
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it("reads earlier boxes' records again only when the main box's summary changes", async () => {
+  const sleep = vi
+    .spyOn(loop, "realSleep")
+    .mockImplementation(
+      (_ms, signal) =>
+        new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve())),
+    );
+  const receive = receiveByPart(async () => false);
+  let summary = heard("lacks");
+  let reads = 0;
+  const app = destination();
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: twoParts((held) => {
+      reads++;
+      return earlierTail(held);
+    }),
+    mainHoldings: () => summary,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch: async (url, init) => app.request(String(url), init),
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("needs-attention"));
+    // Heard again with the same contents, as the wipe-order check does every 30 seconds.
+    summary = heard("lacks");
+    expect(await duty.passNow()).toBe("needs-attention");
+    expect(reads).toBe(1);
+    summary = heard("holds");
+    expect(await duty.passNow()).toBe("confirmed");
+    expect(reads).toBe(2);
+  } finally {
+    await duty.stop();
+    receive.restore();
+    sleep.mockRestore();
+  }
+});
+
 it("a second-part batch is not recorded as a return batch and moves no handover step", async () => {
   await completionBinding();
   const app = destination();

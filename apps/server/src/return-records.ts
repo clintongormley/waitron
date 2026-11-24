@@ -60,6 +60,8 @@ type PassDeps = ReturnRecordsDeps & {
   stopped(): boolean;
   /** The main box's summary the wipe-order check last heard. */
   mainHoldings?: () => HeardHoldings | null;
+  /** The earlier boxes' batches the duty last read, and what they were read for. */
+  othersRead?: { key?: string; batches?: Batch[] | null };
 };
 
 export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState> {
@@ -136,6 +138,21 @@ async function readOtherBoxesBatches(
   destinationNodeId: string | undefined,
 ): Promise<Batch[] | null> {
   const heard = destinationNodeId === undefined ? null : (deps.mainHoldings?.() ?? null);
+  // A restricted box writes no venue data (`restricted-start.ts`), so the same main box and summary
+  // pick the same batches; the summary is heard afresh every 30 seconds, mostly unchanged.
+  const key = canonicalize([destinationNodeId ?? null, heard?.holdings ?? null]);
+  const kept = deps.othersRead;
+  if (kept?.key === key) return kept.batches!;
+  const batches = await packOtherBoxesBatches(deps, destinationNodeId, heard);
+  if (kept) Object.assign(kept, { key, batches });
+  return batches;
+}
+
+async function packOtherBoxesBatches(
+  deps: PassDeps,
+  destinationNodeId: string | undefined,
+  heard: HeardHoldings | null,
+): Promise<Batch[] | null> {
   const batches: Batch[] = [];
   for (const module of deps.modules) {
     const seat = module.handover?.returnRecords;
@@ -304,6 +321,7 @@ export function startReturnRecordsDuty(
 ): { state(): ReturnState; passNow(): Promise<ReturnState>; stop(): Promise<void> } {
   const stopping = new AbortController();
   let state: ReturnState = "waiting";
+  const othersRead = {};
   // A main box that stays out of reach, or earlier boxes' records that cannot be read, is logged
   // once, and again only when the cause changes.
   let lastRepeated = new Map<string, string>();
@@ -325,6 +343,7 @@ export function startReturnRecordsDuty(
         state = await runReturnRecordsPass({
           ...deps,
           log,
+          othersRead,
           stopped: () => stopping.signal.aborted,
         });
       } catch (error) {
