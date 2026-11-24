@@ -59,7 +59,7 @@ describe("set-menu placement", () => {
     ).toEqual({ cost: 3000, uncovered: 3, flows: [[]], capacityPrices: [0] });
   });
 
-  it("compares a place with each dish's own à la carte charge", () => {
+  it("compares menu placement with each dish's individual price", () => {
     expect(
       solvePlacement({
         capacities: [1],

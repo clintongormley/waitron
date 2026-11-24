@@ -75,7 +75,7 @@ function expectWithinHalfSecond(start: number) {
   }
 }
 
-it("selects a partly filled menu and leaves an expensive supplement à la carte", () => {
+it("selects a partly filled menu and charges separately for a dish with an expensive supplement", () => {
   const dishes = [
     dish("soup", "starter", 900),
     dish("hake", "main", 900),
@@ -355,7 +355,7 @@ it("keeps the cheaper complete bill found before the discount search reaches its
       { id: "three", offerId: "lunch", kind: "percent", basisPoints: 7500 },
     ] as const,
   };
-  // Two dishes cost 3¢ à la carte. The discounted menus cost 0¢ and 1¢.
+  // Two dishes cost 3¢ at their individual prices. The discounted menus cost 0¢ and 1¢.
   expect(group(input).totalCents).toBe(4);
 });
 
@@ -711,7 +711,7 @@ it.each([
   expect(repeat.dishes).toEqual(result.dishes);
 });
 
-it("can leave a cheap dish à la carte when one fixed discount covers only one supplement", () => {
+it("charges separately for a cheap dish when one fixed discount covers only one supplement", () => {
   const large = table(40, 5);
   const starter = dish("starter", "starter", 220);
   const main = dish("main", "main", 40);
