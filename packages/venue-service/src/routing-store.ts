@@ -17,6 +17,7 @@ import {
   documentOffers,
   documentSetMenuOffers,
   effectiveProductColumns,
+  notCustomItem,
   parentJoin,
   parentProducts,
   productWithId,
@@ -268,7 +269,7 @@ function rowProductIds(
   return covered;
 }
 
-/** Every active product, or only `routedId`'s own row and its variants'. */
+/** Every active product but the hidden ones behind a custom item, or only `routedId`'s own row and its variants'. */
 function activeProducts(tx: Transaction, routedId?: string) {
   return tx
     .select({
@@ -283,6 +284,7 @@ function activeProducts(tx: Transaction, routedId?: string) {
     .where(
       and(
         eq(products.active, true),
+        notCustomItem,
         routedId === undefined
           ? undefined
           : or(eq(products.id, routedId), eq(products.parentId, routedId)),
@@ -1058,7 +1060,7 @@ export async function routingModel(
   const gridProducts = await tx
     .select({ id: products.id, name: products.name, categoryId: products.categoryId })
     .from(products)
-    .where(and(eq(products.active, true), isNull(products.parentId)))
+    .where(and(eq(products.active, true), isNull(products.parentId), notCustomItem))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
   const periods = options.periods === false ? [] : await readRoutingPeriods(tx, cutover);

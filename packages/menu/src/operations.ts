@@ -34,6 +34,7 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
+import { notCustomItem } from "./custom-item-products.js";
 import { readDefaultProductVatClass, readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
@@ -1070,7 +1071,7 @@ export async function listProducts(tx: Transaction): Promise<Product[]> {
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
-    .where(isTopLevelProduct)
+    .where(and(isTopLevelProduct, notCustomItem))
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
@@ -1334,6 +1335,7 @@ export async function listAvailableProducts(
         // A variant is sold only through its parent's menu offer, never as a product in its own
         // right: sold from here it would be filed under its own names as if it had no parent.
         isTopLevelProduct,
+        notCustomItem,
       ),
     )
     .orderBy(products.createdAt, products.id);

@@ -45,6 +45,7 @@ import {
   addSetMenuDishes,
   createOptionList,
   createProduct,
+  customItemProduct,
   updateProduct,
   createSectionIn,
   listExtraLists,
@@ -114,6 +115,7 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   customThemes,
   products,
+  productTakeawayVatRates,
   sales,
   withTransaction,
   type Transaction,
@@ -4733,6 +4735,53 @@ it("counts an exported product with no Active flag as Active, as the column stor
     select count(*) as count from taxpayer where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
+});
+
+it("leaves the hidden products behind a custom item and their takeaway rates out of an export, which imports", async () => {
+  const source = await applyVenue(planVenue(venue("B42424241"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const ids = await withTransaction(suite.db, async (tx) => {
+    const water = await createProduct(tx, {
+      categoryId: null,
+      name: "Water",
+      unitId: null,
+      unitPrice: "1.00",
+    });
+    return {
+      water: water.id,
+      hidden: [await customItemProduct(tx, 2100), await customItemProduct(tx, null)],
+    };
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-11-24T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.products!.map((row) => row.id)).toEqual([ids.water]);
+  expect(transferred.tables.product_takeaway_vat_rates!.map((row) => row.product_id)).toEqual([
+    ids.water,
+  ]);
+  for (const id of ids.hidden) expect(JSON.stringify(transferred)).not.toContain(id);
+
+  await applyVenue(planVenue(venue("B42424242"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({
+      name: products.name,
+      key: products.customItemKey,
+      rate: productTakeawayVatRates.rate,
+    })
+    .from(products)
+    .leftJoin(productTakeawayVatRates, eq(productTakeawayVatRates.productId, products.id));
+  expect(imported).toEqual([{ name: "Water", key: null, rate: 1000 }]);
 });
 
 it("refuses a leave-behind name the table has no column for", async () => {

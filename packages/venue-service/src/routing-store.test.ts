@@ -14,6 +14,7 @@ import {
   requireMenuRoot,
   createExtraList,
   createProduct,
+  customItemProduct,
   menuDocumentHash,
   publishMenu,
   updateProduct,
@@ -393,6 +394,14 @@ describe("stored preparation rules", () => {
       expect(model.products.map((product) => product.id)).toEqual([f.bread, f.mojito]);
     }));
 
+  it("the hidden products behind a custom item are not grid products", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await customItemProduct(tx, 2100);
+      await customItemProduct(tx, null);
+      const model = await routingModel(tx, new Date("2026-10-02T18:00:00Z"));
+      expect(model.products.map(({ id }) => id)).toEqual([f.bread, f.mojito]);
+    }));
   it("lists a sold-out product and an extras-only product as grid products", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -1342,6 +1351,18 @@ describe("routing previews", () => {
       ]);
       expect(cleared.filter((m) => categorised.includes(m.productId))).toEqual([]);
       expect(await storedCells(tx)).toEqual(stored);
+    }));
+  it("does not count the hidden products behind a custom item in a default-row preview", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await customItemProduct(tx, 2100);
+      await customItemProduct(tx, null);
+      const moves = await previewRoutingChange(tx, {
+        kind: "cell",
+        address: { row: { kind: "all" }, zoneId: f.terrace },
+        target: noPrep,
+      });
+      expect(moves.map(({ productId }) => productId)).toEqual([f.bread, f.variant, f.mojito]);
     }));
   it("previews a no-change write as no moves", async () =>
     scoped(async (tx) => {

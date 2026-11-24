@@ -8,6 +8,7 @@ import {
   useMenuDb,
 } from "../test/fixtures.js";
 import { createCategory } from "./categories.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
@@ -56,6 +57,18 @@ const variant = (name: string, extra: Partial<VariantWrite> = {}): VariantWrite 
 });
 const variants = (productId: string, inputs: VariantWrite[]) =>
   app((tx) => setProductVariants(tx, productId, inputs, "en"));
+
+describe("the hidden products behind a custom item", () => {
+  it("leave their name free for a manager's product", async () => {
+    await app((tx) => customItemProduct(tx, 2100));
+    await app((tx) => customItemProduct(tx, null));
+    const made = await make("Custom item");
+    expect((await app((tx) => readProductEditor(tx, made))).name).toBe("Custom item");
+    await expect(
+      app((tx) => updateProduct(tx, cola, { name: "custom item" })),
+    ).rejects.toMatchObject(taken("name", "custom item"));
+  });
+});
 
 describe("relative variant names", () => {
   it("saves Single and Double under both Seagrams Gin and London Gin", async () => {

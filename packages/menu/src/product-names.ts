@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { notCustomItem } from "./custom-item-products.js";
 import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
@@ -47,6 +48,7 @@ async function assertProductNamesFree(
     .where(
       and(
         eq(products.active, true),
+        notCustomItem,
         parentId === null ? isNull(products.parentId) : eq(products.parentId, parentId),
         familyIds.length === 0 ? undefined : notInArray(products.id, [...familyIds]),
       ),

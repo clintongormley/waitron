@@ -69,7 +69,7 @@ export function namedRows(
       p.parent_id as owner, null as owner_name, null as container, null as child, null as child_menu,
       case when p.parent_id is null then 'product' else 'variant' end as role,
       p.active, 1 as owner_active, 1 as root_matched, null as parent_role, 1 as child_active, null as abbreviations
-    from products p where ${filter("product", sql`p.id`)}
+    from products p where p.custom_item_key is null and ${filter("product", sql`p.id`)}
     union all select 'variant', p.id, p.name, p.customer_name, null, p.parent_id, a.name,
       null, null, null, case when p.parent_id is null then 'product' else 'variant' end,
       p.active, coalesce(a.active, 0), (a.id is not null), null, 1, null
