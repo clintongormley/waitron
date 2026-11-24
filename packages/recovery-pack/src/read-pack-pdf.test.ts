@@ -3,11 +3,12 @@ import { PDFArray, PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
 import {
   buildRecoveryPackFile,
   MAX_PACK_FILE,
+  MAX_PACK_PDF,
   PACK_ATTACHMENT,
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "./pack-file.js";
-import { MAX_PACK_PDF, readRecoveryPackPdf } from "./read-pack-pdf.js";
+import { readRecoveryPackPdf } from "./read-pack-pdf.js";
 
 const file: RecoveryPackFile = {
   kind: "waitron-recovery-pack",

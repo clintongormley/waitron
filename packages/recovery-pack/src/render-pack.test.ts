@@ -4,8 +4,8 @@ import jsQR from "jsqr";
 import { create, type Font } from "fontkit";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDFDocument } from "pdf-lib";
-import type { RecoveryPackFile } from "./pack-file.js";
-import { MAX_PACK_PDF, readRecoveryPackPdf } from "./read-pack-pdf.js";
+import { MAX_PACK_PDF, type RecoveryPackFile } from "./pack-file.js";
+import { readRecoveryPackPdf } from "./read-pack-pdf.js";
 import { PACK_WORDS } from "./i18n/pack-words.js";
 import {
   packDates,

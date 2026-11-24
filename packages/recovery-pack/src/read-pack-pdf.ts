@@ -19,8 +19,6 @@ import {
   type RecoveryPackFileRefusal,
 } from "./pack-file.js";
 
-export { MAX_PACK_PDF };
-
 function refuse(reason: RecoveryPackFileRefusal): never {
   throw new RecoveryPackFileError(reason);
 }
