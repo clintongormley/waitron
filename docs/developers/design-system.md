@@ -2551,7 +2551,7 @@ initial `false`, and omit it for an action. Set `disabled` while the action is u
 The consumer changes the pressed state; the component emits the native click once.
 
 Native controls with their own count or trigger paths retain `iconButtonStyles` and
-`trackIconTooltip`: the table's Filters and Customise buttons and the folded sidebar strip.
+`trackIconTooltip`: the table's Filters and Customise buttons, the till's menu Filter, and the folded sidebar strip.
 The primitive reuses the same helpers
 (`packages/ui/src/icon-button.ts`, exported by `@waitron/ui`): at
 least `--wt-tap-min` each way, with the toolbar's border and surface, and pressed —
@@ -2566,7 +2566,7 @@ itself, and an invisible strip covers the gap between it and the button (WCAG 1.
 condition); a hidden tooltip is `display: none`. Bind `trackIconTooltip` to the button's
 `pointerenter`, `pointerleave`, `focus` and `blur`: while the pointer is on it or it has focus,
 Escape hides the tooltip, which can show again once both have left (WCAG 1.4.13). Binding it also
-means a click on a showing tooltip does not press its button. Customise anchors its tooltip at
+means a click on a showing tooltip does not press its button. Customise and the till's menu Filter anchor their tooltips at
 the trailing edge to keep it inside the screen. The folded sidebar's strip buttons have their own resting, open
 and current look and the tooltip beside them (Dashboard sidebar navigation). Guards:
 `packages/ui/src/components/wt-icon-button.test.ts`, its sibling axe suite,

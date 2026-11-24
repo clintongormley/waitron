@@ -1,4 +1,5 @@
 import { afterEach, describe, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./menu-switcher.js";
 import type { TillMenuSwitcher } from "./menu-switcher.js";
@@ -17,12 +18,15 @@ const twoMenus = [
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-switcher a11y (%s theme)", (theme) => {
-  it("a segmented control of menus has no violations", async () => {
-    const { host } = await mountWidget<TillMenuSwitcher>(
+  it("the closed and open menu picker have no violations", async () => {
+    const { el, host } = await mountWidget<TillMenuSwitcher>(
       "till-menu-switcher",
       { menus: twoMenus, selectedId: "cat-food" },
       theme,
     );
+    await expectNoA11yViolations(host);
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    await userEvent.click(field.shadowRoot!.querySelector("button")!);
     await expectNoA11yViolations(host);
   });
 });

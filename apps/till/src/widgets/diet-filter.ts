@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, iconButtonStyles, trackIconTooltip } from "@waitron/ui";
 import {
   ALLERGEN_CODES,
   CEREAL_KINDS,
@@ -34,11 +34,12 @@ export class TillDietFilter extends LitElement {
   }
   static override styles = [
     baseStyles,
+    iconButtonStyles,
     css`
       :host {
         display: block;
       }
-      button {
+      wt-dialog button {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -50,11 +51,11 @@ export class TillDietFilter extends LitElement {
         cursor: pointer;
         overflow-wrap: anywhere;
       }
-      button[aria-pressed="true"] {
+      wt-dialog button[aria-pressed="true"] {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      button:focus-visible {
+      wt-dialog button:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
@@ -69,6 +70,9 @@ export class TillDietFilter extends LitElement {
           minmax(min(100%, calc(var(--wt-tap-min) * 3)), 1fr)
         );
         gap: var(--wt-space-2);
+      }
+      .icon-tooltip {
+        inset-inline: auto 0;
       }
       [data-filter-count] {
         margin-inline-start: var(--wt-space-2);
@@ -168,16 +172,25 @@ export class TillDietFilter extends LitElement {
   }
   override render() {
     const count = activeFilterCount(this.selected);
+    const label = t("menu.filter.title");
     return html`<button
         type="button"
+        class="icon-button"
         data-filter-open
+        aria-label=${count ? `${label} ${count}` : label}
         aria-haspopup="dialog"
+        @pointerenter=${trackIconTooltip}
+        @pointerleave=${trackIconTooltip}
+        @focus=${trackIconTooltip}
+        @blur=${trackIconTooltip}
         @click=${() => {
           this.kindStep = null;
           this.expanded = true;
         }}
       >
-        ${t("menu.filter.title")}${count ? html`<span data-filter-count>${count}</span>` : nothing}
+        <wt-icon name="table-filter"></wt-icon>
+        <span class="icon-tooltip" aria-hidden="true">${label}</span>
+        ${count ? html`<span data-filter-count>${count}</span>` : nothing}
       </button>
       ${html`<wt-dialog
         ${trackDialog()}

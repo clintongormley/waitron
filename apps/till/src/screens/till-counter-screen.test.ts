@@ -140,6 +140,65 @@ it.each(["en", "es"] as const)(
   },
 );
 
+it("keeps the first counter menu choice focused in one handheld row", async () => {
+  await pageAt(390, 844);
+  try {
+    const menus = servedMenus(
+      [
+        { id: "lunch", name: "Lunch", isDefault: false, versionId: "v1" },
+        { id: "drinks", name: "Drinks", isDefault: false, versionId: "v2" },
+      ],
+      [],
+    );
+    const { el } = await mount({
+      menus,
+      handheld: true,
+      menuSelectionRequired: true,
+      service: {
+        open: true,
+        zoneOpen: true,
+        periodName: "Lunch",
+        periodOccurrenceKey: "lunch",
+        keepOpen: null,
+        zoneKeepOpen: null,
+      },
+    });
+    const browser = menuBrowser(el);
+    expect(browser).not.toBeNull();
+    const field = el
+      .shadowRoot!.querySelector("till-menu-switcher")!
+      .shadowRoot!.querySelector("wt-combobox")!;
+    const trigger = field.shadowRoot!.querySelector("button")!;
+    el.addEventListener("menu-selected", (event) => {
+      el.selectedMenuId = (event as CustomEvent<{ id: string }>).detail.id;
+    });
+    await userEvent.click(trigger);
+    await userEvent.click(field.shadowRoot!.querySelector('[role="option"]')!);
+    await el.updateComplete;
+    await browser.updateComplete;
+
+    expect(field.shadowRoot!.activeElement).toBe(trigger);
+    expect(browser.menu?.id).toBe("lunch");
+    const search = browser.shadowRoot!.querySelector("wt-input")!;
+    const filter = browser.querySelector("till-diet-filter")!;
+    const bounds = [trigger, search, filter].map((each) => each.getBoundingClientRect());
+    expect(Math.max(...bounds.map((box) => box.top))).toBeLessThan(
+      Math.min(...bounds.map((box) => box.bottom)),
+    );
+    expect(bounds[0]!.right).toBeLessThanOrEqual(bounds[1]!.left);
+    expect(bounds[1]!.right).toBeLessThanOrEqual(bounds[2]!.left);
+    expect(Math.abs(bounds[0]!.width - bounds[1]!.width)).toBeLessThanOrEqual(1);
+
+    el.menus = [menus[0]!];
+    await el.updateComplete;
+    await browser.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+    expect(search.getBoundingClientRect().left).toBe(browser.getBoundingClientRect().left);
+  } finally {
+    await resetPage();
+  }
+});
+
 describe("closed zone ordering", () => {
   it("replaces add controls with the area notice and retains the counter basket", async () => {
     const previous = currentLocale();

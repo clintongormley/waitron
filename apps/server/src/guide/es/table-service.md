@@ -585,6 +585,8 @@ enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sal
 pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
 al otro.
 
+Usa el campo **Carta** junto a **Buscar** para cambiar entre las cartas disponibles.
+
 ## Menús {#set-menus}
 
 Indica cuántos menús de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula

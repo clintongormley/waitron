@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { ALLERGEN_CODES } from "@waitron/shared";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { t } from "../i18n/t.js";
@@ -21,6 +21,21 @@ afterEach(cleanupWidgets);
 describe("till-diet-filter", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-diet-filter")).toBe(TillDietFilter);
+  });
+
+  it("shows the funnel and names the filter with its active count", async () => {
+    const { el } = await mountWidget<TillDietFilter>("till-diet-filter", {});
+    const button = page.getByRole("button", { name: "Filter", exact: true });
+    await expect.element(button).toBeVisible();
+    const icon = el.shadowRoot!.querySelector("[data-filter-open] wt-icon");
+    expect(icon?.getAttribute("name")).toBe("table-filter");
+    expect(icon?.shadowRoot?.querySelector("path")?.getAttribute("d")).toBeTruthy();
+    el.selected = { diets: ["vegan"], exclude: { milk: "all" } };
+    await el.updateComplete;
+    await expect.element(page.getByRole("button", { name: "Filter 2", exact: true })).toBeVisible();
+    expect(el.shadowRoot!.querySelector("[data-filter-count]")?.textContent).toBe("2");
+    await open(el);
+    expect(dialogOpenUnder(el)).toBe(true);
   });
 
   it("A738 Filter opens the two groups and four ordered diet choices, marking every selected diet", async () => {

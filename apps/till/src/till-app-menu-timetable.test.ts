@@ -1427,6 +1427,12 @@ describe("an open table's order", () => {
     const el = await openRememberedTable(() => current);
     emit(tableScreen(el), "menu-selected", { id: "almuerzo" });
     await flush(el);
+    const menu = tableScreen(el).shadowRoot!.querySelector("till-menu-browser")!;
+    const dish = menu.shadowRoot!.querySelector("wt-button.tile")!;
+    dish.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+    await flush(el);
+    expect(menu.shadowRoot!.querySelector("till-product-info")).not.toBeNull();
+
     current = {
       ...runningTable("table-lunch-2"),
       defaultMenuId: null,
@@ -1434,7 +1440,11 @@ describe("an open table's order", () => {
     };
     await poll(el);
     expect(tableScreen(el).selectedMenuId).toBe("");
-    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    const browser = tableScreen(el).shadowRoot!.querySelector("till-menu-browser")!;
+    expect(browser.shadowRoot!.querySelector("wt-input")).toBeNull();
+    expect(browser.querySelector("till-diet-filter")).toBeNull();
+    expect(browser.shadowRoot!.querySelector(".tile")).toBeNull();
+    expect(browser.shadowRoot!.querySelector("till-product-info")).toBeNull();
   });
 
   it("restores the table-zone menu when the table is reopened within its occurrence", async () => {

@@ -95,20 +95,9 @@ export class TillCounterScreen extends LitElement {
         min-height: 0;
       }
 
-      .menu-controls {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-3);
-      }
-
       .dining,
       [data-dining-label] {
         margin: var(--wt-space-2);
-      }
-
-      .menu-controls till-menu-switcher::part(options) {
-        margin-bottom: 0;
       }
 
       .sale-grid {
@@ -306,21 +295,6 @@ export class TillCounterScreen extends LitElement {
     this.selectedFilters = filters;
   }
 
-  #menuControls(): TemplateResult {
-    return html`
-      ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
-      ${
-        this.service?.open === true && this.service.zoneOpen
-          ? html`<till-menu-switcher
-              class="menu-switcher"
-              .menus=${this.menus}
-              .selectedId=${this.selectedMenuId}
-            ></till-menu-switcher>`
-          : nothing
-      }
-    `;
-  }
-
   #menu(): TemplateResult | typeof nothing {
     const open = this.service?.open === true && this.service.zoneOpen;
     const menu = !open
@@ -332,13 +306,15 @@ export class TillCounterScreen extends LitElement {
       this.stage === "order" && this.store.dining === "takeaway" && open
         ? this.setMenuCopies
         : NO_ORDERING_COPIES;
-    if (menu === undefined && copies.length === 0) return nothing;
+    const hasMenuPicker = open && this.menus.filter((each) => each.orderable).length > 1;
+    if (menu === undefined && copies.length === 0 && !hasMenuPicker) return nothing;
     const served = this.products.filter((product) =>
       this.menus.some((each) => each.id === product.menuId && each.orderable),
     );
     return html`<till-menu-browser
       .changeAvailability=${this.changeAvailability}
       .changeOptionAvailability=${this.changeOptionAvailability}
+      .hasMenuPicker=${hasMenuPicker}
       .menu=${menu}
       .setMenuBill=${copies.length === 0 ? undefined : this.setMenuBill}
       .setMenuCopies=${copies}
@@ -360,12 +336,26 @@ export class TillCounterScreen extends LitElement {
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
       .handheld=${this.handheld}
-      ><till-diet-filter
-        slot="filters"
-        .selected=${this.selectedFilters}
-        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
-      ></till-diet-filter
-    ></till-menu-browser>`;
+    >
+      ${
+        hasMenuPicker
+          ? html`<till-menu-switcher
+              slot="menu-picker"
+              .menus=${this.menus}
+              .selectedId=${menu?.id ?? ""}
+            ></till-menu-switcher>`
+          : nothing
+      }
+      ${
+        menu === undefined
+          ? nothing
+          : html`<till-diet-filter
+              slot="filters"
+              .selected=${this.selectedFilters}
+              @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+            ></till-diet-filter>`
+      }
+    </till-menu-browser>`;
   }
 
   #setMenuPrices() {
@@ -440,8 +430,8 @@ export class TillCounterScreen extends LitElement {
           <div class="menu-cell">
             ${
               this.orderList === null
-                ? html`<div class="menu-controls">${this.#menuControls()}</div>
-                    ${this.#menu()}`
+                ? html` ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
+                  ${this.#menu()}`
                 : this.#lists()
             }
           </div>

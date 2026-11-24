@@ -491,7 +491,12 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
         await counter.updateComplete;
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         await expect
-          .element(page.getByRole("button", { name: "Casa Delgado", exact: true }))
+          .element(
+            page.getByRole("combobox", {
+              name: locale === "es-ES" ? "Carta Casa Delgado" : "Menu Casa Delgado",
+              exact: true,
+            }),
+          )
           .toBeVisible();
         await expect
           .element(

@@ -16481,11 +16481,14 @@ describe("till-app", () => {
       );
 
     const switcher = (el: TillApp) =>
-      counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
-    /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
-    const switcherButtons = (el: TillApp) => [
-      ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
-    ];
+      counter(el)!
+        .shadowRoot!.querySelector("till-menu-switcher")
+        ?.shadowRoot!.querySelector("wt-combobox");
+    const pickSecondMenu = async (el: TillApp) => {
+      const field = switcher(el)!;
+      await userEvent.click(field.shadowRoot!.querySelector("button")!);
+      await userEvent.click(field.shadowRoot!.querySelectorAll('[role="option"]')[1]!);
+    };
 
     const gridNames = (el: TillApp) =>
       [
@@ -16503,7 +16506,7 @@ describe("till-app", () => {
       c.store.addProduct(sandwich, "1");
       const pushHistory = vi.spyOn(history, "pushState");
       const path = location.pathname;
-      switcherButtons(el)[1]!.click();
+      await pickSecondMenu(el);
       await flush(el);
       expect(location.pathname).toBe(path);
       expect(pushHistory).not.toHaveBeenCalled();
@@ -16520,7 +16523,7 @@ describe("till-app", () => {
     it("keeps the menu after logout and a new login as p1", async () => {
       const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       const c = await toCounter(el);
-      switcherButtons(el)[1]!.click();
+      await pickSecondMenu(el);
       await flush(el);
       expect(gridNames(el)).toEqual(["Cerveza"]);
       emit(c, "logout");
@@ -16532,7 +16535,7 @@ describe("till-app", () => {
       });
       await flush(el);
       expect(gridNames(el)).toEqual(["Cerveza"]);
-      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      expect(switcher(el)!.value).toBe("cat-drinks");
       expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
     });
 
@@ -16541,7 +16544,7 @@ describe("till-app", () => {
       async (personId) => {
         const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
         const c = await toCounter(el);
-        switcherButtons(el)[1]!.click();
+        await pickSecondMenu(el);
         await flush(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
         emit(c, "logout");
@@ -16553,7 +16556,7 @@ describe("till-app", () => {
         });
         await flush(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
-        expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+        expect(switcher(el)!.value).toBe("cat-drinks");
         expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
       },
     );
@@ -16621,7 +16624,7 @@ describe("till-app", () => {
         emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-terrace" });
         await flush(el);
         expect(gridNames(el)).toEqual(["Mojito"]);
-        switcherButtons(el)[1]!.click();
+        await pickSecondMenu(el);
         await flush(el);
         expect(gridNames(el)).toEqual(["Rioja"]);
       };
@@ -16651,7 +16654,7 @@ describe("till-app", () => {
       it("restores each zone's manual menu within the same occurrence", async () => {
         const { el } = await mountApp(zoned());
         await toCounter(el);
-        switcherButtons(el)[1]!.click();
+        await pickSecondMenu(el);
         await flush(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
         await toTerraceWine(el);
@@ -16684,7 +16687,7 @@ describe("till-app", () => {
           listZones: vi.fn().mockResolvedValue([{ ...floorZone, id: "zone-dining" }]),
         });
         await toCounter(el);
-        switcherButtons(el)[1]!.click();
+        await pickSecondMenu(el);
         await flush(el);
         selectTab(el, "floor");
         await flush(el);
@@ -16731,7 +16734,7 @@ describe("till-app", () => {
       el.remove();
       const { el: live } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(live);
-      switcherButtons(live)[1]!.click();
+      await pickSecondMenu(live);
       await flush(live);
       expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
       resolve(fixtureOffers({ menus: [foodMenu], products: [sandwich] }));
@@ -16750,7 +16753,7 @@ describe("till-app", () => {
       try {
         const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
         await toCounter(el);
-        switcherButtons(el)[1]!.click();
+        await pickSecondMenu(el);
         await flush(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
       } finally {
@@ -16763,9 +16766,9 @@ describe("till-app", () => {
       const { el } = await mountApp({ listDefaultZoneOffers: twoMenuProducts });
       await toCounter(el);
 
-      // Both menus offered, default (Comida) first and marked pressed.
-      expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
-      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+      // Both menus offered, with Comida first and selected.
+      expect(switcher(el)!.options.map(({ label }) => label)).toEqual(["Comida", "Bebidas"]);
+      expect(switcher(el)!.value).toBe("cat-food");
       // The grid shows ONLY the default menu's product.
       expect(gridNames(el)).toEqual(["Bocadillo"]);
     });
@@ -16780,12 +16783,12 @@ describe("till-app", () => {
       expect(c.store.lineCount).toBe(1);
 
       // Pick the second menu on the switcher — the real click → composed `menu-selected` → app.
-      switcherButtons(el)[1]!.click();
+      await pickSecondMenu(el);
       await flush(el);
 
-      // The grid now shows ONLY the second menu's product; the switch marks Bebidas pressed.
+      // The grid now shows ONLY the second menu's product; the picker shows Bebidas.
       expect(gridNames(el)).toEqual(["Cerveza"]);
-      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      expect(switcher(el)!.value).toBe("cat-drinks");
       // The cart is untouched — a menu switch changes which tiles are visible, never the basket.
       expect(c.store.lineCount).toBe(1);
       expect(c.store.lines[0]!.product.id).toBe("bocadillo");
@@ -16803,7 +16806,7 @@ describe("till-app", () => {
 
       // Switch to the non-default menu and ring a line — a mid-order switch STICKS (the control: it must
       // NOT be reset while the order is in progress, or it would fight the waiter).
-      switcherButtons(el)[1]!.click();
+      await pickSecondMenu(el);
       await flush(el);
       c.store.addProduct(beer, "1");
       await el.updateComplete;
@@ -16821,7 +16824,7 @@ describe("till-app", () => {
       closeTicket(el);
       await flush(el);
       expect(selected(el)).toBe("cat-drinks");
-      expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+      expect(switcher(el)!.value).toBe("cat-drinks");
       expect(gridNames(el)).toEqual(["Cerveza"]);
       expect(pushHistory).not.toHaveBeenCalled();
       expect(location.pathname).toBe(path);
@@ -16832,7 +16835,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
 
       // Switch to the non-default menu and ring a line — the switch sticks mid-order (the control).
-      switcherButtons(el)[1]!.click();
+      await pickSecondMenu(el);
       await flush(el);
       c.store.addProduct(beer, "1");
       await el.updateComplete;
@@ -16850,8 +16853,7 @@ describe("till-app", () => {
       const { el } = await mountApp();
       await toCounter(el);
 
-      // The switcher element is present but renders no options.
-      expect(switcherButtons(el)).toHaveLength(0);
+      expect(switcher(el)).toBeUndefined();
       expect(gridNames(el)).toEqual(["Café"]);
     });
   });

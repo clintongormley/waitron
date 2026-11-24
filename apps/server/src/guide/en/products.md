@@ -472,6 +472,9 @@ product sold on its own.
 
 ## Read a dish’s nutrition at the till {#nutrition-at-the-till}
 
+Tap the **Filter** icon beside **Search** to narrow the dishes by diet or allergen. The number
+shows how many filters are active.
+
 Hold a product button down to open its information window. You see the dish’s allergens, including
 its cereals or nuts, and its diet labels. An unreviewed dish says so in the window. Choose **Add to
 order** to select the dish, or **Close** to return without adding it.

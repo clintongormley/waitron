@@ -1332,7 +1332,6 @@ export class TillTableOrderScreen extends LitElement {
       /* A draft being sent takes no edit until the answer comes back; the status line says why.
          The order's wrapper draws no box, so its parts are faded one by one, and the bar's contents
          rather than the bar so the lines it covers do not show through it. */
-      .round-control[inert],
       [data-round-controls][inert] .round-bar > :not(.draft-bar),
       [data-round-controls][inert] .draft-bar > * {
         opacity: var(--wt-opacity-disabled);
@@ -3081,13 +3080,13 @@ export class TillTableOrderScreen extends LitElement {
     const menu = this.menuSelectionRequired
       ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
       : shownMenu(this.menus, this.selectedMenuId);
-    if (this.menuSelectionRequired && menu === undefined && this.setMenuCopies.length === 0)
-      return html``;
+    const hasMenuPicker = this.menus.filter((each) => each.orderable).length > 1;
+    if (menu === undefined && this.setMenuCopies.length === 0 && !hasMenuPicker) return html``;
     return html`<till-menu-browser
       .changeAvailability=${this.changeAvailability}
       .changeOptionAvailability=${this.changeOptionAvailability}
-      class="round-control"
-      ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
+      .hasMenuPicker=${hasMenuPicker}
+      .locked=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}
       .setMenuBill=${this.#setMenus}
       .setMenuCopies=${this.setMenuCopies}
@@ -3117,12 +3116,26 @@ export class TillTableOrderScreen extends LitElement {
       .inOrder=${this.wide ? undefined : this.#inOrder(store)}
       .handheld=${this.handheld}
       weighs
-      ><till-diet-filter
-        slot="filters"
-        .selected=${this.selectedFilters}
-        @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
-      ></till-diet-filter
-    ></till-menu-browser>`;
+    >
+      ${
+        hasMenuPicker
+          ? html`<till-menu-switcher
+              slot="menu-picker"
+              .menus=${this.menus}
+              .selectedId=${menu?.id ?? ""}
+            ></till-menu-switcher>`
+          : nothing
+      }
+      ${
+        menu === undefined
+          ? nothing
+          : html`<till-diet-filter
+              slot="filters"
+              .selected=${this.selectedFilters}
+              @menu-filters-selected=${(e: CustomEvent<{ filters: MenuFilters }>) => this.#pickFilters(e.detail.filters)}
+            ></till-diet-filter>`
+      }
+    </till-menu-browser>`;
   }
 
   /** `stopPropagation` keeps the inner `confirm-payment` from reaching the app's counter
@@ -4430,12 +4443,6 @@ export class TillTableOrderScreen extends LitElement {
       </div>`;
     return html`<div class="grid-region">
       ${servicePeriod(this.service, this.departmentName, this.api, this.zoneId, this.zoneName, this.receiptEquipment)}
-      <till-menu-switcher
-        class="menu-switcher"
-        .menus=${this.menus}
-        .selectedId=${this.selectedMenuId}
-      ></till-menu-switcher>
-
       ${keyed(this.orderId, this.#menuBrowser(draft))}
     </div>`;
   }
