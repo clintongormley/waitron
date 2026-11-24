@@ -5,10 +5,11 @@ import type {
   BillPaymentResult,
   TillApi,
 } from "../api/client.js";
+import { formatMoney } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import type { PayLine, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { refusalText } from "../widgets/pay-refusal.js";
-import { confirmationOf, paymentAsk, type Confirmation } from "./bill-payment.js";
+import { confirmationOf, paymentAsk, refusalOf, type Confirmation } from "./bill-payment.js";
 import {
   itemsAllocated,
   itemsAllocatedFrom,
@@ -169,6 +170,15 @@ describe("itemsRefusal", () => {
     ).toBe("Flan forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.");
   });
 
+  it("the advances refusal names its amount in the Pay window", () => {
+    const refusal = refusalOf({ code: "bill.below_advances", advances: "15.00" });
+
+    expect(refusalText(refusal)).toContain(`(${formatMoney("15.00", "en")})`);
+    setLocale("es");
+    expect(refusalText(refusal)).toContain(`(${formatMoney("15.00", "es")})`);
+    expect(refusalText(refusal)).toContain("su propio ticket");
+  });
+
   it("leaves any other refusal as it is", () => {
     const other = { code: "bill.all_items_chosen" };
 
@@ -208,6 +218,12 @@ describe("withItems", () => {
         partyId: "v1",
       },
     });
+  });
+
+  it("refuses an items choice with no edit state rather than send one the route refuses", () => {
+    expect(() =>
+      withItems(itemsConfirmation(itemsAsked), itemsAsked, null, revisions, false),
+    ).toThrow("edit state");
   });
 
   it("adds nothing for a whole-bill choice or a printed bill", () => {

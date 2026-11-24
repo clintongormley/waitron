@@ -117,11 +117,13 @@ export function withItems(
   printed: boolean,
 ): Confirmation {
   if (asked.choice.kind !== "items" || printed) return confirmation;
+  // The route refuses an items payment with no edit state, and a resend would repeat it.
+  if (expectedEdit === null) throw new Error("Pay for items needs the bill's edit state");
   return {
     ...confirmation,
     items: {
       picks: picksOf(asked.choice),
-      expectedEdits: expectedEdit === null ? [] : [expectedEdit],
+      expectedEdits: [expectedEdit],
       ...(revisions.expectedPartyRevision === undefined
         ? {}
         : { expectedPartyRevision: revisions.expectedPartyRevision }),
