@@ -221,20 +221,23 @@ it("conflicting known checkpoints cannot replace the higher floor with a lower f
 it.each([40, 43])(
   "a configured bound restore checks independently retained burn42 for P%d",
   async (serial) => {
-    const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+    const { configuredOperations } = await import("./allocation-configuration.js");
     const f = allocationFixture({
         node: primary,
         bases,
         identity: `P${String(serial).padStart(6, "0")}`,
       }),
       req = f.request("restore");
-    const preparation = FISCAL_OPERATIONS.configure!({
-      environment: {},
-      readPublicEvidence: async () => ({
-        trust: f.custodian,
-        current: { ...req.confirmation, knownHistory: checkpoint("P") },
-      }),
-    });
+    const preparation = configuredOperations(
+      {},
+      {
+        environment: {},
+        readPublicEvidence: async () => ({
+          trust: f.custodian,
+          current: { ...req.confirmation, knownHistory: checkpoint("P") },
+        }),
+      },
+    );
     const run = () =>
       withOperationAuthority(req.binding, req.operatorId, (authority) =>
         preparation.prepare({ binding: req.binding, authority, input: req.input }, (op) =>

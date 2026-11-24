@@ -19,6 +19,8 @@ import { request, firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fis
 import type { ModuleOperationHost } from "@waitron/module";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 
+let evidenceFiles: readonly string[];
+
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
   return {
@@ -35,10 +37,7 @@ vi.mock("@waitron/composition", async (original) => {
                 configure: (bound: ModuleOperationHost) => ({
                   ...module.provisioning!.initialSetup!.configure!(bound),
                   resolutionEvidence: () => ({
-                    files: [
-                      "WAITRON_FISCAL_CUSTODIAN_FILE",
-                      "WAITRON_FISCAL_CONFIRMATION_FILE",
-                    ].map((key) => bound.environment[key]!),
+                    files: evidenceFiles,
                     directories: [],
                   }),
                 }),
@@ -128,15 +127,7 @@ async function launchFixture(ownerSetup = false) {
   const stateDir = join(root, "state");
   await mkdir(stateDir);
   const input = await initialSetupInput(stateDir, request);
-  const evidenceEnv = Object.fromEntries(
-    [
-      "WAITRON_FISCAL_CUSTODIAN_FILE",
-      "WAITRON_FISCAL_CONFIRMATION_FILE",
-      "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
-    ].map((key) => [key, process.env[key]]),
-  );
-  vi.unstubAllEnvs();
-  for (const key of Object.keys(evidenceEnv)) vi.stubEnv(key, "wrong-ambient-value");
+  evidenceFiles = [join(stateDir, "evidence-source.json"), join(stateDir, "evidence-history.json")];
   const [port] = await freePorts(1);
   const migrationsRoot = join(root, "migrations");
   for (const [i, set] of manifestSets().entries())
@@ -154,10 +145,10 @@ async function launchFixture(ownerSetup = false) {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: ownerSetup ? "dev" : "preproduction",
   };
-  return { root, stateDir, input, evidenceEnv, base, port };
+  return { root, stateDir, input, base, port };
 }
 it.each(["direct", "supervised"])(
-  "%s launch binds its passed module evidence and activates owned hour setup despite conflicting process.env",
+  "%s launch retains module evidence and activates owned hour setup",
   async (kind) => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime("2026-10-16T11:38:00Z");
@@ -166,11 +157,11 @@ it.each(["direct", "supervised"])(
     const killed = vi.spyOn(process, "kill").mockReturnValue(true);
     let agent: Agent | undefined;
     try {
-      if (kind === "direct") server = await startServer({ ...f.base, ...f.evidenceEnv });
+      if (kind === "direct") server = await startServer(f.base);
       else {
         await runEntry({
           args: [],
-          baseEnv: { ...f.base, ...f.evidenceEnv },
+          baseEnv: f.base,
           stateDir: f.stateDir,
           venueDir: f.base.WAITRON_VENUE_DIR,
           migrationsRoot: f.base.WAITRON_MIGRATIONS_DIR,
@@ -275,11 +266,7 @@ it.each(["direct", "supervised"])(
         ...(await post("reconfirm", { password: PASSWORD, purpose: "activation" })),
       });
       const outside = ['{"synthetic":"public-source"}', '{"synthetic":"outside-history"}'];
-      for (const [index, key] of [
-        "WAITRON_FISCAL_CUSTODIAN_FILE",
-        "WAITRON_FISCAL_CONFIRMATION_FILE",
-      ].entries())
-        await writeFile(f.evidenceEnv[key]!, outside[index]!);
+      for (const [index, file] of evidenceFiles.entries()) await writeFile(file, outside[index]!);
       const inspected = await fetch(
         `https://127.0.0.1:${f.port}/setup-api/first-setup/resolution`,
         { dispatcher: agent } as RequestInit,
@@ -424,7 +411,6 @@ Object.defineProperty(performance, "now", { value: () => 0 });
   const env = {
     ...callerEnvironment(),
     ...f.base,
-    ...f.evidenceEnv,
     WAITRON_INITIAL_VENUE_INPUT: "",
     WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),

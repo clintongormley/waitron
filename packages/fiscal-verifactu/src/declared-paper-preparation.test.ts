@@ -14,7 +14,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { activateModuleAllocation } from "./allocation-operation.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { configuredOperations } from "./allocation-configuration.js";
 import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { validatePaperCandidates } from "./initial-paper-candidates.js";
 import { declaredHistoryBytes } from "./paper-register-history.js";
@@ -351,7 +351,14 @@ it.each([
 it("dispatches explicit unsigned host facts through the actual configured module seat", async () => {
   const f = fixture();
   const modules = configureModuleOperations(
-    [fakeModule(f.binding.module, { operations: FISCAL_OPERATIONS })],
+    [
+      fakeModule(f.binding.module, {
+        operations: {
+          ...configuredOperations({}),
+          configure: (host) => configuredOperations({}, host),
+        },
+      }),
+    ],
     {
       environment: {},
       readPublicEvidence: async () => ({ trust: null, current: f.facts }),
@@ -486,19 +493,19 @@ it.each([undefined, { trust: null, current: { ...fixture().facts, phase: "retire
   async (publicEvidence) => {
     const f = fixture();
     const host: ModuleOperationHost = {
-      environment: {
-        WAITRON_FISCAL_CUSTODIAN_FILE: "/must-not-read",
-        WAITRON_FISCAL_CONFIRMATION_FILE: "/must-not-read",
-        WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: "0".repeat(64),
-      },
+      environment: {},
       readPublicEvidence: async () => publicEvidence,
     };
     await withOperationAuthority(f.binding, f.operator, async (authority) => {
       await expect(
-        FISCAL_OPERATIONS.configure!(host).prepare(
-          { binding: f.binding, authority, input: f.input },
-          async () => "fallback",
-        ),
+        configuredOperations(
+          {
+            custodianFile: "/must-not-read",
+            confirmationFile: "/must-not-read",
+            custodianFingerprint: "0".repeat(64),
+          },
+          host,
+        ).prepare({ binding: f.binding, authority, input: f.input }, async () => "fallback"),
       ).rejects.toThrowError(invalid);
     });
     await noWrites();
@@ -508,19 +515,19 @@ it.each([undefined, { trust: null, current: { ...fixture().facts, phase: "retire
 it("an unsigned restore without host evidence cannot fall back to legacy signed files", async () => {
   const f = fixture("P");
   const host: ModuleOperationHost = {
-    environment: {
-      WAITRON_FISCAL_CUSTODIAN_FILE: "/must-not-read",
-      WAITRON_FISCAL_CONFIRMATION_FILE: "/must-not-read",
-      WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: "0".repeat(64),
-    },
+    environment: {},
     readPublicEvidence: async () => undefined,
   };
   await withOperationAuthority(f.binding, f.operator, async (authority) => {
     await expect(
-      FISCAL_OPERATIONS.configure!(host).prepare(
-        { binding: f.binding, authority, input: f.input },
-        async () => "fallback",
-      ),
+      configuredOperations(
+        {
+          custodianFile: "/must-not-read",
+          confirmationFile: "/must-not-read",
+          custodianFingerprint: "0".repeat(64),
+        },
+        host,
+      ).prepare({ binding: f.binding, authority, input: f.input }, async () => "fallback"),
     ).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },

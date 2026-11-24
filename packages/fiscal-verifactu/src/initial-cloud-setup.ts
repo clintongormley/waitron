@@ -1,8 +1,9 @@
+import type { HistoricalAllocationPaths } from "./allocation-configuration.js";
 import "./errors.js";
 import { createHash } from "node:crypto";
 import { openSync, readSync, closeSync, fstatSync } from "node:fs";
 import { isDeepStrictEqual as equal } from "node:util";
-import { AppError, isUuid, readVariable } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import type { InitialSetupContext, InitialSetupImport } from "@waitron/module";
 import {
   readCloudAllocationReceipt,
@@ -180,11 +181,10 @@ export function prepareInitialCloudSetup(
   );
 }
 
-export function configuredCloudTrust(
-  environment: Readonly<Record<string, string | undefined>>,
-): ReceiptTrust | null {
-  const path = readVariable(environment, "WAITRON_FISCAL_CLOUD_TRUST_FILE");
-  const fingerprint = readVariable(environment, "WAITRON_FISCAL_CLOUD_FINGERPRINT");
+export function configuredCloudTrust({
+  cloudTrustFile: path,
+  cloudFingerprint: fingerprint,
+}: Pick<HistoricalAllocationPaths, "cloudTrustFile" | "cloudFingerprint">): ReceiptTrust | null {
   let fd: number | undefined;
   try {
     if (!path?.trim() || !fingerprint || !/^[a-f0-9]{64}$/.test(fingerprint)) return null;

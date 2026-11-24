@@ -1,11 +1,15 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 import { withOperationAuthority } from "@waitron/module";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
-const variables = [
-  "WAITRON_FISCAL_CUSTODIAN_FILE",
-  "WAITRON_FISCAL_CONFIRMATION_FILE",
-  "WAITRON_FISCAL_CUSTODIAN_FINGERPRINT",
-] as const;
+import {
+  configuredOperations,
+  type HistoricalAllocationPaths,
+} from "./allocation-configuration.js";
+const paths = {
+  custodianFile: "unavailable-outside-file",
+  confirmationFile: "unavailable-outside-file",
+  custodianFingerprint: "unavailable-outside-file",
+};
+const fields = ["custodianFile", "confirmationFile", "custodianFingerprint"] as const;
 const binding = {
   module: "fiscal-verifactu",
   action: "restore",
@@ -13,21 +17,23 @@ const binding = {
   sourceId: "archive",
   targetNodeId: "target",
 };
-beforeEach(() => {
-  for (const variable of variables) vi.stubEnv(variable, "unavailable-outside-file");
-});
-afterEach(() => vi.unstubAllEnvs());
-function attempt(input: unknown = { allocation: {}, approval: {} }, operationBinding = binding) {
+function attempt(
+  input: unknown = { allocation: {}, approval: {} },
+  operationBinding = binding,
+  options: HistoricalAllocationPaths = paths,
+) {
   return withOperationAuthority(operationBinding, "admin", (authority) =>
-    FISCAL_OPERATIONS.prepare({ binding: operationBinding, authority, input }, async () => {
-      throw new Error("unverified input admitted");
-    }),
+    configuredOperations(options).prepare(
+      { binding: operationBinding, authority, input },
+      async () => {
+        throw new Error("unverified input admitted");
+      },
+    ),
   );
 }
-it.each(variables)("requires the host to configure %s independently", async (variable) => {
+it.each(fields)("requires the host to configure %s independently", async (field) => {
   for (const value of [undefined, "", "  "]) {
-    vi.stubEnv(variable, value);
-    await expect(attempt()).rejects.toMatchObject({
+    await expect(attempt(undefined, binding, { ...paths, [field]: value })).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
@@ -40,8 +46,16 @@ it("refuses an unavailable host custodian instead of accepting trust from input"
   });
 });
 it("refuses a setup whose configured custodian file does not exist", async () => {
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", "/nonexistent/custodian.json");
-  await expect(attempt(undefined, { ...binding, action: "setup" })).rejects.toMatchObject({
+  await expect(
+    attempt(
+      undefined,
+      { ...binding, action: "setup" },
+      {
+        ...paths,
+        custodianFile: "/nonexistent/custodian.json",
+      },
+    ),
+  ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "reservation_untrusted" },
   });
@@ -63,7 +77,7 @@ it.each(["symbol", "non-enumerable", "function"])(
       enumerable: which !== "non-enumerable",
     });
     const readPublicEvidence = vi.fn(async () => undefined);
-    const configured = FISCAL_OPERATIONS.configure!({ environment: {}, readPublicEvidence });
+    const configured = configuredOperations({}, { environment: {}, readPublicEvidence });
     await expect(
       withOperationAuthority(binding, "admin", (authority) =>
         configured.prepare({ binding, authority, input }, async () => "admitted"),
@@ -76,11 +90,13 @@ it.each(["symbol", "non-enumerable", "function"])(
   },
 );
 
-it("binds explicit launch settings instead of ambient process variables", async () => {
-  const configured = FISCAL_OPERATIONS.configure!({
+it("binds the settings supplied when the historical host is configured", async () => {
+  const options = {};
+  const configured = configuredOperations(options, {
     environment: {},
     readPublicEvidence: async () => undefined,
   });
+  Object.assign(options, paths);
   await withOperationAuthority(binding, "admin", async (authority) => {
     for (const input of [{ allocation: {}, approval: {} }, { receipt: {} }, { emergency: {} }]) {
       await expect(

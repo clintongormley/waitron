@@ -49,7 +49,6 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let fixture: Awaited<ReturnType<typeof stagedHourCrash>> | undefined;
 afterEach(async () => {
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
   await fixture?.cleanup();
   fixture = undefined;
 });
@@ -84,9 +83,6 @@ function signedCloudInput(f: Awaited<ReturnType<typeof stage>>) {
       publicKey: receipt.trust.keys.get(receipt.receipt.keyId),
     }),
   );
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_TRUST_FILE", trustPath);
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_FINGERPRINT", receipt.receipt.keyId);
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY", directory);
   const confirmationPath = join(f.root, "legacy-current.json");
   writeFileSync(
     confirmationPath,
@@ -101,7 +97,6 @@ function signedCloudInput(f: Awaited<ReturnType<typeof stage>>) {
       requiredBases: SERIES_BASES,
     }),
   );
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
 
   return {
     allocation: receipt.receipt.payload.allocation,
@@ -185,8 +180,6 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
     trustPath,
     JSON.stringify({ custodianId: "outside-custodian", publicKey, fingerprint }),
   );
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", trustPath);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", fingerprint);
   writeFileSync(
     join(f.root, "legacy-current.json"),
     JSON.stringify({

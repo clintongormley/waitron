@@ -68,7 +68,7 @@ it("production restore runner refuses a signed paper input even with its correct
   const action = "restore";
   const fixture = allocationFixture({ node, bases, identity: "P000042", recoveryKey: true });
   const environment = await writeAllocationInput(root, fixture, action);
-  for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+  vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", environment.WAITRON_RECOVERY_OPERATION_FILE);
   const { binding, input } = fixture.request(action);
   const request = { binding, input };
   const before = await rows();
@@ -146,8 +146,6 @@ it.each(["archive", "stream"] as const)(
       uncertaintyRecorded: true,
     });
     await writeFile(currentPath, current);
-    vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", currentPath);
-    vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", outside);
     const common = {
       environment: "preproduction" as const,
       recoveryOperation: {
@@ -225,7 +223,7 @@ it.each(["recovery key", "administrator"])(
       operatorId: ADMIN,
     });
     const environment = await writeAllocationInput(root, fixture, "promote");
-    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+    vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", environment.WAITRON_RECOVERY_OPERATION_FILE);
     const { binding, input } = fixture.request("promote");
     const before = await rows();
     const activate = vi.fn(async () => "unexpected-series");

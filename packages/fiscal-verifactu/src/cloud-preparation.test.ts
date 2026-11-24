@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -14,7 +14,7 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import * as fiscal from "./index.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { configuredOperations } from "./allocation-configuration.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -79,7 +79,6 @@ beforeEach(async () => {
   await saveCurrent();
 });
 afterEach(async () => {
-  vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
 });
 async function saveCurrent() {
@@ -248,15 +247,17 @@ async function configure() {
       publicKey: fixture.trust.keys.get(fixture.receipt.keyId),
     }),
   );
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_TRUST_FILE", keyPath);
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_FINGERPRINT", fixture.receipt.keyId);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY", receiptDirectory);
+  return {
+    cloudTrustFile: keyPath,
+    cloudFingerprint: fixture.receipt.keyId,
+    confirmationFile: confirmationPath,
+    cloudReceiptDirectory: receiptDirectory,
+  };
 }
 it("passes a Cloud manual packet through the default configured module preparation", async () => {
-  await configure();
+  const paths = await configure();
   const result = await withOperationAuthority(binding, operatorId, (authority) =>
-    FISCAL_OPERATIONS.prepare({ binding, input: input(), authority }, (ready) =>
+    configuredOperations(paths).prepare({ binding, input: input(), authority }, (ready) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, ready)),
     ),
   );
@@ -267,30 +268,32 @@ it("passes a Cloud manual packet through the default configured module preparati
     "RF-C000042",
   ]);
 });
-it.each([
-  "WAITRON_FISCAL_CLOUD_TRUST_FILE",
-  "WAITRON_FISCAL_CLOUD_FINGERPRINT",
-  "WAITRON_FISCAL_CONFIRMATION_FILE",
-  "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
-])("requires explicit %s outside submitted input", async (variable) => {
-  await configure();
-  vi.stubEnv(variable, "");
-  await expect(
-    withOperationAuthority(binding, operatorId, (authority) =>
-      FISCAL_OPERATIONS.prepare({ binding, input: input(), authority }, async () => "unverified"),
-    ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "outside_confirmation_missing" },
-  });
-  expect(await readdir(receiptDirectory)).toEqual([]);
-});
+it.each(["cloudTrustFile", "cloudFingerprint", "confirmationFile", "cloudReceiptDirectory"])(
+  "requires explicit %s outside submitted input",
+  async (field) => {
+    const paths = await configure();
+    await expect(
+      withOperationAuthority(binding, operatorId, (authority) =>
+        configuredOperations({ ...paths, [field]: "" }).prepare(
+          { binding, input: input(), authority },
+          async () => "unverified",
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    });
+    expect(await readdir(receiptDirectory)).toEqual([]);
+  },
+);
 it("requires the independently confirmed signer fingerprint", async () => {
-  await configure();
-  vi.stubEnv("WAITRON_FISCAL_CLOUD_FINGERPRINT", "0".repeat(64));
+  const paths = await configure();
   await expect(
     withOperationAuthority(binding, operatorId, (authority) =>
-      FISCAL_OPERATIONS.prepare({ binding, input: input(), authority }, async () => "unverified"),
+      configuredOperations({ ...paths, cloudFingerprint: "0".repeat(64) }).prepare(
+        { binding, input: input(), authority },
+        async () => "unverified",
+      ),
     ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
@@ -537,7 +540,7 @@ it("refuses a submitted allocation that differs from its signed packet before sp
   expect(await readdir(receiptDirectory)).toEqual([]);
 });
 it("refuses a trust file whose fingerprint metadata differs from the confirmed signer", async () => {
-  await configure();
+  const paths = await configure();
   await writeFile(
     join(root, "trust.json"),
     JSON.stringify({
@@ -548,7 +551,10 @@ it("refuses a trust file whose fingerprint metadata differs from the confirmed s
   );
   await expect(
     withOperationAuthority(binding, operatorId, (authority) =>
-      FISCAL_OPERATIONS.prepare({ binding, input: input(), authority }, async () => "unverified"),
+      configuredOperations(paths).prepare(
+        { binding, input: input(), authority },
+        async () => "unverified",
+      ),
     ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",

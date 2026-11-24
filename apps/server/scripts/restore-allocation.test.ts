@@ -1,6 +1,6 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { nodeDumpEntry } from "../src/testing/node-copy.js";
-import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
+import { configuredOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -133,14 +133,6 @@ let venueDir: string;
 let file: string;
 let secret: string;
 beforeEach(async () => {
-  modules.splice(
-    0,
-    modules.length,
-    fakeModule("fiscal-verifactu", {
-      operations: historicalFiscalOperations,
-      provisioning: { seed: ALLOCATED_FISCAL_SEED },
-    }),
-  );
   await stampDeployment(suite.db, "preproduction");
   await suite.db
     .insert(taxpayer)
@@ -169,12 +161,24 @@ beforeEach(async () => {
     JSON.stringify({ custodianId: "custodian", publicKey, fingerprint }),
   );
   await writeFile(confirmationPath, JSON.stringify(confirmation));
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", custodianPath);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", fingerprint);
+  const paths = {
+    custodianFile: custodianPath,
+    confirmationFile: confirmationPath,
+    custodianFingerprint: fingerprint,
+  };
+  modules.splice(
+    0,
+    modules.length,
+    fakeModule("fiscal-verifactu", {
+      operations: {
+        ...configuredOperations(paths),
+        configure: (host) => configuredOperations(paths, host),
+      },
+      provisioning: { seed: ALLOCATED_FISCAL_SEED },
+    }),
+  );
 });
 afterEach(async () => {
-  vi.unstubAllEnvs();
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 function env() {

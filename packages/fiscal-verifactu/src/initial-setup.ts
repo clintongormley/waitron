@@ -6,8 +6,13 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { nodes } from "@waitron/db";
-import { AppError, nodeId, readVariable, type EnvironmentVariableName } from "@waitron/shared";
-import type { InitialSetupContext, InitialSetupContribution } from "@waitron/module";
+import { AppError, nodeId } from "@waitron/shared";
+import type {
+  InitialSetupContext,
+  InitialSetupContribution,
+  ModuleOperationHost,
+} from "@waitron/module";
+import type { HistoricalAllocationPaths } from "./allocation-configuration.js";
 import {
   validateAllocationEnvelope,
   type FiscalAllocation,
@@ -366,24 +371,6 @@ function createInitialSetup(
       };
     },
     ...(retained === undefined ? {} : { resolutionEvidence: () => structuredClone(retained) }),
-    configure(host) {
-      const paths = (names: readonly EnvironmentVariableName[]) =>
-        names
-          .map((name) => readVariable(host.environment, name))
-          .filter((path): path is string => typeof path === "string" && path.trim().length > 0);
-      return createInitialSetup(() => configuredCloudTrust(host.environment), {
-        files: paths([
-          "WAITRON_FISCAL_CUSTODIAN_FILE",
-          "WAITRON_FISCAL_CLOUD_TRUST_FILE",
-          "WAITRON_FISCAL_CONFIRMATION_FILE",
-          "WAITRON_FISCAL_PAPER_HISTORY_FILE",
-        ]),
-        directories: paths([
-          "WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY",
-          "WAITRON_FISCAL_EMERGENCY_DIRECTORY",
-        ]),
-      });
-    },
     assignmentPositions(context, input) {
       const { scope, allocations } = assignmentFacts(context, input);
       return allocations.map((allocation) => ({
@@ -636,3 +623,19 @@ function createInitialSetup(
   return contribution;
 }
 export const FISCAL_INITIAL_SETUP = createInitialSetup(() => null);
+
+export function configureHistoricalInitialSetup(
+  _host: ModuleOperationHost,
+  paths: HistoricalAllocationPaths,
+): InitialSetupContribution {
+  const present = (path: string | undefined): path is string => Boolean(path?.trim());
+  return createInitialSetup(() => configuredCloudTrust(paths), {
+    files: [
+      paths.custodianFile,
+      paths.cloudTrustFile,
+      paths.confirmationFile,
+      paths.paperHistoryFile,
+    ].filter(present),
+    directories: [paths.cloudReceiptDirectory, paths.emergencyDirectory].filter(present),
+  });
+}

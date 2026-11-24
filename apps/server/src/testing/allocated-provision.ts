@@ -47,7 +47,7 @@ export async function initialSetupInput(
   });
   const held = fixture.request("setup");
   const configuration = await writeAllocationInput(directory, fixture, "setup");
-  for (const [key, value] of Object.entries(configuration)) vi.stubEnv(key, value);
+  vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", configuration.WAITRON_RECOVERY_OPERATION_FILE);
   return {
     nodeId: targetNodeId,
     administratorId,

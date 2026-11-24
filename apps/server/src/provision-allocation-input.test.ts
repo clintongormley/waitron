@@ -1,6 +1,6 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
-import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
+import { configuredOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -156,30 +156,35 @@ const confirmation = {
   currentEntryState: "consumed-for-event",
 };
 let stateDir: string;
+let confirmationPath: string;
 beforeEach(async () => {
-  modules.splice(
-    0,
-    modules.length,
-    fakeModule("fiscal-verifactu", {
-      fiscal: FISCAL_SLOT,
-      operations: historicalFiscalOperations,
-      provisioning: { seed: ALLOCATED_FISCAL_SEED },
-    }),
-  );
   stateDir = await mkdtemp(join(tmpdir(), "waitron-public-allocation-"));
   const custodianPath = join(stateDir, "custodian.json");
-  const confirmationPath = join(stateDir, "current.json");
+  confirmationPath = join(stateDir, "current.json");
   await writeFile(
     custodianPath,
     JSON.stringify({ custodianId: "custodian", publicKey, fingerprint }),
   );
   await writeFile(confirmationPath, JSON.stringify(confirmation));
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", custodianPath);
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FINGERPRINT", fingerprint);
+  const paths = {
+    custodianFile: custodianPath,
+    confirmationFile: confirmationPath,
+    custodianFingerprint: fingerprint,
+  };
+  modules.splice(
+    0,
+    modules.length,
+    fakeModule("fiscal-verifactu", {
+      fiscal: FISCAL_SLOT,
+      operations: {
+        ...configuredOperations(paths),
+        configure: (host) => configuredOperations(paths, host),
+      },
+      provisioning: { seed: ALLOCATED_FISCAL_SEED },
+    }),
+  );
 });
 afterEach(async () => {
-  vi.unstubAllEnvs();
   await rm(stateDir, { recursive: true, force: true });
 });
 function deps(beforeCommit?: (tx: import("@waitron/db").Transaction) => Promise<void>) {
@@ -243,7 +248,7 @@ it("returns committed allocated references after an interrupted setup without an
   await advanceSeriesTo(suite.db, NODE, 37);
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await allocationRows(suite.db);
-  await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
+  await rm(confirmationPath);
   const repeated = await recoverProvisionedVenue(suite.db, {
     environment: "preproduction",
     venue: request,
@@ -428,7 +433,7 @@ it("resumes the actual persisted setup request after a committed venue lost its 
   await allocatedVenue();
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await allocationRows(suite.db);
-  await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
+  await rm(confirmationPath);
   const recovered = await send();
   expect(recovered.status).toBe(200);
   expect(await recovered.json()).toEqual({

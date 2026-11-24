@@ -12,7 +12,7 @@ import { withOperationAuthority, type ModuleOperationInput } from "@waitron/modu
 import { AppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
-import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
+import { configuredOperations } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { withEmergencyAttempt } from "./emergency-attempt.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
@@ -68,23 +68,20 @@ beforeEach(async () => {
     `${createHash("sha256").update(binding.eventId).digest("hex")}.json`,
   );
   await fs.writeFile(confirmationPath, JSON.stringify(current));
-  vi.stubEnv("WAITRON_FISCAL_CONFIRMATION_FILE", confirmationPath);
-  vi.stubEnv("WAITRON_FISCAL_EMERGENCY_DIRECTORY", outside);
 });
 afterEach(async () => {
   vi.restoreAllMocks();
   syncBuiltinESMExports();
-  vi.unstubAllEnvs();
   if (outside) await fs.rm(outside, { recursive: true, force: true });
 });
 const activate = (operation: ModuleOperationInput) =>
   withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, operation));
 function attempt<T>(run: (operation: ModuleOperationInput) => Promise<T>) {
   return withOperationAuthority(binding, operatorId, (authority) =>
-    FISCAL_OPERATIONS.prepare(
-      { binding, authority, input: { emergency: { version: 1 }, approval } },
-      run,
-    ),
+    configuredOperations({
+      confirmationFile: confirmationPath,
+      emergencyDirectory: outside,
+    }).prepare({ binding, authority, input: { emergency: { version: 1 }, approval } }, run),
   );
 }
 const incident = async () => JSON.parse(await fs.readFile(incidentPath, "utf8"));

@@ -1,5 +1,4 @@
 import { dirname, join } from "node:path";
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -19,29 +18,13 @@ afterEach(async () => {
 });
 
 it.each(["cloud", "serials"] as const)(
-  "the owned HTTP setup route refuses retired %s selection with a configured Cloud issuer",
+  "the owned HTTP setup route refuses retired %s selection",
   async (route) => {
     const root = await mkdtemp(join(tmpdir(), "retired-setup-route-"));
     roots.push(root);
-    const keys = generateKeyPairSync("ed25519");
-    const publicKey = keys.publicKey.export({ type: "spki", format: "der" });
-    const keyId = createHash("sha256").update(publicKey).digest("hex");
-    const issuerPath = join(root, "issuer.json");
-    await writeFile(
-      issuerPath,
-      JSON.stringify({
-        issuer: "fixture-registry",
-        fingerprint: keyId,
-        publicKey: publicKey.toString("base64url"),
-      }),
-    );
     const host = createFirstSetupModuleHost({
       modules: ALL_MODULES,
-      environment: {
-        WAITRON_FISCAL_CLOUD_TRUST_FILE: issuerPath,
-        WAITRON_FISCAL_CLOUD_FINGERPRINT: keyId,
-        WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: root,
-      },
+      environment: {},
       stateDir: join(root, "state"),
       venueDir: join(root, "venue"),
     });

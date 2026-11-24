@@ -46,7 +46,6 @@ const lockedCopy = ["cloud-locked-entry"] as const;
 const litestream = ["litestream"] as const;
 const keyRing = ["server", "credentials", "provisioning"] as const;
 const port = "1–65535";
-const fi11 = { retiring: "A1308 fi11" } as const;
 const google = { retiring: "A646 slice 8" } as const;
 const unset = { default: "unset" } as const;
 const secret = { secret: true } as const;
@@ -249,14 +248,6 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_AWS_REHEARSAL_RECEIPT_DIR: variable("test", "path", tests),
   WAITRON_GOOGLE_CLIENT_ID: variable("operator", "text", server, google),
   WAITRON_GOOGLE_CLIENT_SECRET: variable("operator", "key", server, google),
-  WAITRON_FISCAL_CLOUD_FINGERPRINT: variable("operator", "text", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY: variable("operator", "path", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_CLOUD_TRUST_FILE: variable("operator", "path", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_CONFIRMATION_FILE: variable("operator", "path", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_CUSTODIAN_FILE: variable("operator", "path", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: variable("operator", "text", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_EMERGENCY_DIRECTORY: variable("operator", "path", ["VeriFactu"], fi11),
-  WAITRON_FISCAL_PAPER_HISTORY_FILE: variable("operator", "path", ["VeriFactu"], fi11),
 } as const;
 
 export type EnvironmentVariableName = keyof typeof ENVIRONMENT_VARIABLES;

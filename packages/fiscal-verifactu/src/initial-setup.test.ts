@@ -469,7 +469,7 @@ it("the historical paper collector activates independently bound evidence", asyn
 });
 it("a claimed setup with no live host grant cannot fall back to valid configured paper files", async () => {
   const { withOperationAuthority } = await import("@waitron/module");
-  const { FISCAL_OPERATIONS } = await import("./allocation-configuration.js");
+  const { configuredOperations } = await import("./allocation-configuration.js");
   const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
@@ -480,14 +480,17 @@ it("a claimed setup with no live host grant cannot fall back to valid configured
       currentFile = join(dir, "current.json");
     await writeFile(publicFile, JSON.stringify(trust));
     await writeFile(currentFile, JSON.stringify(f.current));
-    const operations = FISCAL_OPERATIONS.configure!({
-      environment: {
-        WAITRON_FISCAL_CUSTODIAN_FILE: publicFile,
-        WAITRON_FISCAL_CONFIRMATION_FILE: currentFile,
-        WAITRON_FISCAL_CUSTODIAN_FINGERPRINT: fingerprint,
+    const operations = configuredOperations(
+      {
+        custodianFile: publicFile,
+        confirmationFile: currentFile,
+        custodianFingerprint: fingerprint,
       },
-      readPublicEvidence: async () => undefined,
-    });
+      {
+        environment: {},
+        readPublicEvidence: async () => undefined,
+      },
+    );
     await expect(
       withOperationAuthority(context.binding, context.administratorId, (authority) =>
         operations.prepare(
