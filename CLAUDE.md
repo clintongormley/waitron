@@ -777,8 +777,8 @@ passed while proving nothing.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
   OUTER config's `test.browser` block**. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
-- **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
-  output**; unset both to see it.
+- **Under an AI agent (`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX` or `CODEX_THREAD_ID` set), Vitest
+  hides a passing test's console output.** Pass `--reporter=default` to see it.
 - **A Vitest run that shows no `Tests` count is no evidence that anything passed, whatever its exit
   status.** Read the count, never a blank output or the exit status of a pipe; under a reporter
   that prints none, read the reporter's own result.
