@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import * as printing from "@waitron/printing";
 import { joinTables } from "./testing/table-action-fixture.js";

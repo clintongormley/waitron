@@ -19,7 +19,7 @@ import {
   saveMenuPeriod,
   updateMenuPeriod,
 } from "@waitron/venue-service";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { setSetMenuCount } from "./set-menu-count.js";
 import { mountTillApi } from "./till-api.js";

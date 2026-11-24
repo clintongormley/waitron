@@ -37,7 +37,8 @@ import {
 } from "./testing/adjustment-venue.js";
 import { readBillEditState } from "./bill-editing.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { correctJoin, fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { correctJoin } from "./order-group-hold-paper.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
 import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";

@@ -31,7 +31,7 @@ import {
   registerModulePermissions,
 } from "@waitron/identity";
 import { setRoutingCell, setStationToday, VENUE_SERVICE_PERMISSIONS } from "@waitron/venue-service";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";

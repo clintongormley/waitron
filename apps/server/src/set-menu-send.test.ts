@@ -11,7 +11,7 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { GroupRelease } from "./order-groups.js";
+import type { GroupRelease } from "./order-group-records.js";
 import { readDrafts, submitDraft, type Draft } from "./order-drafts.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {

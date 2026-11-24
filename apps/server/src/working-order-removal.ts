@@ -41,8 +41,8 @@ import {
   type HeldChange,
   holdPaperFor,
   correctHoldTickets,
-  removeEmptiedHeldGroups,
-} from "./order-groups.js";
+} from "./order-group-hold-paper.js";
+import { removeEmptiedHeldGroups } from "./order-group-records.js";
 import {
   keptExtrasOf,
   type KeptExtra,

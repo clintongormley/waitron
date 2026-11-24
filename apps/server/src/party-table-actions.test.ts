@@ -41,7 +41,7 @@ import { setStationPrinting } from "./testing/station-printing.js";
 import { serveLine } from "./testing/serve-line.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";

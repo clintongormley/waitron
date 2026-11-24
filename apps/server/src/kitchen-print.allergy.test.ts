@@ -11,7 +11,7 @@ import type { DietaryLabel, ProductAllergens } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
-import { submitGroups } from "./order-groups.js";
+import { submitGroups } from "./order-group-submission.js";
 import {
   enqueueAllergyCorrectionSlips,
   enqueueMovedSlips,

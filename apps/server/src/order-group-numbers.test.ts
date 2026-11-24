@@ -5,13 +5,10 @@ import { orderGroups, parties, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  listOrderGroups,
-  moveGroupsToParty,
-  readCurrentOrders,
-  reorderHeldGroups,
-  startGroup,
-} from "./order-groups.js";
+import { moveGroupsToParty } from "./order-group-transfer.js";
+import { reorderHeldGroups } from "./order-group-edits.js";
+import { listOrderGroups, readCurrentOrders } from "./order-group-reads.js";
+import { startGroup } from "./order-group-records.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-00000000000a";
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

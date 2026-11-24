@@ -24,7 +24,7 @@ import { addGroupedTabRound, updateOrderLine } from "./testing/order-writer-fixt
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { passScreensDark, stationScreensDark } from "./station-outputs-down.js";
 import { readStationDeleteImpact } from "./station-delete.js";
 import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";

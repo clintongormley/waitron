@@ -64,7 +64,8 @@ import {
   addTabRound,
   moveDishesToStation,
 } from "./testing/order-writer-fixture.js";
-import { fireGroup, submitGroups } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { submitGroups } from "./order-group-submission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { setStationToday } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";

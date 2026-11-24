@@ -43,7 +43,7 @@ import { splitBill } from "./testing/bill-action-fixture.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
 // status each refusal maps to, and the answer's shape. What the commands do is pinned in
-// `order-groups.test.ts`.
+// the `order-group-*.test.ts` suites.
 let venue: BillVenue;
 
 useVenueDb({

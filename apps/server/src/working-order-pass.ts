@@ -24,7 +24,7 @@ import { type SQL, sql, eq, and } from "drizzle-orm";
 import { readFormerNumbers } from "./former-numbers.js";
 import { firedQuantity, liveKitchenDish } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readGroupNumberLabels } from "./order-groups.js";
+import { readGroupNumberLabels } from "./order-group-records.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import type { PassRow } from "./pass-card.js";
 import {

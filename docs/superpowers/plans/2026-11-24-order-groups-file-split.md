@@ -52,7 +52,14 @@ delete the old product file. Keep route, storage and fiscal behaviour as it is.
    [Carry an open branch across the split](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
    Substitute `order-groups.ts`, `order-groups.test.ts` and `scripts/order-groups-split.json` for
    the corresponding working-order paths. The `jq '.moves |= .[:1]'` command moves product code
-   only. Move edits to test cases by hand using the map.
+   only. Move edits to test cases by hand using the map. Before running the mover in the two
+   disposable checkouts, copy in the version from the split commit. It recognises the optional
+   final semicolon Prettier adds to a wrapped object type.
+
+   ```zsh
+   git show "${split}:scripts/move-ts-declarations.mjs" > "$scratch/base/scripts/move-ts-declarations.mjs"
+   cp "$scratch/base/scripts/move-ts-declarations.mjs" "$scratch/branch/scripts/move-ts-declarations.mjs"
+   ```
 
 Expect about 2,900 product and 6,300 test or fixture lines to move, plus 700–1,000 changed import
 lines and around 150 map and duration lines. The existing tests retain their assertions. The till

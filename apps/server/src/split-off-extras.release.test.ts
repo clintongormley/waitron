@@ -19,7 +19,8 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { OPERATOR } from "./testing/party-venue.js";
 import { bumpBillReady } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";
-import { fireGroup, readCurrentOrders } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { readCurrentOrders } from "./order-group-reads.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";

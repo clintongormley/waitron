@@ -57,7 +57,7 @@ import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";

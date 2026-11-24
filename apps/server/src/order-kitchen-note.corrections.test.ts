@@ -1,5 +1,5 @@
 import { ensureOperator } from "./testing/cancel-line.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";

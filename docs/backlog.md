@@ -1491,7 +1491,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Find a bill search and date, bill allocation, receipt figures, receipt issuer, invoice typing and receipt facts suites independently.
   When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,
   `invoice-document.set-menus`, `receipt-ticket`, `invoice-layout`, `receipt-adjustments`,
-  `list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-groups`,
+  `list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-group-*.test.ts`,
   `working-order`, `issuance-pass` and `free-item-share` suites. When changing the VAT table,
   also run `receipt-ticket`. When changing receipt figures, also run the server's
   `receipt-adjustments`, `invoice-document`, `invoice-layout`, `receipt-document`,

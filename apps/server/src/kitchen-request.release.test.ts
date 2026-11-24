@@ -24,7 +24,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { fireGroup, fireHeldLine } from "./order-groups.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { fireOrderLines } from "./working-order-kitchen-service.js";

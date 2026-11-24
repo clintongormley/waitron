@@ -24,7 +24,7 @@ import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "../bill-editing.js";
 import { ALLERGEN_NAMES } from "../i18n/kitchen-allergy.js";
 import { VENUE_SERVICE } from "../modules.js";
-import { submitGroups } from "../order-groups.js";
+import { submitGroups } from "../order-group-submission.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { mountTillApi } from "../till-api.js";
 import { sessionCookieForTest } from "./session-device.js";

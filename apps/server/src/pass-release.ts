@@ -12,7 +12,7 @@ import { passScopeOf, readPassCardRows, type PassScope } from "./pass-board.js";
 import { passCardRelease, type PassRow, type PassTarget } from "./pass-card.js";
 import { enqueueKitchenTickets, inIds, type FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
-import { heldPaperStations } from "./order-groups.js";
+import { heldPaperStations } from "./order-group-hold-paper.js";
 import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
 import { runServiceCommand, type CommandScope } from "./parties.js";

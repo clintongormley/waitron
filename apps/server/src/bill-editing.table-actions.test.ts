@@ -21,7 +21,7 @@ import {
 } from "./table-actions.js";
 import { mergeBills, moveDishes } from "./bill-actions.js";
 import { takeBillPayment } from "./bill-payments.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { openTillSession } from "./testing/session-device.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";

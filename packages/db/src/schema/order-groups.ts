@@ -20,7 +20,7 @@ export const orderGroupState = enumType(["held", "fired", "removed"]);
 export type OrderGroupRequestKind = "new_order" | "next_course" | "added";
 
 /**
- * One group of a party's order, released to the kitchen together (`apps/server/src/order-groups.ts`).
+ * One group of a party's order, released to the kitchen together (`apps/server/src/order-group-release.ts`).
  * A line names its group in `working_order_lines.group_id`, whichever of the party's bills it sits
  * on. A group emptied while held is `removed`, never deleted, because its events point at it.
  *

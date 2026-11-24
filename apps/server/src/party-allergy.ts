@@ -35,7 +35,8 @@ import {
 import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readDrafts } from "./order-drafts.js";
-import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
+import { readCurrentOrders, type CurrentOrderRow } from "./order-group-reads.js";
+import { requireGroup } from "./order-group-records.js";
 import { fingerprint, partyFamily, partyZone } from "./parties.js";
 import { extraQuantityFor } from "./order-line-quantities.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";

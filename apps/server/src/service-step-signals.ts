@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { TableSignal } from "@waitron/shared";
 import { readStepCompletions, readTableStepRules } from "@waitron/venue-service";
-import { onShownBill } from "./order-groups.js";
+import { onShownBill } from "./order-group-reads.js";
 import {
   liveSteps,
   servedTimes,

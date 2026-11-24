@@ -173,7 +173,7 @@ problems; it does not replace submission validation.
 
 The submission route, `POST /api/parties/:id/drafts/:did/submit`, carries groups of saved draft-line
 ids, not replacement modifier answers. `submitDraft` passes the selected lines to `placeGroups`
-(`apps/server/src/order-groups.ts`), which prices them. Unselected draft lines remain unsent. Save and submit also compare the bill's editor state; taking over another bill does not
+(`apps/server/src/order-group-submission.ts`), which prices them. Unselected draft lines remain unsent. Save and submit also compare the bill's editor state; taking over another bill does not
 grant access to this one. The [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
 defines that separate contract.
 

@@ -35,7 +35,7 @@ import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";
 import { requestBill } from "./bill-request.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { fireGroup, fireHeldLine } from "./order-groups.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";

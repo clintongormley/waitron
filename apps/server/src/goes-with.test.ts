@@ -22,7 +22,7 @@ import {
 } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { passStationsByGroup } from "./working-order-pass-groups.js";

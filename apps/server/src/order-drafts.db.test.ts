@@ -10,7 +10,8 @@ import {
 } from "./testing/draft-command-fixture.js";
 import * as workingOrderOpen from "./working-order-open.js";
 import * as workingOrderKitchenFire from "./working-order-kitchen-fire.js";
-import * as groupWrites from "./order-groups.js";
+import * as orderGroupTransfer from "./order-group-transfer.js";
+import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
@@ -68,7 +69,7 @@ import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState } from "./working-order-table-state.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
-import type { GroupRelease } from "./order-groups.js";
+import type { GroupRelease } from "./order-group-records.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
@@ -4383,7 +4384,7 @@ describe("fresh drafts alongside existing bill families", () => {
     );
     if (state === "fired")
       await inTx(async (tx) =>
-        groupWrites.fireGroup(tx, v.cfg, from.partyId, groupId, {
+        fireGroup(tx, v.cfg, from.partyId, groupId, {
           submissionId: randomUUID(),
           operatorId: ALEX,
           expectedPartyRevision: await partyRevision(from.partyId),
@@ -4677,9 +4678,9 @@ describe("fresh drafts alongside existing bill families", () => {
             otherPartyId: null,
           }),
         );
-      const arrive = groupWrites.groupArrivingDishes;
+      const arrive = orderGroupTransfer.groupArrivingDishes;
       const probe = vi
-        .spyOn(groupWrites, "groupArrivingDishes")
+        .spyOn(orderGroupTransfer, "groupArrivingDishes")
         .mockImplementation(async (...args) => {
           await arrive(...args);
           throw new AppError("management.request_invalid", { field: "arrival_probe" });

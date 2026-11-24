@@ -21,7 +21,7 @@ import { listStationNotices, setRoutingCell } from "@waitron/venue-service";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { createStation } from "./kitchen.js";
-import { readCurrentOrders, readReleaseReminders } from "./order-groups.js";
+import { readCurrentOrders, readReleaseReminders } from "./order-group-reads.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {

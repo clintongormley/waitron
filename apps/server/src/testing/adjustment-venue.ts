@@ -44,7 +44,8 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
 
 import { placeGroups } from "./group-submit-fixture.js";
-import { printHoldTickets, recordGroupEvent, startGroup } from "../order-groups.js";
+import { printHoldTickets } from "../order-group-hold-paper.js";
+import { recordGroupEvent, startGroup } from "../order-group-records.js";
 import { bumpRevision } from "../working-order-edit-state.js";
 import { insertTabRound, priceTabRound, type TabRoundLine } from "../working-order-open.js";
 import { fireLines } from "../working-order-kitchen-fire.js";

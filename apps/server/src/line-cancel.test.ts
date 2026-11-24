@@ -40,7 +40,8 @@ import {
   listStationPrinters,
   replaceStationPrinters,
 } from "./station-printers.js";
-import { fireGroup, printHoldTickets } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { printHoldTickets } from "./order-group-hold-paper.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk, type CancelItemCommand } from "./line-cancel.js";

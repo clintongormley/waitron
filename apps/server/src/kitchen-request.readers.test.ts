@@ -11,7 +11,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { listOrderGroups, readHeldCounts, readReleaseReminders } from "./order-groups.js";
+import { listOrderGroups, readHeldCounts, readReleaseReminders } from "./order-group-reads.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { readPartySignals } from "./table-signals.js";

@@ -50,17 +50,19 @@ import {
 } from "./modifier-selection.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
-  nextFireKind,
-  requireOperator,
-  startGroup,
-  recordGroupEvent,
   correctHoldTickets,
   holdPaperFor,
   type HeldChange,
   recordJoiningStations,
   printHoldTickets,
   correctJoin,
-} from "./order-groups.js";
+} from "./order-group-hold-paper.js";
+import {
+  nextFireKind,
+  requireOperator,
+  startGroup,
+  recordGroupEvent,
+} from "./order-group-records.js";
 import { extraQuantityFor, perDishExtraPicks, grossLineTotal } from "./order-line-quantities.js";
 import {
   type GrowingPortion,

@@ -20,7 +20,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { attendanceDays, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
-import { groupArrivingDishes } from "./order-groups.js";
+import { groupArrivingDishes } from "./order-group-transfer.js";
 import { createCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { createTable } from "./testing/live-table.js";

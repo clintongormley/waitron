@@ -2,11 +2,8 @@ import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { workingOrderLines, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { readBillEditState } from "../bill-editing.js";
-import {
-  moveLinesToGroup as move,
-  splitHeldLineIntoUnits as split,
-  type PartyCommandArgs,
-} from "../order-groups.js";
+import { moveLinesToGroup as move, splitHeldLineIntoUnits as split } from "../order-group-edits.js";
+import { type PartyCommandArgs } from "../order-group-records.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import type { TradingContext } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order-context.js";

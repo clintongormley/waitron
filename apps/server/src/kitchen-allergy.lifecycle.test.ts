@@ -28,7 +28,8 @@ import {
 } from "@waitron/menu";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { submitGroups, fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { submitGroups } from "./order-group-submission.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { splitLinesWithinOrder, splitUnitsWithinOrder } from "./working-order-transfer.js";
 import { moveDishesToStation } from "./station-move.js";

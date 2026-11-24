@@ -7,7 +7,8 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { fireGroup, moveLinesToGroup, splitHeldLineIntoUnits } from "./order-groups.js";
+import { moveLinesToGroup, splitHeldLineIntoUnits } from "./order-group-edits.js";
+import { fireGroup } from "./order-group-release.js";
 import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
 import {
   readDrafts,

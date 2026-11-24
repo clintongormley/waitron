@@ -363,7 +363,7 @@ export async function assertTabOpen(tx: Transaction, tabId: string): Promise<num
 export interface TabLine {
   nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in the group's
-   *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-groups.ts`). */
+   *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-group-reads.ts`). */
   id: string;
   /** The STAFF name (the variant's on a variant line): a waiter reads this list, not a diner. */
   name: string;

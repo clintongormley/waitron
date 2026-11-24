@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { addStarterServiceSteps } from "@waitron/venue-service";
 import { createCourse, readCourseFireNowZones, setProductCourse } from "./kitchen.js";
-import { readReleaseReminders } from "./order-groups.js";
+import { readReleaseReminders } from "./order-group-reads.js";
 import { readTableSteps } from "./service-step-signals.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {

@@ -21,7 +21,7 @@ import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { createCourse } from "./kitchen.js";
-import { bumpGroupReady } from "./order-groups.js";
+import { bumpGroupReady } from "./order-group-readiness.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { moveGuests } from "./testing/table-action-fixture.js";

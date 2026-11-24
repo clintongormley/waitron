@@ -16,16 +16,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { moveDishes } from "./bill-actions.js";
 import { createCourse } from "./kitchen.js";
-import {
-  fireGroup,
-  fireHeldLine,
-  groupArrivingDishes,
-  moveLinesToGroup,
-  removeEmptiedHeldGroups,
-  reorderHeldGroups,
-  startGroup,
-  type GroupRelease,
-} from "./order-groups.js";
+import { groupArrivingDishes } from "./order-group-transfer.js";
+import { moveLinesToGroup, reorderHeldGroups } from "./order-group-edits.js";
+import { fireGroup, fireHeldLine } from "./order-group-release.js";
+import { removeEmptiedHeldGroups, startGroup, type GroupRelease } from "./order-group-records.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { addTabRound, sendLines, updateHeldOrder } from "./testing/order-writer-fixture.js";

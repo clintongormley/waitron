@@ -368,7 +368,7 @@ Remaining Stripe qualification and maintenance.
   was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
   The writes allowed above count their write with `bumpRevisionKeepingPayment`
   (`apps/server/src/working-order-edit-state.ts`). Tests: the "card payment" and "refund" cases in
-  `apps/server/src/bill-editing.station-move.test.ts`, `order-groups.test.ts`,
+  `apps/server/src/bill-editing.station-move.test.ts`, `order-group-edits.test.ts`,
   `working-order-held-write.test.ts`, `till-api.unroutable-dish.test.ts` and `station-delete.test.ts`; the
   card-at-the-reader cases in `till-api.kitchen-note.test.ts` and `till-api.test.ts`.
 

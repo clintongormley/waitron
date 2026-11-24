@@ -74,7 +74,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { parkedRace } from "./testing/parked-race.js";
 import "./errors.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { cancelLine } from "./testing/cancel-line.js";

@@ -89,7 +89,8 @@ import { finishTable } from "./testing/party-close-fixture.js";
 import { numbersOf as billNumbersOf } from "./testing/bill-identities.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
-import { fireGroup, recordHeldPaper } from "./order-groups.js";
+import { fireGroup } from "./order-group-release.js";
+import { recordHeldPaper } from "./order-group-hold-paper.js";
 import { insertPartyBill } from "./parties.js";
 import {
   enqueueCorrectionSlips,
