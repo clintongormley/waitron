@@ -56,6 +56,7 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("Saved venue");
   expect(text).toContain("89890001K");
   expect(text).toContain("Saved venue");
+  expect(text).not.toContain(t("restore.preview_older_key"));
   expect(text).not.toContain(t("restore.preview_keep_keys"));
   expect(text).not.toContain(t("restore.preview_key_separate"));
   expect(text).not.toContain("archive-secret");
@@ -64,17 +65,19 @@ it("shows the selected backup's key name and date without exposing the archive e
 it.each([
   [
     "en-GB",
+    "An older backup brings back its older master key.",
     "Keep older master keys until no older backup remains.",
     "The backup encryption key opens the copy. The master key authorises recovery.",
   ],
   [
     "es-ES",
+    "Una copia antigua recupera la clave maestra de entonces.",
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
     "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
   ],
 ] as const)(
   "tells the %s review of a filing backup that the master key authorises recovery",
-  async (locale, keep, separate) => {
+  async (locale, older, keep, separate) => {
     setLocale(locale);
     const { el } = await mount(
       async () =>
@@ -94,6 +97,7 @@ it.each([
     review(el);
     await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
     const text = child(el)!.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(older);
     expect(text).toContain(keep);
     expect(text).toContain(separate);
   },

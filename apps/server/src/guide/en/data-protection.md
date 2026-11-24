@@ -559,7 +559,7 @@ so change those at each provider too. While scheduled backups are on, **Backups*
 **Change the backup encryption key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
 pack. Scheduled backups made before the change and the whole older bucket copy still need the
 old key. Keep the matching recovery pack for any older copy you may need to restore. A pack can also
-hold the box key. To replace it, choose **Make a new master key**, which makes a new box key too: restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
+hold the box key. To replace it, choose **Make a new master key**, which makes a new box key too: for a venue that files invoices, restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with

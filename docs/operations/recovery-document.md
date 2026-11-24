@@ -20,9 +20,10 @@ permission and a secure (HTTPS) connection to that box.
    or until your session ends.
 4. Choose **Download PDF**, **Open to print**, or both. The box keeps no copy, so save or print the
    pack before you leave the page. Keep it locked away, off the box.
-5. Keep older packs and sheets for older backups. After **Make a new master key**, new backups
-   need the new master key, and an older backup still needs the master key that was current when it was made. A new key cannot unlock an older
-   backup whose matching key you have lost.
+5. Keep older packs and sheets for older backups. After **Make a new master key**, restoring a
+   backup made after that needs the new master key, and restoring an older backup still needs the
+   master key that was current when it was made. A new master key cannot authorise restoring an
+   older backup whose master key you have lost.
 
 For example, keep Monday's pack while you keep Monday's backup, even if you make a new master key
 on Tuesday. Check the key name on the selected copy when you [recover the box](hour-recovery.md).

@@ -616,8 +616,8 @@ seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del c
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
 puede contener la clave del servidor. Para sustituirla, elige **Crear una clave maestra nueva**, que
-también crea una clave del servidor nueva: para restaurar una copia hecha después hace falta la clave
-maestra nueva, y para restaurar una anterior sigue haciendo falta la antigua.
+también crea una clave del servidor nueva: en un local que emite facturas, para restaurar una copia
+hecha después hace falta la clave maestra nueva, y para restaurar una anterior sigue haciendo falta la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,
