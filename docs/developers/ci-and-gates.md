@@ -97,6 +97,34 @@ the pre-push hook), the CI job layout and scheduling, the pnpm filter traps, and
 machine-resource rules, plus a migration-upgrade group: its coverage, how its stall report works, and
 why it keeps its database in memory.
 
+## Product file size
+
+Keep each product TypeScript file within 1,000 physical lines, including comments and blank
+lines. CI reports the path, line count and limit. When a file reaches its limit, move code into a
+new file. Add or raise a cap in `scripts/product-file-size-limits.json` only with the watcher's or
+owner's approval.
+
+The first caps round the counts on main up to a multiple of 250. When a listed file sits more
+than 250 lines below its cap, lower the cap to the nearest multiple of 250 at or above its current
+count. Remove the entry if the new cap would be 1,000, the file drops below 1,000 lines, or the
+file leaves the scan.
+
+`pnpm exec vitest run scripts/product-file-size.test.ts` reads regular working-tree files listed
+by Git under `apps/*/src/` and `packages/*/src/` with the `.ts` extension. The scan excludes
+`testing/` directories, files named `test-helpers.ts`, and the suffixes `.test.ts`,
+`.test-helpers.ts`, `.test-support.ts`, `.test-fixture.ts` and `.fixtures.ts`. It also excludes
+`strings.ts`, `i18n/strings/`, dashboard and till `i18n/codes.ts`, dashboard
+`i18n/alert-messages.ts`, country packs' `src/demo/` data and the generated
+`packages/reporting/src/dr303-layout.ts`.
+
+The guard uses the caps as entered. In review, check that caps are whole numbers, each path
+appears only once, and each added or raised cap has approval. Look for product code renamed
+or moved into any excluded path. For example, the two excluded `codes.ts` catalogues already
+contain resolver code. Untracked files, other extensions and files outside the named source
+directories lie outside the scan. Two pull requests can each pass against their own heads while
+together growing a file past its cap or shrinking it enough to need a lower cap. The root guard
+on main evaluates the combined result.
+
 ## The image's release metadata comes from its source
 
 Before building either image, CI writes the pinned commit's full SHA and committer time with
