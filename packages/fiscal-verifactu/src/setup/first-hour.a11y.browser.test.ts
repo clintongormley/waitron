@@ -200,7 +200,11 @@ for (const theme of ["light", "dark"] as const)
             if (state === "pdf") {
               await click("prepare-pdf");
               await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
+                expect(
+                  el
+                    .shadowRoot!.querySelector("wt-master-key-box")
+                    ?.shadowRoot!.querySelector("[data-test=download]") ?? null,
+                ).not.toBeNull(),
               );
             }
             expect((await axe.run(host)).violations).toEqual([]);

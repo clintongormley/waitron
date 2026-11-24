@@ -43,8 +43,17 @@ const input = {
     ],
   },
 };
-const control = (el: LitElement, name: string) =>
-  el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`);
+/** Finds the part named `name` on the step, or inside its master key box. */
+const control = (el: LitElement, name: string) => {
+  const selector = `[data-test=${name}]`;
+  return (
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector) ??
+    el
+      .shadowRoot!.querySelector("wt-master-key-box")
+      ?.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector) ??
+    null
+  );
+};
 const text = (el: LitElement, name: string) => control(el, name)?.textContent?.trim();
 
 /** Spies the browser's download and new-tab opening, so a test reads what each button hands over. */
@@ -55,7 +64,7 @@ function captureHandovers() {
   ) {
     downloads.push({ href: this.href, name: this.download });
   });
-  const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+  const opened = vi.spyOn(window, "open").mockImplementation(() => ({}) as Window);
   const copied: string[] = [];
   vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (value: string) => {
     copied.push(value);
@@ -157,15 +166,15 @@ it("a Live setup ends with the Recovery pack step: after the password, the key b
   await showKey(el);
   expect(text(el, "master-key-name")).toBe("Master key · 2026-11-23 · QZJV");
   expect(text(el, "master-key")).toBe(KEY);
-  expect(text(el, "download-pdf")).toBe("Download");
-  expect(text(el, "print-pdf")).toBe("Print");
-  expect(text(el, "copy-key")).toBe("Copy");
+  expect(text(el, "download")).toBe("Download");
+  expect(text(el, "print")).toBe("Print");
+  expect(text(el, "copy")).toBe("Copy");
   expect(control(el, "prepare-pdf")).toBeNull();
   expect(el.shadowRoot!.querySelector('input[name="setup-pdf-kept"]')).toBeNull();
   expect(downloads).toEqual([]);
   expect(opened).not.toHaveBeenCalled();
   expect(control(el, "kept")).toBeNull();
-  await userEvent.click(control(el, "download-pdf")!);
+  await userEvent.click(control(el, "download")!);
   expect(downloads).toHaveLength(1);
   expect(downloads[0]!.name).toBe("waitron-recovery-pack-1.pdf");
   const file = await readRecoveryPackPdf(
@@ -174,8 +183,8 @@ it("a Live setup ends with the Recovery pack step: after the password, the key b
   expect(file.masterKey).toBe(KEY);
 });
 
-it.each(["download-pdf", "print-pdf", "copy-key"])(
-  "Continue is not shown until Download, Print or Copy has been used, and keeps the pack once pressed: %s",
+it.each(["download", "print"])(
+  "Continue is not shown until Download or Print has been used, and keeps the pack once pressed: %s",
   async (used) => {
     captureHandovers();
     const { el, kept } = await mount();
@@ -192,18 +201,54 @@ it.each(["download-pdf", "print-pdf", "copy-key"])(
   },
 );
 
+it("Copy alone leaves Continue hidden: the pack also holds the box key, which Copy leaves out", async () => {
+  captureHandovers();
+  const { el, kept } = await mount();
+  await showKey(el);
+  await userEvent.click(control(el, "copy")!);
+  await expect.poll(() => text(el, "copied")).toBe("Copied.");
+  expect(control(el, "kept")).toBeNull();
+  expect(kept).toEqual([]);
+});
+
+it("a Print the browser blocks does not count: it says so where a refused Copy does, and Continue stays hidden", async () => {
+  captureHandovers();
+  vi.spyOn(window, "open").mockReturnValue(null);
+  const { el, host } = await mount();
+  await showKey(el);
+  await userEvent.click(control(el, "print")!);
+  await expect
+    .poll(() => text(el, "print-failed"))
+    .toBe("Print did not open. Use Download, or allow pop-ups and try again.");
+  expect(control(el, "kept")).toBeNull();
+  expect((await axe.run(host)).violations).toEqual([]);
+});
+
+it("says in Spanish when a Print is blocked", async () => {
+  captureHandovers();
+  vi.spyOn(window, "open").mockReturnValue(null);
+  const { el } = await mount("es");
+  await showKey(el);
+  await userEvent.click(control(el, "print")!);
+  await expect
+    .poll(() => text(el, "print-failed"))
+    .toBe(
+      "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
+    );
+});
+
 it("Copy puts the key on the clipboard exactly as printed, and Print opens the pack Download saves", async () => {
   const { copied, opened, downloads } = captureHandovers();
   const { el } = await mount();
   await showKey(el);
   expect(control(el, "copied")).toBeNull();
-  await userEvent.click(control(el, "copy-key")!);
+  await userEvent.click(control(el, "copy")!);
   await expect.poll(() => text(el, "copied")).toBe("Copied.");
   expect(copied).toEqual(["88DP 74BA YPVB RRM5 XFV2 WPQY B5M5"]);
-  await userEvent.click(control(el, "download-pdf")!);
-  await userEvent.click(control(el, "print-pdf")!);
+  await userEvent.click(control(el, "download")!);
+  await userEvent.click(control(el, "print")!);
   expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
-  await userEvent.click(control(el, "download-pdf")!);
+  await userEvent.click(control(el, "download")!);
   expect(downloads).toHaveLength(2);
   expect(downloads[1]!.href).toBe(downloads[0]!.href);
 });
@@ -213,14 +258,14 @@ it("a Copy the browser refuses says so under the key box, never Copied., and lea
   vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
   const { el, host } = await mount();
   await showKey(el);
-  await userEvent.click(control(el, "copy-key")!);
+  await userEvent.click(control(el, "copy")!);
   await expect
     .poll(() => text(el, "copy-failed"))
     .toBe("Copy did not work. Use Download or Print, or write the key down.");
   expect(control(el, "copied")).toBeNull();
   expect(control(el, "kept")).toBeNull();
   expect((await axe.run(host)).violations).toEqual([]);
-  await userEvent.click(control(el, "download-pdf")!);
+  await userEvent.click(control(el, "download")!);
   await expect.poll(() => control(el, "kept")).not.toBeNull();
 });
 
@@ -230,7 +275,7 @@ it("offers no new keys while the box holds the key it made", async () => {
   expect(control(el, "replace-key")).toBeNull();
   await showKey(el);
   expect(control(el, "replace-key")).toBeNull();
-  await userEvent.click(control(el, "copy-key")!);
+  await userEvent.click(control(el, "download")!);
   await expect.poll(() => control(el, "kept")).not.toBeNull();
   expect(control(el, "replace-key")).toBeNull();
   expect(reissues).toEqual([]);
@@ -273,6 +318,11 @@ it.each([
     await userEvent.click(control(el, "prepare-pdf")!);
     await expect.poll(() => text(el, "key-lost")).toBe(lost);
     expect(text(el, "replace-key")).toBe(replace);
+    expect(
+      el.shadowRoot!.querySelector("wt-form-actions[data-failed=false]"),
+      "the lost-key sentence is the only message",
+    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).toBeNull();
     expect(control(el, "prepare-pdf")).toBeNull();
     expect((await axe.run(host)).violations).toEqual([]);
     await userEvent.click(control(el, "replace-key")!);
@@ -295,12 +345,13 @@ it("shows the Recovery pack step in Spanish", async () => {
   expect(text(el, "prepare-pdf")).toBe("Mostrar la clave maestra");
   await showKey(el);
   expect(text(el, "master-key-name")).toBe("Clave maestra · 2026-11-23 · QZJV");
-  expect(text(el, "download-pdf")).toBe("Descargar");
-  expect(text(el, "print-pdf")).toBe("Imprimir");
-  expect(text(el, "copy-key")).toBe("Copiar");
-  await userEvent.click(control(el, "copy-key")!);
+  expect(text(el, "download")).toBe("Descargar");
+  expect(text(el, "print")).toBe("Imprimir");
+  expect(text(el, "copy")).toBe("Copiar");
+  await userEvent.click(control(el, "copy")!);
   await expect.poll(() => text(el, "copied")).toBe("Copiada.");
-  expect(text(el, "kept")).toBe("Continuar");
+  await userEvent.click(control(el, "download")!);
+  await expect.poll(() => text(el, "kept")).toBe("Continuar");
 });
 
 it("says in Spanish when a Copy is refused", async () => {
@@ -308,7 +359,7 @@ it("says in Spanish when a Copy is refused", async () => {
   vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
   const { el } = await mount("es");
   await showKey(el);
-  await userEvent.click(control(el, "copy-key")!);
+  await userEvent.click(control(el, "copy")!);
   await expect
     .poll(() => text(el, "copy-failed"))
     .toBe("No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.");

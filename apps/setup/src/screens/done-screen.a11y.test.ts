@@ -13,7 +13,11 @@ function apiWith(getStatus: () => Promise<unknown>): SetupApi {
   } as unknown as SetupApi;
 }
 
-const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+/** Finds `sel` on the screen, or inside its master key box. */
+const q = (el: SetupDoneScreen, sel: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(sel) ??
+  el.shadowRoot!.querySelector("wt-master-key-box")?.shadowRoot!.querySelector<HTMLElement>(sel) ??
+  null;
 
 afterEach(() => {
   setLocale("en-GB");
@@ -77,8 +81,9 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the Recovery pack step, before and after Copy, at phone and desktop widths in both languages", async () => {
+  it("has no violations on the Recovery pack step, before and after Copy and Download, at phone and desktop widths in both languages", async () => {
     vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const { host, el } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
@@ -103,7 +108,10 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           await expectNoA11yViolations(host);
         }
       }
-      q(el, "[data-test=pack-copy]")!.click();
+      q(el, "[data-test=copy]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=copied]")).not.toBeNull());
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=download]")!.click();
       await vi.waitFor(() => expect(q(el, "[data-test=pack-continue]")).not.toBeNull());
       await expectNoA11yViolations(host);
     } finally {
@@ -127,8 +135,8 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       theme,
     );
     try {
-      q(el, "[data-test=pack-copy]")!.click();
-      await vi.waitFor(() => expect(q(el, "[data-test=pack-copy-failed]")).not.toBeNull());
+      q(el, "[data-test=copy]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=copy-failed]")).not.toBeNull());
       for (const locale of ["en-GB", "es-ES"] as const) {
         setLocale(locale);
         await el.updateComplete;

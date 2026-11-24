@@ -51,7 +51,10 @@ const old = pair("Old key", "old", "AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 const replacement = pair("New key", "replacement", "012345AbCdEfGhIjKlMnOpQrStUvWxYz");
 const control = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`)!;
-const download = (el: LitElement) => el.shadowRoot!.querySelector("[data-test=download-pdf]");
+const download = (el: LitElement) =>
+  el
+    .shadowRoot!.querySelector("wt-master-key-box")
+    ?.shadowRoot!.querySelector<HTMLElement>("[data-test=download]") ?? null;
 /** The files the step has handed to the browser to save, newest last. */
 const saved: string[] = [];
 beforeEach(() => {
@@ -142,10 +145,8 @@ const lost = async (): Promise<InitialSetupNodeKey> => {
 /** Asks for the key the box has lost, which is what offers the replacement. */
 async function loseKey(el: LitElement) {
   await userEvent.click(control(el, "prepare-pdf"));
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
-    .not.toBeNull();
   await expect.poll(() => control(el, "replace-key")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=false]")).not.toBeNull();
 }
 async function keep(el: LitElement) {
   await userEvent.click(control(el, "kept"));
@@ -153,10 +154,7 @@ async function keep(el: LitElement) {
 }
 it("offers explicit replacement after raw-key loss and delivers the new real PDF for the same frozen hour", async () => {
   const { el, calls } = await mount(lost);
-  await userEvent.click(control(el, "prepare-pdf"));
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
-    .not.toBeNull();
+  await loseKey(el);
   expect(calls.filter((c) => c.action === "reissue")).toEqual([]);
   const replace = control(el, "replace-key");
   expect(replace, "lost raw key has an explicit replacement action").not.toBeNull();

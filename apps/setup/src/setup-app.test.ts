@@ -1522,13 +1522,12 @@ describe("setup-app", () => {
       provisionRequest(el);
       await flush(el);
       expect(await screenText(el, "done", "h1")).toBe("Recovery pack");
-      expect(await screenText(el, "done", "[data-test=master-key-name]")).toBe(
-        "Master key · 2026-11-23 · QZJV",
-      );
-      expect(await screenText(el, "done", "[data-test=master-key]")).toBe(
-        "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
-      );
-      expect(await screenText(el, "done", "[data-test=pack-download]")).toBe("Download");
+      const box = (await screenHost(el, "done")).shadowRoot!.querySelector("wt-master-key-box")!;
+      await box.updateComplete;
+      const inBox = (sel: string) => box.shadowRoot!.querySelector(sel)?.textContent?.trim();
+      expect(inBox("[data-test=master-key-name]")).toBe("Master key · 2026-11-23 · QZJV");
+      expect(inBox("[data-test=master-key]")).toBe("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
+      expect(inBox("[data-test=download]")).toBe("Download");
     },
   );
 

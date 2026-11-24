@@ -32,6 +32,11 @@ const control = <T extends HTMLElement = HTMLElement & { disabled: boolean }>(
   el: LitElement,
   name: string,
 ) => el.shadowRoot!.querySelector<T>(`[data-test=${name}]`)!;
+/** A part of the hour step's master key box. */
+const keyPart = (hour: LitElement, name: string) =>
+  hour
+    .shadowRoot!.querySelector("wt-master-key-box")
+    ?.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`) ?? null;
 async function screen(app: SetupApp, name: string) {
   await expect.poll(() => control(app, `screen-${name}`)).not.toBeNull();
   const el = control<LitElement>(app, `screen-${name}`);
@@ -203,7 +208,7 @@ it("cancelling the password prompt leaves Show the master key in place and shows
     venue.admin.password,
   );
   await userEvent.click(control(shell, "reconfirm"));
-  await expect.poll(() => control(hour, "master-key")).not.toBeNull();
+  await expect.poll(() => keyPart(hour, "master-key")).not.toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/node-key-reissue"))).toEqual([]);
 });
 
@@ -222,11 +227,11 @@ for (const locale of ["en-GB", "es-ES"] as const)
           );
           await userEvent.click(control(hour, "prepare-pdf"));
           await password();
-          await expect
-            .poll(() => hour.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
-            .not.toBeNull();
+          await expect.poll(() => control(hour, "replace-key")).not.toBeNull();
+          expect(
+            hour.shadowRoot!.querySelector("wt-form-actions[data-failed=false]"),
+          ).not.toBeNull();
           expect(requests.some((r) => r.path.endsWith("/node-key-reissue"))).toBe(false);
-          expect(control(hour, "replace-key")).not.toBeNull();
           await userEvent.click(control(hour, "replace-key"));
           await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
           expect(control(shell, "next").disabled).toBe(true);
@@ -236,10 +241,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
             path: `__screenshots__/a679-reissue/${locale}-${theme}-${width}-password.png`,
           });
           await password();
-          await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
+          await expect.poll(() => keyPart(hour, "download")).not.toBeNull();
           expect(control(hour, "replace-key")).toBeNull();
           expect(control(hour, "kept")).toBeNull();
-          await userEvent.click(control(hour, "download-pdf"));
+          await userEvent.click(keyPart(hour, "download")!);
           const bytes = new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer());
           expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
           expect(control(shell, "next").disabled).toBe(true);

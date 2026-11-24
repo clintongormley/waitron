@@ -162,6 +162,11 @@ function size(el: LitElement, token: string) {
 }
 const button = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test="${name}"]`)!;
+/** A part of the step's master key box: its key, name, buttons and what they say. */
+const keyPart = (el: LitElement, name: string) =>
+  el
+    .shadowRoot!.querySelector("wt-master-key-box")
+    ?.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`) ?? null;
 /** Records the files the step hands to the browser to save, and the tabs it opens. */
 function captureDownloads() {
   const downloads: { href: string; name: string }[] = [];
@@ -170,7 +175,7 @@ function captureDownloads() {
   ) {
     downloads.push({ href: this.href, name: this.download });
   });
-  const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+  const opened = vi.spyOn(window, "open").mockImplementation(() => ({}) as Window);
   return { downloads, opened };
 }
 async function ready(el: LitElement) {
@@ -1099,13 +1104,11 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   );
   const { downloads, opened } = captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
-  );
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
   expect(downloads).toHaveLength(0);
-  await userEvent.click(button(el, "download-pdf"));
+  await userEvent.click(keyPart(el, "download")!);
   expect(downloads).toHaveLength(1);
-  await userEvent.click(button(el, "print-pdf"));
+  await userEvent.click(keyPart(el, "print")!);
   expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
   const bytes = new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer());
   expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
@@ -1174,10 +1177,8 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     );
     const { downloads } = captureDownloads();
     await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
-    );
-    await userEvent.click(button(el, "download-pdf"));
+    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+    await userEvent.click(keyPart(el, "download")!);
     const task = openRecoveryPdf(
       new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer()),
     );
@@ -1229,11 +1230,9 @@ it.each([
     expect(el.shadowRoot!.textContent).toContain(next);
     expect(button(el, "prepare-pdf").textContent!.trim()).toBe(show);
     await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
-    );
-    expect(button(el, "download-pdf").textContent!.trim()).toBe(download);
-    await userEvent.click(button(el, "download-pdf"));
+    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+    expect(keyPart(el, "download")!.textContent!.trim()).toBe(download);
+    await userEvent.click(keyPart(el, "download")!);
     expect(downloads.map((d) => d.name)).toEqual(["waitron-recovery-pack-1.pdf"]);
     expect(el.shadowRoot!.querySelector('input[name="setup-pdf-kept"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=replace-key]")).toBeNull();
@@ -1557,7 +1556,7 @@ it.each(["stage", "register", "input digest", "PDF ready"])(
     release();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).toBeNull();
+    expect(keyPart(el, "download")).toBeNull();
     expect(registrations).toHaveLength(phase === "register" ? 1 : 0);
     for (const url of urls) expect(revoked).toHaveBeenCalledWith(url);
   },
@@ -1583,10 +1582,8 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   );
   captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
-  );
-  await userEvent.click(button(el, "download-pdf"));
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+  await userEvent.click(keyPart(el, "download")!);
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).not.toBeNull(),

@@ -646,10 +646,11 @@ it("reads back a completed activation after a lost response and offers no second
   expect(leaveCoordinatorFor(hour)!.isDirty([shell])).toBe(true);
   await click(hour, "prepare-pdf");
   await proof();
+  const keyBox = () => hour.shadowRoot!.querySelector<HTMLElement>("wt-master-key-box");
   await expect
-    .poll(() => hour.shadowRoot!.querySelector("[data-test=download-pdf]"))
+    .poll(() => keyBox()?.shadowRoot!.querySelector("[data-test=download]") ?? null)
     .not.toBeNull();
-  await click(hour, "download-pdf");
+  await click(keyBox()!, "download");
   await click(hour, "kept");
   await proof();
   await expect

@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  type DraftScope,
+  type MasterKeyBoxCopy,
+  type MasterKeyUsedDetail,
+} from "@waitron/ui";
 import type {
   InitialSetupActions,
   InitialSetupRecoveryReference,
@@ -10,6 +16,7 @@ import { WAITRON_ID_SISTEMA } from "../software.js";
 import { isMinuteIdentity } from "../hour-identity.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-master-key-box.js";
 import {
   ClockWait,
   clockProblem,
@@ -81,6 +88,7 @@ export const firstHourStrings = {
     copy: "Copy",
     copied: "Copied.",
     copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
+    printFailed: "Print did not open. Use Download, or allow pop-ups and try again.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
     keyLost: "The box no longer holds the master key it made. Make new keys to carry on.",
@@ -110,6 +118,8 @@ export const firstHourStrings = {
     copy: "Copiar",
     copied: "Copiada.",
     copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
+    printFailed:
+      "No se abrió la impresión. Usa Descargar, o permite las ventanas emergentes y vuelve a intentarlo.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
     keyLost: "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",
@@ -160,43 +170,6 @@ export class FirstSetupHour extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-surface);
       }
-      .master-key {
-        margin: var(--wt-space-3) 0;
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-      }
-      .master-key-name {
-        margin: 0 0 var(--wt-space-1);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .master-key code {
-        display: block;
-        font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
-        overflow-wrap: anywhere;
-      }
-      .pack-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: var(--wt-space-3) 0;
-      }
-      .pack-copied {
-        margin: 0;
-        color: var(--wt-color-success);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .pack-copy-failed {
-        margin: 0;
-        color: var(--wt-color-danger);
-      }
     `,
     checkVenueStyles,
   ];
@@ -211,8 +184,6 @@ export class FirstSetupHour extends LitElement {
   @state() private error = false;
   @state() private pdfUrl?: string;
   @state() private pdfUsed = false;
-  @state() private copied = false;
-  @state() private copyFailed = false;
   /**
    * The box answered that it no longer holds the keys it made, as after a restart. Only then may
    * the step make new ones: new keys would orphan a master key the person already copied.
@@ -286,8 +257,6 @@ export class FirstSetupHour extends LitElement {
     this.#reference = undefined;
     this.pdfUrl = undefined;
     this.pdfUsed = false;
-    this.copied = false;
-    this.copyFailed = false;
     this.masterKey = undefined;
     this.kept = false;
   }
@@ -522,39 +491,16 @@ export class FirstSetupHour extends LitElement {
       this.keyLost = false;
     } catch (error) {
       if (!current()) return;
-      this.error = true;
       if ((error as { code?: unknown } | null)?.code === "setup.node_key_lost") this.keyLost = true;
+      else this.error = true;
     } finally {
       delivery?.dispose();
       if (current()) this.busy = false;
     }
   }
-  #downloadPdf(): void {
-    if (!this.pdfUrl) return;
-    const anchor = document.createElement("a");
-    anchor.href = this.pdfUrl;
-    anchor.download = "waitron-recovery-pack-1.pdf";
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    this.pdfUsed = true;
-  }
-  #printPdf(): void {
-    if (!this.pdfUrl) return;
-    window.open(this.pdfUrl, "_blank");
-    this.pdfUsed = true;
-  }
-  async #copyKey(made: { masterKey: string }): Promise<void> {
-    let refused = false;
-    try {
-      await navigator.clipboard.writeText(made.masterKey);
-    } catch {
-      refused = true;
-    }
-    if (made !== this.masterKey) return;
-    this.copied = !refused;
-    this.copyFailed = refused;
-    if (!refused) this.pdfUsed = true;
+  /** Copy does not count: the pack also holds the box key, which Copy leaves out. */
+  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
+    if (event.detail.action !== "copy") this.pdfUsed = true;
   }
   async #keepPdf(): Promise<void> {
     if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
@@ -577,36 +523,26 @@ export class FirstSetupHour extends LitElement {
   #packControls(
     t: (typeof firstHourStrings)["en"],
     made: { masterKey: string; masterKeyName: string },
+    pdfUrl: string,
   ) {
-    return html`<div class="master-key">
-        <p class="master-key-name" data-test="master-key-name">
-          ${t.masterKey} · ${made.masterKeyName}
-        </p>
-        <code data-test="master-key">${made.masterKey}</code>
-      </div>
-      ${
-        this.copyFailed
-          ? html`<p class="pack-copy-failed" data-test="copy-failed" role="alert">
-              ${t.copyFailed}
-            </p>`
-          : nothing
-      }
-      <div class="pack-actions">
-        <wt-button data-test="download-pdf" variant="secondary" @click=${() => this.#downloadPdf()}
-          >${t.download}</wt-button
-        >
-        <wt-button data-test="print-pdf" variant="secondary" @click=${() => this.#printPdf()}
-          >${t.print}</wt-button
-        >
-        <wt-button data-test="copy-key" variant="secondary" @click=${() => void this.#copyKey(made)}
-          >${t.copy}</wt-button
-        >
-        ${
-          this.copied
-            ? html`<p class="pack-copied" data-test="copied" role="status">${t.copied}</p>`
-            : nothing
-        }
-      </div>
+    const copy: MasterKeyBoxCopy = {
+      name: (name) => `${t.masterKey} · ${name}`,
+      download: t.download,
+      print: t.print,
+      copy: t.copy,
+      copied: t.copied,
+      copyFailed: t.copyFailed,
+      printFailed: t.printFailed,
+    };
+    return html`<wt-master-key-box
+        data-test="master-key-box"
+        .masterKey=${made.masterKey}
+        .keyName=${made.masterKeyName}
+        .pdfUrl=${pdfUrl}
+        fileName="waitron-recovery-pack-1.pdf"
+        .copy=${copy}
+        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+      ></wt-master-key-box>
       ${
         this.pdfUsed
           ? html`<wt-form-actions
@@ -697,7 +633,7 @@ export class FirstSetupHour extends LitElement {
           <p class="pack-warning" data-test="pack-warning">${t.packWarning}</p>
           ${
             this.pdfUrl && this.masterKey
-              ? this.#packControls(t, this.masterKey)
+              ? this.#packControls(t, this.masterKey, this.pdfUrl)
               : this.keyLost && this.api.reissueNodeKey
                 ? html`<p data-test="key-lost">${t.keyLost}</p>
                     <wt-button
