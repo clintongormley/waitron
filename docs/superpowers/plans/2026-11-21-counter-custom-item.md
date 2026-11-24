@@ -6,8 +6,9 @@
 > `subagent_type: "implementer"`.
 
 > **Refreshed 2026-11-24** on `main` at `10fe2d01c4`, against VAT rates piece A (#4047, #4091,
-> #4133, #4138), then revised after its first fresh read:
-> [Changed on 2026-11-24](#changed-on-2026-11-24), [Changed after read 1](#changed-after-read-1).
+> #4133, #4138), then revised after its first and second fresh reads:
+> [Changed on 2026-11-24](#changed-on-2026-11-24), [Changed after read 1](#changed-after-read-1),
+> [Changed after read 2](#changed-after-read-2).
 
 **Goal:** Staff on the Counter can ring up something that is not on the menu — typed name, typed
 VAT-inclusive price, a takeaway VAT rate when the order is taken away, and a kitchen station or
@@ -38,20 +39,20 @@ a supervisor's PIN once per request. Reports show these lines under their own "C
   and not built: production about +1,250 lines, tests about +1,900, and four generated files (the
   core set's SQL, snapshot and journal, and the epoch file).
 - **Approval:** the design is approved by the owner, 21 November (recorded in the spec's status line,
-  `c6efa1acbb`). Nobody has approved this plan. Fresh reads: one on 21 November, and one of the refresh
-  on 24 November ("fix first"; this is the fix).
+  `c6efa1acbb`). Nobody has approved this plan. Fresh reads: one on 21 November, and two of the refresh
+  on 24 November (both "fix first"; both are applied).
 
 ## Pull requests
 
 | PR | Tasks | Migration | Notes |
 | --- | --- | --- | --- |
-| **1. Data and reports** | 1, 2, 3 | **core rebuild** | First line: "Reset test venues: a custom item column on products (A1564)". The body says the dashboard's permission list gains "Add custom items", which nothing uses until PR 3. |
-| **2. Server** | 4a, 4b, 5, 6a, 6b, 7a, 7b | none | One PR: until 6a, a stored custom line makes its parked order unreadable. No sale-path read changes. |
-| **3. Till** | 8, 9a, 9b, 9c, 10a, 10b | none | A1563 has landed (#3986), so this PR waits on nothing but PR 2. |
+| **1. Data and reports** | 1, 2, 3 | **core rebuild** | First line: "Reset test venues: a custom item column on products (A1564)". The body says the dashboard's permission list gains "Add custom items", which nothing uses until PR 3, and has a line starting "Sale-path read changed:" (`loadClassification` reads one more `products` column). |
+| **2. Server** | 4a, 4b, 5, 6a, 6b, 7a, 7b | none | One PR: until 6a, a stored custom line makes its parked order unreadable. The body has a line starting "Sale-path read changed:" (the save's line read and `fireLines`' read of a pay-first sale gain the product's key: 6a, 7a). |
+| **3. Till** | 8, 9a, 9b, 9c, 9d, 10a, 10b, 10c | none | A1563 has landed (#3986), so this PR waits on nothing but PR 2. No sale-path read changes. |
 
 Stacked in that order. All three are FULL review (PR 1 a migration and a permission, PR 2 the filed
-line and authorisation, PR 3 the cross-package wire). PR 2 decides the rate a ticket files at, so the
-watcher says who lands it.
+line and authorisation, PR 3 the cross-package wire). The owner lands all three (lane L's queue entry:
+"FISCAL-ADJACENT, owner lands").
 
 **Against VAT rates piece B** (its plan is cleared and not built; B5 drops the label columns). The
 plan names a label in one place only, marked below.
@@ -87,6 +88,18 @@ while a lane L PR is parked applies to PR 1.
      somebody answers (read 1 found a paid-in-part one nobody could finish).
    - **(c) Refuse the move.** "Switch the order to take away first". Costs the least code, but in a
      department that sells only eaten in nobody can switch it, so the bottle must come off the order.
+
+   The move that asks is one bill moved, or a hand-over accepted. A whole table moved, joined or split does
+   not ask: it is refused, and the words say to use Move this bill…, which does ask (read 2).
+
+   What changes in the tasks if the owner does not pick (a):
+   - **(b):** 7b's check in `applyDepartmentDining`, the rates in the move and accept bodies and Task 10b go;
+     a takeaway order may then hold an unchosen item, so Decision 1 falls and read 1's C1, I2 and I3 return
+     with the work they ask for (a rate check at Pay, Place and every way a bill is issued).
+   - **(c):** 7b keeps its check and its refusal, whose words become "Switch the order to take away first";
+     the rates in the move and accept bodies go, and 10b keeps only the words.
+
+   **PR 1 and Tasks 4a to 7a do not depend on the answer.**
 3. **The activity entry leaves the typed name out**: the line's id, the price and the approver's id.
    `activity_log` rows may hold no person's name and cannot be changed (`packages/db/src/activity-kinds.ts:1-13`), and
    staff can type "Cake for María Pérez". The name stays on the order line and the ticket. No screen shows
@@ -107,7 +120,9 @@ while a lane L PR is parked applies to PR 1.
 9. **A deleted station.** The delete screen says unsent lines "return to normal routing"; for a custom line
    an empty station means Nowhere. So the delete leaves a custom line's station as it is: `fireLines` takes
    an inactive station as no choice, and the line follows normal routing (ran: it went to the default
-   station; on a venue with none it is refused `station.no_default`, as any dish is).
+   station; on a venue with none it is refused `station.no_default`, as any dish is). Park, save, Place
+   and payment keep it too, whether or not it is still active (4a). The kitchen question asks about such a
+   line (6b), so a closed or switched-off default is found before anybody pays.
 10. **The rate a takeaway order was given is the one it files**, even if the law changes before it is paid:
     a hidden product's rate is its key.
 
@@ -140,7 +155,8 @@ while a lane L PR is parked applies to PR 1.
   shows bare percentages (owner, 2026-11-21).
 - **Asked only on a takeaway order.** On an eat-in order `takeawayRateBp` is `null`.
 - **"Send to: Nowhere" is a custom line with no `makeAtStationId`.** It is stamped sent with no
-  ticket when fired; it never follows routing. A station that is no longer active is kept (Decision 9).
+  ticket when fired; it never follows routing. A custom line keeps any station that exists, active or not,
+  on every route (Decision 9).
 - **A custom line is a whole portion sold each:** a quantity of 3 is stored as 3 dish rows in one
   cohort (`expandPortionRows`, `apps/server/src/order-portions.ts:32`), and it names no menu item.
 - **`descriptions` holds the typed name under each invoice language** (the trigger
@@ -161,10 +177,12 @@ while a lane L PR is parked applies to PR 1.
 4. **Two different custom items on one hidden product are never treated as one dish** (6b): a Sent
    row's check (`sameDishKey`, `wo` 7602) compares product, offer and note, not name or price.
 5. **An eat-in order moved to a takeaway-only department** is refused whole, and the move succeeds once
-   rates come with it (7b, 10a).
+   rates come with it (7b, 10b); a whole-table move, which cannot carry rates, is refused in words that name
+   Move this bill… (7b, 10b).
 6. **The till's way changes without a switch**: a menu poll follows the department, or a saved order is
    switched with an unsaved custom line beside it (10a).
-7. **A declined card, or another person signing in, while a custom line is still unsaved** (9c).
+7. **A declined card, or another person signing in, while a custom line is still unsaved**; and a hand-keyed
+   card: the PIN and the rate are asked before the customer pays (9c, 9d, 10a).
 8. **A request carrying both a late-dish PIN and a custom-item PIN of the same person** finishes (5).
 
 ---
@@ -265,7 +283,7 @@ product in it (ran), so this lands with Task 1.
 **Produces:**
 - Wire, a NEW custom line: `{ custom: { name: string; unitPriceGross: string; takeawayRateBp: number |
   null }; quantity: string; makeAt?: string | null; note?: string }` — no `menuItemId`; `makeAt`
-  absent or `null` means Nowhere; `extras`, `options`, `courseId`, `variantId` or `menuVersionId` on
+  absent or `null` means Nowhere, and any station that exists is accepted, active or not; `extras`, `options`, `courseId`, `variantId` or `menuVersionId` on
   one refuses `{ field: "lines" }`.
 - `CustomItemConfirmation`: `{ confirm(tx): Promise<string | null> }` — the approver's person id, or
   `null` when the operator holds the permission; otherwise `authorization.not_permitted`
@@ -291,11 +309,14 @@ product in it (ran), so this lands with Task 1.
   - "staff without the permission refuses"; nothing stored. "a table round refuses" (`{ field: "lines" }`).
   - "bad fields refuse": a blank name, 61 characters, a line break, a price of `0`, `-1`, `1.234`, `abc`, a
     fractional quantity — `management.request_invalid` naming `name`, `unitPriceGross` or `quantity`; a
-    `makeAt` that is no station. Price parsed with `MONEY`.
+    `makeAt` that names no station at all. Price parsed with `MONEY`.
+  - "a custom line naming a station that is no longer active is kept when parked" (a menu line naming the
+    same station is still refused `route.station_inactive`).
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/custom-item.test.ts`; FAIL.
 - [ ] Implement. The custom branch skips every offer, version, period, availability and modifier step;
   a basket of custom lines alone still runs `assertZoneTakesNewOrders`. Its metadata carries the two
-  label keys until B3 (table above). `readBasketOffers` gets only the menu lines' ids.
+  label keys until B3 (table above). `readBasketOffers` gets only the menu lines' ids. A custom line's `makeAt`
+  is left out of `namedStations` (`wo` 883), so `invalidMakeAt: "refuse"` (`wo` 898) judges menu lines only.
 - [ ] Run the file, `working-order.test.ts`, `@waitron/venue-service`'s `operations.test.ts`; PASS. Commit
   `Custom item: park adds a custom line`.
 
@@ -309,8 +330,8 @@ refuse one when the order has a party); `till-api.ts` `PUT /api/working-orders/:
 - [ ] **Failing tests:** "saving a parked order adds one"; "saving one onto a party's bill refuses" (`{ field:
   "lines" }`); "the Counter's pay files it": `sale_lines` has the typed name, price, hidden product and rate —
   1000 eaten here; taken away at 2100 and, beside a 10% dish, two VAT rows; "a custom line naming a
-  station that is no longer active is kept and follows normal routing" (the payment's `invalidMakeAt:
-  "ignore"` must not turn it into Nowhere).
+  station that is no longer active is kept and follows normal routing" on a save, on Place and on the payment
+  (the payment's `invalidMakeAt: "ignore"` must not turn it into Nowhere).
 - [ ] Run; FAIL; implement; run the file, `working-order.test.ts`, `counter-bill-payments.test.ts`,
   `takeaway-vat-rate-at-issue.test.ts`, `dine-in-vat-rate.test.ts`; PASS. Commit `Custom item: save and
   the Counter's payment`.
@@ -335,12 +356,18 @@ names no order").
   before the late-dish check begins (Decision 5); skipped when the operator holds the permission. Inside
   the write, `confirm(tx)` asks `authorizeApproval(tx, …)` (`authorize.ts:86`), which refuses an approver
   who lost the permission meanwhile. A read and a write in two transactions is the stated choice here.
+- **At a send, a wrong or throttled custom-item PIN is answered `authorization.not_permitted`
+  `{ permission: "order.custom_item" }`**, and still counts towards the limit. `pin.invalid` and `pin.throttled`
+  name nobody, and the till's `lateSendApprovalAsked` (`till-app.ts:1783`) takes either for the late-dish PIN
+  whenever one is in the send. Only the approval route answers the precise reason.
 
-- [ ] **Failing tests:** "staff with a supervisor's PIN adds it" (activity `authorizedBy`); "a wrong PIN
-  refuses, nothing stored, and counts towards the limit"; "one approval covers two custom lines in one
+- [ ] **Failing tests:** "staff with a supervisor's PIN adds it" (activity `authorizedBy`); "a wrong or
+  throttled PIN at a send is answered `authorization.not_permitted`, stores nothing, and counts towards the
+  limit"; "one approval covers two custom lines in one
   save"; "an approver without the permission refuses"; "a late dish and a custom item approved by the
-  same manager in one park" (Review Focus 6: a test time limit proves it finishes); "the approval is
-  not part of the payment fingerprint"; "the approval route" (204, `pin.invalid`, `authorization.not_permitted`);
+  same manager in one park" (Review Focus 8: a test time limit proves it finishes); "the approval is
+  not part of the payment fingerprint"; "both PINs in one park, the custom one wrong" (the same answer, nothing stored);
+  "the approval route" (204, `pin.invalid`, `authorization.not_permitted`);
   `GET /api/adjustment-approvers?permission=order.custom_item` lists supervisors and managers.
 - [ ] Run; FAIL; implement; run the file, `late-send.test.ts`, `adjustments-api.test.ts` and the three
   inventories; PASS. Commit `Custom item: a supervisor's PIN`.
@@ -356,7 +383,8 @@ boolean`, `EditableLine` the list price), `saveHeldOrderIn` 7418 (the match at 7
 - Re-sent: `{ workingOrderLineId: string; custom: true; quantity: string; makeAt?: string | null; note?:
   string }`.
 - `getHeldOrder` and `getPlacedCounterOrder` answer `{ workingOrderLineId, custom: true, productId, name,
-  unitPriceGross, quantity, makeAt, note }` with no `menuItemId` and no `product`.
+  unitPriceGross, quantity, makeAt, note }` with no `menuItemId`, no `product` and no rate: the till shows
+  no rate for a stored line.
 
 - [ ] **Failing tests:** "a parked order with a custom line reopens" (and one sent unpaid, `/placed`);
   "re-sent with the new-line shape beside its id refuses" (`{ field: "lines" }`, row unchanged); "without
@@ -379,9 +407,12 @@ dead-ends routes `till-api.ts` 1740 (`/sale`) and 3999 (`/order`).
   sent one adds a line at the stored price, no permission needed"; "raising a comped one charges the
   extra units in full" (`list_unit_price_gross`); "a Sent row of two different custom items is refused"
   (`portionLineNos`, Review Focus 4); "options or extras on `PUT …/lines/:lineNo` refuse"; "Cancel item,
-  a comp and a discount work" through their routes; "the kitchen checks skip custom lines": `/sale` with a
-  NEW and a stored one answers for the other lines under their own keys (the till sends the whole basket,
-  `till-app.ts:8355`), `/order` likewise. (`/api/dead-ends/draft` cannot hold one.)
+  a comp and a discount work" through their routes; "the kitchen checks skip Nowhere and active-station
+  custom lines": `/sale` with a NEW and a stored one answers for the other lines under their own keys (the
+  till sends the whole basket, `till-app.ts:8355`), `/order` likewise; "a custom line at a deleted station is
+  asked about like any dish", on both, when the default station is closed or off. A NEW one is asked through
+  `customItemProduct(tx, null)`: `productFacts` (`routing-store.ts:900`) refuses an unknown product id, and
+  every hidden product routes alike. (`/api/dead-ends/draft` cannot hold one.)
 - [ ] Run; FAIL; implement; run the file, `working-order.test.ts`, `dead-ends.test.ts`,
   `adjustments-api.test.ts`; PASS. Commit `Custom item: quantity changes and adjustments`.
 
@@ -404,7 +435,8 @@ leaves custom lines' station alone (Decision 9).
 ### Task 7b: An order becomes takeaway only with its rates
 
 **Files:** `packages/venue-service/src/dining.ts` `applyDepartmentDining` 125 (through
-`unchosenCustomLines`, before the write at 140); `custom-item.ts` `chooseCustomItemRates`;
+`unchosenCustomLines`, before the write at 140); `apps/server/src/move-bill.ts` (`MoveBillOptions` 76,
+`moveBillOnce` 174) and `till-api.ts` `moveCommand` 965; `custom-item.ts` `chooseCustomItemRates`;
 `apps/server/src/order-dining.ts` `switchOrderDining` 93; `till-api.ts` `PUT /api/working-orders/:id/dining`
 2070 and `POST /api/bills/:id/move` 4458; `apps/server/src/department-transfer-api.ts:252` (accept);
 `packages/venue-service/src/errors.ts` and `apps/server/src/errors.ts` (both, as
@@ -412,28 +444,43 @@ leaves custom lines' station alone (Decision 9).
 
 **Produces:**
 - `order.custom_item_rate_required` `{ workingOrderId: string; lineIds: string[] }`, 409, thrown by the
-  switch to takeaway and by `applyDepartmentDining`. Words: "Choose the takeaway VAT of the custom items on
-  this order." and its Spanish.
+  switch to takeaway and by `applyDepartmentDining`. The switch, the move and accept can answer it, so the
+  till opens the rate window (10a, 10b); a whole-table action (move guests, join or split: `takeIntoParty`
+  at `table-actions.ts:276`, 412 and 573) cannot, so the words name what works there: "A custom item on this
+  order has no takeaway VAT. Use “Move this bill…” on its bill, which asks for it, then try again" / "Un
+  artículo libre de este pedido no tiene IVA para llevar. Usa «Mover esta cuenta…» en su cuenta, que lo
+  pregunta, y vuelve a intentarlo". The table-action bodies do not gain rates.
 - `customItemRates?: { lineId: string; takeawayRateBp: number }[]` in the bodies of the switch, the move and
-  accept, applied by `chooseCustomItemRates(tx, workingOrderId, rates)` first, in the command's own
-  transaction: it repoints `product_id` and nothing else, only lines of that order on `"unchosen"`, only
-  while the order is open, and moves no revision (the command does). Accept resolves the order through
-  `readIncomingDepartmentTransfer`, which checks the receiver; its receiver may not hold the order's zone,
-  so the rates cannot come by a route of their own.
+  accept, applied by `chooseCustomItemRates(tx, workingOrderId, rates)` in the command's own transaction: it
+  repoints `product_id` and nothing else, only lines of that order on `"unchosen"`, only while the order is
+  open, and moves no revision (the command does). A line already on exactly the rate sent passes and changes
+  nothing, so two tills answering alike do not collide; a different rate is refused.
+- **Where it runs.** The move: inside `moveBillOnce`, after `guardPathParty`, so after `moveBill`'s replay
+  lookup (`runServiceCommand`, `move-bill.ts:161`), and `customItemRates` is a field of `MoveBillOptions`, so
+  it is part of the replay fingerprint (a resent move that already went through answers as it did, instead
+  of a refusal for lines already chosen). The switch: after its revision and editor checks. Accept: after
+  `readIncomingDepartmentTransfer`, which checks the receiver and resolves the order; its receiver may not
+  hold the order's zone, so the rates cannot come by a route of their own.
 
 - [ ] **Failing tests:**
   - "switching asks for the unchosen items": refused naming them, nothing changed; with `2100` they are on
-    `"2100"` and the order is takeaway; a rate for a menu line, another order's line, a line already chosen
-    or an unpickable rate refuses `{ field: "customItemRates" }` and nothing changes; an order with no
+    `"2100"` and the order is takeaway; a rate for a menu line, another order's line, a line already on a
+    different rate or an unpickable rate refuses `{ field: "customItemRates" }` and nothing changes; an order with no
     custom items switches as today; back and forth asks once.
   - "a move to a table of a takeaway-only department": `POST /api/bills/:id/move` refused 409, the order's
     way, party and revision unchanged; with rates it moves, is takeaway, and files 2100.
+  - "a resent move with rates and an allergy answer" (as the replay case of `till-api.allergy-move.test.ts`):
+    the second request, with the same `submissionId`, answers as the first did and changes nothing.
+  - "a line already on the rate sent passes"; and with a different rate it is refused.
+  - "a table moved to a takeaway-only department with an unsent custom item" (accept a hand-over at a table
+    zone, then move the guests; also joined and split): refused 409, nothing changed; then `POST
+    /api/bills/:id/move` with rates moves that bill.
   - "a hand-over accepted by a takeaway-only department": the same through accept, by a person whose profile
     holds only the destination's zones; a wrong `revision` still refuses.
   - "a chosen rate on an order still eaten in files the dine-in rate".
   - "an item nobody chose cannot join a takeaway bill holding a part payment" (`order.dining_differs`).
 - [ ] Run; FAIL; implement; run the file, `order-dining.switch.test.ts`, `move-bill.dining.test.ts`,
-  `table-actions.dining.test.ts`, `department-transfer-api.test.ts`, the fiscal gate, and from the root
+  `table-actions.dining.test.ts`, `till-api.allergy-move.test.ts`, `department-transfer-api.test.ts`, the fiscal gate, and from the root
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/personal-log-params.test.ts`; PASS. Commit
   `Custom item: an order becomes takeaway only with its rates`; `pnpm -r typecheck`; `/finish-branch` for PR 2.
 
@@ -482,14 +529,14 @@ string[]`, `vatRatesFor(country, territory)?.pickable ?? []` where `takeawayVat`
 **Files:** `till-app.ts` (`#basketLinesOf` 10856, `#askCounterDeadEnds` 8345), `api/client.ts` (`HeldOrder`
 1518), `apps/till/src/state/counter-portion-rows.ts` (read; its key already holds name and price).
 
-- [ ] **Failing tests:** a parked order reopens with the line shown, not marked "not offered", and a change
+- [ ] **Failing tests:** a parked order reopens with the line shown, not marked "not offered", with no VAT rate, and a change
   sends Task 6a's shape; three retrieved portions fold into one row and two different custom items do not;
   the sale question (`/api/dead-ends/sale`) is answered for the basket's other lines; a custom line whose
   station is no longer offered keeps it (`clearInactiveChoices` would make it Nowhere).
 - [ ] Run; FAIL; implement; run the file and `till-app-boot-and-counter.test.ts`. Commit `Custom item:
   reopening at the till`.
 
-### Task 9c: The approval at the till
+### Task 9c: The tile asks for a PIN
 
 **Files:** `till-app.ts`, `api/client.ts` (`approveCustomItem(personId, pin)`; `listApprovers` 5140 gains
 the permission), `apps/till/src/i18n/*`.
@@ -498,37 +545,84 @@ the permission), `apps/till/src/i18n/*`.
   `till-supervisor-override-dialog` (authorizers from `listApprovers("order.custom_item")`); a right PIN
   opens the window, and every park, save or payment sends the approval while a custom line of the basket
   has no id, the late-dish retry included; a wrong PIN shows the dialog's error, a throttled one its
-  countdown, and nothing opens. The PIN is dropped once every custom line has an id, the basket is cleared
-  or the operator changes. **A send refused `authorization.not_permitted` for `order.custom_item` opens the
-  dialog and repeats the send** (as `lateSendApprovalAsked` does): after an operator change, and after the
-  permission was taken away mid-shift. **After a declined reader payment that stored the order**, the basket
-  is read again (`#reloadCounterOrder`, as the edited case does at 8186) so the custom line has its id: a
-  second Pay sends no new line and writes no second activity entry.
-- [ ] Run; FAIL; implement; run both files and `till-app-counter-payment-window.test.ts`. Commit `Custom
-  item: the approval at the till`.
+  countdown, and nothing opens. How long it lasts, each its own named test: "a second tap while one is held
+  asks again" (a later PIN replaces the earlier one); "Cancel in the window after the PIN drops it"; "removing
+  the last unsaved custom line drops it"; and it is dropped once every custom line has an id, the basket is
+  cleared or the operator changes.
+- [ ] Run; FAIL; implement; run the file. Commit `Custom item: the tile asks for a PIN`.
 
-### Task 10a: The till asks for the takeaway rate
+### Task 9d: A PIN refused, changed or missing at Pay
 
-**Files:** `till-app.ts` (`#currentSaleLines` 8305, `#switchCounterDining` 10159, `#switchTableDining` 10197,
-the two `moveBill` calls 18590 and 18783), `apps/till/src/widgets/department-transfers.ts:317` (accept),
-`api/client.ts` (`switchDining` 3727, `moveBill` 5264, `acceptDepartmentTransfer` 2968); a small
-`custom-item-rates-dialog.ts` with `.test.ts`, `.a11y.test.ts` and `.unsaved.test.ts`.
+**Files:** `till-app.ts` (`#onCheckBeforeTender` 8445, `#adoptCreatedCounterNote` 8458, `#collectCard` 8080,
+`#onConfirmPayment` 7886, `#onPlaceOrder` 9131, `#onCounterBillPay` 22889), `apps/till/src/i18n/*`. Tests in
+`till-app-counter-custom-item.test.ts`.
 
-Two rules. **At send:** an eat-in basket sends `takeawayRateBp: null` whatever a line remembers; a takeaway
-one with an unsaved custom line that has no rate opens the window first (park, save, Pay, Place). **After a
-refusal** `order.custom_item_rate_required`: one helper opens the window for the named lines (names from the
-order's lines, or the transfer's detail on accept) and repeats the command with the rates; Cancel leaves
-everything as it was.
+A hand-keyed card is charged on a terminal the box does not drive, so the customer has already paid when
+staff press Confirm. The last moment before that is `check-before-tender` (`tender-pay.ts:591`), which the
+pay card also fires before the payment window. So the PIN is asked there; cash the same. The windows after
+the send are only a backstop.
 
-- [ ] **Failing tests:** an unsaved basket turned takeaway by the switch, and by a menu poll
-  (`setDiningStart`), asks before Pay and sends `2100`; one rated 21%, then eaten in, sends `null`; a saved
-  order with an unsaved custom line beside a stored one asks for both at the switch and the next save; a
-  saved order's switch, a move of a parked order to a table (with and without the allergy window) and an
-  accepted hand-over each ask, repeat and succeed; Cancel; a basket with no custom items as today.
+- [ ] **Failing tests:**
+  - "a hand-keyed card with the approval gone (operator changed) asks for the PIN before the card
+    reference is asked": Cancel answers `false` and nothing is taken; a right PIN goes on. The same for
+    cash and before the payment window. A basket whose approval is kept, or an operator who holds the
+    permission, is not asked.
+  - "a send refused `authorization.not_permitted` for `order.custom_item` opens the dialog and repeats the
+    send" (as `lateSendApprovalAsked` does): when the permission was taken away mid-shift, and when the PIN
+    was changed or throttled. "with a late-dish PIN in the same send it opens the custom dialog, not the
+    late-dish one" (Task 5's answer).
+  - "a second Pay after a declined reader sends no new line and writes no second activity entry", and "a
+    Place whose second call is refused": the re-read is tied to `#adoptCreatedCounterNote`. Wherever that
+    function has the order stored and a custom line of the basket has no id, the basket is read again
+    (`#reloadCounterOrder`) so the line has its id. The re-read moves `loadGeneration`, which Place's
+    `current()` compares, so Place takes the new one before its next check or it would stop after parking.
+  - "after a timed-out or unconfirmed reader the lines stay as sent": a resend is matched on the basket it
+    was sent with (`#payWholeBill`, `api/client.ts:3846`), so giving the lines ids there would make a new
+    submission while the first may still be pending. The re-read runs when that resend is answered
+    other than captured or timed out; the resend carries the same submission id.
+- [ ] Run; FAIL; implement; run the file, `till-app-late-send.test.ts` and
+  `till-app-counter-payment-window.test.ts`. Commit `Custom item: a PIN refused or missing at Pay`.
+
+### Task 10a: The till asks for the takeaway rate: basket and switch
+
+**Files:** `till-app.ts` (`#onCheckBeforeTender` 8445, `#currentSaleLines` 8305, `#switchCounterDining` 10159,
+`#switchTableDining` 10197), `api/client.ts` (`switchDining` 3727); a small `custom-item-rates-dialog.ts` with
+`.test.ts`, `.a11y.test.ts` and `.unsaved.test.ts` (new).
+
+Three rules. **Before payment:** `check-before-tender` opens the rate window for a takeaway basket with an
+unsaved custom line that has no rate, for every tender and before the payment window; Cancel answers
+`false` and nothing is taken. **At send:** an eat-in basket sends `takeawayRateBp: null` whatever a line
+remembers; park, save and Place, which take no money, ask as they send; at Pay this window is only a
+backstop. **After a refusal** `order.custom_item_rate_required`: one helper opens the window for the named
+lines (names from the order's lines) and repeats the command with the rates; Cancel leaves everything as it
+was.
+
+- [ ] **Failing tests:** "a hand-keyed card on an unrated takeaway basket asks before the card reference is
+  asked" (and cash, and before the payment window); an unsaved basket turned takeaway by the switch, and by a
+  menu poll (`setDiningStart`), asks before Pay and sends `2100`; one rated 21%, then eaten in, sends `null`;
+  a saved order with an unsaved custom line beside a stored one asks for both at the switch and the next save;
+  a saved order's switch asks, repeats and succeeds; Cancel; a basket with no custom items as today.
 - [ ] Run; FAIL; implement; run the files; look in both themes and at phone width. Commit `Custom item:
   the till asks for the takeaway rate`.
 
-### Task 10b: The guide and the backlog
+### Task 10b: The till asks when a bill is moved or accepted
+
+**Files:** `till-app.ts` (the two `moveBill` calls 18590 and 18783, `TABLE_REFUSALS` 886),
+`apps/till/src/widgets/department-transfers.ts:317` (accept), `api/client.ts` (`moveBill` 5264,
+`acceptDepartmentTransfer` 2968).
+
+The helper of 10a, used after the refusal at these three commands (names from the order's lines, or the
+transfer's detail on accept). A code not in `TABLE_REFUSALS` is shown as `table.error`, so a whole-table
+refusal needs the code added there to show 7b's words.
+
+- [ ] **Failing tests:** a move of a parked order to a table (with and without the allergy window, and a
+  resend after no answer, which carries the same rates) and an accepted hand-over each ask, repeat and
+  succeed; Cancel; "a table moved to a takeaway-only department with an unsent custom item shows the words
+  that name Move this bill…", and Move this bill… asks and goes through.
+- [ ] Run; FAIL; implement; run the files, `till-app-dining.test.ts` and
+  `widgets/department-transfers.actions.test.ts`; look in both themes and at phone width. Commit `Custom item: the till asks when a bill moves`.
+
+### Task 10c: The guide and the backlog
 
 **Files:** `apps/server/src/guide/{en,es}/table-service.md`: a short section `## Ring up something not on
 the menu {#counter-custom-item}` / Spanish after the "Share a Counter bill" section (there is no
@@ -538,8 +632,8 @@ who can sell; `docs/backlog/till.md` — delete "Custom item on the Counter (A73
 `docs/backlog.md:661` — delete the bullet.
 
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and, from the root,
-  `scripts/guide-links.test.ts`. Commit `Custom item: guide and backlog`; `pnpm -r typecheck`;
-  `/finish-branch` for PR 3.
+  `pnpm exec vitest run scripts/guide-links.test.ts`. Commit `Custom item: guide and backlog`; `pnpm -r
+  typecheck`; `/finish-branch` for PR 3.
 
 ## Changed test checks
 
@@ -595,9 +689,14 @@ column, rebuild, permission and `customItemProduct`, and Task 2's export line:
   Read 1's C1 starts with a move that is now refused; moving the line straight to a takeaway bill is refused
   `order.dining_differs`.
 - *Harmless:* an eat-in line on `2100` files 1000. A Counter order moved to a table of its own department has its
-  line sent with a ticket, so its way can no longer change (so, by reading, an unsent custom item meets
-  `applyDepartmentDining` only when leaving the Counter; elsewhere the guard still refuses). A line at an inactive station fired at the default one. `@waitron/venue-service` typechecks
+  line sent with a ticket, so its way can no longer change. A line at an inactive station fired at the default one. `@waitron/venue-service` typechecks
   with the import.
+
+**Run by read 2**, in a throwaway worktree of `8ce59dc1ce` (removed), with nothing built: a Counter order
+retargeted to a table zone as accepting a hand-over does, then moved with `POST /api/bills/:id/move` to a
+free table, kept its dish UNSENT; `moveGuests` to a table of a takeaway-only department then made the order
+`takeaway` with the dish still unsent. So an unsent custom item meets `applyDepartmentDining` in a
+whole-table move too, not only when leaving the Counter.
 
 **Read, not run:** every other statement about today's code, including the reader list in Task 2, the
 callers of `makersByLine`, the till's merge and fold keys and the three kitchen checks.
@@ -637,11 +736,40 @@ Report: `~/waitron-campaign-l/receipts/a1564-plan-read-1.md`.
   extra revision. No trigger.
 - **I4 (adopted).** The at-send rule and its three tests (10a).
 - **I5 (adopted).** The PIN lasts until every custom line has an id, a refused send asks again, and a declined
-  reader payment re-reads the basket (9c).
+  reader payment re-reads the basket (9c and 9d, as split after read 2).
 - **I6 (adopted, as Decision 9).** A custom line keeps the deleted station and follows normal routing; the same
   rule covers the payment's "ignore" and the till's clearing of inactive choices (4b, 9b).
-- **I7 (adopted).** 4a/4b, 9a/9b/9c; `priceOrderLines` is given `dining`.
+- **I7 (adopted).** 4a/4b, 9a/9b/9c (9d came after read 2); `priceOrderLines` is given `dining`.
 - **M1** (5, checks table), **M2** and **M3** (4a, Decision 4), **M5** (Decision 3, 4a), **M6** (Decision 10), **M7**
   (Decision 8), **M8** (Task 1, 7b): applied. **M4:** said in PR 1's body; moving the permission to PR 2 would leave
   it just as unused until PR 3. **M9:** nothing to change here.
 - **★** rewritten with three choices.
+
+## Changed after read 2
+
+Report: `~/waitron-campaign-l/receipts/a1564-plan-read-2.md`.
+
+- **I1 (adopted, the words, not the rates).** The false sentence in Evidence is corrected; the whole-table
+  bodies do not gain rates; the refusal's words name Move this bill…, and 10b adds the code to
+  `TABLE_REFUSALS` so they show. Named tests in 7b and 10b.
+- **I2 (adopted).** Rates are applied inside `moveBillOnce` after `guardPathParty`, so after the replay lookup,
+  and are in the fingerprint; on accept after the receiver check; the same rate again passes; replay test (7b).
+- **I3 (adopted).** The PIN (9d) and the rate (10a) are asked in `check-before-tender`, for every tender and
+  before the payment window; the at-send and after-refusal windows are a backstop.
+- **I4 (adopted).** A tap always asks; the approval is dropped on Cancel and when no unsaved custom line is
+  left; three named tests (9c).
+- **I5 (adopted, the server's answer).** A failed or throttled custom PIN at a send is
+  `authorization.not_permitted` (5), and a test with both PINs (5, 9d).
+- **M1 (adopted).** Any existing station is kept on every route (Decision 9, 4a, 4b); the kitchen checks skip
+  only Nowhere and active-station custom lines (6b).
+- **M2 (adopted, with a limit).** The re-read is tied to `#adoptCreatedCounterNote` (9d). After a timed-out or
+  unconfirmed reader it waits for the resend's answer, because an earlier one would change the basket the
+  resend is matched on (read: `#payWholeBill`).
+- **M3 (adopted).** PRs 1 and 2 have a line starting "Sale-path read changed:" (table); PR 3 reads nothing new
+  on the sale path.
+- **M4 (adopted).** 9c split into 9c and 9d, 10a into 10a and 10b, so the guide task is 10c: 18 tasks. 4a and 5
+  are near the 100-call limit.
+- **M5 (adopted).** Review Focus 8 in Task 5; the root command in 10c.
+- **M6 (adopted).** Decision 2 says what changes under (b) and (c).
+- **M7 (adopted).** The owner lands, as the queue says.
+- **M8 (adopted).** The till shows no rate for a stored line (6a, 9b).
