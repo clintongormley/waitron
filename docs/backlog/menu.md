@@ -823,8 +823,9 @@ or not. A comped or discounted set-menu dish moves to another bill only with its
 (`set_menu.move_adjusted`). The ticket and the full invoice list set menus and supplements, not the
 dishes a set menu covers; the till's pay-by-items list leaves those out too, and category sales
 show set menus as a group of their own. The table-service guide covers this in both languages.
-A takeaway bill holding a set menu still refuses new payments, comps, discounts and Print the bill
-(`set_menu.payment_not_ready`) until VAT-RATES piece B replaces that check.
+A takeaway set-menu bill takes money like any bill: its price is divided between its dishes when
+their takeaway rates differ, and its ticket names the covered dishes with their VAT letter and no
+amount ([fiscal backlog](fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)).
 Selecting copy-only dishes in the live correction dialog remains open. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
@@ -837,4 +838,6 @@ the menu and its supplements the same way (owner, 2026-11-18). Owner's decision,
 and taken away, set by the manager like any product's (normally the food's, 10%); any dish may be
 included and takes the menu's rate, and set menus are allowed on takeaway orders. The spec's
 refusal of set menus on takeaway and delivery orders, and the plans' refusal of a dish at another
-rate, go._
+rate, go. 2026-11-24: the owner chose instead to divide a takeaway set menu's price between its
+dishes by their à la carte prices, each part at its dish's rate; question 4 of the 19 November sheet
+asks the adviser to confirm it._

@@ -127,9 +127,9 @@ Rescheduling records the old and new activation times and the acting person in
 
 A line freezes its names and its gross price when it is added and never reads them from the menu
 again, so editing a product does not rewrite yesterday's receipt. A line eaten here files at the
-dine-in rate in force on the day of the sale, below. A line taken away,
-other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
-invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
+dine-in rate in force on the day of the sale, below. A line taken away freezes no rate: it files
+at its product's takeaway rate, read when the invoice is issued, and a takeaway set menu's price is
+divided between its dishes (below). `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -181,9 +181,8 @@ takeaway rate on that day, read when the line is rated.** Each published menu ve
 eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
 product's current ones. A line added to a held order or a tab stores that class
-(`working_order_lines.vat_class`) with its gross price, which is the same either way; its
-`takeaway_vat_class` sets the rate only of a set-menu line. Neither label decides an eaten-in
-line's rate. The order's `working_orders.dining` picks
+(`working_order_lines.vat_class`) with its gross price, which is the same either way, and a
+`takeaway_vat_class`. Neither label decides any line's rate. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
@@ -192,12 +191,30 @@ lines it stored. Reading stored lines for a bill, payment or filing takes each l
 from `readLineVatRates`
 (`apps/server/src/line-vat-rates.ts`): eaten here, the venue area's dine-in list
 (`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts`); taken
-away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
-`product_takeaway_vat_rates`, or its parent's when a variant has none
-(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A change to a product's
-takeaway rate reaches every takeaway line rated from then on, open orders included, with no
-publish, and patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
+away, a product's line its product's rows in `product_takeaway_vat_rates`, or its parent's when a
+variant has none (`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A change
+to a product's takeaway rate reaches every takeaway line rated from then on, open orders included,
+with no publish, and patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
 cannot change it.
+
+**Taken away, a set menu's price is divided between its dishes when their rates differ** (owner,
+2026-11-24; plan [2026-11-24-vat-rates-b.md](../superpowers/plans/2026-11-24-vat-rates-b.md)).
+`issueMoment` (`apps/server/src/issue-moment.ts`) runs `shareSetMenus`
+(`packages/menu/src/pricing.ts`) after a free item's share (`shareFreeItems`) and before
+`rateLines`, so a set menu given a free item's share divides that share. Each covered dish weighs
+by the à la carte price stored on its line when it was added
+(`working_order_lines.a_la_carte_unit_price`); `shareByWeight` gives each dish its part, which
+files at the dish's own takeaway rate, and the set menu's own row files 0.00. When the weighted
+dishes share one rate that day, nothing is divided: the set menu's row files its whole price at that
+rate, as eaten in. A set menu with no dish of any weight on the bill files whole at the highest
+takeaway rate among the products its recorded copy can hold (`readLineVatRates`,
+`apps/server/src/takeaway-set-menus.ts`). A supplement stays on its dish's row at the dish's rate,
+a paid extra on its own row at its own rate, and neither is divided or weighed. Each filed row of a divided set menu stores its part in
+`sale_lines.set_menu_part` (minus the whole price on the set menu's own row, null elsewhere), so a
+row's sold amount is `line_gross − set_menu_part`. The ticket and its reprint (`soldGross`,
+`packages/orders-sales/src/receipt-lines.ts`), a refund (`soldAmount`,
+`apps/server/src/cancellation-refund-value.ts`) and the reports read that; a whole credit copies the
+parts negated (`apps/server/src/cancel-credit.ts`); nothing divides again.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
 `packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it

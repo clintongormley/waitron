@@ -132,6 +132,11 @@ screen shows, is deleted rather than ported (**my call**).
 
 ### Set menus
 
+_2026-11-24: the three "Taken away", "The till refuses" and "A scheduled rate change" points below
+are replaced: taken away, a set menu's price is divided between its dishes by their à la carte
+prices, each part at its dish's takeaway rate, and nothing is refused (owner, 24 November; built in
+[VAT rates piece B](../plans/2026-11-24-vat-rates-b.md), PR B1)._
+
 - `set_vat_class` and `set_takeaway_vat_class` are removed, with their fields in the dashboard's
   set-menu form (`apps/dashboard/src/widgets/set-menu-terms-form.ts`).
 - **Eaten here:** the dine-in rate.
@@ -177,6 +182,10 @@ No venue is live, so the schema change rebuilds the core set's starting migratio
 written (CLAUDE.md §3).
 
 ## Open, with the adviser
+
+_2026-11-24: the owner chose the split by price for the first point, designed and built in
+[VAT rates piece B](../plans/2026-11-24-vat-rates-b.md); question 4 of the
+[19 November sheet](../../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm it._
 
 - **A takeaway bundle at the food's rate.** Until he answers, a takeaway set menu with products at
   different rates cannot be sold. If he says the food's rate applies to the whole bundle, the
