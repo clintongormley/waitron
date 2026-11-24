@@ -299,6 +299,8 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
 
+Consulta **Carta principal** para ver qué periodos empiezan con esa carta y **Cartas del personal** para ver en cuáles puede seleccionarla el personal. Pulsa el nombre de un periodo para abrir sus ajustes si tienes permiso para editarlo.
+
 **Cambios sin publicar** bajo el estado de una carta significa que las cajas aún no tienen tus
 últimos cambios: elígelo para revisarlos y publicar. Los **conflictos de precio** que aparecen ahí
 deben resolverse antes de poder publicar la carta: elígelos para verlos.

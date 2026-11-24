@@ -14,6 +14,9 @@ import "./opening-hours-screen.js";
 import "./periods-list.js";
 import "./seasons-screen.js";
 import "./floor-plans-screen.js";
+import { ModelWatches } from "./model-watch.js";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { periodPath } from "./opening-hours-paths.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "venue-service",
@@ -65,6 +68,44 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
           .renderPanel=${ctx.renderPanel}
         ></dashboard-venue-operations-screen>`,
     };
+  },
+  menuPeriodUsage: {
+    readPermission: "venue.view",
+    editPermission: "venue.configure",
+    create(ctx, canEdit) {
+      const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+      const watches = new ModelWatches(ctx.liveData);
+      return {
+        watch: (publish) =>
+          watches.watch(
+            "venue-service:menu-period-usage",
+            QUERY_DEPENDENCIES["menu-period-usage"],
+            () => api.readOpeningHours(),
+            ({ departments }) => {
+              const periods = departments
+                .filter((department) => department.active)
+                .flatMap(({ name, periods }) =>
+                  periods.map((period) => ({ department: name, period })),
+                );
+              const counts = new Map<string, number>();
+              for (const { period } of periods)
+                counts.set(period.name, (counts.get(period.name) ?? 0) + 1);
+              publish(
+                periods.map(({ department, period }) => ({
+                  periodId: period.id,
+                  label:
+                    counts.get(period.name) === 1 ? period.name : `${department}: ${period.name}`,
+                  menuId: period.menuId,
+                  staffMenuIds: period.staffMenuIds,
+                  ...(canEdit ? { href: periodPath(period.id) } : {}),
+                })),
+              );
+            },
+            () => publish(null),
+            () => {},
+          ),
+      };
+    },
   },
   moreScreens: [
     {

@@ -61,3 +61,5 @@ export function hoursPath(month?: string | null): string {
 
 export const seasonsPath = "/seasons";
 export const periodsPath = "/periods";
+
+export const periodPath = (id: string): string => `${periodsPath}/period/${encodePathSegment(id)}`;

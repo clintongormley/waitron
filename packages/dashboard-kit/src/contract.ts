@@ -151,6 +151,20 @@ export interface DashboardSettingsPanel {
   create(ctx: DashboardModuleContext): { render(readOnly?: boolean): TemplateResult };
 }
 
+/** One period's starting menu and the menus staff can switch to in it. */
+export interface MenuPeriodUsage {
+  periodId: string;
+  label: string;
+  menuId: string;
+  staffMenuIds: readonly string[];
+  href?: string;
+}
+
+export interface MenuPeriodUsageProvider {
+  /** Publishes null on a failed read. The returned function stops the watch and its deliveries. */
+  watch(publish: (rows: readonly MenuPeriodUsage[] | null) => void): () => void;
+}
+
 interface DashboardContributionBase {
   module: string; // == the server descriptor name
   strings: { en: Record<string, string>; es: Record<string, string> };
@@ -158,6 +172,11 @@ interface DashboardContributionBase {
   moreScreens?: readonly DashboardFurtherScreen[];
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
+  menuPeriodUsage?: {
+    readPermission: string;
+    editPermission: string;
+    create(ctx: DashboardModuleContext, canEdit: boolean): MenuPeriodUsageProvider;
+  };
   searchDestinations?: readonly (DashboardSearchDestination | DashboardSettingSearchDestination)[];
   publicPages?: readonly {
     path: string;

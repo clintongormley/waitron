@@ -129,6 +129,7 @@ export const QUERY_DEPENDENCIES = {
     "settings.venue",
     "day_cutover_changes",
   ],
+  "menu-period-usage": ["menu_periods", "departments", "menus"],
   "opening-hours": [
     "menu_periods",
     "departments",
