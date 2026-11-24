@@ -61,11 +61,14 @@ export interface GiveBackLine extends Availability {
   quantity: string;
   gross: string;
   /** Correct invoice's `left` where it can read the receipt (any refusal: `gross`), less
-   * `cancelled.back`; never below 0. */
+   * `cancelled.back`; never below 0. A cancelled dish's line counts its extras' lines too. */
   left: string;
-  /** This line's share of the cancels with Refund ticked on its dish: a cancel's value and what
-   * went back of it fill the dish's line first, then each extra's line in turn. */
+  /** The cancels with Refund ticked on this dish, its priced extras included: a cancel's money is
+   * owed for the dish and its extras together, so they are one selection. */
   cancelled: { quantity: string; owed: string; back: string } | null;
+  /** The cancelled dish's line this extra's line is given back with; such a line is never ticked
+   * itself, and its `left` is counted on the dish's. */
+  partOf: string | null;
   givenFree: boolean;
 }
 
@@ -240,20 +243,9 @@ async function readCancelsOf(tx: Transaction, workingOrderId: string) {
 
 type CancelShare = { quantity: Decimal; owed: Decimal; back: Decimal };
 
-/** Fills `amount` cents into `caps` in order, what is left over on the first. */
-function spread(amount: number, caps: readonly number[]): number[] {
-  let left = amount;
-  const shares = caps.map((cap) => {
-    const share = Math.min(Math.max(cap, 0), left);
-    left -= share;
-    return share;
-  });
-  if (shares.length > 0) shares[0] = shares[0]! + left;
-  return shares;
-}
-
 /** The cancels with Refund ticked and the free dishes of the receipt `saleId`, keyed by the line
- * of `toLine` each filed row becomes. */
+ * of `toLine` each filed row becomes: a cancel by its dish's line, which `members` maps to every
+ * line of the dish's family and `partOf` maps each extra's line back to. */
 async function cancelsAndFreeByLine(
   tx: Transaction,
   saleId: SaleId,
@@ -261,12 +253,14 @@ async function cancelsAndFreeByLine(
 ) {
   const cancelled = new Map<string, CancelShare>();
   const cancelIds = new Map<string, string[]>();
+  const members = new Map<string, Set<string>>();
+  const partOf = new Map<string, string>();
   const free = new Set<string>();
   const [sale] = await tx
     .select({ workingOrderId: sales.workingOrderId })
     .from(sales)
     .where(eq(sales.id, saleId));
-  if (sale?.workingOrderId == null) return { cancelled, cancelIds, free };
+  if (sale?.workingOrderId == null) return { cancelled, cancelIds, members, partOf, free };
   const filing = await readBillFiling(tx, sale.workingOrderId, saleId);
   const pairs = pairFiling(filing);
   for (const line of filing.stored.filter(isFree)) {
@@ -277,25 +271,25 @@ async function cancelsAndFreeByLine(
   for (const cancel of await readCancelsOf(tx, sale.workingOrderId)) {
     if (cancel.lineId === null || cancel.refundValue === null) continue;
     const family = filedFamilyOf(filing, pairs, cancel.lineId);
-    if (family === undefined) continue;
-    const values = spread(
-      decimalToCents(cancel.refundValue),
-      family.map((row) => row.share),
-    );
-    const backs = spread(decimalToCents(cancel.linked), values);
-    for (const [i, row] of family.entries()) {
-      const id = toLine(row.rowId);
-      if (id === undefined || values[i] === 0) continue;
-      const before = cancelled.get(id) ?? { quantity: decimal("0.000"), owed: ZERO, back: ZERO };
-      cancelled.set(id, {
-        quantity: addDecimal(before.quantity, cancel.quantity ?? decimal("0.000")),
-        owed: addDecimal(before.owed, centsToDecimal(Math.max(0, values[i]! - backs[i]!))),
-        back: addDecimal(before.back, centsToDecimal(backs[i]!)),
-      });
-      cancelIds.set(id, [...(cancelIds.get(id) ?? []), cancel.id]);
-    }
+    const ids = [...new Set(family?.flatMap((row) => toLine(row.rowId) ?? []))];
+    const dish = ids[0];
+    if (dish === undefined) continue;
+    const value = decimalToCents(cancel.refundValue);
+    const back = decimalToCents(cancel.linked);
+    const before = cancelled.get(dish) ?? { quantity: decimal("0.000"), owed: ZERO, back: ZERO };
+    cancelled.set(dish, {
+      quantity: addDecimal(before.quantity, cancel.quantity ?? decimal("0.000")),
+      owed: addDecimal(before.owed, centsToDecimal(Math.max(0, value - back))),
+      back: addDecimal(before.back, centsToDecimal(back)),
+    });
+    cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
+    const lines = members.get(dish) ?? new Set([dish]);
+    for (const id of ids) lines.add(id);
+    members.set(dish, lines);
   }
-  return { cancelled, cancelIds, free };
+  for (const [dish, lines] of members)
+    for (const id of lines) if (id !== dish && !members.has(id)) partOf.set(id, dish);
+  return { cancelled, cancelIds, members, partOf, free };
 }
 
 const filedLines = (tx: Transaction, saleId: string) =>
@@ -434,6 +428,9 @@ interface GiveBackFacts {
   correctable: number;
   /** The cancels with Refund ticked on each line. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
+  /** The lines a correction names for each ticked line: a cancelled dish's family, those of its
+   * lines Correct invoice still holds money on. */
+  namedFor: (lineId: string) => string[];
   recordsUnchecked: () => Promise<boolean>;
 }
 
@@ -466,24 +463,38 @@ export async function readFacts(
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
-  const { cancelled, cancelIds, free } = await cancelsAndFreeByLine(tx, saleId, toLine);
+  const { cancelled, cancelIds, members, partOf, free } = await cancelsAndFreeByLine(
+    tx,
+    saleId,
+    toLine,
+  );
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
+  const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
+  const leftOf = (id: string) =>
+    decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
+  const familyOf = (id: string) => [...(members.get(id) ?? [id])];
   const lines = filed.map((line) => {
-    const gross = centsToDecimal(line.lineGross ?? 0);
     const cancel = cancelled.get(line.id);
+    const dish = partOf.get(line.id);
     const rest =
-      decimalToCents(correctableLeft.get(line.id) ?? gross) - decimalToCents(cancel?.back ?? ZERO);
-    const left = centsToDecimal(Math.max(0, rest));
+      familyOf(line.id).reduce((total, id) => total + leftOf(id), 0) -
+      decimalToCents(cancel?.back ?? ZERO);
     const view = {
       id: line.id,
       descriptions: line.descriptions,
       quantity: thousandthsToDecimal(line.quantity),
-      gross,
-      left,
+      gross: centsToDecimal(line.lineGross ?? 0),
+      left: centsToDecimal(dish === undefined ? Math.max(0, rest) : 0),
       cancelled: cancel ?? null,
+      partOf: dish ?? null,
       givenFree: free.has(line.id),
     };
-    return { ...view, ...lineAvailability(view, waits, money) };
+    return {
+      ...view,
+      ...(dish === undefined
+        ? lineAvailability(view, waits, money)
+        : { available: false, reason: null }),
+    };
   });
   return {
     view: {
@@ -499,6 +510,7 @@ export async function readFacts(
     tenders: correctable.tenders,
     correctable: correctable.amounts.correctable,
     cancelIds,
+    namedFor: (lineId) => familyOf(lineId).filter((id) => leftOf(id) > 0),
     recordsUnchecked,
   };
 }

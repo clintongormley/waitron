@@ -289,6 +289,8 @@ mounted beside `mountInvoiceCorrectionApi`).
            left: string;
            /** cancels on this line with Refund ticked */
            cancelled: { quantity: string; owed: string; back: string } | null;
+           /** a cancelled dish's extra: the dish's line it is given back with */
+           partOf: string | null;
            givenFree: boolean }[];
   /** "cash" is every cash payment together, as Correct invoice gives cash back today */
   ways: { way: "cash" | string /* tenderId of a card */; last4: string | null; manual: boolean;
@@ -316,7 +318,11 @@ unavailable; the button opens the under-way view instead.
 `packages/adjustments/src/refund-links.ts:54-89`; `owed = refundValue − linked`, `back = linked`),
 mapped to the receipt's lines through the portion bindings that
 `apps/server/src/cancellation-refund-value.ts:195-215` reads. A cancel paid back in full keeps its
-row (`owed: "0.00"`), so the dish still shows its money is back. `left` subtracts `back` because
+row (`owed: "0.00"`), so the dish still shows its money is back. A cancel's money is owed for the
+dish and its priced extras together (`refundValue` and `linked` are per cancel), so they are one
+selection: the dish's line carries the family's `cancelled` and `left`, and each extra's line
+carries `partOf: <the dish's line id>`, `left: "0.00"` and `cancelled: null`, is never available
+itself, and a correction of the ticked dish names the family's lines. `left` subtracts `back` because
 Correct invoice's `left` counts only earlier correctives (`packages/core/src/correction-history.ts:262-283`),
 never plain refunds: without it a dish whose cancel was paid back would offer its money again (the
 read's C1). `givenFree` uses the corrections workbook's test (`apps/server/src/free-items.ts:45`).

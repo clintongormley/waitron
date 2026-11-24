@@ -777,46 +777,94 @@ const aioliOf = (view: GiveBackView) =>
   view.lines.find((line) => Object.values(line.descriptions).includes("Garlic mayonnaise"))!;
 
 describe("readGiveBack: a cancelled dish with a priced extra", () => {
-  it("shares the cancel's money between the dish's line and its extra's, the dish's first", async () => {
+  it("lists the dish and its extra as one selection: the dish's line carries the cancel's money, the extra's line goes with it", async () => {
     const b = await tab(["Paella", "Cheesecake"], { withAioli: true });
     const saleId = await pay(b, [{ cash: "28.00" }]);
     const cancelId = await cancel(b, "Paella", "1", true);
     const cash = await tenderOf(saleId, "cash");
     const before = await read(saleId);
+    const paellaId = lineOf(before, "Paella").id;
     expect(lineOf(before, "Paella")).toMatchObject({
       gross: "18.50",
-      left: "18.50",
-      cancelled: { quantity: "1.000", owed: "18.50", back: "0.00" },
+      left: "21.50",
+      partOf: null,
+      available: true,
+      cancelled: { quantity: "1.000", owed: "21.50", back: "0.00" },
     });
     expect(aioliOf(before)).toMatchObject({
       gross: "3.00",
-      left: "3.00",
-      cancelled: { quantity: "1.000", owed: "3.00", back: "0.00" },
+      left: "0.00",
+      partOf: paellaId,
+      available: false,
+      reason: null,
+      cancelled: null,
     });
+    expect(lineOf(before, "Cheesecake")).toMatchObject({ partOf: null, cancelled: null });
 
     expect((await plainRefund(saleId, cash, { applied: "20.00" }, [cancelId])).status).toBe(200);
     const partly = await read(saleId);
     expect(lineOf(partly, "Paella")).toMatchObject({
-      left: "0.00",
-      available: false,
-      cancelled: { owed: "0.00", back: "18.50" },
-    });
-    expect(aioliOf(partly)).toMatchObject({
       left: "1.50",
       available: true,
-      cancelled: { owed: "1.50", back: "1.50" },
+      cancelled: { owed: "1.50", back: "20.00" },
     });
+    expect(aioliOf(partly)).toMatchObject({ left: "0.00", available: false, cancelled: null });
 
     expect((await plainRefund(saleId, cash, { applied: "1.50" }, [cancelId])).status).toBe(200);
     const all = await read(saleId);
-    for (const line of [lineOf(all, "Paella"), aioliOf(all)])
-      expect(line).toMatchObject({
-        left: "0.00",
-        available: false,
-        reason: null,
-        cancelled: { owed: "0.00" },
-      });
+    expect(lineOf(all, "Paella")).toMatchObject({
+      left: "0.00",
+      available: false,
+      reason: null,
+      cancelled: { owed: "0.00", back: "21.50" },
+    });
     expect(lineOf(all, "Cheesecake")).toMatchObject({ left: "6.50", available: true });
+  });
+
+  it("previews ticking the dish as giving back its extra's money too, and refuses the extra's line ticked on its own", async () => {
+    const b = await tab(["Paella", "Cheesecake"], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "28.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const paella = lineOf(view, "Paella").id;
+    expect(await preview(saleId, ask("dishes", "21.50", { lineIds: [paella] }))).toEqual(
+      planned([{ kind: "refund", amount: "21.50", way: "cash", cancellationIds: [cancelId] }]),
+    );
+    expect(await preview(saleId, ask("dishes", "3.00", { lineIds: [aioliOf(view).id] }))).toEqual(
+      invalidField("lineIds"),
+    );
+    expect(
+      await preview(saleId, ask("dishes", "3.00", { lineIds: [paella, aioliOf(view).id] })),
+    ).toEqual(invalidField("lineIds"));
+  });
+
+  it("names the dish's line and its extra's in a correction of the served portion beyond what the cancel owes", async () => {
+    const b = await tab([["Paella", "2"], "Cheesecake"], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "49.50" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    expect(lineOf(view, "Paella")).toMatchObject({
+      left: "43.00",
+      cancelled: { quantity: "1.000", owed: "21.50", back: "0.00" },
+    });
+    const paella = lineOf(view, "Paella").id;
+    expect(await preview(saleId, ask("dishes", "31.50", { lineIds: [paella] }))).toEqual(
+      planned([
+        { kind: "refund", amount: "21.50", way: "cash", cancellationIds: [cancelId] },
+        { kind: "correction", amount: "10.00", way: "cash", lineIds: [paella, aioliOf(view).id] },
+      ]),
+    );
+    const given = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "31.50", { lineIds: [paella] })),
+    );
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "21.50", state: "completed" },
+        { kind: "correction", amount: "10.00", state: "completed" },
+      ],
+    });
   });
 });
 
@@ -1359,6 +1407,39 @@ describe("POST …/give-back in cash", () => {
       drawerJobs: before.drawerJobs + 1,
       drawerOpens: before.drawerOpens + 1,
       drawerCents: before.drawerCents - 2450,
+    });
+  });
+
+  it("gives a cancelled dish's priced extra back with the dish, never twice", async () => {
+    const b = await tab(["Paella", "Cheesecake"], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "28.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const first = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "3.00", { lineIds: paella })),
+    );
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const after = await read(saleId);
+    expect(lineOf(after, "Paella")).toMatchObject({
+      left: "18.50",
+      cancelled: { owed: "18.50", back: "3.00" },
+    });
+    expect(aioliOf(after)).toMatchObject({ available: false, cancelled: null });
+    const rest = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "18.50", { lineIds: paella })),
+    );
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(rest.json).toMatchObject({ parts: [{ kind: "refund", amount: "18.50" }] });
+    const links = await venue.db.all<{ amount: number }>(
+      sql`select amount from adjustment_refunds where adjustment_id = ${cancelId}`,
+    );
+    expect(links.reduce((total, link) => total + link.amount, 0)).toBe(2150);
+    expect(lineOf(await read(saleId), "Paella")).toMatchObject({
+      left: "0.00",
+      available: false,
+      cancelled: { owed: "0.00", back: "21.50" },
     });
   });
 

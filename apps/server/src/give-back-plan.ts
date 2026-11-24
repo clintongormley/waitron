@@ -187,7 +187,7 @@ export async function planWithRights(
   refuseUnless(view.choices[request.purpose], "amount");
   const ticked = (request.lineIds ?? []).map((id) => {
     const line = view.lines.find((row) => row.id === id);
-    if (line === undefined) throw invalid("lineIds");
+    if (line === undefined || line.partOf !== null) throw invalid("lineIds");
     if (line.reason !== null) throw refusal(line.reason);
     return line;
   });
@@ -245,7 +245,7 @@ export async function planWithRights(
         kind: "correction",
         amount: centsToDecimal(rest),
         way: way.way,
-        lineIds: linesHold ? named.map((line) => line.id) : [],
+        lineIds: linesHold ? named.flatMap((line) => facts.namedFor(line.id)) : [],
       };
       leftUnderWay = Math.max(0, rest - (wayMoney - refund));
     }
