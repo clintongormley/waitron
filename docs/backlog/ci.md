@@ -155,6 +155,13 @@ has not been established. Logs, trace and history are retained in
 failed-job rerun on the same head; a pass is not a repair. A second occurrence needs a priority
 root-cause fix with its trace retained before retrying.
 
+**Shared mutation's 16-diner set-menu case twice hit its 15-second test deadline (2026-11-24).**
+`packages/shared/src/set-menu-grouping.test.ts` timed out during the initial instrumented test run,
+before either job tested mutations. The failure appears in
+[PR #4259, shard 4](https://github.com/clintongormley/waitron/actions/runs/45469291089/job/138714314943)
+and [PR #4266, shard 3](https://github.com/clintongormley/waitron/actions/runs/45485787568/job/138771617437).
+Reproduce the initial test run and measure the fixture's four grouping calls to find where its time goes.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
