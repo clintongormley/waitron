@@ -380,14 +380,30 @@ export async function clearPersonPin(
     .where(and(eq(tillSessions.personId, settleId(input.personId)), isNull(tillSessions.endedAt)));
 }
 
-/** Refuses before an invitation is promised that `issueAccountAction` could never send. */
-export async function requireLoginEmail(tx: Transaction, personId: string): Promise<void> {
+/** Refuses before an invitation is promised that `issueAccountAction` could never send. A
+ * disabled account's reset and a re-enable's taken name are refused first, so adding the email
+ * is the last step left. A repeated re-enable of a person no longer disabled is left to the
+ * route's cooldown. */
+export async function requireLoginEmail(
+  tx: Transaction,
+  input: { personId: string; change: "reset-login" | "reactivate" },
+): Promise<void> {
   const [person] = await tx
-    .select({ email: persons.email })
+    .select({
+      id: persons.id,
+      email: persons.email,
+      status: persons.status,
+      displayName: persons.displayName,
+    })
     .from(persons)
-    .where(eq(persons.id, settleId(personId)));
-  if (person !== undefined && person.email === null)
-    throw new AppError("person.email_missing", { personId });
+    .where(eq(persons.id, settleId(input.personId)));
+  if (person === undefined) return;
+  if (input.change === "reset-login" && person.status === "suspended")
+    throw new AppError("person.transition_invalid", {});
+  if (input.change === "reactivate")
+    await assertDisplayNameAvailable(tx, person.displayName, person.id);
+  if (person.email === null)
+    throw new AppError("person.email_missing", { personId: input.personId });
 }
 
 export async function resetPersonLogin(

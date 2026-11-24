@@ -34,7 +34,8 @@ nueva invitación si el correo está configurado; si Waitron no lo permite,
 consulta [Pérdidas habituales](data-protection.md#breach-losses). Deshabilitar una cuenta también
 borra su PIN, contraseña, llaves de acceso, verificación en dos pasos, códigos de recuperación y
 vínculo con Google. Al volver a habilitarla se envía una nueva
-invitación. Solo puedes cambiar el acceso de otra persona si tienes todos sus permisos.
+invitación. Waitron no permite restablecer el acceso ni volver a habilitar a una persona sin correo
+electrónico hasta que lo añadas con **Editar…**. Solo puedes cambiar el acceso de otra persona si tienes todos sus permisos.
 
 En **Roles de acceso — lo que puede hacer**, elige los roles necesarios y pulsa **Guardar roles de
 acceso**. Solo puedes dar o quitar un rol si tienes todos sus permisos; los roles bloqueados siguen

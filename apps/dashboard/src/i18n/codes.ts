@@ -639,8 +639,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ese correo ya está en uso",
   },
   "person.email_missing": {
-    en: "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address with Edit…, then try again.",
-    es: "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo con Editar… y vuelve a intentarlo.",
+    en: "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address, and their first and last names if missing, with Edit…, then try again.",
+    es: "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
   },
   "person.telephone_invalid": {
     en: "Enter a valid telephone number or leave it blank. Start foreign numbers with + and the country code.",

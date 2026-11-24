@@ -31,7 +31,7 @@ PIN or login, and disable or re-enable their account. Resetting a PIN clears it;
 chooses its replacement. Resetting a login clears their credentials and sends a new invitation if
 email is set up; for when Waitron refuses it, see
 [Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
-PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. You can change another person's sign-in only when you
+PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. Waitron refuses to reset the login of, or re-enable, a person with no email address until you add one with **Edit…**. You can change another person's sign-in only when you
 hold every permission they hold.
 
 In **Access roles — what they may do**, choose the roles a person needs and press **Save access

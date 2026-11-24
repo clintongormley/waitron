@@ -1294,7 +1294,7 @@ export function mountManagementApi(
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
-        await requireLoginEmail(tx, personId);
+        await requireLoginEmail(tx, { personId, change: "reset-login" });
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         if (!acceptInvitation(personId)) return { invitationSent: false };
         return queueInvitationAnswer(tx, deps, {
@@ -1315,7 +1315,7 @@ export function mountManagementApi(
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
         await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
-        await requireLoginEmail(tx, personId);
+        await requireLoginEmail(tx, { personId, change: "reactivate" });
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });

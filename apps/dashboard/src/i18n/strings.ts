@@ -1883,6 +1883,10 @@ export const en = {
   "staff.data_copy_not_found_unreloaded":
     "{name} is on this list, but the box has no record of them. That is a fault in Waitron.",
   "staff.sign_in_as_admin": "Sign in as an administrator",
+  "staff.reactivate_name_taken":
+    "Another account already uses this name, so this account was not re-enabled. If it is the same person, leave this account disabled: the working-time export lists both accounts' hours. If it is someone else, change one of the names with Edit…, then try again.",
+  "staff.email_missing_needs_admin":
+    "This user has no email address, so no invitation can be sent and nothing was changed. Adding one needs permission to change other people's email addresses. Sign in as an administrator (this signs you out here first), add their email address, and their first and last names if missing, with Edit…, then try again.",
   "products.title": "Products",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
@@ -6716,6 +6720,10 @@ export const es: Record<StringKey, string> = {
   "staff.data_copy_not_found_unreloaded":
     "{name} aparece en esta lista, pero el servidor no tiene ningún registro suyo. Es un fallo de Waitron.",
   "staff.sign_in_as_admin": "Iniciar sesión como administrador",
+  "staff.reactivate_name_taken":
+    "Otra cuenta ya usa este nombre, así que esta cuenta no se ha vuelto a habilitar. Si es la misma persona, deja esta cuenta deshabilitada: la exportación del registro de jornada lista las horas de ambas cuentas. Si es otra persona, cambia uno de los nombres con Editar… y vuelve a intentarlo.",
+  "staff.email_missing_needs_admin":
+    "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Para añadirlo hace falta permiso para cambiar el correo de otras personas. Inicia sesión como administrador (antes se cierra tu sesión aquí), añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
   "products.title": "Productos",
   "units.title": "Unidades",
   "units.description": "Define cómo se miden y muestran las cantidades de los productos.",

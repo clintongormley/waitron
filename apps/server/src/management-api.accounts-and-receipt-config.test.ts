@@ -2266,6 +2266,53 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     );
   });
 
+  it("refuses a disabled person's login reset as disabled before asking for an email address", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set status = 'suspended', email = null, email_folded = null
+          where id = ${staffId}`,
+    );
+
+    const refused = await app.request(`/management-api/staff/${staffId}/reset-login`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.transition_invalid", params: {} },
+    });
+    expect(suite.db.all(sql`select status from persons where id = ${staffId}`)).toEqual([
+      { status: "suspended" },
+    ]);
+  });
+
+  it("refuses to re-enable a person whose name another account uses before asking for an email address", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set status = 'suspended', email = null, email_folded = null
+          where id = ${staffId}`,
+    );
+    await withTransaction(suite.db, (tx) =>
+      seedPersons(tx, { displayName: "The Clerk", email: "again@x.com", role: "staff" }),
+    );
+
+    const refused = await app.request(`/management-api/staff/${staffId}/reactivate`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.display_name_taken", params: { displayName: "The Clerk" } },
+    });
+    expect(suite.db.all(sql`select status from persons where id = ${staffId}`)).toEqual([
+      { status: "suspended" },
+    ]);
+  });
+
   it("deletes a deactivated person's PIN and passkey, and leaves their working-time entries as they were", async () => {
     const { staffId } = await setupVenue();
     await withTransaction(suite.db, async (tx) => {

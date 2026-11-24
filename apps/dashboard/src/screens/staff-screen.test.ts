@@ -1420,12 +1420,12 @@ describe("staff-screen — row actions, filters and edit races", () => {
     {
       locale: "en-GB",
       words:
-        "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address with Edit…, then try again.",
+        "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address, and their first and last names if missing, with Edit…, then try again.",
     },
     {
       locale: "es-ES",
       words:
-        "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo con Editar… y vuelve a intentarlo.",
+        "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
     },
   ])(
     "keeps enabling's dialog open and says to add a missing email first ($locale)",
@@ -1441,6 +1441,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
         const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
           ...allStatuses,
           canAdminister: true,
+          canChangeEmail: true,
           api,
         });
         await flush(el);
@@ -1455,6 +1456,109 @@ describe("staff-screen — row actions, filters and edit races", () => {
           )!.error,
         ).toBe(words);
         expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")).toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-test=row-admin-sign-in]")).toBeNull();
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it.each([
+    {
+      locale: "en-GB",
+      words:
+        "Another account already uses this name, so this account was not re-enabled. If it is the same person, leave this account disabled: the working-time export lists both accounts' hours. If it is someone else, change one of the names with Edit…, then try again.",
+    },
+    {
+      locale: "es-ES",
+      words:
+        "Otra cuenta ya usa este nombre, así que esta cuenta no se ha vuelto a habilitar. Si es la misma persona, deja esta cuenta deshabilitada: la exportación del registro de jornada lista las horas de ambas cuentas. Si es otra persona, cambia uno de los nombres con Editar… y vuelve a intentarlo.",
+    },
+  ])(
+    "says to leave a re-enabled account disabled when another uses its name ($locale)",
+    async ({ locale, words }) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          reactivatePerson: vi.fn().mockRejectedValue({
+            code: "person.display_name_taken",
+            params: { displayName: "Ana" },
+          }),
+        });
+        const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+          ...allStatuses,
+          canAdminister: true,
+          canChangeEmail: true,
+          api,
+        });
+        await flush(el);
+        rowAction(el, "p2", "reactivate");
+        await flush(el);
+        confirmRow(el);
+        await flush(el);
+        expect(rowDialog(el).open).toBe(true);
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            "wt-dialog wt-form-actions",
+          )!.error,
+        ).toBe(words);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it.each([
+    {
+      locale: "en-GB",
+      words:
+        "This user has no email address, so no invitation can be sent and nothing was changed. Adding one needs permission to change other people's email addresses. Sign in as an administrator (this signs you out here first), add their email address, and their first and last names if missing, with Edit…, then try again.",
+      button: "Sign in as an administrator",
+    },
+    {
+      locale: "es-ES",
+      words:
+        "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Para añadirlo hace falta permiso para cambiar el correo de otras personas. Inicia sesión como administrador (antes se cierra tu sesión aquí), añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
+      button: "Iniciar sesión como administrador",
+    },
+  ])(
+    "offers an administrator's sign-in when this user cannot add the missing email ($locale)",
+    async ({ locale, words, button }) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          resetLogin: vi
+            .fn()
+            .mockRejectedValue({ code: "person.email_missing", params: { personId: "p2" } }),
+        });
+        const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+          ...allStatuses,
+          canAdminister: true,
+          canChangeEmail: false,
+          api,
+        });
+        await flush(el);
+        rowAction(el, "p2", "reset-login");
+        await flush(el);
+        confirmRow(el);
+        await flush(el);
+        expect(rowDialog(el).open).toBe(true);
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            "wt-dialog wt-form-actions",
+          )!.error,
+        ).toBe(words);
+        const signIn = rowDialog(el).querySelector<HTMLElement>("[data-test=row-admin-sign-in]")!;
+        expect(signIn.tagName).toBe("WT-BUTTON");
+        expect(signIn.textContent!.trim()).toBe(button);
+        const events: Event[] = [];
+        el.addEventListener("admin-sign-in", (event) => events.push(event));
+        signIn.click();
+        expect(events).toHaveLength(1);
+        expect(events[0]!.bubbles).toBe(true);
+        expect(events[0]!.composed).toBe(true);
       } finally {
         setLocale(previous);
       }

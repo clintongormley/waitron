@@ -181,7 +181,7 @@ facturación y horas trabajadas**, y no se puede volver a
 traspasar el local ni retirar ese servidor.
 
 Una persona añadida en el servidor anterior después de la copia vuelve deshabilitada, con sus
-horas pero sin correo electrónico: añade su correo con **Editar…** y luego
+horas pero sin correo electrónico: añade su nombre, apellidos y correo con **Editar…** y luego
 [vuelve a habilitar su cuenta](staff.md#account-access) en lugar de añadirla de nuevo. Si ya
 la habías añadido de nuevo, deja deshabilitada la cuenta devuelta: Waitron no permite volver a
 habilitarla mientras otra cuenta tenga el mismo nombre. La exportación del registro de jornada
@@ -315,10 +315,10 @@ entonces sus bases de datos en lugar de borrarlas, incluidos los registros que n
 Si la página indica que el servidor principal no ha podido guardar algunas de las horas trabajadas
 de este servidor, sus registros de facturación ya han llegado. Descarga los datos de este servidor
 antes de que nadie elija **Borrar y retirar** en el servidor principal: tras un cambio de
-emergencia, la pestaña **Horas de trabajo** del archivo lista las horas de este servidor desde la
-hora que indica su primera línea. Reiniciar este servidor no sirve. El borrado aparta
-entonces las bases de datos de este servidor en lugar de borrarlas, así que las horas anteriores a
-esa hora también se conservan en ellas.
+emergencia, la pestaña **Horas de trabajo** del archivo lista las horas de este servidor, desde la
+hora que indica su primera línea cuando indica una. Reiniciar este servidor no sirve. El borrado
+aparta entonces las bases de datos de este servidor en lugar de borrarlas, así que cualquier hora
+anterior también se conserva en ellas.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
