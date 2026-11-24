@@ -974,7 +974,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #filterBackwards = false;
   readonly #containFilterFocus = (event: Event): void => {
     if (
-      (this.serverPaging === undefined && !this.#hasSlottedFilters()) ||
+      !this.#usesSlottedFilterFocus() ||
       !this.filtersOpen ||
       this.sideFilters ||
       event.composedPath().includes(this.filtersPanel)
@@ -1200,6 +1200,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #hasSlottedFilters(): boolean {
     return this.querySelector(':scope > [slot="filters-start"]') !== null;
+  }
+
+  #usesSlottedFilterFocus(): boolean {
+    return (
+      this.serverPaging !== undefined ||
+      (this.#hasSlottedFilters() && !this.columns.some((column) => column.filter))
+    );
   }
 
   #hasFilters(): boolean {
@@ -1957,7 +1964,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #focusFirstFilter(): void {
-    if (this.serverPaging !== undefined || !this.columns.some((column) => column.filter)) {
+    if (this.#usesSlottedFilterFocus()) {
       const slot = this.filtersPanel.querySelector<HTMLSlotElement>('slot[name="filters-start"]')!;
       const first = this.#filterStops(slot)[0];
       if (first) {
@@ -2926,7 +2933,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #filtersKeydown(event: KeyboardEvent): void {
-    if (event.key === "Tab" && (this.serverPaging !== undefined || this.#hasSlottedFilters())) {
+    if (event.key === "Tab" && this.#usesSlottedFilterFocus()) {
       this.#filterBackwards = event.shiftKey;
       return;
     }

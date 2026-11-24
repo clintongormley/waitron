@@ -109,7 +109,7 @@ it("archives alongside the period and default changes and keeps read and copy av
   const impact = await send("GET", "/archive-impact");
   expect(impact.status).toBe(200);
   expect(await impact.json()).toMatchObject({
-    periods: [{ id: period.id, name: "Evening", replacement: "starting" }],
+    periods: [{ id: period.id, name: "Evening", replacement: "starting", requiresSellable: false }],
     defaultChoices: [{ id: next.id, name: next.name }],
   });
   const self = await send("POST", "/archive", {

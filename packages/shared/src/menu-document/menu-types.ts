@@ -213,6 +213,7 @@ export interface MenuArchivePeriod {
   departmentName: string;
   starting: boolean;
   replacement: "starting" | "staff" | null;
+  requiresSellable: boolean;
   choices: { id: string; name: string }[];
 }
 

@@ -195,7 +195,14 @@ export class MenuArchiveDialog extends LitElement {
           if (period.replacement === null)
             return html`<p>${fill("menus.archive_remove_staff", { name })}</p>`;
           if (period.choices.length === 0)
-            return html`<p>${fill("menus.archive_period_blocked", { name })}</p>`;
+            return html`<p>
+              ${fill(
+                period.requiresSellable
+                  ? "menus.archive_period_publish"
+                  : "menus.archive_period_blocked",
+                { name },
+              )}
+            </p>`;
           return this.choice(
             period.id,
             fill(period.starting ? "menus.archive_starting" : "menus.archive_staff", { name }),

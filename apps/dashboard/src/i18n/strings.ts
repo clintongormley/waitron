@@ -3790,6 +3790,7 @@ export const en = {
   "menus.archive_remove_staff": "Staff will no longer be able to switch to this menu in {name}.",
   "menus.archive_period_blocked":
     "No replacement is available for {name}. Set up another full menu for this period before archiving this one.",
+  "menus.archive_period_publish": "Publish another full menu for {name} before archiving this one.",
   "menus.archive_default_reason":
     "Customers see this menu on your online menu, and new departments start with it.",
   "menus.archive_default_blocked": "Publish another full menu, then archive this one.",
@@ -8699,6 +8700,7 @@ export const es: Record<StringKey, string> = {
   "menus.archive_remove_staff": "El personal ya no podrá cambiar a esta carta en {name}.",
   "menus.archive_period_blocked":
     "No hay otra carta disponible para {name}. Configura otra carta completa para este periodo antes de archivar esta.",
+  "menus.archive_period_publish": "Publica otra carta completa para {name} antes de archivar esta.",
   "menus.archive_default_reason":
     "Los clientes ven esta carta en línea y los nuevos departamentos la usan al empezar.",
   "menus.archive_default_blocked": "Publica otra carta completa y luego archiva esta.",

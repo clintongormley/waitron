@@ -2805,6 +2805,15 @@ export class MenusScreen extends LitElement {
 
   #renderList() {
     const loaded = !this.loading && !this.loadError;
+    const waitingForStatuses =
+      this.statuses === null &&
+      (this.statusFilter === "published" || this.statusFilter === "attention");
+    const emptyMessage =
+      this.menus.length === 0
+        ? t("menus.empty")
+        : waitingForStatuses
+          ? t(this.statusesError ? "menus.status_error" : "menus.status_loading")
+          : tableNoMatches();
     return html`<div class="header">
         <h1>${t("menus.title")}</h1>
         ${loaded && (this.#rows.length || this.statusFilter !== "active") ? this.#renderAddMenu() : nothing}
@@ -2841,7 +2850,7 @@ export class MenusScreen extends LitElement {
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
                 .rowClickLabel=${(menu: MenuRow) => `${t(menu.active ? "menus.open" : "product.view")}: ${menu.name}`}
-                .emptyMessage=${this.menus.length ? tableNoMatches() : t("menus.empty")}
+                .emptyMessage=${emptyMessage}
                 filtersLabel=${t("table.filters")}
                 filtersClearAllLabel=${t("table.filters_clear_all")}
                 filtersCloseLabel=${t("table.filters_close")}

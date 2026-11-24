@@ -13699,13 +13699,31 @@ it("opens the archive window for the chosen menu", async () => {
   await vi.waitFor(() => expect(client.getMenuArchiveImpact).toHaveBeenCalledWith("menu-lunch"));
 });
 
+it("shows status checking while the Published filter is waiting for statuses", async () => {
+  const el = await mount(api({ getMenuStatuses: vi.fn(() => new Promise(() => {})) }));
+  const list = table(el);
+  list
+    .querySelector('wt-combobox[name="menu-status"]')!
+    .dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "published" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await vi.waitFor(() =>
+    expect(text(list.shadowRoot.querySelector(".empty"))).toContain(t("menus.status_loading")),
+  );
+});
+
 it("filters menus by status and opens an archived menu read-only", async () => {
   const retired = { ...menus[0]!, id: "menu-winter", name: "Winter menu", active: false };
   const draft = { ...menus[0]!, id: "menu-draft", name: "Spring draft" };
   const clash = { ...menus[0]!, id: "menu-clash", name: "Late lunch" };
+  const set = { ...menus[0]!, id: "menu-set", name: "Daily set", kind: "set_menu" };
   const el = await mount(
     api({
-      listMenus: vi.fn().mockResolvedValue([...menus, retired, draft, clash]),
+      listMenus: vi.fn().mockResolvedValue([...menus, retired, draft, clash, set]),
       getMenuStatuses: vi.fn().mockResolvedValue({
         ...statuses(),
         [draft.id]: { state: "unpublished", clashes: 0 },
@@ -13719,7 +13737,7 @@ it("filters menus by status and opens an archived menu read-only", async () => {
       .map((r) => r.getAttribute("data-row-key"))
       .sort();
   await vi.waitFor(() =>
-    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch"]),
+    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set"]),
   );
   table(el).shadowRoot.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   await el.updateComplete;
@@ -13741,7 +13759,7 @@ it("filters menus by status and opens an archived menu read-only", async () => {
   for (const [value, expected] of [
     ["published", ["menu-clash", "menu-dinner", "menu-lunch"]],
     ["attention", ["menu-clash", "menu-draft", "menu-lunch"]],
-    ["all", ["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-winter"]],
+    ["all", ["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set", "menu-winter"]],
     ["archived", ["menu-winter"]],
   ] as const) {
     choose(value);

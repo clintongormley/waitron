@@ -17,6 +17,7 @@ const impact: MenuArchiveImpact = {
       departmentName: "Dining",
       starting: true,
       replacement: "starting",
+      requiresSellable: false,
       choices: [{ id: "spring", name: "Spring" }],
     },
   ],
@@ -71,20 +72,16 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
       (wording) => wording === t("menus.archive_warning"),
     ),
   );
-  form.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "spring" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await form.updateComplete;
-  expect(submit().disabled).toBe(true);
   form
     .shadowRoot!.querySelector('wt-combobox[name="default-menu"]')!
     .dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "spring" }, bubbles: true, composed: true }),
     );
+  await form.updateComplete;
+  expect(submit().disabled).toBe(true);
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "spring" }, bubbles: true, composed: true }),
+  );
   await form.updateComplete;
   expect(submit().disabled).toBe(false);
   if (signIn) {
@@ -98,6 +95,7 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
       params: { permission: "venue.configure" },
     });
     await userEvent.click(page.elementLocator(submit().shadowRoot!.querySelector("button")!));
+    app.api.getMenuArchiveImpact.mockResolvedValueOnce({ ...impact, defaultChoices: null });
     await userEvent.click(page.getByRole("button", { name: t("permission_sign_in.heading") }));
     await vi.waitFor(() => expect(submit()?.disabled).toBe(false));
     expect(app.archived).toBe(false);
@@ -106,38 +104,44 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
   await vi.waitFor(() => expect(app.archived).toBe(true));
   expect(app.api.archiveMenu).toHaveBeenLastCalledWith("winter", {
     replacements: { evening: "spring" },
-    defaultMenuId: "spring",
+    ...(signIn ? {} : { defaultMenuId: "spring" }),
   });
 });
 
-it("explains when the period has no replacement menu", async () => {
-  const archiveMenu = vi.fn();
-  const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-archive-dialog"]>(
-    "dashboard-menu-archive-dialog",
-    {
-      menu: { id: "winter", name: "Winter" },
-      api: {
-        archiveMenu,
-        getMenuArchiveImpact: async () => ({
-          ...impact,
-          periods: [{ ...impact.periods[0]!, choices: [] }],
-        }),
+it.each([false, true])(
+  "explains a missing replacement (must be published: %s)",
+  async (requiresSellable) => {
+    const archiveMenu = vi.fn();
+    const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-archive-dialog"]>(
+      "dashboard-menu-archive-dialog",
+      {
+        menu: { id: "winter", name: "Winter" },
+        api: {
+          archiveMenu,
+          getMenuArchiveImpact: async () => ({
+            ...impact,
+            defaultChoices: null,
+            periods: [{ ...impact.periods[0]!, choices: [], requiresSellable }],
+          }),
+        },
       },
-    },
-  );
-  await vi.waitFor(() =>
-    expect(form.shadowRoot!.textContent).toMatch(
-      /No replacement is available for Dining · Evening|No hay otra carta disponible para Dining · Evening/,
-    ),
-  );
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="archive"]')
-      ?.disabled,
-  ).toBe(true);
-  expect(archiveMenu).not.toHaveBeenCalled();
-});
+    );
+    await vi.waitFor(() =>
+      expect(form.shadowRoot!.textContent).toMatch(
+        requiresSellable
+          ? /Publish another full menu for Dining · Evening|Publica otra carta completa para Dining · Evening/
+          : /No replacement is available for Dining · Evening|No hay otra carta disponible para Dining · Evening/,
+      ),
+    );
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="archive"]')
+        ?.disabled,
+    ).toBe(true);
+    expect(archiveMenu).not.toHaveBeenCalled();
+  },
+);
 
-it("asks before discarding a staged choice on Escape", async () => {
+it.each(["cancel", "escape"] as const)("discards the staged choice on %s", async (reason) => {
   const { el: app } = await mountWidget<ArchiveLeaveApp>("menu-archive-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("dashboard-menu-archive-dialog")!;
   await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-combobox")).not.toBeNull());
@@ -152,10 +156,10 @@ it("asks before discarding a staged choice on Escape", async () => {
   const close = new Promise<void>((resolve) =>
     form.addEventListener("menu-archive-close", () => resolve(), { once: true }),
   );
-  const escaping = modal.requestClose("escape");
-  const discard = page.getByRole("button", { name: t("unsaved.discard") });
-  await userEvent.click(discard);
-  await escaping;
+  const closing = modal.requestClose(reason);
+  if (reason === "escape")
+    await userEvent.click(page.getByRole("button", { name: t("unsaved.discard") }));
+  await closing;
   await close;
   expect(app.api.archiveMenu).not.toHaveBeenCalled();
 });

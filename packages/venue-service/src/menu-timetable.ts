@@ -485,6 +485,7 @@ async function menuArchiveChanges(tx: Transaction, menuId: string) {
       departmentName: departmentNames.get(period.departmentId)!,
       starting,
       replacement: starting ? "starting" : losesLastChoice ? "staff" : null,
+      requiresSellable: losesLastChoice,
       choices: fullMenus.filter(({ id }) => id !== menuId && (!losesLastChoice || sellable(id))),
     };
     return { period, staffMenuIds, impact };

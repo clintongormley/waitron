@@ -46,6 +46,7 @@ import {
   readRoutingUses,
   placeOpenPeriod,
   readOpeningHoursModel,
+  readMenuArchivePeriods,
   replaceMenuWeek,
   resolveDefaultMenu,
   resolveDepartmentService,
@@ -183,6 +184,9 @@ describe("archiving a period menu", () => {
       await publish(tx, Lunch);
       await updateMenuPeriod(tx, v.periods!.noon, { menuId: Dinner });
       await updateMenuPeriod(tx, periodId, { staffMenuIds: [Lunch] });
+      expect(await readMenuArchivePeriods(tx, Lunch)).toMatchObject([
+        { id: periodId, requiresSellable: true, choices: [] },
+      ]);
       for (const replacements of [{}, { [periodId]: Dinner }]) {
         await expect(archivePeriodMenus(tx, Lunch, replacements)).rejects.toMatchObject({
           code: "menu_period.archive_replacement",

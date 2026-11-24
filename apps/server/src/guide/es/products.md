@@ -299,6 +299,8 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 Para retirar una carta, elige **Archivar…** en el menú de su fila y selecciona las sustitutas que te pida la ventana. En **Filtros**, elige **Archivadas** en **Estado** para consultarla o elige **Copiar…** para crear una carta sin publicar.
 
+**Publicadas** y **Requieren atención** muestran cartas completas. Encontrarás los menús en **Activas**, **Archivadas** y **Todas**.
+
 Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
 
 Consulta **Carta principal** para ver qué periodos empiezan con esa carta y **Cartas del personal** para ver en cuáles puede seleccionarla el personal. Pulsa el nombre de un periodo para abrir sus ajustes si tienes permiso para editarlo.
@@ -372,6 +374,7 @@ escrito un nombre, Escape te pregunta si quieres seguir editándolo o descartarl
 La misma regla se aplica al crear una carta o cambiarle el nombre. Los espacios al principio y al
 final no distinguen nombres. Si una carta activa ya tiene ese nombre, el mensaje aparece debajo de
 Nombre.
+Las cartas que ya comparten nombre lo conservan hasta que renombres una.
 
 La copia empieza sin publicar, con las secciones de trabajo, los precios y los ajustes de la
 página de inicio de la carta original. Las versiones publicadas y las publicaciones programadas

@@ -283,6 +283,8 @@ product allergens and dietary suitability in **Products**.
 
 To retire a menu, choose **Archive…** from its row menu and select any replacements the window asks for. Under **Filters**, choose **Archived** in **Status** to view it or choose **Copy…** to make a new unpublished menu.
 
+**Published** and **Requiring attention** show full menus. Find set menus under **Active**, **Archived**, and **All**.
+
 Use **Search menus** on the Menus list to find a menu by name.
 
 Check **Main menu** to see which periods open on a menu and **Staff menus** to see where staff can select it. Choose a period name to open its settings if you can edit periods.
@@ -350,6 +352,7 @@ or discard a name you have typed.
 
 The same rule applies when you create or rename a menu. Names ignore surrounding spaces. If an
 active menu already holds the name, the message appears under Name.
+Menus that already share a name keep it until you rename one.
 
 The copy starts unpublished, with the source menu's working sections, prices and Home page
 settings. Published versions and scheduled publications stay with the source. Editing the copy's
