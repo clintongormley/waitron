@@ -185,7 +185,7 @@ Once its invoice records and working hours are back, **Wipe and remove** needs n
 main box may hold data that this box does not have and gives the old box's address when its row
 has one: open it and [download that data](servers.md#handed-over) before you confirm, because once
 the wipe starts it can no longer be downloaded. Or choose **Download the old main box's data**
-under that line: this box fetches the same file from the old one. If this box cannot reach it, use
+under that line: this box fetches the old box's data from it. If this box cannot reach it, use
 the old box's own page. A **CAUTION** line in the dialog means the recovered
 records exist only on this box until a backup is made. Once you confirm, the row says
 **Wipe asked**. The old main box wipes itself and leaves the list the next time it is on and can

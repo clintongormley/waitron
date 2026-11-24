@@ -52,7 +52,7 @@ declare module "@waitron/shared" {
     "handover.old_box_data_unavailable": Record<string, never>;
     "handover.old_box_data_wipe_ordered": Record<string, never>;
     "handover.old_box_unreachable": Record<string, never>;
-    /** Every failure after reaching the old box; the cause is the error's log-only `reason`. */
+    /** Any other failure after reaching the old box; the cause is the error's log-only `reason`. */
     "handover.old_box_data_refused": Record<string, never>;
     "handover.old_box_data_too_large": Record<string, never>;
     /**

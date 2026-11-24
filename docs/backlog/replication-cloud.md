@@ -605,7 +605,8 @@ Slice 3.
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 - **What A1558 left open (23 November 2026).** A replaced main box's own page offers its data for
-  download, and its Servers row offers Wipe and remove, also before its records have all come back.
+  download, the new main box's Wipe and remove dialog can fetch it from the old box, and its Servers
+row offers Wipe and remove, also before its records have all come back.
   Still open, as its own pull request
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): the old box
   also returning other boxes' invoice records it holds.

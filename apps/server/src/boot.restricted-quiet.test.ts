@@ -393,7 +393,7 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
     expect(observed().hashAfter).toBe(observed().hashBefore);
   });
 
-  it("mounts the main box's route for the old box's data, which refuses an unsigned request", () => {
+  it("mounts the old box's route the main box asks for its data, which refuses an unsigned request", () => {
     expect(observed().peerRequest).toEqual({
       status: 409,
       body: {

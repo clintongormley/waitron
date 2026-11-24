@@ -83,8 +83,8 @@ function statusReason(status: number, text: string): string {
 
 /**
  * `POST /management-api/servers/:nodeId/old-box-data`: asks the replaced old main box for the
- * workbook its own page offers, and passes it to the browser. Only reads until the download is
- * recorded, and holds no transaction while the old box is asked.
+ * workbook its own page offers, and passes it to the browser. Holds no transaction while the old box
+ * is asked.
  */
 export function mountOldBoxDataDownloadApi(
   app: Hono,

@@ -36,7 +36,7 @@ function refuse(reason: string): never {
 const isRecord = (value: CanonicalValue | undefined): value is Record<string, CanonicalValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** The main box's signed `old-box-data-query`, checked as the main box checks a `reset-query`. */
+/** The main box's signed `old-box-data-query`. */
 async function checkedQuery(deps: OldBoxDataPeerDeps, raw: unknown, nowMs: number) {
   const chart = await readNodeMembership(deps.db);
   await assertHeldDocumentTrusted(deps, chart);

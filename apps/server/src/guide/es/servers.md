@@ -206,7 +206,7 @@ diálogo dice que puede que el servidor principal anterior tenga datos que este 
 e indica la dirección del servidor anterior cuando su fila tiene una: ábrela y
 [descarga esos datos](servers.md#handed-over) antes de confirmar, porque una vez empezado el borrado
 ya no se pueden descargar. O elige **Descargar los datos del servidor principal anterior** debajo
-de esa línea: este servidor trae el mismo archivo desde el anterior. Si este servidor no puede
+de esa línea: este servidor trae los datos desde el anterior. Si este servidor no puede
 conectar con él, usa la propia página del servidor anterior. Una línea de **ATENCIÓN** en el diálogo indica que los registros
 recuperados solo están en este servidor hasta que se haga una copia de seguridad. Cuando lo
 confirmes, la fila dice **Borrado solicitado**. El servidor principal anterior se borra y sale de la
