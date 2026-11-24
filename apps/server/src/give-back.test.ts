@@ -2109,6 +2109,30 @@ async function ownTill(capabilities: ProfileAction[], { zoned = false } = {}) {
 describe("POST …/give-back: the devices Refund a payment refuses", () => {
   const cashTill: ProfileAction[] = ["take-orders", "open-cash-drawer", "take-cash"];
 
+  it("refuses a preview of cash on a profile that takes no cash, writing nothing, and previews it on one that does", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    const noCash = await ownTill(["take-orders", "hand-keyed-card-payment"]);
+    const cash = await ownTill(cashTill);
+    const path = `/api/transactions/${saleId}/give-back/preview`;
+    const before = effects();
+    const refusedPreview = await send(
+      venue.app,
+      noCash.cookie,
+      "POST",
+      path,
+      ask("goodwill", "10.00"),
+    );
+    expect(refusedPreview).toMatchObject({
+      status: 403,
+      json: { code: "device.cash_not_allowed" },
+    });
+    expect(effects()).toEqual(before);
+    const allowed = await send(venue.app, cash.cookie, "POST", path, ask("goodwill", "10.00"));
+    expect(allowed.status, JSON.stringify(allowed.json)).toBe(200);
+    expect(effects()).toEqual(before);
+  });
+
   it("refuses a profile that takes no cash, a till outside the receipt's zone and a kitchen screen, writing nothing", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);

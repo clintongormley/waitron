@@ -91,6 +91,8 @@ export function mountGiveBackApi(
   app.post("/api/transactions/:saleId/give-back/preview", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
+      // As the write: a preview answers what pressing would.
+      await assertRequestDevice(deps, c, session);
       const cfg = requestCfg(deps.cfg, session),
         id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
       const body = asObject(await readRawJsonBody<unknown>(c));
