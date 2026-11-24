@@ -467,16 +467,24 @@ it("saves a rest with nothing waiting, and Check again sends it with fresh ids, 
   expect(reopened.read("sale-1")).toBeNull();
 });
 
-it("lets a first press refused while the venue's time zone is not ready be changed", async () => {
+it("keeps a first press refused while the venue's time zone is not ready, as a card refund may already have gone back", async () => {
   const api = fakeApi();
   api.giveBack.mockRejectedValueOnce({ code: "venue.time_zone_not_ready", status: 409 });
   const session = new GiveBackSession(scope, api);
   await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
     code: "venue.time_zone_not_ready",
   });
-  expect(session.read("sale-1")?.sent?.firstSendRefused).toBe(true);
-  await session.submit("sale-1", { ...ask, request: { ...request, amount: "19.00" } });
-  expect(sent(api, 1).submissionIds.refund).not.toBe(sent(api, 0).submissionIds.refund);
+  expect(session.read("sale-1")?.sent).toMatchObject({
+    firstSendRefused: false,
+    refusal: { code: "venue.time_zone_not_ready" },
+    submissionIds: sent(api, 0).submissionIds,
+  });
+  await expect(
+    session.submit("sale-1", { ...ask, request: { ...request, amount: "19.00" } }),
+  ).rejects.toMatchObject({ kind: "locked" });
+  expect(api.giveBack).toHaveBeenCalledOnce();
+  await session.resend("sale-1");
+  expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
 });
 
 it("rejects an answer it cannot read, keeping the press to send again", async () => {

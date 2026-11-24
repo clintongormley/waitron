@@ -56,7 +56,8 @@ type GiveBackApi = Pick<TillApi, "giveBack" | "previewGiveBack"> & {
  * raises them only after it looked the ids up and found nothing (`giveBack` in
  * apps/server/src/give-back.ts plans only then; a resend's checks, `checkResend`, reach
  * `reserveTenderRefund` only for rows it finds, which answers them as replays first).
- * `venue.time_zone_not_ready` is not here: `requireEconomicWrite` raises it before the lookup.
+ * `venue.time_zone_not_ready` is in neither set: a card reader's first part commits its refund
+ * before `requireEconomicWrite` can raise it (apps/server/src/tender-refund-sends.ts).
  */
 const PROVES_NOTHING = new Set([
   "give_back.changed",
@@ -76,7 +77,6 @@ const FIRST_SEND_REFUSALS = new Set([
   "tender.manual_refund_pin_required",
   "pin.invalid",
   "pin.throttled",
-  "venue.time_zone_not_ready",
 ]);
 
 function fingerprint(ask: GiveBackAsk): string {

@@ -1352,6 +1352,31 @@ describe("sending", () => {
     expect(api.giveBack).toHaveBeenCalledOnce();
   });
 
+  it("keeps a first press refused while the time zone is not ready, and sends only that press again", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({
+      code: "venue.time_zone_not_ready",
+      reason: "missing",
+      status: 409,
+    });
+    const el = await press(api);
+    const said = codeMessage("venue.time_zone_not_ready", "en", { reason: "missing" } as never);
+    await vi.waitFor(() => expect(bottom(el)).toBe(said));
+    await type(el, "4");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-summary-way]"))).toContain("€4.00"),
+    );
+    submit(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-lost]")).not.toBeNull());
+    expect(text(root(el).querySelector("[data-lost]"))).toBe(said);
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
+    expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
+  });
+
   it("offers to send again an answer whose parts have not started yet", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
