@@ -26,7 +26,6 @@ import { installationChecksum } from "./allocation-identity.js";
 import {
   signPaperBlock,
   signPaperConsumptionForBlock,
-  signPaperReservationForBlock,
   paperCustodianFingerprint,
   type PaperCustodianTrust,
 } from "./paper-evidence.js";
@@ -573,143 +572,10 @@ it("checks emergency checksum evidence without drawing a new identity", async ()
   expect(await verify()).toEqual(result("invalid"));
 });
 
-function reservation(db: DatabaseSync) {
-  const allocation = {
-    version: 1 as const,
-    allocationId: "spare-43",
-    taxpayerNif: "89890001K",
-    softwareId: "W1",
-    environment: "preproduction" as const,
-    installationIdentity: "P000043",
-    series: bases.map((b) => ({ ...b, code: `${b.code}-P000043` })),
-    source: "paper" as const,
-    issuedAt: time,
-  };
-  const block = signPaperBlock(
-    {
-      version: 1,
-      custodianId: custodian.custodianId,
-      generationId: "generation",
-      blockId: "spare-block",
-      packVersion: 1,
-      recipientVenueId: "venue",
-      allocations: [allocation],
-    },
-    privateKey,
-  );
-  const signed = signPaperReservationForBlock(
-    block,
-    allocation.allocationId,
-    {
-      eventId: "reserve-43",
-      operatorId: "administrator",
-      sourceId: node.nodeId,
-      targetNodeId: TAXPAYER_A.nodeId2,
-      incidentEvidence: "spare",
-      reservedAt: time,
-    },
-    privateKey,
-  );
-  db.prepare("insert into fiscal_reservations values (?,?,?,?,?,?,?,?,?,?,?)").run(
-    "reserve-43",
-    allocation.allocationId,
-    TAXPAYER_A.nodeId2,
-    node.nodeId,
-    allocation.taxpayerNif,
-    allocation.softwareId,
-    allocation.environment,
-    allocation.installationIdentity,
-    JSON.stringify({ block, reservation: signed }),
-    JSON.stringify(bases),
-    time,
-  );
-}
-it("checks dormant reservation signatures without current register confirmations", async () => {
-  await capture();
-  both(reservation);
-  pinned.paper = [custodian];
-  expect(await verify()).toEqual(result("passed"));
-});
-it.each(["source", "target"])("requires a reservation's %s node to exist", async (missing) => {
-  await capture(false);
-  both((db) => {
-    for (const id of [node.nodeId, TAXPAYER_A.nodeId2])
-      db.prepare("insert into nodes (id,name,created_at) values (?,?,?)").run(
-        id,
-        "Retained node",
-        time,
-      );
-    reservation(db);
-    db.prepare("delete from nodes where id=?").run(
-      missing === "source" ? node.nodeId : TAXPAYER_A.nodeId2,
-    );
-  });
-  pinned.paper = [custodian];
-  expect(await verify()).toEqual(result("invalid"));
-});
-it.each(["source_node_id", "node_id", "allocation_key", "installation_identity"])(
-  "binds each reservation's %s",
-  async (column) => {
-    await capture();
-    both((db) => {
-      reservation(db);
-      db.exec(`update fiscal_reservations set ${column}='wrong'`);
-    });
-    pinned.paper = [custodian];
-    expect(await verify()).toEqual(result("invalid"));
-  },
-);
-it("retains reservations even when their signatures remain valid", async () => {
-  await capture();
-  both(reservation);
-  pinned.paper = [custodian];
-  edit("after", (db) => db.exec("delete from fiscal_reservations"));
-  expect(await verify()).toEqual(result("invalid"));
-});
 it("does not swallow unavailable query failures into an integrity result", async () => {
   await capture();
   edit("before", (db) => db.exec("drop table nodes"));
   await expect(verify()).rejects.toThrow();
-});
-
-function declaredReservation(db: DatabaseSync, malformed = false) {
-  reservation(db);
-  const held = JSON.parse(
-    String(db.prepare("select evidence from fiscal_reservations").get()!.evidence),
-  ) as { block: { payload: { allocations: unknown[] } } };
-  const entry = {
-    kind: "reserve",
-    allocation: held.block.payload.allocations[0],
-    recipientVenueId: "venue",
-    binding: {
-      module: "fiscal-verifactu",
-      action: "reserve",
-      eventId: "reserve-43",
-      sourceId: node.nodeId,
-      targetNodeId: TAXPAYER_A.nodeId2,
-    },
-    reservedAt: time,
-  };
-  const proof = {
-    kind: "paper-declared-reservation",
-    version: 2,
-    reservation: malformed ? null : entry,
-    reservationDigest: createHash("sha256")
-      .update(canonical(malformed ? null : entry))
-      .digest("hex"),
-    historyDigest: "a".repeat(64),
-  };
-  db.prepare("update fiscal_reservations set evidence=?").run(JSON.stringify(proof));
-}
-it("checks captured declared reservations without a signer or new confirmation", async () => {
-  await capture();
-  both((db) => declaredReservation(db));
-  expect(await verify()).toEqual(result("passed"));
-});
-it("rejects a malformed declared reservation even with a matching digest", async () => {
-  await capture();
-  both((db) => declaredReservation(db, true));
-  expect(await verify()).toEqual(result("invalid"));
 });
 
 function cloud(db: DatabaseSync) {
@@ -848,17 +714,6 @@ it.each(["sourceId", "operatorId", "incidentEvidence"])(
     expect(await verify()).toEqual(result("invalid"));
   },
 );
-it("refuses malformed declared reservation digests", async () => {
-  await capture();
-  both((db) => {
-    declaredReservation(db);
-    const row = db.prepare("select evidence from fiscal_reservations").get()!;
-    const proof = JSON.parse(String(row.evidence)) as Record<string, unknown>;
-    proof.reservationDigest = "b".repeat(64);
-    db.prepare("update fiscal_reservations set evidence=?").run(JSON.stringify(proof));
-  });
-  expect(await verify()).toEqual(result("invalid"));
-});
 it("does not prepare activate draw or sign while verifying retained history", async () => {
   await capture();
   const writers = await import("./allocation.js");
@@ -882,13 +737,6 @@ it("does not prepare activate draw or sign while verifying retained history", as
   } finally {
     for (const spy of spies) spy.mockRestore();
   }
-});
-
-it("keeps malformed release trust unsupported for dormant reservations", async () => {
-  await capture();
-  both(reservation);
-  pinned.paper = [{ ...custodian, publicKey: "not pem" }];
-  expect(await verify()).toEqual(result("unsupported"));
 });
 
 it("rejects a binary value where captured JSON is required", async () => {
@@ -929,42 +777,12 @@ it("rejects an activation result that omits a valid allocated series", async () 
   both((db) => change(db, "result", (v) => ({ ...v, series: v.series.slice(1) })));
   expect(await verify()).toEqual(result("invalid"));
 });
-it.each([
-  "update fiscal_reservations set evidence='null'",
-  "update fiscal_reservations set source_node_id=node_id",
-  "update fiscal_reservations set established_at='bad'",
-])("rejects malformed dormant metadata %#", async (statement) => {
-  await capture();
-  both((db) => {
-    reservation(db);
-    db.exec(statement);
-  });
-  pinned.paper = [custodian];
-  expect(await verify()).toEqual(result("invalid"));
-});
-it.each([{}, { block: { payload: {} }, reservation: { payload: {} } }])(
-  "rejects malformed dormant evidence %#",
-  async (evidence) => {
-    await capture();
-    both((db) => {
-      reservation(db);
-      db.prepare("update fiscal_reservations set evidence=?").run(JSON.stringify(evidence));
-    });
-    pinned.paper = [custodian];
-    expect(await verify()).toEqual(result("invalid"));
-  },
-);
-it("keeps a historical dormant signer without a pinned root unsupported", async () => {
-  await capture();
-  both(reservation);
-  expect(await verify()).toEqual(result("unsupported"));
-});
 it("admits empty migrated fiscal tables when the captured predecessor has none", async () => {
   await capture(false);
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);

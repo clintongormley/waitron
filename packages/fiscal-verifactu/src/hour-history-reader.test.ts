@@ -16,7 +16,6 @@ import { liveSeriesBases } from "./reserved-series.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { VerifactuBackend } from "./backend.js";
@@ -201,44 +200,6 @@ it("a malformed hour suffix cannot become empty history", async () => {
   await seedRows({ identity: "0cnn8" });
   expect((await projection()).contradictions.length).toBeGreaterThan(0);
 });
-it("a dormant reservation's time is recorded without active series on its node", async () => {
-  await seedRows();
-  await suite.db.insert(fiscalReservations).values({
-    eventKey: "dormant",
-    allocationKey: "reserved",
-    nodeId: TAXPAYER_A.nodeId2,
-    sourceNodeId: TAXPAYER_A.nodeId,
-    taxpayerNif: "89890001K",
-    softwareId: "OTHER",
-    environment: "preproduction",
-    installationIdentity: "0CNPG",
-    evidence: { public: "retained" },
-    bases: [{ code: "different", purpose: "standard" }],
-    establishedAt: new Date("2026-10-16T12:00:00Z"),
-  });
-  const result = await projection();
-  expect(result.greatestSpentMinute).toBe(415440);
-  expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T12:00:00Z"));
-  expect(result.references).toContain("fiscal_reservations/dormant");
-  expect(result.contradictions).toEqual([]);
-});
-it("an explicit reservation environment remains separate from the database stamp", async () => {
-  await seedRows();
-  await suite.db.insert(fiscalReservations).values({
-    eventKey: "foreign",
-    allocationKey: "reserved",
-    nodeId: TAXPAYER_A.nodeId2,
-    sourceNodeId: TAXPAYER_A.nodeId,
-    taxpayerNif: "89890001K",
-    softwareId: "W1",
-    environment: "production",
-    installationIdentity: "ZZZZZ",
-    evidence: { public: "retained" },
-    bases: [{ code: "A", purpose: "standard" }],
-  });
-  expect((await projection()).greatestSpentMinute).toBe(415400);
-  expect((await projection()).contradictions).toEqual([]);
-});
 async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferInsert> = {}) {
   const ids = await seedRows();
   const series = [{ id: ids.seriesId, code: "other-base-0CNN8", purpose: "full" }];
@@ -310,29 +271,6 @@ it.each([
   { bases: [] },
 ])("a contradictory committed receipt %j refuses completeness", async (change) => {
   await seedAllocation(change as Partial<typeof fiscalAllocations.$inferInsert>);
-  expect((await projection()).contradictions).toContain("venue:incomplete");
-});
-
-it.each([
-  { evidence: [] },
-  { evidence: "bad" },
-  { bases: [] },
-  { sourceNodeId: TAXPAYER_A.nodeId2 },
-])("a malformed reservation %j cannot masquerade as complete history", async (change) => {
-  await seedRows();
-  await suite.db.insert(fiscalReservations).values({
-    eventKey: "damaged",
-    allocationKey: "reserved",
-    nodeId: TAXPAYER_A.nodeId2,
-    sourceNodeId: TAXPAYER_A.nodeId,
-    taxpayerNif: "89890001K",
-    softwareId: "W1",
-    environment: "preproduction",
-    installationIdentity: "0CNPG",
-    evidence: { public: "retained" },
-    bases: [{ code: "A", purpose: "standard" }],
-    ...change,
-  });
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 

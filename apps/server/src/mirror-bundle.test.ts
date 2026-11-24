@@ -25,11 +25,8 @@ import { assembleMirrorBundle } from "./mirror-bundle.js";
 import {
   standbyContract,
   allocatedStandbyModules,
-  prepareStandbyDatabase,
-  takenOverSeries,
   withoutActivationMark,
 } from "./testing/allocated-contract.js";
-import { nodeId } from "@waitron/shared";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 
 // A mutable copy, so one case can add a module for its own duration.
@@ -50,10 +47,6 @@ const STANDBY_PUB = generateNodeKeyPair().publicKey;
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
-  timeoutMs: 60_000,
-});
-const spare = useVenueDb({
-  migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
 // Never stamped, for `mirror.not_provisioned`.
@@ -177,25 +170,8 @@ describe("assembleMirrorBundle (primary side)", () => {
 
     const r = bundle.reservedIdentity;
     const fiscal = r.modules["fiscal-verifactu"] as typeof fixture.state;
-    const allocation = fiscal.evidence.block.payload.allocations[0]!;
-    expect(allocation.installationIdentity).toBe("P000042");
-    expect(allocation.taxpayerNif).toBe(bundle.taxpayer.taxId);
-    expect(allocation.softwareId).toBe("W1");
     expect(fiscal).toEqual(fixture.state);
     expect(r.series).toEqual([]);
-    expect(allocation.series).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "corrective" },
-      { code: "RFF-P000042", purpose: "full_corrective" },
-    ]);
-    await prepareStandbyDatabase(db, spare.db, primaryNode());
-    expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "corrective" },
-      { code: "RFF-P000042", purpose: "full_corrective" },
-    ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
     const primaryPub = (await readMembershipTrustSet(db))[designated.nodeId]!;
@@ -327,19 +303,6 @@ describe("assembleMirrorBundle (primary side)", () => {
       const fiscal = r.modules["fiscal-verifactu"] as typeof fixture.state;
       expect(fiscal).toEqual(fixture.state);
       expect(r.series).toEqual([]);
-      expect(fiscal.evidence.block.payload.allocations[0]!.series).toEqual([
-        { code: "FA-P000042", purpose: "standard" },
-        { code: "FF-P000042", purpose: "full" },
-        { code: "RF-P000042", purpose: "corrective" },
-        { code: "RFF-P000042", purpose: "full_corrective" },
-      ]);
-      await prepareStandbyDatabase(db, spare.db, primaryNode());
-      expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
-        { code: "FA-P000042", purpose: "standard" },
-        { code: "FF-P000042", purpose: "full" },
-        { code: "RF-P000042", purpose: "corrective" },
-        { code: "RFF-P000042", purpose: "full_corrective" },
-      ]);
     } finally {
       (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
     }
@@ -372,21 +335,13 @@ describe("assembleMirrorBundle (primary side)", () => {
   });
 });
 
-function primaryNode() {
-  return { nodeId: nodeId(designated.nodeId) };
-}
 // The fiscal module reserves as an unmarked stand-in unless `marked` is set.
 async function allocatedBundle(
   standby: { nodeId: string; publicKey: string },
   extra: Partial<Parameters<typeof assembleMirrorBundle>[0]> = {},
   { marked = false }: { marked?: boolean } = {},
 ) {
-  const fixture = await standbyContract(db, primaryNode(), standby.nodeId, [
-    { code: "FA", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "RF", purpose: "corrective" },
-    { code: "RFF", purpose: "full_corrective" },
-  ]);
+  const fixture = standbyContract(designated.nodeId, standby.nodeId);
   const original = [...ALL_MODULES];
   (ALL_MODULES as WaitronModule[]).splice(
     0,

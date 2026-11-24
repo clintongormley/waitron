@@ -36,8 +36,6 @@ import { withPromotionModuleOperation } from "./promotion-operation.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
-import { writeAllocationInput } from "./testing/allocation-input.js";
-import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { writeTradingEnv } from "./trading-config.js";
@@ -365,7 +363,7 @@ const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 async function seedMirrorIdentity(
   db: Database,
   node: NodeDatabase,
-): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
+): Promise<{ nodeId: string; fixture: Awaited<ReturnType<typeof establishDormantContract>> }> {
   await seedModuleSettings(db, { "fiscal-none": false });
   await db
     .insert(taxpayer)
@@ -392,7 +390,6 @@ async function seedMirrorIdentity(
     taxpayerNif: nif,
     standby,
     endorsement,
-    modules: ALL_MODULES,
     operatorId: "contract-administrator",
     recoveryKey: true,
   });
@@ -427,15 +424,12 @@ async function seedMirrorIdentity(
   return { nodeId: standby.nodeId, fixture };
 }
 
-describe("historical promote: mirror → primary, in-process, restart-into-primary", () => {
+describe("promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and leaves the trading.env its join wrote untouched", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
     const secret = await mintBreakGlassSecret({ venue: mirrorDb, node: mirrorNode }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
-
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     // As the spare's join writes it (`adopt.ts`).
     const tradingEnv = await writeTradingEnv(stateDir, {
@@ -465,7 +459,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(server.promoteMirrorToPrimary).toBeDefined();
       expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
 
-      const request = seed.fixture.request("promote");
+      const request = seed.fixture();
       const result = await server.promoteMirrorToPrimary!(
         { oldNodeNeutralised: true },
         (context, consume) =>
@@ -486,7 +480,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(
         (await mirrorDb.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)
           ?.code,
-      ).toBe("FA-P000042");
+      ).toBe("FA-0CNPG");
       expect(result).toEqual({ alreadyPrimary: false, seriesId: activeSeriesId });
       expect(await server.promoteMirrorToPrimary!({ oldNodeNeutralised: true })).toEqual({
         alreadyPrimary: true,
@@ -593,8 +587,6 @@ describe("a mirror's promotion whose role write is lost", () => {
     const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     await node.execute(
       sql`create trigger refuse_role_update before update on box begin select raise(abort, 'role refused'); end`,
     );
@@ -603,9 +595,9 @@ describe("a mirror's promotion whose role write is lost", () => {
     );
 
     try {
-      const first = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      const first = await bootMirror(venueDir, stateDir, seed.nodeId);
       try {
-        const request = seed.fixture.request("promote");
+        const request = seed.fixture();
         const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/promote`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -629,7 +621,7 @@ describe("a mirror's promotion whose role write is lost", () => {
         singletonRole: "secondary",
       });
 
-      const second = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
+      const second = await bootMirror(venueDir, stateDir, seed.nodeId);
       try {
         expect(await readNodeMode(node, seed.nodeId)).toEqual({
           mode: "primary",
@@ -702,9 +694,6 @@ describe("a mirror's promote and the backup room note", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
-
     const server = await startServer(
       {
         ...KEY_ENV,
@@ -727,7 +716,7 @@ describe("a mirror's promote and the backup room note", () => {
       noteAtRestart.push(existsSync(note));
     });
     try {
-      const request = seed.fixture.request("promote");
+      const request = seed.fixture();
       let noteDuringPromotion: boolean | undefined;
       const promote = () =>
         server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, (context, consume) => {
@@ -780,8 +769,6 @@ describe("a mirror's promote and the backup room note", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const steps: string[] = [];
     const server = await startServer(
       {
@@ -797,7 +784,7 @@ describe("a mirror's promote and the backup room note", () => {
     );
     const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
     try {
-      const request = seed.fixture.request("promote");
+      const request = seed.fixture();
       const promote = (beforeRestart: () => Promise<void>) =>
         server.promoteMirrorToPrimary!(
           { oldNodeNeutralised: true },
@@ -845,8 +832,6 @@ describe("a mirror's promote and the backup room note", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const restart = vi.fn();
     const server = await startServer(
       {
@@ -861,7 +846,7 @@ describe("a mirror's promote and the backup room note", () => {
       { timings: TIMINGS, restart },
     );
     try {
-      const request = seed.fixture.request("promote");
+      const request = seed.fixture();
       await expect(
         server.promoteMirrorToPrimary!(
           { oldNodeNeutralised: true },
@@ -902,9 +887,6 @@ describe("a mirror's promote and the backup room note", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
-
     await withCapturedStdout(async (lines) => {
       const server = await startServer(
         {
@@ -924,7 +906,7 @@ describe("a mirror's promote and the backup room note", () => {
       });
 
       try {
-        const request = seed.fixture.request("promote");
+        const request = seed.fixture();
         const promote = () =>
           server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, (context, consume) => {
             // Something at the note's path that no unlink removes, appearing once promotion began.
@@ -968,13 +950,12 @@ describe("a mirror's promote and the backup room note", () => {
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
-  const { FISCAL_OPERATIONS: historicalFiscalOperations } =
-    await import("@waitron/fiscal-verifactu/src/allocation-configuration.js");
+  const { hourPromotionOperations } = await import("./testing/dormant-contract.js");
   return {
     ...actual,
     ALL_MODULES: actual.ALL_MODULES.map((module) =>
       module.name === "fiscal-verifactu"
-        ? { ...module, operations: historicalFiscalOperations }
+        ? { ...module, operations: hourPromotionOperations }
         : module,
     ),
   };

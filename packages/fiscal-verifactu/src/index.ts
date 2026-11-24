@@ -61,8 +61,6 @@ export type {
 
 export { validateAllocationForActivation } from "./allocation.js";
 export type { ActivationRefusal, ActivationValidation } from "./allocation.js";
-export { validateStandbyAllocation } from "./standby-allocation.js";
-export type { StandbyAllocationValidation } from "./standby-allocation.js";
 export {
   createPaperAllocationPreparation,
   createAllocationPreparation,
@@ -79,14 +77,7 @@ export {
   activatePreparedFiscalStandby,
 } from "./allocated-lifecycle.js";
 
-export {
-  ALLOCATED_FISCAL_STANDBY,
-  createStandbyAllocationPreparation,
-} from "./allocated-standby.js";
-export type {
-  StandbyAllocationEvidence,
-  StandbyAllocationEvidenceSource,
-} from "./allocated-standby.js";
+export { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 export {
   createCloudAllocationPreparation,
   readCloudAllocationReport,

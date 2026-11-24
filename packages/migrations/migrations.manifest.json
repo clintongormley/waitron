@@ -67,7 +67,6 @@
       "returned_invoice_records",
       "verifactu_series_conflicts",
       "fiscal_allocations",
-      "fiscal_reservations",
       "verifactu_history",
       "declaraciones_responsables",
       "verifactu_certificates"

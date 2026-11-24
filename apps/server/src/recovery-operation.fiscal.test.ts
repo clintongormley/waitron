@@ -9,14 +9,13 @@ import { persons, dashboardSessions } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
-import { establishDormantAllocation } from "@waitron/fiscal-verifactu/src/standby-allocation.js";
-import { activateAuthenticatedDormantAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
-import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
+import { activateModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import {
-  enrolPaperCustodian,
-  paperCustodianFingerprint,
+  withHourAdmission,
+  type AllocationContext,
+} from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
+import {
   signPaperBlock,
-  signPaperReservationForBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
@@ -28,15 +27,14 @@ import { loadKeyRing } from "@waitron/credentials";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
+import { hourPromotionInput } from "./testing/dormant-contract.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const ADMIN = "a0000000-0000-4000-8000-000000000001";
 const primary = { nodeId: TAXPAYER_A.nodeId };
 const target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
 const keys = generateKeyPairSync("ed25519");
-const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
 const bases = SERIES_BASES;
 const candidate = {
   version: 1 as const,
@@ -66,34 +64,10 @@ const block = signPaperBlock(
   },
   privateKey,
 );
-const join = {
-  eventId: "join-1",
-  operatorId: ADMIN,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: "master/join-1",
-  reservedAt: "2026-10-12T09:00:00.000Z",
-};
-const reservation = {
-  block,
-  reservation: signPaperReservationForBlock(block, candidate.allocationId, join, privateKey),
-};
 const recoveryOperator = {
   kind: "recovery-key" as const,
   nodeId: target.nodeId,
   eventId: "takeover-1",
-};
-const approval = {
-  version: 1 as const,
-  eventId: "takeover-1",
-  operatorId: recoveryOperator,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: "master/takeover-1",
-  oldMachineOffline: true,
-  oldMachineAbsent: false,
-  noParallelRecovery: true,
-  confirmedAt: "2026-10-12T10:00:00.000Z",
 };
 const consumption = {
   version: 1 as const,
@@ -159,59 +133,44 @@ const signedConsumption = {
     privateKey,
   ).toString("base64url"),
 };
-const allocation = { ...candidate, reservationEvidence: { block, consumption: signedConsumption } };
-const context: AllocationContext = {
-  taxpayerNif: candidate.taxpayerNif,
-  softwareId: "W1",
-  environment: "preproduction",
-  mode: "recovery",
-  eventId: approval.eventId,
-  operatorId: recoveryOperator,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: approval.incidentEvidence,
-  requiredBases: bases,
-  reauthentication: null,
-  priorActivation: "none",
-  authority: {
-    kind: "paper",
-    trust,
-    recipientVenueId: "venue-1",
-    generationId: "generation-1",
-    blockId: "block-1",
-    currentRegisterConfirmed: true,
-    consumptionConfirmed: true,
-    currentEntryState: "consumed-for-event",
-  },
-};
 const binding = {
   module: "fiscal-verifactu",
   action: "promote",
-  eventId: approval.eventId,
+  eventId: "takeover-1",
   sourceId: primary.nodeId,
   targetNodeId: target.nodeId,
 };
+const input = hourPromotionInput(binding, recoveryOperator, "89890001K", "preproduction", bases);
+const expectedSeries = [
+  { code: "A-0CNPG", purpose: "standard" },
+  { code: "FF-0CNPG", purpose: "full" },
+  { code: "R-0CNPG", purpose: "corrective" },
+  { code: "RF-0CNPG", purpose: "full_corrective" },
+];
 const document = signedMembershipDoc(2, { signerNodeId: target.nodeId });
 
 let recoveryKey: string;
-async function promote(
-  overrides: Partial<AllocationContext> = {},
-  suppliedApproval: unknown = approval,
-  suppliedAllocation: unknown = allocation,
-) {
+async function promote(overrides: Partial<AllocationContext> = {}) {
   const result = await withRecoveryKeyOperation(
     { db: suite.db, node: suite.node, nodeId: target.nodeId },
     binding,
     recoveryKey,
     async (tx, authority) => {
-      const result = await activateAuthenticatedDormantAllocation(
-        tx,
-        target,
-        join.eventId,
-        suppliedAllocation,
-        suppliedApproval,
-        { ...context, ...overrides },
+      const operation = {
+        binding,
         authority,
+        input: {
+          ...input,
+          approval: { ...input.approval, operatorId: overrides.operatorId ?? recoveryOperator },
+        },
+      };
+      const result = await withHourAdmission(
+        operation,
+        {
+          requiredBases: bases,
+          priorActivation: overrides.priorActivation ?? "none",
+        },
+        (evidence) => activateModuleAllocation(tx, target, operation, evidence),
       );
       if (overrides.priorActivation !== "committed") await commitMirrorPromotionTx(tx, document);
       return result;
@@ -230,7 +189,6 @@ async function snapshot() {
     "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
-    "fiscal_reservations",
     "node_membership",
   ])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
@@ -251,22 +209,6 @@ beforeEach(async () => {
     .values(bases.map((series) => ({ ...series, nodeId: primary.nodeId })));
   await withNodeTransaction(suite.node, (tx) =>
     setNodeModeTx(tx, target.nodeId, "mirror", "adopt"),
-  );
-  await withTransaction(suite.db, (tx) =>
-    establishDormantAllocation(tx, primary, target, reservation, trust, {
-      allocationId: candidate.allocationId,
-      taxpayerNif: candidate.taxpayerNif,
-      softwareId: "W1",
-      environment: "preproduction",
-      recipientVenueId: "venue-1",
-      generationId: "generation-1",
-      blockId: "block-1",
-      ...join,
-      currentRegisterConfirmed: true,
-      reservationConfirmed: true,
-      currentEntryState: "reserved",
-      requiredBases: bases,
-    }),
   );
   recoveryKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
 });
@@ -291,13 +233,13 @@ describe("recovery-key fiscal attribution", () => {
   it("activates every purpose, then the role, without a person or a session", async () => {
     const result = await promote();
     expect(result.series.map((s) => ({ code: s.code, purpose: s.purpose }))).toEqual(
-      candidate.series,
+      expectedSeries,
     );
     const audit = (await suite.db.execute(sql`select approval, allocation from fiscal_allocations`))
       .rows;
     expect(audit).toHaveLength(1);
     const recorded = JSON.parse(audit[0]!.approval as string);
-    expect(recorded).toEqual(approval);
+    expect(recorded).toEqual(input.approval);
     expect(recorded.operatorId).toEqual({
       kind: "recovery-key",
       nodeId: target.nodeId,
@@ -321,35 +263,7 @@ describe("recovery-key fiscal attribution", () => {
     const before = await snapshot();
     await expect(promote({ operatorId })).rejects.toMatchObject({
       code: "sif.allocation_invalid",
-      params: { reason: "reauthentication_required" },
-    });
-    expect(await snapshot()).toEqual(before);
-  });
-
-  it("requires the independently signed consumption to name the same recovery-key event", async () => {
-    const wrong = {
-      ...allocation,
-      reservationEvidence: {
-        block,
-        consumption: signPaperConsumptionForBlock(
-          block,
-          candidate.allocationId,
-          {
-            eventId: approval.eventId,
-            operatorId: ADMIN,
-            sourceId: primary.nodeId,
-            targetNodeId: target.nodeId,
-            incidentEvidence: approval.incidentEvidence,
-            consumedAt: approval.confirmedAt,
-          },
-          privateKey,
-        ),
-      },
-    };
-    const before = await snapshot();
-    await expect(promote({}, approval, wrong)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "reservation_mismatch" },
+      params: { reason: "event_mismatch" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -381,14 +295,10 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
           reserve: async () => ({ state: {} }),
           establish: async () => {},
           activate: async (tx, node, operation) => {
-            await activateAuthenticatedDormantAllocation(
-              tx,
-              node,
-              join.eventId,
-              allocation,
-              approval,
-              context,
-              operation!.authority,
+            await withHourAdmission(
+              operation!,
+              { requiredBases: bases, priorActivation: "none" },
+              (evidence) => activateModuleAllocation(tx, node, operation!, evidence),
             );
           },
         },
@@ -408,31 +318,26 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
             { db, node: nodeDb, nodeId: node.nodeId },
             binding,
             recoveryKey,
-            (tx, authority) =>
-              run(
-                tx,
-                new Map([[module.name, { input: { allocation, approval }, binding, authority }]]),
-              ),
+            (tx, authority) => run(tx, new Map([[module.name, { input, binding, authority }]])),
           ),
       },
       { oldNodeNeutralised: true },
     );
   }
 
-  it("promotes a seriesless standby with the actual signed reservation and key-only authority", async () => {
+  it("promotes a seriesless standby through hour allocation and key-only authority", async () => {
     const result = await realPromotion();
     expect(result.alreadyPrimary).toBe(false);
     expect(
       (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, target.nodeId)))
         .map((s) => ({ code: s.code, purpose: s.purpose }))
         .sort((a, b) => a.code.localeCompare(b.code)),
-    ).toEqual([...candidate.series].sort((a, b) => a.code.localeCompare(b.code)));
+    ).toEqual([...expectedSeries].sort((a, b) => a.code.localeCompare(b.code)));
     expect(result.seriesId).toBe(
-      (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.code, "A-P000042")))[0]!
-        .id,
+      (await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.code, "A-0CNPG")))[0]!.id,
     );
     const audit = (await suite.db.execute(sql`select approval from fiscal_allocations`)).rows;
-    expect(JSON.parse(audit[0]!.approval as string)).toEqual(approval);
+    expect(JSON.parse(audit[0]!.approval as string)).toEqual(input.approval);
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
     const role = await readNodeMode(suite.node, target.nodeId);
@@ -440,7 +345,7 @@ describe("real mirror promotion with a dormant fiscal seat", () => {
     expect(role.singletonRole).toBe("primary");
   });
 
-  it("rolls the actual signed activation back with a refused promotion document", async () => {
+  it("rolls the fiscal activation back with a refused promotion document", async () => {
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, target.nodeId);
     const before = await snapshot();
     await suite.db.execute(

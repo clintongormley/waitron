@@ -14,7 +14,6 @@ import { compareHourClocks } from "./hour-clock.js";
 import { createHourSelection } from "./hour-selection.js";
 import type { HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
@@ -101,7 +100,6 @@ async function snapshot() {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
     records: await suite.db.select().from(verifactuRecords),
   };
 }
@@ -136,7 +134,6 @@ it("activates all next-hour bases without an advance reservation and preserves o
     { code: "a/B_1.2-3-0CNPG", purpose: "standard" },
   ]);
   const after = await snapshot();
-  expect(after.reservations).toEqual([]);
   expect(after.allocations).toHaveLength(2);
   expect(after.allocations[1]!.bases).toEqual(bases);
   expect(after.sifs.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe("0CNPG");

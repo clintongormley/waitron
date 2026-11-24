@@ -47,19 +47,15 @@ import {
   type CanonicalValue,
   type Endorsement,
 } from "@waitron/membership";
-import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
-import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
-import { writeAllocationInput } from "./testing/allocation-input.js";
-import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
 import { writeTradingEnv } from "./trading-config.js";
@@ -84,7 +80,7 @@ const { startServer, httpPort } = ephemeralServerFixture();
 useTestProducer();
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
-// promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
+// promote restarts the mirror as a primary that sells and chains on its own fiscal identity without
 // filing; the break-glass path; the refusals; and the read-only gate's exemption for the promote POST.
 //
 // Not covered: no case shows that a promote whose point-of-no-return write is refused fails closed,
@@ -180,7 +176,7 @@ async function seedMirror(
   node: NodeDatabase,
 ): Promise<{
   nodeId: string;
-  fixture: ReturnType<typeof allocationFixture>;
+  fixture: Awaited<ReturnType<typeof establishDormantContract>>;
   origin: ReturnType<typeof generateNodeKeyPair>;
 }> {
   await seedModuleSettings(admin, { "fiscal-none": false });
@@ -211,7 +207,6 @@ async function seedMirror(
     taxpayerNif: nif,
     standby,
     endorsement,
-    modules: ALL_MODULES,
     operatorId: ADMIN_ID,
     recoveryKey: false,
   });
@@ -378,17 +373,14 @@ async function readEnvios(
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
-  it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
+describe("promote endpoint e2e — the whole arc over HTTP", () => {
+  it("admin login → 200 restarting; restart into primary; sells + chains on its own fiscal identity; does NOT file", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main);
     await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
 
     const mirrorPort = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
-
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     // As the spare's join writes it (`adopt.ts`).
     const tradingEnv = await writeTradingEnv(stateDir, {
@@ -403,7 +395,6 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       {
         ...mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
         ...parseEnvFile(joined.bytes),
-        ...allocationEnv,
       },
       {},
       { timings: TIMINGS },
@@ -444,7 +435,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      const operation = seed.fixture.request("promote");
+      const operation = seed.fixture();
       const res = await postPromote(mirrorBase, {
         moduleOperation: { binding: operation.binding, input: operation.input },
         oldNodeNeutralised: true,
@@ -466,7 +457,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       const activeSeriesId = await readStandardSeriesId(db.main, seed.nodeId);
       expect(
         (await db.main.select().from(invoiceSeries)).find((row) => row.id === activeSeriesId)?.code,
-      ).toBe("FA-P000042");
+      ).toBe("FA-0CNPG");
       expect(await readStandardSeriesId(db.main, seed.nodeId)).toBe(activeSeriesId);
 
       // `trading.env` names no venue directory, so it is supplied here.
@@ -530,7 +521,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       expect(typeof ticket.qr).toBe("string");
       expect(ticket.qr.length).toBeGreaterThan(0);
 
-      // Chained on the node's own reserved SIF.
+      // Chained on the node's own fiscal identity.
       const reservedSif = await db.main.execute<{ id: string }>(
         sql`select id from verifactu_identities where node_id = ${seed.nodeId} and revocado_en is null`,
       );
@@ -576,31 +567,12 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       { venue: db.breakGlass, node: stores.breakGlass.node },
       seed.nodeId,
     );
-    const keyFixture = allocationFixture({
-      node: { nodeId: brandNodeId(seed.nodeId) },
-      primary: {
-        nodeId: brandNodeId(MIRROR_ORIGIN_NODE_ID),
-      },
-      taxpayerNif: "90222222F",
-      identity: "P000042",
-      environment: "production",
-      recoveryKey: true,
-      bases: [
-        { code: "FA", purpose: "standard" },
-        { code: "FF", purpose: "full" },
-      ],
-    });
-
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
-
-    const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     const server = await startServer(
       {
         ...mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
-        ...allocationEnv,
       },
       {},
       { timings: TIMINGS },
@@ -612,7 +584,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     try {
       await pollOrThrow(async () => server.health.lastPassAt ?? undefined, POLL_TRIES_15S);
 
-      const operation = keyFixture.request("promote");
+      const operation = seed.fixture(true);
       const res = await postPromote(base, {
         oldNodeNeutralised: true,
         breakGlass,
@@ -722,12 +694,9 @@ describe("a real offer beside a real promotion on a real start", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-${venue}-state-`));
 
-    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
-    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const server = await startServer(
       {
         ...mirrorEnv(venueDir[venue], port, seed.nodeId, stateDir),
-        ...allocationEnv,
       },
       {},
       { timings: TIMINGS },
@@ -750,7 +719,7 @@ describe("a real offer beside a real promotion on a real start", () => {
   it("an offer arriving just past the promote's check records nothing, and the box promotes with no operation left behind", async () => {
     await withStartedMirror("overlap", async ({ base, seed, offer }) => {
       const hold = holdThePromotion();
-      const operation = seed.fixture.request("promote");
+      const operation = seed.fixture();
       const promoting = postPromote(base, {
         moduleOperation: { binding: operation.binding, input: operation.input },
         oldNodeNeutralised: true,
@@ -891,13 +860,12 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
-  const { FISCAL_OPERATIONS: historicalFiscalOperations } =
-    await import("@waitron/fiscal-verifactu/src/allocation-configuration.js");
+  const { hourPromotionOperations } = await import("./testing/dormant-contract.js");
   return {
     ...actual,
     ALL_MODULES: actual.ALL_MODULES.map((module) =>
       module.name === "fiscal-verifactu"
-        ? { ...module, operations: historicalFiscalOperations }
+        ? { ...module, operations: hourPromotionOperations }
         : module,
     ),
   };

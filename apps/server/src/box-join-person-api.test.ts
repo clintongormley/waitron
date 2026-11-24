@@ -25,10 +25,9 @@ import {
 } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
-import { AppError, nodeId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { BoxJoinRequests } from "./box-join-requests.js";
 import type { Logger } from "./logger.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
@@ -147,18 +146,7 @@ async function withReservingModule<T>(
   body: (moduleOperation: unknown, operators: unknown[]) => Promise<T>,
   reserveFails?: Error,
 ): Promise<T> {
-  const fixture = await standbyContract(
-    db,
-    { nodeId: nodeId(designated.nodeId) },
-    standbyNodeId,
-    [
-      { code: "FA", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "RF", purpose: "corrective" },
-      { code: "RFF", purpose: "full_corrective" },
-    ],
-    approverId,
-  );
+  const fixture = standbyContract(designated.nodeId, standbyNodeId, approverId);
   const held = fixture.request("reserve");
   const operators: unknown[] = [];
   const original = [...ALL_MODULES];
@@ -676,7 +664,6 @@ describe("the main box's person routes for a joining box", () => {
       const again = await approve(listed.requestId, { moduleOperation });
       expect(again.status, JSON.stringify(again.body)).toBe(202);
       // This module's reserve writes no venue row, so its calls are the reservations it made.
-      expect(await db.select().from(fiscalReservations)).toEqual([]);
       expect(operators).toEqual([approverId]);
     });
   });

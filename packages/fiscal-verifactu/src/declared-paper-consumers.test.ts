@@ -6,7 +6,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
-import { seedFixtureSif } from "../test/sif-fixture.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import {
   createAllocationPreparation,
@@ -14,13 +13,8 @@ import {
   createPaperAllocationPreparation,
 } from "./allocation-preparation.js";
 import { createBoundPaperAllocationSource } from "./allocation-paper-source.js";
-import {
-  createStandbyAllocationPreparation,
-  ALLOCATED_FISCAL_STANDBY,
-} from "./allocated-standby.js";
 import type { DeclaredRegisterHistory } from "./paper-register-protocol.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TAXPAYER_A.nodeId },
@@ -126,85 +120,6 @@ it.each(["setup", "restore"])(
       `R-${prefix}000043`,
       `RF-${prefix}000043`,
     ]);
-  },
-);
-async function registerPrimary() {
-  await withTransaction(suite.db, (tx) =>
-    seedFixtureSif(tx, { nodeId: primary.nodeId, nif: "89890001K", idSistemaInformatico: "W1" }),
-  );
-}
-function standby(
-  f: ReturnType<typeof allocationFixture>,
-  action: "reserve" | "establish",
-  history: DeclaredRegisterHistory,
-) {
-  const req = f.request(action),
-    c = req.confirmation as Record<string, unknown>;
-  const preparation = createStandbyAllocationPreparation(async (scope) => ({
-    ...scope,
-    evidence: {
-      trust: f.custodian,
-      allocationId: f.allocation.allocationId,
-      incidentEvidence: c.incidentEvidence as string,
-      recipientVenueId: c.recipientVenueId as string,
-      generationId: c.generationId as string,
-      blockId: c.blockId as string,
-      currentRegisterConfirmed: true,
-      reservationConfirmed: true,
-      currentEntryState: "reserved",
-      knownHistory: history,
-    },
-  }));
-  return withOperationAuthority(req.binding, req.operatorId, (authority) =>
-    preparation.prepare({ binding: req.binding, authority, input: req.input }, (op) =>
-      withTransaction<unknown>(suite.db, (tx) =>
-        action === "reserve"
-          ? ALLOCATED_FISCAL_STANDBY.reserve!(tx, primary, target, op)
-          : ALLOCATED_FISCAL_STANDBY.establish!(tx, target, f.state, op),
-      ),
-    ),
-  );
-}
-it.each(["reserve", "establish"] as const)(
-  "standby %s refuses signed P40 below burn42 and permits P43",
-  async (action) => {
-    await registerPrimary();
-    const history = checkpoint("P");
-    const old = allocationFixture({ node: target, primary, bases, identity: "P000040" });
-    await expect(standby(old, action, history)).rejects.toMatchObject(refusal);
-    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
-    const fresh = allocationFixture({ node: target, primary, bases, identity: "P000043" });
-    const result = await standby(fresh, action, history);
-    if (action === "establish")
-      expect((await suite.db.select().from(fiscalReservations))[0]?.installationIdentity).toBe(
-        "P000043",
-      );
-    else expect(result).toMatchObject({ state: { version: 1, evidence: fresh.state.evidence } });
-  },
-);
-it.each([40, 43])(
-  "promotion of signed dormant P%d checks the fresh known burn floor",
-  async (serial) => {
-    await registerPrimary();
-    const f = allocationFixture({
-      node: target,
-      primary,
-      bases,
-      identity: `P${String(serial).padStart(6, "0")}`,
-    });
-    await f.transaction(suite.db, "establish", (tx, operation) =>
-      ALLOCATED_FISCAL_STANDBY.establish!(tx, target, f.state, operation),
-    );
-    if (serial === 40) {
-      await expect(attempt(f, "promote", checkpoint("P"))).rejects.toMatchObject(refusal);
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-    } else
-      expect((await attempt(f, "promote", checkpoint("P"))).series.map((x) => x.code)).toEqual([
-        "A-P000043",
-        "FF-P000043",
-        "R-P000043",
-        "RF-P000043",
-      ]);
   },
 );
 it("the bound source retains independently held history alongside current signed confirmation", async () => {

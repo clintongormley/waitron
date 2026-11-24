@@ -1,14 +1,6 @@
-import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { loadKeyRing, putCredential, venueCredentials } from "@waitron/credentials";
-import {
-  captureError,
-  deployment,
-  invoiceSeries,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { captureError, deployment, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
@@ -16,11 +8,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TAXPAYER_A, seedTaxpayers } from "../test/fixtures.js";
 import { FISCAL_PROVISIONING, WAITRON_ID_SISTEMA } from "./provisioning.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
-import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
-import { fiscalReservations } from "./schema/reservations.js";
-import { fiscalAllocations } from "./schema/allocations.js";
-import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { readChainHead } from "./chain.js";
 import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
 
@@ -31,10 +19,8 @@ let db: Database;
 const NODE: ProvisionedNode = {
   nodeId: TAXPAYER_A.nodeId,
 };
-const NODE_2: ProvisionedNode = { ...NODE, nodeId: TAXPAYER_A.nodeId2 };
 
 const seed = FISCAL_PROVISIONING.seed!;
-const standby = ALLOCATED_FISCAL_STANDBY;
 
 beforeAll(() => {
   db = suite.db;
@@ -102,224 +88,3 @@ describe("FISCAL_PROVISIONING.seed", () => {
     expect(head.ultimaHuella).toBeNull();
   });
 });
-
-describe("allocated fiscal standby contract", () => {
-  beforeEach(async () => {
-    await withTransaction(db, (tx) =>
-      registerSif(tx, {
-        nodeId: NODE.nodeId,
-        nif: "89890001K",
-        idSistemaInformatico: WAITRON_ID_SISTEMA,
-      }),
-    );
-    await db.insert(invoiceSeries).values([
-      { nodeId: TAXPAYER_A.nodeId, code: "FA", purpose: "standard" },
-      { nodeId: TAXPAYER_A.nodeId, code: "RF", purpose: "corrective" },
-    ]);
-  });
-
-  it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
-    await db.execute(sql`delete from invoice_series where node_id = ${TAXPAYER_A.nodeId}`);
-    const primarySif = await withTransaction(db, (tx) =>
-      registerSif(tx, {
-        nodeId: TAXPAYER_A.nodeId,
-        nif: "89890001K",
-        idSistemaInformatico: WAITRON_ID_SISTEMA,
-      }),
-    );
-    // What a restored primary holds: `FA` retired, `FA-<its installation number>` and `RE-<n>` live.
-    await db.insert(invoiceSeries).values([
-      { nodeId: TAXPAYER_A.nodeId, code: "FA", purpose: "standard", retiredAt: new Date() },
-      {
-        nodeId: TAXPAYER_A.nodeId,
-        code: `FA-${primarySif.numeroInstalacion}`,
-        purpose: "standard",
-        retiredAt: null,
-      },
-      {
-        nodeId: TAXPAYER_A.nodeId,
-        code: `RE-${primarySif.numeroInstalacion}`,
-        purpose: "corrective",
-        retiredAt: null,
-      },
-    ]);
-    const fixture = spareFixture([
-      { code: "FA", purpose: "standard" },
-      { code: "RE", purpose: "corrective" },
-    ]);
-    const reservation = await reserve(fixture);
-    expect(reservation.series).toBeUndefined();
-    expect(fixture.allocation.series).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "RE-P000042", purpose: "corrective" },
-    ]);
-    expect(reservation.state).toEqual(fixture.state);
-    await takeover(fixture, reservation.state);
-    expect(await activeSeries()).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "RE-P000042", purpose: "corrective" },
-    ]);
-  });
-
-  it("reserves a signed identity and opens its complete purpose set only at takeover", async () => {
-    const fixture = spareFixture();
-    const r = await reserve(fixture);
-    expect(r.state).toEqual(fixture.state);
-    expect(r.series).toBeUndefined();
-    expect(fixture.allocation.installationIdentity).toBe("P000042");
-    expect(fixture.allocation.series).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "corrective" },
-    ]);
-    expect(fixture.allocation.series.find((s) => s.code === "RF-P000042")?.purpose).toBe(
-      "corrective",
-    );
-    expect(await activeSeries()).toEqual([]);
-    expect(await activeSifs()).toEqual([]);
-    await takeover(fixture, r.state);
-    expect(await activeSeries()).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "corrective" },
-    ]);
-  });
-
-  it("establishes a dormant reservation on the standby and activates the supplied identity at takeover", async () => {
-    const fixture = spareFixture();
-    const r = await reserve(fixture);
-    await fixture.transaction(db, "establish", (tx, operation) =>
-      standby.establish(tx, NODE_2, r.state, operation),
-    );
-    expect(await activeSifs()).toEqual([]);
-    expect(await activeSeries()).toEqual([]);
-    const retained = await db.select().from(fiscalReservations);
-    expect(retained).toHaveLength(1);
-    expect(retained[0]?.installationIdentity).toBe("P000042");
-    await fixture.transaction(db, "promote", (tx, operation) =>
-      standby.activate!(tx, NODE_2, operation),
-    );
-    const sif = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId2));
-    expect(sif.numeroInstalacion).toBe("P000042");
-    expect(sif.nif).toBe("89890001K");
-    expect(await activeSeries()).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "RF-P000042", purpose: "corrective" },
-    ]);
-  });
-
-  it.each([
-    ["absent", () => undefined],
-    ["not an object", () => "W1/P000042"],
-    [
-      "missing the nif",
-      (state: ReturnType<typeof spareFixture>["state"]) =>
-        malformedState(state, "taxpayerNif", undefined),
-    ],
-    [
-      "an empty software id",
-      (state: ReturnType<typeof spareFixture>["state"]) => malformedState(state, "softwareId", ""),
-    ],
-    [
-      "a software id over two characters",
-      (state: ReturnType<typeof spareFixture>["state"]) =>
-        malformedState(state, "softwareId", "WTX"),
-    ],
-    [
-      "missing the identity",
-      (state: ReturnType<typeof spareFixture>["state"]) =>
-        malformedState(state, "installationIdentity", undefined),
-    ],
-    [
-      "a non-positive identity",
-      (state: ReturnType<typeof spareFixture>["state"]) =>
-        malformedState(state, "installationIdentity", 0),
-    ],
-    [
-      "a fractional identity",
-      (state: ReturnType<typeof spareFixture>["state"]) =>
-        malformedState(state, "installationIdentity", 1.5),
-    ],
-  ])("refuses a reservation state that is %s, writing nothing", async (_label, change) => {
-    const fixture = spareFixture();
-    const ring = loadKeyRing({
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x2d).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    });
-    await withTransaction(db, (tx) =>
-      putCredential(tx, ring, {
-        personId: null,
-        purpose: "backup.archive",
-        value: { accessKeyId: "held-primary-key", secretAccessKey: "held-primary-secret" },
-      }),
-    );
-    const keysBefore = await db.select().from(venueCredentials);
-    expect(keysBefore).toHaveLength(1);
-    const reservationsBefore = await db.select().from(fiscalReservations);
-    const allocationsBefore = await db.select().from(fiscalAllocations);
-    const err = await captureError(() =>
-      fixture.transaction(db, "establish", (tx, operation) =>
-        standby.establish(tx, NODE_2, change(fixture.state), operation),
-      ),
-    );
-    expect(isAppError(err) && err.code).toBe("sif.allocation_invalid");
-    expect(isAppError(err) && err.params).toEqual({ reason: "reservation_mismatch" });
-    expect(await db.select().from(venueCredentials)).toEqual(keysBefore);
-    expect(await db.select().from(fiscalReservations)).toEqual(reservationsBefore);
-    expect(await db.select().from(fiscalAllocations)).toEqual(allocationsBefore);
-    expect(await activeSeries()).toEqual([]);
-    const rows = await db.execute(
-      sql`select 1 from verifactu_identities where node_id = ${TAXPAYER_A.nodeId2}`,
-    );
-    expect(rows.rows).toEqual([]);
-  });
-});
-
-function spareFixture(
-  bases = [
-    { code: "FA", purpose: "standard" },
-    { code: "RF", purpose: "corrective" },
-  ],
-) {
-  return allocationFixture({ node: NODE_2, primary: NODE, bases, identity: "P000042" });
-}
-function reserve(fixture: ReturnType<typeof spareFixture>) {
-  return fixture.transaction(db, "reserve", (tx, operation) =>
-    standby.reserve(tx, NODE, NODE_2, operation),
-  );
-}
-async function takeover(fixture: ReturnType<typeof spareFixture>, state: unknown) {
-  await fixture.transaction(db, "establish", (tx, operation) =>
-    standby.establish(tx, NODE_2, state, operation),
-  );
-  await fixture.transaction(db, "promote", (tx, operation) =>
-    standby.activate!(tx, NODE_2, operation),
-  );
-}
-function activeSeries() {
-  return db
-    .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-    .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, NODE_2.nodeId), isNull(invoiceSeries.retiredAt)))
-    .orderBy(invoiceSeries.code);
-}
-function activeSifs() {
-  return db
-    .select()
-    .from(verifactuIdentities)
-    .where(
-      and(eq(verifactuIdentities.nodeId, NODE_2.nodeId), isNull(verifactuIdentities.revocadoEn)),
-    );
-}
-function malformedState(
-  state: ReturnType<typeof spareFixture>["state"],
-  field: string,
-  value: unknown,
-) {
-  const changed = structuredClone(state);
-  const allocation = changed.evidence.block.payload.allocations[0]! as unknown as Record<
-    string,
-    unknown
-  >;
-  if (value === undefined) delete allocation[field];
-  else allocation[field] = value;
-  return changed;
-}

@@ -10,7 +10,6 @@ import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { FISCAL_RESTORE } from "./restore.js";
 import { currentSif, registerSif } from "./registro-sif.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -39,7 +38,6 @@ async function snapshot() {
     identities: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
   };
 }
 

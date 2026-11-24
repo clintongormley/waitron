@@ -7,13 +7,11 @@ import {
   type OperationOperator,
 } from "@waitron/module";
 import { createAllocationPreparation } from "../src/allocation-preparation.js";
-import { createStandbyAllocationPreparation } from "../src/allocated-standby.js";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
   signPaperBlock,
   signPaperConsumptionForBlock,
-  signPaperReservationForBlock,
 } from "../src/paper-evidence.js";
 
 const keys = generateKeyPairSync("ed25519");
@@ -31,12 +29,11 @@ export function allocationFixture(options: {
   identity: string;
   taxpayerNif?: string;
   softwareId?: string;
-  primary?: ProvisionedNode;
   operatorId?: string;
   recoveryKey?: boolean;
   environment?: "preproduction" | "production";
 }) {
-  const { node, bases, identity, primary } = options;
+  const { node, bases, identity } = options;
   const allocation = {
     version: 1 as const,
     allocationId: `contract-${identity}`,
@@ -63,31 +60,12 @@ export function allocationFixture(options: {
   const operatorId = options.operatorId ?? "contract-administrator";
   const joinEvent = `join-${identity}`;
   const incidentEvidence = `master/${identity}`;
-  const reservation =
-    primary === undefined
-      ? undefined
-      : signPaperReservationForBlock(
-          block,
-          allocation.allocationId,
-          {
-            eventId: joinEvent,
-            operatorId,
-            sourceId: primary.nodeId,
-            targetNodeId: node.nodeId,
-            incidentEvidence,
-            reservedAt: "2026-10-14T08:01:00.000Z",
-          },
-          privateKey,
-        );
-  const state = { version: 1, evidence: { block, reservation } };
-
   function request(action: string, priorActivation: "none" | "committed" = "none") {
-    const joining = action === "reserve" || action === "establish";
     const binding = {
       module: "fiscal-verifactu",
       action,
-      eventId: joining ? joinEvent : `${action}-${identity}`,
-      sourceId: primary?.nodeId ?? (action === "setup" ? "initial-venue" : "archive-contract"),
+      eventId: `${action}-${identity}`,
+      sourceId: action === "setup" ? "initial-venue" : "archive-contract",
       targetNodeId: node.nodeId,
     };
     const authenticatedOperator: OperationOperator = options.recoveryKey
@@ -102,31 +80,6 @@ export function allocationFixture(options: {
       incidentEvidence,
       currentRegisterConfirmed: true,
     };
-    if (joining) {
-      const preparation = createStandbyAllocationPreparation(async (scope) => ({
-        ...scope,
-        evidence: { ...common, reservationConfirmed: true, currentEntryState: "reserved" },
-      }));
-      return {
-        binding,
-        operatorId,
-        preparation,
-        input: state.evidence,
-        confirmation: {
-          version: 1,
-          allocationId: allocation.allocationId,
-          binding,
-          operatorId,
-          recipientVenueId: common.recipientVenueId,
-          generationId: common.generationId,
-          blockId: common.blockId,
-          incidentEvidence,
-          currentRegisterConfirmed: true,
-          reservationConfirmed: true,
-          currentEntryState: "reserved",
-        },
-      };
-    }
     const approval = {
       version: 1 as const,
       eventId: binding.eventId,
@@ -207,7 +160,7 @@ export function allocationFixture(options: {
 
   return {
     allocation,
-    state,
+    state: { version: 1, evidence: { block } },
     custodian: {
       custodianId: "contract-custodian",
       publicKey,

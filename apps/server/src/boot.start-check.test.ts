@@ -1,6 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -247,13 +246,7 @@ async function boot(
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.email, "owner@example.test"));
-    const fixture = await standbyContract(
-      suite.db,
-      { nodeId },
-      SPARE.nodeId,
-      SERIES_BASES,
-      admin!.id,
-    );
+    const fixture = standbyContract(nodeId, SPARE.nodeId, admin!.id);
     const held = fixture.request("reserve");
     const app = new Hono();
     mountBoxJoin(app, {

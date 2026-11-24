@@ -1,6 +1,8 @@
+import { withHourAdmission } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
+import { activateModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
+import { hourPromotionInput } from "./testing/dormant-contract.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
-import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { deployment, invoiceSeries, withNodeTransaction, withTransaction } from "@waitron/db";
@@ -10,16 +12,6 @@ import { hashPassword } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 
-import { establishDormantAllocation } from "@waitron/fiscal-verifactu/src/standby-allocation.js";
-import { activateAuthenticatedDormantAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
-import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import {
-  enrolPaperCustodian,
-  paperCustodianFingerprint,
-  signPaperBlock,
-  signPaperReservationForBlock,
-  signPaperConsumptionForBlock,
-} from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { commitMirrorPromotionTx } from "./promote.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -33,113 +25,15 @@ const PASSWORD = "correct horse";
 const HASH = hashPassword(PASSWORD);
 const primary = { nodeId: TAXPAYER_A.nodeId };
 const target = { ...primary, nodeId: TAXPAYER_A.nodeId2 };
-const keys = generateKeyPairSync("ed25519");
-const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
-const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const trust = enrolPaperCustodian("custodian", publicKey, paperCustodianFingerprint(publicKey))!;
 const bases = SERIES_BASES;
-const candidate = {
-  version: 1 as const,
-  allocationId: "allocation-42",
-  taxpayerNif: "89890001K",
-  softwareId: "W1",
-  environment: "preproduction" as const,
-  installationIdentity: "P000042",
-  source: "paper" as const,
-  issuedAt: "2026-10-12T08:00:00.000Z",
-  series: [
-    { code: "A-P000042", purpose: "standard" },
-    { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "corrective" },
-    { code: "RF-P000042", purpose: "full_corrective" },
-  ],
-};
-const block = signPaperBlock(
-  {
-    version: 1,
-    custodianId: "custodian",
-    generationId: "generation-1",
-    blockId: "block-1",
-    packVersion: 1,
-    recipientVenueId: "venue-1",
-    allocations: [candidate],
-  },
-  privateKey,
-);
-const join = {
-  eventId: "join-1",
-  operatorId: ADMIN,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: "master/join-1",
-  reservedAt: "2026-10-12T09:00:00.000Z",
-};
-const reservation = {
-  block,
-  reservation: signPaperReservationForBlock(block, candidate.allocationId, join, privateKey),
-};
-const approval = {
-  version: 1 as const,
-  eventId: "takeover-1",
-  operatorId: ADMIN,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: "master/takeover-1",
-  oldMachineOffline: true,
-  oldMachineAbsent: false,
-  noParallelRecovery: true,
-  confirmedAt: "2026-10-12T10:00:00.000Z",
-};
-const allocation = {
-  ...candidate,
-  reservationEvidence: {
-    block,
-    consumption: signPaperConsumptionForBlock(
-      block,
-      candidate.allocationId,
-      {
-        eventId: approval.eventId,
-        operatorId: ADMIN,
-        sourceId: primary.nodeId,
-        targetNodeId: target.nodeId,
-        incidentEvidence: approval.incidentEvidence,
-        consumedAt: approval.confirmedAt,
-      },
-      privateKey,
-    ),
-  },
-};
-const context: AllocationContext = {
-  taxpayerNif: candidate.taxpayerNif,
-  softwareId: "W1",
-  environment: "preproduction",
-  mode: "recovery",
-  eventId: approval.eventId,
-  operatorId: ADMIN,
-  sourceId: primary.nodeId,
-  targetNodeId: target.nodeId,
-  incidentEvidence: approval.incidentEvidence,
-  requiredBases: bases,
-  reauthentication: null,
-  priorActivation: "none",
-  authority: {
-    kind: "paper",
-    trust,
-    recipientVenueId: "venue-1",
-    generationId: "generation-1",
-    blockId: "block-1",
-    currentRegisterConfirmed: true,
-    consumptionConfirmed: true,
-    currentEntryState: "consumed-for-event",
-  },
-};
 const binding = {
   module: "fiscal-verifactu",
   action: "promote",
-  eventId: approval.eventId,
+  eventId: "takeover-1",
   sourceId: primary.nodeId,
   targetNodeId: target.nodeId,
 };
+const input = hourPromotionInput(binding, ADMIN, "89890001K", "preproduction", bases);
 const document = signedMembershipDoc(2, { signerNodeId: target.nodeId });
 
 async function promote(personId = ADMIN) {
@@ -149,14 +43,11 @@ async function promote(personId = ADMIN) {
     { personId, password: PASSWORD },
     (authority) =>
       withTransaction(suite.db, async (tx) => {
-        const result = await activateAuthenticatedDormantAllocation(
-          tx,
-          target,
-          join.eventId,
-          allocation,
-          approval,
-          context,
-          authority,
+        const operation = { binding, input, authority };
+        const result = await withHourAdmission(
+          operation,
+          { requiredBases: bases, priorActivation: "none" },
+          (evidence) => activateModuleAllocation(tx, target, operation, evidence),
         );
         await commitMirrorPromotionTx(tx, document);
         return result;
@@ -176,7 +67,6 @@ async function snapshot() {
     "invoice_series",
     "verifactu_records",
     "fiscal_allocations",
-    "fiscal_reservations",
     "node_membership",
   ])
     rows.push((await suite.db.execute(sql`select * from ${sql.identifier(table)}`)).rows);
@@ -193,7 +83,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
       nodeId: primary.nodeId,
-      nif: candidate.taxpayerNif,
+      nif: input.allocation.taxpayerNif,
       idSistemaInformatico: "W1",
     }),
   );
@@ -203,31 +93,19 @@ beforeEach(async () => {
   await withNodeTransaction(suite.node, (tx) =>
     setNodeModeTx(tx, target.nodeId, "mirror", "adopt"),
   );
-  await withTransaction(suite.db, (tx) =>
-    establishDormantAllocation(tx, primary, target, reservation, trust, {
-      allocationId: candidate.allocationId,
-      taxpayerNif: candidate.taxpayerNif,
-      softwareId: "W1",
-      environment: "preproduction",
-      recipientVenueId: "venue-1",
-      generationId: "generation-1",
-      blockId: "block-1",
-      ...join,
-      currentRegisterConfirmed: true,
-      reservationConfirmed: true,
-      currentEntryState: "reserved",
-      requiredBases: bases,
-    }),
-  );
 });
 
 describe("authenticated internal takeover plus the host's promotion transaction", () => {
-  it("commits all three allocated purposes, the new identity and membership together, and the role follows", async () => {
+  it("commits all four allocated purposes, the new identity and membership together, and the role follows", async () => {
     const before = await snapshot();
     const result = await promote();
-    expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual(candidate.series);
+    expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+      { code: "A-0CNPG", purpose: "standard" },
+      { code: "FF-0CNPG", purpose: "full" },
+      { code: "R-0CNPG", purpose: "corrective" },
+      { code: "RF-0CNPG", purpose: "full_corrective" },
+    ]);
     const after = await snapshot();
-    expect(after[4]).toEqual(before[4]);
     expect(
       (after[0] as Record<string, unknown>[]).find((row) => row.node_id === primary.nodeId),
     ).toEqual((before[0] as Record<string, unknown>[])[0]);
@@ -236,10 +114,10 @@ describe("authenticated internal takeover plus the host's promotion transaction"
       singletonRole: "primary",
     });
     expect((after[3] as Record<string, unknown>[])[0]).toMatchObject({
-      installation_identity: "P000042",
+      installation_identity: "0CNPG",
       event_key: "takeover-1",
     });
-    expect(after[5]).toHaveLength(1);
+    expect(after[4]).toHaveLength(1);
   });
 
   it("rolls back every activation row, and the role stays, if the host membership write is refused", async () => {
@@ -254,17 +132,16 @@ describe("authenticated internal takeover plus the host's promotion transaction"
         mode: "mirror",
         singletonRole: "secondary",
       });
-      expect(allocation.reservationEvidence.consumption.payload.eventId).toBe("takeover-1");
     } finally {
       await suite.db.execute(sql`drop trigger refuse_chart`);
     }
   });
 
-  it("refuses a different freshly authenticated administrator substituting for the signed consumption operator", async () => {
+  it("refuses a different freshly authenticated administrator substituting for the approved operator", async () => {
     const before = await snapshot();
     await expect(promote(OTHER)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
-      params: { reason: "reauthentication_required" },
+      params: { reason: "event_mismatch" },
     });
     expect(await snapshot()).toEqual(before);
   });

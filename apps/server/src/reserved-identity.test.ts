@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, readNodeSigningKey, type KeyRing } from "@waitron/credentials";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
-import { ALLOCATED_FISCAL_STANDBY, currentSif } from "@waitron/fiscal-verifactu";
+import { currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -17,7 +17,6 @@ import {
   type StandbyIdentity,
 } from "./reserved-identity.js";
 import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
-import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -49,7 +48,7 @@ describe("establishReservedStandbyIdentity", () => {
     NIF = t.rows[0]!.tax_id;
   });
 
-  it("establishes a dormant reservation and opens its supplied SIF and series only at takeover", async () => {
+  it("establishes the spare without creating live fiscal rows or storing its key", async () => {
     const standby = generateStandbyIdentity();
     const fixture = await preparedReservation(standby);
     await fixture.authorised("establish", (operation) =>
@@ -76,10 +75,6 @@ describe("establishReservedStandbyIdentity", () => {
         sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`,
       ).rows[0]!.n,
     ).toBe(0);
-    const reservations = await suite.db.select().from(fiscalReservations);
-    expect(reservations).toHaveLength(1);
-    expect(reservations[0]?.installationIdentity).toBe("P000042");
-    expect(reservations[0]?.taxpayerNif).toBe(NIF);
     await expect(
       withTransaction(suite.db, (tx) => currentSif(tx, brandNodeId(standby.nodeId))),
     ).rejects.toMatchObject({ code: "sif.not_registered" });
@@ -89,17 +84,6 @@ describe("establishReservedStandbyIdentity", () => {
       ),
     );
     expect(series.rows[0]!.n).toBe(0);
-    await fixture.transaction(suite.db, "promote", (tx, operation) =>
-      ALLOCATED_FISCAL_STANDBY.activate!(tx, { nodeId: brandNodeId(standby.nodeId) }, operation),
-    );
-    const sif = await withTransaction(suite.db, (tx) =>
-      currentSif(tx, brandNodeId(standby.nodeId)),
-    );
-    expect(sif.numeroInstalacion).toBe("P000042");
-    const active = await suite.db.execute<{ code: string; purpose: string }>(sql`
-      select code, purpose from invoice_series where node_id = ${standby.nodeId} and retired_at is null order by code
-    `);
-    expect(active.rows).toEqual([{ code: "FA-P000042", purpose: "standard" }]);
   });
 
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
@@ -128,7 +112,6 @@ describe("establishReservedStandbyIdentity", () => {
       ),
     );
     const second = { ...generateStandbyIdentity(), nodeId: first.nodeId };
-    const reservationsBefore = await suite.db.select().from(fiscalReservations);
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db },
       {
@@ -147,7 +130,6 @@ describe("establishReservedStandbyIdentity", () => {
       sql`select public_key from nodes where id = ${first.nodeId}`,
     );
     expect(node.rows).toEqual([{ public_key: first.publicKey }]);
-    expect(await suite.db.select().from(fiscalReservations)).toEqual(reservationsBefore);
     expect(
       await suite.db.execute<{ n: number }>(
         sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`,
@@ -181,7 +163,6 @@ describe("establishReservedStandbyIdentity", () => {
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
     expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
-    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     const series = await suite.db.execute(
       sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
@@ -217,13 +198,40 @@ describe("establishReservedStandbyIdentity", () => {
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
     expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
-    expect(await suite.db.select().from(fiscalReservations)).toEqual([]);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     const series = await suite.db.execute(
       sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
     );
     expect(series.rows).toEqual([]);
   });
+  it("refuses premature series before writing the spare's node or key", async () => {
+    const standby = generateStandbyIdentity();
+    await expect(
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db },
+        {
+          standby,
+          nodeName: "Spare",
+          filingModule: "fiscal-verifactu",
+          taxModule: null,
+          modules: ALL_MODULES,
+          reserved: {
+            modules: {},
+            series: [{ code: "FA-PREMATURE", purpose: "standard" }],
+            endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "module.operation_invalid",
+      params: { module: "fiscal-verifactu" },
+    });
+    expect(
+      (await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`)).rows,
+    ).toEqual([]);
+    expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
+  });
+
   it("establishes the node with no reserved series when the bundle carries no `series` key and no module reserves", async () => {
     const standby = generateStandbyIdentity();
     await establishReservedStandbyIdentity(
@@ -278,7 +286,6 @@ describe("establishReservedStandbyIdentity", () => {
   it("refuses a fiscal standby without a venue before recording its reservation", async () => {
     const standby = generateStandbyIdentity();
     const fixture = await preparedReservation(standby);
-    const reservationsBefore = await suite.db.select().from(fiscalReservations);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db.execute(sql`delete from settings where module = 'venue'`);
@@ -312,7 +319,6 @@ describe("establishReservedStandbyIdentity", () => {
       (await suite.db.execute(sql`select 1 from invoice_series where node_id = ${standby.nodeId}`))
         .rows,
     ).toEqual([]);
-    expect(await suite.db.select().from(fiscalReservations)).toEqual(reservationsBefore);
   });
 
   async function preparedReservation(standby: StandbyIdentity) {
@@ -326,8 +332,6 @@ describe("establishReservedStandbyIdentity", () => {
     await suite.db
       .insert(invoiceSeries)
       .values({ nodeId: primary.nodeId, code: "FA", purpose: "standard" });
-    return standbyContract(suite.db, primary, standby.nodeId, [
-      { code: "FA", purpose: "standard" },
-    ]);
+    return standbyContract(primary.nodeId, standby.nodeId);
   }
 });

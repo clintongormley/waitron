@@ -8,7 +8,6 @@ import type { HourHistorySource } from "./hour-history.js";
 import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
@@ -75,28 +74,14 @@ export interface HourHistoryRows {
     result: ActivationResult | null;
     activatedAt: Moment;
   }[];
-  readonly reservations: readonly {
-    eventKey: string;
-    allocationKey: string;
-    nodeId: string;
-    sourceNodeId: string;
-    taxpayerNif: string;
-    softwareId: string;
-    environment: string;
-    installationIdentity: string;
-    evidence: unknown;
-    bases: unknown;
-    establishedAt: Moment;
-  }[];
 }
 
 export function hourHistorySource(
-  { taxpayer, series, sifs, allocations, reservations }: HourHistoryRows,
+  { taxpayer, series, sifs, allocations }: HourHistoryRows,
   environment: DeploymentEnvironment | null,
 ): HourHistorySource {
   let complete =
-    series.length + sifs.length + allocations.length + reservations.length === 0 ||
-    (taxpayer && environment !== null);
+    series.length + sifs.length + allocations.length === 0 || (taxpayer && environment !== null);
   const records: unknown[] = [];
   for (const row of sifs)
     records.push({
@@ -173,27 +158,6 @@ export function hourHistorySource(
       recordedAtMs: time(row.activatedAt, allocation?.issuedAt, approval?.confirmedAt),
     });
   }
-  for (const row of reservations) {
-    if (
-      row.evidence === null ||
-      typeof row.evidence !== "object" ||
-      Array.isArray(row.evidence) ||
-      !validBases(row.bases) ||
-      row.sourceNodeId === row.nodeId
-    )
-      complete = false;
-    // A reservation's explicit scope is evidence even if a later database stamp differs.
-    records.push({
-      reference: `fiscal_reservations/${row.eventKey}`,
-      kind: "reservation",
-      taxpayerNif: row.taxpayerNif,
-      environment: row.environment,
-      softwareId: row.softwareId,
-      nodeId: row.nodeId,
-      identity: row.installationIdentity,
-      recordedAtMs: time(row.establishedAt),
-    });
-  }
   return { reference: "venue", complete, records };
 }
 
@@ -240,23 +204,5 @@ export async function readHourHistory(
       activatedAt: fiscalAllocations.activatedAt,
     })
     .from(fiscalAllocations);
-  const reservations = await tx
-    .select({
-      eventKey: fiscalReservations.eventKey,
-      allocationKey: fiscalReservations.allocationKey,
-      nodeId: fiscalReservations.nodeId,
-      sourceNodeId: fiscalReservations.sourceNodeId,
-      taxpayerNif: fiscalReservations.taxpayerNif,
-      softwareId: fiscalReservations.softwareId,
-      environment: fiscalReservations.environment,
-      installationIdentity: fiscalReservations.installationIdentity,
-      evidence: fiscalReservations.evidence,
-      bases: fiscalReservations.bases,
-      establishedAt: fiscalReservations.establishedAt,
-    })
-    .from(fiscalReservations);
-  return hourHistorySource(
-    { taxpayer: taxpayer !== null, series, sifs, allocations, reservations },
-    environment,
-  );
+  return hourHistorySource({ taxpayer: taxpayer !== null, series, sifs, allocations }, environment);
 }

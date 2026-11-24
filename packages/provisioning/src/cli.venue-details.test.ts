@@ -87,7 +87,6 @@ function retained() {
       "invoice_series",
       "verifactu_identities",
       "fiscal_allocations",
-      "fiscal_reservations",
     ].map((table) => [
       table,
       suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
