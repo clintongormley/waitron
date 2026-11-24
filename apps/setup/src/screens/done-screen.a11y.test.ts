@@ -221,7 +221,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         startDelayMs: 100000,
         pollIntervalMs: 100000,
         mirrorJoin: true,
-        breakGlassSecret: "bg-9f3a",
       },
       theme,
     );
@@ -250,7 +249,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           lostAfterMs: 30,
           lostPollIntervalMs: 5,
           mirrorJoin: true,
-          breakGlassSecret: "bg-9f3a",
           serversUrl: "https://waitron.local/servers",
           contactUrl: "https://box-41aa.waitron.local",
         },

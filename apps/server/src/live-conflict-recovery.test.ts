@@ -15,6 +15,7 @@ import { invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
+import { readRecoveryKey } from "@waitron/node-db";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
@@ -31,7 +32,6 @@ import { ALL_MODULES } from "./modules.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
-import { readRecoveryKey } from "@waitron/node-db";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({

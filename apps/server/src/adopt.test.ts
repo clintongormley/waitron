@@ -1111,7 +1111,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     }
   });
 
-  it("leaves no role, signing key, recovery key or link behind when the main box's key cannot be pinned", async () => {
+  it("leaves no role, signing key or link behind when the main box's key cannot be pinned", async () => {
     await suite.node.execute(
       sql.raw(`create trigger refuse_pin before insert on box
         begin select raise(abort, 'refused by test'); end`),

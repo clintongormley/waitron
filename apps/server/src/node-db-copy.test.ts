@@ -99,7 +99,7 @@ function chartBody(term: number, nodes: MembershipDocumentBody["nodes"]): Member
 }
 
 beforeAll(async () => {
-  // Box A: a stamped primary with its signing key, a recovery key and a chart naming it main box.
+  // Box A: a stamped primary with its signing key and a chart naming it main box.
   const aDir = await migratedFolder("waitron-copy-a-");
   const aState = await mkdtemp(join(tmpdir(), "waitron-copy-a-state-"));
   scratch.push(aState);
