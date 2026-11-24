@@ -216,8 +216,10 @@ async function refuseBelowAdvances(tx: Transaction, billId: string): Promise<voi
 /**
  * Move the chosen items, part of a line included, from an open bill to a new bill of its party (a
  * new counter order when it has none) that names the bill they came from, and issue the source
- * when what is left of it is paid. The source may be left holding more than it owes; the kitchen
- * is not told, as the items stay where they are served.
+ * when what is left of it is paid, unless `holdSourceInvoice`: a card reader's payment can still
+ * charge nothing and put the items back, so its source is issued once that payment is received
+ * (`completeBillPayment`). The source may be left holding more than it owes; the kitchen is not
+ * told, as the items stay where they are served.
  */
 export async function moveItemsToNewBill(
   tx: Transaction,
@@ -226,6 +228,7 @@ export async function moveItemsToNewBill(
   picks: readonly ItemPick[],
   command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
   sale: { deps: TillSaleDeps; cfg: DeviceRequestConfig },
+  options: { holdSourceInvoice?: boolean } = {},
 ): Promise<{ billId: string; invoice?: TillSaleResult }> {
   if (picks.length === 0) throw new AppError("sale.empty_basket", {});
   // `moveDishes` runs these too; here they come before the split, so a stale or closed bill gets
@@ -254,6 +257,7 @@ export async function moveItemsToNewBill(
     .set({ itemsPaidFrom: fromBillId })
     .where(eq(workingOrders.id, billId));
   await refuseBelowAdvances(tx, fromBillId);
+  if (options.holdSourceInvoice === true) return { billId };
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);
   return { billId, ...(invoice === null ? {} : { invoice }) };
 }
@@ -344,7 +348,7 @@ export async function payForItems(
     ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
   });
   /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
-  const billFor = async (tx: Transaction) => {
+  const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {
     const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
     if (earlier !== undefined) return { billId: earlier, request: payment(null) };
     const { billId } = await moveItemsToNewBill(
@@ -362,6 +366,7 @@ export async function payForItems(
         admission: deps.admission,
       },
       { deps, cfg },
+      { holdSourceInvoice },
     );
     return { billId, request: payment(await readBillEditState(tx, billId)) };
   };
@@ -375,7 +380,7 @@ export async function payForItems(
         withIssuanceTransaction(
           deps.db,
           async (tx) => {
-            const bill = await billFor(tx);
+            const bill = await billFor(tx, true);
             billId = bill.billId;
             return beginReaderBillPayment(tx, deps, cfg, billId, bill.request, operator, {
               preRead,
@@ -401,7 +406,7 @@ export async function payForItems(
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const { billId, request } = await billFor(tx);
+      const { billId, request } = await billFor(tx, false);
       return {
         billId,
         payment: await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {

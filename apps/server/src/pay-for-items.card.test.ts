@@ -29,6 +29,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import type { Logger } from "./logger.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -193,6 +194,27 @@ async function invoiceCount(billId: string): Promise<number> {
   return rows.length;
 }
 
+/** A cash contribution of `amount` to the bill, as the till sends it. */
+async function contribute(billId: string, amount: string) {
+  const path = `/api/working-orders/${billId}/payments`;
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    path,
+    await observedPaymentBody(venue.db, path, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    }),
+  );
+  expect(answer.status).toBe(200);
+}
+
 function balance(billId: string) {
   return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
@@ -269,6 +291,56 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await lineTotals(newBill)).toEqual([]);
     expect(await invoiceCount(newBill)).toBe(0);
     expect(await partyRevisionOf(venue, sourceId)).toBeGreaterThan(partyDuring);
+  });
+
+  it("a declined card leaves a source the move left paid open, with no invoice", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    venue.card.failNextCollect();
+
+    const paid = await payTartaByReader(sourceId);
+
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect(await invoiceCount(sourceId)).toBe(0);
+    expect(await statusOf(venue, sourceId)).toBe("open");
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "18.00"]);
+    expect((await balance(sourceId)).json).toMatchObject({ total: "21.00", outstanding: "18.00" });
+    expect(await statusOf(venue, paid.json.billId as string)).toBe("abandoned");
+  });
+
+  it("a captured card issues a source the move left paid, and the new bill, once each", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+
+    const paid = await payTartaByReader(sourceId);
+
+    expect(paid.json.payment).toMatchObject({ outcome: "received" });
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await invoiceCount(paid.json.billId as string)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a stuck card settled later as charged issues a source the move left paid", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    venue.card.stallNextCollect();
+    const answer = await payTartaByReader(sourceId);
+    expect(answer.json).toMatchObject({ payment: { outcome: "timeout" } });
+    expect(await invoiceCount(sourceId)).toBe(0);
+    const newBill = await billNaming(sourceId);
+    const [payment] = await paymentRows(venue, newBill);
+    await inTx(venue, (tx) =>
+      tx
+        .update(payments)
+        .set({ state: "captured", settledAt: venue.clock.now().instant.toISOString() })
+        .where(eq(payments.billPaymentId, payment!.id)),
+    );
+
+    await settle();
+
+    expect(await invoiceCount(newBill)).toBe(1);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
   });
 
   it("a declined card is logged as a failed collection", async () => {

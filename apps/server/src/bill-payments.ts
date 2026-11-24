@@ -2464,7 +2464,37 @@ export async function completeBillPayment(
   // An invoice issued or settled is answered, so with none `figures` still stand.
   if (issued.invoice === null)
     await issueAdvanceIfOwed(tx, deps, takenAt, payment!, printers, issued.figures);
+  const sourceId = await itemsPaymentSource(tx, payment!);
+  if (sourceId !== null)
+    await issueIfFullyPaid(tx, deps, takenAt, sourceId, payment!.requestedBy, {
+      ...(datedByLatestAcceptance === undefined ? {} : { datedByLatestAcceptance }),
+    });
   return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
+}
+
+/**
+ * The bill Pay for items moved `payment`'s items from, when `payment` is the one it took: its bill
+ * names a source and holds no other payment in any state. Pay for items inserts its payment in the
+ * transaction that makes the bill, so any later payment there finds it; `null` otherwise.
+ */
+async function itemsPaymentSource(tx: Transaction, payment: PaymentRow): Promise<string | null> {
+  const [bill] = await tx
+    .select({ itemsPaidFrom: workingOrders.itemsPaidFrom })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, payment.workingOrderId));
+  const sourceId = bill?.itemsPaidFrom ?? null;
+  if (sourceId === null) return null;
+  const [other] = await tx
+    .select({ id: billPayments.id })
+    .from(billPayments)
+    .where(
+      and(
+        eq(billPayments.workingOrderId, payment.workingOrderId),
+        sql`${billPayments.id} <> ${payment.id}`,
+      ),
+    )
+    .limit(1);
+  return other === undefined ? sourceId : null;
 }
 
 /** A card bill payment that charged nothing becomes `failed`, releasing its reservation, and the

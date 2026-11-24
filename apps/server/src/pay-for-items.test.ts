@@ -8,6 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   OPERATOR,
   commandFor,
@@ -189,6 +190,39 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     expect(await statusOf(billId)).toBe("open");
     expect(await lineTotals(billId)).toEqual(["6.00"]);
     expect(await paymentsOf(billId)).toEqual([]);
+  });
+
+  it.each([
+    ["cash", { method: "cash", tendered: "15.00" }],
+    ["a hand-keyed card", { method: "card" }],
+  ] as const)("%s issues a source the move left paid in the same request", async (_, pay) => {
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    await takeBillPayment(
+      deps(),
+      v.cfg,
+      billId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "6.00",
+        method: "cash",
+        tendered: "6.00",
+        applied: "6.00",
+        tip: "0.00",
+      },
+      v.operator,
+    );
+    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+      ...pay,
+      applied: "15.00",
+      tip: "0.00",
+    });
+
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+
+    expect(await invoicesOf(billId)).toEqual(["6.00"]);
+    expect(await statusOf(billId)).toBe("settled");
+    expect(await invoicesOf(paid.billId)).toEqual(["15.00"]);
   });
 
   it("the same submission twice makes one bill", async () => {
