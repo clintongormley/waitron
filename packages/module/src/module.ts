@@ -399,7 +399,7 @@ export interface ZoneOffers {
 }
 
 /** A zone's set-menu copies as {@link ZoneOffers} answers them, and the live versions of the
- *  zone's menus on sale now (none when the zone's menus hold no set menu). */
+ *  zone's menus on sale at the read's time (none when the zone's menus hold no set menu). */
 export interface ZoneSetMenus {
   readonly setMenus: readonly ServedSetMenu[];
   readonly sellingVersionIds: readonly string[];

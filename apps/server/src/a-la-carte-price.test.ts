@@ -439,7 +439,7 @@ it.each([
   },
 );
 
-it("refuses to price a set-menu dish whose product row holds no price", async () => {
+it("refuses to price a set-menu dish whose product row is missing", async () => {
   const holding = { offers: {} } as unknown as MenuDocument;
   await expect(
     inTx(venue, (tx) =>
