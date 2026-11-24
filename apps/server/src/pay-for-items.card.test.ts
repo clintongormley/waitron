@@ -22,9 +22,10 @@ import { SimulatorPaymentProvider, payments } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, deviceId as brandDeviceId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { failBillPayment } from "./bill-payments.js";
+import { failBillPayment, issueIfFullyPaid } from "./bill-payments.js";
 import { closeInvoiceCorrection } from "./invoice-corrections.js";
 import type { DiskFullState } from "./disk-full-state.js";
+import { discardDraft, submitDraft, type Draft } from "./order-drafts.js";
 import { payForItems, type PayForItemsRequest } from "./pay-for-items.js";
 import {
   cashPayment,
@@ -38,12 +39,14 @@ import {
 } from "./testing/bill-venue.js";
 import type { Logger } from "./logger.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
+import { expectedDraftEditForTest, saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mountTillApi } from "./till-api.js";
+import { readOrderRevision } from "./working-order.js";
 import "./errors.js";
 
 // Pay for items on the card reader (A1515 D2): the items move to a bill of their own before the
@@ -354,6 +357,93 @@ async function laterPayment(billId: string, state: "received" | "failed") {
         ? { receivedAt: venue.clock.now().instant.toISOString() }
         : { failedAt: venue.clock.now().instant.toISOString() }),
     }),
+  );
+}
+
+async function partyOf(billId: string): Promise<string> {
+  const [bill] = await inTx(venue, (tx) =>
+    tx
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId)),
+  );
+  return bill!.partyId!;
+}
+
+/** The administrator's coffee (3.00), saved on the bill and not yet sent. Pay for items refuses
+ * a bill another person is editing (`draft.taken_over`), so a test opens this while its card is
+ * collected. */
+async function colleagueDraft(billId: string): Promise<Draft> {
+  const partyId = await partyOf(billId);
+  return inTx(venue, (tx) =>
+    saveDraftForTest(tx, partyId, venue.adminId, {
+      billId,
+      draftId: null,
+      revision: 0,
+      lines: [{ menuItemId: coffee, quantity: "1" }],
+    }),
+  );
+}
+
+/** Issues the bill if its payments cover it, as the till's send and discard routes do after. */
+const completeAfter = (tx: Transaction) => (billId: string) =>
+  issueIfFullyPaid(
+    tx,
+    {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+    },
+    venue.cfg,
+    billId,
+    venue.adminId,
+  );
+
+/** The administrator sends their draft, as the till's send route does. */
+async function sendColleagueDraft(billId: string, draft: Draft) {
+  const partyId = await partyOf(billId);
+  const expectedPartyRevision = await partyRevisionOf(venue, billId);
+  return inTx(venue, async (tx) =>
+    submitDraft(
+      tx,
+      venue.cfg,
+      partyId,
+      draft.id,
+      {
+        operatorId: venue.adminId,
+        submissionId: randomUUID(),
+        expectedEdit: await expectedDraftEditForTest(tx, draft),
+        draftRevision: draft.revision,
+        expectedPartyRevision,
+        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+      },
+      undefined,
+      completeAfter(tx),
+    ),
+  );
+}
+
+/** The administrator discards their draft, as the till's discard route does. */
+async function discardColleagueDraft(billId: string, draft: Draft) {
+  const partyId = await partyOf(billId);
+  return inTx(venue, async (tx) =>
+    discardDraft(
+      tx,
+      venue.cfg,
+      partyId,
+      draft.id,
+      venue.adminId,
+      {
+        submissionId: randomUUID(),
+        revision: draft.revision,
+        expectedRevision: await readOrderRevision(tx, billId),
+        expectedEdit: await expectedDraftEditForTest(tx, draft),
+        admission: testTradingAdmission(),
+      },
+      undefined,
+      completeAfter(tx),
+    ),
   );
 }
 
@@ -846,6 +936,61 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
     expect(await statusOf(venue, newBill)).toBe("open");
     expect(await lineTotals(sourceId)).toEqual(["3.00"]);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a card taken while a colleague's order is unsent on the table's bill leaves that bill open, and discarding the order issues it once", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { answer, release } = await heldTartaPayment(sourceId);
+    const draft = await colleagueDraft(sourceId);
+    release();
+
+    const paid = await answer;
+
+    expect(paid.json.payment).toMatchObject({ outcome: "received" });
+    expect(await statusOf(venue, sourceId)).toBe("open");
+    expect(await invoiceCount(sourceId)).toBe(0);
+    const discarded = await discardColleagueDraft(sourceId, draft);
+    expect(discarded.invoice).toMatchObject({ total: "3.00" });
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a card taken while a colleague's order is unsent on the table's bill leaves that order able to be sent", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { answer, release } = await heldTartaPayment(sourceId);
+    const draft = await colleagueDraft(sourceId);
+    release();
+    expect((await answer).json.payment).toMatchObject({ outcome: "received" });
+
+    const sent = await sendColleagueDraft(sourceId, draft);
+    expect(sent.draft).toBeNull();
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "3.00"]);
+    expect(await invoiceCount(sourceId)).toBe(0);
+    await contribute(sourceId, "3.00");
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a declined card that leaves the items on their own bill leaves the table's bill open while a colleague's order is unsent on it", async () => {
+    const sourceId = await coffeeAndTarta();
+    await contribute(sourceId, "3.00");
+    const { answer, release, newBill } = await heldTartaPayment(sourceId);
+    const draft = await colleagueDraft(sourceId);
+    await laterPayment(newBill, "received");
+    venue.card.failNextCollect();
+    release();
+
+    const paid = await answer;
+
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+    expect(await statusOf(venue, sourceId)).toBe("open");
+    expect(await invoiceCount(sourceId)).toBe(0);
+    await discardColleagueDraft(sourceId, draft);
     expect(await invoiceCount(sourceId)).toBe(1);
     expect(await statusOf(venue, sourceId)).toBe("settled");
   });
