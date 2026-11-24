@@ -37,6 +37,7 @@ import {
   returnVenue,
 } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { returnCompletedFor } from "./return-completion.js";
 import { abandonReturn } from "./return-abandoned.js";
 import { advanceHandover } from "./handover-store.js";
 import { listServers, removeStandby } from "./membership-removal.js";
@@ -44,6 +45,11 @@ import { signAsThisBox } from "./handover-signing.js";
 import { AppError } from "@waitron/shared";
 import { caCertPath } from "./box-secrets.js";
 import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
+
+vi.mock("./return-completion.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./return-completion.js")>();
+  return { ...original, returnCompletedFor: vi.fn(original.returnCompletedFor) };
+});
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const ring = loadKeyRing({
@@ -1424,6 +1430,57 @@ it("sends no receipt when closing the takeover fails, and the resend closes it",
   expect(await sendWatchingState(app, states)).toBe("confirmed");
   expect(states).toEqual(["return_complete", "return_complete"]);
   expect(await nodeDatabase.readOpenHandoverOperation(suite.node, receiver)).toBeNull();
+});
+
+it("answers a resend after the takeover closed as before, without checking completion again", async () => {
+  await completionBinding();
+  const app = destination();
+  const receipts = async () => {
+    const bodies: unknown[] = [];
+    expect(
+      await send(async (url, init) => {
+        const response = await app.request(String(url), init);
+        const { nonce: _nonce, ...body } = (
+          (await response.clone().json()) as { body: Record<string, unknown> }
+        ).body;
+        bodies.push({ status: response.status, body });
+        return response;
+      }),
+    ).toBe("confirmed");
+    return bodies;
+  };
+  const first = await receipts();
+  expect(await takeoverState()).toBe("return_complete");
+  vi.mocked(returnCompletedFor).mockClear();
+  expect(await receipts()).toEqual(first);
+  expect(returnCompletedFor).not.toHaveBeenCalled();
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("receiver-emergency"),
+  );
+});
+
+it("closes the takeover on a later batch once any inventory it holds is complete", async () => {
+  await completionBinding();
+  await suite.node.execute(
+    sql`create trigger refuse_return_complete before update on node_handover_operations when new.state = 'return_complete' begin select raise(abort, 'test node write failed'); end`,
+  );
+  const app = destination();
+  try {
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+  } finally {
+    await suite.node.execute(sql`drop trigger refuse_return_complete`);
+  }
+  expect(await takeoverState()).toBe("return_pending");
+  const read = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "read")
+    .mockResolvedValue(["first", "second", "third"]);
+  try {
+    const states: unknown[] = [];
+    expect(await sendWatchingState(app, states)).toBe("confirmed");
+    expect(states).toEqual(["return_complete", "return_complete", "return_complete"]);
+  } finally {
+    read.mockRestore();
+  }
 });
 
 it.each(["false", "refused"])("records no completion fact for a %s batch", async (outcome) => {

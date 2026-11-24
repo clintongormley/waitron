@@ -92,9 +92,13 @@ export function mountReturnRecordsApi(
             complete,
             takeover,
             open: open !== undefined,
+            // Read only while node.db still waits for this takeover's return: a resend checks every
+            // batch, and once the takeover is closed nothing below reads this.
             returned:
+              open !== undefined &&
+              (open.state === "activated" || open.state === "return_pending") &&
               takeover !== undefined &&
-              (await returnCompletedFor(tx, takeover, body.inventory as string)),
+              (await returnCompletedFor(tx, takeover)),
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
           };
         });

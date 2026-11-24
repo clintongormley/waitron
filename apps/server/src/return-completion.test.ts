@@ -163,17 +163,14 @@ it("answers for one box from its own takeovers alone, whatever another box has r
   expect((await activationsBySource(suite.db)).size).toBe(2);
 });
 
-it("answers for the one inventory asked about: every batch recorded and their digests matching it", async () => {
-  const otherInventory = "a".repeat(64);
-  const asked = (inv = inventory) =>
-    withTransaction(suite.db, (tx) => returnCompletedFor(tx, operationId, inv));
+it("answers whether any inventory of the takeover has every batch recorded and digests matching it", async () => {
+  const asked = (id = operationId) => withTransaction(suite.db, (tx) => returnCompletedFor(tx, id));
   await record(0);
   await record(2);
   expect(await asked()).toBe(false);
   await record(1, { digest: "c".repeat(64) });
   expect(await asked()).toBe(false);
-  for (const index of [0, 1, 2]) await record(index, { inventory: otherInventory });
-  expect(await asked(otherInventory)).toBe(false);
+  for (const index of [0, 1, 2]) await record(index, { inventory: "a".repeat(64) });
   expect(await asked()).toBe(false);
 
   const complete = returnDigest(["d", "e"].map((p) => returnDigest({ module: "m", payload: p })));
@@ -182,20 +179,12 @@ it("answers for the one inventory asked about: every batch recorded and their di
     count: 2,
     digest: returnDigest({ module: "m", payload: "e" }),
   });
-  expect(
-    await withTransaction(suite.db, (tx) => returnCompletedFor(tx, operationId, complete)),
-  ).toBe(false);
+  expect(await asked()).toBe(false);
   await record(0, {
     inventory: complete,
     count: 2,
     digest: returnDigest({ module: "m", payload: "d" }),
   });
-  expect(
-    await withTransaction(suite.db, (tx) => returnCompletedFor(tx, operationId, complete)),
-  ).toBe(true);
-  expect(await asked(otherInventory)).toBe(false);
-  expect(await asked()).toBe(false);
-  expect(
-    await withTransaction(suite.db, (tx) => returnCompletedFor(tx, "other-takeover", complete)),
-  ).toBe(false);
+  expect(await asked()).toBe(true);
+  expect(await asked("other-takeover")).toBe(false);
 });

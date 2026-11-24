@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray } from "drizzle-orm";
 import {
   handoverActivations,
   handoverReturnBatches,
@@ -162,33 +162,44 @@ export async function returnsCompletedAt(
 }
 
 /**
- * Whether every batch of `inventory` is recorded for `operationId` and their digests make it up.
- * Counts the inventory's index entries first, so a partial inventory, asked after each batch, reads
- * none of its rows.
+ * Whether every batch of some inventory is recorded for `operationId` and their digests make it up.
+ * Finds each inventory by one index seek and counts its index entries, so only an inventory with
+ * every batch recorded has its rows read.
  */
-export async function returnCompletedFor(
-  tx: Transaction,
-  operationId: string,
-  inventory: string,
-): Promise<boolean> {
-  const scope = and(
-    eq(handoverReturnBatches.operationId, operationId),
-    eq(handoverReturnBatches.inventory, inventory),
-  );
-  const [first] = await tx
-    .select({ count: handoverReturnBatches.batchCount })
-    .from(handoverReturnBatches)
-    .where(scope)
-    .limit(1);
-  if (!first) return false;
-  const [recorded] = await tx.select({ n: count() }).from(handoverReturnBatches).where(scope);
-  if (recorded?.n !== first.count) return false;
-  const rows = await tx
-    .select()
-    .from(handoverReturnBatches)
-    .where(scope)
-    .orderBy(asc(handoverReturnBatches.batchIndex));
-  return completedIn(rows).has(operationId);
+export async function returnCompletedFor(tx: Transaction, operationId: string): Promise<boolean> {
+  let inventory: string | undefined;
+  for (;;) {
+    const [next] = await tx
+      .select({ inventory: handoverReturnBatches.inventory })
+      .from(handoverReturnBatches)
+      .where(
+        and(
+          eq(handoverReturnBatches.operationId, operationId),
+          inventory === undefined ? undefined : gt(handoverReturnBatches.inventory, inventory),
+        ),
+      )
+      .orderBy(asc(handoverReturnBatches.inventory))
+      .limit(1);
+    if (!next) return false;
+    inventory = next.inventory;
+    const scope = and(
+      eq(handoverReturnBatches.operationId, operationId),
+      eq(handoverReturnBatches.inventory, inventory),
+    );
+    const [first] = await tx
+      .select({ count: handoverReturnBatches.batchCount })
+      .from(handoverReturnBatches)
+      .where(scope)
+      .limit(1);
+    const [recorded] = await tx.select({ n: count() }).from(handoverReturnBatches).where(scope);
+    if (recorded?.n !== first?.count) continue;
+    const rows = await tx
+      .select()
+      .from(handoverReturnBatches)
+      .where(scope)
+      .orderBy(asc(handoverReturnBatches.batchIndex));
+    if (completedIn(rows).has(operationId)) return true;
+  }
 }
 
 /** `rows` ordered by operation, inventory and batch index. */
