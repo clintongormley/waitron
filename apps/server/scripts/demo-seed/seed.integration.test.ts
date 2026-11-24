@@ -156,12 +156,12 @@ describe("demo seed end-to-end", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
+      "Lunch menus",
       "Menu of the day",
-      "Set menus",
       "Special menu",
     ]);
     expect(read.menus[0]!.isDefault).toBe(true);
-    const menuDelDia = read.menus.find((m) => m.name === "Set menus")!;
+    const menuDelDia = read.menus.find((m) => m.name === "Lunch menus")!;
     expect(menuDelDia.isDefault).toBe(false);
 
     const chickens = [
@@ -204,7 +204,7 @@ describe("demo seed end-to-end", () => {
     }
 
     const casaMenu = read.menus.find((menu) => menu.name === "Casa Delgado")!.id;
-    const diaMenu = read.menus.find((menu) => menu.name === "Set menus")!.id;
+    const diaMenu = read.menus.find((menu) => menu.name === "Lunch menus")!.id;
     const casaProducts = read.products.filter((product) =>
       read.memberships.some((item) => item.productId === product.id && item.menuId === casaMenu),
     );

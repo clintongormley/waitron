@@ -31,7 +31,7 @@ export interface TranslationCell extends TranslationCellRef {
 }
 export interface TranslationItem extends TranslationRef {
   name: string;
-  parent?: { id: string; name: string };
+  parent?: { id: string; name: string; kind?: "set_menu" };
   owners: TranslationOwners | null;
   cells: TranslationCell[];
 }

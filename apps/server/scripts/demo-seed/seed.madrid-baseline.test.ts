@@ -222,7 +222,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
 const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
   en: sharedDrinks({
     department: "Deli",
-    menus: { drinks: "Drinks", casa: "Casa Delgado", lunch: "Set menus", deli: "Deli takeaway" },
+    menus: { drinks: "Drinks", casa: "Casa Delgado", lunch: "Lunch menus", deli: "Deli takeaway" },
     categories: { soft: "Soft drinks", wineAndBeer: "Wine and beer" },
     deliSection: "Drinks",
     zone: "Deli counter",
@@ -235,7 +235,7 @@ const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
     menus: {
       drinks: "Bebidas",
       casa: "Casa Delgado",
-      lunch: "Menús",
+      lunch: "Menús de mediodía",
       deli: "Charcutería para llevar",
     },
     categories: { soft: "Refrescos", wineAndBeer: "Vino y cerveza" },
@@ -249,8 +249,15 @@ const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
 function lunchSetMenuChanges(locale: "en" | "es", photos: Record<string, string>) {
   const [holderName, drinksName, startersName, mainsName, dailyName, specialName] =
     locale === "en"
-      ? (["Set menus", "Drinks", "Starters", "Mains", "Menu of the day", "Special menu"] as const)
-      : (["Menús", "Bebidas", "Primeros", "Segundos", "Menú del día", "Menú especial"] as const);
+      ? (["Lunch menus", "Drinks", "Starters", "Mains", "Menu of the day", "Special menu"] as const)
+      : ([
+          "Menús de mediodía",
+          "Bebidas",
+          "Primeros",
+          "Segundos",
+          "Menú del día",
+          "Menú especial",
+        ] as const);
   const menu = (name: string) => `@catalogues:${stable([name])}`;
   const section = (name: string, role: string, label: string) =>
     `@sections:${stable([menu(name), role, label])}`;
@@ -410,12 +417,12 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
   en: periodChange("Restaurant and bar", "Open", ["Bar", "Lunch", "Dinner"], {
     drinks: menu("Drinks"),
     casa: menu("Casa Delgado"),
-    lunch: menu("Set menus"),
+    lunch: menu("Lunch menus"),
   }),
   es: periodChange("Restaurante y bar", "Abierto", ["Bar", "Comida", "Cena"], {
     drinks: menu("Bebidas"),
     casa: menu("Casa Delgado"),
-    lunch: menu("Menús"),
+    lunch: menu("Menús de mediodía"),
   }),
 };
 

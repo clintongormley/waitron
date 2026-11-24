@@ -1611,15 +1611,14 @@ straight away. A menu with clashing prices has a line after that: a "2 price cla
 `--wt-color-danger` (clashes stop it being published), named "2 price clashes: <menu>", that opens
 its Price overrides tab filtered to the clashes (`/menus/menu/<id>/view/prices/filter/clashes`).
 Both links are a tap target tall, and a click on either with a modifier key is left to the browser.
-The Status filter starts on **All**. **Published** and **Requiring attention** filter full menus.
+The Status filter starts on **All**. **Published** and **Requiring attention** narrow the list.
 Both kinds of menu offer **Copy…** and **Delete…** in their row actions. The Delete window names the menu,
 counts its own products, asks for any menu replacements and names the menus that will drop it on their
 next publication. A deleted menu disappears from the list.
 
-A set menu's Status says, in muted text, that it goes live with the menus that offer it. While
-the states are read, or after their read fails, every menu says so in muted text and has neither
-link; a failed read also puts one message above the list, with the server's reason when it gave
-one, and a secondary Try again that reads the states again. With no menus at all, the heading's
+While the states are read, or after their read fails, every menu says so in muted text. A failed
+read puts one message above the list, with the server's reason when available, and a secondary
+**Try again** button. With no menus at all, the heading's
 Add menu is hidden and only the empty table's shows. Sorting by Status still puts the menus waiting
 for a publish first. The list has two layouts, chosen by the list's own width through a container query on a
 probe element:
@@ -1629,10 +1628,16 @@ probe element:
   width less three `--wt-tap-min` and `--wt-menu-list-status-room`, room for the row menu and for
   Status. Wrapping lets the name column shrink further so the state and its time stay before
   Actions. Status, which holds the links, cannot be hidden, so the list has no Customise columns
-  button, not even beside a set menu's Kind column.
+  button when the period columns are unavailable.
 - At `30rem` or less, the state, its time and the links stack under the name, as the variants
   table's prices do (above). A click on the Name cell's blank space opens nothing; the name's
   button, the row menu's Open and the Actions cell's blank space still open the menu.
+
+**Set menus** has its own sidebar entry, search and remembered table choices. Above `30rem`,
+the table shows Name, Price, Offered on and Actions, with numeric price sorting. At `30rem`
+or less, price and the labelled links sit under the name. Each **Offered on** link opens a full
+menu whose working copy contains the set menu. With no holder, the cell says **Not on any menu** in
+muted text. **Add set menu** opens the terms form. With an empty list, the table draws that button.
 
 The name width comes from a container query of its own rather than from the layout the probe
 chooses, so it already applies in the frame before the probe is read. The name's ghost button is

@@ -13,6 +13,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createMenu, createProduct } from "./operations.js";
+import { requireMenuRoot } from "./menu-structure.js";
+import { resolveTranslationTargets } from "./content-translation-targets.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { listTranslationItems } from "./content-translation-pages.js";
 import type { TranslationQuery } from "./content-translation-types.js";
@@ -44,6 +46,32 @@ const query = (extra: object = {}): TranslationQuery => ({
 });
 
 describe("multilingual item pages", () => {
+  it("identifies a set menu's editor on list and targeted reads", async () => {
+    await seedTaxpayer(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      await fixture(tx);
+      const set = await createMenu(tx, {
+        name: "Lunch special",
+        kind: "set_menu",
+        setPrice: "12.00",
+        setVatClass: "reduced",
+      });
+      const root = await requireMenuRoot(tx, set.id);
+      const refs = [{ kind: "menu", id: root }] as const;
+      const parent = { id: set.id, name: "Lunch special", kind: "set_menu" };
+      const list = await listTranslationItems(tx, query({ kind: "menu" }), context);
+      expect(list.rows.find(({ id }) => id === root)?.parent).toEqual(parent);
+      const direct = await listTranslationItems(
+        tx,
+        { languages: ["en"], targets: [...refs] },
+        context,
+      );
+      expect(direct.rows[0]?.parent).toEqual(parent);
+      const targets = await resolveTranslationTargets(tx, "en", [...refs], context);
+      expect(targets.targets[0]?.target.parent).toEqual(parent);
+    });
+  });
+
   it("finds gaps outside the projection and distinguishes Missing in from All names", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {

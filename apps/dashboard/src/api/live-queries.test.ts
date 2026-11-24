@@ -331,6 +331,7 @@ it.each([
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products", "product_takeaway_vat_rates"]],
+  ["listMenus", [], ["menus", "sections", "section_members"]],
   ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
   ["getMenuStructures", [], ["sections", "section_members", "menus"]],
   [

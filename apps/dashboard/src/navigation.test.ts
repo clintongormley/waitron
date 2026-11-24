@@ -164,6 +164,21 @@ it("preserves the explicit menu price filter when the dashboard rewrites its des
   expect(url.read("price-filter")).toBe("clashes");
 });
 
+it("reads a set-menu address without carrying an editor ID between the two pages", async () => {
+  history.replaceState(null, "", "/set-menus/menu/lunch%20special");
+  const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
+  hosts.push(host);
+  const url = new UrlStateController(host, () => {}, dashboardPath);
+  document.body.append(host);
+  expect(url.read("setMenu")).toBe("lunch special");
+  expect(url.read("menu")).toBeNull();
+  await url.write({ dashboard: "menus" }, true);
+  expect(location.pathname).toBe("/menus");
+  await url.write({ menu: "dinner" }, true);
+  await url.write({ dashboard: "set-menus" }, true);
+  expect(location.pathname).toBe("/set-menus");
+});
+
 it("preserves Opening hours zone and All departments URLs", async () => {
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);

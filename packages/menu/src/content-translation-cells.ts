@@ -171,7 +171,7 @@ export async function readTranslationCells(
         json_extract(value, '$.language') as language, json_extract(value, '$.field') as field
       from json_each(${requested})
     )
-    select c.kind, c.id, c.name, c.owner, c.owner_name, c.container, c.child, c.child_menu,
+    select c.kind, c.id, c.name, c.owner, c.owner_name, c.owner_kind, c.container, c.child, c.child_menu,
       c.role, c.active, c.owner_active, c.root_matched, c.parent_role, c.child_active,
       r.language, r.field,
       json_extract(${names}, ${path}) as selected_text,

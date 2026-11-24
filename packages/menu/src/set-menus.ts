@@ -27,6 +27,7 @@ import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { reachableMenuItem, requireMenuRoot, syncMenuOffers } from "./menu-structure.js";
 import { isProductPrice } from "./modifier-limits.js";
+import { listMenus, type Menu } from "./operations.js";
 import { priceOrNull } from "./offer-price.js";
 import { loadSectionGraph, menusContaining, type SectionGraph } from "./section-graph.js";
 import { appendProductMembers, memberOrder, productsAbsentFromList } from "./section-members.js";
@@ -385,6 +386,28 @@ export async function readSetMenuDrafts(
   );
 }
 
+function offeringMenus(graph: SectionGraph, root: string): SetMenuDetails["heldBy"] {
+  return menusContaining(graph, root).flatMap((id) => {
+    const parent = graph.menu(id);
+    return parent?.kind === "menu" && parent.active ? [{ id, name: parent.name }] : [];
+  });
+}
+
+export type DashboardMenuSummary = Menu & { heldBy?: SetMenuDetails["heldBy"] };
+
+export async function listDashboardMenus(tx: Transaction): Promise<DashboardMenuSummary[]> {
+  const rows = await listMenus(tx);
+  if (!rows.some(({ kind }) => kind === "set_menu")) return rows;
+
+  const graph = await loadSectionGraph(tx);
+  const roots = new Map(graph.roots().map(({ menuId, sectionId }) => [menuId, sectionId]));
+  return rows.map((menu) => {
+    if (menu.kind !== "set_menu") return menu;
+    const root = roots.get(menu.id);
+    return { ...menu, heldBy: root === undefined ? [] : offeringMenus(graph, root) };
+  });
+}
+
 export async function readSetMenu(
   tx: Transaction,
   menuId: string,
@@ -401,10 +424,7 @@ export async function readSetMenu(
     dishes: await dishSettings(tx, root, courses),
     lines: linesForDraft(await storedLines(tx, menuId)),
     courses,
-    heldBy: menusContaining(graph, root).flatMap((id) => {
-      const parent = graph.menu(id);
-      return parent?.kind === "menu" && parent.active ? [{ id, name: parent.name }] : [];
-    }),
+    heldBy: offeringMenus(graph, root),
   };
   return { ...details, problems: setMenuProblems(details) };
 }

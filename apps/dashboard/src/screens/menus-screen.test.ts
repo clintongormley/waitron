@@ -887,7 +887,6 @@ function deferred<T>() {
 async function chooseOrdinaryMenu(el: MenusScreen, add: HTMLElement): Promise<void> {
   add.click();
   await el.updateComplete;
-  q(el, '[data-test="create-menu"]')!.click();
   await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(true));
 }
 
@@ -1895,35 +1894,6 @@ describe("the menus list's Status column and its changes link", () => {
     expect(opens()).toEqual([]);
   });
 
-  it("says in a set menu's Status, in muted text, that it goes live with the menus that offer it", async () => {
-    for (const [locale, words] of [
-      ["en-GB", "Goes live with the menus that offer it"],
-      ["es-ES", "Se publica con las cartas que lo ofrecen"],
-    ] as const)
-      await at([1280, 900], locale, async () => {
-        const set: MenuSummary = {
-          id: "set-daily",
-          name: "Daily menu",
-          active: true,
-          kind: "set_menu",
-          setPrice: "14.00",
-          setVatClass: "reduced",
-        };
-        const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([...menus, set]) }));
-        await vi.waitFor(async () => {
-          await table(el).updateComplete;
-          expect(statusOf(el, "set-daily")).toBe(words);
-        });
-        const cell = table(el).shadowRoot.querySelector<HTMLElement>(
-          '[data-test="status-set-daily"]',
-        )!;
-        expect(getComputedStyle(cell).color).toBe(
-          computedColour(el.shadowRoot!, "var(--wt-color-text-muted)"),
-        );
-        cleanupWidgets();
-      });
-  });
-
   it("says above the list why the states could not be read, and reads them again on Try again", async () => {
     await at([1280, 900], "en-GB", async () => {
       const client = mixed({
@@ -2226,7 +2196,7 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
-  it("keeps Status and its links shown beside a set menu's Kind column when a saved choice hides Status", async () => {
+  it("keeps Status and its links shown when a saved choice hides Status", async () => {
     localStorage.setItem(`${LIST_KEY}:columns`, JSON.stringify({ status: false, changes: true }));
     localStorage.setItem(`${LIST_KEY}:column-order`, JSON.stringify(["changes", "status"]));
     const set: MenuSummary = {
@@ -2248,7 +2218,7 @@ describe("the menus list's Status column and its changes link", () => {
           }),
         }),
       );
-      expect(heads(el).slice(1)).toEqual([t("menus.status"), t("menus.kind"), t("menus.actions")]);
+      expect(heads(el).slice(1)).toEqual([t("menus.status"), t("menus.actions")]);
       const cell = statusColumnCell(el, "menu-lunch");
       expect(text(cell.querySelector('[data-test="changes-menu-lunch"]'))).toBe(
         "Unpublished changes",
@@ -10065,7 +10035,7 @@ describe("publishing", () => {
     expect(client.getMenuStatus).not.toHaveBeenCalled();
   });
 
-  it("lists the status column beside a set menu's Kind column, with no Changes column and no chooser", async () => {
+  it("lists the status column without Kind, Changes or a chooser", async () => {
     setLocale("es-ES");
     const set = {
       id: "set-daily",
@@ -10082,9 +10052,9 @@ describe("publishing", () => {
       await table(el).updateComplete;
       expect(headerTexts()).toContain(t("menus.status"));
     });
-    expect(headerTexts()).toContain(t("menus.kind"));
+    expect(headerTexts().slice(1)).toEqual([t("menus.status"), t("menus.actions")]);
+    expect(table(el).shadowRoot.querySelector('tr[data-row-key="set-daily"]')).toBeNull();
     expect(headerTexts()).not.toContain("Cambios");
-    // Status carries the menu's links, so it cannot be hidden, and Kind cannot be either.
     expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
   });
 
@@ -10124,7 +10094,7 @@ describe("publishing", () => {
     ["en-GB", "Main menu", "Staff menus", "Kind", "Lunch"],
     ["es-ES", "Carta principal", "Cartas del personal", "Tipo", "Almuerzo"],
   ] as const)(
-    "shows starting and staff periods on desktop and phone in %s, with Kind and Actions in view",
+    "shows starting and staff periods on desktop and phone in %s, with Actions in view",
     async (locale, mainHeading, staffHeading, kindHeading, periodName) => {
       const before = currentLocale();
       setLocale(locale);
@@ -10171,11 +10141,11 @@ describe("publishing", () => {
           expect(starting?.closest("td")).toBe(lunch?.querySelectorAll("td")[stacked ? 0 : 2]);
           expect(headings().includes(mainHeading)).toBe(!stacked);
           expect(headings().includes(staffHeading)).toBe(!stacked);
-          expect(headings()).toContain(kindHeading);
+          expect(headings()).not.toContain(kindHeading);
           expect(text(row("menu-dinner"))).toContain(periodName);
           expect(text(row("menu-dinner"))).not.toContain(t("menus.period_unused"));
           expect(text(row("unused"))).toContain(t("menus.period_unused"));
-          expect(text(row("set-daily"))).not.toContain(t("menus.period_unused"));
+          expect(row("set-daily")).toBeNull();
           if (stacked) {
             expect(text(lunch?.querySelector('[part="period-label"]') ?? null)).toBe(mainHeading);
             expect(text(row("menu-dinner")?.querySelector('[part="period-label"]') ?? null)).toBe(
@@ -10192,7 +10162,7 @@ describe("publishing", () => {
           }
           const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
           expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
-          expectRowMenusOnScreen(table(el), 4, "wt-row-actions", false);
+          expectRowMenusOnScreen(table(el), 3, "wt-row-actions", false);
         });
       }
     },
@@ -13730,7 +13700,7 @@ it("starts on All and offers only the current menu status filters", async () => 
       .map((r) => r.getAttribute("data-row-key"))
       .sort();
   await vi.waitFor(() =>
-    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set"]),
+    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch"]),
   );
   table(el).shadowRoot.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
   await el.updateComplete;
@@ -13755,7 +13725,7 @@ it("starts on All and offers only the current menu status filters", async () => 
   expect(text(root.querySelector(".filters-trigger"))).toContain("1");
   root.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
   await vi.waitFor(() =>
-    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set"]),
+    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch"]),
   );
   expect(filter!.value).toBe("all");
 });

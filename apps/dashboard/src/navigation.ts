@@ -1,6 +1,10 @@
-import type { UrlPathConfig } from "@waitron/ui";
+import { encodePathSegment, type UrlPathConfig } from "@waitron/ui";
 
 export { leftToBrowser } from "@waitron/ui";
+
+export function setMenuAddress(id: string): string {
+  return `/set-menus/menu/${encodePathSegment(id)}`;
+}
 
 export const dashboardPath: UrlPathConfig = {
   basePath: "",
@@ -20,6 +24,7 @@ export const dashboardPath: UrlPathConfig = {
     },
     "venue-operations": { department: "department", view: "view", zone: "zone" },
     menus: { menu: "menu", view: "view", section: "section", "price-filter": "filter" },
+    "set-menus": { setMenu: "menu" },
     modifiers: { view: "view", list: "list" },
     orders: {
       status: "status",

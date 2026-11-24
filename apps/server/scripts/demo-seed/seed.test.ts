@@ -573,7 +573,7 @@ describe("seedDemoRestaurant", () => {
           department: "Restaurant and bar",
           name: "Lunch",
           menu: "Casa Delgado",
-          staff_menus: "Set menus",
+          staff_menus: "Lunch menus",
         },
       ]);
 
@@ -757,8 +757,8 @@ describe("seedDemoRestaurant", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
+      "Lunch menus",
       "Menu of the day",
-      "Set menus",
       "Special menu",
     ]);
     expect(read.menuStates).toEqual(["current", "current", "current", "current"]);
@@ -787,28 +787,28 @@ describe("seedDemoRestaurant", () => {
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set menus"],
+        menus: ["Casa Delgado", "Drinks", "Lunch menus"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: true,
-        menus: ["Casa Delgado", "Drinks", "Set menus"],
+        menus: ["Casa Delgado", "Drinks", "Lunch menus"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set menus"],
+        menus: ["Casa Delgado", "Drinks", "Lunch menus"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set menus"],
+        menus: ["Casa Delgado", "Drinks", "Lunch menus"],
       },
     ]);
     expect(read.hours).toEqual([
@@ -836,7 +836,7 @@ describe("seedDemoRestaurant", () => {
       },
       {
         product_id: expect.any(String),
-        menu_name: "Set menus",
+        menu_name: "Lunch menus",
         gross_price: 900,
         unit_price: 1100,
       },

@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ContentLanguages, TranslationGapKind } from "@waitron/shared";
 import { mainContentLanguages, TRANSLATION_GAP_KINDS as KINDS } from "@waitron/shared";
-import type { TranslationRef } from "./content-translation-types.js";
+import type { TranslationItem, TranslationRef } from "./content-translation-types.js";
 
 export type NamedRow = {
   kind: TranslationGapKind;
@@ -12,6 +12,7 @@ export type NamedRow = {
   abbreviations: string | null;
   owner: string | null;
   owner_name: string | null;
+  owner_kind: "set_menu" | null;
   container: string | null;
   child: string | null;
   child_menu: string | null;
@@ -22,6 +23,17 @@ export type NamedRow = {
   parent_role: string | null;
   child_active: number;
 };
+export function translationParent(
+  row: Pick<NamedRow, "kind" | "owner" | "owner_name" | "owner_kind">,
+): TranslationItem["parent"] {
+  if (!row.owner || row.kind === "product") return undefined;
+  return {
+    id: row.owner,
+    name: row.owner_name ?? "",
+    ...(row.owner_kind === "set_menu" ? { kind: row.owner_kind } : {}),
+  };
+}
+
 export const LIVE_CANDIDATE = sql`active = 1 and owner_active = 1 and child_active = 1 and root_matched = 1
       and (kind not in ('product', 'variant', 'menu', 'section', 'included_menu') or
         (kind = 'product' and role = 'product') or (kind = 'variant' and role = 'variant') or
@@ -68,38 +80,38 @@ export function namedRows(
     select 'product' as kind, p.id, p.name, p.customer_name as names, null as inherited,
       p.parent_id as owner, null as owner_name, null as container, null as child, null as child_menu,
       case when p.parent_id is null then 'product' else 'variant' end as role,
-      p.active, 1 as owner_active, 1 as root_matched, null as parent_role, 1 as child_active, null as abbreviations
+      p.active, 1 as owner_active, 1 as root_matched, null as parent_role, 1 as child_active, null as abbreviations, null as owner_kind
     from products p where p.custom_item_key is null and ${filter("product", sql`p.id`)}
     union all select 'variant', p.id, p.name, p.customer_name, null, p.parent_id, a.name,
       null, null, null, case when p.parent_id is null then 'product' else 'variant' end,
-      p.active, coalesce(a.active, 0), (a.id is not null), null, 1, null
+      p.active, coalesce(a.active, 0), (a.id is not null), null, 1, null, null
     from products p left join products a on a.id = p.parent_id where ${filter("variant", sql`p.id`)}
     union all select 'option_list', l.id, l.name, l.customer_name, null, null, null,
-      null, null, null, null, l.active, 1, 1, null, 1, null
+      null, null, null, null, l.active, 1, 1, null, 1, null, null
     from option_lists l where ${filter("option_list", sql`l.id`)}
     union all select 'option_label', l.id, l.name, l.customer_name, null, l.list_id, o.name,
-      null, null, null, null, 1, coalesce(o.active, 0), (o.id is not null), null, 1, null
+      null, null, null, null, 1, coalesce(o.active, 0), (o.id is not null), null, 1, null, null
     from option_labels l left join option_lists o on o.id = l.list_id where ${filter("option_label", sql`l.id`)}
     union all select 'extra_list', l.id, l.name, l.customer_name, null, null, null,
-      null, null, null, null, l.active, 1, 1, null, 1, null
+      null, null, null, null, l.active, 1, 1, null, 1, null, null
     from extra_lists l where ${filter("extra_list", sql`l.id`)}
     union all select 'menu', s.id, coalesce(s.internal_name, c.name), s.names, null, s.owner_menu_id, c.name,
-      null, null, null, s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), null, 1, null
+      null, null, null, s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), null, 1, null, nullif(c.kind, 'menu')
     from sections s left join menus c on c.id = s.owner_menu_id
       where ${filter("menu", sql`s.id`)}
     union all select 'section', s.id, coalesce(s.internal_name, c.name), s.names, null, s.owner_menu_id, c.name,
-      null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1, null
+      null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1, null, null
     from sections s left join menus c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
     union all select 'included_menu', m.id, coalesce(s.internal_name, a.name), m.folder_names,
       s.names, l.owner_menu_id, c.name, m.section_id, m.child_section_id, s.owner_menu_id,
       case when a.kind = 'set_menu' and s.role = 'menu_root' then 'set_menu' else s.role end,
-      1, coalesce(c.active, 0), (s.role = 'menu_root'), l.role, coalesce(a.active, 0), null
+      1, coalesce(c.active, 0), (s.role = 'menu_root'), l.role, coalesce(a.active, 0), null, null
     from section_members m left join sections s on s.id = m.child_section_id
       left join sections l on l.id = m.section_id left join menus c on c.id = l.owner_menu_id
       left join menus a on a.id = s.owner_menu_id
     where ${filter("included_menu", sql`m.id`)}
     union all select 'unit', u.id, u.staff_name, u.name, null, null, null,
-      null, null, null, null, 1, 1, 1, null, 1, u.abbreviation
+      null, null, null, null, 1, 1, 1, null, 1, u.abbreviation, null
     from units u where ${filter("unit", sql`u.id`)}
   `;
 }

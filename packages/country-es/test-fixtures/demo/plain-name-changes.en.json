@@ -1026,14 +1026,14 @@
     "row": "@catalogues:[\"Menú del Día\"]",
     "column": "name",
     "old": "Menú del Día",
-    "new": "Set menus"
+    "new": "Lunch menus"
   },
   {
     "table": "sections",
     "row": "@sections:[\"@catalogues:[\\\"Menú del Día\\\"]\",\"menu_root\",\"Menú del Día\"]",
     "column": "internal_name",
     "old": "Menú del Día",
-    "new": "Set menus"
+    "new": "Lunch menus"
   },
   {
     "table": "kitchen_stations",

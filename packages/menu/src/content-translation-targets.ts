@@ -10,13 +10,18 @@ import { sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import type { TranslationGapKind, TranslationGapReason } from "@waitron/shared";
-import type { TranslationOwners, TranslationRef } from "./content-translation-types.js";
+import type {
+  TranslationItem,
+  TranslationOwners,
+  TranslationRef,
+} from "./content-translation-types.js";
 import {
   namedRows,
   LIVE_CANDIDATE,
   POSITION,
   blankIn,
   ABSENT,
+  translationParent,
   type NamedRow,
 } from "./content-translation-candidates.js";
 export { liveTranslationRows, blankTranslationSql } from "./content-translation-candidates.js";
@@ -24,7 +29,7 @@ import "./errors.js";
 
 export interface TranslationTarget extends TranslationRef {
   name: string;
-  parent?: { id: string; name: string };
+  parent?: TranslationItem["parent"];
   reason: TranslationGapReason;
   selectedText: string | null;
   defaultText: string | null;
@@ -202,13 +207,12 @@ function resolved(
         : null;
   const effectiveSelectedText = effective[language] ?? null;
   const effectiveDefaultText = effective[config.defaultLanguage] ?? null;
+  const parent = translationParent(row);
   const target: Omit<TranslationTarget, "expected"> = {
     kind: row.kind,
     id: row.id,
     name: row.name ?? "",
-    ...(row.owner && row.kind !== "product"
-      ? { parent: { id: row.owner, name: row.owner_name ?? "" } }
-      : {}),
+    ...(parent ? { parent } : {}),
     reason:
       row.kind !== "unit" &&
       row.kind !== "included_menu" &&

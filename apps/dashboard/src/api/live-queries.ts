@@ -275,7 +275,7 @@ export const QUERY_DEPENDENCIES = {
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],
   listPendingSwaps: ["shift_swaps", "shifts"],
-  listMenus: ["menus"],
+  listMenus: ["menus", "sections", "section_members"],
   getMenuStructure: ["sections", "section_members", "menus"],
   getMenuStructures: ["sections", "section_members", "menus"],
   // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,

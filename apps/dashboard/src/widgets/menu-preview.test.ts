@@ -1473,11 +1473,11 @@ it("links each set menu with problems to its set menu tab, counting one problem 
     },
   });
   const links = [
-    ...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('a[href$="/view/set-menu"]'),
+    ...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>('a[href^="/set-menus/menu/"]'),
   ];
   expect(links.map((link) => new URL(link.href).pathname)).toEqual([
-    "/menus/menu/daily/view/set-menu",
-    "/menus/menu/weekend/view/set-menu",
+    "/set-menus/menu/daily",
+    "/set-menus/menu/weekend",
   ]);
   expect(links[0]!.textContent!.trim()).toBe(
     fill("menu_preview.set_menu_problem_count_one", { name: "Daily menu", count: "1" }),

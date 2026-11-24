@@ -33,7 +33,7 @@ import {
 } from "./menu-publish-warnings.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
-import { leftToBrowser } from "../navigation.js";
+import { setMenuAddress, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import "./menu-publications.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -733,9 +733,7 @@ export class MenuPreviewPanel extends LitElement {
   #renderEdit(change: MenuChange) {
     if (change.kind === "set_menu_changed" || change.kind === "set_menu_added") {
       const { id, name } = change.setMenu;
-      return html`<a
-        data-edit-change=${change.id}
-        href=${`/menus/menu/${encodeURIComponent(id)}/view/set-menu`}
+      return html`<a data-edit-change=${change.id} href=${setMenuAddress(id)}
         >${fill("menu_preview.edit_menu", { menu: name })}</a
       >`;
     }
@@ -927,7 +925,7 @@ export class MenuPreviewPanel extends LitElement {
         ${drafts.map(
           ({ menuId, name, problems }) => html`
             <li>
-              <a href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
+              <a href=${setMenuAddress(menuId)}
                 >${fill(
                   problems.length === 1
                     ? "menu_preview.set_menu_problem_count_one"

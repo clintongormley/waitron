@@ -49,7 +49,7 @@ import {
 import type { MemberRef, Presentation } from "@waitron/shared";
 import type { CategorySummary, MenuStructureNode, MenuSummary, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import { leftToBrowser } from "../navigation.js";
+import { setMenuAddress, leftToBrowser } from "../navigation.js";
 
 /** A section node's own customer-facing presentation, before any include's folder applies. */
 export function ownPresentation(node: MenuStructureNode): Presentation {
@@ -1168,7 +1168,7 @@ export class MenuStructureTable extends LitElement {
               ? this.#nameSpan(row)
               : html`<a
                   part="set-menu-link"
-                  href=${`/menus/menu/${encodeURIComponent(menuId)}/view/set-menu`}
+                  href=${setMenuAddress(menuId)}
                   @click=${(event: MouseEvent) => {
                     if (leftToBrowser(event)) return;
                     event.preventDefault();

@@ -276,9 +276,10 @@ product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
-To permanently remove a menu or set menu, choose **Delete…** from its row menu, check the product count and choose any replacements the window asks for.
+To remove a menu permanently, find it under **Menus** or **Set menus**. Choose **Delete…** from
+its row menu, check the product count and choose any replacements the window asks for.
 
-Under **Filters**, **Status** starts on **All**. Choose **Published** or **Requiring attention** to narrow the list to full menus.
+Under **Filters**, **Status** starts on **All**. Choose **Published** or **Requiring attention** to narrow the list.
 
 Use **Search menus** on the Menus list to find a menu by name.
 
@@ -302,8 +303,8 @@ list and the reason.
 
 ## Set menus {#set-menus}
 
-To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name
-and price, and choose its **Eat-in VAT** and, if it differs, its **VAT when taken away**. Eaten
+To sell several courses for one price, open **Set menus** under **Products and menus** and
+choose **Add set menu**. Give it a name and price, and choose its **Eat-in VAT** and, if it differs, its **VAT when taken away**. Eaten
 here, it is charged the one rate in [How VAT is charged](products.md#vat); its Eat-in VAT is used
 only as its VAT when taken away when you choose none. Add customer names in the languages you use, then save.
 
@@ -321,6 +322,8 @@ guests choose from either.
 If your set menu includes drinks, bread or coffee, [add the courses you need and assign them to
 products](products.md#course). In each department, set Drinks and Bread to **Fire now** so you
 can send them with the first order.
+
+Check **Offered on** to see which menus sell a set menu. Choose a menu name to open it.
 
 Open the full menu that will offer the set menu. In **Structure**, open the actions for the
 menu or section where it belongs, choose **Set menu…** and pick it. Use **Preview** to see the
@@ -343,7 +346,7 @@ that this menu shows.
 ## Copy a menu {#copy-menu}
 
 When your next menu is similar to one you already have, start with a copy. In **Products and
-menus → Menus**, open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
+menus**, open **Menus** or **Set menus**. Open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
 Use a name no active menu holds. Upper and lower case count as the same name. **Cancel**
 discards the name without asking and creates nothing. Escape still asks whether to keep editing
 or discard a name you have typed.
@@ -439,7 +442,7 @@ sent takes the new customer-facing or prep station name of an options list or op
 change to the order.
 
 When you set up a Madrid demo in English, its staff and prep station names are in English.
-At a table at lunch, open **Set menus** for the **Menu of the day** (€14) or the **Special
+At a table at lunch, open **Lunch menus** for the **Menu of the day** (€14) or the **Special
 menu** (€20). Try the **Sirloin** for a €5 supplement on the Menu of the day.
 **Salad** uses the prep station name
 **SALAD · LUNCH** and a custom **Portion** unit, abbreviated **ptn**. **House coffee** has two
@@ -460,8 +463,8 @@ the Balearic, Valencian and Galician demos default to Spanish receipts.
 During setup, the suggested restaurant name follows the postcode or province until you edit it.
 Once you type a name, Waitron keeps it when you change the region, including after Review and Back.
 
-Casa Delgado and Set menus include a **Drinks** menu as a folder. Drinks prices **Beer** at
-3.00 instead of its product price of 2.80; both including menus inherit that price. Set menus
+Casa Delgado and Lunch menus include a **Drinks** menu as a folder. Drinks prices **Beer** at
+3.00 instead of its product price of 2.80; both including menus inherit that price. Lunch menus
 sets its own **House Negroni** price of 9.00. The coffee variants keep their own prices. The
 **Sirloin** carries the **Doneness** options list. On **Roast chicken**, you can choose up to
 three optional **Sides**: peppers (2.00), salad (1.50) and bread (0.50). These prices apply to

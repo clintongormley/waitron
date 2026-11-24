@@ -14,7 +14,7 @@ import {
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import { leftToBrowser } from "../navigation.js";
+import { leftToBrowser, setMenuAddress } from "../navigation.js";
 import type { TranslationDrafts } from "./content-translations-model.js";
 
 export function languageWindow(
@@ -51,6 +51,8 @@ export function translationEditorHref(
     case "extra_list":
       return `/modifiers/view/extras/list/${id}`;
     case "menu":
+      if (row.parent?.kind === "set_menu") return setMenuAddress(row.parent.id);
+      return `/menus/menu/${parent}/view/structure`;
     case "section":
     case "included_menu":
       return `/menus/menu/${parent}/view/structure`;

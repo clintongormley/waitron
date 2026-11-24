@@ -22,11 +22,12 @@ import {
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
+import "./set-menus-screen.js";
 
 useLocale("en-GB");
 afterEach(cleanupWidgets);
 
-const dailyPath = "/menus/menu/daily/view/set-menu";
+const dailyPath = "/set-menus/menu/daily";
 const lunchPath = "/menus/menu/lunch/view/preview";
 const menu: MenuSummary = {
   id: "lunch",
@@ -36,13 +37,14 @@ const menu: MenuSummary = {
   setPrice: null,
   setVatClass: null,
 };
-const daily: MenuSummary = {
+const daily: MenuSummary & { heldBy: { id: string; name: string }[] } = {
   id: "daily",
   name: "Daily menu",
   active: true,
   kind: "set_menu",
   setPrice: "14.00",
   setVatClass: "reduced",
+  heldBy: [menu],
 };
 const details: SetMenuDetails = {
   id: "daily",
@@ -117,7 +119,7 @@ async function mount(path = "/menus", client = api(), theme?: "light" | "dark") 
   history.replaceState(null, "", path);
   return (
     await mountWidget<MenusScreen>(
-      "dashboard-menus-screen",
+      path.startsWith("/set-menus") ? "dashboard-set-menus-screen" : "dashboard-menus-screen",
       {
         api: client as unknown as DashboardApi,
       },
@@ -126,40 +128,45 @@ async function mount(path = "/menus", client = api(), theme?: "light" | "dark") 
   ).el;
 }
 
-it("shows the set menu kind and price, and says in Status that it goes live with the menus that offer it", async () => {
-  const el = await mount();
-  const root = el.shadowRoot!;
-  await vi.waitFor(() => {
-    const table = root.querySelector("wt-data-table");
-    const row = table?.shadowRoot?.querySelector('[data-test="open-daily"]')?.closest("tr");
-    expect(row?.textContent).toContain("Set menu");
-    expect(row?.textContent).toContain("€14.00");
-    expect(row?.querySelector('[data-test="status-daily"]')?.textContent?.trim()).toBe(
-      "Goes live with the menus that offer it",
-    );
-  });
+it("shows only set menus, their prices and their offering menus on the new list", async () => {
+  const client = api();
+  client.listMenus.mockResolvedValue([
+    menu,
+    daily,
+    { ...daily, id: "weekly", name: "Weekly menu", heldBy: [] },
+  ]);
+  await mount("/set-menus", client);
+  await expect.element(page.getByRole("heading", { name: "Set menus", exact: true })).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: "Daily menu" });
+  await expect.element(row).toHaveTextContent("€14.00");
+  const holder = row.getByRole("link", { name: "Lunch" });
+  await expect.element(holder).toHaveAttribute("href", "/menus/menu/lunch/view/structure");
+  await expect.element(page.getByText("Not on any menu")).toBeVisible();
+  expect(page.getByRole("button", { name: /Filters/ }).elements()).toHaveLength(0);
+  await holder.click();
+  expect(location.pathname).toBe("/menus/menu/lunch/view/structure");
+  expect(client.readSetMenu).not.toHaveBeenCalled();
 });
 
-it("replaces an old Prices address with the set menu's only tab", async () => {
+it.each([
+  ["/menus/menu/daily/view/prices", "/menus", "Menus"],
+  ["/set-menus/menu/lunch", "/set-menus", "Set menus"],
+  ["/set-menus/menu/unknown", "/set-menus", "Set menus"],
+])("replaces an editor address for the wrong list (%s)", async (address, list, heading) => {
   const client = api();
-  const route = vi.spyOn(history, "replaceState");
-  try {
-    const el = await mount("/menus/menu/daily/view/prices", client);
-    await vi.waitFor(() => {
-      expect(el.shadowRoot!.querySelector("wt-tabs")?.items.map(({ key }) => key)).toEqual([
-        "set-menu",
-      ]);
-      expect(
-        route.mock.calls.map(([, , address]) => new URL(address!, location.origin).pathname),
-      ).toContain(dailyPath);
-    });
-    await expect
-      .element(page.getByText("Price per set menu", { exact: false }).first())
-      .toBeVisible();
-    expect(page.getByRole("button", { name: "Publish", exact: true }).elements()).toHaveLength(0);
-  } finally {
-    route.mockRestore();
-  }
+  await mount(address, client);
+  await expect.element(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  expect(location.pathname).toBe(list);
+  expect(client.readSetMenu).not.toHaveBeenCalled();
+});
+
+it("opens the set menu editor at its own address", async () => {
+  const client = api();
+  await mount(dailyPath, client);
+  await expect.element(page.getByRole("tab", { name: "Set menu", exact: true })).toBeVisible();
+  await expect.element(page.getByRole("textbox", { name: /^Price per set menu/ })).toBeVisible();
+  expect(location.pathname).toBe(dailyPath);
+  expect(page.getByRole("button", { name: "Publish", exact: true }).elements()).toHaveLength(0);
 });
 
 it("links to the full menu that publishes the set menu", async () => {
@@ -456,32 +463,20 @@ it("keeps the unsaved price when Back is refused and returns to the list when al
   await expect.element(price).toHaveValue("15.00");
   await userEvent.click(back);
   await vi.waitFor(() => {
-    expect(new URL(guard.href).pathname).toBe("/menus");
+    expect(new URL(guard.href).pathname).toBe("/set-menus");
     expect(screen.shadowRoot!.querySelector("dashboard-set-menu-editor")).toBeNull();
   });
 });
 
-it("offers Menu and Set menu when adding a menu", async () => {
+it("opens the ordinary menu form directly from Add menu", async () => {
   await mount();
   await page.getByRole("button", { name: "Add menu", exact: true }).click();
-  await expect.element(page.getByRole("button", { name: "Menu", exact: true })).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Set menu", exact: true })).toBeVisible();
-});
-
-it("dismisses the menu kind choice with Cancel and returns to Add menu", async () => {
-  await mount();
-  const add = page.getByRole("button", { name: "Add menu", exact: true });
-  await add.click();
-  const cancel = page.getByRole("button", { name: "Cancel", exact: true });
-  await vi.waitFor(() => expect(cancel.elements()).toHaveLength(1));
-  await cancel.click();
-  await vi.waitFor(() => expect(add.element().matches(":focus")).toBe(true));
+  await expect.element(page.getByRole("textbox", { name: /^Name/ }).first()).toBeVisible();
   expect(page.getByRole("button", { name: "Set menu", exact: true }).elements()).toHaveLength(0);
 });
 
 async function fillNewSetMenu(name: string) {
-  await page.getByRole("button", { name: "Add menu", exact: true }).click();
-  await page.getByRole("button", { name: "Set menu", exact: true }).click();
+  await page.getByRole("button", { name: "Add set menu", exact: true }).click();
   await page.getByRole("textbox", { name: "Name", exact: false }).first().fill(name);
   await page.getByRole("textbox", { name: "Price per set menu", exact: false }).fill("14.00");
   return page;
@@ -491,7 +486,7 @@ it("opens the new set menu's editor after saving its terms", async () => {
   const client = api();
   client.listMenus.mockResolvedValueOnce([menu]);
   client.readSetMenu.mockResolvedValue({ ...details, heldBy: [] });
-  await mount("/menus", client);
+  await mount("/set-menus", client);
   const form = await fillNewSetMenu("Daily menu");
   await form.getByRole("button", { name: "Save", exact: true }).click();
   await expect.element(page.getByRole("tab", { name: "Set menu", exact: true })).toBeVisible();
@@ -508,7 +503,7 @@ it("opens the new set menu's editor after saving its terms", async () => {
 it("keeps the creation form editable and names a duplicate beside the name field", async () => {
   const client = api();
   client.createMenu.mockRejectedValueOnce({ code: "menu.name_taken", params: { field: "name" } });
-  await mount("/menus", client);
+  await mount("/set-menus", client);
   const form = await fillNewSetMenu("Lunch");
   const save = form.getByRole("button", { name: "Save", exact: true });
   await save.click();
@@ -516,7 +511,7 @@ it("keeps the creation form editable and names a duplicate beside the name field
     .element(form.getByRole("textbox", { name: /^Name/ }).first())
     .toHaveAccessibleDescription("Another menu already has this name. Enter a different name.");
   await expect.element(save).toBeEnabled();
-  expect(location.pathname).toBe("/menus");
+  expect(location.pathname).toBe("/set-menus");
 });
 
 const placement = { memberId: "placed", ref: { kind: "set_menu", menuId: "daily" } } as const;
@@ -584,8 +579,8 @@ it("shows a placed set menu's price and opens its editor from the structure row"
   const row = name.element().closest("tr");
   expect(row?.textContent).toContain("€14.00");
   expect(row?.textContent).toContain("Set menu");
+  await expect.element(name).toHaveAttribute("href", dailyPath);
   await name.click();
-  await expect.element(page.getByRole("tab", { name: "Set menu", exact: true })).toBeVisible();
   expect(location.pathname).toBe(dailyPath);
 });
 
@@ -675,8 +670,6 @@ async function startSetMenu(screen: MenusScreen) {
     expect(screen.shadowRoot!.querySelector('.header [data-test="add-menu"]')).toBeTruthy(),
   );
   screen.shadowRoot!.querySelector<HTMLElement>('.header [data-test="add-menu"]')!.click();
-  await screen.updateComplete;
-  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="create-set_menu"]')!.click();
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")).toBeTruthy(),
   );
@@ -684,18 +677,21 @@ async function startSetMenu(screen: MenusScreen) {
 }
 
 it("closes the new set menu form when it is cancelled", async () => {
-  const screen = await mount();
+  const screen = await mount("/set-menus");
   const form = await startSetMenu(screen);
   await form.updateComplete;
   await userEvent.click(page.getByRole("button", { name: "Cancel" }));
-  await vi.waitFor(() =>
-    expect(screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")).toBeNull(),
-  );
+  await vi.waitFor(() => {
+    expect(screen.shadowRoot!.querySelector("dashboard-set-menu-terms-form")).toBeNull();
+    expect(screen.shadowRoot!.activeElement).toBe(
+      screen.shadowRoot!.querySelector('[data-test="add-menu"]'),
+    );
+  });
 });
 
 it("opens a created set menu and reports a failed re-read of the menus", async () => {
   const client = api();
-  const screen = await mount("/menus", client);
+  const screen = await mount("/set-menus", client);
   const form = await startSetMenu(screen);
   await form.updateComplete;
   client.listMenus.mockRejectedValue(new Error("Connection lost"));

@@ -626,7 +626,7 @@ it.each(
   expect(row("copy")?.textContent).toContain("Weekend");
   expect(row("saved")?.textContent).toContain(display.saved);
   expect(row("copy")?.querySelector("a[data-edit-change]")?.getAttribute("href")).toBe(
-    "/menus/menu/daily/view/set-menu",
+    "/set-menus/menu/daily",
   );
   await expectNoA11yViolations(host);
   await page.screenshot({

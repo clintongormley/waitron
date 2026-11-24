@@ -170,11 +170,13 @@ export { duplicateMenu } from "./menu-copy.js";
 export {
   addSetMenuDishes,
   copySetMenuDishes,
+  listDashboardMenus,
   readSetMenu,
   refuseSetMenu,
   saveSetMenuDishCourse,
   saveSetMenuLines,
   saveSetMenuVariantChoices,
+  type DashboardMenuSummary,
   type SetMenuDetails,
 } from "./set-menus.js";
 export {

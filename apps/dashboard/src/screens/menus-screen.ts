@@ -58,7 +58,6 @@ import "../widgets/home-shortcut-picker.js";
 import "../widgets/menu-patch-dialog.js";
 import "../widgets/menu-copy-dialog.js";
 import "../widgets/menu-delete-dialog.js";
-import "../widgets/set-menu-editor.js";
 import "../widgets/guest-menu-preview.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { MenuPricesTable, PriceSave, PriceSaveResult } from "../widgets/menu-prices-table.js";
@@ -91,21 +90,16 @@ import type {
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import {
-  HOME_COLUMN_RANGE,
-  HOME_DEVICES,
-  HOME_ORDERS,
-  formatMoney,
-  type VatClass,
-} from "@waitron/shared";
+import { HOME_COLUMN_RANGE, HOME_DEVICES, HOME_ORDERS } from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { MenuListLayout, menuListStyles, type ListLayout } from "./menu-list-layout.js";
+import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
-type Tab = (typeof TABS)[number] | "set-menu";
+type Tab = (typeof TABS)[number];
 
 const isTab = (value: string | null): value is (typeof TABS)[number] =>
   TABS.includes(value as (typeof TABS)[number]);
@@ -126,7 +120,6 @@ interface MenuRow extends MenuSummary {
   status: MenuStatus | "loading" | "failed";
 }
 
-type ListLayout = "narrow" | "wide";
 type PeriodUse = "starts" | "staff";
 type PeriodUses = Record<PeriodUse, MenuPeriodUsage[]>;
 const PERIOD_LABELS = { starts: "menus.period_starts", staff: "menus.period_staff" } as const;
@@ -360,6 +353,7 @@ export class MenusScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    menuListStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
@@ -390,22 +384,6 @@ export class MenusScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-      h1 {
-        margin: 0 0 var(--wt-space-4);
-      }
-      .header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-3);
-        margin-bottom: var(--wt-space-4);
-      }
-      .header h1 {
-        margin: 0;
-      }
-      .header wt-button {
-        margin-inline-start: auto;
       }
       .heading {
         margin-bottom: var(--wt-space-4);
@@ -554,45 +532,18 @@ export class MenusScreen extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
-      /* Back by the ghost button's own inline padding and border, so a name's text starts under
-         the Name heading's text. The padding is narrowed so the button's border and focus ring
-         stay inside the cell rather than on the table's clipped edge; it keeps its tap size. */
-      wt-data-table::part(name) {
-        --wt-button-padding-inline: var(--wt-space-1);
-        overflow-wrap: anywhere;
-        text-align: start;
-        margin-inline-start: calc(-1 * (var(--wt-space-1) + 1px));
-      }
-      wt-data-table::part(muted) {
-        color: var(--wt-color-text-muted);
-      }
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
       }
       .status-line .clashes {
         color: var(--wt-color-danger);
       }
-      .list,
-      .sizer,
       dashboard-menu-structure-table {
         container-type: inline-size;
       }
       wt-input[name="structure-search"] {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: 0;
-      }
-      .narrow-probe {
-        display: none;
-      }
-      @container (max-width: 30rem) {
-        .narrow-probe {
-          display: block;
-        }
-      }
-      @container (max-width: 52rem) {
-        .with-usage .narrow-probe {
-          display: block;
-        }
       }
       wt-data-table::part(periods) {
         list-style: none;
@@ -612,12 +563,6 @@ export class MenusScreen extends LitElement {
       }
       wt-data-table::part(time) {
         white-space: nowrap;
-      }
-      wt-data-table::part(name-text) {
-        text-align: start;
-      }
-      wt-data-table::part(stacked) {
-        display: block;
       }
       /* The list's cells start at their top, where the name button and the row menu are a tap target
          tall with their text centred, so the state's first line is centred on that height too. */
@@ -662,21 +607,6 @@ export class MenusScreen extends LitElement {
       wt-data-table::part(period-link):focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
-      }
-      /* The table itself never narrows a column below its content, so a long name wraps only
-         within a width set here. On a narrow list the name and its status take the list's width
-         less room for the row menu's column. */
-      wt-data-table.narrow::part(name),
-      wt-data-table.narrow::part(stacked) {
-        max-width: calc(100cqi - 3 * var(--wt-tap-min));
-      }
-      /* Set by a container query on the list's width, like the probe's, rather than by the layout
-         the probe chooses, so it already applies in the frame before the probe is read. The name
-         leaves room for the row menu and for Status. */
-      @container (width > 30rem) {
-        wt-data-table::part(name) {
-          max-width: calc(100cqi - 3 * var(--wt-tap-min) - var(--wt-menu-list-status-room));
-        }
       }
     `,
   ];
@@ -776,11 +706,6 @@ export class MenusScreen extends LitElement {
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
   @state() private patching = false;
-
-  @state() private choosingMenuKind = false;
-  @state() private creatingSetMenu = false;
-  @state() private defaultProductVatClass: VatClass = "general";
-  #newMenuKind: MenuSummary["kind"] | null = null;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -896,32 +821,8 @@ export class MenusScreen extends LitElement {
     narrow: this.#buildColumns("narrow"),
     wide: this.#buildColumns("wide"),
   };
-  readonly #kindColumn: DataTableColumn<MenuRow> = {
-    key: "kind",
-    label: t("menus.kind"),
-    cell: (menu) => html`
-      ${t(menu.kind === "set_menu" ? "menus.set_menu_kind" : "menus.menu_kind")}
-      ${
-        menu.setPrice == null
-          ? nothing
-          : html`<span part="stacked">${formatMoney(menu.setPrice, currentLocale())}</span>`
-      }
-    `,
-  };
-  readonly #columnsWithKind = Object.fromEntries(
-    Object.entries(this.#columns).map(([layout, columns]) => [
-      layout,
-      [...columns.slice(0, -1), this.#kindColumn, columns.at(-1)!],
-    ]),
-  ) as Record<ListLayout, DataTableColumn<MenuRow>[]>;
   readonly #usageColumns = this.#buildColumns("wide", true);
-  readonly #usageColumnsWithKind = [
-    ...this.#usageColumns.slice(0, -1),
-    this.#kindColumn,
-    this.#usageColumns.at(-1)!,
-  ];
-  #listSize: ResizeObserver | null = null;
-  #probe: Element | undefined;
+  readonly #listLayout = new MenuListLayout(this, (layout) => (this.layout = layout));
   #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
   /** The list {@link path} names. */
@@ -973,7 +874,7 @@ export class MenusScreen extends LitElement {
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
     // replaces the link a person may already have focused.
     if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
-      this.layout = this.#measuredLayout();
+      this.layout = this.#listLayout.measure();
     if (
       changed.has("menus") ||
       changed.has("statuses") ||
@@ -981,6 +882,7 @@ export class MenusScreen extends LitElement {
       changed.has("statusFilter")
     )
       this.#rows = this.menus
+        .filter(({ kind, active }) => kind !== "set_menu" && active)
         .map((menu): MenuRow => ({
           ...menu,
           status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
@@ -1159,7 +1061,6 @@ export class MenusScreen extends LitElement {
         }),
         this.#queries.watch("getMenuSettings", [], (value) => {
           this.defaultColor = value.defaultColor;
-          this.defaultProductVatClass = value.defaultProductVatClass;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           setContentLanguages(value);
@@ -1319,11 +1220,6 @@ export class MenusScreen extends LitElement {
         this.#statusQueries.release("getMenuStatuses");
         this.#includedStatusesFor = null;
       }
-      if (this.view === "set-menu") {
-        this.#menuReads.release();
-        this.#menuReadGeneration++;
-        return;
-      }
       if (again && (this.view === "preview" || this.view === "home"))
         void this.#watchPreview(menuId);
       else void this.#watchMenu(again);
@@ -1398,8 +1294,6 @@ export class MenusScreen extends LitElement {
     if (this.#url.read("dashboard") !== "menus") {
       this.#menuFormGeneration++;
       this.menuForm = null;
-      this.choosingMenuKind = false;
-      this.creatingSetMenu = false;
       return;
     }
     this.#select(this.#url.read("menu"));
@@ -1419,8 +1313,6 @@ export class MenusScreen extends LitElement {
     this.#menuOpenings++;
     this.#menuFormGeneration++;
     this.menuForm = null;
-    this.choosingMenuKind = false;
-    this.creatingSetMenu = false;
     this.#menuReads.release();
     this.#menuReadGeneration++;
     this.#menuReadKey = "";
@@ -1475,12 +1367,7 @@ export class MenusScreen extends LitElement {
       this.#url.write({ menu: null, view: null, section: null, "price-filter": null }, true);
       return;
     }
-    const view =
-      menu?.kind === "set_menu" || (!menu && addressView === "set-menu")
-        ? "set-menu"
-        : isTab(addressView)
-          ? addressView
-          : TABS[0];
+    const view = isTab(addressView) ? addressView : TABS[0];
     this.showPriceClashes = view === "prices" && priceFilter === "clashes";
     if (view !== this.view || this.#statusFor !== this.menuId) this.#showView(view);
     if (
@@ -1501,7 +1388,6 @@ export class MenusScreen extends LitElement {
 
   #open(menuId: string, view: Tab = TABS[0], priceFilter: "clashes" | null = null): void {
     this.#select(menuId);
-    if (this.#selectedMenu()?.kind === "set_menu") view = "set-menu";
     this.showPriceClashes = priceFilter === "clashes";
     this.#showView(view);
     this.#url.write({
@@ -1525,7 +1411,9 @@ export class MenusScreen extends LitElement {
   }
 
   #selectedMenu(): MenuSummary | undefined {
-    return this.menus.find(({ id }) => id === this.menuId);
+    return this.menus.find(
+      ({ id, kind, active }) => id === this.menuId && kind !== "set_menu" && active,
+    );
   }
 
   #menuName(): string {
@@ -2371,8 +2259,6 @@ export class MenusScreen extends LitElement {
    * and a menu with clashing prices a link to them. */
   #statusCell(menu: MenuRow) {
     const test = `status-${menu.id}`;
-    if (menu.kind === "set_menu")
-      return html`<span part="status muted" data-test=${test}>${t("menus.set_menu_status")}</span>`;
     if (typeof menu.status === "string")
       return html`<span part="status muted" data-test=${test}
         >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
@@ -2459,7 +2345,7 @@ export class MenusScreen extends LitElement {
   }
 
   #periodCell(menu: MenuRow, role: PeriodUse, stacked = false) {
-    if (!this.menuPeriodUsage || menu.kind === "set_menu") return nothing;
+    if (!this.menuPeriodUsage) return nothing;
     const uses = this.periodUses?.get(menu.id);
     const periods = uses?.[role];
     if (periods?.length) {
@@ -2486,10 +2372,9 @@ export class MenusScreen extends LitElement {
   }
 
   #listColumns(): DataTableColumn<MenuRow>[] {
-    const kinds = this.#rows.some((menu) => menu.kind === "set_menu");
-    if (this.menuPeriodUsage && this.layout === "wide")
-      return kinds ? this.#usageColumnsWithKind : this.#usageColumns;
-    return (kinds ? this.#columnsWithKind : this.#columns)[this.layout];
+    return this.menuPeriodUsage && this.layout === "wide"
+      ? this.#usageColumns
+      : this.#columns[this.layout];
   }
 
   /** On a narrow list the status moves under the name and its column goes, as the variants table
@@ -2554,16 +2439,12 @@ export class MenusScreen extends LitElement {
               data-test=${`edit-${menu.id}`}
               @click=${() => this.#open(menu.id)}
               >${t("menus.open")}</wt-button
-            >${
-              menu.kind === "set_menu"
-                ? nothing
-                : html`<wt-button
-                    icon="menu-rename"
-                    data-test=${`rename-${menu.id}`}
-                    @click=${() => this.#openMenuForm(menu)}
-                    >${t("menus.rename")}</wt-button
-                  >`
-            }<wt-button
+            ><wt-button
+              icon="menu-rename"
+              data-test=${`rename-${menu.id}`}
+              @click=${() => this.#openMenuForm(menu)}
+              >${t("menus.rename")}</wt-button
+            ><wt-button
               icon="menu-copy"
               data-test=${`duplicate-${menu.id}`}
               ?disabled=${this.copyingMenu?.id === menu.id}
@@ -2685,26 +2566,6 @@ export class MenusScreen extends LitElement {
     ></dashboard-section-details-form>`;
   }
 
-  /** The probe is observed rather than the list: its width follows the list's container, not the
-   * table's contents. */
-  #measuredLayout(): ListLayout {
-    const probe = this.#probe;
-    return probe !== undefined && getComputedStyle(probe).display !== "none" ? "narrow" : "wide";
-  }
-
-  #observeProbe = (probe: Element | undefined): void => {
-    if (this.#probe !== undefined) this.#listSize?.unobserve(this.#probe);
-    this.#probe = probe;
-    if (probe === undefined) return;
-    this.#listSize ??= new ResizeObserver(() => {
-      // Column changes wait until the searchable table's resize delivery has finished.
-      requestAnimationFrame(() => {
-        if (this.isConnected) this.layout = this.#measuredLayout();
-      });
-    });
-    this.#listSize.observe(probe);
-  };
-
   #renderAddMenu(slot?: "empty-action") {
     return html`<wt-button
       data-test="add-menu"
@@ -2712,59 +2573,10 @@ export class MenusScreen extends LitElement {
       variant="primary"
       @click=${(event: Event) => {
         this.#addOpener = event.currentTarget as HTMLElement;
-        this.#newMenuKind = null;
-        this.choosingMenuKind = true;
+        void this.#openMenuForm(null);
       }}
       >${t("menus.add")}</wt-button
     >`;
-  }
-
-  #renderMenuKindChoice() {
-    return this.#formModal({
-      test: "menu-kind-choice",
-      open: this.choosingMenuKind,
-      heading: t("menus.add"),
-      body: (["menu", "set_menu"] as const).map(
-        (kind) =>
-          html`<wt-button
-            data-test=${`create-${kind}`}
-            variant="secondary"
-            @click=${() => {
-              this.#newMenuKind = kind;
-              this.choosingMenuKind = false;
-            }}
-            >${t(kind === "menu" ? "menus.menu_kind" : "menus.set_menu_kind")}</wt-button
-          >`,
-      ),
-      close: () => {
-        this.choosingMenuKind = false;
-      },
-      closed: () => {
-        const kind = this.#newMenuKind;
-        this.#newMenuKind = null;
-        if (kind === "menu") void this.#openMenuForm(null);
-        if (kind === "set_menu") this.creatingSetMenu = true;
-      },
-    });
-  }
-
-  #renderCreateSetMenu() {
-    if (!this.creatingSetMenu) return nothing;
-    return html`<dashboard-set-menu-terms-form
-      creating
-      .api=${this.api}
-      .languages=${currentContentLanguages()}
-      .defaultVatClass=${this.defaultProductVatClass}
-      @set-menu-terms-cancelled=${() => {
-        this.creatingSetMenu = false;
-      }}
-      @set-menu-terms-saved=${(event: CustomEvent<{ created: MenuSummary }>) => {
-        const { created } = event.detail;
-        if (!this.menus.some(({ id }) => id === created.id)) this.menus = [...this.menus, created];
-        this.#open(created.id, "set-menu");
-        void this.#watchMenus().catch(() => undefined);
-      }}
-    ></dashboard-set-menu-terms-form>`;
   }
 
   /** Said once above the list, beside the "Could not be checked" in each row. */
@@ -2793,12 +2605,11 @@ export class MenusScreen extends LitElement {
     const waitingForStatuses =
       this.statuses === null &&
       (this.statusFilter === "published" || this.statusFilter === "attention");
-    const emptyMessage =
-      this.menus.length === 0
-        ? t("menus.empty")
-        : waitingForStatuses
-          ? t(this.statusesError ? "menus.status_error" : "menus.status_loading")
-          : tableNoMatches();
+    const emptyMessage = !this.menus.some(({ kind, active }) => kind !== "set_menu" && active)
+      ? t("menus.empty")
+      : waitingForStatuses
+        ? t(this.statusesError ? "menus.status_error" : "menus.status_loading")
+        : tableNoMatches();
     return html`<div class="header">
         <h1>${t("menus.title")}</h1>
         ${loaded && (this.#rows.length || this.statusFilter !== "all") ? this.#renderAddMenu() : nothing}
@@ -2861,7 +2672,7 @@ export class MenusScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${this.#renderMenuKindChoice()} ${this.#renderMenuForm()} ${this.#renderCreateSetMenu()}
+      ${this.#renderMenuForm()}
       <dashboard-menu-copy-dialog
         .open=${this.copyingMenu !== null}
         .menu=${this.copyingMenu}
@@ -3003,7 +2814,7 @@ export class MenusScreen extends LitElement {
         }}
         @wt-set-menu-open=${(event: CustomEvent<{ menuId: string }>) => {
           event.stopPropagation();
-          this.#open(event.detail.menuId, "set-menu");
+          void this.#url.write({ dashboard: "set-menus", setMenu: event.detail.menuId });
         }}
         @wt-set-menu-move=${(event: CustomEvent<{ key: string }>) => {
           event.stopPropagation();
@@ -4162,7 +3973,6 @@ export class MenusScreen extends LitElement {
   #renderEditor(menuId: string) {
     const menu = this.#selectedMenu();
     const name = menu?.name ?? "";
-    const setMenu = menu?.kind === "set_menu";
     return html`<div class="heading">
         <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
           <a
@@ -4178,43 +3988,11 @@ export class MenusScreen extends LitElement {
         </nav>
         <div class="title">
           <h1>${name || t("menus.title")}</h1>
-          ${
-            setMenu
-              ? html`<wt-help-tooltip
-                  mode="help-mode"
-                  aria-label=${t("menus.set_menu_help_label")}
-                  guide-href=${guideHref("products.set-menus")}
-                  guide-label=${t("menus.set_menu_help_guide")}
-                  >${t("menus.set_menu_help")}</wt-help-tooltip
-                >`
-              : this.#renderLiveWords()
-          }
+          ${this.#renderLiveWords()}
         </div>
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
-      ${
-        menu === undefined && this.view === "set-menu"
-          ? nothing
-          : setMenu
-            ? html`<wt-tabs
-                data-test="menu-tabs"
-                label=${menu.name}
-                value="set-menu"
-                .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
-              >
-                <div slot="set-menu">
-                  ${keyed(
-                    menuId,
-                    html`<dashboard-set-menu-editor
-                      .api=${this.api}
-                      .menuId=${menuId}
-                      @set-menu-terms-saved=${() => void this.#watchMenus().catch(() => undefined)}
-                    ></dashboard-set-menu-editor>`,
-                  )}
-                </div>
-              </wt-tabs>`
-            : this.#renderFullMenuEditor(menuId, name)
-      }`;
+      ${this.#renderFullMenuEditor(menuId, name)}`;
   }
 
   #renderFullMenuEditor(menuId: string, name: string) {
@@ -4269,7 +4047,7 @@ export class MenusScreen extends LitElement {
         class=${this.menuPeriodUsage ? "sizer with-usage" : "sizer"}
         aria-hidden="true"
       >
-        <span class="narrow-probe" ${ref(this.#observeProbe)}></span>
+        <span class="narrow-probe" ${ref(this.#listLayout.observe)}></span>
       </div>
       ${this.menuId === null ? this.#renderList() : this.#renderEditor(this.menuId)}`;
   }
