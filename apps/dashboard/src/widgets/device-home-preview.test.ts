@@ -1,5 +1,4 @@
-import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
-import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
+import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
@@ -35,40 +34,35 @@ const KILO = {
   hardwareUnit: "kg" as const,
 };
 
-it.each(
-  [360, 390].flatMap((width) =>
-    [2, 3].flatMap((columns) =>
-      (["colours", "thumbnails"] as const).map((mode) => ({ width, columns, mode })),
-    ),
-  ),
-)("fits $columns preview columns at $width px in $mode", async ({ width, columns, mode }) => {
-  const document = lunch(
-    [],
-    [drinks(), documentProduct("mi-lemonade", "p-lemonade"), documentProduct("mi-ham", "p-ham")],
-  );
-  document.offers["mi-lemonade"]!.name = "Extraordinariamenteextralargapalabra";
-  document.offers["mi-ham"]!.name = "Pollo asado con patatas y verduras";
-  const { el, host } = await mount({
-    document: display("handheld", { columns, tiles: mode }, document),
-  });
-  await widen(host, width);
-  const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
-  expect(tracks(grid)).toBe(columns);
-  expect(tiles(el, "structure")).toHaveLength(3);
-  for (const cell of tiles(el, "structure")) {
-    const box = cell.getBoundingClientRect();
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
-    for (const content of cell.querySelectorAll<HTMLElement>(
-      ".name, .price, .kind, wt-icon, img",
-    )) {
-      const bounds = content.getBoundingClientRect();
-      expect(bounds.left).toBeGreaterThanOrEqual(box.left);
-      expect(bounds.right).toBeLessThanOrEqual(box.right);
-      expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+it.each([360, 390].flatMap((width) => [2, 3].map((columns) => ({ width, columns }))))(
+  "fits $columns preview columns at $width px",
+  async ({ width, columns }) => {
+    const document = lunch(
+      [],
+      [drinks(), documentProduct("mi-lemonade", "p-lemonade"), documentProduct("mi-ham", "p-ham")],
+    );
+    document.offers["mi-lemonade"]!.name = "Extraordinariamenteextralargapalabra";
+    document.offers["mi-ham"]!.name = "Pollo asado con patatas y verduras";
+    const { el, host } = await mount({
+      document: display("handheld", { columns }, document),
+    });
+    await widen(host, width);
+    const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
+    expect(tracks(grid)).toBe(columns);
+    expect(tiles(el, "structure")).toHaveLength(3);
+    for (const cell of tiles(el, "structure")) {
+      const box = cell.getBoundingClientRect();
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      for (const content of cell.querySelectorAll<HTMLElement>(".name, .price, .kind, wt-icon")) {
+        const bounds = content.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(box.left);
+        expect(bounds.right).toBeLessThanOrEqual(box.right);
+        expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+      }
     }
-  }
-});
+  },
+);
 
 it.each([360, 390])("shows three preview columns inside a %s px dashboard", async (width) => {
   const { el, host } = await mount({ document: display("handheld", { columns: 3 }) });
@@ -439,7 +433,7 @@ describe("dashboard-device-home-preview", () => {
   });
 
   describe("fills tiles as the device does", () => {
-    it("paints Colours mode from the product's frozen colour and the section's colour", async () => {
+    it("paints the product's frozen colour and the section's colour", async () => {
       const { el } = await mount();
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
@@ -450,52 +444,27 @@ describe("dashboard-device-home-preview", () => {
       expect(section.hasAttribute("data-painted")).toBe(true);
       expect(fillOf(section)).toBe("rgb(177, 37, 37)");
       expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
-      expect(section.querySelector(".kind")).toBeNull();
-      const water = tile(el, "structure", "Water");
-      expect(water.hasAttribute("data-painted")).toBe(false);
-    });
-
-    it("shows Thumbnails mode's image, else the colour, else the neutral tile", async () => {
-      const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
-      const lemonade = tile(el, "structure", "Lemonade");
-      const img = image(lemonade)!;
-      await vi.waitFor(() =>
-        expect(img.getAttribute("src")).toBe(
-          `/media/renditions/v1/${mediaTestReference("lemonade.webp")}/till/7500-2500-200.webp`,
-        ),
-      );
-      expect(img.getAttribute("alt")).toBe("");
-      expect(img.compareDocumentPosition(lemonade.querySelector(".name")!)).toBe(
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      );
-      expect(lemonade.hasAttribute("data-painted")).toBe(false);
-
-      const ham = tile(el, "structure", "Ham");
-      expect(image(ham)).toBeNull();
-      expect(ham.hasAttribute("data-painted")).toBe(true);
-      expect(fillOf(ham)).toBe("rgb(177, 37, 37)");
-
-      const section = tile(el, "structure", "Drinks para clientes");
-      await vi.waitFor(() =>
-        expect(image(section)!.getAttribute("src")).toBe(
-          `/media/renditions/v1/${mediaTestReference("drinks.webp")}/till/7500-2500-200.webp`,
-        ),
-      );
-      expect(section.hasAttribute("data-painted")).toBe(false);
-      const folder = section.querySelector('wt-icon[name="folder"]')!;
-      expect(folder?.parentElement?.contains(image(section))).toBe(true);
-      expect(
-        folder.shadowRoot!.querySelector("svg")!.getBoundingClientRect().width,
-      ).toBeGreaterThanOrEqual(14);
       expect(
         section.querySelector(".section-kind")!.getBoundingClientRect().width,
       ).toBeLessThanOrEqual(1);
       await expect
         .element(page.elementLocator(section.shadowRoot!.querySelector("button")!))
         .toHaveAccessibleName("Drinks para clientes Section");
+      const water = tile(el, "structure", "Water");
+      expect(water.hasAttribute("data-painted")).toBe(false);
     });
 
-    it("draws a product with neither image nor colour neutral in Thumbnails mode, name and price shown", async () => {
+    it("uses colour and the folder even with stored Thumbnails and photos", async () => {
+      const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
+      const lemonade = tile(el, "structure", "Lemonade");
+      expect(image(lemonade)).toBeNull();
+      expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
+      const section = tile(el, "structure", "Drinks para clientes");
+      expect(image(section)).toBeNull();
+      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+    });
+
+    it("draws an uncoloured product with its name and price", async () => {
       const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
       const water = tile(el, "structure", "Water");
       expect(image(water)).toBeNull();
@@ -505,15 +474,6 @@ describe("dashboard-device-home-preview", () => {
       expect(water.querySelector(".price")!.textContent!.trim()).toBe(
         formatMoney("3.00", currentLocale()),
       );
-    });
-
-    it("uses the shown device's tile mode", async () => {
-      const document = display("till", { tiles: "thumbnails" });
-      const { el } = await mount({ document });
-      expect(image(tile(el, "structure", "Lemonade"))).toBeNull();
-      el.device = "till";
-      await el.updateComplete;
-      expect(image(tile(el, "structure", "Lemonade"))).not.toBeNull();
     });
   });
 
@@ -864,27 +824,15 @@ describe("dashboard-device-home-preview", () => {
     it("opens the top-level copy from a shortcut to a menu included twice, drawn from that copy", async () => {
       const painted = bar({
         color: "#256bb1",
-        image: mediaTestReference("bar-folder.webp"),
         fixed: {
           names: { es: "Barra para clientes" },
           color: "#256bb1",
-          image: mediaTestReference("bar-folder.webp"),
         },
       });
       const shortcut = [sectionTile("s-drinks")];
       const { el } = await mount({ document: twice(painted, shortcut) });
       expect(names(tiles(el, "shortcuts"))).toEqual(["Barra para clientes"]);
       expect(fillOf(tile(el, "shortcuts", "Barra para clientes"))).toBe("rgb(37, 107, 177)");
-      const thumbnails = await mount({
-        document: display("handheld", { tiles: "thumbnails" }, twice(painted, shortcut)),
-      });
-      await vi.waitFor(() =>
-        expect(
-          image(tile(thumbnails.el, "shortcuts", "Barra para clientes"))!.getAttribute("src"),
-        ).toBe(
-          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
-        ),
-      );
       await click(el, tile(el, "shortcuts", "Barra para clientes"));
       expect(breadcrumb(el)).toBe("Home › Barra para clientes");
 
@@ -1643,40 +1591,6 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     await press(el, "sc-chips", "ArrowLeft");
     expect(status(el)).toBe("Chips $& {index} {total} moved to position 1 of 2");
   });
-});
-
-const mediaReplacements = useMediaPresentations();
-
-it("an unchanged menu document's product and section thumbnails follow photo replacements", async () => {
-  const document = display("handheld", { tiles: "thumbnails" });
-  const original = JSON.stringify(document);
-  const { el } = await mount({ document });
-  const reference = mediaTestReference("lemonade.webp");
-  const sectionReference = mediaTestReference("drinks.webp");
-  const replacement = mediaTestReference("replacement.webp");
-  const img = image(tile(el, "structure", "Lemonade"))!;
-  const sectionImg = image(tile(el, "structure", "Drinks para clientes"))!;
-  await vi.waitFor(() =>
-    expect(img.getAttribute("src")).toBe(
-      `/media/renditions/v1/${reference}/till/7500-2500-200.webp`,
-    ),
-  );
-  mediaReplacements.set(reference, replacement);
-  mediaReplacements.set(sectionReference, replacement);
-  invalidateMediaImages();
-  await vi.waitFor(() =>
-    expect(img.getAttribute("src")).toBe(
-      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
-    ),
-  );
-  await vi.waitFor(() =>
-    expect(sectionImg.getAttribute("src")).toBe(
-      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
-    ),
-  );
-  const box = img.getBoundingClientRect();
-  expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
-  expect(JSON.stringify(document)).toBe(original);
 });
 
 it("keeps the staff unit abbreviation on a menu preview tile with empty customer maps", async () => {

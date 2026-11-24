@@ -39,19 +39,17 @@ the full scans and translation-gap read remain.
 Left open:
 
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
-  copies the till's tile/breadcrumb markup, thumbnail/paint helpers and CSS
+  copies the till's tile and breadcrumb markup, paint helper and CSS
   (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already
   use shared rules. The preview also copies table ordering's width switch, flex share, gap and
   inset. A shared presentation boundary would need adapters for the till's ordering state and
-  the dashboard's shortcut controls. Even a partial extraction (sharing only the CSS, thumbnails and
-  paint helpers) was deferred: it would add a cross-package interface while leaving both renderers
+  the dashboard's shortcut controls. Even a partial extraction (sharing only the CSS and paint helper) was deferred: it would add a cross-package interface while leaving both renderers
   (watcher, 2026-11-14 08:56, MENU-HOME-TAB).
 
 ## An included menu can show its sections directly (A322, #1372): left open
 
 Left open:
 
-- A folder's fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
 - A home shortcut to a menu that is included in two lists of one menu opens the top-level copy,
   else the copy indexed last.
 
@@ -848,7 +846,7 @@ _2026-11-24: Set menus are to have a page of their own beside Menus, approved by
 
 _2026-11-24: Menus and set menus use permanent Delete. Products and variants still need their own Delete slice before the Set menus page. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
+_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 

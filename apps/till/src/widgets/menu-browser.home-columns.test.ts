@@ -12,16 +12,13 @@ afterEach(cleanupWidgets);
 
 const cases = [360, 390].flatMap((width) =>
   [2, 3].flatMap((columns) =>
-    (["colours", "thumbnails"] as const).flatMap((tiles) =>
-      (["light", "dark"] as const).map((theme) => ({
-        width,
-        columns,
-        tiles,
-        theme,
-        handheld: true,
-        wantedTracks: columns,
-      })),
-    ),
+    (["light", "dark"] as const).map((theme) => ({
+      width,
+      columns,
+      theme,
+      handheld: true,
+      wantedTracks: columns,
+    })),
   ),
 );
 
@@ -29,7 +26,6 @@ cases.push(
   ...(["light", "dark"] as const).map((theme) => ({
     width: 1024,
     columns: 4,
-    tiles: "colours" as const,
     theme,
     handheld: false,
     wantedTracks: 4,
@@ -40,7 +36,6 @@ cases.push(
   ...[360, 390].map((width) => ({
     width,
     columns: 6,
-    tiles: "colours" as const,
     theme: "light" as const,
     handheld: false,
     wantedTracks: 2,
@@ -48,8 +43,8 @@ cases.push(
 );
 
 it.each(cases)(
-  "fits $wantedTracks columns at $width px ($tiles, $theme, handheld=$handheld)",
-  async ({ width, columns, tiles, theme, handheld, wantedTracks }) => {
+  "fits $wantedTracks columns at $width px ($theme, handheld=$handheld)",
+  async ({ width, columns, theme, handheld, wantedTracks }) => {
     const locale = currentLocale();
     setLocale("es-ES");
     try {
@@ -80,7 +75,6 @@ it.each(cases)(
         vatClass: "reduced",
         category: null,
         allergens: null,
-        image: "photo.svg",
         color: "#256bb1",
       }));
       const measured = products[2]!;
@@ -93,7 +87,7 @@ it.each(cases)(
         precision: 3,
         hardwareUnit: "kg",
       };
-      if (tiles === "thumbnails") measured.allergens = { milk: {} };
+      measured.allergens = { milk: {} };
       measured.variants = ["12.50", "85.00"].map((unitPrice, index) => ({
         ...sellingValuesOf(measured),
         id: `v${index}`,
@@ -131,7 +125,7 @@ it.each(cases)(
         },
         home: {
           shortcuts: [],
-          handheld: { columns, tiles, order: "menu_first" },
+          handheld: { ...HOME_DISPLAY_DEFAULTS.handheld, columns, order: "menu_first" },
           till: { ...HOME_DISPLAY_DEFAULTS.till, columns },
         },
       };
@@ -150,21 +144,13 @@ it.each(cases)(
       host.style.paddingInline = "calc(var(--wt-space-5) + var(--wt-space-4))";
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
-      for (const image of grid.querySelectorAll<HTMLImageElement>("img")) {
-        image.src =
-          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'/%3E";
-        await image.decode();
-      }
       expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(wantedTracks);
       expect(grid.querySelectorAll(".tile")).toHaveLength(4);
-      expect(grid.querySelectorAll("img")).toHaveLength(tiles === "thumbnails" ? 3 : 0);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
         const box = tile.getBoundingClientRect();
         expect(box.width).toBeGreaterThanOrEqual(handheld ? 44 : 104);
         expect(box.height).toBeGreaterThanOrEqual(44);
-        for (const content of tile.querySelectorAll<HTMLElement>(
-          ".name, .price, .kind, wt-icon, img",
-        )) {
+        for (const content of tile.querySelectorAll<HTMLElement>(".name, .price, .kind, wt-icon")) {
           const bounds = content.getBoundingClientRect();
           expect(bounds.left).toBeGreaterThanOrEqual(box.left);
           expect(bounds.right).toBeLessThanOrEqual(box.right);
@@ -173,7 +159,7 @@ it.each(cases)(
         if (tile.dataset.kind === "product") {
           expect(tile.querySelector(".price")!.textContent).toContain("12,50");
           const name = tile.querySelector<HTMLElement>(".name")!;
-          if (tiles === "thumbnails" && tile.hasAttribute("data-nutrition")) {
+          if (name.textContent === measured.name) {
             const text = document.createRange();
             text.selectNodeContents(name);
             for (const line of text.getClientRects()) {

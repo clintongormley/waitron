@@ -548,7 +548,7 @@ menu and the order sit side by side.
 
 Use the **Menu** field beside **Search** to switch between the menus available now.
 Tap a tile with a folder to open that section. A price range shows what the different variants
-cost. Tap the product to choose one and see its price. Look for the unit on prices such as €89.00/kg.
+cost. Tap the product to choose one and see its price.
 
 ## Set menus {#set-menus}
 

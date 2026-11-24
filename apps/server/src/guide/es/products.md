@@ -357,8 +357,7 @@ posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
 Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir
 cómo se muestran sus botones. Busca el icono de carpeta para abrir una sección en la vista
-previa. Si un producto muestra un intervalo, son los precios de sus variantes. La unidad aparece
-en precios como 89,00 €/kg.
+previa. Si un producto muestra un intervalo, son los precios de sus variantes.
 
 Elige **Caja registradora** para consultar la **Vista previa del
 pedido de mesa**: representa una caja tan ancha como el marco y reserva espacio para el pedido.

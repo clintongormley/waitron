@@ -1,6 +1,5 @@
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
-import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
   LitElement,
   css,
@@ -44,7 +43,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
-import type { DocumentTile, HomeTileMode } from "@waitron/shared";
+import type { DocumentTile } from "@waitron/shared";
 import type {
   DocumentMember,
   FrozenOffer,
@@ -94,10 +93,6 @@ const KEY_STEPS: Record<string, number> = {
   ArrowRight: 1,
   ArrowDown: 1,
 };
-
-function thumb(image: string): TemplateResult {
-  return html`<img class="thumb" src=${liveMediaImage(image, "till")} alt="" />`;
-}
 
 const paints = new Map<string, string>();
 
@@ -242,30 +237,6 @@ export class DeviceHomePreview extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
         grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
-      }
-
-      .thumb {
-        display: block;
-        width: 100%;
-        aspect-ratio: 4 / 3;
-        object-fit: cover;
-        border-radius: var(--wt-radius-sm);
-      }
-
-      .section-photo {
-        position: relative;
-        width: 100%;
-      }
-
-      wt-icon.folder-badge {
-        box-sizing: content-box;
-        position: absolute;
-        inset-block-start: var(--wt-space-1);
-        inset-inline-start: var(--wt-space-1);
-        padding: var(--wt-space-1);
-        border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
       }
 
       .section-kind {
@@ -718,7 +689,6 @@ export class DeviceHomePreview extends LitElement {
     tile: HomeTile,
     index: PreviewIndex,
     placed: Placed,
-    mode: HomeTileMode,
   ): { face: TemplateResult; name: string } {
     const { ref } = tile;
     if (!tile.reachable || ref.kind === "missing") {
@@ -733,7 +703,7 @@ export class DeviceHomePreview extends LitElement {
       };
     }
     const opens = ref.kind === "section" ? [{ sectionId: ref.sectionId, copy: 0 }] : [];
-    const face = this.#tile(ref, opens, index, mode);
+    const face = this.#tile(ref, opens, index);
     if (face === nothing)
       return {
         name: tile.name,
@@ -751,14 +721,9 @@ export class DeviceHomePreview extends LitElement {
     return { name, face };
   }
 
-  #editCell(
-    tile: HomeTile,
-    index: PreviewIndex,
-    placed: Placed,
-    mode: HomeTileMode,
-  ): TemplateResult {
+  #editCell(tile: HomeTile, index: PreviewIndex, placed: Placed): TemplateResult {
     const { memberId } = tile;
-    const { face, name } = this.#shortcutFace(tile, index, placed, mode);
+    const { face, name } = this.#shortcutFace(tile, index, placed);
     return html`<div
       class="shortcut"
       data-member-id=${memberId}
@@ -792,16 +757,11 @@ export class DeviceHomePreview extends LitElement {
     </div>`;
   }
 
-  #editCells(
-    list: HomeTile[],
-    index: PreviewIndex,
-    placed: Placed,
-    mode: HomeTileMode,
-  ): TemplateResult {
+  #editCells(list: HomeTile[], index: PreviewIndex, placed: Placed): TemplateResult {
     return html`${repeat(
       this.#editable(list),
       (tile) => tile.memberId,
-      (tile) => this.#editCell(tile, index, placed, mode),
+      (tile) => this.#editCell(tile, index, placed),
     )}${ADD_TILES.map(
       ({ kind, label }) =>
         html`<wt-button
@@ -832,14 +792,14 @@ export class DeviceHomePreview extends LitElement {
     </div>`;
   }
 
-  #productTile(offer: FrozenOffer, mode: HomeTileMode): TemplateResult {
+  #productTile(offer: FrozenOffer): TemplateResult {
     const locale = currentLocale();
     const unit =
       offer.unit.id === EACH_UNIT_ID
         ? ""
         : unitPresentation(offer.unit, locale, currentContentLanguages()).abbreviation;
     const price = tilePrice(offer.unitPrice, offer.variants, unit, locale);
-    const fill = tileFill(mode, offer.image, offer.color);
+    const fill = tileFill(offer.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<div
       class="tile"
@@ -848,15 +808,14 @@ export class DeviceHomePreview extends LitElement {
       ?data-painted=${paint !== undefined}
     >
       <span class="label">
-        ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name">${offer.name}</span>
         <span class="price">${price}</span>
       </span>
     </div>`;
   }
 
-  #sectionTile(section: SectionNode, mode: HomeTileMode, opens: SectionStep[]): TemplateResult {
-    const fill = tileFill(mode, section.image, section.color);
+  #sectionTile(section: SectionNode, opens: SectionStep[]): TemplateResult {
+    const fill = tileFill(section.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
       class="tile"
@@ -868,14 +827,7 @@ export class DeviceHomePreview extends LitElement {
       }}
     >
       <span class="label">
-        ${
-          fill.kind === "image"
-            ? html`<span class="section-photo">
-                ${thumb(fill.image)}
-                <wt-icon class="folder-badge" name="folder" aria-hidden="true"></wt-icon>
-              </span>`
-            : html`<wt-icon name="folder" aria-hidden="true"></wt-icon>`
-        }
+        <wt-icon name="folder" aria-hidden="true"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
         <span class="section-kind">${t("home.tile_section")}</span>
       </span>
@@ -889,26 +841,24 @@ export class DeviceHomePreview extends LitElement {
     ref: DocumentTile | ReturnType<typeof shownMembers>[number],
     opens: SectionStep[],
     index: PreviewIndex,
-    mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       if (!index.sections.has(ref.sectionId)) return nothing;
       const section = "members" in ref ? ref : openedSection(ref.sectionId, index)!;
-      return this.#sectionTile(section, mode, opens);
+      return this.#sectionTile(section, opens);
     }
     const offer = index.products.get(ref.productId);
-    return offer === undefined ? nothing : this.#productTile(offer, mode);
+    return offer === undefined ? nothing : this.#productTile(offer);
   }
 
   #listTiles(
     list: ReturnType<typeof shownMembers>,
     path: SectionStep[],
     index: PreviewIndex,
-    mode: HomeTileMode,
   ): (TemplateResult | typeof nothing)[] {
     const opens = tilePaths(list, path);
-    return list.map((member, place) => this.#tile(member, opens[place]!, index, mode));
+    return list.map((member, place) => this.#tile(member, opens[place]!, index));
   }
 
   #home(
@@ -922,10 +872,9 @@ export class DeviceHomePreview extends LitElement {
         tile,
         tile.kind === "section" ? [{ sectionId: tile.sectionId, copy: 0 }] : [],
         index,
-        display.tiles,
       ),
     );
-    const members = this.#listTiles(index.home, [], index, display.tiles);
+    const members = this.#listTiles(index.home, [], index);
     const editing = this.shortcuts;
     const { blocks, divider } = arrangeHome(
       display.order,
@@ -938,7 +887,7 @@ export class DeviceHomePreview extends LitElement {
       const cells = !shortcutBlock
         ? members
         : editing !== null
-          ? this.#editCells(editing, index, placed, display.tiles)
+          ? this.#editCells(editing, index, placed)
           : shortcuts.map((cell) =>
               cell === nothing ? html`<span class="slot" aria-hidden="true"></span>` : cell,
             );
@@ -985,10 +934,7 @@ export class DeviceHomePreview extends LitElement {
           <li><span aria-current="location">${this.#sectionName(current)}</span></li>
         </ol>
       </nav>
-      ${this.#grid(
-        this.#listTiles(shownMembers(current.members), this.path, index, display.tiles),
-        display,
-      )}
+      ${this.#grid(this.#listTiles(shownMembers(current.members), this.path, index), display)}
     </section>`;
   }
 
@@ -1000,7 +946,7 @@ export class DeviceHomePreview extends LitElement {
         found.length === 0
           ? html`<p class="empty">${t("home.no_results")}</p>`
           : this.#grid(
-              found.map((offer) => this.#productTile(offer, display.tiles)),
+              found.map((offer) => this.#productTile(offer)),
               display,
             )
       }

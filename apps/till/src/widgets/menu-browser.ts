@@ -1,7 +1,6 @@
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
-import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import {
   LitElement,
@@ -23,7 +22,6 @@ import {
   Gestures,
 } from "@waitron/ui";
 import "./product-info.js";
-import { nutritionDietLabels } from "../diet-labels.js";
 import {
   centsToDecimal,
   copiesListing,
@@ -51,7 +49,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
-import type { DocumentMember, DocumentTile, HomeDisplay, HomeTileMode } from "@waitron/shared";
+import type { DocumentMember, DocumentTile, HomeDisplay } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -61,7 +59,6 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
-import { menuTileStyles } from "./menu-tile-styles.js";
 import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import {
@@ -123,10 +120,6 @@ function indexMenu(
     (id) => offers.get(id),
     (id) => copies.some(({ copy }) => copy.menuId === id),
   );
-}
-
-function thumb(image: string): TemplateResult {
-  return html`<img class="thumb" src=${liveMediaImage(image, "till")} alt="" />`;
 }
 
 const paints = new Map<string, string>();
@@ -287,7 +280,124 @@ export class TillMenuBrowser extends LitElement {
         --home-tile-min: calc(var(--wt-tap-min) * 1.5);
       }
 
-      ${menuTileStyles}
+      .section-kind {
+        ${visuallyHiddenStyles}
+      }
+
+      .tile,
+      .slot {
+        width: 100%;
+      }
+
+      .slot {
+        min-height: calc(var(--wt-tap-min) * 1.5);
+      }
+
+      .tile::part(button) {
+        position: relative;
+        height: 100%;
+        min-height: calc(var(--wt-tap-min) * 1.5);
+        padding: var(--wt-space-2);
+      }
+
+      .in-order {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-start: var(--wt-space-1);
+        min-inline-size: var(--wt-space-5);
+        block-size: var(--wt-space-5);
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        line-height: var(--wt-space-5);
+        text-align: center;
+      }
+      /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
+       never changes size when its first dish is added and its name stays centred. On a photo the
+       badge covers the photo's corner instead. */
+      .tile[data-counted]::part(button) {
+        padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
+      }
+      .in-order-words {
+        ${visuallyHiddenStyles}
+      }
+
+      .label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+        text-align: center;
+        overflow-wrap: break-word;
+      }
+
+      /* A centred column item is as wide as its longest word, so without this a word wider than
+       the tile would spill out of it instead of breaking. */
+      .label > * {
+        max-width: 100%;
+      }
+
+      .name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .name[lang] {
+        hyphens: auto;
+        /* No hyphen in a word under 8 letters, so a short word that fits a line stays whole
+         (menu-browser.home-columns.test.ts); a longer one can still be hyphenated where it would
+         fit on the next line. */
+        hyphenate-limit-chars: 8 auto auto;
+      }
+
+      .price,
+      .kind,
+      .sold-out,
+      .empty {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .tile[data-painted]::part(button) {
+        background: var(--tile-fill);
+        border-color: var(--tile-fill);
+        color: var(--tile-ink);
+      }
+
+      .tile[data-painted]:not([data-sold-out])::part(button):hover:not(:disabled) {
+        border-color: var(--tile-ink);
+      }
+
+      /* wt-icon sets its own text colour on its host, so it is named here as the labels are. */
+      .tile[data-painted] .price,
+      .tile[data-painted] .kind,
+      .tile[data-painted] .sold-out,
+      .tile[data-painted] wt-icon {
+        color: inherit;
+      }
+
+      /* Sold-out dishes still open information. */
+      .tile[data-sold-out]::part(button) {
+        opacity: 1;
+        background: var(--wt-color-surface-sunken);
+        border-color: var(--wt-color-border);
+        color: var(--wt-color-text);
+      }
+
+      /* Inset shadows take no layout width, so the labels stay centred. The text-coloured line
+       under the stripe keeps a stripe close to the tile's own fill visible. */
+      .tile[data-sold-out][data-painted]::part(button) {
+        box-shadow:
+          inset var(--wt-space-1) 0 0 var(--tile-fill),
+          inset calc(var(--wt-space-1) + 1px) 0 0 var(--wt-color-text);
+      }
+
+      .tile[data-sold-out] .price,
+      .tile[data-sold-out] .sold-out {
+        color: inherit;
+      }
 
       .empty {
         margin: 0;
@@ -860,13 +970,12 @@ export class TillMenuBrowser extends LitElement {
     return [...found, ...search(customerNamed).filter((result) => !shown.has(result))];
   }
 
-  #resultTile(result: SearchResult, mode: HomeTileMode, menuId: string): TemplateResult {
+  #resultTile(result: SearchResult, menuId: string): TemplateResult {
     if (result.kind === "product")
-      return this.#productButton(result.product, mode, () => this.#pick(result.product));
+      return this.#productButton(result.product, () => this.#pick(result.product));
     if (result.kind === "set_menu") return this.#setMenuTile(result.row);
     return this.#sectionButton(
       result.section,
-      mode,
       result.disabled
         ? undefined
         : () => {
@@ -888,14 +997,11 @@ export class TillMenuBrowser extends LitElement {
     );
   }
 
-  #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
+  #productButton(product: TillProduct, onTap: () => void): TemplateResult {
     const price = productTilePrice(product);
     const sellable = hasSomethingToSell(product);
-    const fill = tileFill(mode, product.image, product.color);
+    const fill = tileFill(product.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
-    const marked =
-      Object.keys(product.allergens ?? {}).length > 0 ||
-      nutritionDietLabels(product.diet, product.dietaryDeclarations).length > 0;
     const inOrder = this.inOrder?.get(product.id) ?? 0;
     return html`<wt-button
       class="tile"
@@ -903,7 +1009,6 @@ export class TillMenuBrowser extends LitElement {
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
       ?data-sold-out=${!sellable}
-      ?data-nutrition=${marked}
       ?data-counted=${this.inOrder !== undefined}
       ?data-in-order=${inOrder > 0}
       @contextmenu=${(event: Event) => event.preventDefault()}
@@ -925,14 +1030,12 @@ export class TillMenuBrowser extends LitElement {
         }
       }}
     >
-      ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
       ${
         inOrder > 0
           ? html`<span class="in-order" data-in-order-count aria-hidden="true">${inOrder}</span>`
           : nothing
       }
       <span class="label">
-        ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name" lang=${currentContentLanguages().defaultLanguage}
           >${productName(product)}</span
         >
@@ -950,8 +1053,8 @@ export class TillMenuBrowser extends LitElement {
   }
 
   /** Without `onTap`, the section is one the diet filter emptied: greyed and not openable. */
-  #sectionButton(section: SectionNode, mode: HomeTileMode, onTap?: () => void): TemplateResult {
-    const fill = tileFill(mode, section.image, section.color);
+  #sectionButton(section: SectionNode, onTap?: () => void): TemplateResult {
+    const fill = tileFill(section.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     const filtered = onTap === undefined;
     return html`<wt-button
@@ -964,14 +1067,7 @@ export class TillMenuBrowser extends LitElement {
       @click=${onTap ?? nothing}
     >
       <span class="label">
-        ${
-          fill.kind === "image"
-            ? html`<span class="section-photo">
-                ${thumb(fill.image)}
-                <wt-icon class="folder-badge" name="menu-section" aria-hidden="true"></wt-icon>
-              </span>`
-            : html`<wt-icon name="menu-section" aria-hidden="true"></wt-icon>`
-        }
+        <wt-icon name="menu-section" aria-hidden="true"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
         <span class="section-kind">${t("menu.section")}</span>
         ${filtered ? html`<span class="kind">${t("menu.filtered_out")}</span>` : nothing}
@@ -986,7 +1082,6 @@ export class TillMenuBrowser extends LitElement {
     ref: DocumentTile | DocumentMember,
     opens: SectionStep[],
     index: MenuIndex,
-    mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "set_menu") {
@@ -997,26 +1092,25 @@ export class TillMenuBrowser extends LitElement {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
       if (index.sections.has(id))
-        return this.#sectionButton(own ?? openedSection(id, index)!, mode, () => this.#open(opens));
+        return this.#sectionButton(own ?? openedSection(id, index)!, () => this.#open(opens));
       const unfiltered = this.#unfilteredIndex(this.menu!);
       return unfiltered.sections.has(id)
-        ? this.#sectionButton(own ?? openedSection(id, unfiltered)!, mode)
+        ? this.#sectionButton(own ?? openedSection(id, unfiltered)!)
         : nothing;
     }
     const product = index.products.get(ref.productId);
     return product === undefined
       ? nothing
-      : this.#productButton(product, mode, () => this.#pick(product));
+      : this.#productButton(product, () => this.#pick(product));
   }
 
   #listTiles(
     list: readonly DocumentMember[],
     path: SectionStep[],
     index: MenuIndex,
-    mode: HomeTileMode,
   ): (TemplateResult | typeof nothing)[] {
     const opens = tilePaths(list, path);
-    return list.map((member, place) => this.#tile(member, opens[place]!, index, mode));
+    return list.map((member, place) => this.#tile(member, opens[place]!, index));
   }
 
   #home(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
@@ -1025,14 +1119,12 @@ export class TillMenuBrowser extends LitElement {
         tile,
         tile.kind === "section" ? [{ sectionId: tile.sectionId, copy: 0 }] : [],
         index,
-        display.tiles,
       ),
     );
     const members = this.#listTiles(
       shownMembers(menu.structure.members, this.setMenuCopies.length > 0),
       [],
       index,
-      display.tiles,
     );
     if (this.#heldMenuFolders().length > 0) members.push(this.#setMenuTile(undefined, true));
     const { blocks, divider } = arrangeHome(
@@ -1088,7 +1180,6 @@ export class TillMenuBrowser extends LitElement {
           shownMembers(current.members, this.setMenuCopies.length > 0),
           this.path,
           index,
-          display.tiles,
         ),
         display,
       )}
@@ -1193,7 +1284,7 @@ export class TillMenuBrowser extends LitElement {
       .filter((other) => other.found.length > 0);
     const tiles = (results: SearchResult[], menuId: string) =>
       this.#grid(
-        results.map((result) => this.#resultTile(result, display.tiles, menuId)),
+        results.map((result) => this.#resultTile(result, menuId)),
         display,
       );
     const empty = (text: string) => html`<p class="empty">${text}</p>`;

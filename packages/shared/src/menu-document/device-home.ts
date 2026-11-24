@@ -59,18 +59,9 @@ export function arrangeHome(
   return { blocks, divider: blocks.length === 2 };
 }
 
-export type TileFill =
-  { kind: "image"; image: string } | { kind: "color"; color: string } | { kind: "neutral" };
+export type TileFill = { kind: "color"; color: string } | { kind: "neutral" };
 
-/** A tile's fill: in Thumbnails mode its image, else its colour; in Colours mode its colour; else
- * neutral. A colour is checked because it lands in a style attribute. */
-export function tileFill(
-  mode: HomeTileMode,
-  image: string | null | undefined,
-  color: string | null | undefined,
-): TileFill {
-  if (mode === "thumbnails" && typeof image === "string" && image !== "")
-    return { kind: "image", image };
+export function tileFill(color: string | null | undefined): TileFill {
   return isStoredColor(color) ? { kind: "color", color } : { kind: "neutral" };
 }
 

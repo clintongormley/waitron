@@ -360,34 +360,6 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("Thumbnails, with an imaged product, an imaged section and a neutral tile, has no violations", async () => {
-    const pictured: DocumentMember = {
-      kind: "section",
-      sectionId: "sec-pictured",
-      internalName: "pictured-internal",
-      names: { en: "Pictured (EN)" },
-      image: "drinks.webp",
-      color: null,
-      members: [member("cola")],
-    };
-    const { el, host } = await mount(theme, {
-      menu: {
-        ...menu,
-        structure: { members: [member("photo"), pictured, member("cana")] },
-        home: {
-          ...menu.home,
-          shortcuts: [],
-          till: { ...menu.home.till, tiles: "thumbnails" },
-        },
-      },
-      products: [...products, { ...product("photo", "Photo"), image: "cafe.webp" }],
-    });
-    expect(button(el, "Photo").querySelector("img")).not.toBeNull();
-    expect(button(el, "Pictured (EN)").querySelector("img")).not.toBeNull();
-    expect(button(el, "Caña").querySelector("img")).toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
   it("a handheld at 3 columns has no violations", async () => {
     const { el, host } = await mount(theme, {
       handheld: true,

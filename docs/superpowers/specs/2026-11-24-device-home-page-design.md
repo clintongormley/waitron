@@ -27,19 +27,16 @@ deciding. The owner chose none, asked about putting sections on a row of their o
 
 ### The settings
 
-- A menu has **one** home page display for every device: what tiles show, and what is shown first.
-  The Handheld / Till choice and both column settings go, in the schema, the published document, the
-  save and transfer requests and the dashboard.
+- A menu has **one** home page display for every device, with a choice of what is shown first.
+  The Handheld / Till choice, column settings and stored tile mode go from the schema, published
+  document, save and transfer requests and dashboard. Piece 1 removes the tile mode control.
 - **Columns come from the layout**, by one rule shared by the till and the dashboard's preview
   (`HOME_GRID_COLUMNS`): about 3 on a phone (360 and 390 px wide), about 6 on a 1280 px counter till's
   menu area (792 px), fewer on a small tablet, and no more than about 6 or 7 on a large one, because
   tiles grow there. A minimum tile width of about 15% of the grid, between about 100 and 160 px, gave
   those numbers on paper; the lane measures it, at the larger text sizes too.
-- Tiles show **Colours** or **Photos** (was Thumbnails). **Shown first** is Shortcuts or Full menu (was
-  "After search", "Device Home Page first" / "Menu first"). Both are `wt-segmented-control`, in a row
-  above the page. On a phone they stack, each with its label above and filling the width in two equal
-  halves, so they line up in any language (owner: "it would be good if they were the same width so they
-  line up on the phone, but difficult with different widths of text in different languages").
+- **Shown first** is a `wt-segmented-control` above the page, offering Shortcuts or Full menu. On a
+  phone the control fills the width in two equal halves, with its label above.
 
 ### The tab
 
@@ -59,9 +56,11 @@ deciding. The owner chose none, asked about putting sections on a row of their o
 
 ### Tiles, on the till and in the dashboard
 
-- The word **Section** goes from section tiles; the folder icon stays. With a photo, the folder is a
-  small badge on it, so a section and a product differ. The tile's accessible name keeps "section". The
-  till's "Nothing matches the filter" line stays.
+- The owner said “i think we drop the photos, and the icon” on 24 November (watcher's 19:37 note in
+  Lane F's `questions.md`). Tiles use colour or the neutral fill and centre their names. Photo
+  display for guests follows the [guest-menu design](2026-11-12-a670-guest-menu-design.md). The
+  till's diet filter, “Nothing matches the filter” notice and long-press information stay available.
+- A folder identifies a section visually. The tile's accessible name keeps “Section”.
 - A product with variants shows the **range** of the prices its variants have on this menu, or one price
   when they are equal. Sold-out variants count in the range. The owner confirmed on 24 November
   (“i think full is fine”, relayed by the watcher at 19:33 in Lane F's `questions.md`). In a set
@@ -80,15 +79,15 @@ Spanish. Rewrite, not append to, the Device Home Page paragraphs of
 
 ## Delivery
 
-1. Tiles: the range, the unit and the folder, on the till and in the preview. Small, and can land
-   before anything else.
-2. One display with no columns, and the joined buttons. It changes the menus schema and the published
-   document, so it needs a venue reset, said in the PR's first line.
+1. Tiles, on the till and in the preview. Show the range, the unit and the folder. Remove tile photos,
+   the tile mode control and the till's nutrition mark.
+2. One display without manual columns or the stored tile mode. It changes the menus schema and the
+   published document, so it needs a venue reset, said in the PR's first line.
 3. The tab: one page, one Add shortcuts, Cancel and Save. After the menu editor's Structure piece, whose
    bar and save it follows.
 
 Screenshots for the owner before landing each: the tab and a real till and handheld, 1440, 1280 and
-390 px, light and dark, English and Spanish, Colours and Photos, with and without shortcuts.
+390 px, light and dark, English and Spanish, with and without shortcuts.
 
 ## Not in this work
 

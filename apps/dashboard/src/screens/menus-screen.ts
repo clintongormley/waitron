@@ -95,7 +95,6 @@ import {
   HOME_COLUMN_RANGE,
   HOME_DEVICES,
   HOME_ORDERS,
-  HOME_TILE_MODES,
   formatMoney,
   type VatClass,
 } from "@waitron/shared";
@@ -197,7 +196,7 @@ const SHORTCUT_TARGET_REFUSALS = new Set([
   "menu_section.wrong_role",
 ]);
 
-const HOME_DISPLAY_FIELDS: readonly string[] = ["columns", "tiles", "order"];
+const HOME_DISPLAY_FIELDS: readonly string[] = ["columns", "order"];
 
 /** Every product and section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
@@ -3605,55 +3604,27 @@ export class MenusScreen extends LitElement {
       <p class="help" data-test="columns-note">
         ${t(device === "handheld" ? "home.columns_note_handheld" : "home.columns_note_till")}
       </p>
-      ${this.#homeChoice(
-        "tiles",
-        t("home.tiles"),
-        HOME_TILE_MODES.map((mode) => ({
-          value: mode,
-          label: t(mode === "colours" ? "home.tiles_colours" : "home.tiles_thumbnails"),
-        })),
-        display.tiles,
-        (value) => void this.#saveDisplay({ tiles: value as HomeDisplay["tiles"] }),
-      )}
-      ${this.#homeChoice(
-        "order",
-        t("home.order"),
-        HOME_ORDERS.map((order) => ({
-          value: order,
-          label: t(order === "home_first" ? "home.order_home_first" : "home.order_menu_first"),
-        })),
-        display.order,
-        (value) => void this.#saveDisplay({ order: value as HomeDisplay["order"] }),
-      )}`;
+      ${this.#homeOrder(display.order)}`;
   }
 
-  /** One display setting as a group of radios, its refusal beneath it. These radios and the slider
-   * bind through `live`: a refused change leaves the saved value unchanged, and without it the
-   * refused choice would stay showing once its save is answered. */
-  #homeChoice(
-    field: "tiles" | "order",
-    legend: string,
-    options: { value: string; label: string }[],
-    value: string,
-    change: (value: string) => void,
-  ) {
-    const error = this.homeFieldErrors[field];
-    const errorId = `home-${field}-error`;
+  #homeOrder(value: HomeDisplay["order"]) {
+    const error = this.homeFieldErrors.order;
+    const errorId = "home-order-error";
     return html`<fieldset aria-describedby=${ifDefined(error ? errorId : undefined)}>
-      <legend>${legend}</legend>
+      <legend>${t("home.order")}</legend>
       <div class="choices">
-        ${options.map(
-          (option) =>
+        ${HOME_ORDERS.map(
+          (order) =>
             html`<label
               ><input
                 type="radio"
-                name=${`home-${field}`}
-                value=${option.value}
-                .checked=${live(option.value === value)}
+                name="home-order"
+                value=${order}
+                .checked=${live(order === value)}
                 .disabled=${this.homePending !== null}
                 aria-invalid=${ifDefined(error ? "true" : undefined)}
-                @change=${() => change(option.value)}
-              />${option.label}</label
+                @change=${() => void this.#saveDisplay({ order })}
+              />${t(order === "home_first" ? "home.order_home_first" : "home.order_menu_first")}</label
             >`,
         )}
       </div>

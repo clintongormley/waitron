@@ -99,18 +99,13 @@ describe("arrangeHome", () => {
 });
 
 describe("tileFill", () => {
-  it("paints a stored colour in Colours mode and never shows an image there", () => {
-    expect(tileFill("colours", "a.webp", "#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
-    expect(tileFill("colours", "a.webp", null)).toEqual({ kind: "neutral" });
-  });
-  it("shows the image in Thumbnails mode, else the colour, else neutral", () => {
-    expect(tileFill("thumbnails", "a.webp", "#256bb1")).toEqual({ kind: "image", image: "a.webp" });
-    expect(tileFill("thumbnails", null, "#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
-    expect(tileFill("thumbnails", "", undefined)).toEqual({ kind: "neutral" });
+  it("paints a stored colour and otherwise uses the neutral fill", () => {
+    expect(tileFill("#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
+    expect(tileFill(null)).toEqual({ kind: "neutral" });
   });
   it("draws a malformed colour neutral, because it would land in a style attribute", () => {
     for (const color of ["red", "#B12525", "#b12", "x;background:url(y)"])
-      expect(tileFill("colours", null, color)).toEqual({ kind: "neutral" });
+      expect(tileFill(color)).toEqual({ kind: "neutral" });
   });
 });
 

@@ -587,8 +587,7 @@ al otro.
 
 Usa el campo **Carta** junto a **Buscar** para cambiar entre las cartas disponibles.
 Toca un botón con una carpeta para abrir esa sección. Un intervalo de precios indica cuánto
-cuestan las variantes. Toca el producto para elegir una y ver su precio. Busca la unidad en
-precios como 89,00 €/kg.
+cuestan las variantes. Toca el producto para elegir una y ver su precio.
 
 ## Menús {#set-menus}
 
