@@ -2,7 +2,11 @@ import type { ReportDialogCloud } from "@waitron/ui/src/components/wt-report-dia
 import type { BillSetMenuState, DishMove, ServedSetMenuCopy } from "@waitron/shared";
 import { rememberInvoiceEvidence } from "./invoice-evidence.js";
 import type { InvoiceEvidence } from "./invoice-evidence.js";
-import type { RecipientIdentifierType } from "@waitron/country-packs";
+import type {
+  CloudAddressOperation,
+  CloudAddressReply,
+  RecipientIdentifierType,
+} from "@waitron/country-packs";
 import type {
   AllergyCommand,
   AllergyMoveRead,
@@ -2989,6 +2993,10 @@ export class TillApi {
   /** A challenge for "Check the time": the box's time, valid for a few seconds, and `keepOffered`
    * while its start waits. `override` says an administrator signing in here asks; its PIN is
    * checked by the confirm. */
+  addressLookup(operation: CloudAddressOperation): Promise<CloudAddressReply> {
+    return this.#request("/api/address-lookup", "POST", operation);
+  }
+
   boxClockChallenge(override?: {
     personId: string;
     pin: string;

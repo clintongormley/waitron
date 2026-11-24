@@ -2033,6 +2033,10 @@ describe("a Restaurant profile in its own zones", () => {
       status: 409,
       body: { error: { code: "device_profile.no_service_zone", params: { profileId } } },
     });
+    expect(await send(cookie, "POST", "/api/address-lookup", { kind: "available" })).toEqual({
+      status: 200,
+      body: { available: false },
+    });
   });
 });
 

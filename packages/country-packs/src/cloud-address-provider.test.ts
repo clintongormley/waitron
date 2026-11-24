@@ -139,3 +139,26 @@ it("leaves the search hidden when Cloud says it is unavailable", async () => {
   expect(await cloudAddressProvider(read, () => "es")).toBeUndefined();
   expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
 });
+
+it("credits Google Maps on the address the provider resolved", async () => {
+  const provider = await cloudAddressProvider(
+    async (operation) => {
+      if (operation.kind === "available") return { available: true };
+      if (operation.kind === "suggest") return { candidates: [{ text: "Main Street 2" }] };
+      return {
+        fields: {
+          addressLine1: "Main Street 2",
+          addressLine2: null,
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+          countryCode: "ES",
+        },
+      };
+    },
+    () => "en",
+  );
+  await provider!.suggest({ query: "Main", countryCode: "ES", sessionToken: "open" });
+  const result = await provider!.resolve({ suggestionId: "Main Street 2", sessionToken: "open" });
+  expect(result).toMatchObject({ lines: ["Main Street 2"], attribution: "Google Maps" });
+});

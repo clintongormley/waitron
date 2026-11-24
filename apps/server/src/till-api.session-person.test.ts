@@ -101,6 +101,7 @@ const BLIND: readonly { route: string; class: Class; reason: string }[] = [
 /** A valid body for each route that refuses `"{}"` before it reads the sign-in, so the walk reaches
  * that read; every walk sends the same one. */
 const BODIES: Readonly<Record<string, () => unknown>> = {
+  "POST /api/address-lookup": () => ({ kind: "available" }),
   // A fresh person each time, so no two sign-in attempts share a PIN throttle entry.
   "POST /api/session": () => ({ personId: randomUUID(), pin: "1234" }),
 };

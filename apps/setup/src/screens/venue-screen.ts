@@ -391,6 +391,7 @@ export class SetupVenueScreen extends LitElement {
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   /** Address suggestions; without one the address search fields stay hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  @state() private addressCredits: Partial<Record<AddressSearch, string>> = {};
 
   constructor() {
     super();
@@ -524,6 +525,7 @@ export class SetupVenueScreen extends LitElement {
         return (Object.keys(left) as ComparableKey[]).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
+        this.addressCredits = {};
         this.staffLanguage = form.staffLanguage;
         this.#demoVenueNameSource = form.demoVenueNameSource;
         this.values = form.values;
@@ -716,6 +718,7 @@ export class SetupVenueScreen extends LitElement {
   /** So an address still on its way cannot overwrite what the person typed or switched. */
   #cancelAddressSearch(which: AddressSearch | undefined): void {
     if (which === undefined) return;
+    this.addressCredits = { ...this.addressCredits, [which]: undefined };
     this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
   }
 
@@ -728,6 +731,7 @@ export class SetupVenueScreen extends LitElement {
       return;
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
+    this.addressCredits = { ...this.addressCredits, [which]: address.attribution };
     const area = areaOfChosenAddress(pack, address);
     const [addressLine1 = "", ...later] = address.lines;
     const rest = later.filter((line) => line.trim() !== "");
@@ -785,6 +789,7 @@ export class SetupVenueScreen extends LitElement {
   #onCountry(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const country = event.detail.value;
+    this.addressCredits = {};
     const pack = getVenueSetupCountryPack(country);
     this.values = {
       ...this.values,
@@ -1036,6 +1041,7 @@ export class SetupVenueScreen extends LitElement {
       },
     };
     dispatchSetupPatch(this, patch);
+    this.addressCredits = {};
     this.#baseline = this.#snapshot(this.#current());
     this.#scope?.commit(this.#baseline);
 
@@ -1078,6 +1084,7 @@ export class SetupVenueScreen extends LitElement {
       class="field"
       data-test=${`${which}-lookup`}
       name=${`${which}-search`}
+      .appliedAttribution=${this.addressCredits[which]}
       .provider=${pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
       label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}

@@ -42,6 +42,7 @@ function privacyNotice(document: ReceiptDocumentInput, privacy: InvoiceEmailPriv
   const venue = (document.result.issuer ?? document.issuer).venueName;
   return [
     (privacy.taxRecord ? words.purposeWithRecord : words.purpose).replace("{venue}", () => venue),
+    words.addressSearch,
     words.contact.replace("{contacts}", () => contacts.join(", ")),
   ].join("\n");
 }

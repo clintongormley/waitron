@@ -20,6 +20,8 @@ export interface CloudAddressReply {
   };
 }
 
+const attribution = "Google Maps";
+
 export async function cloudAddressProvider(
   lookup: (operation: CloudAddressOperation) => Promise<CloudAddressReply>,
   language: () => "en" | "es",
@@ -41,7 +43,7 @@ export async function cloudAddressProvider(
         return (candidates ?? []).map(({ text }) => ({
           id: text,
           label: text,
-          secondaryLabel: "Google Maps",
+          secondaryLabel: attribution,
         }));
       } catch (error) {
         if (
@@ -61,6 +63,7 @@ export async function cloudAddressProvider(
         throw new Error("Incomplete address fields");
       const area = findAdministrativeArea(spain, fields.province);
       return {
+        attribution,
         lines: fields.addressLine2
           ? [fields.addressLine1, fields.addressLine2]
           : [fields.addressLine1],

@@ -193,6 +193,7 @@ export class VenueDetailsPanel extends LitElement {
   @state() private registeredAddressProvider?: AddressLookupProvider;
   #registeredAddressLoad?: Promise<AddressLookupProvider | undefined>;
   @state() private cloudAddressProvider?: AddressLookupProvider;
+  @state() private addressAttribution?: string;
   @state() private model?: VenueDetailsModel;
   @state() private draft?: VenueDetailValues;
   @state() private submitting = false;
@@ -340,6 +341,7 @@ export class VenueDetailsPanel extends LitElement {
     this.#expected = { ...this.model.details };
     this.draft = { ...this.model.details };
     this.refusedAddress = undefined;
+    this.addressAttribution = undefined;
     this.errors = {};
     this.#feedback.reset();
     this.actionError = "";
@@ -365,6 +367,7 @@ export class VenueDetailsPanel extends LitElement {
       equal: (a, b) => Object.keys(venueDetailPatch(a, b)).length === 0,
       restore: (value) => {
         this.#cancelAddressSearch();
+        this.addressAttribution = undefined;
         this.draft = value;
         this.errors = {};
         this.actionError = "";
@@ -536,7 +539,10 @@ export class VenueDetailsPanel extends LitElement {
   }
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    if (SEARCH_FILLS.includes(field)) this.#cancelAddressSearch();
+    if (SEARCH_FILLS.includes(field)) {
+      this.#cancelAddressSearch();
+      this.addressAttribution = undefined;
+    }
     this.#apply({ [field]: event.detail.value });
   }
   /** So an address still on its way cannot overwrite what the person typed or restored. */
@@ -555,6 +561,7 @@ export class VenueDetailsPanel extends LitElement {
     else if (chosen && chosen.code !== current?.code) this.refusedAddress = "province";
     else {
       this.refusedAddress = undefined;
+      this.addressAttribution = address.attribution;
       const [addressLine1 = "", ...rest] = address.lines;
       this.#apply({
         addressLine1,
@@ -758,6 +765,7 @@ export class VenueDetailsPanel extends LitElement {
     return html`<wt-address-lookup
       class="field"
       name="address-search"
+      .appliedAttribution=${this.addressAttribution}
       .provider=${this.addressProvider ?? this.cloudAddressProvider}
       country-code=${model.issuer.country}
       label=${t("venue_details.address_lookup.label")}

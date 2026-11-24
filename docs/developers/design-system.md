@@ -3993,12 +3993,15 @@ tree; the same reference inside the shadow root did describe it).
 #### Addresses
 
 A form that asks for a postal address puts `wt-address-lookup` above its address fields (the owner's ask,
-2026-10-28; this shape is A1171's design, flagged to the owner). The search is hidden until the form is handed an address provider; with none,
-the form is its manual fields alone. The dashboard checks Cloud when you open an eligible Spanish
-venue or registered address form. Choosing a suggestion fills
-the form's own fields, which stay editable and keep their checks; the form's Save or Next is the
-confirmation. Address line 2 is replaced only when the chosen address has a second line. An
-address in another country fills nothing, and the form says why on the search's own line. The
+2026-10-28; this shape is A1171's design, flagged to the owner). The search appears when the form
+has a provider. The dashboard checks Cloud when you open an eligible Spanish venue or registered
+address form. The till shows its recipient fields while it checks Cloud for a Spanish address.
+Choosing a suggestion fills the form's own fields, which stay editable and keep their checks.
+The form's Save or Next is the confirmation. Google Maps appears in the suggestions and above
+the filled address fields. The credit on filled fields stays if the provider becomes unavailable.
+An address edit, reset or successful save clears it. Setup and the dashboard replace address
+line 2 only when the chosen address has a second line. An address in another country fills
+nothing, and the form says why on the search's own line. The
 setup venue screen takes the province from the address's area code, else its postcode; the
 dashboard's Venue card keeps the stored province. It uses the same area code or postcode lookup
 and refuses choices in a different province by comparing province codes. The card offers search
@@ -4016,8 +4019,8 @@ rule (`apps/server/src/registered-address-check.ts`).
 Setup opens with the switch on unless a different line was saved; the dialog opens with it on
 only when the saved line is the venue's address. Choosing a suggestion fills the parts, as for
 the venue's address, and takes the province from the address's area code, else its postcode.
-In setup, a chosen suggestion also turns the switch off. The till's invoice recipient dialog asks in the country chosen
-below its fields, which its label names, and fills its one street line with every line of the
+In setup, a chosen suggestion also turns the switch off. The till's invoice recipient dialog
+names the address country in its search label and fills its one street line with every line of the
 address, joined by commas, so a typed floor or unit is replaced; the province is the comma-free
 name of the area Waitron knows for the address's area code, else its postcode, and is emptied when
 Waitron knows no area for the address. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its

@@ -104,6 +104,32 @@ function deferredProvider() {
 }
 
 describe("the invoice recipient dialog's address search", () => {
+  it("keeps the search hidden if a Spanish availability answer arrives in another country", async () => {
+    let answer!: (reply: { available: boolean }) => void;
+    const availability = new Promise<{ available: boolean }>((resolve) => {
+      answer = resolve;
+    });
+    const lookupAddress = vi.fn(() => availability);
+    const el = await mountDialog({ lookupAddress });
+    await vi.waitFor(() => expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }));
+    await chooseCountry(el, "FR");
+    answer({ available: true });
+    await flush(el);
+    expect(lookup(el)!.hidden).toBe(true);
+    await fill(el, "address", "2 Rue de Rivoli");
+    expect(value(el, "address")).toBe("2 Rue de Rivoli");
+  });
+
+  it("leaves manual entry available when the box refuses the availability check", async () => {
+    const lookupAddress = vi.fn().mockRejectedValue({ code: "cloud.unavailable" });
+    const el = await mountDialog({ lookupAddress });
+    await vi.waitFor(() => expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }));
+    await flush(el);
+    expect(lookup(el)!.hidden).toBe(true);
+    await fill(el, "address", "Calle Mía 5");
+    expect(value(el, "address")).toBe("Calle Mía 5");
+  });
+
   it("is hidden without a provider, so the dialog is its manual fields alone", async () => {
     const el = await mountDialog({});
     expect(lookup(el)!.hidden).toBe(true);

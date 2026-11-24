@@ -150,6 +150,12 @@ For example, a French address can be **2 Main Street**, **Paris**, **France**, w
 or province. Do not add the country name to the street. The printed invoice and till ticket name
 it in the receipt language. Order details name it in your screen language.
 
+For a Spanish address, use **Find the address** when it appears in the full-invoice window.
+Type the street and number, choose a suggestion, then check or correct the filled fields before
+you save. Press Enter if suggestions stop updating as you type. Waitron Cloud sends the search
+text and the suggestion you choose to Google Maps. You can type the address by hand in the fields
+below the search.
+
 At the counter, choose **Full invoice** before **Pay**. Paying the order in full issues the
 invoice. Placing a counter order alone does not issue an invoice.
 

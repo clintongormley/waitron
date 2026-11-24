@@ -20,6 +20,7 @@ import type {
 import type { AdministrativeArea } from "@waitron/country";
 import {
   areaOfChosenAddress,
+  cloudAddressProvider,
   countryNameFor,
   getCountryPack,
   RECIPIENT_COUNTRY_CODES,
@@ -28,6 +29,8 @@ import {
   recipientAddressErrors,
   composeRecipientAddress,
   recipientAddressFields,
+  type CloudAddressOperation,
+  type CloudAddressReply,
   type RecipientAddressDraft,
   type RecipientIdentifier,
   type RecipientIdentifierType,
@@ -133,6 +136,12 @@ export class TillInvoiceRecipientDialog extends LitElement {
   confirmedAddress?: RememberedAddress;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  @property({ attribute: false }) lookupAddress?: (
+    operation: CloudAddressOperation,
+  ) => Promise<CloudAddressReply>;
+  @state() private cloudProvider?: AddressLookupProvider;
+  @state() private addressAttribution?: string;
+  #addressRequest?: object;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
   @property({ attribute: false }) offerSimplified = false;
   @state() private attempted = false;
@@ -263,6 +272,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         if (scope?.isDirty()) return false;
       }
       this.active = false;
+      this.addressAttribution = undefined;
       scope?.dispose();
       this.#scope = undefined;
       this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.closeAfter("saved");
@@ -270,7 +280,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     };
   }
 
-  override willUpdate(changed: PropertyValues<this>): void {
+  override willUpdate(changed: PropertyValues): void {
     if (
       changed.has("deliveryOptions") &&
       this.#baseline !== undefined &&
@@ -279,7 +289,16 @@ export class TillInvoiceRecipientDialog extends LitElement {
       this.medium = this.#openingMedium();
       this.#scope?.changed();
     }
-    if (!this.isConnected || !this.active || this.#scope) return;
+    if (!this.isConnected || !this.active) return;
+    if (this.#scope) {
+      if (
+        changed.has("countryCode") ||
+        changed.has("lookupAddress") ||
+        changed.has("addressProvider")
+      )
+        this.#readAddressProvider();
+      return;
+    }
     if (this.#baseline === undefined) {
       this.medium =
         !this.staged && this.savedDelivery === undefined && this.#printer() !== null
@@ -329,15 +348,35 @@ export class TillInvoiceRecipientDialog extends LitElement {
           };
           return canonical(a) === canonical(b);
         }),
-      restore: (value) => Object.assign(this, value),
+      restore: (value) => {
+        this.#cancelAddressSearch();
+        this.addressAttribution = undefined;
+        Object.assign(this, value);
+      },
     });
     this.#leave = coordinator;
     this.#scope = scope;
     scope.commit(this.#baseline);
+    this.#readAddressProvider();
+  }
+
+  #readAddressProvider(): void {
+    this.cloudProvider = undefined;
+    this.#addressRequest = undefined;
+    if (this.countryCode !== "ES" || this.addressProvider || !this.lookupAddress) return;
+
+    const request = (this.#addressRequest = {});
+    void cloudAddressProvider(this.lookupAddress, () => (currentLocale() === "es-ES" ? "es" : "en"))
+      .then((provider) => {
+        if (this.active && this.#addressRequest === request) this.cloudProvider = provider;
+      })
+      .catch(() => {});
   }
 
   override disconnectedCallback(): void {
     this.#opening = {};
+    this.#addressRequest = undefined;
+    this.addressAttribution = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -474,7 +513,10 @@ export class TillInvoiceRecipientDialog extends LitElement {
     if (field === "identifierType")
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
-    if (SEARCH_FILLS.has(field)) this.#cancelAddressSearch();
+    if (SEARCH_FILLS.has(field)) {
+      this.#cancelAddressSearch();
+      this.addressAttribution = undefined;
+    }
     if (field === "countryCode") this.foreignAddressCountry = undefined;
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
@@ -496,6 +538,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       return;
     }
     this.foreignAddressCountry = undefined;
+    this.addressAttribution = address.attribution;
     const pack = getCountryPack(this.countryCode);
     const area = pack === undefined ? undefined : areaOfChosenAddress(pack, address);
     this.streetAddress = address.lines.join(", ");
@@ -650,7 +693,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
         ></wt-input>
         <wt-address-lookup
           name="address-search"
-          .provider=${this.countryCode === "" ? undefined : this.addressProvider}
+          .appliedAttribution=${this.addressAttribution}
+          .provider=${this.countryCode === "" ? undefined : (this.addressProvider ?? this.cloudProvider)}
           country-code=${this.countryCode}
           label=${t("invoice.address_lookup.label").replace("{country}", () =>
             countryNameFor(this.countryCode, currentLocale()),

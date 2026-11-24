@@ -113,3 +113,37 @@ it("opened with a server refusal but untouched, Save is quiet and the refusal st
   expect(await saveState(el)).toEqual(quiet);
   expect(bottom(el).error).toBe("The server could not be reached");
 });
+
+it("keeps the filled-address credit after a refused save and clears it after a manual edit", async () => {
+  const el = await mount();
+  const lookup = el.shadowRoot!.querySelector("wt-address-lookup")!;
+  const credit = () => lookup.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+  const sent = confirmations(el);
+  await type(el, "taxId", "12345678Z");
+  await type(el, "legalName", "Test Customer");
+  lookup.dispatchEvent(
+    new CustomEvent("wt-address-chosen", {
+      detail: {
+        address: {
+          lines: ["Main Street 2"],
+          locality: "Madrid",
+          postalCode: "28013",
+          countryCode: "ES",
+          attribution: "Google Maps",
+        },
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(credit()).toBe("Google Maps");
+  saveButton(el).click();
+  expect(sent).toHaveLength(1);
+  el.refusal = "Try again";
+  el.refusalField = "address";
+  await el.updateComplete;
+  expect(credit()).toBe("Google Maps");
+  await type(el, "address", "Main Street 3");
+  expect(credit()).toBeUndefined();
+});

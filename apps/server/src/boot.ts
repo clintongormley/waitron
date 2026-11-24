@@ -2949,6 +2949,7 @@ async function bootServer(
       devMode: config.devMode,
       deviceChooserEnabled,
       invoiceEmailAvailable: invoiceEmailAvailableIn,
+      addressLookup: { connection: cloudConnection, isPrimary: () => cloudServing() },
       testPages,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,

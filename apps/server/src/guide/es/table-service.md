@@ -173,6 +173,12 @@ opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 
 impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
 del pedido lo muestra en el idioma de tu pantalla.
 
+Para una dirección española, usa **Buscar la dirección** cuando aparezca en la ventana de factura
+completa. Escribe la calle y el número, elige una sugerencia y revisa o corrige los campos
+rellenados antes de guardar. Pulsa Intro si las sugerencias dejan de actualizarse al escribir.
+Waitron Cloud envía a Google Maps el texto de la búsqueda y la sugerencia que eliges. También
+puedes escribir la dirección a mano en los campos debajo del buscador.
+
 Cada factura completa muestra el domicilio fiscal de tu negocio. Si es incorrecto o está
 incompleto, corrígelo en **Ajustes del local → Datos del local**: elige **Cambiar domicilio
 fiscal** en la tarjeta **Negocio**. Si usas **Igual que la dirección del local**, corrige antes la dirección del

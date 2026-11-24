@@ -3,6 +3,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PinThrottle } from "@waitron/identity";
 import type { ModuleTimeRecordExport, FloorAnnotator, TableRemoval } from "@waitron/module";
 import type { PaymentProvider, CardProviderContribution } from "@waitron/payments";
+import type { AddressLookupAccess } from "./address-lookup-api.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -13,6 +14,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import type { TradingContext } from "./trading-context.js";
 
 export interface TillApiDeps {
+  addressLookup?: AddressLookupAccess;
   cloudEmergency?: () => { address: string } | null;
   paymentsEnabled?: boolean;
   exporter?: ModuleTimeRecordExport;

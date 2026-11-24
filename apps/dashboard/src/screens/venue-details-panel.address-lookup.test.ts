@@ -422,3 +422,14 @@ it("a new search with no results shows its own line in place of an earlier refus
   await search(el, "Nowhere street");
   await vi.waitFor(() => expect(status()).toBe("No address found. Type it below."));
 });
+
+it("credits the filled venue address until the person changes an address field", async () => {
+  const el = await editing(apiFor());
+  await choose(el, { ...MADRID, attribution: "Google Maps" });
+  const credit = () => lookup(el)!.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+  expect(credit()).toBe("Google Maps");
+  await typeInto(el, "venueName", "New House");
+  expect(credit()).toBe("Google Maps");
+  await typeInto(el, "addressLine1", "My street");
+  expect(credit()).toBeUndefined();
+});

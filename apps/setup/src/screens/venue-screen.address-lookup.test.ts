@@ -153,6 +153,25 @@ describe("the venue screen's address search", () => {
     });
   });
 
+  it("credits the two chosen addresses separately and clears the registered credit on the switch", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) });
+    const address = { ...MADRID, attribution: "Google Maps" };
+    const credit = (which?: string) =>
+      lookup(el, which)?.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+    await choose(el, address);
+    await type(el, "registeredSameAsVenue", "off");
+    await choose(el, address, "domicile-lookup");
+    expect(credit()).toBe("Google Maps");
+    expect(credit("domicile-lookup")).toBe("Google Maps");
+
+    await type(el, "registeredSameAsVenue", "on");
+    await type(el, "registeredSameAsVenue", "off");
+    expect(credit("domicile-lookup")).toBeUndefined();
+    expect(credit()).toBe("Google Maps");
+    await type(el, "addressLine1", "My street");
+    expect(credit()).toBeUndefined();
+  });
+
   it("keeps the person's own address line 2 when the chosen address has one line", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     await type(el, "addressLine2", "3º B");

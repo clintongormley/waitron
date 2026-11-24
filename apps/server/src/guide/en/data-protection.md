@@ -90,14 +90,17 @@ Copy and adapt the next paragraph:
 
 **Data protection.** _Your venue's legal name_ uses your name, tax number and address to issue
 this invoice and meet its tax duties, including sending the Tax Agency a record of it with your
-name and tax number. Your rights and more
-information: _your privacy email address_, _the address of your privacy page_.
+name and tax number. If staff search for your address, Waitron Cloud sends the search text and
+the selected suggestion to Google Maps. Your rights and more information: _your privacy email
+address_, _the address of your privacy page_.
 
 When Waitron emails a full invoice, the email carries this notice, with your venue's legal name
 and the privacy email and page from the **Privacy** card. The notice is in Spanish unless the
 invoice is in English, and has the part about the Tax Agency only for an invoice the box sends a
-record of. With neither the privacy email nor the page set, the email carries no notice. The email reaches the customer after staff have taken the
-details, so show the notice where they take them too, for example on a sign beside the till.
+record of. It includes the conditional sentence about address search even where search is off.
+With neither the privacy email nor the page set, the email carries no notice. The email reaches
+the customer after staff have taken the details, so show the notice where they take them too, for
+example on a sign beside the till.
 
 If you also want it on paper, you can type a short version into the receipt's **Footer message**. In
 **Departments and zones**, open the department and choose its **Receipts** tab. What you type there
@@ -322,7 +325,9 @@ details, and Waitron can email them the invoice.
 - Whose data: invoice customers who are people, including sole traders.
 - What data: name, tax number, address and country, and the email address an invoice was sent to.
 - Who receives it: the Tax Agency, which receives the customer's name and tax number, but not the
-  address, with each invoice record; your email provider, for each invoice you email, which carries
+  address, with each invoice record; Google Maps, which receives the search text and selected
+  suggestion from Waitron Cloud when staff use address search; your email provider, for each
+  invoice you email, which carries
   the invoice as a PDF with the customer's name, tax number and address; and your accountant, when
   you share the workbook from **Download for accountant (XLSX)** in **Sales & takings**. Its
   issued-invoices sheet includes the recorded customer name, tax number and address. The deferred

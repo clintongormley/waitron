@@ -97,6 +97,18 @@ test("stays hidden when the page around it gives it a display", async () => {
   expect(el.getBoundingClientRect().height).toBe(0);
 });
 
+test("keeps the applied address credit visible when the provider disappears", async () => {
+  const el = await mountLookup();
+  el.appliedAttribution = "Google Maps";
+  el.provider = undefined;
+  await el.updateComplete;
+
+  const credit = el.shadowRoot!.querySelector('[part="attribution"]')!;
+  expect(credit?.textContent).toBe("Google Maps");
+  expect(credit.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(input(el).getBoundingClientRect().height).toBe(0);
+});
+
 test("with a provider it shows a labelled search field", async () => {
   const el = await mountLookup();
   expect(el.hidden).toBe(false);

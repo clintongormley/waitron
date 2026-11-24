@@ -908,6 +908,19 @@ it("aligns the address search with the street field, below the switch and its hi
   expect(lookup.getBoundingClientRect().left).toBeCloseTo(street.left);
 });
 
+it("credits the filled registered address until the person switches back to the venue address", async () => {
+  const panel = await mountSearching(stubApi(VENUE));
+  await open(panel);
+  await turn(panel, false);
+  await choose(panel, { ...MADRID, attribution: "Google Maps" });
+  const credit = () =>
+    search(panel)?.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+  expect(credit()).toBe("Google Maps");
+  await turn(panel, true);
+  await turn(panel, false);
+  expect(credit()).toBeUndefined();
+});
+
 it("fills the parts from a chosen address, its second line into Line 2, and Save sends them joined", async () => {
   const api = stubApi();
   const panel = await mountSearching(api);

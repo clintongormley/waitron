@@ -603,6 +603,30 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(api.getInvoiceDeliveryOptions).not.toHaveBeenCalled();
   });
 
+  it("opens the invoice fields while the box checks for address suggestions", async () => {
+    let answer!: (reply: { available: boolean }) => void;
+    const availability = new Promise<{ available: boolean }>((resolve) => {
+      answer = resolve;
+    });
+    const addressLookup = vi.fn(() => availability);
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      addressLookup,
+    });
+    const order = await openTable(el);
+    emit(order, "choose-bill-invoice", { workingOrderId: "wo-4", revision: 7 });
+    await flush(el);
+
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    const search = form.shadowRoot!.querySelector("wt-address-lookup")!;
+    expect(form.shadowRoot!.querySelector('wt-input[name="address"]')).not.toBeNull();
+    expect(search.hidden).toBe(true);
+    expect(addressLookup).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
+    answer({ available: true });
+    await vi.waitFor(() => expect(search.hidden).toBe(false));
+  });
+
   it("saves a full-invoice recipient on a partly paid bill and shows the saved choice", async () => {
     const recipient = {
       taxId: "12345678Z",

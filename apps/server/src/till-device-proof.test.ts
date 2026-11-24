@@ -462,6 +462,7 @@ const actionRoutes = [
   ["POST", "/api/tables/:id/today/split-off", 401],
   ["POST", "/api/zones/:id/today/reset", 401],
   ["POST", "/api/zones/:id/today/update-layout", 401],
+  ["POST", "/api/address-lookup", 401],
   ["POST", "/api/working-orders", 401],
   ["PUT", "/api/working-orders/:id", 401],
   ["PUT", "/api/working-orders/:id/label", 401],

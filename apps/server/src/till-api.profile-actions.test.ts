@@ -209,6 +209,7 @@ const handingOver = (method: string, path: string): Row => [
 ];
 
 const ROUTES: readonly Row[] = [
+  ordering("POST", "/api/address-lookup"),
   ordering("PUT", `/api/service-zones/${id}/options/${id}/labels/${id}/availability`),
   ordering("PUT", `/api/service-zones/${id}/products/${id}/availability`),
   ["GET", `/api/device/stations/${id}/today`, "prepare-orders", forbidden("prepare-orders")],

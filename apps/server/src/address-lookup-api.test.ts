@@ -3,9 +3,15 @@ import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { endManagementSession } from "@waitron/identity";
+import { endManagementSession, endSession, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { setupPartyVenue } from "./testing/party-venue.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { mountTillApi } from "./till-api.js";
 import { ALL_MODULES } from "./modules.js";
 import type { CloudConnection } from "./cloud-client.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -114,4 +120,51 @@ it("offers manual entry without a Cloud connection and still validates requests"
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: { code: "cloud.request_invalid", params: {} } });
   }
+});
+
+it("lets a signed-in till ask Cloud and refuses the reply after sign-out", async () => {
+  const { backend, clock, cfg } = await setupPartyVenue(venue.db);
+  const [person] = await seedPersons(venue.db, {
+    displayName: "Cashier",
+    role: "staff",
+    pinHash: fixturePinHash("1234"),
+  });
+  const { token } = await withTransaction(venue.db, (tx) =>
+    loginWithPin(tx, { deviceId: cfg.origin.deviceId, personId: person!.id, pin: "1234" }),
+  );
+  const cookie = await sessionCookieForTest(venue.db, token);
+  const addressLookup = vi.fn<CloudConnection["addressLookup"]>(async () => ({ available: true }));
+  const app = new Hono();
+  mountTillApi(
+    app,
+    {
+      db: venue.db,
+      backend,
+      clock,
+      cfg,
+      admission: testTradingAdmission(),
+      secureCookies: false,
+      venueLocale: cfg.locale,
+      addressLookup: { connection: { addressLookup }, isPrimary: () => true },
+    },
+    () => {},
+  );
+  const post = () =>
+    app.request("/api/address-lookup", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(available),
+    });
+
+  const response = await post();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ available: true });
+  addressLookup.mockImplementationOnce(async (_input, authorize) => {
+    await withTransaction(venue.db, (tx) => endSession(tx, token));
+    await authorize();
+    return { available: true };
+  });
+  const signedOut = await post();
+  expect(signedOut.status).toBe(401);
+  expect(await signedOut.json()).toEqual({ error: { code: "session.required", params: {} } });
 });

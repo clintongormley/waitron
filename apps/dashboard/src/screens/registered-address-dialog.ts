@@ -105,6 +105,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   @property({ attribute: false }) venueAddress?: VenueDetailValues;
 
   @state() private foreignAddress = false;
+  @state() private addressAttribution?: string;
 
   #provinces?: { countryCode: string; options: { value: string; label: string }[] };
 
@@ -227,10 +228,11 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
 
   protected override reset(): void {
     this.foreignAddress = false;
-    this.#cancelAddressSearch();
+    this.typed();
   }
 
   protected override typed(): void {
+    this.addressAttribution = undefined;
     this.#cancelAddressSearch();
   }
 
@@ -246,6 +248,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     const pack = this.#pack();
     this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
     if (pack === undefined || this.foreignAddress) return;
+    this.addressAttribution = address.attribution;
     const area = areaOfChosenAddress(pack, address);
     const [street = "", ...later] = address.lines;
     const rest = later.filter((line) => line.trim() !== "");
@@ -263,6 +266,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   #addressSearch(busy: boolean, sameAsVenue: boolean): TemplateResult {
     return html`<wt-address-lookup
       name="domicile-search"
+      .appliedAttribution=${sameAsVenue ? undefined : this.addressAttribution}
       .provider=${sameAsVenue ? undefined : this.addressProvider}
       country-code=${this.countryCode}
       label=${t("venue_details.address_lookup.label")}

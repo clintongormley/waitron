@@ -215,6 +215,7 @@ export interface AddressSuggestion {
 }
 
 export interface ResolvedAddress {
+  readonly attribution?: string;
   readonly lines: readonly string[];
   readonly locality: string;
   readonly administrativeAreaCode?: string;

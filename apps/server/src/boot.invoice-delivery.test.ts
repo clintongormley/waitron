@@ -635,6 +635,7 @@ describe("invoice mail at trading boot", () => {
       expect(textPart(smtp.messages[0]!).split("\n\n").slice(1)).toEqual([
         [
           words.purpose.replace("{venue}", () => taxpayerRow!.legalName),
+          words.addressSearch,
           words.contact.replace(
             "{contacts}",
             () => "privacy@example.com, https://example.com/privacy",

@@ -1,10 +1,7 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
-import {
-  createErrorBoundary,
-  readRawJsonBody,
-  requireManagementSession,
-} from "@waitron/server-kit";
+import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { readAddressLookup } from "./cloud-address-lookup.js";
 import type { CloudConnection } from "./cloud-client.js";
@@ -18,16 +15,15 @@ export interface AddressLookupAccess {
 
 export function mountAddressLookupApi(
   app: Hono,
+  path: string,
   { connection, isPrimary }: AddressLookupAccess,
-  authorize: (sessionId: string) => Promise<void>,
+  authorize: (c: Context, passive: boolean) => Promise<unknown>,
+  authorizationStatuses: Record<string, ContentfulStatusCode>,
   log: Logger,
 ): void {
   const run = createErrorBoundary(
     {
-      "management_session.required": 401,
-      "management_session.expired": 401,
-      "person.suspended": 403,
-      "authorization.not_permitted": 403,
+      ...authorizationStatuses,
       "cloud.not_primary": 409,
       "cloud.not_configured": 409,
       "cloud.binding_conflict": 409,
@@ -39,7 +35,7 @@ export function mountAddressLookupApi(
     "cloud.failed",
   );
   app.post(
-    "/management-api/address-lookup",
+    path,
     (c, next) => {
       c.header("Cache-Control", "no-store");
       return next();
@@ -50,12 +46,11 @@ export function mountAddressLookupApi(
     }),
     (c) =>
       run(c, log, async () => {
-        const session = requireManagementSession(c);
-        const check = async () => {
-          await authorize(session);
+        const check = async (passive: boolean) => {
+          await authorize(c, passive);
           if (!isPrimary()) throw new AppError("cloud.not_primary", {});
         };
-        await check();
+        await check(false);
         if (
           c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json"
         )
@@ -65,7 +60,7 @@ export function mountAddressLookupApi(
           if (input.kind === "available") return c.json({ available: false });
           throw new AppError("cloud.not_configured", {});
         }
-        return c.json(await connection.addressLookup(input, check, c.req.raw.signal));
+        return c.json(await connection.addressLookup(input, () => check(true), c.req.raw.signal));
       }),
   );
 }

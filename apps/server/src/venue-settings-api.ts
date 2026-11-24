@@ -247,9 +247,14 @@ export function mountVenueSettingsApi(
   if (deps.addressLookup)
     mountAddressLookupApi(
       app,
+      "/management-api/address-lookup",
       deps.addressLookup,
-      async (sessionId) => {
-        await gated(sessionId, async () => {});
+      (c) => gated(requireManagementSession(c), async () => {}),
+      {
+        "management_session.required": 401,
+        "management_session.expired": 401,
+        "person.suspended": 403,
+        "authorization.not_permitted": 403,
       },
       log,
     );

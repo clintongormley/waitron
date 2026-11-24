@@ -13,6 +13,7 @@ export interface AddressLookupSuggestion {
 }
 
 export interface AddressLookupResult {
+  readonly attribution?: string;
   readonly lines: readonly string[];
   readonly locality: string;
   readonly administrativeAreaCode?: string;
@@ -106,14 +107,19 @@ export class WtAddressLookup extends LitElement {
         margin: var(--wt-space-1) 0 0;
       }
 
+      .field[hidden] {
+        display: none;
+      }
+
       .status:empty {
         margin: 0;
       }
     `,
   ];
 
-  /** Without one the field is hidden: the form around it is its manual fields alone. */
+  /** Without one, only the credit on an already filled address can be shown. */
   @property({ attribute: false }) provider?: AddressLookupProvider;
+  @property({ attribute: false }) appliedAttribution?: string;
   @property({ attribute: "country-code" }) countryCode = "";
   @property() label = "";
   @property() name = "";
@@ -145,7 +151,7 @@ export class WtAddressLookup extends LitElement {
   private readonly statusId = uniqueId("wt-address-lookup-status");
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    this.hidden = this.provider === undefined;
+    this.hidden = this.provider === undefined && !this.appliedAttribution;
     if (changed.has("message")) this.#messageCurrent = true;
     if (changed.has("provider") || changed.has("countryCode") || changed.has("disabled"))
       this.cancelSearch();
@@ -290,19 +296,24 @@ export class WtAddressLookup extends LitElement {
   }
 
   override render() {
+    const credit = this.appliedAttribution
+      ? html`<p class="status" part="attribution" role="status">${this.appliedAttribution}</p>`
+      : nothing;
     const inputId = this.name || this.inputId;
     const open = this.suggestions.length > 0;
     const line =
-      (this.#messageCurrent && this.message) ||
-      (this.notice === "none"
-        ? this.noResultsLabel
-        : this.notice === "unavailable"
-          ? this.unavailableLabel
-          : "");
+      this.provider &&
+      ((this.#messageCurrent && this.message) ||
+        (this.notice === "none"
+          ? this.noResultsLabel
+          : this.notice === "unavailable"
+            ? this.unavailableLabel
+            : ""));
     return html`
       <div
         class="field"
         part="field"
+        ?hidden=${!this.provider}
         data-label=${fieldLabelState({
           value: this.query,
           hint: "",
@@ -365,6 +376,7 @@ export class WtAddressLookup extends LitElement {
         )}
       </ul>
       <p id=${this.statusId} class="status" role="status">${line || nothing}</p>
+      ${credit}
     `;
   }
 }

@@ -372,13 +372,6 @@ streams to an S3 store that runs on the spare box"). The owner's idea: a till bo
 similar hardware, so it could also be a spare. Needs a design: how a second spare receives the
 stream, which spare takes over, and how alerts and the update order (A950) work with two.
 
-## A1171: address search on the till and privacy wording
-
-Connect the till's full-invoice window to address suggestions. Add Google's name beside the filled
-fields on all four forms, and explain the till search in `table-service.md`, `data-protection.md`
-and `apps/server/src/i18n/invoice-email-notice.ts` in English and Spanish.
-[Finish plan](../superpowers/plans/2026-11-24-address-lookup-finish.md)
-
 ## A1342: return a stopped box's records before reset
 
 **Automatic duplicate identification:** agree which returned invoices count as duplicates before
