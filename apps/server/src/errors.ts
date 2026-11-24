@@ -1498,8 +1498,9 @@ declare module "@waitron/shared" {
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
     /**
-     * A join's hello carried a malformed new-box identity (`parseHello` in `box-join-api.ts`). The
-     * new box's key is not echoed.
+     * A join's hello carried a malformed new-box identity, or a contact address that is plain http
+     * at a host other than this machine (`parseHello` in `box-join-api.ts`). The new box's key is
+     * not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
     /**

@@ -10,7 +10,7 @@ import { checkBackupSettings } from "./backup-env-writer.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { assertSafePrimaryUrl } from "./primary-url.js";
+import { assertSafePrimaryUrl, isEncryptedOrLoopback, isLoopbackHost } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
 
@@ -283,6 +283,10 @@ function openAt(
   handshakeLimitMs: number | undefined,
 ): Promise<IncomingMessage> {
   const https = url.protocol === "https:";
+  // A loopback name may be answered with any address, so plain http is judged by the one dialled.
+  if (!https && (isIP(address) === 0 || !isLoopbackHost(address))) {
+    return Promise.reject(new PlainHttpBoxAddress(url));
+  }
   return new Promise((resolve, reject) => {
     let connected = false;
     const req = (https ? request : httpRequest)(
@@ -375,6 +379,16 @@ async function firstToConnect(
   throw new NotConnected(failure);
 }
 
+/** A box address that would carry the request unencrypted across the network. */
+export class PlainHttpBoxAddress extends Error {
+  constructor(url: URL) {
+    super(
+      `refused to send to another box at ${url.origin}: only https, or plain http to this machine, may be used`,
+    );
+    this.name = "PlainHttpBoxAddress";
+  }
+}
+
 /**
  * Sends the request on the first connection to finish its handshake. Under a pinned authority only
  * a server holding a certificate that authority issued for the name finishes one, and the address
@@ -382,6 +396,7 @@ async function firstToConnect(
  * certificate goes to whichever server finishes first.
  */
 async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMessage> {
+  if (!isEncryptedOrLoopback(url)) throw new PlainHttpBoxAddress(url);
   const host = url.hostname.replace(/^\[|\]$/g, "");
   const checked =
     options.checked ?? (options.lookup === undefined ? checkedByDefault : new CheckedAddresses());
@@ -451,9 +466,9 @@ async function openHeard(
 }
 
 /**
- * One request to a box; `trust` applies to an https address, and plain http ignores it. A
- * `.local` host that no other box answers for is `mirror.peer_unresolved`, which names no host:
- * the caller names the box it was asking.
+ * One request to a box; `trust` applies to an https address, and a plain http one, which must be
+ * loopback, ignores it. A `.local` host that no other box answers for is `mirror.peer_unresolved`,
+ * which names no host: the caller names the box it was asking.
  */
 export async function boxExchange(
   url: URL,

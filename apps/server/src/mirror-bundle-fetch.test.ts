@@ -30,6 +30,7 @@ import {
   CheckedAddresses,
   CheckedAddressUnreached,
   isMirrorBundle,
+  PlainHttpBoxAddress,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import {
@@ -492,6 +493,140 @@ describe("boxExchange", () => {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
     }
+  });
+});
+
+describe("a box is sent nothing over plain http unless it is on this machine", () => {
+  const closers: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    while (closers.length > 0) await closers.pop()!();
+  });
+
+  async function plainServer() {
+    const asked: string[] = [];
+    const server = createHttpServer((req, res) => {
+      asked.push(req.url ?? "");
+      req.resume();
+      res.setHeader("content-length", "8");
+      res.end("answered");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closers.push(async () => {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    });
+    return { port: (server.address() as AddressInfo).port, asked };
+  }
+
+  const answering = (...addresses: string[]) =>
+    vi.fn<BoxLookup>(() => Promise.resolve({ addresses, remembered: false }));
+  const toLoopback = () => answering("127.0.0.1");
+
+  it("answers a plain http loopback address", async () => {
+    const { port, asked } = await plainServer();
+
+    const answer = await boxExchange(new URL(`http://127.0.0.1:${port}/x`), {
+      method: "GET",
+      trust: {},
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(asked).toEqual(["/x"]);
+  });
+
+  it("refuses a plain http address on the network before looking it up or connecting", async () => {
+    const { port, asked } = await plainServer();
+    const lookup = toLoopback();
+
+    const refusal = boxExchange(new URL(`http://box-abcd.waitron.local:${port}/x`), {
+      method: "POST",
+      trust: {},
+      signal: AbortSignal.timeout(5_000),
+      body: "{}",
+      lookup,
+    });
+
+    await expect(refusal).rejects.toBeInstanceOf(PlainHttpBoxAddress);
+    await expect(refusal).rejects.toThrow(
+      `refused to send to another box at http://box-abcd.waitron.local:${port}: only https, or plain http to this machine, may be used`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(lookup).not.toHaveBeenCalled();
+    expect(asked).toEqual([]);
+  });
+
+  it("refuses a download from a plain http address on the network, touching no file", async () => {
+    const { port, asked } = await plainServer();
+    const lookup = toLoopback();
+    const folder = await mkdtemp(join(tmpdir(), "waitron-plain-http-"));
+    closers.push(() => rm(folder, { recursive: true, force: true }));
+
+    await expect(
+      boxDownload(
+        new URL(`http://box-abcd.waitron.local:${port}/copy`),
+        { trust: {}, signal: AbortSignal.timeout(5_000), body: "{}", lookup },
+        join(folder, "copy.db"),
+      ),
+    ).rejects.toBeInstanceOf(PlainHttpBoxAddress);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(lookup).not.toHaveBeenCalled();
+    expect(asked).toEqual([]);
+    expect(await fs.readdir(folder)).toEqual([]);
+  });
+
+  it("sends plain http to a loopback name the lookup answers with a loopback address", async () => {
+    const { port, asked } = await plainServer();
+
+    const answer = await boxExchange(new URL(`http://localhost:${port}/x`), {
+      method: "GET",
+      trust: {},
+      signal: AbortSignal.timeout(5_000),
+      lookup: answering("::1", "127.0.0.1"),
+    });
+
+    expect(answer).toEqual({ status: 200, text: "answered" });
+    expect(asked).toEqual(["/x"]);
+  });
+
+  it("refuses plain http to a loopback name the lookup answers with an address on the network", async () => {
+    const { port, asked } = await plainServer();
+    const lookup = answering("192.0.2.10", "127.0.0.1");
+
+    const refusal = boxExchange(new URL(`http://localhost:${port}/x`), {
+      method: "POST",
+      trust: {},
+      signal: AbortSignal.timeout(5_000),
+      body: "{}",
+      lookup,
+    });
+
+    await expect(refusal).rejects.toBeInstanceOf(PlainHttpBoxAddress);
+    expect(lookup).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(asked).toEqual([]);
+  });
+
+  it("refuses a plain http download from a loopback name answered with an address on the network", async () => {
+    const { port, asked } = await plainServer();
+    const folder = await mkdtemp(join(tmpdir(), "waitron-plain-http-"));
+    closers.push(() => rm(folder, { recursive: true, force: true }));
+
+    await expect(
+      boxDownload(
+        new URL(`http://localhost:${port}/copy`),
+        {
+          trust: {},
+          signal: AbortSignal.timeout(5_000),
+          body: "{}",
+          lookup: answering("192.0.2.10"),
+        },
+        join(folder, "copy.db"),
+      ),
+    ).rejects.toBeInstanceOf(PlainHttpBoxAddress);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(asked).toEqual([]);
+    expect(await fs.readdir(folder)).toEqual([]);
   });
 });
 

@@ -51,6 +51,7 @@ import {
 import { isReadableChart } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
+import { isEncryptedOrLoopback } from "./primary-url.js";
 import { isRemoteStaffRequest, plainAddress, requestAddress } from "./request-from-box.js";
 import { canLockFor, prepareJoinLock } from "./box-join-seal.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
@@ -123,6 +124,7 @@ function parseHello(body: Record<string, unknown>): {
     !canLockFor(encryptionKey) ||
     typeof contactUrl !== "string" ||
     !isBareOrigin(contactUrl) ||
+    !isEncryptedOrLoopback(new URL(contactUrl)) ||
     !isStoreUrlOf(storeUrl, contactUrl) ||
     !Array.isArray(addresses) ||
     addresses.length === 0 ||

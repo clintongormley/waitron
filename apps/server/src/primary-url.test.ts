@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { assertSafePrimaryUrl, isBlockedIpLiteral, isLoopbackHost } from "./primary-url.js";
+import {
+  assertSafePrimaryUrl,
+  isBlockedIpLiteral,
+  isEncryptedOrLoopback,
+  isLoopbackHost,
+} from "./primary-url.js";
 
 function reason(raw: string): string {
   try {
@@ -75,6 +80,23 @@ describe("isLoopbackHost", () => {
     expect(isLoopbackHost("10.0.0.5")).toBe(false);
     expect(isLoopbackHost("169.254.169.254")).toBe(false);
     expect(isLoopbackHost("128.0.0.1")).toBe(false);
+  });
+});
+
+describe("isEncryptedOrLoopback", () => {
+  it("accepts https anywhere and plain http only at a loopback host", () => {
+    const cases: Array<[string, boolean]> = [
+      ["https://box-abcd.waitron.local", true],
+      ["http://127.0.0.1:8080", true],
+      ["http://127.9.9.9", true],
+      ["http://localhost:5191", true],
+      ["http://[::1]:8080", true],
+      ["http://box-abcd.waitron.local", false],
+      ["http://192.168.1.20:8080", false],
+      ["http://[fe80::1]", false],
+      ["ftp://127.0.0.1", false],
+    ];
+    expect(cases.map(([raw]) => [raw, isEncryptedOrLoopback(new URL(raw))])).toEqual(cases);
   });
 });
 

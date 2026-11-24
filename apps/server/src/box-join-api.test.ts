@@ -398,9 +398,15 @@ describe("the main box's box-to-box join routes", () => {
       Buffer.alloc(32),
     ]).toString("base64");
     const unlockable = { ...box, hello: { ...box.hello, encryptionKey: unusable } };
+    const plainHttp = joiningBox("192.168.1.20", {
+      addresses: ["192.168.1.20"],
+      contactUrl: "http://box-abcd.waitron.local",
+      storeUrl: "https://box-abcd.waitron.local:9000",
+    });
     const cases: [string, Record<string, unknown>, number, unknown][] = [
       ["malformed", helloBody(box, { addresses: [] }), 400, err("mirror.standby_invalid")],
       ["unusable key", helloBody(unlockable), 400, err("mirror.standby_invalid")],
+      ["plain http contact", helloBody(plainHttp), 400, err("mirror.standby_invalid")],
       ["protocol", helloBody(box, { protocol: 1, addresses: [] }), 400, err("mirror.join_invalid")],
       ["signature", { ...helloBody(box), at: NOW + 1 }, 400, err("mirror.join_invalid")],
       [
