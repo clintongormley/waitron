@@ -2880,6 +2880,9 @@ which CI's `changes` job answers `code=false` and runs no package's tests: the s
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
 
+The 24 November split moves the closing cases out of `till-app-parties.test.ts` into
+`till-app-parties-closing.test.ts`, with separate entries in the seven-shard duration table.
+
 ### The server's shards: twenty-four after A1297
 
 A1297 (3 November 2026) runs the server's ordinary tests in twenty-four

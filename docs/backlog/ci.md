@@ -222,7 +222,7 @@ ever seen. For later packing comparisons, use qualified runs with one coverage m
 runs from before and after A1427.
 Db, provisioning, venue-service and fiscal-verifactu keep the file-count split because their
 measured shards are inside the four-minute target; revisit a package when a job passes about four minutes.
-The till runs the parties and closing cases on separate shards after the parties file took 235 seconds in the [24 November nightly](https://github.com/clintongormley/waitron/actions/runs/45311390022/job/138168403875).
+The till's packed layout splits the parties and closing cases across shards after 714 cases took 235 seconds in the [24 November nightly](https://github.com/clintongormley/waitron/actions/runs/45311390022/job/138168403875).
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
