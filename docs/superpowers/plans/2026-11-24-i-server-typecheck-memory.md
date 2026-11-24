@@ -37,22 +37,17 @@ cap and peaked at 10.76 GiB. At 9 GiB they exited 137 with one kernel memory kil
 peaking at 8.37 GiB in the 12 GiB container and reaching the 9 GiB ceiling without a kill.
 Go uses a soft memory target. [Go's garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
 
-Use one unmerged scratch ref. In `ci.yml`'s manual `server_probe` job, reuse the normal
-typecheck job's five-minute timeout and bounded setup. Check out the full affected commit
-`01ec75f7e065115f07892bd110250716c8135aab`. Dispatch fresh attempt-1 guests for default and
-tuned settings. Run `pnpm typecheck` with peak RSS, garbage-collection time and elapsed time. Capture guest RAM, swap, tmpfs,
-cgroup limits, peak and OOM counters, and any kernel kill record, before and after the check.
-Report actual hardware and effective limits to the watcher for the A1454 decision. Repeat on
-fresh guests when readings disagree or show intermittent pressure. Remove the scratch ref
-after saving run IDs and logs.
-
-If a tuned run reduces pressure with at least 2 GiB of effective guest headroom and a job
-under 4m30s in clean comparisons, apply the measured target to the existing CI step as a
-stopgap. Compare 8 GiB if 6 GiB brings the job close to its time limit. If both settings have ample headroom and the kill
-does not recur, keep the case open for live evidence. Bring any runner limit discrepancy or
-need for temporary hosted routing to the watcher.
+The watcher cleared a single 6 GiB trial on 24 November at 22:15 and made the temporary setting
+the first change at 22:35 after two more failures. Use the manual `server_probe` job on an unmerged
+scratch ref, with the normal typecheck setup and five-minute job limit. Check out
+`01ec75f7e065115f07892bd110250716c8135aab` and run `pnpm typecheck`. Record the elapsed time,
+guest memory, swap, group memory peak and memory-kill counters, and the kernel log. Save the run
+and remove the scratch ref. Apply the two-line setting when the job passes in under 4m30s.
+Try 8 GiB once if the 6 GiB run takes longer. If the probe cannot run within the hour, the watcher
+cleared the 6 GiB setting with a Server comment change to select typecheck on the pull request.
 
 Verify a deliberately mistyped test file still fails and the existing whole-workspace guard
 passes. A workflow-only PR and merge skip typecheck. Record their exact checks and follow the
-first code-selected disposable main run with the change. The stopgap is two workflow lines
-plus a short CI guide receipt and backlog pointer, with no committed tests.
+first code-selected disposable main run with the change. The stopgap is two workflow lines plus
+a short CI guide receipt and backlog pointer, with no committed tests. The item remains open until
+the Mac comparison identifies what grew and why it stays or how to fix it.

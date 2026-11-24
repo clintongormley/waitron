@@ -1003,6 +1003,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck
+        env:
+          GOMEMLIMIT: ${{ runner.environment == 'self-hosted' && '6GiB' || '' }}
 
   # packages/db, SHARDED THREE WAYS across parallel runners. It was the workspace's critical-path job
   # — 374s on the unfiltered `main` run 33890775789 (`gh run view 33890775789 --json jobs`), of which
