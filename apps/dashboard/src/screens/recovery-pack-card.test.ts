@@ -777,17 +777,11 @@ describe("making a pack", () => {
     expect(show).toHaveBeenCalledWith(STATES["up to date"], "master-key");
   });
 
-  it.each([
-    ["none", false],
-    ["not_yet", false],
-    ["set", true],
-  ] as const)(
-    "offers Make a new master key only once the status says the box has a box key to replace with it (%s)",
-    async (serverKey, offered) => {
+  it.each(["none", "not_yet", "set"] as const)(
+    "offers Make a new master key whether or not the box has a box key to replace with it (%s)",
+    async (serverKey) => {
       const el = await mount(stubApi(status({ serverKey })));
-      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]") !== null).toBe(
-        offered,
-      );
+      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
       expect(
         el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]"),
       ).not.toBeNull();
@@ -1392,14 +1386,13 @@ it.each([true, false])(
     const dialog = dialogOf(el);
     try {
       expect(dialog.isOpen).toBe(false);
+      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
     } finally {
       release(value);
     }
     await expect.poll(() => dialog.isOpen).toBe(true);
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]") !== null).toBe(
-      present,
-    );
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
     expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
       t("recovery_pack_dialog.heading"),
     );

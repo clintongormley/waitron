@@ -274,7 +274,7 @@ type MakeInput = {
   madeAt: string;
   newSecret: string | undefined;
   verifier: string | undefined;
-  /** Shown only if the pack also carries the new box key, the one case it is saved in. */
+  /** Shown and saved unless the pack's box-key page failed; a box key in force is replaced with it. */
   newMasterKey: MadeMasterKey | undefined;
 };
 
@@ -294,6 +294,7 @@ async function makePack(
   key: "failed" | "replaced" | "unchanged";
   parts: BuiltPart[];
   replacement: { verifier: string; name: string } | undefined;
+  showsNewMasterKey: boolean;
 }> {
   const { request, madeAt, newSecret } = input;
   const nodeId = deps.node.nodeId;
@@ -343,6 +344,7 @@ async function makePack(
     request.locale,
   );
   const carried = serverKey.record.carriedKey === true;
+  const showsNewMasterKey = input.newMasterKey !== undefined && serverKey.part.state !== "failed";
   const { pdf, record } = await drawRecoveryPack(
     {
       locale: request.locale,
@@ -354,10 +356,9 @@ async function makePack(
       nodeId,
       madeBy: input.personId,
       parts,
-      masterKey:
-        carried && input.newMasterKey !== undefined
-          ? shownMasterKey(input.newMasterKey)
-          : await currentMasterKeyElsewhere(tx, records),
+      masterKey: showsNewMasterKey
+        ? shownMasterKey(input.newMasterKey!)
+        : await currentMasterKeyElsewhere(tx, records),
     },
   );
   await insertRecoveryPack(tx, record);
@@ -369,6 +370,7 @@ async function makePack(
     key,
     parts,
     replacement: carried ? { verifier: input.verifier!, name: newKey!.name } : undefined,
+    showsNewMasterKey,
   };
 }
 
@@ -433,9 +435,9 @@ export function mountBackupRecoveryPackMakeApi(
             return made;
           });
           // The request's last database write, so a failure before it leaves the old key current.
-          // It follows node.db's key save, an exception listed in conventions-data.md.
+          // It follows node.db's key save where there is one, an exception in conventions-data.md.
           const masterKey =
-            pack.replacement === undefined || newMasterKey === undefined
+            !pack.showsNewMasterKey || newMasterKey === undefined
               ? undefined
               : await saveNewMasterKey(deps.db, newMasterKey, new Date(madeAt), personId);
           return { ...pack, masterKey };
