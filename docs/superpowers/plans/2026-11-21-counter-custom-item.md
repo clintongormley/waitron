@@ -6,9 +6,10 @@
 > `subagent_type: "implementer"`.
 
 > **Refreshed 2026-11-24** on `main` at `10fe2d01c4`, against VAT rates piece A (#4047, #4091,
-> #4133, #4138), then revised after its first and second fresh reads:
-> [Changed on 2026-11-24](#changed-on-2026-11-24), [Changed after read 1](#changed-after-read-1),
-> [Changed after read 2](#changed-after-read-2).
+> #4133, #4138), then revised after its first and second fresh reads and for the owner's answer on
+> moved bills: [Changed on 2026-11-24](#changed-on-2026-11-24), [Changed after read 1](#changed-after-read-1),
+> [Changed after read 2](#changed-after-read-2), [Changed for the owner's answer](#changed-for-the-owners-answer),
+> [Changed after read 3](#changed-after-read-3).
 
 **Goal:** Staff on the Counter can ring up something that is not on the menu — typed name, typed
 VAT-inclusive price, a takeaway VAT rate when the order is taken away, and a kitchen station or
@@ -18,8 +19,8 @@ none — gated by a new permission that can be assigned to anyone.
 creates on first use: one per takeaway rate, plus one for "eaten in, rate not asked". The line files
 like any other: eaten here at the area's dine-in rate, taken away at its product's row in
 `product_takeaway_vat_rates`. **A takeaway order never holds an item whose rate nobody chose**: that
-is held where such an item is added, where an order is switched, and where a move makes an order
-takeaway (Decision 1). The server learns a second line shape on the order wire (`custom`),
+is held where such an item is added and where staff switch an order (Decision 1). A bill moved or
+handed over to another department keeps its way (Decision 2, Task 7c). The server learns a second line shape on the order wire (`custom`),
 priced from the request when the line is new and never again. A person without the permission gets
 a supervisor's PIN once per request. Reports show these lines under their own "Custom items" row.
 
@@ -36,23 +37,28 @@ a supervisor's PIN once per request. Reports show these lines under their own "C
   item 5), the category row (item 3) and the question at a takeaway switch (item 4), all asked for.
 - **Cost to keep:** one nullable column, one permission, one error code, one activity kind, one
   second line shape in `priceOrderLines`, `applyLineEdits` and `readBasketOrder`. Size, estimated
-  and not built: production about +1,250 lines, tests about +1,900, and four generated files (the
-  core set's SQL, snapshot and journal, and the epoch file).
+  and not built (re-estimated after the move and accept questions were cut): production about +1,100
+  lines, tests about +1,750, and four generated files (the core set's SQL, snapshot and journal, and
+  the epoch file), all four landed with PR 1 (#4217).
 - **Approval:** the design is approved by the owner, 21 November (recorded in the spec's status line,
   `c6efa1acbb`). The owner has not approved this plan; the watcher cleared PR 1 and Tasks 4a to 7a on
-  24 November 2026 at 08:28. Fresh reads: one on 21 November, and two of the refresh
-  on 24 November (both "fix first"; both are applied).
+  24 November 2026 at 08:28. The owner answered the moved-bill question the same day
+  (`~/waitron-campaign-l/questions.md`, "WATCHER 2026-11-24 10:42"). Fresh reads: one on 21 November,
+  three of the refresh on 24 November (reads 1 and 2 "fix first", read 3 three important findings; all
+  applied, see the Changed sections).
 
 ## Pull requests
 
 | PR | Tasks | Migration | Notes |
 | --- | --- | --- | --- |
-| **1. Data and reports** | 1, 2, 3 | **core rebuild** | First line: "Reset test venues: a custom item column on products (A1564)". The body says the dashboard's permission list gains "Add custom items", which nothing uses until PR 3, and has a line starting "Sale-path read changed:" (`loadClassification` reads one more `products` column). |
+| **1. Data and reports** | 1, 2, 3 | **core rebuild** | **Landed** 24 November as #4217. First line: "Reset test venues: a custom item column on products (A1564)". The body says the dashboard's permission list gains "Add custom items", which nothing uses until PR 3, and has a line starting "Sale-path read changed:" (`loadClassification` reads one more `products` column). |
+| **1b. A moved bill keeps its way** | 7c | none | Its own small PR, from `main`, landing before PR 2 (mine, after read 3: it changes filing for every bill, not only custom items). First lines say **a bill moved or handed over to another department now keeps its way** (owner, 2026-11-24), so an unsent bill moved into a department set the other way files at its own way's VAT rate, not the new department's, and an eaten-in bill with set menus moved into a takeaway-only department can now be paid (today `set_menu.payment_not_ready`, read). |
 | **2. Server** | 4a, 4b, 5, 6a, 6b, 7a, 7b | none | One PR: until 6a, a stored custom line makes its parked order unreadable. The body has a line starting "Sale-path read changed:" (the save's line read and `fireLines`' read of a pay-first sale gain the product's key: 6a, 7a). |
-| **3. Till** | 8, 9a, 9b, 9c, 9d, 10a, 10b, 10c | none | A1563 has landed (#3986), so this PR waits on nothing but PR 2. No sale-path read changes. |
+| **3. Till** | 8, 9a, 9b, 9c, 9d, 10a, 10c | none | A1563 has landed (#3986), so this PR waits on nothing but PR 2. No sale-path read changes. Task 10b was removed (owner, 2026-11-24). |
 
-Stacked in that order. All three are FULL review (PR 1 a migration and a permission, PR 2 the filed
-line and authorisation, PR 3 the cross-package wire). The owner lands all three (lane L's queue entry:
+Stacked in that order; PR 1b and PR 2 start from `main`, PR 2 after 1b lands. All are FULL review (PR 1 a
+migration and a permission, PR 1b and PR 2 the filed line, PR 2 authorisation too, PR 3 the cross-package
+wire). The owner lands all four (lane L's queue entry:
 "FISCAL-ADJACENT, owner lands").
 
 **Against VAT rates piece B** (its plan is cleared and not built; B5 drops the label columns). The
@@ -68,39 +74,59 @@ Whichever lands second fixes Task 4a's two keys (a compile error names them). PR
 core: the second takes `main`'s copy and reruns the rebuild. Lane L's rule that no migration PR starts
 while a lane L PR is parked applies to PR 1.
 
-## Decisions (recommended defaults; ★ needs the owner)
+## Decisions (recommended defaults unless marked; none waits for the owner)
 
-1. **A takeaway order never holds a "rate not asked" item.** Held at three points: adding one to a
-   takeaway order needs a rate (4a); the switch needs a rate for each such item (7b); and
-   `applyDepartmentDining` (`packages/venue-service/src/dining.ts:125`) refuses before it writes `dining`
-   (7b). No other code was found that writes `dining` or moves a line between orders sold differently
-   (Evidence, with its limits). Rates
-   may be chosen while the order is still eaten in, which changes nothing it files (ran). As a belt, that
-   product has no takeaway rate row, so a missed path would refuse `vat_rate.unavailable` rather than
-   file a rate nobody chose.
-2. **★ An eat-in order moved to a takeaway-only department** becomes takeaway without anybody switching
-   it; the design covers only staff switching one. Example: a €12.00 bottle is rung up eaten in on the
-   Counter, and the order is moved to a table of, or handed to, the Takeaway department.
-   - **(a) Ask as it is moved (recommended).** "Choose the VAT: 21%, 10%, 4% or 0%" appears when somebody
-     moves the order, or accepts it when it was handed over, and the move then goes through. Costs one
-     question in those two windows; the person accepting may not know what the bottle is.
-   - **(b) Let it move and ask at payment.** Nobody is stopped at the move; the till asks at Pay, Send or
-     Print. Costs a check on every way a bill is issued, and leaves bills that cannot be invoiced until
-     somebody answers (read 1 found a paid-in-part one nobody could finish).
-   - **(c) Refuse the move.** "Switch the order to take away first". Costs the least code, but in a
-     department that sells only eaten in nobody can switch it, so the bottle must come off the order.
+1. **A takeaway order never holds a "rate not asked" item.** Held at two points: adding one to a
+   takeaway order needs a rate (4a), and staff switching an order to takeaway need a rate for each such
+   item (7b). Task 7c deletes `applyDepartmentDining` (`packages/venue-service/src/dining.ts:125`), the only
+   other writer of an existing order's `dining` in product code, so a move or hand-over no longer changes it
+   (Decision 2). No other code was found that writes `dining` or moves a line between orders sold
+   differently (Evidence, with its limits). An eaten-in order holds a chosen rate only after being switched
+   to takeaway and back; it then files the dine-in rate (ran, 24 November). As a belt, that product has no
+   takeaway rate row, so a missed path refuses `vat_rate.unavailable` rather than file a rate nobody chose.
+   Dropping read 1's refusal inside `applyDepartmentDining` goes with the function (mine).
+2. **A bill keeps its way, eaten here or taken away, when it moves or is handed over to another
+   department; a custom item keeps the VAT rate it was added with; nothing asks for a takeaway rate on a
+   move** (owner, 24 November, relayed by the watcher at 10:42, replacing options (a) to (c)). When a
+   diner also buys something to take away, staff use two bills, one per department: the meal's bill stays
+   eaten here wherever it is paid, and the takeaway items go on a takeaway bill of their own. The owner's
+   words, on paying both bills at once: "this would be nice but is not strictly required. paying twice is
+   ok"; on two receipts: "i'm ok with this"; and "this is a much less common occurrence, so doing a bit more
+   work is fine".
 
-   The move that asks is one bill moved, or a hand-over accepted. A whole table moved, joined or split does
-   not ask: it is refused, and the words say to use Move this bill…, which does ask (read 2).
+   **What `main` does today (ran, Evidence "Run for the owner's answer"):** an unsent, unpaid bill moved
+   or handed over into a department fixed the other way takes that department's way. Eaten-in bills
+   moved or accepted into a takeaway-only department become takeaway, as table or counter; takeaway
+   bills moved or accepted to a counter of an eaten-in-only department become eaten in; a takeaway bill
+   moved to a table stays takeaway (owner, A1522), and a sent bill keeps its way (a paid one too, by
+   reading `orderDiningLocked`). Nothing refused any of these moves. An eaten-in bill made takeaway this
+   way files a product whose takeaway rate is 21% at 21% instead of the dine-in 10%. The rewrite is `retargetOrderServiceContext` calling `applyDepartmentDining`
+   (`packages/venue-service/src/operations.ts:1097`), reached by every single-bill move
+   (`adoptZone`, `move-bill.ts:634`), moving a table's guests to a free table (`retargetUnsettledBills`,
+   `table-actions.ts:573`) or onto a table another party holds (`combineParties`, 276), both through
+   `takeIntoParty` and `adoptZone` (the first ran here, the second by read 3), and every accepted hand-over (`department-transfers.ts:404`).
+   Joining a free table of another department is refused `service_zone.join_mismatch`, and a split stays in
+   its zone (read 3 ran both). It was the A1522 spec's "My call, moving an order to another department"
+   (deleted in `28f9998ef8`), narrowed then by the owner only for takeaway bills moved to a table and for
+   bills already sent or paid. The same pruning commit wrote the decision in `docs/backlog/till.md` (the
+   `order.dining_differs` entry) that a whole bill "keeps its way, even into a department set the other
+   way": a paraphrase, false for unsent bills until Task 7c.
 
-   What changes in the tasks if the owner does not pick (a):
-   - **(b):** 7b's check in `applyDepartmentDining`, the rates in the move and accept bodies and Task 10b go;
-     a takeaway order may then hold an unchosen item, so Decision 1 falls and read 1's C1, I2 and I3 return
-     with the work they ask for (a rate check at Pay, Place and every way a bill is issued).
-   - **(c):** 7b keeps its check and its refusal, whose words become "Switch the order to take away first";
-     the rates in the move and accept bodies go, and 10b keeps only the words.
+   **One refusal by the bill's way stays:** an eaten-in bill with set menus cannot move to a counter
+   (`set_menu.not_seated`, `move-bill.ts:196-202`, read). It is a seating rule for set menus, not a
+   department's, and the move is refused before anything changes; 7c leaves it alone (mine).
 
-   **PR 1 and Tasks 4a to 7a do not depend on the answer.**
+   **The fix (Task 7c, PR 1b, mine):** delete `applyDepartmentDining` and its two calls. Every move that
+   reaches `retargetOrderServiceContext` then leaves the way alone (ran with that call removed: every case
+   run kept its way, and the 21% product filed 10%). Its other call, `adoptZone`'s branch for an order that
+   never had a department (`move-bill.ts:626`), no production order reaches (read: the one insert of
+   `working_orders`, `wo` 1677, records its zone, and `working_orders_service_context_ck` requires zone,
+   department and mode to be all set or all empty); after 7c such an order would keep its stored way too.
+   **This is on the fiscal filing path**: a line's VAT at issue comes from its order's way
+   (`readLineVatRates`, `apps/server/src/line-vat-rates.ts:18`), so an unsent bill moved into a department
+   set the other way now files at its own way's rates, and its invoice record carries those rates and the
+   amounts worked out from them. Lines carry no rate of their own. How a record is hashed and chained does
+   not change.
 3. **The activity entry leaves the typed name out**: the line's id, the price and the approver's id.
    `activity_log` rows may hold no person's name and cannot be changed (`packages/db/src/activity-kinds.ts:1-13`), and
    staff can type "Cake for María Pérez". The name stays on the order line and the ticket. No screen shows
@@ -117,7 +143,8 @@ while a lane L PR is parked applies to PR 1.
    it refreshes through `setupRevision` like `takeawayVat`.
 7. **On a table's bill** a custom item that arrived with a moved order is an ordinary line; a NEW
    one is refused there, whoever asks (Counter only).
-8. **Choosing a rate needs no `order.custom_item`**: anyone who may switch, move or accept the order.
+8. **Choosing a rate needs no `order.custom_item`**: anyone who may switch the order between eaten here
+   and takeaway. A move or a hand-over asks for no rate (Decision 2).
 9. **A deleted station.** The delete screen says unsent lines "return to normal routing"; for a custom line
    an empty station means Nowhere. So the delete leaves a custom line's station as it is: `fireLines` takes
    an inactive station as no choice, and the line follows normal routing (ran: it went to the default
@@ -154,7 +181,8 @@ while a lane L PR is parked applies to PR 1.
   `product_takeaway_vat_rates` is written only in that file (`scripts/write-path-tables.json`).
 - **The wire carries the takeaway rate as basis points (`takeawayRateBp`), never a label.** The till
   shows bare percentages (owner, 2026-11-21).
-- **Asked only on a takeaway order.** On an eat-in order `takeawayRateBp` is `null`.
+- **Asked only on a takeaway order.** On an eat-in order `takeawayRateBp` is `null`. The order's own
+  stored way decides, never the department it is in now (Decision 2).
 - **"Send to: Nowhere" is a custom line with no `makeAtStationId`.** It is stamped sent with no
   ticket when fired; it never follows routing. A custom line keeps any station that exists, active or not,
   on every route (Decision 9).
@@ -163,7 +191,7 @@ while a lane L PR is parked applies to PR 1.
 - **`descriptions` holds the typed name under each invoice language** (the trigger
   `working_order_lines_check_locales_insert`, `packages/db/triggers/core.sql:143`).
 - **Every new word, guide sentences included, is in English and Spanish.**
-- **Fiscal gate, unedited and passing in PR 1 and PR 2:** `pnpm --filter @waitron/fiscal-verifactu exec
+- **Fiscal gate, unedited and passing in PR 1, PR 1b and PR 2:** `pnpm --filter @waitron/fiscal-verifactu exec
   vitest run src/inmutabilidad.test.ts src/write-path.e2e.test.ts`.
 - **Test commands:** `pnpm --filter <pkg> exec vitest run <file>`; read the `Tests` count. Each task
   ends with `pnpm exec prettier --check <changed files>`, the changed packages' `typecheck`, and a
@@ -177,9 +205,9 @@ while a lane L PR is parked applies to PR 1.
 3. **Raising a comped custom line** prices the new units at the price before the comp (6b).
 4. **Two different custom items on one hidden product are never treated as one dish** (6b): a Sent
    row's check (`sameDishKey`, `wo` 7602) compares product, offer and note, not name or price.
-5. **An eat-in order moved to a takeaway-only department** is refused whole, and the move succeeds once
-   rates come with it (7b, 10b); a whole-table move, which cannot carry rates, is refused in words that name
-   Move this bill… (7b, 10b).
+5. **A bill moved, handed over, or moved with its table into a department set the other way** keeps its
+   way, and its lines file at that way's rates, a custom item on "unchosen" at the dine-in rate (7c, 7b). The
+   change is a deletion; a review checks that nothing else writes an existing order's `dining`.
 6. **The till's way changes without a switch**: a menu poll follows the department, or a saved order is
    switched with an unsaved custom line beside it (10a).
 7. **A declined card, or another person signing in, while a custom line is still unsaved**; and a hand-keyed
@@ -442,57 +470,80 @@ leaves custom lines' station alone (Decision 9).
 - [ ] Run; FAIL; implement; run the file, `working-order.pay-and-dispatch.test.ts`,
   `move-bill.dining.test.ts` and `station-delete`'s suite; PASS. Commit `Custom item: the kitchen`.
 
-### Task 7b: An order becomes takeaway only with its rates
+### Task 7b: Switching an order to takeaway asks for its custom items' rates
 
-**Files:** `packages/venue-service/src/dining.ts` `applyDepartmentDining` 125 (through
-`unchosenCustomLines`, before the write at 140); `apps/server/src/move-bill.ts` (`MoveBillOptions` 76,
-`moveBillOnce` 174) and `till-api.ts` `moveCommand` 965; `custom-item.ts` `chooseCustomItemRates`;
-`apps/server/src/order-dining.ts` `switchOrderDining` 93; `till-api.ts` `PUT /api/working-orders/:id/dining`
-2070 and `POST /api/bills/:id/move` 4458; `apps/server/src/department-transfer-api.ts:252` (accept);
-`packages/venue-service/src/errors.ts` and `apps/server/src/errors.ts` (both, as
-`order.service_context_missing` is), STATUS (`till-api.ts:517`), `apps/till/src/i18n/codes.ts`.
+Spec item 4. After Task 7c a switch by staff is the only way an existing order becomes takeaway (Decision 1).
+
+**Files:** `apps/server/src/order-dining.ts` `switchOrderDining` 93; `till-api.ts` `PUT
+/api/working-orders/:id/dining` 2070; `custom-item.ts` `chooseCustomItemRates`; `unchosenCustomLines`
+(Task 1 left it to this task, its only user); `packages/venue-service/src/errors.ts` and
+`apps/server/src/errors.ts` (both, as `order.service_context_missing` is), STATUS (`till-api.ts:517`),
+`apps/till/src/i18n/codes.ts`.
 
 **Produces:**
-- `order.custom_item_rate_required` `{ workingOrderId: string; lineIds: string[] }`, 409, thrown by the
-  switch to takeaway and by `applyDepartmentDining`. The switch, the move and accept can answer it, so the
-  till opens the rate window (10a, 10b); a whole-table action (move guests, join or split: `takeIntoParty`
-  at `table-actions.ts:276`, 412 and 573) cannot, so the words name what works there: "A custom item on this
-  order has no takeaway VAT. Use “Move this bill…” on its bill, which asks for it, then try again" / "Un
-  artículo libre de este pedido no tiene IVA para llevar. Usa «Mover esta cuenta…» en su cuenta, que lo
-  pregunta, y vuelve a intentarlo". The table-action bodies do not gain rates.
-- `customItemRates?: { lineId: string; takeawayRateBp: number }[]` in the bodies of the switch, the move and
-  accept, applied by `chooseCustomItemRates(tx, workingOrderId, rates)` in the command's own transaction: it
-  repoints `product_id` and nothing else, only lines of that order on `"unchosen"`, only while the order is
-  open, and moves no revision (the command does). A line already on exactly the rate sent passes and changes
-  nothing, so two tills answering alike do not collide; a different rate is refused.
-- **Where it runs.** The move: inside `moveBillOnce`, after `guardPathParty`, so after `moveBill`'s replay
-  lookup (`runServiceCommand`, `move-bill.ts:161`), and `customItemRates` is a field of `MoveBillOptions`, so
-  it is part of the replay fingerprint (a resent move that already went through answers as it did, instead
-  of a refusal for lines already chosen). The switch: after its revision and editor checks. Accept: after
-  `readIncomingDepartmentTransfer`, which checks the receiver and resolves the order; its receiver may not
-  hold the order's zone, so the rates cannot come by a route of their own.
+- `order.custom_item_rate_required` `{ workingOrderId: string; lineIds: string[] }`, 409, thrown only by
+  the switch to takeaway, so the till opens the rate window (10a). Its words, shown only if the window
+  cannot open: "Choose the takeaway VAT for each custom item on this order, then switch again" / "Elige el
+  IVA para llevar de cada artículo libre de este pedido y vuelve a cambiarlo" (mine).
+- `customItemRates?: { lineId: string; takeawayRateBp: number }[]` in the switch's body, applied by
+  `chooseCustomItemRates(tx, workingOrderId, rates)` in the switch's own transaction, after its revision and
+  editor checks: it repoints `product_id` and nothing else, only lines of that order on `"unchosen"`, only
+  while the order is open, and moves no revision (the switch does). A line already on exactly the rate sent
+  passes and changes nothing, so two tills answering alike do not collide; a different rate is refused.
+- The move, accept and whole-table bodies gain nothing (Decision 2).
 
 - [ ] **Failing tests:**
   - "switching asks for the unchosen items": refused naming them, nothing changed; with `2100` they are on
     `"2100"` and the order is takeaway; a rate for a menu line, another order's line, a line already on a
     different rate or an unpickable rate refuses `{ field: "customItemRates" }` and nothing changes; an order with no
     custom items switches as today; back and forth asks once.
-  - "a move to a table of a takeaway-only department": `POST /api/bills/:id/move` refused 409, the order's
-    way, party and revision unchanged; with rates it moves, is takeaway, and files 2100.
-  - "a resent move with rates and an allergy answer" (as the replay case of `till-api.allergy-move.test.ts`):
-    the second request, with the same `submissionId`, answers as the first did and changes nothing.
   - "a line already on the rate sent passes"; and with a different rate it is refused.
-  - "a table moved to a takeaway-only department with an unsent custom item" (accept a hand-over at a table
-    zone, then move the guests; also joined and split): refused 409, nothing changed; then `POST
-    /api/bills/:id/move` with rates moves that bill.
-  - "a hand-over accepted by a takeaway-only department": the same through accept, by a person whose profile
-    holds only the destination's zones; a wrong `revision` still refuses.
   - "a chosen rate on an order still eaten in files the dine-in rate".
   - "an item nobody chose cannot join a takeaway bill holding a part payment" (`order.dining_differs`).
-- [ ] Run; FAIL; implement; run the file, `order-dining.switch.test.ts`, `move-bill.dining.test.ts`,
-  `table-actions.dining.test.ts`, `till-api.allergy-move.test.ts`, `department-transfer-api.test.ts`, the fiscal gate, and from the root
+  - "an unchosen custom item on a bill moved to a table of a takeaway-only department files the dine-in
+    rate, and nothing asks" (holds once PR 1b has landed).
+- [ ] Run; FAIL; implement; run the file, `order-dining.switch.test.ts`, the fiscal gate, and from the root
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/personal-log-params.test.ts`; PASS. Commit
-  `Custom item: an order becomes takeaway only with its rates`; `pnpm -r typecheck`; `/finish-branch` for PR 2.
+  `Custom item: switching to takeaway asks for its rates`; `pnpm -r typecheck`; `/finish-branch` for PR 2.
+
+### Task 7c: A bill keeps its way when it moves or is handed over (PR 1b)
+
+The owner's rule (Decision 2); the fix, and making it a pull request of its own, are mine. It is not about
+custom items: it changes which VAT rate an unsent bill moved into a department set the other way files
+at, **on the fiscal filing path**. It needs nothing from Tasks 4a to 7b; Task 7b's move test relies on it.
+
+**Files:** `packages/venue-service/src/dining.ts` — delete `applyDepartmentDining` (118-141) and the
+`orderDiningLocked` import it leaves unused; `operations.ts` `retargetOrderServiceContext` 1088 (its call
+at 1097 and the import at 20); `apps/server/src/move-bill.ts` `adoptZone` 616 (the call at 628: the
+first-time branch only records the zone); the seat in `packages/module/src/module.ts:947-953` and
+`packages/venue-service/src/service.ts` 94 and 192; `docs/backlog/till.md`'s `order.dining_differs`
+decision (2192): its "keeps its way, even into a department set the other way" sentence corrected in place
+to the owner's rule with his 24 November words, not a second entry beside it. Tests below.
+
+- [ ] **Failing tests** (a second department, its table zone and its counter zone built as the probe in
+  Evidence did: `createDepartment`, `seedZone`, `offerProducts` with `zone: { zoneId }`):
+  - `move-bill.dining.test.ts`, "a bill moved into another department keeps its way": an unsent eaten-in
+    Counter bill moved to a table of a takeaway-only department stays eaten in and, paid in cash, files a
+    product whose takeaway rate is 21% at 10% (on `main` it files 21%: the control, ran); an unsent eaten-in
+    table bill moved to the counter of a takeaway-only department stays eaten in; an unsent takeaway table
+    bill moved to the counter of an eaten-in-only department stays takeaway.
+  - `table-actions.dining.test.ts`: an unsent eaten-in bill whose guests move to a free table of a
+    takeaway-only department, and one whose guests move onto a table another party holds there, both stay
+    eaten in (both ran as probes); joining a table of another department is refused or leaves the way as
+    it was (read 3 ran a free table).
+  - `department-transfer-api.test.ts`: an unsent eaten-in order accepted by a takeaway-only department, at a
+    table and at a counter, stays eaten in.
+  - Flipped or removed (Changed test checks): `department-transfers.test.ts` 1406 and 1412;
+    `move-bill.dining.test.ts:169`; `dining.test.ts`'s `applyDepartmentDining` block; the seat list in
+    `service.test.ts:17`.
+- [ ] Run; FAIL; implement; run `@waitron/venue-service`'s `dining.test.ts`, `operations.test.ts`,
+  `department-transfers.test.ts` and `service.test.ts`, and the server's `move-bill.dining`,
+  `table-actions.dining`, `department-transfer-api`, `order-dining.*`, `party-move-bill`, `set-menu-moves`
+  and `till-api.allergy-move` suites, and the fiscal gate; PASS. (With only the `retargetOrderServiceContext`
+  call removed, on `18a3778ff7`: those eleven server files passed 305 of 305, and the four venue-service
+  files 207 of 209, failing only the two cases that flip. Deleting the function and the first-time call was
+  not run.) Commit `A bill keeps its way when it moves to another department`; `pnpm -r typecheck`;
+  `/finish-branch` for PR 1b.
 
 ### Task 8: The till's custom item window
 
@@ -527,10 +578,13 @@ string[]`, `vatRatesFor(country, territory)?.pickable ?? []` where `takeawayVat`
 - `OrderLine.custom?: { name; unitPriceGross; takeawayRateBp } | true` beside a stand-in
   `product: TillProduct` (the typed name and price, the Each unit, no `menuItemId`, so nothing merges into
   it: `mergeTarget`, `working-order.ts:162`).
+- The window's `takeaway` is the order's own way (`store.dining`), never the department's
+  (`store.diningStart`): a saved order keeps its way wherever it now is (Decision 2).
 
 - [ ] **Failing tests:** the tile on the Counter, not on the table-order screen; a holder fills it in and
   the basket shows name and price; Pay and Park send Task 4a's shape; nothing merges into the line; it
-  shows "allergens not recorded", never "contains none".
+  shows "allergens not recorded", never "contains none"; "a saved bill eaten here, now on the Counter of a
+  takeaway-only department, opens the window with no rate choice and sends `takeawayRateBp: null`".
 - [ ] Run; FAIL; implement; run the file, `working-order.test.ts`, `order-line.test.ts`,
   `menu-browser.test.ts`. Commit `Custom item: the Counter tile and basket`.
 
@@ -603,9 +657,9 @@ Three rules. **Before payment:** `check-before-tender` opens the rate window for
 unsaved custom line that has no rate, for every tender and before the payment window; Cancel answers
 `false` and nothing is taken. **At send:** an eat-in basket sends `takeawayRateBp: null` whatever a line
 remembers; park, save and Place, which take no money, ask as they send; at Pay this window is only a
-backstop. **After a refusal** `order.custom_item_rate_required`: one helper opens the window for the named
-lines (names from the order's lines) and repeats the command with the rates; Cancel leaves everything as it
-was.
+backstop. **After a refusal** `order.custom_item_rate_required`, which only the switch answers (7b): the
+helper opens the window for the named lines (names from the order's lines) and repeats the switch with the
+rates; Cancel leaves everything as it was. A move or an accepted hand-over never opens it (Decision 2).
 
 - [ ] **Failing tests:** "a hand-keyed card on an unrated takeaway basket asks before the card reference is
   asked" (and cash, and before the payment window); an unsaved basket turned takeaway by the switch, and by a
@@ -615,28 +669,19 @@ was.
 - [ ] Run; FAIL; implement; run the files; look in both themes and at phone width. Commit `Custom item:
   the till asks for the takeaway rate`.
 
-### Task 10b: The till asks when a bill is moved or accepted
+### Task 10b: Removed
 
-**Files:** `till-app.ts` (the two `moveBill` calls 18590 and 18783, `TABLE_REFUSALS` 886),
-`apps/till/src/widgets/department-transfers.ts:317` (accept), `api/client.ts` (`moveBill` 5264,
-`acceptDepartmentTransfer` 2968).
-
-The helper of 10a, used after the refusal at these three commands (names from the order's lines, or the
-transfer's detail on accept). A code not in `TABLE_REFUSALS` is shown as `table.error`, so a whole-table
-refusal needs the code added there to show 7b's words.
-
-- [ ] **Failing tests:** a move of a parked order to a table (with and without the allergy window, and a
-  resend after no answer, which carries the same rates) and an accepted hand-over each ask, repeat and
-  succeed; Cancel; "a table moved to a takeaway-only department with an unsent custom item shows the words
-  that name Move this bill…", and Move this bill… asks and goes through.
-- [ ] Run; FAIL; implement; run the files, `till-app-dining.test.ts` and
-  `widgets/department-transfers.actions.test.ts`; look in both themes and at phone width. Commit `Custom item: the till asks when a bill moves`.
+It asked for rates when a bill was moved or a hand-over accepted. The owner's answer (Decision 2) leaves
+nothing to ask there, and `TABLE_REFUSALS` gains no code. The guide task keeps its number, 10c.
 
 ### Task 10c: The guide and the backlog
 
 **Files:** `apps/server/src/guide/{en,es}/table-service.md`: a short section `## Ring up something not on
 the menu {#counter-custom-item}` / Spanish after the "Share a Counter bill" section (there is no
-Counter page) — what it is for, the permission or a PIN, the takeaway VAT; `guide/{en,es}/products.md` only if it names
+Counter page) — what it is for, the permission or a PIN, the takeaway VAT; in the same guide's "Sell food
+eaten here or taken away" section `{#eat-here-or-take-away}` (`table-service.md:799`), one sentence with its
+Spanish twin (mine): "A bill keeps its way when it moves to another table or department, so ring up
+anything to take away from a meal eaten here on a takeaway bill of its own."; `guide/{en,es}/products.md` only if it names
 who can sell; `docs/backlog/till.md` — delete "Custom item on the Counter (A738 residual)" (2248) and fix
 the three other links to it (316-318, 1519-1520, 2213), leaving A738's dated boards as they are;
 `docs/backlog.md:661` — delete the bullet.
@@ -657,6 +702,10 @@ Only these existing assertions change; every other edit adds cases. The golden h
 | 1 | `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, "preserves every Madrid seed row" (en, es) | `products` gains `custom_item_key` (null in every row); the supervisor and manager lists (1261, 1266) gain the permission | a column and a permission; ran: the column fails both, the lists are read |
 | 8 | `apps/server/src/till-api.test.ts`, "GET /api/till returns locale + issuer identity …" | the exact body gains `takeawayVatRates: ["0.00","4.00","10.00","21.00"]` | Decision 6; read |
 | 5 | `till-api.profile-actions.test.ts`, `till-api.session-person.test.ts`, `till-api.profile-zones.test.ts` | their route lists gain the new route | the inventory rule |
+| 7c | `packages/venue-service/src/department-transfers.test.ts:1406`, "makes an unsent takeaway counter order eaten here in a department that sells only eaten here" | expects `eat_in` → `takeaway`, renamed "keeps an unsent takeaway counter order takeaway …" | the owner's rule (Decision 2); ran: one of the two failures with the call removed |
+| 7c | the same file, 1412, "makes an unsent counter order eaten here takeaway in a department that sells only takeaway" | expects `takeaway` → `eat_in`, renamed "keeps an unsent counter order eaten here …" | the same |
+| 7c | `apps/server/src/move-bill.dining.test.ts:169`, "takes the way of a department fixed one way" | expects `takeaway` → `eat_in`, renamed "keeps its way when it takes a department for the first time" | the function it tested is deleted (read 3's M1); not yet run |
+| 7c | `packages/venue-service/src/dining.test.ts:298`, the `applyDepartmentDining` block, and `service.test.ts:17`'s seat list | deleted, and the name dropped from the list | the function is deleted |
 
 The till's codes test and `access-role-permissions` pass once the new words exist; they change no
 assertion. If another existing assertion must change, the implementer stops and reports.
@@ -671,7 +720,7 @@ column, rebuild, permission and `customItemProduct`, and Task 2's export line:
   no payment row, and repointed to `400` then files 400. `sale_lines` keeps the typed name and the
   `custom_items` classification.
 - `product_id` can be changed on a sent line while the order is open; on a placed order the trigger refuses.
-- The move in Decision 2 with nothing built: after `VENUE_SERVICE.retargetOrderContext` the order reads
+- The move in the old Decision 2 with nothing built: after `VENUE_SERVICE.retargetOrderContext` the order reads
   `takeaway`, cash is refused `vat_rate.unavailable`, switching back is refused `order.dining_fixed`.
 - Export: no hidden product or rate row with the line, and the import works; without it three products and
   two rate rows travel and the import is refused.
@@ -694,7 +743,7 @@ column, rebuild, permission and `customItemProduct`, and Task 2's export line:
   run of the server's suites was not permitted, so the rest is by reading: every `update(workingOrders)`, every
   insert, the triggers, the demo seed (writes each order's way once, at insert), the configuration transfer
   (no orders) and `copyBillDishes` (its new bill copies the way). Restores and twin copies take whole files.
-- *The guard.* With `applyDepartmentDining` refusing: a retarget and `POST /api/bills/:id/move` to a takeaway
+- *The guard* (dropped: Decision 1). With `applyDepartmentDining` refusing: a retarget and `POST /api/bills/:id/move` to a takeaway
   department are refused and the order stays `eat_in`; repointed to `2100` both go through, and cash files 2100.
   Read 1's C1 starts with a move that is now refused; moving the line straight to a takeaway bill is refused
   `order.dining_differs`.
@@ -706,12 +755,55 @@ column, rebuild, permission and `customItemProduct`, and Task 2's export line:
 retargeted to a table zone as accepting a hand-over does, then moved with `POST /api/bills/:id/move` to a
 free table, kept its dish UNSENT; `moveGuests` to a table of a takeaway-only department then made the order
 `takeaway` with the dish still unsent. So an unsent custom item meets `applyDepartmentDining` in a
-whole-table move too, not only when leaving the Counter.
+whole-table move too, not only when leaving the Counter. (With Task 7c's change the order stays eaten
+in: next section.)
+
+**Run for the owner's answer** (24 November), on `main` at `f4f5e02427` and again at `18a3778ff7` (#4217
+landed; the same answers both times; the `moveGuests` row at `18a3778ff7` only), in the docs worktree with
+throwaway test files, deleted afterwards (sources: `~/waitron-campaign-l/receipts/a1564-dining-probe/`).
+For the moves, a second department "Deli" with a table zone and a counter zone, the venue's own
+departments "chosen on the till"; for the hand-overs, `department-transfer-api.test.ts`'s own two
+departments; the receiving one set as each line says.
+What a broken rule prints: an `after` different from `before`. Command, from `apps/server`:
+`TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run src/zz-probe-a1564-dining.test.ts`, and
+`… src/department-transfer-api.test.ts -t PROBE` and `… src/table-actions.dining.test.ts` with the probe
+cases appended.
+
+| Case (all unsent unless said) | Receiver sells | `main` | call removed |
+| --- | --- | --- | --- |
+| eaten-in Counter bill → Deli table (`POST /api/bills/:id/move`) | takeaway | `eat_in` → `takeaway` | `eat_in` |
+| eaten-in table bill → Deli counter | takeaway | `eat_in` → `takeaway` | `eat_in` |
+| takeaway Counter bill → Deli table | eaten in | `takeaway` (kept) | `takeaway` |
+| takeaway table bill → Deli counter | eaten in | `takeaway` → `eat_in` | `takeaway` |
+| either way, either move | till's choice | kept | kept |
+| eaten-in table bill with a sent dish → Deli table | takeaway | kept | kept |
+| eaten-in bill, guests moved to a free Deli table (`moveGuests`) | takeaway | `eat_in` → `takeaway` | `eat_in` |
+| eaten-in bill, guests moved onto a Deli table another party holds (read 3's run) | takeaway | `eat_in` → `takeaway` | `eat_in` |
+| hand-over accepted, eaten in, at a table or counter | takeaway | `eat_in` → `takeaway` | `eat_in` |
+| hand-over accepted, takeaway, at a counter | eaten in | `takeaway` → `eat_in` | `takeaway` |
+| hand-over accepted, takeaway, at a table | eaten in | kept | kept |
+| hand-over accepted, either way, at a counter | till's choice | kept | kept |
+
+Every move and accept answered 200. Read 3 also ran a join of a free table of another department (refused
+`service_zone.join_mismatch`, both ways) and a split (same department and zone, way unchanged). Outputs:
+`~/waitron-campaign-l/receipts/a1564-dining-probe/output.txt`; read 3's in its report. The paid case, with Octopus's takeaway rate set to 2100 (its dine-in
+rate is 1000; at its seeded 1000 both answers looked alike, so that first run measured nothing): an
+eaten-in Counter bill moved to a Deli table, then paid in cash, filed `sale_lines.vat_rate` 2100 on `main`
+and 1000 with the call removed. With the call removed the existing suites in Task 7c passed except the two
+cases that flip.
+
+**Read, not run, for the owner's answer:** the callers named in Decision 2; that a line's rate at issue
+comes from its order's way (`readLineVatRates`); that an eaten-in set-menu bill made takeaway by a move is
+refused payment today (`set_menu.payment_not_ready`, `refuseTakeawaySetMenuMoney`,
+`apps/server/src/set-menu-bill.ts:66`), which 7c ends; joining and splitting tables.
 
 **Read, not run:** every other statement about today's code, including the reader list in Task 2, the
 callers of `makersByLine`, the till's merge and fold keys and the three kitchen checks.
 
 ## Changed on 2026-11-24
+
+_History. What it says about rates asked on a move or hand-over, Task 10b, the whole-table words and
+options (a) to (c) is superseded: see [Changed for the owner's answer](#changed-for-the-owners-answer)._
 
 - **VAT labels out (Tasks 1, 4, 7).** Hidden products are made by `createProductSkippingNameCheck`, which
   writes the takeaway rate row; `customItemProduct` takes no date and returns an id; the rate list is
@@ -737,6 +829,9 @@ callers of `makersByLine`, the till's merge and fold keys and the three kitchen 
 
 ## Changed after read 1
 
+_History. What it says about rates asked on a move or hand-over, Task 10b, the whole-table words and
+options (a) to (c) is superseded: see [Changed for the owner's answer](#changed-for-the-owners-answer)._
+
 Report: `~/waitron-campaign-l/receipts/a1564-plan-read-1.md`.
 
 - **C1, I2, I3 (gone with I1).** The state they need cannot arise: see Evidence.
@@ -756,6 +851,9 @@ Report: `~/waitron-campaign-l/receipts/a1564-plan-read-1.md`.
 - **★** rewritten with three choices.
 
 ## Changed after read 2
+
+_History. What it says about rates asked on a move or hand-over, Task 10b, the whole-table words and
+options (a) to (c) is superseded: see [Changed for the owner's answer](#changed-for-the-owners-answer)._
 
 Report: `~/waitron-campaign-l/receipts/a1564-plan-read-2.md`.
 
@@ -783,3 +881,36 @@ Report: `~/waitron-campaign-l/receipts/a1564-plan-read-2.md`.
 - **M6 (adopted).** Decision 2 says what changes under (b) and (c).
 - **M7 (adopted).** The owner lands, as the queue says.
 - **M8 (adopted).** The till shows no rate for a stored line (6a, 9b).
+
+## Changed for the owner's answer
+
+The owner's answer of 24 November (Decision 2), relayed by the watcher, and what running `main` found.
+
+- **Decision 2** is the owner's rule: a moved or handed-over bill keeps its way; options (a) to (c) are
+  gone, and no decision waits for the owner.
+- **Found by running:** `main` rewrites an unsent bill's way when it moves or is handed over into a
+  department fixed the other way, and nothing refuses it (Evidence). **Task 7c (new, its own PR 1b after
+  read 3)** removes that (mine); it is on the fiscal filing path.
+- **Decision 1** holds at two points, adding and switching; read 1's refusal inside
+  `applyDepartmentDining` is dropped (mine). **Decision 8:** only the switch can choose a rate.
+- **Task 7b** keeps only the switch: no rates in the move, accept or whole-table bodies, no Move this bill…
+  words, no replay case. **Task 9a:** the window asks by the order's own way. **Task 10a:** only the switch
+  opens the window after a refusal. **Task 10b** is removed. **Task 10c:** one guide sentence on two bills
+  (mine). **Review Focus 5**, the Architecture paragraph, Global Constraints, the PR table, Changed test
+  checks and Evidence follow. PR 1 landed as #4217.
+
+## Changed after read 3
+
+Report: `~/waitron-campaign-l/receipts/a1564-plan-read-3.md`.
+
+- **I1 (adopted).** The paths that reach the rewrite are single-bill moves, moving guests to a free table or
+  onto a held one, and accepted hand-overs; joins across departments are refused and splits stay in their
+  zone (read 3 ran these). Task 7c tests the held-table move instead of joins and splits.
+- **I2 (adopted, mine; the managing session may fold it back into PR 2).** Task 7c is PR 1b, landing before
+  PR 2; its custom-item test is in 7b.
+- **I3 (adopted).** 7c corrects the backlog decision in place; Decision 2 says it was a false paraphrase.
+- **M1 (adopted, mine).** 7c deletes `applyDepartmentDining` and both calls rather than one; that deletion was
+  not run.
+- **M2** (Decision 2: `set_menu.not_seated` stays), **M3** (history marked superseded), **M4** (Decision 1),
+  **M5** (PR 1b's notes), **M6** (outputs saved), **M7** (this section): applied.
+

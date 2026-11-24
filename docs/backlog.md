@@ -666,7 +666,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Nobody can sell one yet: what exists is the hidden products (`customItemProduct`, which nothing calls),
   the permission, which nothing checks, and the "Custom items" row of the category report. To come: the
   server's order lines (Tasks 4a to 7b) and the till (Tasks 8 to 10c). The watcher cleared Tasks 4a to 7a
-  to build; what depends on the plan's Decision 2 waits for the owner's answer.
+  to build. The owner answered Decision 2 on 2026-11-24: a bill keeps its eaten-here or takeaway way when
+  it moves or is handed over. Today an unsent one takes the new department's way, and so its VAT; Task 7c,
+  a small pull request of its own before the server's, makes the owner's rule true.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
   `docs/superpowers/plans/2026-11-21-counter-custom-item.md`.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
