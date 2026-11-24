@@ -39,8 +39,8 @@ page heading _Cartas_; and Set menus becomes a screen of its own rather than mor
   menus. Page search finds it.
 - Set menus is a new screen with its own address (`/set-menus`), in files of its own; an open set
   menu's address is under it. Links to a set menu elsewhere (a menu's Preview, its publish problems,
-  search, the image library, help) go there. `/menus/menu/<id>` naming a set menu opens its Set menus
-  address (**my call**).
+  search, the image library, help) go there. No redirect from the address a set menu has today (owner:
+  "there are no old links").
 - The heading is **Set menus**, with **Add set menu** beside it, as Menus has **Add menu**. With no
   set menus, the table offers Add set menu and the heading does not, as on Menus. The window that asks
   "Menu or Set menu?" (`menu-kind-choice`) goes.
