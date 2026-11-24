@@ -423,7 +423,6 @@ export class SetupRecoveryCopy extends LitElement {
                     : nothing
                 }
               </dl>
-              <p>${t("restore.preview_older_key")}</p>
               ${
                 preview.fiscalSelection === undefined
                   ? nothing
