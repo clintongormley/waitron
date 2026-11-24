@@ -867,8 +867,7 @@ _2026-11-24: Set menus are to have a page of their own beside Menus, approved by
 
 _2026-11-24: Before that page, menus, set menus, products and variants are to say Delete, not Archive, and a deleted one is listed nowhere, approved by the owner: [spec](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The Home page tab and the guest menu preview get their own design rounds with the owner; nothing is queued for them._
-
+_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The Home page tab has its own design, the Device home page, approved the same day: [spec](../superpowers/specs/2026-11-24-device-home-page-design.md). The guest menu preview gets its own design round with the owner; nothing is queued for it._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 
