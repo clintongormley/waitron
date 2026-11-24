@@ -37,9 +37,10 @@ function sizeProblems(files: ReadonlyMap<string, number>, limits: Limits): strin
       continue;
     }
     if (listedCap === undefined) continue;
-    if (lines < defaultLimit) {
+    const shouldLower = cap - lines > limitStep;
+    if (lines < defaultLimit || (shouldLower && lines === defaultLimit)) {
       problems.push(`${size} Remove its limit entry.`);
-    } else if (cap - lines > limitStep) {
+    } else if (shouldLower) {
       problems.push(`${size} Lower the limit to ${Math.ceil(lines / limitStep) * limitStep}.`);
     }
   }
@@ -119,6 +120,11 @@ it.each([
     problems: [`${product}: 1249 lines, limit 1500. Lower the limit to 1250.`],
   },
   { lines: 1_000, cap: 1_250, problems: [] },
+  {
+    lines: 1_000,
+    cap: 1_500,
+    problems: [`${product}: 1000 lines, limit 1500. Remove its limit entry.`],
+  },
   {
     lines: 999,
     cap: 1_250,

@@ -102,11 +102,12 @@ why it keeps its database in memory.
 Keep each product TypeScript file within 1,000 physical lines, including comments and blank
 lines. CI reports the path, line count and limit. When a file reaches its limit, move code into a
 new file. Add or raise a cap in `scripts/product-file-size-limits.json` only with the watcher's or
-owner's approval. Quote that approval in your pull request.
+owner's approval.
 
 The first caps round the counts on main up to a multiple of 250. When a listed file sits more
 than 250 lines below its cap, lower the cap to the nearest multiple of 250 at or above its current
-count. Remove its entry when the file drops below 1,000 lines or leaves the scan.
+count. Remove the entry if the new cap would be 1,000, the file drops below 1,000 lines, or the
+file leaves the scan.
 
 `pnpm exec vitest run scripts/product-file-size.test.ts` reads regular working-tree files listed
 by Git under `apps/*/src/` and `packages/*/src/` with the `.ts` extension. The scan excludes
@@ -116,12 +117,12 @@ by Git under `apps/*/src/` and `packages/*/src/` with the `.ts` extension. The s
 `i18n/alert-messages.ts`, country packs' `src/demo/` data and the generated
 `packages/reporting/src/dr303-layout.ts`.
 
-The guard checks file size. Review still catches product code moved into an excluded catalogue
-or `testing/` directory, such as the resolver code already in the two `codes.ts` files. Review
-also checks approval for a new or raised cap. Untracked files, other extensions and files outside
-the named source directories lie outside the scan. Two pull requests can each pass against their
-own heads while together growing a file past its cap or shrinking it enough to need a lower cap.
-The root guard on main evaluates the combined result.
+The guard uses the caps as entered. In review, check the shape and approval of cap changes and
+look for product code renamed or moved into any excluded path. For example, the two excluded
+`codes.ts` catalogues already contain resolver code. Untracked files, other extensions and files
+outside the named source directories lie outside the scan. Two pull requests can each pass
+against their own heads while together growing a file past its cap or shrinking it enough to need
+a lower cap. The root guard on main evaluates the combined result.
 
 ## The image's release metadata comes from its source
 
