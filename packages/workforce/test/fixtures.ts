@@ -9,7 +9,7 @@ import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { WORKFORCE_PERMISSIONS } from "../src/permissions.js";
 import { hashPin, registerModulePermissions } from "@waitron/identity";
-import { appendToChain } from "../src/chain.js";
+import { appendToChain, type TimeEntryAppend } from "../src/chain.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 import type { WorkTimeRuleset } from "../src/ruleset.js";
 import { absences } from "../src/schema/absences.js";
@@ -290,6 +290,18 @@ export async function insertTimeEntry(
       },
     ),
   );
+}
+
+/** Appends each entry in turn to `nodeId`'s chain through the real append; returns their ids. */
+export async function appendChainEntries(
+  db: Database | Transaction,
+  nodeId: string,
+  entries: readonly TimeEntryAppend[],
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const entry of entries)
+    ids.push((await db.transaction((inner) => appendToChain(inner, { nodeId }, entry))).id);
+  return ids;
 }
 
 type AttendanceMailFields = Partial<{
