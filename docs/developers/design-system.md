@@ -574,8 +574,8 @@ mode a tile is painted as above. In Thumbnails mode a tile with an image shows i
 Colours mode, or neutral. A folder identifies a section and sits on a badge when the tile has a
 photo. The accessible name includes "Section". On the till, a section emptied by a diet filter
 still shows "Nothing matches the filter". A product tile shows its menu price or the range of its
-variant prices, with one amount when they are equal. It appends the unit once for units other
-than Each.
+variant prices, including sold-out variants, with one amount when the prices are equal. It appends
+the unit once for units other than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
 The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the

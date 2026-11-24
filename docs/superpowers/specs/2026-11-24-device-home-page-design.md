@@ -63,8 +63,9 @@ deciding. The owner chose none, asked about putting sections on a row of their o
   small badge on it, so a section and a product differ. The tile's accessible name keeps "section". The
   till's "Nothing matches the filter" line stays.
 - A product with variants shows the **range** of the prices its variants have on this menu, or one price
-  when they are equal. Variants that cannot be ordered just now are left out unless none can
-  (**my call**). In a set menu's folder, tiles keep saying what they say today.
+  when they are equal. Sold-out variants count in the range. The owner confirmed on 24 November
+  (“i think full is fine”, relayed by the watcher at 19:33 in Lane F's `questions.md`). In a set
+  menu's folder, tiles keep saying what they say today.
 - A price names its unit only when the unit is not Each: "€5.50", "€89.00/kg". Today's two writers are
   `#productButton` in `apps/till/src/widgets/menu-browser.ts` and
   `apps/dashboard/src/widgets/device-home-preview.ts`; they share one function after this.
