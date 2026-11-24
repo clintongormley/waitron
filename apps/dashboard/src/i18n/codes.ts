@@ -1617,6 +1617,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Waitron's own records contradict that outcome, so it was not recorded. Check what the card provider shows again.",
     es: "Los registros de Waitron contradicen ese resultado, así que no se ha registrado. Vuelve a comprobar lo que muestra el proveedor de pagos.",
   },
+  "membership.self_reset_failed": {
+    en: "The box couldn’t start the reset. Try again.",
+    es: "El servidor no pudo iniciar el restablecimiento. Inténtalo de nuevo.",
+  },
   "membership.node_not_found": {
     en: "That box is not on this venue's list of boxes. Refresh the list.",
     es: "Ese servidor no está en la lista de servidores del local. Actualiza la lista.",

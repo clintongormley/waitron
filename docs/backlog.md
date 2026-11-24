@@ -1155,7 +1155,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 
-- **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
+- **Resetting a box without a terminal** — open for the recovery page and boxes that joined another box. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
 
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare can
   use a mail server or test Cloud for staff email. Settings lets admins

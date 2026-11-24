@@ -3706,6 +3706,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-servers-screen
           .api=${this.api}
           .canPromote=${this.#sessionPermissions.includes("node.manage")}
+          .canOpenBackups=${this.#canOpenScreen("backup")}
+          .onboardingIntent=${this.onboardingIntent}
           @handover-open=${(event: CustomEvent<{ url: string }>) => {
             this.#leaving = true;
             window.location.href = event.detail.url;

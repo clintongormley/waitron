@@ -146,6 +146,7 @@ describe("the user guides", () => {
       "adding-a-spare",
       "switch-label",
       "remove-a-spare",
+      "reset-this-box",
       "emergency",
       "old-box-returns",
       "hand-over",
