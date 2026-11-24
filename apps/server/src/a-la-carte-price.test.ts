@@ -44,6 +44,9 @@ let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 let supplement: typeof daily;
 let tapas: typeof daily;
 let tortilla: { unpriced: string; priced: string };
+// Each `setMenuOnFullMenu` gives its dish a course of its own: Flan's is Special's, Tortilla's is
+// Tapas's, and Daily's copy counts Flan as Sharing.
+let courses: { dessert: string; main: string; sharing: string };
 let extra: { listId: string; picks: { productId: string; quantity: number }[] };
 let app: Hono;
 let cookie: string;
@@ -78,6 +81,14 @@ useVenueDb({
         .values({ name: "Sharing", displayOrder: 5 })
         .returning({ id: kitchenCourses.id });
       await saveSetMenuDishCourse(tx, daily.menuId, daily.menuItemId, courseId);
+      const [dessert, main] = await tx
+        .insert(kitchenCourses)
+        .values([
+          { name: "Dessert", displayOrder: 6 },
+          { name: "Main", displayOrder: 7 },
+        ])
+        .returning({ id: kitchenCourses.id });
+      courses = { dessert: dessert!.id, main: main!.id, sharing: courseId };
       supplement = await setMenuOnFullMenu(tx, venue.tables.menuId, flan, "Special", "21.00");
       await tx
         .update(menuItems)
@@ -111,6 +122,10 @@ useVenueDb({
         "es",
       );
       tortilla = { unpriced: unpriced!.id, priced: priced!.id };
+      await tx
+        .update(products)
+        .set({ courseId: courses.dessert })
+        .where(eq(products.id, tortilla.priced));
       tapas = await setMenuOnFullMenu(tx, venue.tables.menuId, dish, "Tapas", "12.00");
       daily.versionId =
         supplement.versionId =
@@ -155,6 +170,19 @@ const rowsOf = (tabId: string) =>
       parentLineId: workingOrderLines.parentLineId,
       unitPriceGross: workingOrderLines.unitPriceGross,
       aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+
+const coursesOf = (tabId: string) =>
+  venue.db
+    .select({
+      setMenuRole: workingOrderLines.setMenuRole,
+      parentLineId: workingOrderLines.parentLineId,
+      courseId: workingOrderLines.courseId,
+      setMenuCountsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
+      countsAsCourseId: workingOrderLines.countsAsCourseId,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -397,3 +425,107 @@ it.each([
     ]);
   },
 );
+
+it("records an a la carte dish's own course as the course it counts as, and none on its extras", async () => {
+  const bill = await tableBill();
+  await send(
+    await saveSetMenuDraft(venue, bill, {
+      menuItemId: venue.item("Flan"),
+      quantity: "1",
+      extras: [extra],
+    }),
+  );
+  expect(await coursesOf(bill.tabId)).toMatchObject([
+    { parentLineId: null, countsAsCourseId: supplement.courseId },
+    { parentLineId: expect.any(String), countsAsCourseId: null },
+  ]);
+});
+
+it("records the dish's own course when the waiter sends it with another course", async () => {
+  const bill = await tableBill();
+  await send(
+    await saveSetMenuDraft(venue, bill, {
+      menuItemId: venue.item("Flan"),
+      quantity: "1",
+      courseId: courses.main,
+    }),
+  );
+  expect(await coursesOf(bill.tabId)).toMatchObject([
+    { courseId: courses.main, countsAsCourseId: supplement.courseId },
+  ]);
+});
+
+it("records the product's course on a dish tapped in a set menu, not the copy's, and none on the set menu's row", async () => {
+  const bill = await tableBill();
+  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
+  await send(await saveSetMenuDraft(venue, bill, { ...inMenu(daily), extras: [extra] }));
+  expect(await coursesOf(bill.tabId)).toMatchObject([
+    { setMenuRole: "set_menu", countsAsCourseId: null },
+    {
+      setMenuRole: "dish",
+      setMenuCountsAsCourseId: courses.sharing,
+      countsAsCourseId: supplement.courseId,
+    },
+    { setMenuRole: null, parentLineId: expect.any(String), countsAsCourseId: null },
+  ]);
+});
+
+it.each([
+  ["a variant with no course of its own takes its dish's", "unpriced", "parent"],
+  ["a variant with a course of its own takes that course", "priced", "dessert"],
+] as const)("records the course a variant counts as: %s", async (_, which, course) => {
+  const body = await counterTakeaway([], tapas.menuId);
+  const opened = await request("POST", "/api/working-orders", body);
+  expect(opened.status).toBe(200);
+  const { revision, setMenus } = await opened.json();
+  const saved = await request("PUT", `/api/working-orders/${body.id}`, {
+    dining: body.dining,
+    expectedEdit: null,
+    revision,
+    lines: [
+      {
+        ...inMenu(tapas),
+        variantId: tortilla[which],
+        menuVersionId: setMenus.recorded[tapas.menuId],
+        setMenuReservedLineId: setMenus.setMenus[0].lineId,
+        setMenuReservedPlace: 0,
+      },
+    ],
+  });
+  expect(saved.status).toBe(200);
+  expect(await coursesOf(body.id)).toMatchObject([
+    { setMenuRole: "set_menu", countsAsCourseId: null },
+    {
+      setMenuRole: "dish",
+      countsAsCourseId: course === "parent" ? tapas.courseId : courses.dessert,
+    },
+  ]);
+});
+
+it("keeps the course a dish counts as on the rows a split carves", async () => {
+  const bill = await tableBill();
+  await inTx(venue, async (tx) => {
+    await addGroupedTabRound(tx, venue.cfg, bill.tabId, [
+      { menuItemId: venue.item("Flan"), quantity: "3" },
+    ]);
+    await splitLinesWithinOrder(tx, venue.cfg, bill.tabId, [{ lineNo: 1, quantity: "1" }]);
+  });
+  expect(await coursesOf(bill.tabId)).toMatchObject([
+    { countsAsCourseId: supplement.courseId },
+    { countsAsCourseId: supplement.courseId },
+  ]);
+});
+
+it("keeps the course a dish counts as on the dishes Reopen to split copies onto the new bill", async () => {
+  const from = await tableBill();
+  const to = await tableBill();
+  await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
+  await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));
+  await inTx(venue, async (tx) => {
+    await copyBillDishes(tx, from.tabId, to.tabId);
+  });
+  expect(await coursesOf(to.tabId)).toMatchObject([
+    { setMenuRole: "set_menu", countsAsCourseId: null },
+    { setMenuRole: "dish", countsAsCourseId: supplement.courseId },
+  ]);
+});

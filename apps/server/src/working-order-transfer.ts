@@ -443,6 +443,7 @@ async function carveLines(
         offerVatClass: workingOrderLines.offerVatClass,
         offerCategoryName: workingOrderLines.offerCategoryName,
         aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
+        countsAsCourseId: workingOrderLines.countsAsCourseId,
       },
       ticketItemId: ticketItems.id,
     })
