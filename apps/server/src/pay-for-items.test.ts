@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { billPayments, sales, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  billPayments,
+  readVenueSettings,
+  sales,
+  saveVenueFields,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct, writeContentLanguages } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -402,28 +409,42 @@ describe("A1515 pay for items: what the new bill keeps", () => {
 
   // Spain never offers English on a receipt, so Catalan stands for "a language not the venue's".
   it("the new bill prints in the table's bill's receipt language", async () => {
+    const saved = await inTx(v, (tx) => readVenueSettings(tx));
     await inTx(v, (tx) =>
       writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca"] }),
     );
-    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
-    await v.db
-      .update(workingOrders)
-      .set({ receiptLocale: "ca-ES" })
-      .where(eq(workingOrders.id, billId));
-    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
-      method: "cash",
-      applied: "15.00",
-      tip: "0.00",
-      tendered: "15.00",
-    });
+    try {
+      const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+      await v.db
+        .update(workingOrders)
+        .set({ receiptLocale: "ca-ES" })
+        .where(eq(workingOrders.id, billId));
+      const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+        method: "cash",
+        applied: "15.00",
+        tip: "0.00",
+        tendered: "15.00",
+      });
 
-    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+      const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
 
-    const [newBill] = await v.db
-      .select({ receiptLocale: workingOrders.receiptLocale })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, paid.billId));
-    expect(newBill!.receiptLocale).toBe("ca-ES");
-    expect(paid.payment.invoice?.locale).toBe("ca-ES");
+      const [newBill] = await v.db
+        .select({ receiptLocale: workingOrders.receiptLocale })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, paid.billId));
+      expect(newBill!.receiptLocale).toBe("ca-ES");
+      expect(paid.payment.invoice?.locale).toBe("ca-ES");
+    } finally {
+      await inTx(v, (tx) =>
+        saveVenueFields(
+          tx,
+          {
+            contentLanguages: saved.doc.contentLanguages,
+            defaultContentLanguage: saved.doc.defaultContentLanguage,
+          },
+          null,
+        ),
+      );
+    }
   });
 });

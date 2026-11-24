@@ -6395,6 +6395,37 @@ describe("A1515 pay for items over HTTP", () => {
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
   });
 
+  it("item payments keep a hand-keyed card's operation number and machine", async () => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+
+    const paid = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks: [{ lineId: salad, quantity: "1" }],
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      method: "card",
+      externalRef: "4471",
+      externalProvider: "other",
+      externalMachine: "  Patio  ",
+      applied: "12.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    expect(paid.json.payment).toMatchObject({
+      outcome: "received",
+      payment: {
+        method: "card",
+        entry: "manual",
+        externalRef: "4471",
+        externalProvider: "other",
+        externalMachine: "Patio",
+      },
+    });
+  });
+
   it.each([
     [
       "item payments refuse which-machine details for cash",
