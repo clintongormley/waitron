@@ -54,7 +54,7 @@ describe("setMenuALaCartePrices", () => {
     });
   }
 
-  it("prices each set-menu line from its holding menu or its own price, and leaves à la carte lines null", async () => {
+  it("prices each set-menu line from its holding menu or its own price, and leaves a la carte lines null", async () => {
     const ids = await seedDishes();
     const holding = {
       offers: { flan: { productId: ids.flan, unitPrice: "8.00", variants: [] } },

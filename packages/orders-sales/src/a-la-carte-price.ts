@@ -9,7 +9,7 @@ function offersByProduct(document: MenuDocument): ReadonlyMap<string, FrozenOffe
 }
 
 /**
- * What a dish costs à la carte: the holding menu's ordinary offer of it (its variant's price where
+ * What a dish costs a la carte: the holding menu's ordinary offer of it (its variant's price where
  * the menu lists the variant), else the variant's own price, else the dish's own price.
  */
 export function aLaCarteUnitCents(
@@ -40,8 +40,8 @@ async function readOwnPrices(
 }
 
 /**
- * Each line's à la carte price where it was taken from a set-menu copy, from the copy's holding
- * menu; null for a line priced à la carte, whose charged price is its à la carte price.
+ * Each line's a la carte price where it was taken from a set-menu copy, from the copy's holding
+ * menu; null for a line priced a la carte, whose charged price is its a la carte price.
  */
 export async function setMenuALaCartePrices(
   tx: Transaction,

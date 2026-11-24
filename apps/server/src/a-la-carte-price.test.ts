@@ -252,7 +252,7 @@ it("probe D4: the set-menu copy and the holding menu's ordinary offer agree on c
   expect(pick(copy)).toEqual(pick(ordinary));
 });
 
-it("writes an à la carte dish's charged price as its à la carte price when a draft is sent", async () => {
+it("writes an a la carte dish's charged price as its a la carte price when a draft is sent", async () => {
   const bill = await tableBill();
   await send(
     await saveSetMenuDraft(venue, bill, {
@@ -288,7 +288,7 @@ it("writes the holding menu's price on a set-menu dish with a supplement", async
   ]);
 });
 
-it("writes the à la carte price when a counter order is opened with dishes", async () => {
+it("writes the a la carte price when a counter order is opened with dishes", async () => {
   const body = await counterTakeaway([{ menuItemId: venue.counterItem("Flan"), quantity: "1" }]);
   const opened = await request("POST", "/api/working-orders", body);
   expect(opened.status).toBe(200);
@@ -297,7 +297,7 @@ it("writes the à la carte price when a counter order is opened with dishes", as
   ]);
 });
 
-it("writes the à la carte price on dishes a counter order saves, à la carte and in a set menu", async () => {
+it("writes the a la carte price on dishes a counter order saves, a la carte and in a set menu", async () => {
   const body = await counterTakeaway([], daily.menuId);
   const opened = await request("POST", "/api/working-orders", body);
   expect(opened.status).toBe(200);
@@ -324,7 +324,7 @@ it("writes the à la carte price on dishes a counter order saves, à la carte an
   ]);
 });
 
-it("keeps the à la carte price on the row a split cuts off", async () => {
+it("keeps the a la carte price on the row a split cuts off", async () => {
   const bill = await tableBill();
   await inTx(venue, async (tx) => {
     await addGroupedTabRound(tx, venue.cfg, bill.tabId, [
@@ -338,7 +338,7 @@ it("keeps the à la carte price on the row a split cuts off", async () => {
   ]);
 });
 
-it("keeps the à la carte price on the set-menu dish Reopen to split copies onto the new bill", async () => {
+it("keeps the a la carte price on the set-menu dish Reopen to split copies onto the new bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
   await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
@@ -352,7 +352,7 @@ it("keeps the à la carte price on the set-menu dish Reopen to split copies onto
   ]);
 });
 
-it("keeps the à la carte price on a set-menu dish moved to another bill", async () => {
+it("keeps the a la carte price on a set-menu dish moved to another bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
   await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
@@ -370,7 +370,7 @@ it.each([
   ["a variant with no price of its own takes the dish's own price", "unpriced", 600],
   ["a variant with a price of its own takes that price", "priced", 900],
 ] as const)(
-  "writes the à la carte price of a set-menu dish the menu does not list: %s",
+  "writes the a la carte price of a set-menu dish the menu does not list: %s",
   async (_, which, cents) => {
     const body = await counterTakeaway([], tapas.menuId);
     const opened = await request("POST", "/api/working-orders", body);

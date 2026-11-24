@@ -758,7 +758,7 @@ describe("working_order_lines", () => {
     await seed(db);
   });
 
-  describe("a line's à la carte price", () => {
+  describe("a line's a la carte price", () => {
     it("refuses a negative price and stores zero and a positive one", async () => {
       const bill = await openOrder(db);
       const error = await captureError(() =>

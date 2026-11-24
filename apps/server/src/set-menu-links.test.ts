@@ -229,7 +229,7 @@ it("links nothing on a counter order eaten in, and still takes the dish", async 
   expect(lines).toEqual([{ name: "Flan" }]);
 });
 
-it("links the set menus of a dish tapped in an à la carte folder", async () => {
+it("links the set menus of a dish tapped in an a la carte folder", async () => {
   const { venue, copy } = fixture;
   const { tabId } = await seated();
   await order(venue, tabId, "Flan");
