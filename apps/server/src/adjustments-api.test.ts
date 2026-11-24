@@ -13,6 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   printJobs,
   products,
+  roles,
   withTransaction,
   workingOrders,
   workingOrderLines,
@@ -1532,5 +1533,53 @@ describe("what the till reads", () => {
       ]);
     }
     expect((await approvers("?permission=adjustment.approve", "")).status).toBe(401);
+  });
+
+  it("lists only the people holding every permission asked for", async () => {
+    const approvers = async (query: string) => {
+      const answer = await send(
+        venue.app,
+        venue.cookie.staff,
+        "GET",
+        `/api/adjustment-approvers${query}`,
+      );
+      return [answer.status, answer.json] as const;
+    };
+    const [{ permissions: supervisorHeld }] = await inTx(venue, (tx) =>
+      tx
+        .select({ permissions: roles.permissions })
+        .from(roles)
+        .where(eq(roles.builtInKey, "supervisor")),
+    );
+    await inTx(venue, (tx) => removeBuiltInPermissionForTest(tx, "supervisor", "sale.rectify"));
+    try {
+      const refunds = await approvers("?permission=sale.refund");
+      expect(refunds[0]).toBe(200);
+      expect((refunds[1] as unknown as { personId: string }[]).map((p) => p.personId)).toContain(
+        venue.supervisorId,
+      );
+      const both = await approvers("?permission=sale.refund&permission=sale.rectify");
+      expect(both[0]).toBe(200);
+      expect(both[1]).toEqual([
+        { personId: expect.any(String), displayName: "Administrator" },
+        { personId: venue.managerId, displayName: "Martha" },
+      ]);
+      expect(await approvers("?permission=sale.rectify&permission=sale.refund")).toEqual(both);
+      expect(await approvers("?permission=sale.refund&permission=person.admin")).toEqual([
+        400,
+        { code: "management.request_invalid", params: { field: "permission" } },
+      ]);
+      expect(await approvers("?permission=sale.refund&permission=")).toEqual([
+        400,
+        { code: "management.request_invalid", params: { field: "permission" } },
+      ]);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(roles)
+          .set({ permissions: supervisorHeld })
+          .where(eq(roles.builtInKey, "supervisor")),
+      );
+    }
   });
 });

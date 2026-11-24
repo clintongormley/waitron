@@ -2017,6 +2017,25 @@ async function correctionsOn(saleId: string) {
 }
 
 describe("POST …/give-back on a card reader", () => {
+  it("refuses a profile that may not take reader cards, writing nothing, and sends once it may", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }]);
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: reader }));
+    const noReader = await ownTill(["take-orders", "open-cash-drawer", "take-cash"]);
+    const calls = cardCallsNow();
+    const before = effects();
+    const answer = await give(saleId, body, noReader.cookie);
+    expectRefusedUnwritten(answer, "device.forbidden_action", before);
+    expect([answer.status, answer.json]).toEqual([
+      403,
+      { code: "device.forbidden_action", params: { action: "pay" } },
+    ]);
+    expect(cardCallsSince(calls).refunds).toEqual([]);
+    const allowed = await ownTill(["take-orders", "integrated-card-payment"]);
+    expect((await give(saleId, body, allowed.cookie)).status).toBe(200);
+  });
+
   it("sends the extra, then the goodwill's leg, each completing before the next, and files the corrective", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }], "3.00");

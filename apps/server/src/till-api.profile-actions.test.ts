@@ -595,9 +595,9 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   },
   {
     proof: "matching request (source)",
-    actions: ["take-cash", "hand-keyed-card-payment"],
+    actions: ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"],
     basis:
-      'Conditional on the way chosen: cash needs take-cash, a separate terminal hand-keyed-card-payment, as POST /api/transactions/:saleId/refunds checks the payment it gives back; give-back.test.ts: "refuses a profile that takes no cash, a till outside the receipt\'s zone and a kitchen screen, writing nothing" and "refuses a profile that may not take hand-keyed cards, writing nothing"',
+      'Conditional on the way chosen: cash needs take-cash, a separate terminal hand-keyed-card-payment, a card reader integrated-card-payment (refused as action pay), as POST /api/transactions/:saleId/refunds checks the payment it gives back; give-back.test.ts: "refuses a profile that takes no cash, a till outside the receipt\'s zone and a kitchen screen, writing nothing", "refuses a profile that may not take hand-keyed cards, writing nothing" and "refuses a profile that may not take reader cards, writing nothing, and sends once it may"',
     routes: ["POST /api/transactions/:saleId/give-back"],
   },
   {

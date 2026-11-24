@@ -1304,6 +1304,59 @@ describe("refunds without a corrective invoice", () => {
     ]);
   });
 
+  it("names the customer of a full invoice's refund, read from the sale, and no one for a simplified ticket's", async () => {
+    const fullInvoice = async (
+      invoiceNumber: number,
+      customer: { counterpartyLegalName?: string; counterpartyTaxId?: string },
+    ) => {
+      const saleId = await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: "2026-11-02T12:00:00.000Z",
+        total: "11.00",
+        lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+        ...customer,
+      });
+      await seedTender(
+        suite.db,
+        { saleId },
+        { method: "cash", amount: "11.00", settledAt: "2026-11-02T12:00:00.000Z" },
+      );
+      const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+      return { saleId, tenderId: tender!.id, method: "cash" as const, venue };
+    };
+    const named = await refund(
+      await fullInvoice(1, { counterpartyLegalName: "Acme SL", counterpartyTaxId: "B12345678" }),
+      "1.00",
+      "2026-11-03T12:00:00.000Z",
+    );
+    const taxNumberOnly = await refund(
+      await fullInvoice(2, { counterpartyTaxId: "B87654321" }),
+      "1.00",
+      "2026-11-03T13:00:00.000Z",
+    );
+    const simplified = await refund(
+      await seedRefundableSale(suite.db, venue, {
+        method: "cash",
+        applied: "11.00",
+        tip: "0.00",
+        at: "2026-11-02T12:00:00.000Z",
+        invoiceNumber: 3,
+        vatRate: "10.00",
+        base: "10.00",
+      }),
+      "1.00",
+      "2026-11-03T14:00:00.000Z",
+    );
+
+    const rows = (await list()).refundsWithoutCorrective;
+    expect(rows.map((row) => [row.id, row.customer])).toEqual([
+      [named, "Acme SL, B12345678"],
+      [taxNumberOnly, "B87654321"],
+      [simplified, undefined],
+    ]);
+    expect(rows[2]).not.toHaveProperty("customer");
+  });
+
   it("lists a plain refund of an ordinary card payment, but not a Correct invoice's refund nor one completed outside the period", async () => {
     const card = await seedRefundableSale(suite.db, venue, {
       method: "card",
@@ -1445,7 +1498,7 @@ describe("refunds without a corrective invoice", () => {
       new RegExp(`<Relationship Id="${relationshipId}"[^>]*Target="([^"]+)"`),
     )?.[1];
     const xml = strFromU8(files[`xl/${target}`]!);
-    const common = ["Cold food", "Ana", "Bea", "sale-1", "A/1", ""];
+    const common = ["Cold food", "Ana", "Bea", "sale-1", "A/1", "", ""];
     expect(row(xml, 3)).toEqual([
       "refund-1",
       refund.refundedAt,
@@ -1640,6 +1693,7 @@ describe("refunds without a corrective invoice", () => {
                 authorizedBy: "Luis",
                 saleId: "sale-1",
                 invoiceNumber: "A/1",
+                customer: "Acme SL, B12345678",
                 takenOffBy: "A/2",
                 vat: [
                   { rate: "10.00", base: decimal("4.55"), tax: decimal("0.46") },
@@ -1661,10 +1715,13 @@ describe("refunds without a corrective invoice", () => {
           : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
       ]);
       expect(row(xml, 2)).toEqual(words.refundColumns);
-      expect(row(xml, 2)).toHaveLength(14);
+      expect(row(xml, 2)).toHaveLength(15);
+      expect(row(xml, 2)[10]).toBe(
+        language === "en" ? "Customer on the invoice" : "Cliente de la factura",
+      );
       const card = words.paymentMethods.card;
       const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
-      const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "A/2"];
+      const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "Acme SL, B12345678", "A/2"];
       expect(row(xml, 3)).toEqual([...shared, "10.01", "0.50", ...tail, "10.00", "4.55", "0.46"]);
       expect(row(xml, 4)).toEqual([...shared, "", "", ...tail, "21.00", "4.13", "0.87"]);
     },
