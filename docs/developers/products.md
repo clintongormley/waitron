@@ -71,7 +71,7 @@ You store one allergen declaration. Saving sorts cereal and nut kinds and remove
 `null` means you have not reviewed it, while `{}` means you reviewed it and declared none.
 The diet profile is calculated when read from the declared override over unknown vegan and
 vegetarian values; it is not stored separately (`overlayDietProfile`). Deleting a product or folder,
-or switching Active off in the product editor, records the product name, the variants archived
+or deleting from the product editor, records the product name, the variants deleted
 with it and the person who acted in `activity_log`.
 
 The three resolvers, one per audience:
@@ -359,10 +359,10 @@ removes that entry and reveals the root's text. The include remains eligible whi
 sections directly, because it can show its folder again.
 
 `content-translation-candidates.ts` shares the ownership and activity query across the full
-report, count summary and translation target reads. Discovery excludes archived products and
-variants, variants under archived products, disabled lists and their labels, and sections or
+report, count summary and translation target reads. Discovery excludes deleted products and
+variants, variants under deleted products, disabled lists and their labels, and sections or
 includes whose owners, roles or root identities do not match. Direct translation reads still
-allow archived products and variants. The stored text's blank check uses JavaScript's trim
+allow retained rows of deleted products and variants. The stored text's blank check uses JavaScript's trim
 character set in SQL as well, so tabs and nonbreaking spaces remain missing text. Translate all
 uses that same whitespace rule when collecting and storing name suggestions.
 
@@ -603,8 +603,9 @@ hardware mapping: no mapping means `each`, a mapping means `weight`.
 `readProductEditor` returns `unitId: null` for a variant and its parent's value in `inherited.unitId`.
 The editor refuses a variant body naming a unit (`product.invalid`, field `unitId`) and otherwise
 clears its stored unit. `assignProductUnit` answers a variant's id with `product.not_found`.
-Unit management lists and reassigns only top-level products; `deleteUnit` clears any variant
-assignments before deleting the unit (`packages/menu/src/units.ts`).
+Unit management lists current top-level products. Deleted products keep the unit for saved draft
+counts. Once no current product uses it, `deleteUnit` clears the remaining assignments and deletes
+the unit (`packages/menu/src/units.ts`).
 
 Its colour is always its parent's too (W92), whatever its own `color` column holds:
 `effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns
@@ -646,48 +647,36 @@ for a variant only to override its price there: a `menu_item_variant_overrides` 
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
 row. Saving one size's price on a menu writes that size's row alone (`setMenuVariantPrice`,
 `packages/menu/src/variants.ts`), while `setMenuVariants` replaces the row of every Active size
-at once. An archived size holds no row: archiving it deletes its row on every menu, and
+at once. A deleted size holds no price override: deleting it removes its override on every menu, and
 `setMenuVariantPrice` refuses one with `product.variant_not_found`. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available
 
 A variant has the same two states as a product (_One save, one transaction_ below).
-Archiving a saved variant keeps its row; Remove on an unsaved one just drops it from the draft.
-A saved active variant left out of a product save is archived too (`setProductVariants`). An
-already archived variant, omitted or sent inactive, stays unchanged. A live or scheduled menu
-holding the variant refuses the archive with `product.on_live_menu`.
+Deleting a saved variant keeps its record. Remove on an unsaved variant drops it from the draft.
+Deleting a product removes it from Products, its menu drafts and extras lists. It deletes the
+product's variants and clears their menu prices. Deleting a variant removes it from the list under
+its product, its extras lists and the menus' variant prices. A live or scheduled menu holding
+the product or variant refuses deletion with `product.on_live_menu`.
 
-A product is on an active menu when that menu's working structure places it — in the menu's own
-sections, or inside an active menu it includes — and the product is Active; it is sellable when it
-is also Available. A variant is listed under its parent's offer while it is Active, and is sellable
-while it is Available (`readOfferVariants` in `listMenuOffers`,
-`packages/menu/src/operations.ts`). A menu has no on/off setting of its own for a product or a
-variant. To take a product off a menu, change the structure so that nothing in it places the
-product; one that comes through an included menu goes when that menu's structure stops placing it or
-the menu is no longer included. Archiving is refused while a live or scheduled published menu includes the product or variant.
-Remove it and publish first. Archiving a product then removes it from menu drafts and extras
-lists, archives its variants and clears their menu prices. Archiving a variant clears its menu
-prices and removes it from extras lists. Neither can be enabled again
-([product-categories.md](product-categories.md), "Moving and deleting").
+Deleting a saved product or variant releases its photo. You can delete the photo or unit separately
+once no current product uses it. Products archived before this change retain their photo links until
+you reset that test venue.
 
-You can fix an archived product's or variant's customer-facing translations by naming that target
-in the content-translations route. The automatic missing-translations list still leaves archived
-families out. An edit opened before archiving needs Review latest before it can save because the
-activity state is part of its saved baseline. Other inactive translation targets remain unavailable.
-The archived product keeps its unit assignment. You cannot delete a unit that it still uses or
-reassign it to another unit; the unit remains available for its retained details.
+Missing-translation discovery lists active products and variants. Explicit translation targets can
+still amend retained customer names. A save opened before deletion fails its stored-state check.
 
 A menu's Price overrides tab lists every Active product an active menu's working structure
-reaches, with its Active sizes. The working offers leave archived products and sizes out. The tab's Available
+reaches, with its Active sizes. The working offers leave deleted products and sizes out. The tab's Available
 column reads the product's, or a size's, own Available flag. The tab reads `menuPrices`; a
 menu's offers, and the published document built from them
 (`packages/menu/src/menu-document.ts`), come from `listMenuOffers` (both in
-`packages/menu/src/operations.ts`), and both leave an archived product or size out.
+`packages/menu/src/operations.ts`), and both leave a deleted product or size out.
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
-archived when it was published (`listMenuOffers`, `packages/menu/src/operations.ts`). A product
-that is Unavailable, or has become archived since, is served in its place marked unavailable
+already deleted when it was published (`listMenuOffers`, `packages/menu/src/operations.ts`). A product
+that is Unavailable, or has been deleted since, is served in its place marked unavailable
 (`applyLiveFields`, `packages/menu/src/menu-document.ts`). A change to a menu's structure
 reaches the tills only when the menu is published again. Whether each product and variant is
 Active and Available, including products picked as extras, is read from the current rows
@@ -767,13 +756,13 @@ extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVar
 cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order-pricing.ts`) refuses a pick of
 such a product; a pick of a variant itself sells. That refusal comes from one read for the whole
 basket's picks (`parentsWithActiveVariants`, `packages/menu/src/variants.ts`). A product whose
-variants are all archived sells as itself.
+variants are all deleted sells as itself.
 
 On the server, an edit of a held order keeps each stored line it names, at its stored price —
 including one whose product, or one of whose extras, has since gained an Active variant — and
 prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 `apps/server/src/working-order-held-write.ts`). Lowering or keeping such a line's quantity is allowed; raising
-it is refused `product.variant_required`, as a raise of a line whose product has become archived or
+it is refused `product.variant_required`, as a raise of a line whose product has been deleted or
 Unavailable is refused. An unsent line the edit names with a different variant is not kept: it
 becomes a new line, at that variant's price and name ("keeps a new variant sent for a saved,
 unsent line" in `apps/server/src/working-order.test.ts`). One that names its own variant, now
@@ -788,8 +777,8 @@ own words ("sends a raise to the server, and words the server's refusal" in
 variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the
 dine-in rate, and taken away, at the product's takeaway rate, as _What a sold
 line freezes_ says; a line not yet sent, dish
-or extra, whose product or parent is now archived is refused `product.unavailable`, while a
-sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`,
+or extra, whose product or parent is now deleted is refused `product.unavailable`, while a
+sold-out recorded line remains payable and a sent one is billed after deletion (`priceStoredOrderForIssuance`,
 `apps/server/src/stored-order-lines.ts`). The box files a captured card payment as it stands. On the till, retrieving the order keeps
 such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
 sold-out one, because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
@@ -840,17 +829,17 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   (`editor.base_price`) for a product with no unit, and a variant with no price of its own shows the
   base price as its hint, in its window and in its table row. Without variants, Variants shows only
   Add variant.
-- An active saved row's menu offers **Open**, **Edit** and **Archive**; an unsaved row uses
+- An active saved row's menu offers **Open**, **Edit** and **Delete**; an unsaved row uses
   **Remove**. **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
   save first, while the product form has unsaved changes, because opening the page replaces the form.
 - A click on a variant's row, or Enter on it, opens its edit window, as the menu's **Edit** does. The
   drag handle, the Available switch and the row menu keep their own clicks.
-- **Archive** stages `active: false` on a saved variant. Its row stays visible with
-  **Archived when saved** and **Keep**, which cancels that change before Save. **Remove** drops a
-  variant never saved from the draft. The table hides variants archived before the editor opened;
+- **Delete** stages `active: false` on a saved variant. Its row stays visible with
+  **Deleted when saved** and **Keep**, which cancels that change before Save. **Remove** drops a
+  variant never saved from the draft. The table hides variants deleted before the editor opened;
   there is no show/hide toggle and no action to bring them back (`dashboard-variant-table`,
-  `apps/dashboard/src/widgets/variant-table.ts`). An archive refused on Save keeps the draft open
+  `apps/dashboard/src/widgets/variant-table.ts`). A deletion refused on Save keeps the draft open
   and names the live or scheduled menus holding the variant.
 
 A variant also has its own product page: the product editor's routes read and save a variant's id.
@@ -914,8 +903,7 @@ Top to bottom:
 3. A `wt-card raised`: the price, with no group label above it, then Variants and Modifiers, always
    open. A variant's page holds only the price here.
 
-Cancel and Save follow. An archived product opens a plain-text details panel through View, not this
-editor.
+Cancel and Save follow.
 
 Details' closed line shows only what is set: one row per group with something set, each cut after
 two lines with a hanging indent, which can hide a later value in that row, so opening the section
@@ -968,16 +956,15 @@ main reporting category; on a variant it must be `null`, and any other value is 
 dietary declarations, the required `active` flag and optional save-only `available` (below), the required
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
-a required `active`, plus `id` when it already exists. An active variant sent with `active: false`, or left out of the body, is archived; an already
-archived variant sent inactive or omitted remains unchanged (`writeProductVariants`,
+a required `active`, plus `id` when it already exists. An active variant sent with `active: false`, or left out of the body, is deleted. A previously
+deleted variant sent inactive or omitted keeps its row (`writeProductVariants`,
 `packages/menu/src/variants.ts`). A customer-facing name whose every entry is blank parses to
 `null`, so "I typed spaces" and "I left it empty" store identically.
 
-A product has two states. **Active / Archived** is its retained state. Archive sets `active: false`
-and keeps the row. Switching it back on is refused with `product.archived`. Editor saves, product
-patches, variant writes, extras-list additions, course writes, and unit reassignment
-refuse an archived product too. Translation fixes, the main reporting category and folder moves
-remain allowed.
+Delete sets `active: false` and keeps the row. Product management lists and configuration
+exports leave those rows out. The product and variant writers refuse reactivation with
+`product.archived`. Translation fixes and internal category-key moves can still reach retained rows.
+
 **Available / Unavailable** is "sold out for now": a save sends `available` only when the editor's
 Available switch changed. Omission preserves an existing row; a new row defaults to available. This
 also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans.
@@ -986,11 +973,11 @@ it is both (`applyLiveFields` in `packages/menu/src/menu-document.ts` marks it o
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order-pricing.ts` refuses
 what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
-an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
+an extra has since been deleted or become Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the station already has is refused
 `product.unavailable` too: `applyLineEdits` treats that change as new work).
 Stored-order pricing ignores the sold-out flag for recorded lines. A stored line never sent whose
-product or parent is archived is refused `product.unavailable`
+product or parent is deleted is refused `product.unavailable`
 (`priceStoredOrderForIssuance`, `apps/server/src/stored-order-lines.ts`).
 
 That stored-line check is separate from a table bill's **New order**. Before starting a new

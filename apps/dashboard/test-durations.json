@@ -441,8 +441,6 @@
   "src/widgets/product-browser.a11y.test.ts": 12.6,
   "src/widgets/product-browser.test.ts": 32.7,
   "src/widgets/product-browser.unsaved.test.ts": 2.4,
-  "src/widgets/product-details.a11y.test.ts": 1.2,
-  "src/widgets/product-details.test.ts": 0.7,
   "src/widgets/product-editor.a11y.test.ts": 9.6,
   "src/widgets/product-editor.nutrition.test.ts": 12.1,
   "src/widgets/product-editor.save-state.test.ts": 2.6,

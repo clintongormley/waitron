@@ -242,24 +242,12 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
     ]);
   });
 
-  it("lists an Inactive variant too, in variant order, with its effective values", async () => {
+  it("lists the remaining variant with its effective values after deleting another", async () => {
     await fx.db.update(products).set({ active: false }).where(eq(products.id, f.wine125));
     const [parent] = await run((tx) => listProducts(tx));
     expect(
       parent!.variants.map(({ id, active, effective }) => ({ id, active, effective })),
     ).toEqual([
-      {
-        id: f.wine125,
-        active: false,
-        effective: {
-          unitPrice: "4.00",
-          vatClass: "reduced",
-          takeawayVatRate: "21.00",
-          primaryCategoryId: f.wines,
-          allergens: { sulphites: {} },
-          courseId: f.courseId,
-        },
-      },
       {
         id: f.wine175,
         active: true,

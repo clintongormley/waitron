@@ -79,7 +79,7 @@ async function reads() {
     const [listed] = await listProducts(tx);
     return {
       editor: { active: editor.active, available: editor.available },
-      listed: { active: listed!.active, available: listed!.available },
+      listed: listed === undefined ? null : { active: listed.active, available: listed.available },
       offers: (await listMenuOffers(tx, [menuId])).map((offer) => offer.productId),
       sellable: (await listAvailableProducts(tx)).products.map((p) => p.id),
     };
@@ -103,7 +103,7 @@ describe("Active and Available", () => {
 
     expect(await reads()).toEqual({
       editor: { active: false, available: true },
-      listed: { active: false, available: true },
+      listed: null,
       offers: [],
       sellable: [],
     });
@@ -125,7 +125,7 @@ describe("Active and Available", () => {
     });
     const archived = {
       editor: { active: false, available: false },
-      listed: { active: false, available: false },
+      listed: null,
       offers: [],
       sellable: [],
     };

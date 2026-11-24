@@ -689,7 +689,8 @@ ties, disables diet-empty sections, and opens a section without changing the bas
   Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name
   with a new id. Deleting a course clears product defaults, including archived products;
   recorded draft and order choices keep the original course. Courses and stations left as
-  history are excluded from configuration exports; being archived does not leave a product behind.
+  history are excluded from configuration exports. Products and variants now follow the same export
+  rule when deleted (owner, 2026-11-24).
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
@@ -716,6 +717,8 @@ product has no replacement for; the backlog entry marked that matching "assumed,
 choices. The switched-off-station example above records A463's earlier decision; Task 9's
 integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
 column and filter were deleted.)
+**2026-11-24 update:** The permanent Delete design removes Show archived and its View action.
+Availability stays on Products for current products and variants.
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.
@@ -843,7 +846,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Set menus are to have a page of their own beside Menus, approved by the owner: [spec](../superpowers/specs/2026-11-24-menus-list-tabs-design.md)._
 
-_2026-11-24: Menus and set menus use permanent Delete. Products and variants still need their own Delete slice before the Set menus page. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
+_2026-11-24: Menus, set menus, products and variants use permanent Delete. The remaining code-only product deletion renames follow in their own pull request. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
 _2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 

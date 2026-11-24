@@ -66,7 +66,7 @@ pendiente en un idioma cuando falta cualquiera de los dos campos, y cuenta una s
 **Editar traducciones** abre el mismo editor desde cualquier fila de idioma principal. **Falta en** empieza
 con el idioma que elegiste. Selecciona **Todos los nombres** para incluir los que ya tienen texto.
 Usa **Tipo** y la búsqueda para reducir las filas. El informe incluye nombres que faltan en el
-idioma predeterminado y nombres sin ninguna traducción. Los productos archivados y las listas
+idioma predeterminado y nombres sin ninguna traducción. Los productos eliminados y las listas
 desactivadas quedan fuera. El nombre propio de una lista de extras aparece aunque no se imprima en
 un ticket; un elemento de esa lista toma el nombre de su producto.
 
@@ -235,11 +235,8 @@ biblioteca para tus otros productos.
 
 Para quitar la propia fotografía, elige **Eliminar** en su menú **⋮** y confirma. Si algún producto,
 variante de producto o sección todavía la usa, la eliminación se bloquea. Ves enlaces a esos
-productos y variantes, incluidos los archivados, que la lista marca con **(Producto archivado)** o
-**(Variante archivada)**, y a esas secciones, cada una mostrada por su nombre interno. Quita la
-fotografía de cada registro editable antes de volver a intentar eliminarla. Un producto o una
-variante archivados abren sus datos en solo lectura y no se les puede quitar la imagen desde el
-editor de productos, así que una imagen que todavía usan sigue sin poder eliminarse. El enlace de una sección abre la pestaña **Estructura** de su carta, en
+productos y variantes, y a las secciones por su nombre interno. Quita la fotografía de cada
+registro antes de volver a intentar eliminarla. El enlace de una sección abre la pestaña **Estructura** de su carta, en
 **Productos y cartas**, **Cartas**, donde **Quitar imagen** en el editor de la sección la borra
 cuando guardas la sección. La fotografía de la propia carta se quita igual, con **Cambiar nombre** en
 la fila de la carta en **Productos y cartas**, **Cartas**. Una carta incluida en otra puede tener una

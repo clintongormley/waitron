@@ -58,7 +58,7 @@ async function refusalOf(write: Promise<unknown>): Promise<{ code: unknown; para
 }
 
 describe("unit operations", () => {
-  it("counts dishes carrying extras once, including archived dishes and inactive lists", async () => {
+  it("counts each current dish carrying extras once, including inactive lists", async () => {
     await run(async (tx) => {
       const unit = await createUnit(
         tx,
@@ -77,16 +77,18 @@ describe("unit operations", () => {
       const [options] = await tx.insert(optionLists).values({ name: "Doneness" }).returning();
       const dish = await product(tx, "Burger");
       const archived = await product(tx, "Archived fish");
+      const withInactiveList = await product(tx, "Salad");
       const optionsOnly = await product(tx, "Steak");
       const inverse = await product(tx, "Sauce");
       const other = await product(tx, "Other unit");
-      for (const id of [dish, archived, optionsOnly, inverse])
+      for (const id of [dish, archived, withInactiveList, optionsOnly, inverse])
         await assignProductUnit(tx, id, unit.id);
       await tx.run(sql`update products set active = 0 where id = ${archived}`);
       await tx.insert(productModifiers).values([
         { productId: dish, extraListId: list!.id },
         { productId: dish, extraListId: inactive!.id, sort: 1 },
         { productId: archived, extraListId: inactive!.id },
+        { productId: withInactiveList, extraListId: inactive!.id },
         { productId: optionsOnly, optionListId: options!.id },
         { productId: other, extraListId: list!.id },
       ]);
@@ -306,16 +308,18 @@ describe("unit operations", () => {
 
       const productId = await product(tx, "Soup");
       await assignProductUnit(tx, productId, unit.id);
-      await tx.execute(sql`
-        update products set active = false where id = ${productId}`);
       expect(await refusalOf(deleteUnit(tx, unit.id))).toEqual({
         code: "unit.in_use",
-        params: { products: [{ id: productId, name: "Soup", active: false }] },
+        params: { products: [{ id: productId, name: "Soup", active: true }] },
       });
+      await tx.execute(sql`
+        update products set active = false where id = ${productId}`);
+      await deleteUnit(tx, unit.id);
+      expect(await listUnits(tx)).toEqual([]);
     });
   });
 
-  it("lists the products using a unit, with each product's Active flag", async () => {
+  it("lists current products using a unit", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
@@ -338,14 +342,9 @@ describe("unit operations", () => {
       await tx.execute(sql`
         update products set active = false where id = ${tea}`);
 
-      const using = await productsUsingUnit(tx, unit.id);
-      expect(using).toHaveLength(2);
-      expect(using).toEqual(
-        expect.arrayContaining([
-          { id: soup, name: "Soup", active: true },
-          { id: tea, name: "Tea", active: false },
-        ]),
-      );
+      expect(await productsUsingUnit(tx, unit.id)).toEqual([
+        { id: soup, name: "Soup", active: true },
+      ]);
     });
   });
 

@@ -437,8 +437,8 @@ export class VariantTable extends LitElement {
                     "remove",
                     index,
                     // A variant never saved has no row to keep, so it is really removed.
-                    t(variant.id === undefined ? "action.remove" : "product.archive"),
-                    variant.id === undefined ? "menu-remove" : "menu-archive",
+                    t(variant.id === undefined ? "action.remove" : "action.delete"),
+                    variant.id === undefined ? "menu-remove" : "menu-delete",
                     "secondary",
                   ),
                 ])

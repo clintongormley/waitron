@@ -2253,7 +2253,7 @@ Controls without selection keep their horizontal centering when `rowControlsAlig
 Put a full-width lower toolbar in the
 `toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
 a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
-Filters panel. Products puts its Show archived switch there and Menus puts its Status dropdown there.
+Filters panel. Menus puts its Status dropdown there.
 For a filter that supports a badge and Clear all, supply the count and handle the reset in the screen,
 as Menus does. The table remembers column choices under `viewKey`.
 
@@ -3334,7 +3334,7 @@ and the staffing grid's block editor in the A761 entry):
   dashboard and the till (2026-10-08, A416): a button that is not a
   save is drawn `secondary` while it waits for a choice, a selection or a load, and its own variant
   once it can act, keeping its own variant while its own action is being sent. A416 brought these
-  under it: the Products browser's toolbar Delete (Archive when only products are selected); on the
+  under it: the Products browser's toolbar Delete; on the
   Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
   window's Edit; Print on an equipment label; Print a copy on Reprint the receipt; the profile
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
@@ -6125,13 +6125,9 @@ While Delete or Unpair is at the provider, another Unpair, Delete or adoption is
 `reader.removed_while_adding`. Removing a reader's row menu sends focus to the Payments heading, since
 Refresh may still be disabled while status reads finish.
 
-Products use **Archive**, with **Archived** in the Availability column, and **View** for an archived
-row. In Spanish these are **Archivar**, **Archivado** for a product, **Archivada** for a variant,
-and **Ver**. Archive is permanent; it has no Enable action.
-With only products selected, the bulk action reads Archive and is absent when every selected
-product is already archived. With a category selected it reads Delete: the category is deleted,
-and its contents are moved or archived according to the dialog's answer. Products selected
-directly are archived in either case.
+Products and variants offer **Delete** in their row menus. The Products toolbar offers **Delete**
+for any selection of products and categories. You choose whether to delete a category's contents
+or move them up to its parent. The action deletes directly selected products in either case.
 
 Print agents offer **Delete** in the row menu and keep only active agents in the main list, with
 no lifecycle status column/filter. The shared Delete confirmation explains that printers reached only
@@ -6140,29 +6136,21 @@ offers retained trusted agents by saved name, including this box's agent, before
 steps. Fresh pairing creates a new identity and its A4 printers need rediscovery; self-enrolment
 does not reverse Delete.
 
-### Products: Active and Available are two different words
+### Product availability and deletion
 
-**Active / Archived** describes the product's retained state. **Available / Unavailable** says
-whether an active product is sold out for now. Archive keeps the row and past sales, but you
-cannot bring it back. Take it out of every live or scheduled menu and publish before archiving;
-a refusal names the menus that still include it. This also applies to variants and to products
-offered as extras or home-screen shortcuts.
+Turn off **Available** to mark a product or variant sold out. Its row stays in Products, with
+**Unavailable** in the Availability column. Available items leave that column blank.
 
-Archived products and variants are hidden until **Show archived**, a switch at the top of the
-Filters panel, is on. Choose View on an archived row to open its plain-text details panel. The
-panel has no Save or availability control and does not open the editor. A variant of an archived
-product is archived too. The Availability column reads Archived for an archived row, Unavailable
-for a sold-out active one, and is blank otherwise; an Unavailable active product stays listed.
+Delete removes the product or variant from Products and keeps its past sales. Take it out of every
+live or scheduled menu and publish before deleting. The refusal names the menus that still use it,
+including menus where it is an extra or a Home shortcut.
 
-The editor hides variants archived before it opened. Archive on a saved variant stages the
-change: its row remains visible with **Archived when saved** and **Keep** until Save. Keep cancels
-that staged archive; it cannot restore an archive already saved. An unsaved variant uses Remove.
-There is no Show disabled toggle or Archive action in the editor footer.
+In the editor, Delete on a saved variant marks it **Deleted when saved**. Choose **Keep** to
+cancel the pending deletion. Use **Remove** to drop a variant you have yet to save.
 
 A menu's Price overrides tab lists active products and sizes reached by its working structure.
-Archiving removes a product from drafts and clears the archived variants' menu prices. Its
-Available column still reads Yes or No from the product's or size's own Available flag, and each
-row's ⋮ holds Edit product. The Structure tab's product rows show the same Available word.
+Deletion removes a product from drafts and clears deleted variants' menu prices. The Available
+column reads the product's or variant's own flag. Each row's menu offers Edit product.
 
 ### Navigation and language controls
 

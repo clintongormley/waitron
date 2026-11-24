@@ -191,11 +191,6 @@ export function homeDeviceName(device: HomeDevice): string {
   return t(device === "handheld" ? "home.device_handheld" : "home.device_till");
 }
 
-/** Spanish puts a variant's state in the feminine and a product's in the masculine. */
-export function productArchivedName(variant: boolean): string {
-  return t(variant ? "product.variant_archived_badge" : "product.archived_badge");
-}
-
 export function vatClassName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(VAT_CLASS_NAMES, value, locale);
 }

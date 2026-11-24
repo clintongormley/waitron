@@ -452,14 +452,12 @@ describe("listed variant allergens", () => {
       { id: saved[0]!.id, active: true, allergens: { milk: {} }, inherited: true },
       { id: saved[1]!.id, active: true, allergens: { eggs: {} }, inherited: false },
       { id: saved[2]!.id, active: true, allergens: {}, inherited: false },
-      { id: saved[3]!.id, active: false, allergens: { milk: {} }, inherited: true },
     ]);
     await run((tx) => updateProduct(tx, productId, { allergens: null }));
     expect(await listed()).toEqual([
       { id: saved[0]!.id, active: true, allergens: null, inherited: true },
       { id: saved[1]!.id, active: true, allergens: { eggs: {} }, inherited: false },
       { id: saved[2]!.id, active: true, allergens: {}, inherited: false },
-      { id: saved[3]!.id, active: false, allergens: null, inherited: true },
     ]);
     await run((tx) => updateProduct(tx, productId, { allergens: {} }));
     expect((await listed())[0]).toEqual({

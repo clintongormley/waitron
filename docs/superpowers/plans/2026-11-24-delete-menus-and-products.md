@@ -12,7 +12,7 @@
 ## 2. Products, variants and categories
 
 - Managers can permanently delete saved products and variants, including products selected with categories. An unsaved variant still says Remove. Drop Show archived and its details panel. Filter the product and translation lists. Keep internal save checks, category-key moves and the existing unit and photo refusals for current products.
-- Reuse `archive.ts`, `operations.ts`, `variants.ts`, `product-editor.ts` and `product-items.ts`. Trace stored order lines, kitchen papers, reports, refunds, reprints and past invoices before clearing product `image` and `unitId` in `markInactive`. Leave the unsent draft badge lookup alone. If both a dish and its unit are deleted, the badge can show 2 instead of 1. Record that case in the PR.
+- Reuse `archive.ts`, `operations.ts`, `variants.ts`, `product-editor.ts` and `product-items.ts`. Trace stored order lines, kitchen papers, reports, refunds, reprints and past invoices before clearing product `image` in `markInactive`. Keep the product’s unit link until Unit Delete and leave the draft badge lookup alone. Record in the PR that the badge can overcount an unsent measured dish once its unit has been deleted separately.
 - Update the dashboard client, Products, Units, widgets, till, errors, activities and translations. Count current products in category and course impact. Test separate unit and photo removal once per resource, with live-use controls. Test saved and unsaved choices and bulk Delete in the browser.
 
 ## Both slices
@@ -20,3 +20,7 @@
 Use `leaveBehindWhenFalse: "active"` in `packages/db/src/configuration-transfer.ts` for the rows each slice deletes. The configuration transfer suite owns the round trip and dependent rows. Keep the existing course and routing assertions. Update both language guides, design system and the affected developer and backlog entries. Capture each slice’s approved windows and filters at desktop and phone widths, in both languages and themes. Get the owner’s recorded answer before each merge.
 
 Slice 1 estimate is 520 product and 600 test lines, counting additions and removals. Slice 2 previously estimated 725 product and 875 test lines. Re-estimate after the watcher’s cuts before starting it. Above 1,500 changed lines, put pure code renames in a third PR. The watcher cleared these edits on 24 November at 16:49 after Claude’s review and final read.
+
+**Review decision, 24 November at 21:19:** Keep a deleted product’s unit link for open draft counts.
+Unit Delete clears the retained links once no current product uses it. The photo still comes off at
+product deletion. The watcher cleared this small change after the 150 g draft check.

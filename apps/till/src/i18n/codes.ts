@@ -843,8 +843,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",
   },
   "product.archived": {
-    en: "This dish or size has been archived. Close this window and choose another dish or size.",
-    es: "Este plato o tamaño se ha archivado. Cierra esta ventana y elige otro plato o tamaño.",
+    en: "This dish or size has been deleted. Close this window and choose another dish or size.",
+    es: "Este plato o tamaño se ha eliminado. Cierra esta ventana y elige otro plato o tamaño.",
   },
   "options.not_found": {
     en: "This choice is no longer offered here. Close this window and choose another dish.",

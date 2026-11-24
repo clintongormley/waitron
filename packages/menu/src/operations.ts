@@ -1077,14 +1077,13 @@ export async function listProducts(tx: Transaction): Promise<Product[]> {
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
-    .where(and(isTopLevelProduct, notCustomItem))
+    .where(and(isTopLevelProduct, notCustomItem, eq(products.active, true)))
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
     tx,
     rows.map((row) => row.id),
   );
-  // A variant is listed under its parent, never on its own; Inactive ones too, for the dashboard.
   const variantRows = await listedVariantRows(
     tx,
     rows.map((row) => row.id),
@@ -1101,7 +1100,7 @@ export async function listProducts(tx: Transaction): Promise<Product[]> {
   }));
 }
 
-/** Every variant of each product in `productIds`, Inactive ones included, in variant order, with
+/** Active variants in variant order, with
  * the values it carries once its blanks read as its parent's. */
 async function listedVariantRows(tx: Transaction, productIds: readonly string[]) {
   return tx
@@ -1125,7 +1124,7 @@ async function listedVariantRows(tx: Transaction, productIds: readonly string[])
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .where(inArray(products.parentId, [...productIds]))
+    .where(and(inArray(products.parentId, [...productIds]), eq(products.active, true)))
     .orderBy(products.parentId, products.variantOrder, products.id);
 }
 
@@ -1200,8 +1199,8 @@ async function patchProduct(
   const row = await readUpdatedName(tx, id);
   if (row !== undefined && (!row.active || row.parentActive === false))
     throw new AppError("product.archived", { productId: id });
-  // Archive before writing the patch: archiving skips rows already inactive.
-  if (patch.active === false && row?.active === true) await archiveProducts(tx, [id], personId);
+  const deleting = patch.active === false && row?.active === true;
+  if (deleting) await archiveProducts(tx, [id], personId);
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
@@ -1243,6 +1242,7 @@ async function patchProduct(
     .update(products)
     .set({
       ...rest,
+      ...(deleting ? { image: null } : {}),
       ...(unitPrice === undefined
         ? {}
         : { unitPrice: unitPrice === null ? null : stringToCents(unitPrice) }),
@@ -1254,8 +1254,10 @@ async function patchProduct(
       updatedAt: now(),
     })
     .where(eq(products.id, id));
-  if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
-  else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
+  if (!deleting) {
+    if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
+    else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
+  }
   if (takeawayVatRate !== undefined) await setTakeawayVatRate(tx, id, takeawayVatRate);
 }
 

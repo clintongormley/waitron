@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   settings,
   decodeSettingsRow,
@@ -258,8 +258,7 @@ export async function clearProductUnit(tx: Transaction, productId: string): Prom
   await tx.update(products).set({ unitId: null }).where(eq(products.id, productId));
 }
 
-/** The products that assign this unit, ordered by product id. A row a variant still stores is not
- * listed: a variant always reads its parent's unit. */
+/** Current products that assign this unit, ordered by product id. A variant inherits its parent's unit. */
 export async function productsUsingUnit(
   tx: Transaction,
   unitId: string,
@@ -267,7 +266,7 @@ export async function productsUsingUnit(
   return tx
     .select({ id: products.id, name: products.name, active: products.active })
     .from(products)
-    .where(and(eq(products.unitId, unitId), isTopLevelProduct))
+    .where(and(eq(products.unitId, unitId), isTopLevelProduct, eq(products.active, true)))
     .orderBy(asc(products.id));
 }
 
@@ -291,10 +290,6 @@ export async function deleteUnit(tx: Transaction, unitId: string): Promise<void>
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  // Variants never read their own assignment, but its foreign key still restricts deletion.
-  await tx
-    .update(products)
-    .set({ unitId: null })
-    .where(and(eq(products.unitId, unitId), isNotNull(products.parentId)));
+  await tx.update(products).set({ unitId: null }).where(eq(products.unitId, unitId));
   await tx.delete(units).where(eq(units.id, unitId));
 }

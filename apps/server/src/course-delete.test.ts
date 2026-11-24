@@ -124,7 +124,7 @@ describe("permanent course deletion", () => {
       target: { id, name: "Desserts" },
       refusals: [],
       ends: [],
-      removes: [{ key: "course_products", count: 3, targets: [] }],
+      removes: [{ key: "course_products", count: 2, targets: [] }],
     };
     expect(await inTx(v, (tx) => readCourseDeleteImpact(tx, id))).toEqual(impact);
     expect(await inTx(v, (tx) => tx.select().from(products).orderBy(products.id))).toEqual(before);

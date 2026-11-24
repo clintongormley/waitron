@@ -180,7 +180,7 @@ it.each([
   [
     "light",
     "product.archived",
-    "This dish or size has been archived. Close this window and choose another dish or size.",
+    "This dish or size has been deleted. Close this window and choose another dish or size.",
   ],
   ["dark", "product.archived", codeMessage("product.archived", "es-ES")],
 ] as const)(

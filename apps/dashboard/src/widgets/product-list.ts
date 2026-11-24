@@ -24,15 +24,9 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
-import {
-  allergenState,
-  allergenStateName,
-  productArchivedName,
-  vatRateText,
-} from "../i18n/domain.js";
+import { allergenState, allergenStateName, vatRateText } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
@@ -334,12 +328,6 @@ export class ProductList extends LitElement {
         grid-row: 2;
         grid-column: 1 / -1;
       }
-      /* Drawn as one more section of the Filters panel, above the column filters. */
-      wt-switch[slot="filters-start"] {
-        display: flex;
-        padding-block: var(--wt-space-2);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
     `,
     productMediaStyles,
   ];
@@ -371,8 +359,6 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) choosingColor = false;
   /** Whether the menu has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
-  /** Off, archived products and variants are left out of the rows the table is given. */
-  @state() private showArchived = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #nameValue = "";
@@ -595,12 +581,7 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
-    if (
-      changed.has("categories") ||
-      changed.has("products") ||
-      changed.has("nameDraft") ||
-      changed.has("showArchived")
-    ) {
+    if (changed.has("categories") || changed.has("products") || changed.has("nameDraft")) {
       this.#rowList = this.#rows();
       this.#rowByKey = new Map(this.#rowList.map((row) => [row.key, row]));
     }
@@ -841,14 +822,13 @@ export class ProductList extends LitElement {
             product,
             variant,
           })),
-        ].filter((row) => this.showArchived || rowActive(row)),
+        ].filter(rowActive),
       ),
     ];
   }
 
   /** What each category holds directly, and under `null` the whole menu, counted once per change
-   * of the lists rather than once per row drawn. Archived products are left out, as Show archived
-   * starts off. */
+   * of the lists rather than once per row drawn. */
   #count(): Map<string | null, { categories: number; products: number }> {
     const counts = new Map<string | null, { categories: number; products: number }>([
       [null, { categories: this.categories.length, products: 0 }],
@@ -913,7 +893,6 @@ export class ProductList extends LitElement {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
-  /** Removed variants are kept but not counted: Show archived starts off. */
   #variantCount(product: Product) {
     const count = product.variants.filter(({ active }) => active).length;
     return count === 0
@@ -1136,17 +1115,13 @@ export class ProductList extends LitElement {
         },
         cell: (row) => {
           const { product, variant } = row;
-          if (!rowActive(row))
-            return html`<span part="badge" data-test="availability-badge" data-state="archived"
-              >${productArchivedName(variant !== null)}</span
-            >`;
           return (variant ?? product).available
             ? nothing
             : html`<span part="badge" data-test="availability-badge" data-state="unavailable"
                 >${t("product.unavailable_badge")}</span
               >`;
         },
-        sortValue: (row) => (!rowActive(row) ? 2 : (row.variant ?? row.product).available ? 0 : 1),
+        sortValue: (row) => ((row.variant ?? row.product).available ? 0 : 1),
       },
       {
         key: "allergens",
@@ -1202,28 +1177,22 @@ export class ProductList extends LitElement {
             align="end"
             data-test=${`actions-${id}`}
             label=${`${t("staff.actions")}: ${name}`}
-            >${
-              rowActive(row)
-                ? html`<wt-button
-                      icon="menu-edit"
-                      data-test=${`edit-${id}`}
-                      @click=${() => this.#send("edit-product", { productId: id })}
-                      >${t("action.edit")}</wt-button
-                    ><wt-button
-                      icon="menu-archive"
-                      variant="danger"
-                      data-test=${`delete-${id}`}
-                      @click=${() => this.#send("delete-product", { productId: id })}
-                      >${t("product.archive")}</wt-button
-                    >`
-                : html`<wt-button
-                    icon="menu-open"
-                    data-test=${`view-${id}`}
-                    @click=${() => this.#send("view-product", { productId: id })}
-                    >${t("product.view")}</wt-button
-                  >`
-            }</wt-row-actions
-          >`;
+          >
+            <wt-button
+              icon="menu-edit"
+              data-test=${`edit-${id}`}
+              @click=${() => this.#send("edit-product", { productId: id })}
+              >${t("action.edit")}</wt-button
+            >${rowActionTail(true, [
+              html`<wt-button
+                icon="menu-delete"
+                variant="danger"
+                data-test=${`delete-${id}`}
+                @click=${() => this.#send("delete-product", { productId: id })}
+                >${t("action.delete")}</wt-button
+              >`,
+            ])}
+          </wt-row-actions>`;
         },
       },
     ];
@@ -1601,17 +1570,6 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
-        ><wt-switch
-          slot="filters-start"
-          name="show-archived"
-          label=${t("product.show_archived")}
-          .checked=${this.showArchived}
-          @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-            event.stopPropagation();
-            this.showArchived = event.detail.checked;
-            this.#send("show-archived-change", { showArchived: this.showArchived });
-          }}
-        ></wt-switch
         ><slot name="toolbar-search" slot="toolbar-search"></slot
         ><slot name="toolbar-end" slot="toolbar-end"></slot
         ><slot name="toolbar-bottom" slot="toolbar-bottom"></slot></wt-data-table

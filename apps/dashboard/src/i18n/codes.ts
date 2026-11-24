@@ -1184,12 +1184,12 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
   },
   "product.archived": {
-    en: "This product is archived and can no longer be changed.",
-    es: "Este producto está archivado y ya no se puede modificar.",
+    en: "This product was deleted and can no longer be changed.",
+    es: "Este producto se eliminó y ya no se puede modificar.",
   },
   "product.on_live_menu": {
-    en: "It is on a live or scheduled menu. Take it off the menu and publish, then archive it.",
-    es: "Está en una carta publicada o programada. Quítalo de la carta y publica; después archívalo.",
+    en: "It is on a live or scheduled menu. Take it off the menu and publish, then delete it.",
+    es: "Está en una carta publicada o programada. Quítalo de la carta y publica; después elimínalo.",
   },
   "product.name_taken": {
     en: "Another active product or variant already has this name.",
