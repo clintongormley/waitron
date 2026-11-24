@@ -503,6 +503,10 @@ export class TillMenuBrowser extends LitElement {
    * pay widget does not take the dish. */
   @property({ type: Boolean }) weighs = false;
 
+  #pickerOnly(): boolean {
+    return this.hasMenuPicker && this.menu === undefined && this.setMenuCopies.length === 0;
+  }
+
   /** The open section's path, as {@link sectionTrail} reads it. Empty is home. */
   @state() private path: SectionStep[] = [];
 
@@ -604,6 +608,20 @@ export class TillMenuBrowser extends LitElement {
       const id = this.setMenuFolder?.id;
       if (id !== undefined && !this.setMenuCopies.some(({ copy }) => copy.menuId === id))
         this.setMenuFolder = undefined;
+    }
+    if (this.#pickerOnly()) {
+      if (changed.has("menu") || changed.has("setMenuCopies")) {
+        this.#pendingSection = undefined;
+        this.query = "";
+        this.#open([]);
+        this.infoProduct = undefined;
+        this.pickerProduct = undefined;
+        this.#pickerSetMenu = undefined;
+        this.#replaceAfterPick = undefined;
+        this.placeRequest = undefined;
+        this.setMenuError = "";
+      }
+      return;
     }
     if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
     if (this.pickerProduct && this.#pickerSetMenu === undefined)
@@ -1368,7 +1386,11 @@ export class TillMenuBrowser extends LitElement {
               }
             </div>`
       }
-      <div data-menu-content ?inert=${this.locked}>${this.#menuContent(view)}</div>
+      ${
+        this.#pickerOnly()
+          ? nothing
+          : html`<div data-menu-content ?inert=${this.locked}>${this.#menuContent(view)}</div>`
+      }
     `;
   }
 

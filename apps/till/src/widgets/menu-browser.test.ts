@@ -4084,6 +4084,30 @@ describe("typing a weighed dish's weight with a keyboard", () => {
     expect(selected).toEqual([ham]);
   });
 
+  it("removes the weight pad when only the menu picker remains", async () => {
+    const { el, store } = await weighHam();
+    el.hasMenuPicker = true;
+    el.menu = undefined;
+    await el.updateComplete;
+    await blurAll();
+    await userEvent.keyboard("0.25{Enter}");
+    expect(store.lines).toEqual([]);
+    expect(root(el).querySelector("till-tender-pay")).toBeNull();
+  });
+
+  it("clears an old search when the browser waits for a new menu choice", async () => {
+    const menu = lunch();
+    const { el } = await mount({ menu, hasMenuPicker: true });
+    await search(el, "zzz");
+    expect(root(el).querySelector("[data-region=results]")).not.toBeNull();
+    el.menu = undefined;
+    await el.updateComplete;
+    el.menu = menu;
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-region=results]")).toBeNull();
+    expect(root(el).querySelector("[data-region=structure] .tile")).not.toBeNull();
+  });
+
   it("while the order is sending and the menu is inert, typing does not change the weight", async () => {
     const { el, weigh, pad } = await weighHam();
     el.locked = true;

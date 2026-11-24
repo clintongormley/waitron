@@ -51,6 +51,22 @@ describe("till-menu-switcher", () => {
     expect(options(el)[0]!.getAttribute("aria-selected")).toBe("true");
   });
 
+  it("keeps a long list of running menus selectable without opening a keyboard search", async () => {
+    const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
+      menus: Array.from({ length: 8 }, (_, index) => ({
+        ...twoMenus[0]!,
+        id: `menu-${index}`,
+        name: `Menu ${index + 1}`,
+        isDefault: index === 0,
+      })),
+      selectedId: "menu-0",
+    });
+    const field = picker(el);
+    await userEvent.click(field.shadowRoot!.querySelector("button")!);
+    expect(options(el)).toHaveLength(8);
+    expect(field.shadowRoot!.querySelector("input")).toBeNull();
+  });
+
   it("takes no space when just one running menu remains among retained menus", async () => {
     const { el } = await mountWidget<TillMenuSwitcher>("till-menu-switcher", {
       menus: [
