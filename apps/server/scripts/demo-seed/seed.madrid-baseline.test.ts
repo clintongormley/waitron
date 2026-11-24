@@ -1605,6 +1605,12 @@ for (const locale of ["en", "es"] as const) {
         { name: "takeaway_vat_class", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
       );
       for (const row of Object.values(orderLines.rows)) row.takeaway_vat_class = row.vat_class;
+      orderLines.columns.splice(
+        orderLines.columns.findIndex((column) => column.name === "list_unit_price_gross") + 1,
+        0,
+        { name: "a_la_carte_unit_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(orderLines.rows)) row.a_la_carte_unit_price = null;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );

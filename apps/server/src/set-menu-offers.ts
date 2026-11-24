@@ -1,7 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { readRecordedDocuments } from "@waitron/menu";
 import type { ZoneMenu, ZoneMenuOffer } from "@waitron/module";
-import { AppError, setMenuCopyOf, type SetMenuCopy } from "@waitron/shared";
+import { AppError, setMenuCopyOf, type MenuDocument, type SetMenuCopy } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import { readBillSetMenuVersions } from "./set-menu-bill.js";
 import "./errors.js";
@@ -14,9 +14,15 @@ interface SetMenuLineOffer {
 }
 
 export interface SetMenuOfferLookup {
-  offerFor(
-    line: SetMenuLineOffer,
-  ): { offer: ZoneMenuOffer; copy: SetMenuCopy; fromRecordedCopy: boolean } | undefined;
+  offerFor(line: SetMenuLineOffer):
+    | {
+        offer: ZoneMenuOffer;
+        copy: SetMenuCopy;
+        fromRecordedCopy: boolean;
+        /** The full menu version holding the copy. */
+        document: MenuDocument;
+      }
+    | undefined;
 }
 
 /** Validate a basket against the bill and zone versions. Edits supply version ids from stored rows. */
@@ -88,6 +94,7 @@ export async function setMenuOfferLookup(
         key,
         {
           copy: setMenuCopyOf(snapshot, versionId),
+          document: doc,
           fromRecordedCopy: stale === "stored" || recorded.get(menuId) === versionId,
           offers: new Map(
             snapshot.offers.map((offer) => [
@@ -106,7 +113,12 @@ export async function setMenuOfferLookup(
       const offer = entry.offers.get(menuItemId);
       return offer === undefined
         ? undefined
-        : { offer, copy: entry.copy, fromRecordedCopy: entry.fromRecordedCopy };
+        : {
+            offer,
+            copy: entry.copy,
+            fromRecordedCopy: entry.fromRecordedCopy,
+            document: entry.document,
+          };
     },
   };
 }

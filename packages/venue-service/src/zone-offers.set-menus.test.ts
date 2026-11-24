@@ -17,8 +17,17 @@ import {
   updateMenuItem,
   updateProduct,
 } from "@waitron/menu";
-import { listZoneOffers, menuState, offeredKey, productsOfferedIn } from "./operations.js";
+import {
+  listZoneOffers,
+  listZoneSetMenus,
+  menuState,
+  offeredKey,
+  productsOfferedIn,
+  resolveZoneContext,
+} from "./operations.js";
 import { setMenuFixture } from "./testing/set-menu-fixtures.js";
+import { readBusinessDayScheduleRevision } from "./business-day-schedule.js";
+import { replaceMenuWeek } from "./menu-timetable.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 type Fixture = Awaited<ReturnType<typeof setMenuFixture>>;
@@ -368,4 +377,49 @@ it("selects the newest copy on sale even when a later copy is held for another p
         },
       ]);
     }
+  }));
+
+it.each(["midday", "evening"] as const)(
+  "answers the set-menu copies and selling versions the whole zone read answers, at %s",
+  (when) =>
+    scenario(async (tx, f) => {
+      await differentCopies(tx, f);
+      const whole = await listZoneOffers(tx, f.zoneId, { at: f[when] });
+      const narrow = await listZoneSetMenus(tx, f.zoneId, f[when]);
+      expect(narrow.setMenus).toEqual(whole.setMenus);
+      expect(narrow.setMenus.length).toBeGreaterThan(1);
+      expect(narrow.sellingVersionIds.length).toBeGreaterThan(0);
+      expect(narrow.sellingVersionIds).toEqual(
+        whole.menus.filter(({ orderable }) => orderable).map(({ versionId }) => versionId),
+      );
+    }),
+);
+
+it("answers the whole zone read's set menus for a department with no menu week", () =>
+  scenario(async (tx, f) => {
+    await differentCopies(tx, f);
+    const { departmentId } = await resolveZoneContext(tx, f.zoneId);
+    await replaceMenuWeek(
+      tx,
+      departmentId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+      f.midday,
+      await readBusinessDayScheduleRevision(tx),
+    );
+    const whole = await listZoneOffers(tx, f.zoneId, { at: f.midday });
+    const narrow = await listZoneSetMenus(tx, f.zoneId, f.midday);
+    expect(narrow.setMenus).toEqual(whole.setMenus);
+    expect(narrow.setMenus.length).toBeGreaterThan(1);
+    expect(narrow.sellingVersionIds).toEqual(
+      whole.menus.filter(({ orderable }) => orderable).map(({ versionId }) => versionId),
+    );
+  }));
+
+it("answers no set menus and no selling versions for a zone whose live menus hold none", () =>
+  scenario(async (tx, f) => {
+    expect((await listZoneOffers(tx, f.zoneId, { at: f.midday })).setMenus).toEqual([]);
+    expect(await listZoneSetMenus(tx, f.zoneId, f.midday)).toEqual({
+      setMenus: [],
+      sellingVersionIds: [],
+    });
   }));

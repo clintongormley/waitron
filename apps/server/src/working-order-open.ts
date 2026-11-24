@@ -39,6 +39,7 @@ import {
   placeSetMenuRows,
 } from "./set-menu-bill.js";
 import { setSetMenuCount } from "./set-menu-count.js";
+import { linkSetMenusFor } from "./set-menu-links.js";
 import {
   type OrderLineIdentity,
   totalBeforeEdit,
@@ -270,6 +271,7 @@ export async function createOpenOrder(
     workingOrderLines,
     lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
   );
+  await linkSetMenusFor(tx, id, lineRows, effectiveZoneId);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, billNumber, gross, identities, lineRows };
@@ -503,6 +505,7 @@ export async function insertTabRound(
         })),
     );
   }
+  await linkSetMenusFor(tx, round.tabId, placed);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
 }

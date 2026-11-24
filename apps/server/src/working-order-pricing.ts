@@ -41,6 +41,7 @@ import {
 } from "@waitron/shared";
 import { offeredKey } from "@waitron/venue-service";
 import { and, inArray, eq } from "drizzle-orm";
+import { setMenuALaCartePrices } from "./a-la-carte-price.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
@@ -461,8 +462,16 @@ export async function priceOrderLines(
     if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
-    return { ...line, offer, setMenuOffer };
+    return { ...line, offer, setMenuOffer, holding: selected?.document };
   });
+  const aLaCarte = await setMenuALaCartePrices(
+    tx,
+    lines.map(({ holding, offer, variantId }) => ({
+      holding,
+      productId: offer.productId,
+      variantId: variantId ?? null,
+    })),
+  );
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodId, periodName } of late)
@@ -519,6 +528,7 @@ export async function priceOrderLines(
         makeAt: string | null;
         unit: ExtraChild["unitContext"];
         portionable: boolean;
+        aLaCarteCents: number | null;
         placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
         late?: LineContextInput["late"];
         vatClass: VatClass;
@@ -643,6 +653,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable,
+      aLaCarteCents: aLaCarte[index]!,
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
@@ -733,6 +744,8 @@ export async function priceOrderLines(
       // re-price, so a later menu price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
+      aLaCarteUnitPrice:
+        meta.kind === "parent" ? (meta.aLaCarteCents ?? decimalToCents(line.grossUnitPrice)) : null,
       vatClass: meta.vatClass,
       takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and

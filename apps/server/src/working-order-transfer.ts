@@ -36,6 +36,7 @@ import {
   refuseDraftLosingSetMenuPlace,
   carryBillSetMenuCopies,
 } from "./set-menu-bill.js";
+import { carrySetMenuLinks } from "./set-menu-links.js";
 import { replaceMovedDishes } from "./set-menu-moves.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
@@ -160,6 +161,14 @@ export async function moveOrderLines(
       fromTabId,
       toTabId,
       lineNos === undefined ? undefined : movedMenus.map(({ setMenuId }) => setMenuId!),
+    );
+  }
+  if (lineNos !== undefined) {
+    await carrySetMenuLinks(
+      tx,
+      fromTabId,
+      toTabId,
+      source.map(({ id }) => id),
     );
   }
 
@@ -438,6 +447,7 @@ async function carveLines(
         offerUnitPrecision: workingOrderLines.offerUnitPrecision,
         offerVatClass: workingOrderLines.offerVatClass,
         offerCategoryName: workingOrderLines.offerCategoryName,
+        aLaCarteUnitPrice: workingOrderLines.aLaCarteUnitPrice,
       },
       ticketItemId: ticketItems.id,
     })

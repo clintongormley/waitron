@@ -30,6 +30,7 @@ import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
   inTx,
+  order,
   seatWithNoAllergies,
   setupPartyVenue,
   type PartyVenue,
@@ -335,4 +336,32 @@ it("takes the newest copy on sale and records a full menu that sells it now", as
       await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [] });
     });
   }
+});
+
+it("keeps a set menu linked by a dish ordered at lunch usable for a dessert sent after lunch", async () => {
+  at("14:30");
+  const { tabId, partyId } = await seatWithNoAllergies(
+    venue,
+    await venue.table(crypto.randomUUID()),
+  );
+  await order(venue, tabId, "Flan");
+  at("16:00");
+  const { recorded } = await countDaily(tabId, 1);
+  at("16:15");
+  const draft = await saveSetMenuDraft(
+    venue,
+    { tabId, partyId },
+    {
+      menuItemId: daily.menuItemId,
+      menuVersionId: recorded[daily.menuId]!,
+      setMenuId: daily.menuId,
+      quantity: "1",
+    },
+  );
+  const sent = await send(draft, "fire");
+  expect(sent.groups[0]).toMatchObject({ state: "fired" });
+  expect(await dishRow(sent.groups[0]!.lineIds[0]!)).toMatchObject({
+    setMenuRole: "dish",
+    latePeriodName: null,
+  });
 });

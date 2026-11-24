@@ -398,6 +398,13 @@ export interface ZoneOffers {
   readonly liveFields: string;
 }
 
+/** A zone's set-menu copies as {@link ZoneOffers} answers them, and the live versions of the
+ *  zone's menus on sale now (none when the zone's menus hold no set menu). */
+export interface ZoneSetMenus {
+  readonly setMenus: readonly ServedSetMenu[];
+  readonly sellingVersionIds: readonly string[];
+}
+
 /** What a zone's live menus hold that cannot be sold now. */
 export interface ZoneUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
@@ -1058,6 +1065,8 @@ export interface VenueServiceContribution {
       withDefault?: false;
     },
   ): Promise<ZoneOffers>;
+  /** `listZoneOffers`' set menus at `at` (now when absent), without serving the zone's other offers. */
+  listZoneSetMenus(tx: Transaction, zoneId: string, at?: Date): Promise<ZoneSetMenus>;
   resolveDefaultMenu(
     tx: Transaction,
     zoneId: string,

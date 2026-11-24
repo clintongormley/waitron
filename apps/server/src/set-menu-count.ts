@@ -5,6 +5,7 @@ import { AppError, stringToCents, type BillSetMenuState } from "@waitron/shared"
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import { assertBillInvariant, readPaidQuantities, refusePaidLines } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { copiesOnSale } from "./set-menu-links.js";
 import {
   readBillSetMenus,
   refuseDraftLosingSetMenuPlace,
@@ -100,16 +101,12 @@ export async function setSetMenuCount(
 async function firstCopyOnSale(tx: Transaction, billId: string, menuId: string) {
   const context = await VENUE_SERVICE.findOrderContext(tx, billId);
   if (context !== null) {
-    const zone = await VENUE_SERVICE.listZoneOffers(tx, context.zoneId);
-    const copy = zone.setMenus.find((offer) => offer.menuId === menuId && offer.newestOnSale);
-    if (copy !== undefined) {
-      const selling = new Set(
-        zone.menus.filter(({ orderable }) => orderable).map(({ versionId }) => versionId),
-      );
+    const zone = await VENUE_SERVICE.listZoneSetMenus(tx, context.zoneId);
+    const chosen = copiesOnSale(zone).find((copy) => copy.setMenuId === menuId);
+    if (chosen !== undefined) {
       return {
-        copy,
-        versionId:
-          copy.versionIds.find((versionId) => selling.has(versionId)) ?? copy.versionIds[0]!,
+        copy: zone.setMenus.find(({ key }) => key === chosen.id)!,
+        versionId: chosen.versionId,
       };
     }
   }

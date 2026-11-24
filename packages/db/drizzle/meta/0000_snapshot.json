@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "591df3a4-9cdd-4d56-90fd-98c4c19e3e4d",
+  "id": "8a074107-d088-4253-a1f2-47953e7f8097",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -677,6 +677,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "a_la_carte_unit_price": {
+          "name": "a_la_carte_unit_price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "menu_item_id": {
           "name": "menu_item_id",
           "type": "text",
@@ -1132,6 +1139,10 @@
         "working_order_lines_line_no_ck": {
           "name": "working_order_lines_line_no_ck",
           "value": "\"working_order_lines\".\"line_no\" >= 1"
+        },
+        "working_order_lines_a_la_carte_price_ck": {
+          "name": "working_order_lines_a_la_carte_price_ck",
+          "value": "\"working_order_lines\".\"a_la_carte_unit_price\" is null or \"working_order_lines\".\"a_la_carte_unit_price\" >= 0"
         },
         "working_order_lines_set_menu_role_ck": {
           "name": "working_order_lines_set_menu_role_ck",

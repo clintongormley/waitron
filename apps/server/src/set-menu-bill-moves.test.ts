@@ -183,7 +183,12 @@ it("moves a menu and its dishes together, with their original places, prices and
       { menuId: special.menuId, versionId: special.versionId },
     ]),
   );
-  expect(await copies(source.target)).toEqual([{ menuId: copy.menuId, versionId: copy.versionId }]);
+  expect(new Set(await copies(source.target))).toEqual(
+    new Set([
+      { menuId: copy.menuId, versionId: copy.versionId },
+      { menuId: special.menuId, versionId: special.versionId },
+    ]),
+  );
 });
 
 it("places a dish moved alone on a Special and takes the target surcharge", async () => {
@@ -231,7 +236,12 @@ it("keeps the target's recorded version while the arriving line keeps its own ve
     return versionId;
   });
   await move(source, source.menuLineId);
-  expect(await copies(source.target)).toEqual([{ menuId: copy.menuId, versionId }]);
+  expect(new Set(await copies(source.target))).toEqual(
+    new Set([
+      { menuId: copy.menuId, versionId },
+      { menuId: special.menuId, versionId: special.versionId },
+    ]),
+  );
   expect((await lines(source.target)).slice(1)).toMatchObject([
     { id: source.menuLineId, versionId: copy.versionId, lineTotal: 1400 },
     { id: source.dishId, setMenuLineId: source.menuLineId },

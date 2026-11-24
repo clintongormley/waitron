@@ -430,6 +430,7 @@ BEGIN
       AND new.cohort_ordinal IS old.cohort_ordinal
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -505,6 +506,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -598,6 +600,7 @@ BEGIN
       AND new.cohort_ordinal IS old.cohort_ordinal
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
+      AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name

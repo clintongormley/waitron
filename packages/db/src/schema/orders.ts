@@ -273,6 +273,8 @@ export const workingOrderLines = table(
     // The unit price the line had when an adjustment first touched it, never changed after; null
     // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.
     listUnitPriceGross: money("list_unit_price_gross"),
+    // What the dish costs à la carte, written when it is added.
+    aLaCarteUnitPrice: money("a_la_carte_unit_price"),
     menuItemId: id("menu_item_id"),
     menuId: id("menu_id"),
     menuName: label("menu_name"),
@@ -359,6 +361,10 @@ export const workingOrderLines = table(
       sql`${t.takeawayVatClass} in ('general','reduced','super_reduced','zero')`,
     ),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
+    check(
+      "working_order_lines_a_la_carte_price_ck",
+      sql`${t.aLaCarteUnitPrice} is null or ${t.aLaCarteUnitPrice} >= 0`,
+    ),
     foreignKey({
       columns: [t.menuItemId],
       foreignColumns: [menuItems.id],

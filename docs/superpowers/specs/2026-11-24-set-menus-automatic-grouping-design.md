@@ -207,6 +207,7 @@ On every change the server reruns the calculation and, in the same transaction:
 - keeps on each dish its à la carte price, stored once when it is added (section 1). This is new
   for a dish tapped in a set-menu folder: today such a line stores the set menu's supplement and no
   à la carte price (`packages/db/src/schema/menu/menu.ts:6`);
+  _Pointer, 2026-11-24: stored in `working_order_lines.a_la_carte_unit_price` (A1515-3 PR 1)._
 - credits each set menu, in staff sales, to whoever rang the earliest-added dish in it (**my
   call**; each line records `credited_to`, and a set menu formed from two waiters' dishes has no
   other obvious owner).
