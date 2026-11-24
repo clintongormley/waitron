@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
-# Fast feedback before upload: sign-off, locked install, formatting, lint and types.
+# Fast feedback before upload: sign-off, locked install, formatting, lint, English and types.
 # Tests and coverage belong to CI; focused behavioral tests run during implementation.
 # Git starts hooks at the repository root; Husky invokes this script with sh -e.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-# Only an explicit deletion-only push skips checks. Empty or unknown ranges keep all local checks.
+# An unknown range keeps whole-workspace checks and leaves range-based checks to CI.
 saw_ref=0
 has_update=0
 have_range=0
@@ -86,7 +86,8 @@ fi
 if [ "$range_unknown" -eq 1 ]; then
   commits=""
   changed_paths=""
-  echo "pre-push: could not work out what this push adds — running the whole gate"
+  echo "pre-push: could not work out what this push adds — running whole-workspace format, lint and type checks"
+  echo "pre-push: CI will run the English-only check because the push range is unknown"
 fi
 
 # Keep command arguments separate from the printable reproduction command; never eval them.
@@ -194,6 +195,11 @@ if [ "$scope_kind" = "root" ]; then
   end_ts=$(date +%s)
   echo "pre-push: repository machinery only — typecheck and tests skipped, $((end_ts - start_ts))s"
   exit 0
+fi
+
+if [ "$range_unknown" -eq 0 ]; then
+  run_step "English-only check" 'pnpm --dir apps/server exec tsx ../../scripts/check-english-only.ts "$PWD" path/to/file' \
+    check_changed pnpm --dir apps/server exec tsx ../../scripts/check-english-only.ts "$PWD"
 fi
 
 # An empty pnpm selection exits successfully, so validate it before running scoped typechecks.
