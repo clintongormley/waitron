@@ -52,7 +52,8 @@ it.each(cases)(
       const products: TillProduct[] = [
         "Pollo asado con patatas y verduras",
         "Extraordinariamenteextralargapalabra",
-        "Zumo de naranja recién exprimido",
+        // Measure centring on words that wrap without a browser-inserted hyphen.
+        "Zumo de naranja recién hecho",
       ].map((name, index) => ({
         id: `p${index}`,
         productId: `p${index}`,
