@@ -64,7 +64,8 @@ async function exchange(
       lease: JSON.stringify(state.lifecycle.lease),
       body: encoded,
     });
-    const timeout = AbortSignal.timeout(action === "backup-publish" ? 50_000 : 8_000);
+    // Reserve must outlast Cloud's 10-second storage credential grant (StorageAuthority.grant in waitron-cloud).
+    const timeout = AbortSignal.timeout(action === "backup-publish" ? 50_000 : 15_000);
     const response = await fetch(state.origin + "/api/installations/" + action, {
       method: "POST",
       headers: { "content-type": "application/json" },
