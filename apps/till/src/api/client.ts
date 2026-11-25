@@ -44,6 +44,8 @@ import type {
   OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
+import type { MadeHereItem } from "./made-here-types.js";
+export type { MadeHereExtra, MadeHereItem } from "./made-here-types.js";
 import type {
   ItemPaymentAsk,
   ItemPaymentPreview,
@@ -2657,25 +2659,6 @@ export interface TabLine {
   /** True on a dish line bound to a whole, unmeasured portion: only those share a row. Absent only
    * on a fixture that omits it, read as false. */
   portion?: boolean;
-}
-
-export interface MadeHereExtra {
-  name: string;
-  quantity: string;
-  unitName: Record<string, string> | null;
-  soldInEach: boolean;
-  perDish: number;
-}
-
-export interface MadeHereItem {
-  lineId: string;
-  name: string;
-  quantity: string;
-  unitName: Record<string, string> | null;
-  soldInEach: boolean;
-  optionSnapshots: OptionSnapshot[];
-  extras: MadeHereExtra[];
-  note: string | null;
 }
 
 export type OriginalReceiptPrint =
