@@ -16,7 +16,7 @@ import { type FiredItem } from "./kitchen-ticket-items.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { heldPaperStations } from "./order-group-hold-paper.js";
 import type { TradingContext } from "./trading-context.js";
-import { assertSubjectZones } from "./zone-access.js";
+import { assertSubjectZones, checkKitchenOrderZone } from "./zone-access.js";
 import { runServiceCommand, type CommandScope } from "./parties.js";
 import type { OrderAttendance } from "./working-order-context.js";
 
@@ -73,11 +73,9 @@ export async function releasePassItems(
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});
   const ask = passReleaseAsk(body);
-  await assertSubjectZones(tx, device.deviceProfileId, [
-    ask.target.kind === "group"
-      ? { partyId: ask.target.partyId }
-      : { orderId: ask.target.workingOrderId },
-  ]);
+  if (ask.target.kind === "group")
+    await assertSubjectZones(tx, device.deviceProfileId, [{ partyId: ask.target.partyId }]);
+  else await checkKitchenOrderZone(tx, { device }, ask.target.workingOrderId);
 
   const asked = [...ask.ticketItemIds].sort();
   const scope: CommandScope =

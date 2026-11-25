@@ -33,8 +33,7 @@ export interface PassCoverageGap {
  *  the Fire's profile check (`passReleaseRefusal`) and has an available pass screen, and a till or
  *  handheld's profile also has the Pass button on (`show-expo`), without which the till never opens
  *  the pass though its Fire would answer; it covers a station and zone its screen sees, where its
- *  profile's zone list allows that zone. A pair in no zone needs no allowance from the list, as at
- *  the Fire (`assertSubjectZones`). */
+ *  profile's zone list allows that zone. A pair in no zone needs no allowance from the list. */
 export async function readPassCoverage(tx: Transaction): Promise<PassCoverageGap[]> {
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
