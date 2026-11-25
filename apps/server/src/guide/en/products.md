@@ -14,9 +14,14 @@ Details is open when you add a product and closed when you edit one. While it is
 something set, so you can see what is set without opening it. Click its heading to open or close it. If
 it contains something you need to fix, it opens itself and stays open until you have fixed it.
 
-Use **Filters** to narrow the Products list. A category shows how many of its products match,
-including products in its subcategories. If an empty category disappears after you save it,
-choose **Clear all** in **Filters**. Search by name to find it under a closed category.
+Use **Filters** to narrow the Products list. Matching categories open while you filter, with a
+count that includes products in their subcategories. Choose **Available → No** to find dishes or
+variants that are off sale. A dish with an unavailable variant can appear under **Yes** and **No**.
+
+Categories stay in alphabetical order when you sort the products within them. Search by name to
+find a dish or category and see where it belongs. If a search finds nothing or hides a product you
+just saved, choose **Clear search and filters**. If a new empty category disappears while you
+filter, choose **Clear all** in **Filters**.
 
 ## How VAT is charged {#vat}
 

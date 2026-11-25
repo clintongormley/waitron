@@ -701,7 +701,7 @@ describe("menu-screen", () => {
     expect(scroll.scrollTop).toBe(scrollBeforeSave);
   });
 
-  it("keeps a named refusal visible when the rows are scrolled", async () => {
+  it("keeps a named refusal and the dish visible under the Available filter when scrolled", async () => {
     const viewport = { width: innerWidth, height: innerHeight };
     const locale = currentLocale();
     onTestFinished(() => setLocale(locale));
@@ -723,6 +723,10 @@ describe("menu-screen", () => {
     el.style.setProperty("--wt-table-max", "300px");
     await flush(el);
     const table = await productTable(el);
+    onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
+    table.chooseFilter("available", ["yes"]);
+    await table.updateComplete;
+    expect(table.filterValues("available")).toEqual(["yes"]);
     const root = table.shadowRoot!;
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
     const control = root.querySelector<HTMLElementTagNameMap["wt-switch"]>(
@@ -1370,14 +1374,54 @@ describe("menu-screen", () => {
 
   it("opens the category a new product was saved into, so the product shows", async () => {
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
-      api: stubApi(),
+      api: stubApi({
+        listProducts: vi
+          .fn()
+          .mockResolvedValueOnce(products)
+          .mockResolvedValue([...products, { ...products[0]!, id: "new", name: "Toast" }]),
+      }),
     });
     await flush(el);
-    const reveal = vi.spyOn(list(el), "revealProduct");
+    const table = await productTable(el);
+    expect(table.isExpanded("folder:c1")).toBe(false);
     emit(list(el), "add-product", { categoryId: "c1" });
     await el.updateComplete;
     emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
-    await vi.waitFor(() => expect(reveal).toHaveBeenCalledExactlyOnceWith("new"));
+    await vi.waitFor(() =>
+      expect(table.shadowRoot!.querySelector('tr[data-row-key="new"]')).not.toBeNull(),
+    );
+  });
+
+  it("offers to clear the search and filters when they hide a saved product", async () => {
+    const rename = { ...value, name: "Toast" };
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockResolvedValue(rename),
+      listProducts: vi
+        .fn()
+        .mockResolvedValueOnce(products)
+        .mockResolvedValue([{ ...products[0]!, name: rename.name }]),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const search =
+      list(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        '[name="menu-search"]',
+      )!;
+    const table = await productTable(el);
+    onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
+    emit(search, "wt-change", { value: "Croquettes" });
+    table.chooseFilter("available", ["yes"]);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value: rename });
+    const notice = () => list(el).shadowRoot!.querySelector('[data-test="product-saved-hidden"]');
+    await vi.waitFor(() => expect(notice()?.textContent).toContain("Toast"));
+    expect(editor(el).open).toBe(false);
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="p1"]')).toBeNull();
+    notice()!.querySelector<HTMLElement>("wt-button")!.click();
+    await vi.waitFor(() => expect(notice()).toBeNull());
+    expect(search.value).toBe("");
+    expect(table.filterValues("available")).toEqual([]);
   });
 
   it("loads the aggregate on edit and keeps the editor open after a failed save", async () => {
@@ -3254,6 +3298,43 @@ describe("menu-screen", () => {
       expect(editor(el).open).toBe(true);
       expect(editor(el).value).toEqual(variantValue);
     });
+
+    it.each([false, true])(
+      "reports a saved variant as hidden only when its closed search match excludes it (%s)",
+      async (hidden) => {
+        const api = variantApi();
+        const saved = { ...variantValue, available: !hidden };
+        vi.mocked(api.updateProductEditor).mockResolvedValue(saved);
+        if (hidden)
+          vi.mocked(api.listProducts)
+            .mockResolvedValueOnce(withVariant)
+            .mockResolvedValue([
+              {
+                ...withVariant[0]!,
+                variants: [{ ...withVariant[0]!.variants[0]!, available: false }],
+              },
+            ]);
+        const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+        await flush(el);
+        const search = list(el).shadowRoot!.querySelector('[name="menu-search"]')!;
+        emit(search, "wt-change", { value: "Croquettes" });
+        const table = await productTable(el);
+        onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
+        table.chooseFilter("available", ["yes"]);
+        await table.updateComplete;
+        expect(
+          table.shadowRoot!.querySelector('tr[data-row-key="p1"]')?.getAttribute("aria-expanded"),
+        ).toBe("false");
+        emit(list(el), "edit-product", { productId: "v1" });
+        await flush(el);
+        emit(editor(el), "wt-submit", { value: saved });
+        await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(2));
+        await flush(el);
+        expect(
+          Boolean(list(el).shadowRoot!.querySelector('[data-test="product-saved-hidden"]')),
+        ).toBe(hidden);
+      },
+    );
 
     it("opens a variant's page from its parent's variants section, and saves to the variant", async () => {
       history.replaceState(null, "", "/products");

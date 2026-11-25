@@ -43,6 +43,8 @@ import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
 import { refusalText } from "./delete-refusal.js";
 import {
+  clearProductSearch,
+  hiddenProductSave,
   productListActionFeedback,
   productAvailabilityFeedback,
   productAvailabilityFeedbackStyles,
@@ -297,11 +299,20 @@ export class ProductBrowser extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
   }
 
-  /** Opens every category above a product, once the browser has drawn the list that holds it. */
-  async revealProduct(id: string): Promise<void> {
+  @state() private hiddenSave: string | null = null;
+  async showSavedProduct(id: string, name: string, created: boolean): Promise<void> {
     await this.updateComplete;
-    await this.#list()?.revealProduct(id);
+    const list = this.#list();
+    const hidden = await list?.hidesSavedProduct(id);
+    this.hiddenSave = hidden ? name : null;
+    if (created && !hidden) await list?.revealProduct(id);
   }
+  readonly #clearProductSearch = (): void => {
+    this.search = "";
+    this.hiddenSave = null;
+    this.#list()?.clearFilters();
+    this.renderRoot.querySelector<HTMLElement>('wt-input[name="menu-search"]')?.focus();
+  };
 
   focusRowMenu(categoryId: string | null): void {
     this.#list()?.focusRowMenu(categoryId);
@@ -927,6 +938,7 @@ export class ProductBrowser extends LitElement {
         }}
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
+          this.hiddenSave = null;
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
@@ -1010,6 +1022,7 @@ export class ProductBrowser extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.search = event.detail.value;
+            this.hiddenSave = null;
           }}
         ></wt-input>
         ${
@@ -1068,6 +1081,8 @@ export class ProductBrowser extends LitElement {
               </p>`
             : nothing
         }
+        ${clearProductSearch(this.#clearProductSearch, "no-matches-action")}
+        ${this.hiddenSave === null ? nothing : hiddenProductSave(this.hiddenSave, this.#clearProductSearch)}
         ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form

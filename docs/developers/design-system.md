@@ -1538,13 +1538,15 @@ leaves the slot empty. A widget that draws a table with an Add button for a scre
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`), while the Products screen has no Add button in its table: its tree always shows the All products
 row, whose menu holds the screen's adds (spec [2026-10-02-products-category-tree-design.md](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/specs/2026-10-02-products-category-tree-design.md)
-§3), so its box appears only when a search matches nothing, holding the no-matches sentence. A
+§3), so its box appears only when a search matches nothing. Products puts **Clear search and filters**
+below the sentence. A
 menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
 menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page; the Printers
 screen does this by naming that button as the dialog's `opener` (see the `wt-modal` entry). When
 rows exist but the table's own search or filters hide them all, the same box holds
-`noMatchesMessage` and the slot is not drawn.
+`noMatchesMessage`. With a search in effect, the action goes in `no-matches-action`, including
+when filters are also active. The `empty-action` slot appears only when the table has no rows.
 
 The no-matches sentence is one sentence, the same on every screen: `tableNoMatches()` from
 `@waitron/dashboard-kit` ("Nothing matches your search or filters." / "Nada coincide con tu búsqueda
@@ -1876,7 +1878,12 @@ and opens their parents in the remembered tree. Closing a search branch affects 
 after the name, in muted small text, wrapping before Actions when space runs out. Expanded contents
 keep their ordinary tree cells. Menu Structure shows every member path; repeated views of one
 list/member share a tick through `rowSelectionKey`, while distinct memberships stay separate.
-Products has one category placement per product. Filters alone keep the ordinary tree rules.
+Products has one category placement per product. Its categories sort A–Z in either direction of a
+product sort, with a new category's name box after its sibling categories. Products uses
+`filterOpensBranch` for All products and categories: filters alone open paths to matching rows.
+Their toggles change only the filtered view, and clearing the filters restores the remembered tree.
+When search and filters are both active, the table keeps flat search results and their disclosures
+without saving changes to the ordinary branches.
 
 Repeated search copies share a row key. Pointer geometry and insertion marks use the rendered copy
 under the pointer; keyboard reordering returns focus to the grip copy that received the key.
@@ -1896,7 +1903,9 @@ correction.
 Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice with
 `chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables"). `shownKeys()`
 lists the keys of the rows the search and filters show now, in a tree with the rows it keeps around
-a match, and including rows a closed branch hides.
+a match, and including rows a closed branch hides. For flat search, it defaults to the rendered rows.
+`shownKeys({ includeCollapsedSearchMatches: true })` also includes filter-passing rows reachable
+under a closed search match.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the

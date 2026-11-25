@@ -196,6 +196,62 @@ test("Expand all counts every branch, and opens one whose rows a filter hides fo
   expect(keys(el)).toEqual(["a", "a1", "b", "b1"]);
 });
 
+test("opt-in filtered branches open temporarily even when remembered closed", async () => {
+  const props = {
+    initiallyCollapsed: true,
+    collapseDescendants: true,
+    rememberExpanded: true,
+    viewKey: "filtered-tree",
+    filterOpensBranch: (r: Row) => r.id !== "latte",
+  };
+  const el = await tree(props);
+  el.setExpanded("menu", true);
+  el.setExpanded("coffee", false);
+  await el.updateComplete;
+  const remembered = localStorage.getItem("filtered-tree:collapsed");
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  expect(shownRow(el, "coffee").getAttribute("aria-expanded")).toBe("true");
+  await userEvent.click(shownRow(el, "coffee").querySelector<HTMLButtonElement>(".tree-toggle")!);
+  expect(keys(el)).not.toContain("latte");
+  await userEvent.click(shownRow(el, "coffee").querySelector<HTMLButtonElement>(".tree-toggle")!);
+  expect(keys(el)).toContain("latte");
+  expect(localStorage.getItem("filtered-tree:collapsed")).toBe(remembered);
+  el.chooseFilter("kind", []);
+  await el.updateComplete;
+  expect(keys(el)).not.toContain("latte");
+  expect(keys(await tree(props))).not.toContain("latte");
+});
+
+test("flat search can report reachable rows under closed matches", async () => {
+  const el = await flatSearch();
+  expect(el.shownKeys()).toEqual(["coffee", "cake"]);
+  expect(el.shownKeys({ includeCollapsedSearchMatches: true })).toEqual([
+    "coffee",
+    "latte",
+    "oat",
+    "cake",
+  ]);
+});
+
+test("a no-matches search offers its action while an empty table offers its own", async () => {
+  const el = await flatSearch({ searchTerm: "missing" });
+  const action = document.createElement("button");
+  action.slot = "no-matches-action";
+  el.append(action);
+  expect(action.assignedSlot?.name).toBe("no-matches-action");
+  el.chooseFilter("kind", ["drink"]);
+  await el.updateComplete;
+  expect(action.assignedSlot?.name).toBe("no-matches-action");
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(action.assignedSlot).toBeNull();
+  el.rows = [];
+  await el.updateComplete;
+  expect(action.assignedSlot).toBeNull();
+  expect(el.shadowRoot!.querySelector('slot[name="empty-action"]')).not.toBeNull();
+});
+
 test("a search that opens the path shows every row below a match, wherever the rows list it", async () => {
   const el = await tree({
     rows: [
