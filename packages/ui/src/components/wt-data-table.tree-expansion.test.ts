@@ -234,6 +234,27 @@ test("flat search can report reachable rows under closed matches", async () => {
   ]);
 });
 
+test("changing an active filter opens a branch closed under the previous filter", async () => {
+  const el = await tree({
+    rows: [
+      row("menu", null, "Menu"),
+      row("tea", "menu", "Tea"),
+      row("water", "menu", "Water", "drink"),
+    ],
+    collapseDescendants: true,
+    filterOpensBranch: () => true,
+  });
+  const shownMenu = () => shownRow(el, "menu");
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  shownMenu().querySelector<HTMLButtonElement>(".tree-toggle")!.click();
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["menu"]);
+  el.chooseFilter("kind", ["drink"]);
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["menu", "water"]);
+});
+
 test("a no-matches search offers its action while an empty table offers its own", async () => {
   const el = await flatSearch({ searchTerm: "missing" });
   const action = document.createElement("button");

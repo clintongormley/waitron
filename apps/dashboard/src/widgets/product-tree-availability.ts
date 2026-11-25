@@ -53,19 +53,24 @@ export function productsWithAvailability(
 export function keepAvailabilityFocus(table: ReactiveControllerHost & HTMLElement): void {
   let control: HTMLElement | undefined;
   let fromKeyboard = false;
+  const switchSelector = 'wt-switch[part="availability-switch"]';
   table.addController({
     hostUpdate() {
       const focused = table.shadowRoot?.activeElement;
       control =
-        focused instanceof HTMLElement && focused.matches('wt-switch[part="availability-switch"]')
-          ? focused
-          : undefined;
+        focused instanceof HTMLElement && focused.matches(switchSelector) ? focused : undefined;
       fromKeyboard = control?.shadowRoot?.activeElement?.matches(":focus-visible") ?? false;
     },
     hostUpdated() {
       // Moving a keyed row can blur its still-connected switch.
-      if (control?.isConnected && !table.shadowRoot?.activeElement)
-        control.focus({ preventScroll: !fromKeyboard });
+      const root = table.shadowRoot;
+      if (!control || !root || root.activeElement) return;
+      if (control.isConnected) control.focus({ preventScroll: !fromKeyboard });
+      else if (fromKeyboard)
+        (
+          root.querySelector<HTMLElement>(switchSelector) ??
+          root.querySelector<HTMLElement>(".filters-trigger")
+        )?.focus();
     },
   });
 }

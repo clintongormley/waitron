@@ -1,4 +1,6 @@
 import { css, html, nothing } from "lit";
+import { codeOf } from "../i18n/codes.js";
+import { refusalText } from "./delete-refusal.js";
 import { fill, t } from "../i18n/t.js";
 
 export function productListActionFeedback(message: string, announce: boolean) {
@@ -27,8 +29,18 @@ export const productAvailabilityFeedbackStyles = css`
   }
 `;
 
-export function productAvailabilityFeedback(message: string) {
-  return message ? html`<p class="availability-error" role="alert">${message}</p>` : nothing;
+export function productAvailabilityFeedback(refusal: { name: string; error: unknown } | null) {
+  return refusal
+    ? html`<p class="availability-error" role="alert">
+        ${fill("product.availability_refused", {
+          name: refusal.name,
+          reason: refusalText(
+            codeOf(refusal.error),
+            (refusal.error as { params?: unknown })?.params,
+          ),
+        })}
+      </p>`
+    : nothing;
 }
 
 export function clearProductSearch(clear: () => void, slot?: string) {

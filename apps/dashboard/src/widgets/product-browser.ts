@@ -222,6 +222,7 @@ export class ProductBrowser extends LitElement {
     this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("search")) this.hiddenSave = null;
     if (this.operation === null) this.#releaseOperation();
     else if (!this.#operationScope) {
       this.#operationLeave = leaveCoordinatorFor(this);
@@ -272,6 +273,13 @@ export class ProductBrowser extends LitElement {
 
   override updated(changed: PropertyValues): void {
     if (this.tableHidden) return;
+    const saved = this.hiddenSave;
+    if (saved && (changed.has("products") || changed.has("categories")))
+      void this.#list()
+        ?.hidesSavedProduct(saved.id)
+        .then((hidden) => {
+          if (!hidden && this.hiddenSave === saved) this.hiddenSave = null;
+        });
     if (changed.has("categoryId") || changed.has("categories") || changed.has("tableHidden")) {
       const id = this.categoryId;
       if (
@@ -299,19 +307,23 @@ export class ProductBrowser extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
   }
 
-  @state() private hiddenSave: string | null = null;
-  async showSavedProduct(id: string, name: string, created: boolean): Promise<void> {
+  @state() private hiddenSave: { id: string; name: string } | null = null;
+  async showSavedProduct(
+    saved: { id: string; name: string } | null,
+    created: boolean,
+  ): Promise<void> {
     await this.updateComplete;
     const list = this.#list();
-    const hidden = await list?.hidesSavedProduct(id);
-    this.hiddenSave = hidden ? name : null;
-    if (created && !hidden) await list?.revealProduct(id);
+    this.hiddenSave = saved && (await list?.hidesSavedProduct(saved.id)) ? saved : null;
+    if (created && saved) await list?.revealProduct(saved.id);
   }
   readonly #clearProductSearch = (): void => {
+    const saved = this.hiddenSave;
     this.search = "";
     this.hiddenSave = null;
     this.#list()?.clearFilters();
     this.renderRoot.querySelector<HTMLElement>('wt-input[name="menu-search"]')?.focus();
+    if (saved) void this.updateComplete.then(() => this.#list()?.revealProduct(saved.id));
   };
 
   focusRowMenu(categoryId: string | null): void {
@@ -910,18 +922,7 @@ export class ProductBrowser extends LitElement {
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    const refusal = this.availabilityError;
-    return html`${productAvailabilityFeedback(
-        refusal
-          ? fill("product.availability_refused", {
-              name: refusal.name,
-              reason: refusalText(
-                codeOf(refusal.error),
-                (refusal.error as { params?: unknown })?.params,
-              ),
-            })
-          : "",
-      )}<dashboard-product-list
+    return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
         .availabilityPending=${this.availabilityPending}
         @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}
@@ -1022,7 +1023,6 @@ export class ProductBrowser extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.search = event.detail.value;
-            this.hiddenSave = null;
           }}
         ></wt-input>
         ${
@@ -1084,7 +1084,7 @@ export class ProductBrowser extends LitElement {
         ${
           this.hiddenSave === null
             ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
-            : hiddenProductSave(this.hiddenSave, this.#clearProductSearch)
+            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch)
         }
         ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>

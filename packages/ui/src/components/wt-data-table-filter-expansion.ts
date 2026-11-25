@@ -1,6 +1,7 @@
 /** Filters add temporary choices without changing the ordinary tree's remembered branches. */
 export class FilterExpansion {
   #choices = new Map<string, boolean>();
+  #filters: object | undefined;
 
   choose(
     keys: readonly string[],
@@ -10,15 +11,21 @@ export class FilterExpansion {
   ): string[] {
     const choices = keys.filter(temporary);
     if (choices.length === 0) return [...keys];
-    for (const key of expanded ? choices : closeBelow(choices)) this.#choices.set(key, expanded);
+    this.set(expanded ? choices : closeBelow(choices), expanded);
     return keys.filter((key) => !choices.includes(key));
+  }
+
+  set(keys: readonly string[], expanded: boolean): void {
+    for (const key of keys) this.#choices.set(key, expanded);
   }
 
   get(key: string): boolean | undefined {
     return this.#choices.get(key);
   }
 
-  clear(): void {
+  reset(filters: object | undefined): void {
+    if (this.#filters === filters) return;
+    this.#filters = filters;
     this.#choices.clear();
   }
 }

@@ -27,7 +27,7 @@ import {
   rememberCellPress,
 } from "./wt-data-table-cell-controls.js";
 
-import { tableMessage } from "./wt-data-table-message.js";
+import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
 
 registerIcons({
@@ -478,18 +478,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-danger);
       }
 
-      .empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--wt-space-4);
-        padding: var(--wt-space-6);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        text-align: center;
-      }
-
       .table-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -901,6 +889,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     `,
     iconButtonStyles,
     cellControlStyles,
+    tableMessageStyles,
   ];
 
   @property({ attribute: false }) rows: readonly Row[] = [];
@@ -1483,7 +1472,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.#restoreView();
       if (this.#judgeFilters()) this.#persistView();
     }
-    if (!this.#filteringTree()) this.#filterExpansion.clear();
+    this.#filterExpansion.reset(this.#filteringTree() ? this.filterSelections : undefined);
   }
 
   /** Reads the stored view once there are columns to check it against. A stored sort is adopted
@@ -2480,10 +2469,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return branches;
   }
 
-  #setOpen(keys: readonly string[], open: boolean): void {
+  #setOpen(keys: readonly string[], open: boolean, fromToggle = false): void {
     const filtering = this.#filteringTree();
     const searching = this.#flatSearching();
-    if (filtering && !searching) {
+    if (filtering && fromToggle && !searching) {
       const byKey = this.#treeShown().byKey;
       const persistent = this.#filterExpansion.choose(
         keys,
@@ -2502,6 +2491,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       keys = persistent;
     }
     if (!open && this.collapseDescendants) keys = this.#closureKeys(keys);
+    if (filtering && !fromToggle && !searching) this.#filterExpansion.set(keys, open);
     if (searching) {
       const next = new Set(this.searchExpanded);
       for (const key of keys) {
@@ -2509,7 +2499,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         else next.delete(key);
       }
       this.searchExpanded = next;
-      if (filtering || (!open && !this.collapseDescendants)) return;
+      if ((filtering && fromToggle) || (!open && !this.collapseDescendants)) return;
       if (open) {
         const byKey = this.#rowsByKey();
         const persistent = new Set(keys);
@@ -2564,7 +2554,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #toggle(key: string): void {
     const expanded = !this.isExpanded(key);
-    this.#setOpen([key], expanded);
+    this.#setOpen([key], expanded, true);
     this.dispatchEvent(
       new CustomEvent("wt-expand-change", {
         detail: { key, expanded, ...(this.#filteringTree() ? { filtering: true } : {}) },
@@ -2639,7 +2629,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     let parent = row !== undefined && this.rowParent ? this.rowParent(row) : null;
     while (parent !== null && byKey.has(parent) && !seen.has(parent)) {
       seen.add(parent);
-      if (!this.isExpanded(parent)) closed.push(parent);
+      if (!this.isExpanded(parent) || (this.#filteringTree() && this.collapsed.has(parent)))
+        closed.push(parent);
       parent = this.rowParent!(byKey.get(parent)!);
     }
     if (closed.length > 0) this.#setOpen(closed, true);
@@ -2875,7 +2866,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return html`<button
       type="button"
       class="expand-all"
-      @click=${() => this.#setOpen(branches, !allOpen)}
+      @click=${() => this.#setOpen(branches, !allOpen, true)}
     >
       ${allOpen ? this.collapseAllLabel : this.expandAllLabel}
     </button>`;

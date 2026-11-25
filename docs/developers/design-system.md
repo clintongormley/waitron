@@ -1881,7 +1881,9 @@ list/member share a tick through `rowSelectionKey`, while distinct memberships s
 Products has one category placement per product. Its categories sort A–Z in either direction of a
 product sort, with a new category's name box after its sibling categories. Products uses
 `filterOpensBranch` for All products and categories: filters alone open paths to matching rows.
-Their toggles change only the filtered view, and clearing the filters restores the remembered tree.
+Their toggles change only the current filtered view. Changing a filter reopens matching paths.
+Clearing the filters restores the remembered tree, including openings made to reveal a linked
+category or newly saved product.
 When search and filters are both active, the table keeps flat search results and their disclosures
 without saving changes to the ordinary branches.
 
