@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,7 +60,7 @@ describe("move-ts-declarations", () => {
       write("client.ts", client);
     });
 
-    async function moveClient(methods, otherKept = []) {
+    async function moveClient(methods, otherKept = [], classOptions = {}) {
       write(
         "moves.json",
         JSON.stringify({
@@ -74,6 +75,7 @@ describe("move-ts-declarations", () => {
                 request: "Request",
                 keep: ["#request", "constructor", ...otherKept],
                 groups: { TicketApi: methods },
+                ...classOptions,
               },
             },
           ],
@@ -83,16 +85,23 @@ describe("move-ts-declarations", () => {
     }
 
     it("preserves a branch-edited member and redirects an inline type import", async () => {
-      write("consumer.ts", 'export type Bill = import("./client.js").Ticket;\n');
+      write(
+        "receipt-types.d.ts",
+        'declare module "receipt-types" { export type Currency = string; }\n',
+      );
+      const external = 'export type Currency = import("receipt-types").Currency;\n';
+      write("consumer.ts", 'export type Bill = import("./client.js").Ticket;\n' + external);
 
       await moveClient(["readTicket"]);
 
       expect(read("tickets.ts")).toContain(editedMethod);
-      expect(read("consumer.ts")).toBe('export type Bill = import("./tickets.js").Ticket;\n');
+      expect(read("consumer.ts")).toBe(
+        'export type Bill = import("./tickets.js").Ticket;\n' + external,
+      );
       expect(read("client.ts")).toContain("export class Api extends TicketApi");
       expect(read("client.ts")).not.toContain("readTicket");
       const program = ts.createProgram(
-        ["client.ts", "consumer.ts"].map((file) => join(root, file)),
+        ["client.ts", "consumer.ts", "receipt-types.d.ts"].map((file) => join(root, file)),
         {
           target: ts.ScriptTarget.ESNext,
           module: ts.ModuleKind.NodeNext,
@@ -111,6 +120,7 @@ describe("move-ts-declarations", () => {
         "client.ts",
         'import type { TicketAmount as Amount } from "./request.js";\n' +
           "export type { Amount };\n" +
+          'export type { Request } from "./request.js";\n' +
           client.replace("amount: number;", "amount: Amount;"),
       );
 
@@ -119,6 +129,7 @@ describe("move-ts-declarations", () => {
       expect(read("client.ts")).toContain(
         'export type { TicketAmount as Amount } from "./request.js";',
       );
+      expect(read("client.ts")).toContain('export type { Request } from "./request.js";');
       expect(read("tickets.ts")).toContain("amount: Amount;");
     });
 
@@ -204,6 +215,116 @@ describe("move-ts-declarations", () => {
       await expect(moveClient(["readTicket"])).rejects.toThrow(/client import cycle/);
 
       expect(read("client.ts")).toBe(source);
+      expect(() => read("tickets.ts")).toThrow(/ENOENT/);
+    });
+
+    it("keeps the same request through both area constructors", async () => {
+      write(
+        "tsconfig.json",
+        '{"compilerOptions":{"module":"NodeNext","verbatimModuleSyntax":true}}',
+      );
+      const retained = ["  makeBlankTicket(): Ticket {", "    return { amount: 0 };", "  }"].join(
+        "\n",
+      );
+      const second = [
+        "  readTotal(): number {",
+        '    return this.#request<number>("/total", true);',
+        "  }",
+      ].join("\n");
+      write("request.ts", "export type Request = <T>(url: string, passive?: boolean) => T;\n");
+      write("receipt-setup.ts", "(globalThis as Record<string, unknown>).ticketSetup = 11;\n");
+      write(
+        "client.ts",
+        'import "./receipt-setup.js";\n' +
+          client
+            .replace("amount: number;", "amount: number;\n  api?: Api;")
+            .replace(editedMethod, [editedMethod, second, retained].join("\n")),
+      );
+      write(
+        "moves.json",
+        JSON.stringify({
+          tsconfig: "tsconfig.json",
+          moves: [
+            {
+              source: "client.ts",
+              keep: ["Api"],
+              targets: { "tickets.ts": ["Ticket", "TicketApi"], "totals.ts": ["TotalApi"] },
+              classLift: {
+                name: "Api",
+                request: "Request",
+                keep: ["#request", "constructor", "makeBlankTicket"],
+                groups: { TicketApi: ["readTicket"], TotalApi: ["readTotal"] },
+                allowClientTypeFrom: "tickets.ts",
+              },
+            },
+          ],
+        }),
+      );
+
+      await main(["moves.json"], root);
+
+      const program = ts.createProgram([join(root, "client.ts")], {
+        target: ts.ScriptTarget.ESNext,
+        module: ts.ModuleKind.NodeNext,
+        noEmitOnError: true,
+        verbatimModuleSyntax: true,
+      });
+      expect(program.emit().emitSkipped).toBe(false);
+      const run = [
+        'import { Api } from "./client.js";',
+        "const calls = [];",
+        "const api = new Api((...args) => {",
+        "  calls.push(args);",
+        "  return args[1] ? 7 : { amount: 12 };",
+        "});",
+        "console.log(JSON.stringify([api.readTicket(), api.readTotal(), api.makeBlankTicket(), globalThis.ticketSetup, calls]));",
+      ].join("\n");
+      const result = execFileSync(process.execPath, ["--input-type=module", "-e", run], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      expect(JSON.parse(result)).toEqual([
+        { amount: 12 },
+        7,
+        { amount: 0 },
+        11,
+        [["/ticket/branch-edit"], ["/total", true]],
+      ]);
+    });
+
+    it("refuses formatting that changes a moved method body", async () => {
+      const source = client.replace("return this.", "return  this.");
+      write("client.ts", source);
+
+      await expect(moveClient(["readTicket"])).rejects.toThrow(
+        /changed a method signature or body/,
+      );
+
+      expect(read("client.ts")).toBe(source);
+      expect(() => read("tickets.ts")).toThrow(/ENOENT/);
+    });
+
+    it.each([
+      {
+        methods: ["readTicket", "readReceipt"],
+        options: {},
+        reason: /missing client member readReceipt/,
+      },
+      { methods: ["readTicket", "readTicket"], options: {}, reason: /duplicate client member/ },
+      {
+        methods: ["readTicket", "constructor"],
+        options: { keep: ["#request"] },
+        reason: /keep the client constructor/,
+      },
+      {
+        methods: ["readTicket"],
+        options: { name: "ReceiptApi" },
+        reason: /expected a client class named ReceiptApi/,
+      },
+    ])("refuses a stale client map with $reason", async ({ methods, options, reason }) => {
+      await expect(moveClient(methods, [], options)).rejects.toThrow(reason);
+
+      expect(read("client.ts")).toBe(client);
       expect(() => read("tickets.ts")).toThrow(/ENOENT/);
     });
 
