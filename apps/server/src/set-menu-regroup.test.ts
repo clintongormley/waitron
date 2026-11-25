@@ -226,7 +226,7 @@ async function groupedSoupAndHake(first: Ordered = "Soup", release: "hold" | "fi
 }
 
 type Action =
-  | { action: "comp" }
+  | { action: "cancel" | "comp" }
   | { action: "discount_percent"; percentBp: number }
   | { action: "discount_amount"; amount: string };
 
@@ -237,7 +237,10 @@ async function adjust(
   row: { lineIds: string[]; quantity: string } | null = null,
 ) {
   const reason = await inTx(venue, (tx) =>
-    createAdjustmentReason(tx, { ...REASONS.house, name: `House ${randomUUID()}` }),
+    createAdjustmentReason(tx, {
+      ...(action.action === "cancel" ? REASONS.houseVoid : REASONS.house),
+      name: `House ${randomUUID()}`,
+    }),
   );
   return inTx(venue, async (tx) =>
     applyAdjustment(
@@ -536,6 +539,27 @@ it("works out again a dish its row's comp names but took nothing off (D30)", asy
     setMenuLineId: null,
     place: null,
   });
+});
+
+it("works out again a dish a cancel of part of its row names, which kept no charge (D30)", async () => {
+  const bill = await seated();
+  await send(bill, "Soup", "Soup", "Hake", "Hake");
+  const soups = (await shape(bill.tabId)).filter(({ what }) => what === "Soup").map(idOf);
+  const hakes = (await shape(bill.tabId)).filter(({ what }) => what === "Hake").map(idOf);
+  await adjust(bill.tabId, soups[0]!, { action: "cancel" }, { lineIds: soups, quantity: "1" });
+  expect(
+    await venue.db
+      .select({ action: adjustments.action, chargeKept: adjustments.chargeKept })
+      .from(adjustments)
+      .where(eq(adjustments.lineId, soups[0]!)),
+  ).toEqual([{ action: "cancel", chargeKept: false }]);
+  expect(await rows(bill.tabId)).toContainEqual(
+    expect.objectContaining({ id: soups[0], setMenuRole: "dish", unitPriceGross: 0 }),
+  );
+  for (const hake of hakes) await cancelById(bill.tabId, hake);
+  expect(await shape(bill.tabId)).toMatchObject([
+    { id: soups[0], role: null, price: 600, total: 600, setMenuLineId: null, place: null },
+  ]);
 });
 
 it("clears the stamp a part of a row's comp left on the dishes it did not take (D30)", async () => {

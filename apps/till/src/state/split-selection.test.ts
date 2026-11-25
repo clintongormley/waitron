@@ -344,18 +344,30 @@ describe("A803 selection:", () => {
       staysPicks(withDaily(["a", "b"], { all: [...lines, comped] }), ["a", "b"]);
     });
 
-    it("without the set menu a comp or discount on one of them keeps does not", () => {
-      const discounted = { ...lines[0]!, listUnitPriceGross: "6.00" };
-      staysPicks(withDaily(["a", "b"], { all: [discounted, lines[1]!, daily] }), ["a", "b"]);
+    it("without the set menu one of them, below its list price, keeps does not", () => {
+      const reduced = { ...lines[0]!, listUnitPriceGross: "6.00" };
+      staysPicks(withDaily(["a", "b"], { all: [reduced, lines[1]!, daily] }), ["a", "b"]);
     });
 
-    it("without the set menu a comp on an extra of one of them keeps does not", () => {
+    it("becomes whole when an extra of one of them is comped", () => {
       const extra = line("bread", 4, {
         parentLineNo: 1,
         unitPriceGross: "0.00",
         listUnitPriceGross: "1.50",
       });
-      staysPicks(withDaily(["a", "b"], { all: [...lines, daily, extra] }), ["a", "b"]);
+      const one = withDaily(["a", "b"], { all: [...lines, daily, extra] });
+
+      expect([...pickOnBill(one, NOTHING, new Set(["a", "b"])).whole]).toEqual(["b1"]);
+    });
+
+    it("becomes whole when one of them, or their set menu, is at its list price", () => {
+      const listed = [lines[0]!, daily].map((one) => ({
+        ...one,
+        listUnitPriceGross: one.unitPriceGross,
+      }));
+      const one = withDaily(["a", "b"], { all: [listed[0]!, lines[1]!, listed[1]!] });
+
+      expect([...pickOnBill(one, NOTHING, new Set(["a", "b"])).whole]).toEqual(["b1"]);
     });
 
     it("without the set menu one of them leaves only with does not", () => {

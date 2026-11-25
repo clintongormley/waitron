@@ -299,8 +299,8 @@ export const workingOrderLines = table(
     groupId: id("group_id"),
     // Whose sale the line counts as.
     creditedTo: id("credited_to"),
-    // The unit price the line had when an adjustment first touched it, never changed after; null
-    // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.
+    // The unit price before an adjustment repriced the line; null on a line none has. Working out
+    // set menus clears one equal to the price. Filing reads `unit_price_gross`, never this.
     listUnitPriceGross: money("list_unit_price_gross"),
     // What the dish costs a la carte, written when it is added; null on an extras pick and on a
     // set menu's own row.

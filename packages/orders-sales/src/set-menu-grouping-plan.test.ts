@@ -554,6 +554,32 @@ describe("planBillGrouping", () => {
     ]);
   });
 
+  it("clears the stamp on a dish it charges a la carte as no longer one portion, or sold by measure (D30)", () => {
+    const lines = [
+      placed(dish("hake", 1, "hake", { quantity: 2000, listUnitPriceGross: 0 }), "menu-a", 1),
+      menuRow("menu-a", 2),
+      placed(
+        dish("sirloin", 3, "sirloin", { soldByMeasure: true, listUnitPriceGross: 500 }),
+        "menu-b",
+        1,
+        500,
+      ),
+      menuRow("menu-b", 4),
+    ];
+    const frozen = frozenLinesOf(lines, { reduced: none, held: none });
+    const plan = planBillGrouping(lines, frozen, [daily], ids("unused"));
+    expect(
+      plan.dishUpdates.map(({ id, unitPriceGross, listUnitPriceGross }) => ({
+        id,
+        unitPriceGross,
+        listUnitPriceGross,
+      })),
+    ).toEqual([
+      { id: "hake", unitPriceGross: 1200, listUnitPriceGross: null },
+      { id: "sirloin", unitPriceGross: 1800, listUnitPriceGross: null },
+    ]);
+  });
+
   it("leaves a frozen placed dish of two portions as it is", () => {
     const lines = [
       placed(dish("hake", 1, "hake", { quantity: 2000 }), "menu-a", 1),
