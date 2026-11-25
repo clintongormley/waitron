@@ -581,6 +581,68 @@ describe("Give back", () => {
     expect(bottom(el)).toBe("");
   });
 
+  it("is drawn quiet until the box checked the money back and a reason is chosen, and in its own colour from then until its press is answered", async () => {
+    const api = fakeGiveBackApi();
+    const check = deferred<GiveBackPreview>();
+    api.previewGiveBack.mockImplementationOnce(() => check.promise);
+    const answer = deferred<never>();
+    api.giveBack.mockImplementationOnce(() => answer.promise);
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    expect(submit(el).variant).toBe("secondary");
+    await type(el, "5");
+    await vi.waitFor(() => expect(api.previewGiveBack).toHaveBeenCalledOnce());
+    await reason(el, "complaint");
+    expect(submit(el).variant).toBe("secondary");
+    check.resolve(previewFor(api.previewGiveBack.mock.calls[0]![1]));
+    await vi.waitFor(() => expect(submit(el).variant).toBe("primary"));
+    expect(submit(el).disabled).toBe(false);
+    await reason(el, "");
+    expect(summary(el)).not.toBeNull();
+    expect(submit(el).variant).toBe("secondary");
+    await reason(el, "complaint");
+    expect(submit(el).variant).toBe("primary");
+    submit(el).click();
+    await vi.waitFor(() => expect(submit(el).loading).toBe(true));
+    expect(submit(el).variant).toBe("primary");
+  });
+
+  it("is drawn quiet while a field a press marked is not fixed", async () => {
+    const { el } = await mount();
+    await choose(el, "goodwill");
+    await type(el, "5");
+    await reason(el, "other");
+    await vi.waitFor(() => expect(submit(el).variant).toBe("primary"));
+    submit(el).click();
+    await vi.waitFor(() => expect(submit(el).disabled).toBe(true));
+    expect(summary(el)).not.toBeNull();
+    expect(submit(el).variant).toBe("secondary");
+    await reason(el, "complaint");
+    expect(submit(el).variant).toBe("primary");
+  });
+
+  it.each(["0", "0.00", "-1", "0.001", "abc", "1,000.00"])(
+    "refuses the amount %s under the amount, asking the box nothing and giving nothing back",
+    async (amount) => {
+      const { el, api } = await mount();
+      await choose(el, "goodwill");
+      await reason(el, "complaint");
+      amountField(el).dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: amount }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      submit(el).click();
+      await vi.waitFor(() =>
+        expect(amountField(el).error).toBe(
+          t("give_back.amount_invalid").replace("{amount}", formatMoney("47.00", "en")),
+        ),
+      );
+      expect(submit(el).disabled).toBe(true);
+      expect(api.previewGiveBack).not.toHaveBeenCalled();
+      expect(api.giveBack).not.toHaveBeenCalled();
+    },
+  );
+
   it("hands on what was previewed when pressed", async () => {
     const { el } = await mount();
     await choose(el, "dishes");
