@@ -646,18 +646,28 @@ of later parent edits (`effectiveProductColumns`, `packages/menu/src/variant-fal
 
 ### Price
 
-A variant's own price may be blank. On a menu it is charged the most specific price that is set
-(`resolveOfferPrice`, `packages/menu/src/offer-price.ts`):
+A variant's own price may be blank. On a menu it is charged the first price that is set
+(`combineOffer`, `packages/menu/src/menu-combine.ts`):
 
 1. that menu's price for the variant (`menu_item_variant_overrides.price`);
-2. else the variant's own price (`products.unit_price` on its row);
-3. else its parent's price on that menu (`menu_items.gross_price`);
-4. else its parent's own price.
+2. else the variant's own price (`products.unit_price` on its row), where the menu places the
+   product in its own sections, together with the variant price each included menu decides; when
+   they disagree, the menu has a clash to settle;
+3. else its parent's own price.
+
+An ordinary menu never prices a product with an Active variant itself. `writeMenuItemSettings`
+(`packages/menu/src/operations.ts`) refuses a price for one with `menu_item.has_variants`; saving
+a variant list holding an Active variant (`writeProductVariants`, `packages/menu/src/variants.ts`)
+clears the product's price on every ordinary menu, deleted ones included (`dropProductMenuPrices`,
+`packages/menu/src/menu-removal.ts`); an import clears it
+(`dropMenuPricesOfProductsWithVariants`); and `offersOn` reads a price still in the table as null.
+A set menu's price on such a dish is its supplement and stays.
 
 A menu may leave any product's price blank (`menu_items.gross_price` is nullable), which means the
 product's own price. A menu's Price overrides tab shows the price a blank field inherits as its
-placeholder: one amount, the range across a product's Active sizes, or a clash
-(`apps/dashboard/src/widgets/menu-price-inheritance.ts`). The
+placeholder: one amount or a clash (`apps/dashboard/src/widgets/menu-price-inheritance.ts`). A
+product with an Active variant has no field there: its row shows the amount or range its sizes
+sell at as text. The
 product-editor save accepts a blank variant price both in the parent's variants list and on the
 variant's own page (`parseProductEditorInput`, `packages/menu/src/product-editor-input.ts`),
 and `writeProductVariants` (`packages/menu/src/variants.ts`) stores it blank.
@@ -753,10 +763,8 @@ unit, directly or with the till keypad. Tap an unsent line's amount to edit it.
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
 variants were sent in). The first available one is chosen to start with, except on a reopened line
 not yet stored on an order, which starts on its own variant even when that is no longer available and
-saves only once an available one is chosen; an unavailable one stays listed, drawn disabled; each is
-labelled with its difference from the parent's price on that menu ("+€1.50") where it has one
-(`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`; the difference is worked out in
-`apps/till/src/api/menu-api.ts`). A line of a held order, read back from the server, carries no list of
+saves only once an available one is chosen; an unavailable one stays listed, drawn disabled; each
+shows its name and full price only (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`). A line of a held order, read back from the server, carries no list of
 variants, so its window offers no variant choice and saves a note or answer change on its own
 variant, even one sold out since ("reopens with no variant choice and saves a changed note, keeping
 the variant" in `apps/till/src/till-app.test.ts`). A product none of whose variants is

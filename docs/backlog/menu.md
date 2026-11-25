@@ -674,12 +674,6 @@ From A344 (#1375, a menu's Price overrides tab shows its clashes):
   [Save bar](../developers/design-system.md#a-value-saved-from-its-own-table-row) replaced Undo.
   A live re-read still follows the same rule.
 
-From A345 (#1383, a menu with clashes cannot be published, from anywhere):
-
-- Decided as built: a product with both a variant that follows its clashing price and a variant
-  whose own price clashes is marked on its own price first, because a price typed there settles
-  one of them; once typed, the mark moves to the variants.
-
 From A294 (#1300, the Products and Structure trees show drag grips only in a mode):
 
 - The Structure tree's section rows were deliberately not top-aligned: section names do not wrap
@@ -767,7 +761,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Menus, set menus, products and variants use permanent Delete. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading, the live menu’s Patch action in the list and a Preview that points to the prices and set menus you need to fix. You can edit a product from Structure and return to the same row. The Structure table with its draft and Save button is still to come. The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one tab that saves the order and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
+_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading, the live menu’s Patch action in the list and a Preview that points to the prices and set menus you need to fix. You can edit a product from Structure and return to the same row. A menu other than a set menu no longer sets its own price on a product with variants: its variants carry the price, and the till's variant picker shows each one's full price. The Structure table with its draft and Save button is still to come. The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one tab that saves the order and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 

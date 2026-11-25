@@ -3875,7 +3875,8 @@ Delete appears in the confirmation dialog, and a refusal without a field appears
 
 A menu's Price overrides tab (`apps/dashboard/src/widgets/menu-prices-table.ts`) stages the
 product and size prices together. Save and Cancel stay in view below the table. A field's label names
-its product and size and says when the menu sets its own price. Save opens a collapsed row to focus
+its product and size and says when the menu sets its own price. A product with an Active variant
+has no field: its row shows the price or range its sizes sell at as text. Save opens a collapsed row to focus
 the first marked field it can show. The footer names errors in filtered-out rows and keeps the
 filter. The existing price requests run in sequence, so a refusal can leave other prices saved.
 The edits that were refused stay ready to retry.

@@ -175,7 +175,8 @@ sending the request; Cancel creates nothing.
 
 `PATCH /management-api/menus/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved
-value. The retired `active` and `offered` fields are refused with `management.request_invalid`
+value. On a menu other than a set menu, a price for a product with an Active variant answers
+`menu_item.has_variants` (400, `menuItemId`). The retired `active` and `offered` fields are refused with `management.request_invalid`
 (400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
@@ -192,7 +193,8 @@ sizes, `product.variant_not_found` (404); an item of another menu, or one this m
 working structure, including sold-out products. An inactive menu gives no rows. Each row is
 `{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, available, variants }`,
 with `available` the product's own Available.
-`override` is this menu's saved price, which may be null. `combined` explains the resulting price,
+`override` is this menu's saved price, which may be null, and is null for a product with an
+Active variant. `combined` explains the resulting price,
 including each variant's. Each setting is either decided, with its `value`, `source` and
 `otherwise`, or a clash with its `candidates`. A source
 identifies this menu's decision, the product, a parent, or an included menu and that menu's source.
@@ -201,7 +203,8 @@ as decided.
 
 A menu's own decision wins. Otherwise its own placements and its active included menus contribute
 values; equal values agree, differing values or an unresolved included value clash. Sizes use
-size-level price decisions first, then the combined product price when there are none. Their price
+size-level price decisions first, then the product's own price when there are none: no menu but a
+set menu prices a product with an Active variant itself. Their price
 source records whether it was decided at the size or product level. For example, if Drinks sets beer
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
@@ -324,7 +327,8 @@ were.
   `revision` `menu_patch.declarations_changed` (409, `menuId`), writing nothing. A change the route cannot apply
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
   refused field, and `reason` with the code behind a refused translation, or `image.not_found`
-  for a picture the image library does not hold). A patch that leaves the
+  for a picture the image library does not hold). A `price` change on a dish whose live copy lists
+  variants is one, with `field: "target"`: such a dish is priced on its variants. A patch that leaves the
   live version and every scheduled version it names as they were answers `menu_patch.unchanged` (409, `menuId`).
 
 Tills sell from live versions of active menus. Reading a live version outside document format 6 refuses

@@ -220,7 +220,8 @@ export interface ZoneMenuOffer {
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;
-  /** The STORED menu price, null when the menu sets none; `unitPrice` is the one charged. */
+  /** The menu's price, null when the menu sets none or, on a menu other than a set menu, when the
+   * product has an Active variant; `unitPrice` is the one charged. */
   readonly grossPrice: string | null;
   /** The price this offer charges, resolved along the menu's menu price chain. */
   readonly unitPrice: string;
