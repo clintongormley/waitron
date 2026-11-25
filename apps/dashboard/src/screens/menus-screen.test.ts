@@ -11208,16 +11208,16 @@ describe("the Home page tab", () => {
     async (outcome) => {
       const pending = deferred<void>();
       const client = api({
-        getMenuHome: vi.fn(async (id: string) => ({
+        getMenuHome: vi.fn(async () => ({
           ...menuHome(),
-          order: id === "menu-lunch" ? ("home_first" as const) : ("menu_first" as const),
+          order: "menu_first" as const,
         })),
       });
       const el = await mountHome(client);
       client.setHomeDisplay.mockImplementationOnce(() => pending.promise);
-      emit(control(el), "wt-change", { value: "menu_first" });
       emit(control(el), "wt-change", { value: "home_first" });
-      expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "menu_first");
+      emit(control(el), "wt-change", { value: "menu_first" });
+      expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "home_first");
       await goToDinnerHome(el, client);
       const reads = client.getMenuHome.mock.calls.length;
       if (outcome === "save") pending.resolve();

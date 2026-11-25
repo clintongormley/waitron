@@ -286,7 +286,7 @@ it("words every kind of change, each with where it came from", async () => {
       "Order changed at the top level",
       "Order changed in Drinks — included menu",
       "Device Home Page shortcuts changed",
-      "What appears first on the device home page changed",
+      "What appears first on the Device Home Page changed",
       "Menu renamed from Midday Menu to Lunch Menu",
     ].sort(),
   );

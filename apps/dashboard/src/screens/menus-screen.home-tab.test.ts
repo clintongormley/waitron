@@ -773,6 +773,7 @@ describe("the Home page tab's shortcuts", () => {
     const grid = widget.shadowRoot!.querySelector(".grid")!;
     const tracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
     expect(tracks).toHaveLength(width === 1280 ? 6 : 3);
+    if (width === 1280) expect(control.clientWidth).toBeLessThan(350);
     if (width <= 390) {
       const buttons = [...control.shadowRoot!.querySelectorAll("button")];
       const [first, second] = buttons.map((button) => button.getBoundingClientRect().width);
@@ -802,14 +803,18 @@ describe("the Home page tab's shortcuts", () => {
     save.resolve();
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
     expect(control.value).toBe("menu_first");
-    expect(preview(el)!.order).toBe("menu_first");
+    const blocks = () =>
+      [...preview(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-region]")].map(
+        (block) => block.dataset.region,
+      );
+    expect(blocks()).toEqual(["search", "structure", "shortcuts"]);
     client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
     choose(0);
     await vi.waitFor(() =>
       expect(q(el, '[data-test="home-error"]')?.textContent).toBe(codeMessage("server.internal")),
     );
     expect(control.value).toBe("menu_first");
-    expect(preview(el)!.order).toBe("menu_first");
+    expect(blocks()).toEqual(["search", "structure", "shortcuts"]);
   });
 });
 

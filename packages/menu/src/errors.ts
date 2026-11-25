@@ -137,7 +137,6 @@ declare module "@waitron/shared" {
     "menu_patch.unchanged": { menuId: string };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };
-    /** A home display setting is outside what its device takes (`@waitron/shared`'s menu-document/device-home.ts). */
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };

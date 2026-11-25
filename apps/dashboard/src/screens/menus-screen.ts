@@ -414,8 +414,10 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
-      .home-settings {
-        max-inline-size: var(--wt-form-max-width);
+      @media (min-width: 800px) {
+        .home-settings {
+          inline-size: fit-content;
+        }
       }
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
@@ -633,8 +635,6 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's Device Home Page is read, which happens only on the Home page tab. */
   @state() private menuHome: MenuHome | null = null;
   @state() private homeLoadError = false;
-  /** Why a display setting was refused when the refusal names no control on screen, or why a
-   * shortcut's remove or move was refused. */
   @state() private homeError: string | null = null;
   @state() private homePending: { menuId: string; order: HomeOrder } | null = null;
   /** The shortcut picker while it is open. */
@@ -2052,7 +2052,7 @@ export class MenusScreen extends LitElement {
 
   async #saveDisplay(order: HomeOrder): Promise<void> {
     const menuId = this.menuId;
-    if (menuId === null || this.homePending !== null || this.menuHome?.order === order) return;
+    if (menuId === null || this.homePending !== null) return;
     this.homePending = { menuId, order };
     this.homeError = null;
     try {

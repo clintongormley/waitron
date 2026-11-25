@@ -163,7 +163,7 @@ changing that name must pass the check.
 
 `POST /management-api/menus/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active }`). It
-copies the menu's own sections and their members, its Home shortcuts, its display settings, its
+copies the menu's own sections and their members, its Home shortcuts, its home order, its
 products' menu prices and its variant prices (`duplicateMenu`,
 `packages/menu/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
 still name the other menu's sections. Published versions, scheduled publications and menu periods
@@ -221,9 +221,9 @@ fields that need a decision. `document` is the proposed published document, with
 structure and the Device Home Page as `home` (below); a shortcut whose target the document does not
 hold keeps its place as a `{ kind: "empty" }` slot. Each such shortcut gives a warning
 `{ kind: "shortcut_missing", name }`. Among the `changes`, a `home_shortcuts_changed` change says
-the shortcuts differ from the live version's, and a `home_display_changed` change, naming its
-`device`, that one device's display does. With no live version, the shortcuts count as changed when
-there are any, and a display when it differs from the default.
+the shortcuts differ from the live version's. A `home_display_changed` change says what appears
+first has changed. On a first publication, shortcuts count as changed when there are any, and the
+order counts as changed when the full menu appears first.
 
 `POST /management-api/menus/:id/publish`, with `{ expectedHash }`, gives
 `{ versionId, number, publishedAt }` (200). The time is the recorded release time in ISO 8601.
@@ -319,13 +319,13 @@ there are no per-menu extras publications or overrides.
 ### Device Home Page routes
 
 A menu has one Device Home Page: the shortcuts a handheld or a till shows under its search, beside
-the menu's own structure, and how each of the two kinds of device lays them out. A menu never
+the full menu, and which one appears first on every device. A menu never
 inherits another menu's. A shortcut points at a product or a section and adds no product, price or
 placement to the menu. The shortcut writer checks that the menu's working structure reaches the
 target, including targets in included menus. Use the shortcut routes to write it: the generic
 section writes refuse its section with `menu_section.wrong_role`.
 
-`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
+`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, order }`. A
 shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
 section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
 `missingName` is null for a reachable target and otherwise records its name or section path.
@@ -516,7 +516,7 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 ## Storage and development reset
 
 `categories` holds each category's name, parent and colour in core's set. Its parent key refuses
-deleting a category while a child still names it. `menus` holds its display settings, and
+deleting a category while a child still names it. `menus` holds its home order, and
 `sections` holds the root and Home roles. `deleteMenu` detaches a menu from working menus, keeps
 its Home positions as named missing shortcuts, and ends its own live and scheduled editions.
 `menu.deleted` records the menu name and person. The menu and recorded editions stay in the database.

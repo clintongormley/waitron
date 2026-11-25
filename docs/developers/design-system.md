@@ -574,7 +574,8 @@ the prices are equal. It appends the unit once for units other than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
 **Shown first** sits above a single preview with two equal choices, **Shortcuts** and **Full
-menu**. On a phone the control fills the available width. The preview is at most 792px wide. Each
+menu**. On a phone the control fills the available width. On a wide screen it fits its labels.
+The preview is at most 792px wide. Each
 shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove
 shortcut: <name>"). The bin is disabled while a shortcut is added, removed or reordered and
 while an order change saves. The grips stay usable during a reorder.

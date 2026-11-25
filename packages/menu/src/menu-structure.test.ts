@@ -168,7 +168,7 @@ const offerNames = async (menuId: string) =>
   (await app((tx) => listMenuOffers(tx, [menuId]))).map((offer) => offer.name);
 
 describe("creating a menu", () => {
-  it("makes a root and a Home section the menu owns, with default display settings", async () => {
+  it("makes a root and a Home section the menu owns, with shortcuts shown first", async () => {
     await seedTaxpayer(fx.db);
     const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>
@@ -187,12 +187,7 @@ describe("creating a menu", () => {
       menuId: menu.id,
       rootSectionId: root.id,
       homeSectionId: layout.id,
-      handheldColumns: 3,
-      handheldTiles: "colours",
-      handheldOrder: "home_first",
-      tillColumns: 6,
-      tillTiles: "colours",
-      tillOrder: "home_first",
+      homeOrder: "home_first",
     });
     expect(await app((tx) => readMenuStructure(tx, menu.id))).toEqual({
       rootSectionId: root.id,

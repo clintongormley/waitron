@@ -4037,7 +4037,7 @@ export const en = {
   "menu_preview.section_renamed": "{name} renamed",
   "menu_preview.order_changed": "Order changed in {place}",
   "menu_preview.home_shortcuts_changed": "Device Home Page shortcuts changed",
-  "menu_preview.home_display_changed": "What appears first on the device home page changed",
+  "menu_preview.home_display_changed": "What appears first on the Device Home Page changed",
   "menu_preview.menu_renamed": "Menu renamed from {from} to {to}",
   "menu_preview.field_names": "names",
   "menu_preview.field_name": "name",
