@@ -699,7 +699,7 @@ describe("menu-screen", () => {
     },
   );
 
-  it("keeps the next dish visible after a pointer save changes the Available sort", async () => {
+  it("keeps the next dish in place when a pointer save moves a partly covered row", async () => {
     onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
     const many = Array.from({ length: 40 }, (_, index) => ({
       ...products[0]!,
@@ -707,15 +707,11 @@ describe("menu-screen", () => {
       name: `Dish ${index + 10}`,
       primaryCategoryId: null,
     }));
+    const refreshed = many.map((dish) => (dish.id === "p0" ? { ...dish, available: false } : dish));
     const saved = deferred<void>();
     const setProductAvailability = vi.fn().mockReturnValue(saved.promise);
     const api = stubApi({
-      listProducts: vi
-        .fn()
-        .mockResolvedValueOnce(many)
-        .mockResolvedValue(
-          many.map((dish) => (dish.id === "p0" ? { ...dish, available: false } : dish)),
-        ),
+      listProducts: vi.fn().mockResolvedValueOnce(many).mockResolvedValue(refreshed),
       setProductAvailability,
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
@@ -734,6 +730,7 @@ describe("menu-screen", () => {
       timeout: 2000,
     });
     expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p0", false);
+    expect(root.activeElement?.localName).toBe("wt-switch");
     const row = root.querySelector('tr[data-row-key="p0"]')!;
     const heading = root.querySelector("thead th")!;
     const headingBottom = heading.getBoundingClientRect().bottom;
@@ -748,7 +745,7 @@ describe("menu-screen", () => {
     const topBeforeSave = nextDish().top - visibleTop();
     expect(topBeforeSave).toBeGreaterThan(0);
     saved.resolve();
-    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(list(el).products).toBe(refreshed));
     await vi.waitFor(() =>
       expect(root.querySelector("tbody tr:last-child")?.getAttribute("data-row-key")).toBe("p0"),
     );

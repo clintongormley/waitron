@@ -1,16 +1,16 @@
 # Check what stays visible after an availability save
 
-When a pointer save sends a dish to the bottom of the Available sort, the next visible dish
-should stay in place. The watcher put this check ahead of bulk availability at 17:49 in Lane H's
-questions.md on 25 November 2026.
+When a pointer save sends a dish partly covered by the sticky heading to the bottom of the
+Available sort, the next visible dish should stay in place. The watcher put the investigation
+ahead of bulk availability at 17:49 in Lane H's questions.md on 25 November 2026.
 
 The first diagnosis treated the change in the table's scroll offset as a visible jump. Claude's
 build review questioned that measurement. In macOS Chromium, a real click followed by a successful
 refresh on 3514422237 changed the offset from 153 to 99 px. The next dish moved from 304 to 303.5 px.
 The proposed product change fixed the offset at 153 px and moved the next dish to 249.5 px, behind
 the heading at 277 px. Both focus cases gave the same figures. In seven runs on one Mac, the old
-test reached different starting scroll positions and failed only when the clicked row was partly
-under the heading. The geometry of the old passing CI run is unverified.
+test reached different starting scroll positions with the same fonts. It failed only when the
+clicked row was partly under the heading. The geometry of the old passing CI run is unverified.
 
 The watcher cleared the revised scope at 19:05 in Lane H's questions.md. Keep the product's current
 scroll anchoring. In the existing Products screen test, use a real click, put part of the clicked
