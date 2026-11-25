@@ -2,17 +2,23 @@ import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { orderDraftLines, orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
+import { menus, orderDraftLines, orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
 import type { AllergenMap } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { savePartyAllergy, setRoutingCell } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
+  addProductToMenu,
   assignMenuToVenue,
   createMenu,
   createCategory,
   createExtraList,
   createProduct,
+  deactivateMenu,
+  listMembers,
+  removeMember,
+  requireMenuRoot,
   setMenuVariants,
   setProductVariants,
   updateProduct,
@@ -320,6 +326,208 @@ describe("A669 candidate sets", () => {
       [null, null, null],
     ]);
     expect(allergens(await arriving())).toEqual([["working", null, [null, null, null]]]);
+  });
+
+  describe("a saved draft's dishes", () => {
+    const wheat = { gluten: { kinds: ["wheat" as const] } };
+
+    /** A menu of its own beside the zone's, selling a pie with a variant and an extra, and a cake;
+     * and a draft of the two sold from its first version, with the pie again from no version. */
+    async function draftFromOwnMenu() {
+      const p = await party();
+      const tag = randomUUID().slice(0, 8);
+      const menu = await inTx(v, async (tx) => {
+        const { id } = await createMenu(tx, { name: `Specials ${tag}` });
+        const category = await createCategory(tx, { name: `Specials ${tag}` });
+        const make = (dish: string, allergens: AllergenMap, weighed = false) => {
+          const name = `${dish} ${tag}`;
+          return createProduct(tx, {
+            categoryId: category.id,
+            name,
+            customerName: { es: `${name} customer` },
+            kitchenName: `${name} kitchen`,
+            pricingUnit: weighed ? "weight" : "each",
+            unitPrice: "2.00",
+            vatClass: "general",
+            allergens,
+          });
+        };
+        const pie = await make("Pie", { milk: {} });
+        const cake = await make("Cake", { eggs: {} });
+        const ham = await make("Ham", { sulphites: {} }, true);
+        const [large] = await setProductVariants(
+          tx,
+          pie.id,
+          [
+            {
+              name: "Large",
+              customerName: { es: "Large customer" },
+              kitchenName: "Large kitchen",
+              image: null,
+              unitPrice: "3.00",
+              available: true,
+            },
+          ],
+          "es-ES",
+        );
+        await updateProduct(tx, large!.id, { allergens: wheat });
+        const list = await createExtraList(
+          tx,
+          {
+            name: `Ham ${tag}`,
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [
+              {
+                productId: ham.id,
+                portion: "0.500",
+                maxQuantity: 1,
+                preselected: false,
+                price: "1.00",
+              },
+            ],
+          },
+          "es-ES",
+        );
+        await writeProductModifiers(tx, pie.id, [{ kind: "extras", id: list.id }]);
+        const pieItem = await addProductToMenu(tx, { menuId: id, productId: pie.id });
+        const cakeItem = await addProductToMenu(tx, { menuId: id, productId: cake.id });
+        await offerMenuThroughZone(tx, v.tables.zoneId, id, { displayOrder: 9 });
+        return {
+          id,
+          ids: { pie: pie.id, cake: cake.id, large: large!.id, ham: ham.id },
+          items: { pie: pieItem.id, cake: cakeItem.id },
+          extras: [{ listId: list.id, picks: [{ productId: ham.id, quantity: 1 }] }],
+          versionId: await publishWorkingMenu(tx, id),
+        };
+      });
+      const pie = { menuItemId: menu.items.pie, variantId: menu.ids.large, extras: menu.extras };
+      await inTx(v, (tx) =>
+        saveDraftForTest(tx, p.partyId, OPERATOR, {
+          billId: p.tabId,
+          draftId: null,
+          revision: 0,
+          lines: [
+            fresh({ ...pie, menuVersionId: menu.versionId }),
+            fresh({ menuItemId: menu.items.cake, menuVersionId: menu.versionId }),
+            fresh(pie),
+          ],
+        }),
+      );
+      const declare = (
+        pieLarge: AllergenMap | null,
+        cake: AllergenMap | null,
+        ham: AllergenMap | null,
+      ) =>
+        inTx(v, async (tx) => {
+          await updateProduct(tx, menu.ids.large, { allergens: pieLarge });
+          await updateProduct(tx, menu.ids.cake, { allergens: cake });
+          await updateProduct(tx, menu.ids.ham, { allergens: ham });
+        });
+      const publish = () => inTx(v, (tx) => publishWorkingMenu(tx, menu.id));
+      const removeDishes = () =>
+        inTx(v, async (tx) => {
+          const rootId = await requireMenuRoot(tx, menu.id);
+          for (const { id, ref } of await listMembers(tx, rootId))
+            if (ref.kind === "product") await removeMember(tx, rootId, id);
+          await publishWorkingMenu(tx, menu.id);
+        });
+      const dishes = async () =>
+        (await view(p.partyId)).dishes.map(({ name, allergens, extras }) => [
+          name.replace(` ${tag}`, ""),
+          allergens,
+          ...extras.map((extra) => [
+            extra.name.replace(` ${tag}`, ""),
+            extra.quantity,
+            extra.allergens,
+          ]),
+        ]);
+      return { tag, menu, declare, publish, removeDishes, dishes };
+    }
+
+    const corrected = [
+      ["Pie (Large)", { ...wheat, celery: {} }, ["Ham", "0.500", { sulphites: {}, mustard: {} }]],
+      ["Cake", { eggs: {}, milk: {} }],
+    ];
+    /** The zone's offer of the cake takes a new name, which the draft's own version never had. */
+    async function correct({
+      tag,
+      menu,
+      declare,
+      publish,
+      dishes,
+    }: Awaited<ReturnType<typeof draftFromOwnMenu>>) {
+      expect(await dishes()).toEqual([
+        ["Pie (Large)", wheat, ["Ham", "0.500", { sulphites: {} }]],
+        ["Cake", { eggs: {} }],
+        ["Pie (Large)", wheat, ["Ham", "0.500", { sulphites: {} }]],
+      ]);
+      await declare(
+        { ...wheat, celery: {} },
+        { eggs: {}, milk: {} },
+        { sulphites: {}, mustard: {} },
+      );
+      await inTx(v, (tx) => updateProduct(tx, menu.ids.cake, { name: `Best cake ${tag}` }));
+      await publish();
+      const [pie, cake] = corrected;
+      expect(await dishes()).toEqual([pie, ["Best cake", ...cake!.slice(1)], pie]);
+    }
+
+    it("keep their names and published allergens after their menu drops them", async () => {
+      const f = await draftFromOwnMenu();
+      await correct(f);
+      await f.removeDishes();
+      await f.declare({}, {}, {});
+      // The pie sold from no version has only the zone's offer, which is gone.
+      const unknown = ["", null, ["", "1.000", null]];
+      expect(await f.dishes()).toEqual([...corrected, unknown]);
+    });
+
+    it("are not reviewed when no menu version is known by the id they name", async () => {
+      const f = await draftFromOwnMenu();
+      await v.db
+        .update(orderDraftLines)
+        .set({ menuVersionId: randomUUID() })
+        .where(eq(orderDraftLines.menuVersionId, f.menu.versionId));
+      expect(await f.dishes()).toEqual([
+        ["Pie (Large)", null, ["Ham", "0.500", null]],
+        ["Cake", null],
+        ["Pie (Large)", wheat, ["Ham", "0.500", { sulphites: {} }]],
+      ]);
+    });
+
+    it("keep their names and published allergens after their menu is made inactive", async () => {
+      const f = await draftFromOwnMenu();
+      await correct(f);
+      await f.declare(null, null, null);
+      await inTx(v, (tx) => deactivateMenu(tx, f.menu.id));
+      try {
+        const unknown = ["", null, ["", "1.000", null]];
+        expect(await f.dishes()).toEqual([...corrected, unknown]);
+      } finally {
+        // The zone's menu period still names it, and a later case saves that period.
+        await v.db.update(menus).set({ active: true }).where(eq(menus.id, f.menu.id));
+      }
+    });
+
+    it("keep a variant's and an extra's name and published allergens after the menu drops only those", async () => {
+      const f = await draftFromOwnMenu();
+      await correct(f);
+      await f.removeDishes();
+      await inTx(v, async (tx) => {
+        await setProductVariants(tx, f.menu.ids.pie, [], "es-ES");
+        await updateProduct(tx, f.menu.ids.pie, { allergens: { fish: {} } });
+        await writeProductModifiers(tx, f.menu.ids.pie, []);
+        const back = await addProductToMenu(tx, { menuId: f.menu.id, productId: f.menu.ids.pie });
+        expect(back.id).toBe(f.menu.items.pie);
+      });
+      await f.publish();
+      const unknown = ["Pie", null, ["", "1.000", null]];
+      expect(await f.dishes()).toEqual([...corrected, unknown]);
+    });
   });
 
   it("reads every family bill and resolves a merged party id to its survivor", async () => {

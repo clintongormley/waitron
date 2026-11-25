@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { orderDraftLines, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProductToMenu,
@@ -16,35 +17,42 @@ import {
   setSpecCount,
   setupSetMenuSpecVenue,
   specRows,
+  type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+
+/** Hake's Large variant, and allergens of its own on each of Soup, Hake, Large and Bread. */
+async function declareDishes(tx: Transaction, { venue, productIds, bread }: SpecVenue) {
+  const [large] = await setProductVariants(
+    tx,
+    productIds.Hake,
+    [
+      {
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "20.00",
+        available: true,
+      },
+    ],
+    venue.cfg.locale,
+  );
+  await updateProduct(tx, productIds.Soup, { allergens: { milk: {} } });
+  await updateProduct(tx, productIds.Hake, { allergens: { fish: {} } });
+  await updateProduct(tx, large!.id, { allergens: { molluscs: {} } });
+  await updateProduct(tx, bread.picks[0]!.productId, { allergens: { sesame: {} } });
+  return large!.id;
+}
 
 it("reads each kind of stored order line's published declarations", async () => {
   const spec = await setupSetMenuSpecVenue(suite.db);
   const { venue, daily, productIds, bread } = spec;
   const breadId = bread.picks[0]!.productId;
   const { large, soupItem, hakeItem, versionId } = await inTx(venue, async (tx) => {
-    const [variant] = await setProductVariants(
-      tx,
-      productIds.Hake,
-      [
-        {
-          name: "Large",
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: "20.00",
-          available: true,
-        },
-      ],
-      venue.cfg.locale,
-    );
-    await updateProduct(tx, productIds.Soup, { allergens: { milk: {} } });
-    await updateProduct(tx, productIds.Hake, { allergens: { fish: {} } });
-    await updateProduct(tx, variant!.id, { allergens: { molluscs: {} } });
-    await updateProduct(tx, breadId, { allergens: { sesame: {} } });
+    const large = await declareDishes(tx, spec);
     const menuId = venue.tables.menuId;
     const soup = await addProductToMenu(tx, {
       menuId,
@@ -57,7 +65,7 @@ it("reads each kind of stored order line's published declarations", async () => 
       grossPrice: "16.00",
     });
     return {
-      large: variant!.id,
+      large,
       soupItem: soup.id,
       hakeItem: hake.id,
       versionId: await publishWorkingMenu(tx, menuId),
@@ -118,29 +126,8 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
   const { venue, daily, productIds, bread } = spec;
   const breadId = bread.picks[0]!.productId;
   const { large, versionId } = await inTx(venue, async (tx) => {
-    const [variant] = await setProductVariants(
-      tx,
-      productIds.Hake,
-      [
-        {
-          name: "Large",
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: "20.00",
-          available: true,
-        },
-      ],
-      venue.cfg.locale,
-    );
-    await updateProduct(tx, productIds.Soup, { allergens: { milk: {} } });
-    await updateProduct(tx, productIds.Hake, { allergens: { fish: {} } });
-    await updateProduct(tx, variant!.id, { allergens: { molluscs: {} } });
-    await updateProduct(tx, breadId, { allergens: { sesame: {} } });
-    return {
-      large: variant!.id,
-      versionId: await publishWorkingMenu(tx, venue.tables.menuId),
-    };
+    const large = await declareDishes(tx, spec);
+    return { large, versionId: await publishWorkingMenu(tx, venue.tables.menuId) };
   });
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   await setSpecCount(spec, bill.tabId, { ...daily, versionId }, 1);
@@ -182,4 +169,26 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
   expect(await dishes()).toEqual(published.map((dish) => ["draft", ...dish]));
   await sendSpecDraft(spec, bill.partyId, draft.id);
   expect(await dishes()).toEqual(published.map((dish) => ["working", ...dish]));
+});
+
+it("reads a set-menu draft naming no known menu version as not reviewed", async () => {
+  const spec = await setupSetMenuSpecVenue(suite.db);
+  const { venue, daily } = spec;
+  const versionId = await inTx(venue, async (tx) => {
+    await declareDishes(tx, spec);
+    return publishWorkingMenu(tx, venue.tables.menuId);
+  });
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await setSpecCount(spec, bill.tabId, { ...daily, versionId }, 1);
+  await saveSetMenuDraft(venue, bill, {
+    menuVersionId: versionId,
+    setMenuId: daily.menuId,
+    menuItemId: daily.items.Soup!,
+    quantity: "1",
+  });
+  await suite.db.update(orderDraftLines).set({ menuVersionId: crypto.randomUUID() });
+  const { dishes } = await inTx(venue, (tx) => readPartyAllergyView(tx, bill.partyId));
+  expect(dishes.map(({ name, allergens }) => ({ name, allergens }))).toEqual([
+    { name: "", allergens: null },
+  ]);
 });
