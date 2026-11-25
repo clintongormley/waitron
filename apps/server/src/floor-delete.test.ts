@@ -1,5 +1,5 @@
 import { settings } from "@waitron/db";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { mergeOf as mergeColumns } from "@waitron/db";
 import { addFloorPlanSet } from "@waitron/venue-service";
 import { seedZone } from "@waitron/db/testing/seed.js";
@@ -712,6 +712,20 @@ describe("floor hierarchy deletion", () => {
     expect(
       await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
     ).toEqual([]);
+  });
+
+  it("keeps orders at the same delivery table in number order across digit lengths", async () => {
+    const zoneId = await zone("Same delivery table");
+    const table = await v.table("Terrace", zoneId);
+    const [later, earlier] = await inTx(v, async (tx) => [
+      await seedWorkingOrder(tx, { orderNumber: 1000, deliveryTableId: table, label: "A former" }),
+      await seedWorkingOrder(tx, { orderNumber: 999, deliveryTableId: table, label: "B former" }),
+    ]);
+    const { refusals } = await impact([zoneId]);
+    expect(refusals.flatMap((refusal) => refusal.targets)).toEqual([
+      { id: earlier.id, name: "#999 · Terrace" },
+      { id: later.id, name: "#1000 · Terrace" },
+    ]);
   });
 
   it("empty and unknown zone selections do not change or create floor state", async () => {

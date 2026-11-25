@@ -1,4 +1,5 @@
 import { readOrderPlaces, type OrderPlaces, type Transaction } from "@waitron/db";
+import { partyTablesName } from "@waitron/shared";
 
 type DisplayPlace = Pick<OrderPlaces, "names" | "partyName" | "billName" | "counter">;
 
@@ -8,8 +9,11 @@ export function currentOrderLabel(
 ): string | null {
   if (place === undefined) return null;
   if (savedLabel !== undefined && !place.counter && place.names.length === 0) return savedLabel;
-  const names = new Set([...place.names, place.partyName, place.billName].filter(Boolean));
-  return [...names].join(" · ") || null;
+  const tables = new Set(place.names.filter(Boolean));
+  const typedNames = new Set(
+    [place.partyName, place.billName].filter((name) => name && !tables.has(name)),
+  );
+  return [partyTablesName([...tables]), ...typedNames].filter(Boolean).join(" · ") || null;
 }
 
 export function refusalOrderName(orderNumber: number, place: DisplayPlace | undefined): string {

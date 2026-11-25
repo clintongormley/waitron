@@ -1716,24 +1716,24 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
 
   it("lists the pending refunds nothing is driving, with their payment, bill and send", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
-    await inTx(venue, async (tx) => {
+    const tableId = await inTx(venue, async (tx) => {
       const [seat] = await tx
         .select({ tableId: partyTables.tableId })
         .from(partyTables)
         .innerJoin(workingOrders, eq(workingOrders.partyId, partyTables.partyId))
         .where(eq(workingOrders.id, billId));
+      const tableId = seat!.tableId;
+      await tx.update(diningTables).set({ label: "Terrace 8" }).where(eq(diningTables.id, tableId));
       await tx
-        .update(diningTables)
-        .set({ label: "Terrace 8" })
-        .where(eq(diningTables.id, seat!.tableId));
+        .update(workingOrders)
+        .set({ label: "Recorded table" })
+        .where(eq(workingOrders.id, billId));
+      return tableId;
     });
 
-    const listed = await send(
-      managerApp(),
-      managerCookie,
-      "GET",
-      "/management-api/payments/bill-refunds",
-    );
+    const app = managerApp();
+    const list = () => send(app, managerCookie, "GET", "/management-api/payments/bill-refunds");
+    const listed = await list();
 
     expect(listed.status).toBe(200);
     expect(listed.json as unknown as unknown[]).toContainEqual(
@@ -1747,6 +1747,18 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         tipAmount: "0.00",
         sendCount: 1,
       }),
+    );
+
+    await inTx(venue, (tx) =>
+      tx
+        .update(partyTables)
+        .set({ leftAt: new Date().toISOString() })
+        .where(eq(partyTables.tableId, tableId)),
+    );
+    const afterLeaving = await list();
+    expect(afterLeaving.status).toBe(200);
+    expect(afterLeaving.json as unknown as unknown[]).toContainEqual(
+      expect.objectContaining({ refundId, label: "Recorded table" }),
     );
   });
 });

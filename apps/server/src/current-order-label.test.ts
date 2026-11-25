@@ -9,9 +9,9 @@ describe("current order labels", () => {
       billName: "Ana",
       counter: false,
     };
-    expect(currentOrderLabel(place, "Former table")).toBe("Terrace 4 · Terrace 5 · Ana");
+    expect(currentOrderLabel(place, "Former table")).toBe("Terrace 4, 5 · Ana");
     expect(refusalOrderName(12, { ...place, billName: "Riley" })).toBe(
-      "#12 · Terrace 4 · Terrace 5 · Ana · Riley",
+      "#12 · Terrace 4, 5 · Ana · Riley",
     );
   });
 
