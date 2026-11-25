@@ -12,7 +12,8 @@ If Waitron cannot verify this device for an action, reload or reopen Waitron on 
 If you see **Can't reach the box**, check that this phone is on the venue's WiFi. Leave the
 page open. The till opens by itself when the box answers.
 
-If you are already on the venue's WiFi, follow [the certificate steps](table-service.md#certificate-trust).
+If you are already on the venue's WiFi, check that the box is switched on. If it is, you may
+need to [install its certificate again](table-service.md#certificate-trust).
 
 ## Read the notice line {#notice-line}
 

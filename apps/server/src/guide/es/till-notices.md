@@ -13,7 +13,8 @@ Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelv
 Si ves **No se puede conectar con el servidor**, comprueba que este teléfono esté conectado a la red
 WiFi del local. Deja la página abierta. La caja se abre sola cuando responde el servidor.
 
-Si ya estás en la red WiFi del local, sigue [los pasos del certificado](table-service.md#certificate-trust).
+Si ya estás en la red WiFi del local, comprueba que el servidor esté encendido. Si lo está, puede
+que tengas que [volver a instalar su certificado](table-service.md#certificate-trust).
 
 ## Lee la línea de avisos {#notice-line}
 

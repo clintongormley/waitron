@@ -33,8 +33,9 @@ function page(language: "en" | "es", words: typeof es, styles: string): string {
 <main>
   <h1>${words["offline.title"]}</h1>
   <p>${words["offline.wifi"]}</p>
-  <p>${words["offline.already_on_wifi"]} ${words["trust.explanation"]}</p>
+  <p>${words["offline.already_on_wifi"]}</p>
   <p><a target="_blank" rel="noopener">${words["trust.open_setup"]}</a></p>
+  <p>${words["offline.opens_itself"]}</p>
 </main>
 <script>${retryScript}</script>
 </html>`;

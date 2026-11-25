@@ -6,8 +6,8 @@ import type { BrowserCommand } from "vitest/node";
 type Scenario = "reconnect" | "retire";
 
 export const probeOfflineNavigation: BrowserCommand<
-  [worker: string, retired: string, path: string, scenario: Scenario]
-> = async (context, worker, retired, path, scenario) => {
+  [worker: string, retired: string, path: string, scenario: Scenario, locale?: string]
+> = async (context, worker, retired, path, scenario, locale = "en-GB") => {
   let state = "live";
   let script = worker;
   const server = createServer((request, response) => {
@@ -32,7 +32,7 @@ export const probeOfflineNavigation: BrowserCommand<
     );
   });
   const runner = (context as unknown as { page: Page }).page;
-  const browser = await runner.context().browser()!.newContext({ locale: "en-GB" });
+  const browser = await runner.context().browser()!.newContext({ locale });
   try {
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
@@ -82,6 +82,7 @@ export const probeOfflineNavigation: BrowserCommand<
       return { heading: null };
     }
     const heading = await subject.locator("h1").textContent();
+    const paragraphs = await subject.locator("main > p").allTextContents();
     const link = subject.getByRole("link");
     const instructions = await link.getAttribute("href");
     const target = await link.getAttribute("target");
@@ -103,6 +104,7 @@ export const probeOfflineNavigation: BrowserCommand<
     await subject.goto(origin + "/till/tabs/redirect");
     return {
       heading,
+      paragraphs,
       instructions,
       target,
       rel,
