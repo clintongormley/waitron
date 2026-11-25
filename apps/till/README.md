@@ -5,8 +5,8 @@ server's till HTTP API (`/api/*`): the operator logs in on a lock screen, rings 
 counter screen, takes cash, and gets a filed Veri\*Factu ticket with its QR.
 
 Slice 1 (**7a — walk-up cash sale**) of the Counter POS, built in #60.
-The till sends its requests over HTTP. `apps/server/src/till-api.ts` shows where the Server mounts
-each group of till routes.
+The till sends its requests over HTTP. The Server handles database access and registers till route
+groups in `apps/server/src/till-api.ts` and device routes in `apps/server/src/device-api.ts`.
 
 ## Counter ordering
 

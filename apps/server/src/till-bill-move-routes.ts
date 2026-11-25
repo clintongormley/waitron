@@ -38,9 +38,8 @@ import { run, runBodyLines } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
 import { requireEconomicWrite } from "./trading-admission.js";
-import type { OrderAttendance } from "./working-order-context.js";
+import type { OrderAttendance, TillSaleDeps } from "./working-order-context.js";
 import { checkZones } from "./zone-access.js";
-import type { TillSaleDeps } from "./working-order-context.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
