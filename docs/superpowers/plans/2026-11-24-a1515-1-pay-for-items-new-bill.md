@@ -1737,10 +1737,10 @@ were tried.
   dropped pick are re-pointed at those; a test of the paid mark itself is deleted.
 - **PR3-D6 (follows).** The counter keeps a part-paid retrieved order unfolded
   (`state/counter-portion-rows.ts:6-18`, guides `table-service.md`); only its comment's reason changes.
-- **PR3-D7 (needs the watcher; recommended).** `bill_pay.items_none` says "Every item on this bill is
-  already paid for.", which can no longer be the reason. Reword to "There are no items to choose on
-  this bill." / "No hay artículos que elegir en esta cuenta."
-- **PR3-D8 (needs the watcher; recommended: land PR 3 without waiting).** Nothing a person can do after
+- **PR3-D7 (watcher, 2026-11-25 14:47).** `bill_pay.items_none` says "Every item on this bill is
+  already paid for.", which can no longer be the reason. Reword to "Nothing to choose on
+  this bill." / "No hay nada que elegir en esta cuenta."
+- **PR3-D8 (watcher, 2026-11-25 14:47: land PR 3 without waiting).** Nothing a person can do after
   PR 4 is lost: `previewPayment`/`takePayment` send every items choice to the new route
   (`state/pay-for-items.ts:193-221`), `withItems` throws rather than fall back (`:144`), a sent Counter
   order and a Find-a-bill bill show Items barred (`:98-109`), and no reader outside the till posts the
