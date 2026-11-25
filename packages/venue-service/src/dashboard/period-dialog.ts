@@ -460,14 +460,17 @@ export class PeriodDialog extends LitElement {
   commitSubmitted(input: MenuPeriodInput): boolean {
     if (!this.open || !this.isConnected || this.submittedGeneration !== this.generation)
       return false;
+    const lastOrders = input.lastOrders ?? this.baseline!.lastOrders;
+    // Close Add with a clean draft after the POST, even when it could not send the times.
     if (
-      input.lastOrders !== undefined &&
-      sameLastOrders(this.draft.lastOrders, this.submitted!.lastOrders)
+      !this.period ||
+      (input.lastOrders !== undefined &&
+        sameLastOrders(this.draft.lastOrders, this.submitted!.lastOrders))
     )
-      this.draft = { ...this.draft, lastOrders: input.lastOrders };
+      this.draft = { ...this.draft, lastOrders };
     const submitted: Draft = {
       ...input,
-      lastOrders: input.lastOrders ?? this.baseline!.lastOrders,
+      lastOrders,
       colour: input.colour ?? this.submitted!.colour,
       floorPlanSetId:
         input.floorPlanSetId === undefined
@@ -715,11 +718,7 @@ export class PeriodDialog extends LitElement {
         .error=${bottomMessage(
           bottom,
           marked ? t("menu.fix_fields") : "",
-          this.lastOrderReadFailed
-            ? t("period.last_orders_read_failed")
-            : this.onlyWaitingLastOrders
-              ? t("period.last_orders_loading")
-              : "",
+          this.lastOrderReadFailed ? t("period.last_orders_read_failed") : "",
         )}
       >
         <wt-button

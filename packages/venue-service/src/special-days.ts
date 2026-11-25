@@ -29,6 +29,12 @@ import {
   type HolidayDates,
   type SpecialDayDateRule,
 } from "./repeat-rules.js";
+import {
+  occurrencesOf,
+  specialDayOccurrenceColumns,
+  type SpecialDayOccurrence,
+} from "./special-day-occurrences.js";
+export type { SpecialDayOccurrence } from "./special-day-occurrences.js";
 import { storedTime, wireTime } from "./operations.js";
 import { readHolidayDates, type HolidayReads } from "./holidays.js";
 import { joinTouching } from "./season-weeks.js";
@@ -107,16 +113,6 @@ export function firstSkippedEnd<T extends ClosedRange>(
   return null;
 }
 
-export interface SpecialDayOccurrence {
-  specialDayId: string;
-  name: string;
-  dateId: string;
-  storedDate: LocalDate;
-  closedAllDay: boolean;
-  paint: ReadonlyMap<string, PaintRange[]>;
-  zonePaint: ReadonlyMap<string, ZonePaint[]>;
-}
-
 /** The special-day date standing on each of `days` (null when none), with its paint for every
  *  department and zone: one read of the dates, and one of the paint only when any date matched. */
 export async function specialDaysOn(
@@ -129,11 +125,7 @@ export async function specialDaysOn(
   const ordered = [...new Set(days)].sort();
   const dates = await tx
     .select({
-      specialDayId: specialDayDates.specialDayId,
-      name: specialDays.name,
-      dateId: specialDayDates.id,
-      date: specialDayDates.date,
-      closedAllDay: specialDayDates.closedAllDay,
+      ...specialDayOccurrenceColumns,
       repeats: specialDays.repeatsYearly,
       holidayName: specialDayDates.holidayName,
     })
@@ -178,62 +170,6 @@ export async function specialDaysOn(
   return found;
 }
 
-interface OccurrenceRow {
-  specialDayId: string;
-  name: string;
-  dateId: string;
-  date: LocalDate;
-  closedAllDay: boolean;
-}
-
-/** One read of the department and zone paint of `dateIds`, and a builder of each date's
- *  occurrence from it. */
-async function occurrencesOf(
-  tx: Transaction,
-  dateIds: readonly string[],
-): Promise<(row: OccurrenceRow) => SpecialDayOccurrence> {
-  const paint = await tx
-    .select({
-      dateId: openingHours.specialDayDateId,
-      departmentId: openingHours.departmentId,
-      zoneId: openingHours.zoneId,
-      periodId: openingHours.periodId,
-      kind: openingHours.kind,
-      startsAt: openingHours.startsAt,
-      endsAt: openingHours.endsAt,
-    })
-    .from(openingHours)
-    .where(inArray(openingHours.specialDayDateId, [...dateIds]));
-  const departmentPaint = new Map<string, Map<string, PaintRange[]>>();
-  const zonePaint = new Map<string, Map<string, ZonePaint[]>>();
-  const add = <T>(
-    into: Map<string, Map<string, T[]>>,
-    dateId: string,
-    ownerId: string,
-    item: T,
-  ) => {
-    const owners = into.get(dateId) ?? new Map<string, T[]>();
-    into.set(dateId, owners);
-    owners.set(ownerId, [...(owners.get(ownerId) ?? []), item]);
-  };
-  for (const row of paint) {
-    const range = { startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) };
-    if (row.departmentId !== null)
-      add(departmentPaint, row.dateId!, row.departmentId, { periodId: row.periodId, ...range });
-    else
-      add(zonePaint, row.dateId!, row.zoneId!, { kind: row.kind as ZonePaint["kind"], ...range });
-  }
-  return (row) => ({
-    specialDayId: row.specialDayId,
-    name: row.name,
-    dateId: row.dateId,
-    storedDate: row.date,
-    closedAllDay: row.closedAllDay,
-    paint: departmentPaint.get(row.dateId) ?? new Map(),
-    zonePaint: zonePaint.get(row.dateId) ?? new Map(),
-  });
-}
-
 /** The venue's special day `specialDayId` and each of its dates' own occurrence, at its stored
  *  date, in date order: one read of the day with its dates, and one of the paint when it has dates.
  *  Null when the venue has no such special day. */
@@ -265,28 +201,6 @@ export async function specialDayOccurrences(
     dates.map((d) => d.dateId),
   );
   return { name: first.name, occurrences: dates.map(occurrence) };
-}
-
-/** Each stored date's own paint, independent of which repeating day would stand there. */
-export async function storedSpecialDayOccurrences(
-  tx: Transaction,
-): Promise<SpecialDayOccurrence[]> {
-  const dates = await tx
-    .select({
-      specialDayId: specialDayDates.specialDayId,
-      name: specialDays.name,
-      dateId: specialDayDates.id,
-      date: specialDayDates.date,
-      closedAllDay: specialDayDates.closedAllDay,
-    })
-    .from(specialDayDates)
-    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId));
-  if (dates.length === 0) return [];
-  const occurrence = await occurrencesOf(
-    tx,
-    dates.map(({ dateId }) => dateId),
-  );
-  return dates.map(occurrence);
 }
 
 export interface SpecialDayClash {

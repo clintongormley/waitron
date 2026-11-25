@@ -212,11 +212,7 @@ export class PeriodEditing implements ReactiveController {
       this.created = { id: created, departmentId: departmentId! };
       this.options.chose(created);
     }
-    if (this.editor === editor) {
-      const committed = component.commitSubmitted(input);
-      // A successful creation cannot leave a form that would send another POST.
-      if (created !== undefined || committed) this.close();
-    }
+    if (this.editor === editor && component.commitSubmitted(input)) this.close();
     api.rereadWatches();
   }
   private setBusy(busy: boolean) {

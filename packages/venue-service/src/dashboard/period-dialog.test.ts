@@ -1269,7 +1269,6 @@ it("preserves the saved time of a station hidden by the current menu and routing
     lastOrderDraft(dialog);
     dialog.period = { ...dialog.period!, lastOrders: [...dialog.period!.lastOrders!, hidden] };
   });
-  await el.updateComplete;
   await change(el, "lastOrders.bar", { value: "30" });
   expect(submittedInput(el).lastOrders).toEqual([
     { kind: "station", stationId: "bar", minutes: 30 },

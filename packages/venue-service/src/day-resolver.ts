@@ -18,12 +18,9 @@ import {
   type ServiceRange,
 } from "./service-day.js";
 import { holidayReadsAt, type HolidayReads } from "./holidays.js";
-import {
-  specialDayOccurrences,
-  specialDaysOn,
-  storedSpecialDayOccurrences,
-  type SpecialDayOccurrence,
-} from "./special-days.js";
+import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
+
+import { storedSpecialDayOccurrences } from "./special-day-occurrences.js";
 
 export interface ResolvedDepartmentDay {
   businessDay: LocalDate;

@@ -303,16 +303,10 @@ it("offers the fallback in a gap and a station reached only in a special day's l
       ]);
       const count = selects.mock.calls.length;
       await specialDay(db, {
-        name: "Another special day",
+        name: "Closed for a public holiday",
         repeatsYearly: false,
-        dates: [{ date: "2026-10-13", closedAllDay: false }],
-        paint: [
-          {
-            departmentId: f.department,
-            date: "2026-10-13",
-            ranges: [{ periodId: f.afternoon, startsAt: "16:00", endsAt: "17:00" }],
-          },
-        ],
+        dates: [{ date: "2026-10-13", closedAllDay: true }],
+        paint: [],
       });
       selects.mockClear();
       expect(await read()).toEqual(choices);
