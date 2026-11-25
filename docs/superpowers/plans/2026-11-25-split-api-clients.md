@@ -47,8 +47,8 @@ with `addSectionMember`. Record measured lines and file names in the lane log be
 
    ```sh
    for side in base branch; do
-     git show "$split:scripts/move-ts-declarations.mjs" > "$scratch/$side/scripts/move-ts-declarations.mjs"
-     git show "$split:scripts/$app-client-split.json" > "$scratch/$side.json"
+     git cat-file blob "${split}:scripts/move-ts-declarations.mjs" > "$scratch/$side/scripts/move-ts-declarations.mjs"
+     git cat-file blob "${split}:scripts/$app-client-split.json" > "$scratch/$side.json"
    done
    ```
 
