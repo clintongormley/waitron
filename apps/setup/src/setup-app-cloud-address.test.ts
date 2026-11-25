@@ -84,39 +84,31 @@ it.each(["missing", "partial"])(
     const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
     await expect.poll(() => screen("venue")).not.toBeNull();
     const form = screen("venue")!.shadowRoot!;
-    const widget = form.querySelector<WtAddressLookup>("[data-test=address-lookup]")!;
-    const street = form.querySelector("[data-test=addressLine1]") as HTMLElement & {
-      value: string;
-    };
+    const street = form.querySelector<WtAddressLookup>("[data-test=addressLine1]")!;
     const postal = form.querySelector("[data-test=postalCode]") as HTMLInputElement;
-    await expect.poll(() => widget.hidden).toBe(false);
-    for (const [field, value] of [
-      [street, "Manual address"],
-      [postal, "28001"],
-    ] as const)
-      field.dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    widget.delay = 0;
-    const input = widget.shadowRoot!.querySelector("input")!;
-    const option = () => widget.shadowRoot!.querySelector('[role="option"]');
+    await expect.poll(() => street.provider).toBeDefined();
+    postal.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "28001" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    const option = () => street.shadowRoot!.querySelector('[role="option"]');
     const search = async (query: string) => {
-      input.value = query;
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await userEvent.fill(input, query);
       await expect.poll(() => option()?.textContent).toContain(suggestion);
     };
-    await search("Calle");
+    await search("Mayor");
     expect(option()?.textContent).toContain("Google Maps");
     await search("Calle Mayor");
     await userEvent.click(option()!);
     await expect
-      .poll(() => widget.shadowRoot!.querySelector('[role="status"]')?.textContent)
-      .toContain("Type the address below");
-    expect(street.value).toBe("Manual address");
+      .poll(() => street.shadowRoot!.querySelector('[role="status"]')?.textContent)
+      .toContain("Enter it by hand");
+    expect(street.value).toBe("Calle Mayor");
     expect(postal.value).toBe("28001");
 
     await search("Calle Mayor 1");
@@ -132,7 +124,7 @@ it.each(["missing", "partial"])(
     expect(second).not.toBe(first);
     expect(bodies).toEqual([
       { tab, kind: "available" },
-      { tab, kind: "suggest", workflowId: first, query: "Calle", language: "en" },
+      { tab, kind: "suggest", workflowId: first, query: "Mayor", language: "en" },
       { tab, kind: "suggest", workflowId: first, query: "Calle Mayor", language: "en" },
       { tab, kind: "validate", workflowId: first, selectedText: suggestion },
       { tab, kind: "suggest", workflowId: second, query: "Calle Mayor 1", language: "en" },

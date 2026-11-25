@@ -183,7 +183,7 @@ describe("setup venue unsaved changes", () => {
     };
     await venue.updateComplete;
     expect(unload()).toBe(false);
-    venue.shadowRoot!.querySelector("[data-test=address-lookup]")!.dispatchEvent(
+    venue.shadowRoot!.querySelector("[data-test=addressLine1]")!.dispatchEvent(
       new CustomEvent("wt-address-chosen", {
         detail: {
           address: {

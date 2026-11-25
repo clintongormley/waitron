@@ -765,6 +765,7 @@ describe("setup-venue-screen", () => {
     const input = q(el, "[data-test=registeredStreet]")!;
     await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(input.hasAttribute("invalid")).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(input);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 

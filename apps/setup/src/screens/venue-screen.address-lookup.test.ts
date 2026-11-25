@@ -124,6 +124,29 @@ describe("the venue screen's address search", () => {
       expect(lookup(el, which)!.provider).toBeDefined();
   });
 
+  it("skips generic street words from Spain's pack with or without accents", async () => {
+    const ask = vi.fn(providerFor(MADRID).suggest);
+    const el = await mount({ addressProvider: { ...providerFor(MADRID), suggest: ask } });
+    const street = lookup(el)!;
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    for (const text of ["PLAÇA ", "placa,", "C/ ", "Carrer de la ", "rúa ", "kalea ", "12 "]) {
+      await userEvent.fill(input, text);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(ask).not.toHaveBeenCalled();
+    await userEvent.fill(input, "Kale Nagusia ");
+    await expect
+      .poll(() => ask.mock.calls.map(([request]) => request.query))
+      .toEqual(["Kale Nagusia"]);
+    const options = () => street.shadowRoot!.querySelectorAll('[role="option"]');
+    await expect.poll(options).toHaveLength(1);
+    await userEvent.fill(input, "Kale Nagusia, ");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(options()).toHaveLength(1);
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
   it("offers a suggestion from the street and advances with a hand-edited street on Enter", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     const patches = collect(el);
@@ -166,7 +189,7 @@ describe("the venue screen's address search", () => {
     });
   });
 
-  it("credits the two chosen addresses separately and clears the registered credit on the switch", async () => {
+  it("keeps the credit with each chosen address until that address is edited", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     const address = { ...MADRID, attribution: "Google Maps" };
     const credit = (which?: string) =>
@@ -178,7 +201,10 @@ describe("the venue screen's address search", () => {
     expect(credit("registeredStreet")).toBe("Google Maps");
 
     await type(el, "registeredSameAsVenue", "on");
+    expect(credit("registeredStreet")).toBeUndefined();
     await type(el, "registeredSameAsVenue", "off");
+    expect(credit("registeredStreet")).toBe("Google Maps");
+    await type(el, "registeredStreet", "My registered street");
     expect(credit("registeredStreet")).toBeUndefined();
     expect(credit()).toBe("Google Maps");
     await type(el, "addressLine1", "My street");

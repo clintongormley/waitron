@@ -1,3 +1,4 @@
+import { foldForSearch } from "@waitron/shared";
 import { popupIndex } from "../popup-helpers.js";
 import { css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -38,7 +39,11 @@ export interface AddressChosenDetail {
   readonly address: AddressLookupResult;
 }
 
-const MIN_QUERY = 4;
+const TRAILING_WORD_BREAK = /[^\p{L}\p{M}\p{N}]+$/u;
+
+function streetQuery(value: string): string {
+  return value.trimStart().replace(TRAILING_WORD_BREAK, "");
+}
 const AUTOMATIC_SEARCH_LIMIT = 5;
 
 /** `crypto.randomUUID` needs a secure context; a box reached over plain http has none. */
@@ -104,14 +109,15 @@ export class WtAddressLookup extends WtInput {
   ];
 
   @property({ attribute: false }) provider?: AddressLookupProvider;
+  @property({ attribute: false }) ignoredSearchWords?: readonly string[];
   @property({ attribute: false }) appliedAttribution?: string;
   @property({ attribute: "country-code" }) countryCode = "";
   @property({ attribute: "unavailable-label" }) unavailableLabel = "";
   /** The form's own line under the field about the last choice, e.g. why it was not copied; a new
    * search hides it until the next choice or a new message. */
   @property() message = "";
-  /** How long typing must pause, in milliseconds, before the provider is asked. */
-  @property({ type: Number }) delay = 600;
+  /** How long to wait for the last word without a trailing word break. */
+  @property({ type: Number }) delay = 1000;
 
   @state() private suggestions: readonly AddressLookupSuggestion[] = [];
   @state() private activeIndex = -1;
@@ -119,6 +125,8 @@ export class WtAddressLookup extends WtInput {
   @state() private messageCurrent = true;
 
   #generation = 0;
+  #query = "";
+  #lastAsked?: string;
   /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
   #resolving?: number;
   #timer?: ReturnType<typeof setTimeout>;
@@ -130,11 +138,13 @@ export class WtAddressLookup extends WtInput {
   override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
     if (changed.has("message")) this.messageCurrent = true;
+    const contextChanged = changed.has("provider") || changed.has("countryCode");
+    if (contextChanged) this.#lastAsked = undefined;
     if (
-      changed.has("provider") ||
-      changed.has("countryCode") ||
+      contextChanged ||
       changed.has("disabled") ||
-      changed.has("hidden")
+      changed.has("readonly") ||
+      (changed.has("value") && streetQuery(this.value) !== this.#query)
     )
       this.cancelSearch();
   }
@@ -165,22 +175,32 @@ export class WtAddressLookup extends WtInput {
 
   protected override afterInput(): void {
     this.messageCurrent = false;
-    this.cancelSearch();
-    const query = this.value.trim();
+    this.resolveFailed = false;
+    const query = streetQuery(this.value);
+    if (query !== this.#query) {
+      this.#query = query;
+      this.cancelSearch();
+    }
     if (
       this.disabled ||
-      this.hidden ||
       this.readonly ||
       this.provider === undefined ||
-      query.length < MIN_QUERY ||
+      query === this.#lastAsked ||
       this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT
     )
       return;
+    const ignored = this.ignoredSearchWords?.map(foldForSearch) ?? [];
+    const words = foldForSearch(query).match(/[\p{L}\p{N}]+/gu) ?? [];
+    if (!words.some((word) => /\p{L}/u.test(word) && !ignored.includes(word))) return;
+
+    clearTimeout(this.#timer);
     const generation = this.#generation;
+    const delay = TRAILING_WORD_BREAK.test(this.value) ? 0 : this.delay;
     this.#timer = setTimeout(() => {
+      this.#lastAsked = query;
       this.#automaticSearches += 1;
       void this.#ask(query, generation);
-    }, this.delay);
+    }, delay);
   }
 
   async #ask(query: string, generation: number): Promise<void> {
@@ -192,7 +212,8 @@ export class WtAddressLookup extends WtInput {
         countryCode: this.countryCode,
         sessionToken: this.#session,
       });
-      if (generation === this.#generation && query === this.value.trim()) this.suggestions = found;
+      if (generation === this.#generation && query === streetQuery(this.value))
+        this.suggestions = found;
     } catch {
       // A suggestion is optional while the person types the address.
     }
@@ -237,10 +258,11 @@ export class WtAddressLookup extends WtInput {
   private onKeydown(event: KeyboardEvent): void {
     if (belongsToComposition(event)) return;
     const count = this.suggestions.length;
-    if (event.key === "Enter" && this.activeIndex >= 0) {
+    if (event.key === "Enter") {
+      if (this.activeIndex < 0 && this.#resolving !== this.#generation) return;
       event.preventDefault();
       event.stopPropagation();
-      void this.#choose(this.activeIndex);
+      if (this.activeIndex >= 0) void this.#choose(this.activeIndex);
       return;
     }
     if (count === 0) return;

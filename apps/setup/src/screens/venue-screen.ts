@@ -389,7 +389,6 @@ export class SetupVenueScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
-  /** Address suggestions; without one the address search fields stay hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @state() private addressCredits: Partial<Record<AddressSearch, string>> = {};
 
@@ -577,10 +576,10 @@ export class SetupVenueScreen extends LitElement {
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
     >(
-      `:is(wt-input,wt-combobox)[name=${this.serverInvalid.key === "taxpayerDomicile" ? "registeredStreet" : this.serverInvalid.key}]`,
+      `:is(wt-input,wt-combobox,wt-address-lookup)[name=${this.serverInvalid.key === "taxpayerDomicile" ? "registeredStreet" : this.serverInvalid.key}]`,
     );
     if (field === null) return;
-    // Wait for the `wt-input`'s own render: until then the native input its focus is delegated to
+    // Wait for the field's own render: until then the native input its focus is delegated to
     // does not exist, and focusing the host does nothing. The screen may be gone by then.
     void Promise.resolve(field.updateComplete).then(() => {
       if (this.isConnected) field.focus();
@@ -684,7 +683,10 @@ export class SetupVenueScreen extends LitElement {
     )
       this.serverInvalid = undefined;
     const value = event.detail.value;
-    this.#cancelAddressSearch(SEARCH_FILLS[key]);
+    this.#cancelAddressSearch(
+      SEARCH_FILLS[key],
+      key !== "addressLine1" && key !== "registeredStreet",
+    );
     if (key === "name") this.#demoVenueNameSource = "custom";
     if (key === "registeredPostalCode") {
       const area = provinceOfPostalCode(this.#pack(), value);
@@ -716,11 +718,15 @@ export class SetupVenueScreen extends LitElement {
   }
 
   /** So an address still on its way cannot overwrite what the person typed or switched. */
-  #cancelAddressSearch(which: AddressSearch | undefined): void {
+  #cancelAddressSearch(which: AddressSearch | undefined, cancelPending = true): void {
     if (which === undefined) return;
     this.addressCredits = { ...this.addressCredits, [which]: undefined };
-    const field = which === "address" ? "addressLine1" : "registeredStreet";
-    this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${field}]`)?.cancelSearch();
+    if (cancelPending) this.#streetField(which)?.cancelSearch();
+  }
+
+  #streetField(which: AddressSearch): WtAddressLookup | null {
+    const name = which === "address" ? "addressLine1" : "registeredStreet";
+    return this.shadowRoot!.querySelector<WtAddressLookup>(`[name=${name}]`);
   }
 
   #onAddressChosen(which: AddressSearch, event: CustomEvent<AddressChosenDetail>): void {
@@ -769,7 +775,7 @@ export class SetupVenueScreen extends LitElement {
 
   #onSameAsVenue(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
-    this.#cancelAddressSearch("domicile");
+    this.#streetField("domicile")?.cancelSearch();
     this.sameAsVenue = event.detail.checked;
     this.#scope?.changed();
   }
@@ -1102,6 +1108,7 @@ export class SetupVenueScreen extends LitElement {
       .appliedAttribution=${shown ? this.addressCredits[which] : undefined}
       .provider=${shown && pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
+      .ignoredSearchWords=${pack?.addressSearchIgnoredWords}
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onField(key, event)}

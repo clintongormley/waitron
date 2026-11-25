@@ -1347,8 +1347,7 @@ export const en = {
   "venue_details.name": "Venue name",
   "venue_details.addressLine1": "Street address",
   "venue_details.addressLine2": "Address line 2",
-  "venue_details.address_lookup.unavailable":
-    "Address suggestions are not available. Type the address below.",
+  "venue_details.address_lookup.unavailable": "Could not fill that address. Enter it by hand.",
   "venue_details.address_lookup.other_country":
     "That address is not in {country}. Choose another or edit the street address.",
   "venue_details.address_lookup.other_province":
@@ -6103,7 +6102,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.addressLine1": "Dirección",
   "venue_details.addressLine2": "Segunda línea de dirección",
   "venue_details.address_lookup.unavailable":
-    "Las sugerencias de direcciones no están disponibles. Escribe la dirección abajo.",
+    "No se pudo rellenar esa dirección. Escríbela a mano.",
   "venue_details.address_lookup.other_country":
     "Esa dirección no está en {country}. Elige otra o edita la calle.",
   "venue_details.address_lookup.other_province":

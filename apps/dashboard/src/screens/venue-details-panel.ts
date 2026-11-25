@@ -540,7 +540,7 @@ export class VenueDetailsPanel extends LitElement {
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (SEARCH_FILLS.includes(field)) {
-      this.#cancelAddressSearch();
+      if (field !== "addressLine1") this.#cancelAddressSearch();
       this.addressAttribution = undefined;
     }
     this.#apply({ [field]: event.detail.value });
@@ -780,6 +780,7 @@ export class VenueDetailsPanel extends LitElement {
       .appliedAttribution=${this.addressAttribution}
       .provider=${locked ? undefined : (this.addressProvider ?? this.cloudAddressProvider)}
       country-code=${model.issuer.country}
+      .ignoredSearchWords=${getCountryPack(model.issuer.country)?.addressSearchIgnoredWords}
       @wt-change=${change}
       unavailable-label=${t("venue_details.address_lookup.unavailable")}
       .message=${

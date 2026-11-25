@@ -125,41 +125,73 @@ test("changing provider availability preserves the street and changes autocomple
   expect(input(el).getAttribute("autocomplete")).toBe("address-line1");
 });
 
-test("waits 600 ms after the last input before asking with the country and a session token", async () => {
+test("waits for a word break or a one-second pause after typing", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
-  const el = await mountLookup(provider, false, 600);
-  type(el, "Calle M");
-  vi.advanceTimersByTime(350);
-  type(el, "Calle Ma");
-  vi.advanceTimersByTime(599);
+  const el = await mountLookup(provider, false, 1000);
+  type(el, "Mai");
+  await vi.advanceTimersByTimeAsync(750);
+  type(el, "Main");
+  await vi.advanceTimersByTimeAsync(999);
   expect(provider.calls.suggest).toHaveLength(0);
-  vi.advanceTimersByTime(1);
-  expect(provider.calls.suggest).toHaveLength(1);
-  expect(provider.calls.suggest[0]!.query).toBe("Calle Ma");
-  expect(provider.calls.suggest[0]!.countryCode).toBe("ES");
-  expect(provider.calls.suggest[0]!.sessionToken).toMatch(/^[0-9a-f]{32}$/);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(provider.calls.suggest[0]).toEqual({
+    query: "Main",
+    countryCode: "ES",
+    sessionToken: expect.stringMatching(/^[0-9a-f]{32}$/),
+  });
+
+  type(el, "Main Street,");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Main", "Main Street"]);
+  type(el, "Main Street, ");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(provider.calls.suggest).toHaveLength(2);
+  expect(options(el)).toHaveLength(2);
 });
 
-test("the pause is 600 ms unless set", async () => {
-  const el = document.createElement("wt-address-lookup");
-  expect(el.delay).toBe(600);
+test("the pause is one second unless set", () => {
+  expect(document.createElement("wt-address-lookup").delay).toBe(1000);
 });
 
-test("asks nothing for fewer than four characters, and a shorter text closes the list", async () => {
+test("a bare number and ignored words spend no search before or after a pause", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
   const el = await mountLookup(provider);
-  type(el, " Cal ");
-  await settle(el);
+  el.ignoredSearchWords = ["street", "of", "the"];
+  await el.updateComplete;
+  for (const text of ["42", "Street of the ", "42 STREET-", "123 Street"]) {
+    type(el, text);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
   expect(provider.calls.suggest).toHaveLength(0);
-  type(el, "Call");
-  await settle(el);
-  expect(options(el)).toHaveLength(2);
-  type(el, "  C  ");
-  await settle(el);
-  expect(options(el)).toHaveLength(0);
-  expect(input(el).getAttribute("aria-expanded")).toBe("false");
+
+  type(el, "Oak ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Oak"]);
+  type(el, "42 ");
+  await vi.advanceTimersByTimeAsync(1000);
   expect(provider.calls.suggest).toHaveLength(1);
+  expect(options(el)).toHaveLength(0);
+});
+
+test("a replacement street drops a queued search and closes already visible suggestions", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider();
+  const el = await mountLookup(provider, false, 1000);
+  type(el, "Main Street");
+  el.value = "Oak Road";
+  await el.updateComplete;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(provider.calls.suggest).toHaveLength(0);
+
+  type(el, "Oak Road ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(2);
+  el.value = "Pine Road";
+  await el.updateComplete;
+  expect(options(el)).toHaveLength(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Oak Road"]);
 });
 
 test("after five automatic searches, Enter can save the typed street without another search", async () => {
@@ -360,6 +392,27 @@ test("a refused or throwing search leaves manual typing quiet", async () => {
     expect(options(el)).toHaveLength(0);
     cleanup();
   }
+});
+
+test("Enter reaches the form again as soon as a chosen address is refused", async () => {
+  let refuse!: (reason: Error) => void;
+  const pending = new Promise<never>((_, reject) => (refuse = reject));
+  const el = await mountLookup(fakeProvider([MAYOR], { resolve: () => pending }));
+  const enters = vi.fn();
+  host.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") enters(event);
+  });
+  await userEvent.fill(input(el), "Calle Mayor");
+  await settle(el);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  await userEvent.keyboard("{Enter}");
+  expect(enters).not.toHaveBeenCalled();
+
+  refuse(new Error("unavailable"));
+  await settle(el);
+  expect(status(el)).toBe("Suggestions are not available.");
+  await userEvent.keyboard("{Enter}");
+  expect(enters).toHaveBeenCalledOnce();
 });
 
 test("a refused resolve says suggestions are unavailable and sends nothing", async () => {
@@ -685,7 +738,7 @@ test("cancelSearch drops a chosen suggestion still on its way and the open list,
   expect(chosen).not.toHaveBeenCalled();
   expect(input(el).value).toBe("Calle Mayor");
 
-  type(el, "Calle Mayor");
+  type(el, "Calle Real");
   await settle(el);
   expect(options(el)).toHaveLength(1);
   el.cancelSearch();

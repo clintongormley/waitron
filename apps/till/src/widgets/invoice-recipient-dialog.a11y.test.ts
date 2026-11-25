@@ -215,7 +215,7 @@ for (const theme of ["light", "dark"] as const) {
         "wt-address-lookup",
       )!;
     search.delay = 0;
-    await userEvent.fill(page.elementLocator(search.shadowRoot!.querySelector("input")!), "Calle");
+    await userEvent.fill(page.elementLocator(search.shadowRoot!.querySelector("input")!), "Mayor");
     await expect.poll(() => search.shadowRoot!.querySelectorAll("[role=option]").length).toBe(1);
     await userEvent.keyboard("{ArrowDown}");
     await expectNoA11yViolations(host);

@@ -201,6 +201,7 @@ export interface CountryPack {
   readonly demo?: CountryDemoIdentity;
   /** Completeness of a recipient postal address stored separately from its country code. */
   readonly postalAddress?: { isComplete(address: string): boolean };
+  readonly addressSearchIgnoredWords?: readonly string[];
   readonly countryNames?: Readonly<Record<string, string>>;
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;

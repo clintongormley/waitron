@@ -715,8 +715,7 @@ export const en = {
   "invoice.tax_id_invalid": "Enter a valid Spanish tax ID.",
   "invoice.legal_name": "Customer legal name",
   "invoice.name_required": "Enter the customer's complete legal name.",
-  "invoice.address_lookup.unavailable":
-    "Address suggestions are not available. Type the address below.",
+  "invoice.address_lookup.unavailable": "Could not fill that address. Enter it by hand.",
   "invoice.address_lookup.other_country":
     "That address is not in {country}. Choose another or edit the street address.",
   "invoice.street_address": "Customer street and number",
@@ -3202,8 +3201,7 @@ export const es: Record<StringKey, string> = {
   "invoice.tax_id_invalid": "Introduce un identificador fiscal español válido.",
   "invoice.legal_name": "Nombre o razón social del cliente",
   "invoice.name_required": "Introduce el nombre o razón social completos del cliente.",
-  "invoice.address_lookup.unavailable":
-    "Las sugerencias de direcciones no están disponibles. Escribe la dirección abajo.",
+  "invoice.address_lookup.unavailable": "No se pudo rellenar esa dirección. Escríbela a mano.",
   "invoice.address_lookup.other_country":
     "Esa dirección no está en {country}. Elige otra o edita la calle.",
   "invoice.street_address": "Calle y número del cliente",

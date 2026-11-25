@@ -133,8 +133,7 @@ export const venueEn = {
     "The name you use for this venue. You can keep the suggested name or change it.",
   "venue.hint.address_line1": "Street and building number",
   "venue.hint.address_line2": "Floor, unit or other detail",
-  "venue.address_lookup.unavailable":
-    "Address suggestions are not available. Type the address below.",
+  "venue.address_lookup.unavailable": "Could not fill that address. Enter it by hand.",
   "venue.address_lookup.other_country":
     "That address is not in {country}. Choose another or edit the street address.",
   "venue.hint.postal_code": "Used to suggest the province",
@@ -406,8 +405,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
   "venue.hint.address_line1": "Calle y número",
   "venue.hint.address_line2": "Piso, puerta u otro detalle",
-  "venue.address_lookup.unavailable":
-    "Las sugerencias de direcciones no están disponibles. Escribe la dirección abajo.",
+  "venue.address_lookup.unavailable": "No se pudo rellenar esa dirección. Escríbela a mano.",
   "venue.address_lookup.other_country":
     "Esa dirección no está en {country}. Elige otra o edita la calle.",
   "venue.hint.postal_code": "Sirve para proponer la provincia",

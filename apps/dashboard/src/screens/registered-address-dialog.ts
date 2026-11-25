@@ -228,10 +228,6 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
 
   protected override reset(): void {
     this.foreignAddress = false;
-    this.typed();
-  }
-
-  protected override typed(): void {
     this.addressAttribution = undefined;
     this.#cancelAddressSearch();
   }
@@ -277,6 +273,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
       .appliedAttribution=${sameAsVenue ? undefined : this.addressAttribution}
       .provider=${sameAsVenue ? undefined : this.addressProvider}
       country-code=${this.countryCode}
+      .ignoredSearchWords=${this.#pack()?.addressSearchIgnoredWords}
       @keydown=${view.submitOnEnter}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
@@ -310,6 +307,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   }
 
   #changePart(view: TaxpayerFieldsView<RegisteredAddressDraft>, part: Part, value: string): void {
+    this.addressAttribution = undefined;
     const next = { ...view.draft, [part]: value };
     if (part === "postalCode") {
       const area = provinceOfPostalCode(this.#pack(), value);
@@ -322,6 +320,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     const name = NAMES[part];
     const change = (event: CustomEvent<{ value: string }>) => {
       event.stopPropagation();
+      this.#cancelAddressSearch();
       this.#changePart(view, part, event.detail.value);
     };
     const pack = this.#pack();
@@ -363,6 +362,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
         ?disabled=${view.busy}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
           event.stopPropagation();
+          this.#cancelAddressSearch();
           view.change({ ...view.draft, sameAsVenue: event.detail.checked });
         }}
       ></wt-switch>

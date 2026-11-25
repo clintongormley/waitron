@@ -902,7 +902,7 @@ it("puts the registered street below the switch and its hint", async () => {
   expect(lookup).toBe(part(panel, "registeredStreet"));
 });
 
-it("credits the filled registered address until the person switches back to the venue address", async () => {
+it("keeps the credit with the chosen registered address until the address is edited", async () => {
   const panel = await mountSearching(stubApi(VENUE));
   await open(panel);
   await turn(panel, false);
@@ -911,7 +911,10 @@ it("credits the filled registered address until the person switches back to the 
     search(panel)?.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
   expect(credit()).toBe("Google Maps");
   await turn(panel, true);
+  expect(credit()).toBeUndefined();
   await turn(panel, false);
+  expect(credit()).toBe("Google Maps");
+  await type(panel, { registeredCity: "Alcobendas" });
   expect(credit()).toBeUndefined();
 });
 

@@ -528,7 +528,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
     if (SEARCH_FILLS.has(field)) {
-      this.#cancelAddressSearch();
+      if (field !== "streetAddress") this.#cancelAddressSearch();
       this.addressAttribution = undefined;
     }
     if (field === "countryCode") {
@@ -721,6 +721,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           .appliedAttribution=${this.addressAttribution?.text}
           .provider=${this.countryCode === "" ? undefined : (this.addressProvider ?? this.cloudProvider)}
           country-code=${this.countryCode}
+          .ignoredSearchWords=${getCountryPack(this.countryCode)?.addressSearchIgnoredWords}
           unavailable-label=${t("invoice.address_lookup.unavailable")}
           .message=${
             this.foreignAddressCountry === undefined

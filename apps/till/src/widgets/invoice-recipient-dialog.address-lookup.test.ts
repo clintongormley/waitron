@@ -473,4 +473,30 @@ describe("the invoice recipient dialog's address search", () => {
     await vi.waitFor(() => expect(value(el, "address")).toBe("Calle Mayor 1"));
     expect(saved).toEqual([]);
   });
+
+  it("waits for a chosen suggestion before Enter confirms an invoice", async () => {
+    const { resolving, answers } = deferredProvider();
+    const el = await mountDialog({ addressProvider: resolving });
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await fill(el, "postalCode", "08001");
+    await fill(el, "locality", "Barcelona");
+    await fill(el, "province", "Barcelona");
+
+    const street = lookup(el)!;
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "Calle May");
+    await expect.poll(() => street.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1);
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await expect.poll(() => answers).toHaveLength(1);
+    await userEvent.keyboard("{Enter}");
+    expect(saved).toEqual([]);
+
+    answers[0]!(MADRID);
+    await expect.poll(() => street.value).toBe("Calle Mayor 1");
+    await userEvent.keyboard("{Enter}");
+    expect(saved[0]?.recipient.address).toBe("Calle Mayor 1, 28013 Madrid, Madrid");
+  });
 });
