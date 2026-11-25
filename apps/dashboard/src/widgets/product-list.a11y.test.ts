@@ -402,7 +402,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await table.updateComplete;
     table.shadowRoot!.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
-    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(5);
+    expect(table.shadowRoot!.querySelectorAll(".filter-section")).toHaveLength(6);
     await expectNoA11yViolations(host);
   });
 
