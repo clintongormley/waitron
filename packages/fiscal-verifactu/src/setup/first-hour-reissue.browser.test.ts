@@ -157,6 +157,8 @@ async function loseKey(el: LitElement) {
   await expect.poll(() => control(el, "replace-key")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=false]")).not.toBeNull();
 }
+/** The pack is drawn for real, which can take seconds on a loaded machine. */
+const PACK_DRAWN = { timeout: 15_000 };
 async function keep(el: LitElement) {
   await userEvent.click(control(el, "kept"));
   await expect.poll(() => control(el, "kept").disabled).toBe(true);
@@ -169,7 +171,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   expect(replace, "lost raw key has an explicit replacement action").not.toBeNull();
   expect(replace.disabled).toBe(false);
   await userEvent.click(replace);
-  await expect.poll(() => download(el)).not.toBeNull();
+  await expect.poll(() => download(el), PACK_DRAWN).not.toBeNull();
   expect(control(el, "replace-key"), "the replacement is offered once per lost key").toBeNull();
   await userEvent.click(download(el)!);
   const file = await readRecoveryPackPdf(
@@ -189,7 +191,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   expect(calls.filter((c) => c.action === "keep")).toEqual([]);
   await keep(el);
   expect(calls.find((c) => c.action === "keep")?.value).toMatchObject({ stageId: "replacement" });
-});
+}, 60_000);
 it("keeps a refused replacement retryable, and the retried one needs its own use and keep of the newly registered document", async () => {
   let replacements = 0;
   const { el, calls } = await mount(lost, async () => {
@@ -206,7 +208,7 @@ it("keeps a refused replacement retryable, and the retried one needs its own use
   expect(download(el)).toBeNull();
   await expect.poll(() => control(el, "replace-key")?.disabled).toBe(false);
   await userEvent.click(control(el, "replace-key"));
-  await expect.poll(() => download(el)).not.toBeNull();
+  await expect.poll(() => download(el), PACK_DRAWN).not.toBeNull();
   expect(control(el, "kept"), "Continue waits for Download, Print or Copy").toBeNull();
   await userEvent.click(download(el)!);
   expect(saved).toHaveLength(1);
@@ -225,7 +227,7 @@ it("keeps a refused replacement retryable, and the retried one needs its own use
   });
   expect(control(el, "replace-key"), "no replacement after keeping a PDF").toBeNull();
   expect(calls.filter((c) => c.action === "select")).toHaveLength(1);
-});
+}, 60_000);
 it("drops a delayed replacement after its module context changes", async () => {
   let release!: (value: InitialSetupNodeKey) => void;
   const { el, parent, calls } = await mount(

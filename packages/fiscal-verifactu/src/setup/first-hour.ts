@@ -72,7 +72,7 @@ export const firstHourStrings = {
       "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
     next: "Recovery pack",
     packLead:
-      "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+      "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
     packWarning: "This is the only time the master key is shown.",
     showKey: "Show the master key",
     masterKey: "Master key",
@@ -80,12 +80,12 @@ export const firstHourStrings = {
     print: "Print",
     copy: "Copy",
     copied: "Copied.",
-    copyFailed: "Copy did not work. Use Download or Print.",
+    copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
     printFailed: "Your browser blocked printing. Use Download instead.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
-    keyLost: "The box no longer holds the master key it made. Make new keys to carry on.",
-    replace: "Make new keys",
+    keyLost: "The box no longer holds the master key it made. Make a new one to carry on.",
+    replace: "Make a new master key",
   },
   es: {
     ...clockWaitStrings.es,
@@ -101,7 +101,7 @@ export const firstHourStrings = {
       "Sigue sola cuando el servidor se ponga en hora por internet, o en el móvil si sigues allí.",
     next: "Paquete de recuperación",
     packLead:
-      "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
     packWarning: "Esta es la única vez que se muestra la clave maestra.",
     showKey: "Mostrar la clave maestra",
     masterKey: "Clave maestra",
@@ -109,12 +109,12 @@ export const firstHourStrings = {
     print: "Imprimir",
     copy: "Copiar",
     copied: "Copiada.",
-    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir.",
+    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
     printFailed: "El navegador ha bloqueado la impresión. Usa Descargar.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
-    keyLost: "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",
-    replace: "Crear claves nuevas",
+    keyLost: "El servidor ya no guarda la clave maestra que creó. Crea una nueva para seguir.",
+    replace: "Crear una clave maestra nueva",
   },
 };
 @customElement("vf-first-setup-hour")
@@ -176,8 +176,8 @@ export class FirstSetupHour extends LitElement {
   @state() private pdfUrl?: string;
   @state() private keyUsed = false;
   /**
-   * The box answered that it no longer holds the keys it made, as after a restart. Only then may
-   * the step make new ones: new keys would orphan a master key the person already copied.
+   * The box answered that it no longer holds the master key it made, as after a restart. Only then
+   * may the step make a new one: a new key would orphan a master key the person already copied.
    */
   @state() private keyLost = false;
   @state() private masterKey?: { masterKey: string; masterKeyName: string };

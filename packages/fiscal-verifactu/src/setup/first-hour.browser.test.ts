@@ -167,6 +167,8 @@ const keyPart = (el: LitElement, name: string) =>
   el
     .shadowRoot!.querySelector("wt-master-key-box")
     ?.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`) ?? null;
+/** The pack is drawn for real, which can take seconds on a loaded machine. */
+const PACK_DRAWN = { timeout: 10_000 };
 /** Records the files the step hands to the browser to save, and the tabs it opens. */
 function captureDownloads() {
   const downloads: { href: string; name: string }[] = [];
@@ -1103,7 +1105,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   );
   const { downloads, opened } = captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
   expect(downloads).toHaveLength(0);
   await userEvent.click(keyPart(el, "download")!);
   expect(downloads).toHaveLength(1);
@@ -1180,7 +1182,7 @@ it.each([
     expect(el.shadowRoot!.textContent).toContain(next);
     expect(button(el, "prepare-pdf").textContent!.trim()).toBe(show);
     await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
     expect(keyPart(el, "download")!.textContent!.trim()).toBe(download);
     await userEvent.click(keyPart(el, "download")!);
     expect(downloads.map((d) => d.name)).toEqual(["waitron-recovery-pack-1.pdf"]);
@@ -1530,7 +1532,7 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   );
   captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
   await userEvent.click(keyPart(el, "download")!);
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() =>
@@ -2317,13 +2319,13 @@ it.each([
   [
     "en",
     "Recovery pack",
-    "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
     "This is the only time the master key is shown.",
   ],
   [
     "es",
     "Paquete de recuperación",
-    "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
     "Esta es la única vez que se muestra la clave maestra.",
   ],
 ] as const)(

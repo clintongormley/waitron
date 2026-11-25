@@ -82,6 +82,9 @@ it("requires a fresh original password for replacement and clears the previous R
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=next]")!.hasAttribute("disabled")).toBe(true);
   expect(requests.some((request) => request.path.endsWith("/node-key-reissue"))).toBe(false);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("section p")?.textContent?.trim())
+    .toBe("Confirm before making a new master key.");
   await password();
   await expect(pending).resolves.toEqual(key);
   expect(session.state).toEqual(before);
