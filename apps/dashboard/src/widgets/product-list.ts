@@ -1519,7 +1519,11 @@ export class ProductList extends LitElement {
         .rows=${this.#rowList}
         .rowCellParts=${() => "products-cell"}
         .rowSpansUnpinnedColumns=${
-          this.phone && this.view === "tree" ? (row: ListRow) => row.kind !== "product" : undefined
+          this.phone && this.view === "tree"
+            ? (row: ListRow, columns: readonly DataTableColumn<ListRow>[]) =>
+                row.kind !== "product" &&
+                columns.every(({ key }) => key === "name" || key === "price" || key === "available")
+            : undefined
         }
         .columns=${this.#columns()}
         .layoutHiddenColumns=${

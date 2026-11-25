@@ -898,7 +898,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * heading row's band for one. */
   @property({ attribute: false }) rowCellParts?: (row: Row) => string;
   /** Tree rows with only a heading and pinned controls can use the empty columns for their heading. */
-  @property({ attribute: false }) rowSpansUnpinnedColumns?: (row: Row) => boolean;
+  @property({ attribute: false }) rowSpansUnpinnedColumns?: (
+    row: Row,
+    columns: readonly DataTableColumn<Row>[],
+  ) => boolean;
   @property({ type: Boolean }) initiallyCollapsed = false;
   @property({ type: Boolean }) collapseDescendants = false;
   @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
@@ -3333,8 +3336,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
     const entries = this.#treeShown().entries ?? this.#treeRows(treeRows, heldOpen, sortColumn);
-    const unpinnedColumns = shown.filter((column) => column.pinned !== "end").length;
-    const spanningColumns = [shown[0]!, ...shown.slice(unpinnedColumns)];
+    const unpinned = shown.filter((column) => column.pinned !== "end");
+    const spanningColumns = [shown[0]!, ...shown.slice(unpinned.length)];
     const visibleKeys = entries
       .filter(({ row }) => this.rowSelectable(row))
       .map(({ row, key }) => this.#selectionKey(row, key));
@@ -3385,7 +3388,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   : clicks
                     ? () => this.rowClick!(row)
                     : undefined;
-                const span = this.rowSpansUnpinnedColumns?.(row) ? unpinnedColumns : 1;
+                const span = this.rowSpansUnpinnedColumns?.(row, unpinned) ? unpinned.length : 1;
                 const rowColumns = span > 1 ? spanningColumns : shown;
                 return html`<tr
                   data-row-key=${key}
