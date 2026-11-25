@@ -140,6 +140,8 @@ Read on `af930f2b30`; "ran" marks what was run.
   list price differs from its filed total files that list price, which the full invoice prints as a
   discount (`receipt-figures.ts:40-48`). At issue the full invoice decides "covered dish, not printed"
   from the as-sold amount (`receipt-adjustments.ts:185-218`, `receipt-lines.ts:227-247`).
+  _2026-11-25: a full invoice's lines now carry the gross they were filed at, on the first print too
+  (`dishLines` in `receipt-adjustments.ts`)._
 - Every issuing path rates its lines in `readLockedLinesForIssuance` (`working-order.ts:1243`) and then
   `issueMoment`: payment of every kind, a captured card, a bill totalling nothing, Print, walk-out, deferred
   close, close of day, a split's bills (money-moved receipt, section 6). Advances take the dine-in rate.

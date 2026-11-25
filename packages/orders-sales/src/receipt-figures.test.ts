@@ -303,6 +303,129 @@ describe("invoiceDiscounts", () => {
     });
   });
 
+  const FULL: readonly (readonly [string, (amount: string) => ReceiptAdjustment])[] = [
+    ["a comp", comp],
+    ["a 100% discount", (amount) => ({ kind: "discount", percentBp: 10000, amount })],
+  ];
+
+  // A445: the olives' free 1.50 spread over the 9.00 paid, so both rates still charge.
+  it.each(FULL)("keeps both rates plain when %s of an extra leaves them charged", (_name, full) => {
+    const pizza = filed({
+      gross: "7.71",
+      listGross: "9.00",
+      listUnitPriceGross: "9.00",
+      net: net("6.37", "6.37", "21"),
+    });
+    const olives = filed({
+      parentLineNo: 1,
+      gross: "1.29",
+      listGross: "1.50",
+      listUnitPriceGross: "1.50",
+      net: net("1.17", "1.17", "10"),
+      adjustments: [full("1.50")],
+    });
+    expect(under(invoiceDiscounts([group(0, 0, pizza, olives)], []))).toEqual({
+      0: [
+        { rate: "21", amount: "1.07", comp: false, named: null },
+        { rate: "10", amount: "0.19", comp: false, named: null },
+      ],
+    });
+  });
+
+  // A445: the pizza's cent files a base of 0.00, but its gross is still charged.
+  it.each([
+    ["nothing off the bill", []],
+    ["a cent off the bill too", [own("0.01")]],
+  ] as const)("keeps a rate charged one cent plain, with %s", (_name, bill) => {
+    const pizza = filed({
+      gross: "0.01",
+      listGross: "0.02",
+      listUnitPriceGross: "0.02",
+      net: net("0.00", "0.00", "21"),
+    });
+    const olives = filed({
+      parentLineNo: 1,
+      gross: "0.01",
+      listGross: "0.02",
+      listUnitPriceGross: "0.02",
+      net: net("0.01", "0.01", "10"),
+      adjustments: [comp("0.02")],
+    });
+    expect(under(invoiceDiscounts([group(0, 0, pizza, olives)], bill))).toEqual({
+      0: [
+        { rate: "21", amount: "0.02", comp: false, named: null },
+        { rate: "10", amount: "0.01", comp: false, named: null },
+      ],
+    });
+  });
+
+  // A445: the pizza's family loses 1.74, more than its own 1.50, and the salad 1.66 of its 10.00.
+  it.each(FULL)("leaves the bill's end row plain when %s of an extra is charged", (_name, full) => {
+    const pizza = filed({
+      gross: "7.51",
+      listGross: "9.00",
+      listUnitPriceGross: "9.00",
+      net: net("6.21", "6.21", "21"),
+    });
+    const olives = filed({
+      parentLineNo: 1,
+      gross: "1.25",
+      listGross: "1.50",
+      listUnitPriceGross: "1.50",
+      net: net("1.14", "1.14", "10"),
+      adjustments: [full("1.50")],
+    });
+    const salad = filed({
+      gross: "8.34",
+      listGross: "10.00",
+      listUnitPriceGross: "10.00",
+      net: net("7.58", "7.58", "10"),
+    });
+    const result = invoiceDiscounts(
+      [group(0, 0, pizza, olives), group(1, 1, salad)],
+      [own("1.90")],
+    );
+    expect(result.atEnd).toEqual([{ rate: "10", amount: "1.51", comp: false, named: null }]);
+    expect(result.billNamed).toBeNull();
+  });
+
+  it.each(FULL)("names both rates when %s leaves a dish and its extra uncharged", (_name, full) => {
+    const named = full("10.50");
+    const extra = { ...free("1.50", "10"), parentLineNo: 1 };
+    expect(under(invoiceDiscounts([group(0, 0, free("9.00", "21", named), extra)], []))).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: true, named },
+        { rate: "10", amount: "1.36", comp: true, named },
+      ],
+    });
+  });
+
+  it("names the uncharged rate alone when the same full comp left another rate charged", () => {
+    const named = comp("10.00");
+    const charged = filed({
+      parentLineNo: 1,
+      gross: "0.50",
+      listGross: "1.50",
+      listUnitPriceGross: "1.50",
+      net: net("0.45", "0.45", "10"),
+    });
+    expect(under(invoiceDiscounts([group(0, 0, free("9.00", "21", named), charged)], []))).toEqual({
+      0: [
+        { rate: "21", amount: "7.44", comp: true, named },
+        { rate: "10", amount: "0.91", comp: false, named: null },
+      ],
+    });
+  });
+
+  it("names a free extra's rate when its dish is charged in full", () => {
+    const named = comp("1.50");
+    const pizza = filed({ gross: "9.00", net: net("7.44", "7.44", "21") });
+    const olives = { ...free("1.50", "10", named), parentLineNo: 1 };
+    expect(under(invoiceDiscounts([group(0, 0, pizza, olives)], []))).toEqual({
+      0: [{ rate: "10", amount: "1.36", comp: true, named }],
+    });
+  });
+
   it("keeps both rates plain when the bill and a comp share the loss at each rate", () => {
     const extra = { ...free("3.00", "10"), parentLineNo: 1 };
     const result = invoiceDiscounts(
@@ -672,6 +795,38 @@ describe("invoiceDiscounts", () => {
       { rate: "21.00", amount: "2.48", named: null },
       { rate: "10.00", amount: "0.22", named: null },
     ]);
+  });
+
+  // No line is itself a charged free item: only a loss short of the comp shows the share.
+  it("names the end rows plainly when a dish's lines lost less than its own adjustment", () => {
+    const result = invoiceDiscounts(
+      [
+        group(
+          0,
+          0,
+          free("0.00", "10", comp("3.00")),
+          filed({
+            parentLineNo: 1,
+            gross: "2.08",
+            listGross: "3.00",
+            listUnitPriceGross: "3.00",
+            net: net("1.89", "1.89", "10"),
+          }),
+        ),
+        group(
+          1,
+          1,
+          filed({
+            gross: "6.92",
+            listGross: "10.00",
+            listUnitPriceGross: "10.00",
+            net: net("5.72", "5.72", "21"),
+          }),
+        ),
+      ],
+      [own("1.00")],
+    );
+    expect(result.billNamed).toBeNull();
   });
 
   it("keeps a dish's own row no larger than the discount its family's lines carry", () => {

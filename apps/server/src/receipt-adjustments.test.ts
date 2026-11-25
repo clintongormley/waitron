@@ -315,8 +315,8 @@ describe("receiptLines", () => {
         );
       });
       expect(changedDisplay.lines).toMatchObject([
-        { gross: "99.99", net: { base: "9.82", tax: "0.98" } },
-        { gross: "99.99", net: { base: "5.45", tax: "0.55" } },
+        { gross: "10.80", net: { base: "9.82", tax: "0.98" } },
+        { gross: "6.00", net: { base: "5.45", tax: "0.55" } },
       ]);
     } finally {
       await inTx(venue, (tx) =>

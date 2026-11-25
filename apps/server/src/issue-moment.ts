@@ -11,7 +11,8 @@ export interface IssueMoment {
   meal: PricedLines;
   /** One line per advance and rate, to follow `priced.lines` on the invoice. */
   deductionLines: DeductionLine[];
-  /** The lines as sold, before `shareFreeItems` gave a free item its share; the receipt prints them. */
+  /** The lines as sold, before `shareFreeItems` gave a free item its share; a simplified
+   * receipt prints them. */
   gross: GrossLines;
   /** Answers the reading `issueMoment` took on every `now()`, so `recordSale` dates the invoice on
    * the issue day `priced` and `operationDate` were worked out from, even across midnight. */

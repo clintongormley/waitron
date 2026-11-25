@@ -1095,10 +1095,11 @@ here is asked or built before that. They were separate entries, many of them que
   `packages/adjustments/src/record.ts`); the report still shows such an amount in euros. On a full
   invoice, a row that joins steps, or whose reduction no single adjustment explains, prints
   «Descuento». For example, a bill discount and a comp can share a dish's row at each of two VAT
-  rates. A separate free item can also take a share of the price paid (A445). The per-dish fallback
-  leaves off the percentage when the records no longer add up to the bill. The filed sale is
-  unchanged. A reason without Free refuses 100% too (the rule's first half,
-  `adjustment.free_not_allowed`). Plan:
+  rates. A free item can also take a share of the price paid (A445), and then a bill discount's row
+  is plain too. Where a dish and its extras have several rates, a full adjustment prints 100% only
+  on a rate that charges nothing. The per-dish fallback leaves off the percentage when the records
+  no longer add up to the bill. The filed sale is unchanged. A reason without Free refuses 100% too
+  (the rule's first half, `adjustment.free_not_allowed`). Plan:
   [A803 slice 1](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
 
 - **A bill keeps its number while it stays with its seated party (owner, 2026-10-19; A803 slice

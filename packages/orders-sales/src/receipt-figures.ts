@@ -12,7 +12,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
-import type { ReceiptAdjustment, TillSaleLine } from "./receipt-lines.js";
+import { soldGross, type ReceiptAdjustment, type TillSaleLine } from "./receipt-lines.js";
 
 export type FiledLine = TillSaleLine & { net: NonNullable<TillSaleLine["net"]> };
 
@@ -52,7 +52,7 @@ export interface GroupDiscount {
   rate: string;
   /** What the row takes off at this rate, before VAT; never zero. */
   amount: Decimal;
-  /** Zero filed base at this rate. An unnamed row also needs one full adjustment for its loss. */
+  /** Zero filed gross at this rate. An unnamed row also needs one full adjustment for its loss. */
   comp: boolean;
   /** The adjustment that names the row. If absent, `comp` chooses the full or plain discount label. */
   named: ReceiptAdjustment | null;
@@ -77,10 +77,14 @@ export interface InvoiceDiscounts {
 
 /** A dish family's own discount prints under the family; what the bill took off prints once per
  *  rate at the end. Per family and rate: own + bill share = the lines' discounts, so the table still
- *  comes to the filed bases. `groups` holds the invoice's groups whose lines all have `net`. */
+ *  comes to the filed bases. `groups` holds the invoice's groups whose lines all have `net`;
+ *  `invoiceLines` every line of the invoice, a divided set menu's heading with its adjustments. */
 export function invoiceDiscounts(
   groups: readonly FiguredGroup[],
   billAdjustments: readonly ReceiptAdjustment[],
+  invoiceLines: readonly TillSaleLine[] = groups.flatMap(({ lines }) =>
+    lines.map(({ line }) => line),
+  ),
 ): InvoiceDiscounts {
   const families = new Map<number, FiguredGroup[]>();
   for (const group of groups) {
@@ -91,7 +95,7 @@ export function invoiceDiscounts(
   const hasBill = billAdjustments.length > 0;
   const under = new Map<number, GroupDiscount[]>();
   const billShares: { rate: string; amount: Decimal }[] = [];
-  let sharedFreeItem = false;
+  let sharedFreeItem = invoiceLines.some(isChargedFreeLine);
   for (const members of families.values()) {
     const lines = members.flatMap((group) => group.lines);
     const ownEntries = lines.flatMap(({ line }) => line.adjustments ?? []);
@@ -101,9 +105,11 @@ export function invoiceDiscounts(
     // means a free item's share of the price paid moved part of it, and the words would not fit.
     const nameable =
       ownEntries.length === 1 && (hasBill ? lostVersusOwn >= 0 : lostVersusOwn === 0);
-    const wholeFamilyComp = singleFullAdjustment(ownEntries) && lostVersusOwn === 0;
+    const singleFull = singleFullAdjustment(ownEntries);
+    const wholeFamilyComp = singleFull && lostVersusOwn === 0;
     const byRate = discountsByRate(lines);
     const oneRate = byRate.length === 1;
+    const oneRateAndNoShare = oneRate && !lines.some(({ line }) => isChargedFreeLine(line));
     const home =
       members.find((group) =>
         group.lines.some(({ line }) => (line.adjustments ?? []).length > 0),
@@ -123,7 +129,9 @@ export function invoiceDiscounts(
               );
       addByRate(billShares, entry.rate, subtractDecimal(entry.amount, ownAmount));
       if (isZeroDecimal(ownAmount)) continue;
-      const named = nameable && (!hasBill || oneRate) ? ownEntries[0]! : null;
+      // A free item's price can be spread over the bill's rates, leaving each still charged.
+      const fits = !singleFull || entry.comp || oneRateAndNoShare;
+      const named = nameable && fits && (!hasBill || oneRate) ? ownEntries[0]! : null;
       const row: GroupDiscount = {
         rate: entry.rate,
         amount: ownAmount,
@@ -157,8 +165,17 @@ function sameRate(left: string, right: string): boolean {
   return compareDecimal(decimal(left), decimal(right)) === 0;
 }
 
+function isFull({ kind, percentBp }: ReceiptAdjustment): boolean {
+  return kind === "comp" || percentBp === 10000;
+}
+
 function singleFullAdjustment(entries: readonly ReceiptAdjustment[]): boolean {
-  return entries.length === 1 && (entries[0]!.kind === "comp" || entries[0]!.percentBp === 10000);
+  return entries.length === 1 && isFull(entries[0]!);
+}
+
+/** Made free, yet filing a share of the price paid (A445). */
+function isChargedFreeLine(line: TillSaleLine): boolean {
+  return compareDecimal(soldGross(line), ZERO) > 0 && (line.adjustments ?? []).some(isFull);
 }
 
 function fullAdjustmentAtRate(
@@ -198,7 +215,7 @@ function firstRates(groups: readonly FiguredGroup[]): string[] {
 }
 
 /** The lines' discounts added per rate, in the order the rates first appear; `comp` when every
- *  line at the rate has a filed base of zero. */
+ *  line at the rate files zero gross: a charged cent can have a base of zero. */
 function discountsByRate(
   lines: readonly FiguredLine[],
 ): { rate: string; amount: Decimal; comp: boolean }[] {
@@ -207,12 +224,13 @@ function discountsByRate(
     line,
     figures: { discount },
   } of lines) {
-    const zeroBase = isZeroDecimal(decimal(line.net.base));
+    const zeroGross = isZeroDecimal(decimal(line.gross));
     const entry = byRate.find((candidate) => sameRate(candidate.rate, line.net.rate));
-    if (entry === undefined) byRate.push({ rate: line.net.rate, amount: discount, comp: zeroBase });
+    if (entry === undefined)
+      byRate.push({ rate: line.net.rate, amount: discount, comp: zeroGross });
     else {
       entry.amount = addDecimal(entry.amount, discount);
-      entry.comp &&= zeroBase;
+      entry.comp &&= zeroGross;
     }
   }
   return byRate;

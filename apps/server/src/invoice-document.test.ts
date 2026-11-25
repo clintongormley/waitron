@@ -9,12 +9,14 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { eq, inArray } from "drizzle-orm";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   billPayments,
+  extraListItems,
   invoiceSeries,
   parties,
+  products,
   sales,
   saleLines,
   taxpayer,
@@ -44,6 +46,7 @@ import {
   provisionAdjustmentVenue,
   takeawayRates,
   type AdjustmentVenue,
+  type RoundLine,
 } from "./testing/adjustment-venue.js";
 import {
   readCustomerInvoiceDocument,
@@ -55,13 +58,16 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import { adjustmentLabel, CONTACT_SEPARATOR } from "./receipt-facts.js";
+import { adjustmentLabel, CONTACT_SEPARATOR, receiptFigures } from "./receipt-facts.js";
 import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import type { TillSaleLine } from "./till-sale.js";
+import { readSettledTicket, type TillSaleLine } from "./till-sale.js";
 import { layoutA4Invoice } from "./invoice-layout.js";
 import { pageRows } from "./testing/invoice-page-rows.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
+import { republishMenus } from "./testing/publish-menu.js";
+import { formatReceipt } from "./receipt-ticket.js";
 import { INVOICE_PAGE_WIDTH, invoiceTextWidth } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
@@ -1423,28 +1429,9 @@ it.each(["sumup", "simulator"] as const)(
 // A445 D3a and D3b: a free item on a takeaway ticket mixing VAT rates files its share of the price
 // paid (salad €10.00 at 4% files 8.33, the comped water €2.00 at 21% files 1.67).
 describe("a free item holding its share of the price paid", () => {
-  /** The water comped beside a €10.00 salad, or with `also`: the €9.00 pizza in its place, a
-   *  percentage off it, a percentage off the whole bill and the price paid in cents. */
-  async function comped(
-    dining: "takeaway" | "here",
-    full: boolean,
-    also: { dish?: "Salad" | "Pizza"; dishOffBp?: number; billOffBp?: number; paid?: number } = {},
-  ): Promise<string> {
-    const dish = also.dish ?? "Salad";
-    if (dining === "takeaway")
-      await takeawayRates(venue, { [dish]: dish === "Salad" ? "4.00" : "10.00", Water: "21.00" });
-    const { billId } = await billWith(
-      venue,
-      [{ name: dish }, { name: "Water" }],
-      dining === "takeaway" ? { dining: "takeaway" } : {},
-    );
-    const dishId = await lineIdOf(venue, billId, 1);
-    const waterId = await lineIdOf(venue, billId, 2);
-    const adjust = (ask: {
-      lineId: string | null;
-      action: "comp" | "discount_percent";
-      percentBp?: number;
-    }) =>
+  const adjustOn =
+    (billId: string) =>
+    (ask: { lineId: string | null; action: "comp" | "discount_percent"; percentBp?: number }) =>
       withTransaction(suite.db, async (tx) => {
         const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
         await applyAdjustment(
@@ -1464,11 +1451,9 @@ describe("a free item holding its share of the price paid", () => {
           venue.venueLocale,
         );
       });
-    await adjust({ lineId: waterId, action: "comp" });
-    if (also.dishOffBp !== undefined)
-      await adjust({ lineId: dishId, action: "discount_percent", percentBp: also.dishOffBp });
-    if (also.billOffBp !== undefined)
-      await adjust({ lineId: null, action: "discount_percent", percentBp: also.billOffBp });
+
+  /** Pays `cents` in cash, issuing the bill's invoice; answers the sale. */
+  async function paid(billId: string, full: boolean, cents: number): Promise<string> {
     if (full) {
       const [order] = await suite.db
         .select()
@@ -1491,11 +1476,11 @@ describe("a free item holding its share of the price paid", () => {
         .values({
           workingOrderId: billId,
           submissionId: randomUUID(),
-          fingerprint: `invoice-document-free-${dining}-${full}-${randomUUID()}`,
+          fingerprint: `invoice-document-free-${randomUUID()}`,
           kind: "contribution",
           method: "cash",
-          applied: also.paid ?? 1000,
-          tendered: also.paid ?? 1000,
+          applied: cents,
+          tendered: cents,
           state: "pending",
           requestedBy: venue.supervisorId,
           source: venue.cfg.origin.source,
@@ -1512,6 +1497,46 @@ describe("a free item holding its share of the price paid", () => {
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
       return sale!.id;
     });
+  }
+
+  /** A bill's full invoice as the A4 page draws it and as the receipt roll does, from the settled
+   *  bill, once both are seen to state the same rows. */
+  async function onBothPapers(billId: string, saleId: string) {
+    const page = await read(venue.backend, saleId);
+    const result = await withTransaction(suite.db, (tx) =>
+      readSettledTicket(venue.backend, tx, venue.cfg, billId),
+    );
+    const roll: ReceiptDocumentInput = { ...page, result };
+    expect(receiptFigures(roll).sections).toEqual(receiptFigures(page).sections);
+    return { page, roll };
+  }
+
+  /** The water comped beside a €10.00 salad, or with `also`: the €9.00 pizza in its place, a
+   *  percentage off it, a percentage off the whole bill and the price paid in cents. */
+  async function comped(
+    dining: "takeaway" | "here",
+    full: boolean,
+    also: { dish?: "Salad" | "Pizza"; dishOffBp?: number; billOffBp?: number; paid?: number } = {},
+  ): Promise<string> {
+    const dish = also.dish ?? "Salad";
+    if (dining === "takeaway")
+      await takeawayRates(venue, { [dish]: dish === "Salad" ? "4.00" : "10.00", Water: "21.00" });
+    const { billId } = await billWith(
+      venue,
+      [{ name: dish }, { name: "Water" }],
+      dining === "takeaway" ? { dining: "takeaway" } : {},
+    );
+    const dishId = await lineIdOf(venue, billId, 1);
+    const waterId = await lineIdOf(venue, billId, 2);
+    const adjust = adjustOn(billId);
+    await adjust({ lineId: waterId, action: "comp" });
+    if (also.dishOffBp !== undefined)
+      await adjust({ lineId: dishId, action: "discount_percent", percentBp: also.dishOffBp });
+    if (also.billOffBp !== undefined)
+      await adjust({ lineId: null, action: "discount_percent", percentBp: also.billOffBp });
+    const saleId = await paid(billId, full, also.paid ?? 1000);
+    if (full) await onBothPapers(billId, saleId);
+    return saleId;
   }
   const shown = (lines: readonly TillSaleLine[]) =>
     lines.map((line) => ({
@@ -1629,6 +1654,269 @@ describe("a free item holding its share of the price paid", () => {
       { item: "House salad", price: "9,09", amount: "9,09", rate: "10%" },
       { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
       { item: `${DISCOUNT} 100%`, price: "", amount: "-1,82", rate: "10%" },
+    ]);
+  });
+
+  type Reduction = {
+    /** The bill's line, the whole bill when absent. */
+    line?: number;
+    action: "comp" | "discount_percent";
+    percentBp?: number;
+  };
+  /** A takeaway bill of `dishes`, the pizza at 21% and the olives at 10% unless `rates` says
+   *  otherwise, reduced as asked and paid on a full invoice. */
+  async function pizzaInvoice(
+    dishes: RoundLine[],
+    reductions: Reduction[],
+    cents: number,
+    rates: Record<string, string> = { Pizza: "21.00", Olives: "10.00" },
+  ) {
+    await takeawayRates(venue, rates);
+    const { billId } = await billWith(venue, dishes, { dining: "takeaway" });
+    for (const { line, ...ask } of reductions)
+      await adjustOn(billId)({
+        ...ask,
+        lineId: line === undefined ? null : await lineIdOf(venue, billId, line),
+      });
+    return onBothPapers(billId, await paid(billId, true, cents));
+  }
+  const a4Rows = (document: ReceiptDocumentInput) =>
+    tableRows(document).map(({ item, amount, rate }) => `${item} | ${amount} | ${rate}`);
+  const pizzaRows = async (...bill: Parameters<typeof pizzaInvoice>) =>
+    a4Rows((await pizzaInvoice(...bill)).page);
+
+  /** Sells the Burger, the Bread, the Pizza and its olives at `cents` for this test. */
+  async function pricesAt(cents: number): Promise<void> {
+    const sold = inArray(products.name, ["Burger", "Bread", "Pizza"]);
+    const before = await suite.db
+      .select({ id: products.id, unitPrice: products.unitPrice })
+      .from(products)
+      .where(sold);
+    const olives = eq(extraListItems.listId, venue.pizzaExtras);
+    const [extra] = await suite.db.select().from(extraListItems).where(olives);
+    const sell = (price: (was: number) => number) =>
+      withTransaction(suite.db, async (tx) => {
+        for (const { id, unitPrice } of before)
+          await tx
+            .update(products)
+            .set({ unitPrice: price(unitPrice!) })
+            .where(eq(products.id, id));
+        await tx
+          .update(extraListItems)
+          .set({ price: price(extra!.price!) })
+          .where(olives);
+        await republishMenus(tx);
+      });
+    await sell(() => cents);
+    onTestFinished(() => sell((was) => was));
+  }
+
+  // The free olives hold their share of the 9.00 paid, so the pizza's row and the olives' both
+  // still charge something.
+  it("olives made free as a charged pizza's extra print no 100% at either rate", async () => {
+    const { page, roll } = await pizzaInvoice(
+      [{ name: "Pizza", olives: 1 }],
+      [{ line: 2, action: "comp" }],
+      900,
+    );
+    expect(a4Rows(page)).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -1,07 | 21%`,
+      `${DISCOUNT} | -0,19 | 10%`,
+    ]);
+    for (const paperWidth of ["80mm", "58mm"] as const) {
+      const printer = { paperWidth, resolution: "180dpi" } as const;
+      const ticket = decodeTicket(formatReceipt({ ...roll, printer })).replace(/\s+/gu, " ");
+      expect(ticket).toContain(`${DISCOUNT} -1,07 21% ${DISCOUNT} -0,19 10%`);
+      expect(ticket).not.toContain("100%");
+    }
+  });
+
+  it("olives taken 100% off as a charged pizza's extra print no 100% at either rate", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }],
+        [{ line: 2, action: "discount_percent", percentBp: 10000 }],
+        900,
+      ),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -1,07 | 21%`,
+      `${DISCOUNT} | -0,19 | 10%`,
+    ]);
+  });
+
+  it("olives made free as their own dish beside a charged pizza print no 100%", async () => {
+    expect(
+      await pizzaRows([{ name: "Pizza" }, { name: "Olives" }], [{ line: 2, action: "comp" }], 900),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      `${DISCOUNT} | -1,07 | 21%`,
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -0,19 | 10%`,
+    ]);
+  });
+
+  it("a pizza and its olives made free beside a charged salad print no 100% while they hold a share", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }, { name: "Salad" }],
+        [{ line: 1, action: "comp" }],
+        1000,
+      ),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -3,81 | 21%`,
+      `${DISCOUNT} | -0,70 | 10%`,
+      "House salad | 9,09 | 10%",
+      `${DISCOUNT} | -4,65 | 10%`,
+    ]);
+  });
+
+  it("a pizza's 50% keeps its words at the pizza's rate and its olives'", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }],
+        [{ line: 1, action: "discount_percent", percentBp: 5000 }],
+        525,
+      ),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} 50% | -3,72 | 21%`,
+      `${DISCOUNT} 50% | -0,68 | 10%`,
+    ]);
+  });
+
+  it("10% off the bill beside a pizza's free olives prints no percentage", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }],
+        [
+          { line: 2, action: "comp" },
+          { action: "discount_percent", percentBp: 1000 },
+        ],
+        810,
+      ),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -1,70 | 21%`,
+      `${DISCOUNT} | -0,31 | 10%`,
+    ]);
+  });
+
+  // Filed at 0.01 with a base of 0.00, the pizza's 21% still charges a cent.
+  it("a pizza charged one cent beside its free olives prints no 100%", async () => {
+    await pricesAt(2);
+    expect(
+      await pizzaRows(
+        [{ name: "Burger" }, { name: "Bread" }, { name: "Pizza", olives: 1 }],
+        [
+          { line: 1, action: "discount_percent", percentBp: 5000 },
+          { line: 2, action: "discount_percent", percentBp: 5000 },
+          { line: 4, action: "comp" },
+        ],
+        4,
+        { Burger: "21.00", Pizza: "21.00", Bread: "21.00", Olives: "10.00" },
+      ),
+    ).toEqual([
+      "Beef burger | 0,02 | 21%",
+      `${DISCOUNT} 50% | -0,01 | 21%`,
+      "Country bread | 0,02 | 21%",
+      `${DISCOUNT} 50% | -0,01 | 21%`,
+      "Margherita pizza | 0,02 | 21%",
+      "Marinated olives | 0,02 | 10%",
+      `${DISCOUNT} | -0,02 | 21%`,
+      `${DISCOUNT} | -0,01 | 10%`,
+    ]);
+  });
+
+  it("10% off the bill of a pizza with free olives and a salad prints no percentage", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }, { name: "Salad" }],
+        [
+          { line: 2, action: "comp" },
+          { action: "discount_percent", percentBp: 1000 },
+        ],
+        1710,
+      ),
+    ).toEqual([
+      "Margherita pizza | 7,44 | 21%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -1,23 | 21%`,
+      `${DISCOUNT} | -0,22 | 10%`,
+      "House salad | 9,09 | 10%",
+      `${DISCOUNT} | -1,51 | 10%`,
+    ]);
+  });
+
+  it("10% off the bill keeps its words beside a pizza's free olives at one rate", async () => {
+    expect(
+      await pizzaRows(
+        [{ name: "Pizza", olives: 1 }, { name: "Salad" }],
+        [
+          { line: 2, action: "comp" },
+          { action: "discount_percent", percentBp: 1000 },
+        ],
+        1710,
+        { Pizza: "10.00", Olives: "10.00" },
+      ),
+    ).toEqual([
+      "Margherita pizza | 8,18 | 10%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} 100% | -1,36 | 10%`,
+      "House salad | 9,09 | 10%",
+      `${DISCOUNT} 10% | -1,73 | 10%`,
+    ]);
+  });
+
+  // The water's 21% spreads the free olives' price, so at the pizza's one rate they still charge.
+  it("10% off the bill of a one-rate pizza with free olives and a water at another rate prints no percentage", async () => {
+    const { page } = await pizzaInvoice(
+      [{ name: "Pizza", olives: 1 }, { name: "Water" }],
+      [
+        { line: 2, action: "comp" },
+        { action: "discount_percent", percentBp: 1000 },
+      ],
+      990,
+      { Pizza: "10.00", Olives: "10.00", Water: "21.00" },
+    );
+    expect(page.result.lines.map(({ gross }) => gross)).toEqual(["7.13", "1.19", "1.58"]);
+    expect(a4Rows(page)).toEqual([
+      "Margherita pizza | 8,18 | 10%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} | -1,36 | 10%`,
+      "Mineral water | 1,65 | 21%",
+      `${DISCOUNT} | -0,62 | 10%`,
+      `${DISCOUNT} | -0,34 | 21%`,
+    ]);
+  });
+
+  it("10% off the bill keeps its words eaten here beside a free water", async () => {
+    const saleId = await comped("here", true, { billOffBp: 1000, paid: 900 });
+    expect(a4Rows(await read(venue.backend, saleId))).toEqual([
+      "House salad | 9,09 | 10%",
+      "Mineral water | 1,82 | 10%",
+      `${DISCOUNT} 100% | -1,82 | 10%`,
+      `${DISCOUNT} 10% | -0,91 | 10%`,
+    ]);
+  });
+
+  it("a pizza's free olives at the pizza's own rate keep 100%", async () => {
+    expect(
+      await pizzaRows([{ name: "Pizza", olives: 1 }], [{ line: 2, action: "comp" }], 900, {
+        Pizza: "10.00",
+        Olives: "10.00",
+      }),
+    ).toEqual([
+      "Margherita pizza | 8,18 | 10%",
+      "Marinated olives | 1,36 | 10%",
+      `${DISCOUNT} 100% | -1,36 | 10%`,
     ]);
   });
 });
