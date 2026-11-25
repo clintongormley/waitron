@@ -345,14 +345,23 @@ it("asks at Bar's cutoff for a Lunch dish it took over", async () => {
   });
 });
 
-it.each([false, true])(
-  "sends an agreed dessert to Bar or its stand-in (closed: %s)",
-  async (closed) => {
-    at("16:00");
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+])(
+  "sends an agreed dessert to Bar or its stand-in (closed: %s, agreed at Place: %s)",
+  async (closed, onPlace) => {
+    at(onPlace ? "14:44" : "16:00");
     const v = await venueWithLastOrders();
     const { lateSend } = confirming([v.menus.setLunch]);
     const id = randomUUID();
-    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id, lateSend);
+    await open(
+      v,
+      [{ menuItemId: v.toast.setLunch, quantity: "1" }],
+      id,
+      onPlace ? undefined : lateSend,
+    );
     const destination = closed
       ? await withTransaction(suite.db, async (tx) => {
           const standIn = await createStation(tx, { name: "Terrace bar" });
@@ -368,16 +377,24 @@ it.each([false, true])(
         })
       : v.stations.bar;
     at("16:15");
-    expect(await sendAsTill(v, "POST", `/api/working-orders/${id}/place`)).toMatchObject({
-      status: 200,
-    });
+    const reply = await sendAsTill(
+      v,
+      "POST",
+      `/api/working-orders/${id}/place`,
+      onPlace ? { lateSend: { menuIds: [v.menus.setLunch] } } : undefined,
+    );
+    expect(reply).toMatchObject({ status: 200 });
     const [line] = await linesOf(id);
     expect(
       await suite.db
-        .select({ stationId: ticketItems.stationId })
+        .select({
+          stationId: ticketItems.stationId,
+          agreedStationId: workingOrderLines.lateStationId,
+        })
         .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
         .where(eq(ticketItems.workingOrderLineId, line!.id)),
-    ).toEqual([{ stationId: destination }]);
+    ).toEqual([{ stationId: destination, agreedStationId: v.stations.bar }]);
   },
 );
 

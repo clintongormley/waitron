@@ -768,8 +768,7 @@ When a period has station last orders, order entry, stored sends and dispatch us
 [routing rule](../superpowers/specs/2026-11-24-last-orders-per-station-design.md#2-is-this-dish-on-sale).
 A station can stop before the period ends. Another station can take over at the original menu
 price. A sent dish's new extras use the station holding that dish. A stopped quantity increase
-asks the till to keep the original quantity. Until the agreed station is stored, a confirmed dish
-routes by its recorded period as described below.
+asks the till to keep the original quantity.
 
 Without station adjustments, a period's menus can be picked and sent from its start until its end: for
 Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepartmentService`,
@@ -778,19 +777,21 @@ Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepa
 an order is refused the same way, while unchanged lines, decreases and notes keep their stored-line
 behaviour. A new dish whose period ended earlier the same business day (`endedMenus`) is the
 exception: `priceOrderLines` accepts it at its taken price when a menu the running period offers
-in the zone also sells its product and variant on its own, and otherwise refuses it
+in the zone also sells its product and variant, including inside a set menu. Otherwise the server
+refuses a dish that needs preparation with
 `menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
 `late_send_needs_manager` is on, someone holding `venue.configure` authorises it — the
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). The kitchen ticket and kitchen screen
 read the stored `late_period_name` and whether there was a confirmer through `readLateSendMarks`.
-A confirmed dish records `working_order_lines.late_period_id` when its period is known. This
-id survives period deletion and follows the dish if the bill is split. Sends without a confirmation
-and confirmations that identify only a menu leave the id empty. Plan D19–D28.
+A confirmed dish records the station that agreed in `working_order_lines.late_station_id` when it
+has one. The station and the period follow the dish if the bill is split. A late dish that needed no
+preparation can carry its period for routing without a confirmer.
 
-Kitchen routing uses the saved period separately for each dish and its extras. If the period
-belongs to the routing department and the venue clock is readable, its matching line on the
-cell applies. A cell with no line for that period uses its base target. A missing or foreign
-period uses the running period. Station closures and replacements apply at the time of routing.
+Kitchen routing sends an agreed dish to its saved station, applying closures and replacements at
+dispatch. Otherwise it uses the saved period when that period belongs to the routing department and
+the venue clock is readable. A cell without a line for the period uses its base target. A missing
+or foreign period uses the running period. An extra that shared the dish's period route follows the
+dish to the agreed station. An extra with its own destination keeps that route.
 
 Extras added later to a dish already sent (stamped sent or holding a ticket item, held or fired)
 whose period ended earlier that day, through either
@@ -821,10 +822,9 @@ reports it as not agreed, so its ticket and station card read "After <period>" w
 business day is judged by today's periods alone: placed before today's period selling its menu has
 ended, or on a day no period sells it, it is sent to its station unasked and unmarked.
 
-A table can order from its recorded set-menu copy after that menu's period ends. An immediate
-Send goes through without the late question or mark. If the waiter holds the dish, Send stores the
-period mark without a confirmer so Fire can release it without asking. Fire still asks about a
-set-menu dish held during the period and released after it ends.
+A linked set menu keeps its recorded price and grouping after its period ends. Its dishes follow
+last orders when sent. A dish ordered from an ended period can link set menus from that period and
+from menus still on sale. Fire releases held dishes without a second last-orders question.
 
 The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a

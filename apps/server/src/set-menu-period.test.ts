@@ -7,6 +7,7 @@ import { loginWithPin, persons } from "@waitron/identity";
 import {
   addMember,
   createMenu,
+  deactivateMenu,
   removeMember,
   requireMenuRoot,
   saveSetMenuDishCourse,
@@ -559,38 +560,46 @@ it("fires a held a la carte dish the grouping put in a set menu without a questi
 });
 
 it.each([
-  [400, 450],
-  [450, 400],
-])("uses the cheaper set menu when Lunch costs %d and Dinner costs %d", async (lunch, dinner) => {
-  at("14:30");
-  await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, daily.menuId, { setPrice: (lunch / 100).toFixed(2) });
-    await publishWorkingMenu(tx, daily.fullMenuId);
-    await saveSetMenuLines(tx, evening.menuId, [{ count: 1, courseIds: [daily.courseId] }]);
-    await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, daily.courseId);
-    await updateMenuDetails(tx, evening.menuId, { setPrice: (dinner / 100).toFixed(2) });
-    await publishWorkingMenu(tx, evening.fullMenuId);
-  });
-  const late = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  const draft = await saveSetMenuDraft(venue, late, {
-    menuItemId: venue.item("Flan"),
-    quantity: "1",
-  });
-  at("16:00");
-  const sent = await send(draft, "fire");
-  expect(await dishRow(sent.groups[0]!.lineIds[0]!)).toMatchObject({
-    setMenuRole: "dish",
-    aLaCarteUnitPrice: 500,
-    unitPriceGross: 0,
-    latePeriodName: null,
-  });
-  const grouped = await inTx(venue, (tx) => readBillSetMenus(tx, late.tabId));
-  expect(new Map(grouped.copies.map((copy) => [copy.setMenuId, copy.priceCents]))).toEqual(
-    new Map([
-      [daily.menuId, lunch],
-      [evening.menuId, dinner],
-    ]),
-  );
-  const cheapest = grouped.copies.find((copy) => copy.priceCents === 400)!;
-  expect(grouped.setMenus).toMatchObject([{ copyId: cheapest.id }]);
-});
+  [400, 450, false],
+  [450, 400, false],
+  [450, 400, true],
+])(
+  "links eligible copies at %d and %d cents (Dinner withdrawn: %s)",
+  async (lunch, dinner, withdrawn) => {
+    at("14:30");
+    await inTx(venue, async (tx) => {
+      await updateMenuDetails(tx, daily.menuId, { setPrice: (lunch / 100).toFixed(2) });
+      await publishWorkingMenu(tx, daily.fullMenuId);
+      await saveSetMenuLines(tx, evening.menuId, [{ count: 1, courseIds: [daily.courseId] }]);
+      await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, daily.courseId);
+      await updateMenuDetails(tx, evening.menuId, { setPrice: (dinner / 100).toFixed(2) });
+      await publishWorkingMenu(tx, evening.fullMenuId);
+      if (withdrawn) {
+        await updateMenuPeriod(tx, lunchPeriodId, { staffMenuIds: [evening.fullMenuId] });
+        await deactivateMenu(tx, evening.fullMenuId);
+      }
+    });
+    const late = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    const draft = await saveSetMenuDraft(venue, late, {
+      menuItemId: venue.item("Flan"),
+      quantity: "1",
+    });
+    at("16:00");
+    const lateSend = withdrawn
+      ? { menuIds: new Set([daily.fullMenuId]), confirm: async () => venue.operator.personId }
+      : undefined;
+    const sent = await send(draft, "fire", lateSend);
+    expect(await dishRow(sent.groups[0]!.lineIds[0]!)).toMatchObject({
+      setMenuRole: "dish",
+      aLaCarteUnitPrice: 500,
+      unitPriceGross: 0,
+      latePeriodName: withdrawn ? "Lunch" : null,
+    });
+    const grouped = await inTx(venue, (tx) => readBillSetMenus(tx, late.tabId));
+    expect(new Map(grouped.copies.map((copy) => [copy.setMenuId, copy.priceCents]))).toEqual(
+      new Map([[daily.menuId, lunch], ...(withdrawn ? [] : [[evening.menuId, dinner] as const])]),
+    );
+    const cheapest = grouped.copies.find((copy) => copy.priceCents === (withdrawn ? lunch : 400))!;
+    expect(grouped.setMenus).toMatchObject([{ copyId: cheapest.id }]);
+  },
+);

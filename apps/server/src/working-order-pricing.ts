@@ -523,7 +523,10 @@ export async function priceOrderLines(
     if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
-    return { ...line, offer, setMenuOffer, holding: selected?.document };
+    let sourceMenuIds = periodOf.get(offer.menuId)?.sourceMenuIds;
+    if (sourceMenuIds !== undefined && cutoff?.run.menuIds.includes(offer.menuId))
+      sourceMenuIds = cutoff.run.menuIds;
+    return { ...line, offer, setMenuOffer, holding: selected?.document, sourceMenuIds };
   });
   const setMenuLinks: SetMenuLinks = {
     zoneId,
@@ -538,7 +541,7 @@ export async function priceOrderLines(
             {
               productId: line.offer.productId,
               variantId: line.variantId ?? null,
-              sourceMenuIds: periodOf.get(line.offer.menuId)?.sourceMenuIds,
+              sourceMenuIds: line.sourceMenuIds,
             },
           ],
     ),

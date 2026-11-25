@@ -109,7 +109,7 @@ export async function linkSetMenusFor(
       source === undefined || selling instanceof Date
         ? selling
         : {
-            menuIds: [...new Set([...selling.menuIds, ...source])],
+            ...selling,
             orderableMenuIds: [...new Set([...selling.orderableMenuIds, ...source])],
           };
     const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, when));
