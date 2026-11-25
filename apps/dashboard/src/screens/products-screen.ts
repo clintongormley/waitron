@@ -514,18 +514,18 @@ export class ProductsScreen extends LitElement {
     this.editorFieldErrors = {};
     let written = false;
     try {
-      let created: ProductEditorValue | null = null;
-      if (this.editorValue === null)
-        created = await this.api.createProductEditor(event.detail.body);
-      else await this.api.updateProductEditor(this.editorValue.id, event.detail.body);
+      const editing = this.editorValue;
+      const saved = editing
+        ? await this.api.updateProductEditor(editing.id, event.detail.body)
+        : await this.api.createProductEditor(event.detail.body);
       written = true;
       this.#editor()?.closeSaved(event.detail.value);
       this.#closeEditor();
-      if (created) void this.#openPlacement(created);
+      if (!editing) void this.#openPlacement(saved);
       const refreshed = await this.#reloadProducts();
-      if (created && refreshed) {
+      if (this.isConnected) {
         await this.updateComplete;
-        await this.#browser()?.revealProduct(created.id);
+        await this.#browser()?.showSavedProduct(refreshed ? saved.id : null, !editing);
       }
     } catch (error) {
       const fieldErrors = this.#rejectedField(error, event.detail.value);

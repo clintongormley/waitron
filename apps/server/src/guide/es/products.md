@@ -15,9 +15,15 @@ cada uno de sus grupos que tiene algo configurado, así ves lo que está configu
 encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se abre sola y sigue
 abierta hasta que lo corriges.
 
-Usa **Filtros** para acotar la lista de Productos. Cada categoría indica cuántos de sus productos
-coinciden, incluidos los de sus subcategorías. Si una categoría vacía desaparece al guardarla,
-elige **Borrar todo** en **Filtros**. Busca la categoría por su nombre si está dentro de otra cerrada.
+Usa **Filtros** para acotar la lista de Productos. Al filtrar se abren las categorías con
+coincidencias y se cuentan también los productos de sus subcategorías. En **Disponible**, elige
+**No** para encontrar platos o variantes que no están a la venta. Un plato con una variante no
+disponible puede aparecer bajo **Sí** y **No**.
+
+Las categorías siguen en orden alfabético cuando ordenas los productos dentro de ellas. Busca por
+nombre para encontrar un plato o una categoría y ver dónde está. Si la búsqueda no encuentra nada u
+oculta un producto que acabas de guardar, elige **Borrar búsqueda y filtros**. Si una categoría
+vacía nueva desaparece al filtrar, elige **Borrar todo** en **Filtros**.
 
 ## Cómo se cobra el IVA {#vat}
 

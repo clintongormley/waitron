@@ -43,6 +43,8 @@ import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
 import { refusalText } from "./delete-refusal.js";
 import {
+  clearProductSearch,
+  hiddenProductSave,
   productListActionFeedback,
   productAvailabilityFeedback,
   productAvailabilityFeedbackStyles,
@@ -124,6 +126,7 @@ export class ProductBrowser extends LitElement {
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) takeawayVat = false;
   @state() private search = "";
+  @state() private hiddenSave: { id: string; name: string } | null = null;
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
   /** The colour chosen in the open name box; undefined until one is. */
@@ -220,6 +223,7 @@ export class ProductBrowser extends LitElement {
     this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("search")) this.hiddenSave = null;
     if (this.operation === null) this.#releaseOperation();
     else if (!this.#operationScope) {
       this.#operationLeave = leaveCoordinatorFor(this);
@@ -270,6 +274,14 @@ export class ProductBrowser extends LitElement {
 
   override updated(changed: PropertyValues): void {
     if (this.tableHidden) return;
+    const saved = this.hiddenSave;
+    if (saved && (changed.has("products") || changed.has("categories")))
+      void this.#list()
+        ?.hiddenSavedProductName(saved.id)
+        .then((name) => {
+          if (name !== saved.name && this.hiddenSave === saved)
+            this.hiddenSave = name === undefined ? null : { id: saved.id, name };
+        });
     if (changed.has("categoryId") || changed.has("categories") || changed.has("tableHidden")) {
       const id = this.categoryId;
       if (
@@ -297,11 +309,21 @@ export class ProductBrowser extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
   }
 
-  /** Opens every category above a product, once the browser has drawn the list that holds it. */
-  async revealProduct(id: string): Promise<void> {
+  async showSavedProduct(id: string | null, created: boolean): Promise<void> {
     await this.updateComplete;
-    await this.#list()?.revealProduct(id);
+    const list = this.#list();
+    const name = id === null ? undefined : await list?.hiddenSavedProductName(id);
+    this.hiddenSave = id !== null && name !== undefined ? { id, name } : null;
+    if (created && id !== null && name === undefined) await list?.revealProduct(id);
   }
+  readonly #clearProductSearch = (): void => {
+    const saved = this.hiddenSave;
+    this.search = "";
+    this.hiddenSave = null;
+    this.#list()?.clearFilters();
+    this.renderRoot.querySelector<HTMLElement>('wt-input[name="menu-search"]')?.focus();
+    if (saved) void this.updateComplete.then(() => this.#list()?.revealProduct(saved.id));
+  };
 
   focusRowMenu(categoryId: string | null): void {
     this.#list()?.focusRowMenu(categoryId);
@@ -899,18 +921,7 @@ export class ProductBrowser extends LitElement {
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    const refusal = this.availabilityError;
-    return html`${productAvailabilityFeedback(
-        refusal
-          ? fill("product.availability_refused", {
-              name: refusal.name,
-              reason: refusalText(
-                codeOf(refusal.error),
-                (refusal.error as { params?: unknown })?.params,
-              ),
-            })
-          : "",
-      )}<dashboard-product-list
+    return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
         .availabilityPending=${this.availabilityPending}
         @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}
@@ -927,6 +938,7 @@ export class ProductBrowser extends LitElement {
         }}
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
+          this.hiddenSave = null;
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
@@ -1067,6 +1079,11 @@ export class ProductBrowser extends LitElement {
                 ${t("folders.routing_unavailable")}
               </p>`
             : nothing
+        }
+        ${
+          this.hiddenSave === null
+            ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
+            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch)
         }
         ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>

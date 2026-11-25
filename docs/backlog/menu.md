@@ -588,7 +588,7 @@ Closing a branch closes its descendants, including hidden paths. Preview keeps E
 Structure uses one Select mode for checkboxes and drag handles. Search openings and their parents
 survive clearing unless deliberately closed; after clearing, a closed current Structure path
 returns editing to its nearest open parent. Products remembers deliberate closures across reloads.
-(2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: filters open the Products categories that match.)
+(2026-11-25: the [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) supersedes this for filtering in Products: categories open temporarily to show matches. Category toggles while filtering apply to that view.)
 [Implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a462-table-toolbars.md).
 
 **Product search (A461, owner 2026-10-10).** Products and Menu Structure show flat own matches

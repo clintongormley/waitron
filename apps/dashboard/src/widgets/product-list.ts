@@ -15,6 +15,7 @@ import {
 import {
   formatMoney,
   categoryColorSource,
+  createLabelComparator,
   isStoredColor,
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -81,6 +82,14 @@ interface ProductRow {
   parentKey: string;
   product: Product;
   variant: Product["variants"][number] | null;
+}
+
+function availabilityFilter({ product, variant }: ProductRow): string | string[] {
+  if (!product.available) return "no";
+  if (variant !== null) return variant.available ? "yes" : "no";
+  return product.variants.some(({ active, available }) => active && !available)
+    ? ["yes", "no"]
+    : "yes";
 }
 
 function orderingName(ordering: ProductOrdering): string {
@@ -373,6 +382,34 @@ export class ProductList extends LitElement {
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, CategoryCounts>();
   #branchCounts = new WeakMap<readonly ListRow[], ReadonlyMap<string, number>>();
+  #categoryRanks?: {
+    categories: readonly CategorySummary[];
+    locale: string;
+    ranks: Map<string, number>;
+  };
+
+  #categoryGroups(): (row: ListRow) => number {
+    const locale = currentLocale();
+    if (
+      this.#categoryRanks?.categories !== this.categories ||
+      this.#categoryRanks.locale !== locale
+    ) {
+      const compare = createLabelComparator(locale);
+      const sorted = [...this.categories].sort((left, right) => compare(left.name, right.name));
+      this.#categoryRanks = {
+        categories: this.categories,
+        locale,
+        ranks: new Map(sorted.map(({ id }, index) => [id, index])),
+      };
+    }
+    const { ranks } = this.#categoryRanks;
+    return (row) => {
+      if (row.kind === "folder") return ranks.get(row.folder.id)!;
+      if (row.kind === "draft") return ranks.size;
+      return ranks.size + 1;
+    };
+  }
+
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #dragged: string[] = [];
   get #pointerDrag() {
@@ -1162,6 +1199,16 @@ export class ProductList extends LitElement {
             (change: ProductAvailabilityChange) => this.#send("change-availability", change),
           ),
         sortValue: (row) => ((row.variant ?? row.product).available ? 0 : 1),
+        filter: {
+          label: t("editor.available"),
+          allLabel: t("product.filter_any"),
+          preserveOrder: true,
+          value: availabilityFilter,
+          options: [
+            { value: "yes", label: t("product.available_yes") },
+            { value: "no", label: t("product.available_no") },
+          ],
+        },
       },
       {
         key: "allergens",
@@ -1500,9 +1547,11 @@ export class ProductList extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
 
-  readonly #expandChange = (event: CustomEvent<{ key: string; expanded: boolean }>): void => {
+  readonly #expandChange = (
+    event: CustomEvent<{ key: string; expanded: boolean; filtering?: boolean }>,
+  ): void => {
     event.stopPropagation();
-    if (this.search.trim() !== "") return;
+    if (this.search.trim() !== "" || event.detail.filtering) return;
     const { key, expanded } = event.detail;
     if (key === ROOT_KEY) this.#send("category-toggle", { categoryId: null, open: expanded });
     else if (key.startsWith("folder:"))
@@ -1541,7 +1590,31 @@ export class ProductList extends LitElement {
     const table = this.#table();
     if (!table) return;
     await table.updateComplete;
-    await table.revealRow(id);
+    await table.revealRow(this.#productRow(id)?.key ?? id);
+  }
+
+  async hiddenSavedProductName(id: string): Promise<string | undefined> {
+    await this.updateComplete;
+    const table = this.#table();
+    if (!table) return;
+    await table.updateComplete;
+    const row = this.#productRow(id);
+    if (
+      row?.kind !== "product" ||
+      table.shownKeys({ includeCollapsedSearchMatches: true }).includes(row.key)
+    )
+      return;
+    return row.variant ? `${row.product.name}, ${row.variant.name}` : row.product.name;
+  }
+
+  #productRow(id: string): ListRow | undefined {
+    return this.#rowList.find(
+      (row) => row.kind === "product" && (row.variant ?? row.product).id === id,
+    );
+  }
+
+  clearFilters(): void {
+    this.#table()?.clearFilters();
   }
 
   focusRowMenu(categoryId: string | null): void {
@@ -1564,6 +1637,7 @@ export class ProductList extends LitElement {
         flatTreeSearch
         dense-rows
         .filterCandidates=${this.#filterCandidates}
+        .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
@@ -1598,7 +1672,7 @@ export class ProductList extends LitElement {
             : row.kind === "product"
               ? (row.variant?.name ?? row.product.name)
               : ""}
-        .rowGroup=${(row: ListRow) => (row.kind === "product" ? 1 : 0)}
+        .rowGroup=${this.#categoryGroups()}
         .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
         .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .rowActivation=${(row: ListRow) =>
@@ -1627,6 +1701,7 @@ export class ProductList extends LitElement {
         @pointerdown=${this.#pointerDown}
         @click=${this.#clickAvailableCell}
         @wt-expand-change=${this.#expandChange}
+        ><slot name="no-matches-action" slot="no-matches-action"></slot
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot
         ><slot name="toolbar-end" slot="toolbar-end"></slot

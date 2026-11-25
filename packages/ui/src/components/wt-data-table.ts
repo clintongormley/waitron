@@ -27,6 +27,9 @@ import {
   rememberCellPress,
 } from "./wt-data-table-cell-controls.js";
 
+import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
+import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
+
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
   "table-customise":
@@ -142,6 +145,7 @@ interface Searched<Row> {
   inputs: readonly unknown[];
   candidates: readonly Row[];
   filterMatches?: readonly Row[];
+  hasFilters?: boolean;
   visible: readonly Row[];
   ranks: ReadonlyMap<Row, SearchRank> | undefined;
   tree?: TreeShown<Row>;
@@ -472,18 +476,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .error {
         color: var(--wt-color-danger);
-      }
-
-      .empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: var(--wt-space-4);
-        padding: var(--wt-space-6);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        text-align: center;
       }
 
       .table-toolbar {
@@ -897,6 +889,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     `,
     iconButtonStyles,
     cellControlStyles,
+    tableMessageStyles,
   ];
 
   @property({ attribute: false }) rows: readonly Row[] = [];
@@ -1040,6 +1033,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     rows: readonly Row[],
     hasFilters: boolean,
   ) => readonly Row[];
+
+  /** For trees with collapseDescendants, temporarily opens these branches during column filtering. */
+  @property({ attribute: false }) filterOpensBranch?: (row: Row) => boolean;
+  #filterExpansion = new FilterExpansion();
+  #filteringTree(): boolean {
+    return (
+      this.collapseDescendants &&
+      this.rowParent !== undefined &&
+      this.filterOpensBranch !== undefined &&
+      this.#searched().hasFilters === true
+    );
+  }
 
   @state() private searchExpanded = new Set<string>();
   #searchExpansionQuery = "";
@@ -1464,9 +1469,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
       if (seeded) this.collapsed = next;
     }
     if (changed.has("viewKey")) this.#restored = false;
-    if (!changed.has("viewKey") && !changed.has("columns")) return;
-    this.#restoreView();
-    if (this.#judgeFilters()) this.#persistView();
+    if (changed.has("viewKey") || changed.has("columns")) {
+      this.#restoreView();
+      if (this.#judgeFilters()) this.#persistView();
+    }
+    this.#filterExpansion.reset(this.#filteringTree() ? this.filterSelections : undefined);
   }
 
   /** Reads the stored view once there are columns to check it against. A stored sort is adopted
@@ -1919,6 +1926,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         new CustomEvent("wt-filters-clear", { detail: {}, bubbles: true, composed: true }),
       );
     }
+    this.clearFilters();
+  }
+
+  /** Clears the choices on the table’s columns. */
+  clearFilters(): void {
     const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
     const next = Object.fromEntries(
       this.columns
@@ -2225,6 +2237,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.searchOpensPath,
       this.flatTreeSearch,
       this.filterCandidates,
+      this.filterOpensBranch,
       this.columnOrder,
     ];
     const held = this.#searchMemo;
@@ -2251,6 +2264,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       inputs,
       candidates,
       filterMatches,
+      hasFilters: active.length > 0,
       visible: ranks ? candidates.filter((row) => ranks.has(row)) : candidates,
       ranks,
     };
@@ -2342,54 +2356,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #treeVisible(visible: readonly Row[], searchTyped: boolean): TreeShown<Row>["shown"] {
-    const parentOf = this.rowParent!;
-    const keys = this.rows.map((row, index) => this.rowKey(row, index));
-    const keyByRow = new Map<Row, string>();
-    const rowByKey = new Map<string, Row>();
-    this.rows.forEach((row, index) => {
-      keyByRow.set(row, keys[index]!);
-      if (!rowByKey.has(keys[index]!)) rowByKey.set(keys[index]!, row);
-    });
-    const matched = new Set(visible.map((row) => keyByRow.get(row)!));
-    const ancestors = new Set<string>();
-    this.rows.forEach((row, index) => {
-      if (!matched.has(keys[index]!)) return;
-      const visited = new Set<string>();
-      let parentKey = parentOf(row);
-      while (parentKey && !visited.has(parentKey)) {
-        visited.add(parentKey);
-        ancestors.add(parentKey);
-        const parent = rowByKey.get(parentKey);
-        parentKey = parent ? parentOf(parent) : null;
-      }
-    });
-    const searching = this.searchOpensPath && searchTyped;
-    const below = new Set<string>();
-    if (searching) {
-      const active = this.#activeFilters();
-      let grew = true;
-      while (grew) {
-        grew = false;
-        this.rows.forEach((row, index) => {
-          const key = keys[index]!;
-          const parent = parentOf(row);
-          if (matched.has(key) || below.has(key) || parent === null) return;
-          if (!matched.has(parent) && !below.has(parent)) return;
-          if (!this.#passesFilters(row, active)) return;
-          below.add(key);
-          grew = true;
-        });
-      }
-    }
-    const included = new Set([...matched, ...ancestors, ...below]);
-    const ancestorOnly = new Set(
-      [...ancestors].filter((key) => !matched.has(key) && !below.has(key)),
+    const active = this.#activeFilters();
+    return visibleTree(
+      this.rows,
+      visible,
+      (row, index) => this.rowKey(row, index),
+      (row) => this.rowParent!(row),
+      this.searchOpensPath && searchTyped,
+      (row) => this.#passesFilters(row, active),
+      this.#filteringTree() ? this.filterOpensBranch : undefined,
     );
-    return {
-      rows: this.rows.filter((_row, index) => included.has(keys[index]!)),
-      ancestorOnly,
-      heldOpen: searching ? ancestors : ancestorOnly,
-    };
   }
 
   #treeRows(
@@ -2494,16 +2470,37 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return branches;
   }
 
-  #setOpen(keys: readonly string[], open: boolean): void {
+  #setOpen(keys: readonly string[], open: boolean, fromToggle = false): void {
+    const filtering = this.#filteringTree();
+    const searching = this.#flatSearching();
+    if (filtering && fromToggle && !searching) {
+      const byKey = this.#treeShown().byKey;
+      const persistent = this.#filterExpansion.choose(
+        keys,
+        open,
+        (key) => {
+          const row = byKey.get(key);
+          return (
+            this.#filterExpansion.get(key) !== undefined ||
+            (row !== undefined && this.filterOpensBranch!(row))
+          );
+        },
+        (keys) => this.#closureKeys(keys),
+      );
+      if (persistent.length !== keys.length) this.requestUpdate();
+      if (persistent.length === 0) return;
+      keys = persistent;
+    }
     if (!open && this.collapseDescendants) keys = this.#closureKeys(keys);
-    if (this.#flatSearching()) {
+    if (filtering && !fromToggle) this.#filterExpansion.set(keys, open);
+    if (searching) {
       const next = new Set(this.searchExpanded);
       for (const key of keys) {
         if (open) next.add(key);
         else next.delete(key);
       }
       this.searchExpanded = next;
-      if (!open && !this.collapseDescendants) return;
+      if ((filtering && fromToggle) || (!open && !this.collapseDescendants)) return;
       if (open) {
         const byKey = this.#rowsByKey();
         const persistent = new Set(keys);
@@ -2547,16 +2544,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #ordinaryOpen(key: string, heldOpen: ReadonlySet<string>): boolean {
     const row = this.#treeShown().byKey.get(key);
     if (row && !this.rowCollapsible(row)) return true;
+    if (row !== undefined && this.#filteringTree()) {
+      const choice = this.#filterExpansion.get(key);
+      if (choice !== undefined) return choice;
+      if (heldOpen.has(key) && this.filterOpensBranch!(row)) return true;
+    }
     if (this.collapseDescendants && this.#closedChoices().has(key)) return false;
     return !this.collapsed.has(key) || heldOpen.has(key);
   }
 
   #toggle(key: string): void {
     const expanded = !this.isExpanded(key);
-    this.#setOpen([key], expanded);
+    this.#setOpen([key], expanded, true);
     this.dispatchEvent(
       new CustomEvent("wt-expand-change", {
-        detail: { key, expanded },
+        detail: { key, expanded, ...(this.#filteringTree() ? { filtering: true } : {}) },
         bubbles: true,
         composed: true,
       }),
@@ -2579,8 +2581,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** Flat search reports rendered keys; ordinary trees include children of collapsed branches. */
-  shownKeys(): string[] {
-    if (this.#flatSearching()) return this.#treeShown().entries!.map(({ key }) => key);
+  shownKeys({ includeCollapsedSearchMatches = false } = {}): string[] {
+    if (this.#flatSearching())
+      return (
+        includeCollapsedSearchMatches ? this.#flatSearchEntries(true) : this.#treeShown().entries!
+      ).map(({ key }) => key);
     return this.#shownRows().map((row, index) => this.rowKey(row, index));
   }
 
@@ -2624,7 +2629,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     let parent = row !== undefined && this.rowParent ? this.rowParent(row) : null;
     while (parent !== null && byKey.has(parent) && !seen.has(parent)) {
       seen.add(parent);
-      if (!this.isExpanded(parent)) closed.push(parent);
+      if (!this.isExpanded(parent) || (this.#filteringTree() && this.collapsed.has(parent)))
+        closed.push(parent);
       parent = this.rowParent!(byKey.get(parent)!);
     }
     if (closed.length > 0) this.#setOpen(closed, true);
@@ -2860,7 +2866,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return html`<button
       type="button"
       class="expand-all"
-      @click=${() => this.#setOpen(branches, !allOpen)}
+      @click=${() => this.#setOpen(branches, !allOpen, true)}
     >
       ${allOpen ? this.collapseAllLabel : this.expandAllLabel}
     </button>`;
@@ -3239,10 +3245,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     const { visible, ranks: searchRanks, filterMatches } = this.#searched();
     if (this.rows.length === 0) {
-      const empty = html`<div class="empty">
-        <p class="message" role="status">${this.emptyMessage}</p>
-        <slot name="empty-action"></slot>
-      </div>`;
+      const empty = tableMessage(this.emptyMessage, "empty-action");
       return this.serverPaging === undefined && !this.#hasSlottedFilters()
         ? empty
         : this.#withToolbar(empty);
@@ -3250,15 +3253,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
-    // In tree mode kept ancestors keep a deep match on screen, so "no matches" counts the rows the
-    // tree actually renders, not just the ones that matched.
     const treeVisible = isTree ? this.#treeShown().shown : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
       return this.#withToolbar(
-        html`<div class="empty">
-          <p class="message" role="status">${this.noMatchesMessage}</p>
-        </div>`,
+        tableMessage(this.noMatchesMessage, searchRanks ? "no-matches-action" : undefined),
       );
 
     const shown = this.#shownColumns();

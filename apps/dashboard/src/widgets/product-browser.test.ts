@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
@@ -1206,8 +1206,17 @@ it("A461 flat search shows a category path and clearing it restores what was ope
   expect((await tableOf(el)).shadowRoot!.querySelector('[part="search-path"]')!.textContent).toBe(
     "Drinks",
   );
-  await typeSearch(el, "");
+  const table = await tableOf(el);
+  table.chooseFilter("available", ["yes"]);
+  await typeSearch(el, "Drinks");
+  await toggleCategory(el, "d");
+  await typeSearch(el, "Not on the menu");
+  await userEvent.click(page.getByRole("button", { name: t("product.clear_search_filters") }), {
+    timeout: 2000,
+  });
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
+  expect(table.filterValues("available")).toEqual([]);
+  expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("menu-search");
 });
 it("searches a folder's own name and a product's variant names, never a product's folder", async () => {
   const el = await mountBrowser({

@@ -13,11 +13,12 @@ Enter on a category's row opens or closes it, and the categories a person opens 
 that browser. Search finds a product by its name or a variant's name, and a category by its own
 name. While you search, only those own matches appear in a flat list, closest first, each followed
 by its category path. A matching category starts collapsed; open it to see its contents while
-matching products also keep their flat result. Clearing search keeps the branches you opened
-and opens their parents too. Column filters affect
-products; categories stay. The address names the category last opened, as
-`/products/category/<id>`; closing that category, or one above it, names the closed
-category's parent.
+matching products also keep their flat result. Without column filters, clearing search keeps the
+branches you opened and opens their parents too. Filters keep categories that hold matching
+products and open those paths temporarily. Changing a filter reopens matching paths. Clearing the filters restores the
+remembered tree. The address names the last category opened in the ordinary tree as
+`/products/category/<id>`. Closing that category or one above it names its parent. Category toggles
+during search or filtering leave the address alone.
 
 A category has at most one parent, stored in `categories.parent_id`. A save that would make
 it its own ancestor is refused with `category.parent_cycle`. A category's name must differ,

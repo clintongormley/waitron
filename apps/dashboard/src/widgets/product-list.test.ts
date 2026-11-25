@@ -2519,13 +2519,18 @@ describe("the product list as a tree", () => {
   });
 
   it("nests a category's subcategories, then its products, under it, whichever column sorts the table", async () => {
-    const { el, root, table } = await mountTree();
+    const { el, root, table } = await mountTree({
+      categories: [{ ...food, name: "Shelf 10" }, { ...drinks, name: "Shelf 2" }, beer],
+    });
     await openRow(el, "folder:d");
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
     expect(root.querySelector('tr[data-row-key="folder:b"]')!.getAttribute("aria-level")).toBe("3");
     root.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["folder:f", "folder:d", "folder:b", "cola", "bread"]);
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+    root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
     root.querySelector<HTMLButtonElement>('button[data-sort="price"]')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
@@ -5512,7 +5517,7 @@ describe("stable column inputs", () => {
     root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
     await table.updateComplete;
     const filters = [...root.querySelectorAll<WtCombobox>("wt-combobox")];
-    expect(filters.length).toBe(5);
+    expect(filters.length).toBe(6);
     await Promise.all(filters.map((filter) => filter.updateComplete));
     const widths = filters.map((filter) =>
       vi.spyOn(filter as unknown as { widthTexts(): string[] }, "widthTexts"),
@@ -5521,7 +5526,7 @@ describe("stable column inputs", () => {
     await el.updateComplete;
     await table.updateComplete;
     await Promise.all(filters.map((filter) => filter.updateComplete));
-    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0]);
+    expect(widths.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0, 0, 0]);
     expect(table.columns).toBe(columns);
     setLocale("es");
     el.requestUpdate();
@@ -5704,6 +5709,7 @@ describe("product-list filters (A463)", () => {
       "course",
       "modifiers",
       "ordering",
+      "available",
       "allergens",
       "dietary",
     ]);
@@ -5951,14 +5957,17 @@ describe("product-list filters (A463)", () => {
       });
       expect(count(root, "d")).toBe("1 category, 1 product");
       await choose(el, "modifiers", "has");
-      expect(rowKeys(root)).toEqual(["folder:d"]);
+      expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager"]);
       expect(count(root, "root")).toBe("1 of 3 products");
       expect(count(root, "d")).toBe("1 of 2 products");
-      await openRow(el, "folder:d");
       expect(count(root, "b")).toBe("1 of 1 product");
-      await openRow(el, "folder:b");
-      expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager"]);
+      const categoryToggle = vi.fn();
+      el.addEventListener("category-toggle", categoryToggle);
+      await openRow(el, "folder:d");
+      expect(rowKeys(root)).toEqual(["folder:d"]);
+      expect(categoryToggle).not.toHaveBeenCalled();
       await choose(el, "modifiers", "");
+      expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
       expect(count(root, "d")).toBe("1 category, 1 product");
       expect(count(root, "f")).toBe("0 products");
     });
@@ -6115,6 +6124,42 @@ describe("product-list filters (A463)", () => {
     const control = cellUnder(root, "prod-1", t("editor.available")).querySelector("wt-switch");
     expect(control?.accessibleName).toBe(`${t("editor.available")}: ${product().name}`);
     expect(control?.checked).toBe(true);
+  });
+
+  it("filters availability by the variant and its parent while leaving the variant switch independent", async () => {
+    setLocale("en");
+    const { table, root } = await mountTree({
+      categories: [],
+      products: [
+        product({
+          id: "mixed",
+          name: "A bun",
+          variants: [bunVariant, { ...bunVariant, id: "large", available: false }],
+        }),
+        product({ id: "off", name: "B bun", available: false, variants: [bunVariant] }),
+        product({
+          id: "inactive-variant",
+          name: "C bun",
+          variants: [{ ...bunVariant, active: false, available: false }],
+        }),
+      ],
+    });
+    expect(filterOptions(root, "available")).toEqual([
+      ["", "Any"],
+      ["yes", "Yes"],
+      ["no", "No"],
+    ]);
+    table.setExpanded("mixed", true);
+    table.setExpanded("off", true);
+    table.chooseFilter("available", ["yes"]);
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["mixed", "mixed:small", "inactive-variant"]);
+    table.chooseFilter("available", ["no"]);
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["mixed", "mixed:large", "off", "off:small"]);
+    expect(cellUnder(root, "off:small", "Available").querySelector("wt-switch")?.checked).toBe(
+      true,
+    );
   });
 
   it("sorts Available as on, then off", async () => {
@@ -6474,7 +6519,7 @@ it("A462 Products closes saved descendant openings through a flat search branch"
   expect(again.table.isExpanded("bun")).toBe(false);
 });
 
-it("A462 Products narrowed branch closure clears hidden descendants on refresh", async () => {
+it("closing a filtered Products branch keeps its remembered descendants open after clear and refresh", async () => {
   const { el, root, table } = await mountTree({
     products: treeProducts().map((row) =>
       row.id === "cola" ? { ...row, modifiers: [{ kind: "extras" as const, id: "ex-1" }] } : row,
@@ -6486,13 +6531,15 @@ it("A462 Products narrowed branch closure clears hidden descendants on refresh",
   expect(rowKeys(root)).toContain("cola");
   expect(rowKeys(root)).not.toContain("lager");
   await openRow(el, "folder:d");
+  expect(table.isExpanded("folder:d")).toBe(false);
   expect(table.isExpanded("folder:b")).toBe(false);
   await choose(el, "modifiers", "");
   el.categories = [...el.categories];
   await el.updateComplete;
   await table.updateComplete;
-  expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
-  expect(table.isExpanded("folder:d")).toBe(false);
+  expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
+  expect(table.isExpanded("folder:d")).toBe(true);
+  expect(table.isExpanded("folder:b")).toBe(true);
 });
 
 it.each(
