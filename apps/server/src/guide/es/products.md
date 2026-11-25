@@ -23,9 +23,9 @@ junto al precio controla la disponibilidad. En un teléfono, sal de **Selecciona
 ver el precio y el interruptor.
 
 Para cambiar varios productos a la vez, activa **Seleccionar**, marca los productos y elige
-**Marcar como disponible** o **Marcar como no disponible**. El número de cada botón incluye
-los productos marcados que ocultan la búsqueda o los filtros. Desmarca las categorías para activar
-los botones de disponibilidad.
+**Marcar como disponible** o **Marcar como no disponible**. El recuento indica cuántos
+elementos marcados ocultan la búsqueda o los filtros. Desmarca las categorías para activar los
+botones de disponibilidad.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir

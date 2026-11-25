@@ -146,6 +146,7 @@ export class ProductBrowser extends LitElement {
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
+  @state() private hiddenSelected = 0;
   #selectionVersion = 0;
   #availabilitySelectionVersion?: number;
   @state() private operation: "move" | "delete" | null = null;
@@ -298,6 +299,8 @@ export class ProductBrowser extends LitElement {
 
   override updated(changed: PropertyValues): void {
     if (this.tableHidden) return;
+    if (["selected", "search", "products", "categories"].some((key) => changed.has(key)))
+      void this.#refreshHiddenSelected();
     const saved = this.hiddenSave;
     if (saved && (changed.has("products") || changed.has("categories")))
       void this.#list()
@@ -359,6 +362,12 @@ export class ProductBrowser extends LitElement {
 
   #list(): ProductList | null {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
+  }
+
+  async #refreshHiddenSelected(): Promise<void> {
+    const { selected, search } = this;
+    const hidden = selected.length ? await this.#list()?.hiddenSelectedCount() : 0;
+    if (selected === this.selected && search === this.search) this.hiddenSelected = hidden ?? 0;
   }
 
   async showSavedProduct(id: string | null, created: boolean): Promise<void> {
@@ -950,6 +959,7 @@ export class ProductBrowser extends LitElement {
   }
   #resetSelection(): void {
     this.selected = [];
+    this.hiddenSelected = 0;
     this.#selectionVersion++;
   }
 
@@ -997,7 +1007,7 @@ export class ProductBrowser extends LitElement {
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     const emptyTree = !this.tableHidden && this.view === "tree" && this.#emptyProducts;
     const availability = this.#availabilitySelection;
-    return html`${productAvailabilityFeedback(this.#availability.refusal)}<dashboard-product-list
+    return html`${productAvailabilityFeedback(this.#availability.refusal, this.selecting)}<dashboard-product-list
         .view=${this.view}
         .availabilityPending=${this.#availability.pending}
         @change-availability=${this.#changeAvailability}
@@ -1016,6 +1026,7 @@ export class ProductBrowser extends LitElement {
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
           this.hiddenSave = null;
+          void this.#refreshHiddenSelected();
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
@@ -1102,6 +1113,8 @@ export class ProductBrowser extends LitElement {
           busy: this.summaryLoading || this.operationBusy,
           showSpinner: !this.operation,
           count: this.selected.length,
+          hidden: this.hiddenSelected,
+          phone: this.phone,
           deleteWaiting: this.#deleteWaiting,
           availabilityCount: availability.length,
           availabilityWaiting: availability.some((id) => this.#availability.pending.has(id)),

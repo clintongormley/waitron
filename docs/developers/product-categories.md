@@ -420,7 +420,8 @@ you can scroll on the rest of the row. You can also use the selection actions wi
 a touch screen.
 
 Searching or changing a filter keeps your ticks, so you can gather rows from several searches.
-The selected count includes hidden ticks. Move and the two availability actions include them too.
+The selected count says how many ticks search or filters hide. Move and the two availability
+actions include those ticks.
 When your selection contains only products, choose **Mark available** or **Mark unavailable** to
 change them together. A drag carries only visible ticks
 and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.

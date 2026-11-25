@@ -2,6 +2,7 @@ import { css, html, nothing } from "lit";
 import { codeOf } from "../i18n/codes.js";
 import { refusalText } from "./delete-refusal.js";
 import { fill, t } from "../i18n/t.js";
+import type { ProductAvailabilityRefusal } from "./product-availability-actions.js";
 
 export function productListActionFeedback(message: string, announce: boolean) {
   return message
@@ -33,22 +34,44 @@ export const productAvailabilityFeedbackStyles = css`
     color: var(--wt-color-danger);
     overflow-wrap: anywhere;
   }
+  .availability-error[data-reserved] {
+    box-sizing: border-box;
+    block-size: calc(var(--wt-tap-min) + var(--wt-space-6));
+    overflow: auto;
+  }
+  .availability-error:not([data-message]) {
+    background: transparent;
+    pointer-events: none;
+  }
 `;
 
+function availabilityRefusalText({ batch, name, error }: ProductAvailabilityRefusal): string {
+  const code = codeOf(error);
+  const reason = refusalText(code, (error as { params?: unknown })?.params);
+  const message =
+    name === undefined
+      ? reason
+      : batch && code === "product.deleted"
+        ? fill("product.batch_availability_deleted", { name })
+        : fill("product.availability_refused", { name, reason });
+  // A lost reply can follow a committed write.
+  return batch && !code.startsWith("connection.") && code !== "server.internal"
+    ? fill("product.batch_availability_refused", { reason: message })
+    : message;
+}
+
 export function productAvailabilityFeedback(
-  refusal: { name: string | undefined; error: unknown } | null,
+  refusal: ProductAvailabilityRefusal | null,
+  reserveSpace: boolean,
 ) {
-  if (refusal === null) return nothing;
-  const reason = refusalText(
-    codeOf(refusal.error),
-    (refusal.error as { params?: unknown })?.params,
-  );
-  return html`<p class="availability-error" role="alert">
-    ${
-      refusal.name === undefined
-        ? reason
-        : fill("product.availability_refused", { name: refusal.name, reason })
-    }
+  if (refusal === null && !reserveSpace) return nothing;
+  return html`<p
+    class="availability-error"
+    role=${refusal === null ? nothing : "alert"}
+    ?data-reserved=${reserveSpace}
+    ?data-message=${refusal !== null}
+  >
+    ${refusal === null ? nothing : availabilityRefusalText(refusal)}
   </p>`;
 }
 

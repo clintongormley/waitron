@@ -1417,6 +1417,15 @@ export class ProductList extends LitElement {
     await table.revealRow(this.#productRow(id)?.key ?? id);
   }
 
+  async hiddenSelectedCount(): Promise<number> {
+    await this.updateComplete;
+    const table = this.#table();
+    if (!table || !this.selected.length) return 0;
+    await table.updateComplete;
+    const shown = new Set(table.shownKeys({ includeCollapsedSearchMatches: true }));
+    return this.selected.filter((key) => !shown.has(key)).length;
+  }
+
   async hiddenSavedProductName(id: string): Promise<string | undefined> {
     await this.updateComplete;
     const table = this.#table();

@@ -10,10 +10,16 @@ type AvailabilityHost = HTMLElement &
     availabilitySaved?: (ids: readonly string[], available: boolean) => void;
   };
 
+export interface ProductAvailabilityRefusal {
+  batch: boolean;
+  name: string | undefined;
+  error: unknown;
+}
+
 export class ProductAvailabilityActions {
   pending: ReadonlyMap<string, boolean> = new Map();
-  batch: { available: boolean; count: number } | null = null;
-  refusal: { name: string | undefined; error: unknown } | null = null;
+  batch: boolean | null = null;
+  refusal: ProductAvailabilityRefusal | null = null;
 
   constructor(private readonly host: AvailabilityHost) {}
 
@@ -23,7 +29,7 @@ export class ProductAvailabilityActions {
       [id],
       available,
       () => this.host.api.setProductAvailability(id, available),
-      () => name,
+      (error) => ({ batch: false, name, error }),
     );
   }
 
@@ -33,7 +39,7 @@ export class ProductAvailabilityActions {
     const names = new Map(
       this.host.products.filter(({ id }) => selected.has(id)).map(({ id, name }) => [id, name]),
     );
-    this.batch = { available, count: ids.length };
+    this.batch = available;
     try {
       return await this.#save(
         ids,
@@ -44,7 +50,11 @@ export class ProductAvailabilityActions {
           if (code === "product.deleted" || code === "product.not_found")
             this.host.api.liveData?.invalidate([{ type: "products" }]);
           const productId = (error as { params?: { productId?: string } })?.params?.productId;
-          return productId === undefined ? undefined : names.get(productId);
+          return {
+            batch: true,
+            name: productId === undefined ? undefined : names.get(productId),
+            error,
+          };
         },
       );
     } finally {
@@ -57,7 +67,7 @@ export class ProductAvailabilityActions {
     ids: readonly string[],
     available: boolean,
     write: () => Promise<void>,
-    refusalName: (error: unknown) => string | undefined,
+    refusal: (error: unknown) => ProductAvailabilityRefusal,
   ): Promise<boolean> {
     const pending = new Map(this.pending);
     for (const id of ids) pending.set(id, available);
@@ -69,7 +79,7 @@ export class ProductAvailabilityActions {
       if (this.host.isConnected) this.host.availabilitySaved?.(ids, available);
       return true;
     } catch (error) {
-      if (this.host.isConnected) this.refusal = { name: refusalName(error), error };
+      if (this.host.isConnected) this.refusal = refusal(error);
       return false;
     } finally {
       const remaining = new Map(this.pending);

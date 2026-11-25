@@ -46,12 +46,23 @@ export const productsToolbarStyles = css`
     gap: var(--wt-space-2);
     padding: var(--wt-space-3) 0;
   }
-  .selection-count,
-  wt-button[data-test^="mark-"]::part(button) {
-    font-variant-numeric: tabular-nums;
-  }
   .selection-count {
     display: grid;
+    font-variant-numeric: tabular-nums;
+  }
+  .actions-phone {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .selection-heading {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--wt-space-2);
+  }
+  .actions-phone > wt-button::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
   }
   .selection-count > span,
   .selection-count::after {
@@ -148,10 +159,12 @@ export function productSelectionBar(options: {
   busy: boolean;
   showSpinner: boolean;
   count: number;
+  hidden: number;
+  phone: boolean;
   deleteWaiting: boolean;
   availabilityCount: number;
   availabilityWaiting: boolean;
-  availabilityWriting: { available: boolean; count: number } | null;
+  availabilityWriting: boolean | null;
   showAvailabilityProgress: boolean;
   markAvailability: (available: boolean) => void;
   move: () => void;
@@ -159,9 +172,32 @@ export function productSelectionBar(options: {
   done: () => void;
 }) {
   if (!options.selecting && !options.busy) return nothing;
+  const selected = countOf("folders.selected", options.count);
+  const count = html`<span
+    class="selection-count"
+    data-test="selected-count"
+    aria-live="polite"
+    data-width-text=${countOf("folders.selected", Math.max(2, options.count))}
+    ><span
+      >${
+        options.hidden
+          ? fill(options.hidden === 1 ? "folders.selected_hidden_one" : "folders.selected_hidden", {
+              selected,
+              hidden: String(options.hidden),
+            })
+          : selected
+      }</span
+    ></span
+  >`;
+  const done = html`<wt-button
+    data-test="cancel-selection"
+    variant="secondary"
+    @click=${options.done}
+    >${t("action.done")}</wt-button
+  >`;
   return html`<div
     slot="toolbar-bottom"
-    class="actions"
+    class=${options.phone ? "actions actions-phone" : "actions"}
     data-test="selection-bar"
     role="group"
     aria-label=${t("folders.select")}
@@ -169,13 +205,7 @@ export function productSelectionBar(options: {
     ${options.showSpinner && options.busy ? html`<wt-spinner></wt-spinner>` : nothing}
     ${
       options.selecting
-        ? html`<span
-              class="selection-count"
-              data-test="selected-count"
-              aria-live="polite"
-              data-width-text=${countOf("folders.selected", Math.max(2, options.count))}
-              ><span>${countOf("folders.selected", options.count)}</span></span
-            >
+        ? html`${options.phone ? html`<div class="selection-heading">${count}${done}</div>` : count}
             <wt-button
               data-test="move"
               variant="secondary"
@@ -185,7 +215,7 @@ export function productSelectionBar(options: {
             >
             ${[true, false].map((available) => {
               const batch = options.availabilityWriting;
-              const loading = options.showAvailabilityProgress && batch?.available === available;
+              const loading = options.showAvailabilityProgress && batch === available;
               const action = available ? "available" : "unavailable";
               return html`<wt-button
                 data-test=${`mark-${action}`}
@@ -199,9 +229,7 @@ export function productSelectionBar(options: {
                     batch !== null)
                 }
                 @click=${() => options.markAvailability(available)}
-                >${fill(available ? "product.mark_available" : "product.mark_unavailable", {
-                  count: String(loading ? batch.count : options.availabilityCount),
-                })}</wt-button
+                >${t(available ? "product.mark_available" : "product.mark_unavailable")}</wt-button
               >`;
             })}
             <wt-button
@@ -211,9 +239,7 @@ export function productSelectionBar(options: {
               @click=${options.remove}
               >${t("action.delete")}</wt-button
             >
-            <wt-button data-test="cancel-selection" variant="secondary" @click=${options.done}
-              >${t("action.done")}</wt-button
-            >`
+            ${options.phone ? nothing : done}`
         : nothing
     }
   </div>`;

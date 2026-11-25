@@ -2138,8 +2138,12 @@ const bulkApi = () =>
   }) satisfies Partial<DashboardApi>;
 function pendingAvailability() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => (resolve = done));
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<void>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 const availabilitySwitch = async (el: ProductBrowser, id: string) =>
   (await tableOf(el)).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
@@ -2158,9 +2162,10 @@ it.each(["List", "Tree"] as const)(
     await selectKeys(el, ["bread", "cola"]);
     await typeSearch(el, "Bread");
     expect(await rowKeys(el)).toEqual(["bread"]);
+    await vi.waitFor(() => expect(count(el)).toBe("2 selected, 1 hidden"));
     const button = bulkButton(el, "unavailable");
-    expect(button?.textContent?.trim()).toBe("Mark unavailable (2)");
-    expect(bulkButton(el, "available")?.textContent?.trim()).toBe("Mark available (2)");
+    expect(button?.textContent?.trim()).toBe("Mark unavailable");
+    expect(bulkButton(el, "available")?.textContent?.trim()).toBe("Mark available");
     button!.focus();
     await userEvent.keyboard(" ");
     expect(api.setProductsAvailability).toHaveBeenCalledExactlyOnceWith(["bread", "cola"], false);
@@ -2191,8 +2196,8 @@ it("disables availability actions for empty or mixed ticks on a Spanish phone", 
   tick("bread");
   await el.updateComplete;
   for (const [action, label] of [
-    ["available", "Marcar como disponible (1)"],
-    ["unavailable", "Marcar como no disponible (1)"],
+    ["available", "Marcar como disponible"],
+    ["unavailable", "Marcar como no disponible"],
   ] as const) {
     const button = bulkButton(el, action);
     expect(button?.textContent?.trim()).toBe(label);
@@ -2219,7 +2224,10 @@ it.each([
     await page.viewport(viewportWidth, 844);
     setLocale(locale);
     localStorage.setItem("waitron.products.view", "list");
-    const el = await mountBrowser();
+    const api = bulkApi();
+    const saved = pendingAvailability();
+    api.setProductsAvailability.mockReturnValue(saved.promise);
+    const el = await mountBrowser({ api: api as unknown as DashboardApi });
     await selectKeys(el, []);
     await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
     const table = await tableOf(el);
@@ -2238,6 +2246,23 @@ it.each([
     await userEvent.click(second!);
     expect(tick("bread").checked).toBe(true);
     expect(tick("burger").checked).toBe(true);
+
+    const { left: x, top: y, width: w, height: h } = tick("cola").getBoundingClientRect();
+    const followingTap = () => root.elementFromPoint(x + w / 2, y + h / 2);
+    await userEvent.click(bulkButton(el, "unavailable")!);
+    await tableOf(el);
+    expect(bulkButton(el, "unavailable")?.loading).toBe(true);
+    expect(followingTap()).toBe(tick("cola"));
+    saved.reject({ code: "authorization.not_permitted" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".availability-error")?.textContent).toContain(
+        codeMessage("authorization.not_permitted"),
+      ),
+    );
+    await tableOf(el);
+    expect(followingTap()).toBe(tick("cola"));
+    await userEvent.click(followingTap()!);
+    expect(tick("cola").checked).toBe(true);
   },
 );
 
@@ -2248,7 +2273,8 @@ it("keeps a new tick and prevents overlapping writes to the same product", async
   const api = bulkApi();
   const single = pendingAvailability();
   const batch = pendingAvailability();
-  api.setProductAvailability.mockReturnValueOnce(single.promise);
+  const other = pendingAvailability();
+  api.setProductAvailability.mockReturnValueOnce(single.promise).mockReturnValue(other.promise);
   api.setProductsAvailability.mockReturnValueOnce(batch.promise);
   const el = await mountBrowser({ api: api as unknown as DashboardApi });
   await chooseView(el, "List");
@@ -2261,24 +2287,25 @@ it("keeps a new tick and prevents overlapping writes to the same product", async
   await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.disabled).toBe(false));
 
   await userEvent.click(bulkButton(el, "unavailable")!);
-  await tableOf(el);
+  const burger = await availabilitySwitch(el, "burger");
+  await userEvent.click(burger);
   await userEvent.click(bread);
-  await userEvent.click(await availabilitySwitch(el, "burger"));
-  expect(api.setProductAvailability.mock.calls).toEqual([
-    ["bread", false],
-    ["burger", false],
-  ]);
   (await tableOf(el))
     .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
     .click();
-  await el.updateComplete;
-  expect(bulkButton(el, "unavailable")?.textContent?.trim()).toBe("Mark unavailable (1)");
+  await vi.waitFor(() => expect(count(el)).toBe("2 selected"));
   batch.resolve();
   await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
   expect(
     (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
       .checked,
   ).toBe(true);
+  await userEvent.click(burger);
+  other.resolve();
+  expect(api.setProductAvailability.mock.calls).toEqual([
+    ["bread", false],
+    ["burger", false],
+  ]);
 });
 
 it.each(["Done", "view switch"])(
@@ -2312,7 +2339,7 @@ it.each(["Done", "view switch"])(
   },
 );
 
-it("refreshes a deleted tick and shows the reason alone when a new refusal names no dish", async () => {
+it("refreshes a deleted tick and reports a retry refused without a product name", async () => {
   const viewport = [innerWidth, innerHeight] as const;
   onTestFinished(() => page.viewport(...viewport));
   await page.viewport(1180, 844);
@@ -2322,21 +2349,32 @@ it("refreshes a deleted tick and shows the reason alone when a new refusal names
     .mockRejectedValueOnce({ code: "authorization.not_permitted" });
   const el = await mountBrowser({ api: api as unknown as DashboardApi });
   await chooseView(el, "List");
-  await selectKeys(el, ["bread", "cola"]);
-  await userEvent.click(bulkButton(el, "available")!);
+  await selectKeys(el, ["cola"]);
+  bulkButton(el, "available")!.focus();
+  await userEvent.keyboard(" ");
   const notice = () => el.shadowRoot!.querySelector(".availability-error[role=alert]");
-  await vi.waitFor(() => expect(notice()?.textContent).toContain("Cola"));
+  await vi.waitFor(() =>
+    expect(notice()?.textContent?.trim()).toBe(
+      "Nothing was changed. Cola was deleted and can no longer be changed.",
+    ),
+  );
   expect(api.liveData.invalidate).toHaveBeenCalledExactlyOnceWith([{ type: "products" }]);
-  expect(count(el)).toBe("2 selected");
-  expect((await availabilitySwitch(el, "bread")).checked).toBe(true);
+  expect(count(el)).toBe("1 selected");
   el.products = PRODUCTS.filter(({ id }) => id !== "cola");
-  await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+  expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-bread"]')!
+    .click();
+  await el.updateComplete;
   await userEvent.click(bulkButton(el, "unavailable")!);
   await vi.waitFor(() =>
-    expect(notice()?.textContent?.trim()).toBe(codeMessage("authorization.not_permitted")),
+    expect(notice()?.textContent?.trim()).toBe(
+      `Nothing was changed. ${codeMessage("authorization.not_permitted")}`,
+    ),
   );
   expect(api.setProductsAvailability.mock.calls).toEqual([
-    [["bread", "cola"], true],
+    [["cola"], true],
     [["bread"], false],
   ]);
   expect((await availabilitySwitch(el, "bread")).checked).toBe(true);
@@ -2451,8 +2489,9 @@ it.each(["search", "filter"])(
     await selectKeys(el, ["bread"]);
     if (trigger === "search") await typeSearch(el, "bread");
     if (trigger === "filter") await chooseFilter(el, "modifiers", "has");
-    await el.updateComplete;
-    expect(count(el)).toBe("1 selected");
+    await vi.waitFor(() =>
+      expect(count(el)).toBe(trigger === "filter" ? "1 selected, 1 hidden" : "1 selected"),
+    );
     expect((await tableOf(el)).selectable).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-test=move]")!.getAttribute("disabled")).toBeNull();
   },
@@ -4606,8 +4645,7 @@ it("A461 keeps the selection when a filter is chosen in the panel beside the row
       (row) => row.textContent!.trim() === en["product.has_modifiers"],
     )!;
     await userEvent.click(option);
-    await el.updateComplete;
-    expect(count(el)).toBe("1 selected");
+    await vi.waitFor(() => expect(count(el)).toBe("1 selected, 1 hidden"));
     expect(getComputedStyle(panel).display).not.toBe("none");
   } finally {
     await page.viewport(width, height);
@@ -4776,8 +4814,15 @@ it("at phone width fits Select controls beneath the final search and Customise l
     await press(el, "select");
     const table = await tableOf(el);
     await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
-    const controls = el.shadowRoot!.querySelectorAll('[data-test="selection-bar"] > *');
+    const bar = el.shadowRoot!.querySelector('[data-test="selection-bar"]')!;
+    const controls = bar.querySelectorAll("[data-test]");
     expect(controls).toHaveLength(6);
+    const count = bar.querySelector('[data-test="selected-count"]')!.getBoundingClientRect();
+    const done = bar.querySelector('[data-test="cancel-selection"]')!.getBoundingClientRect();
+    const move = bar.querySelector('[data-test="move"]')!.getBoundingClientRect();
+    expect((count.top + count.bottom) / 2).toBeCloseTo((done.top + done.bottom) / 2, 0);
+    expect(done.right).toBeCloseTo(bar.getBoundingClientRect().right, 0);
+    expect(move.top).toBeGreaterThanOrEqual(done.bottom);
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
     const header = table.shadowRoot!.querySelector("thead")!.getBoundingClientRect();
     for (const control of controls) {
@@ -5301,21 +5346,19 @@ it("A461 gathers Products ticks across searches and only selects shown rows", as
   await selectKeys(el, ["iced"]);
   await typeSearch(el, "cake");
   (await box("cake")).click();
-  await tableOf(el);
-  expect(count(el)).toBe("2 selected");
+  await vi.waitFor(() => expect(count(el)).toBe("2 selected, 1 hidden"));
   const all = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
     '[data-test="select-all"]',
   )!;
   all.click();
-  await tableOf(el);
-  expect(count(el)).toBe("1 selected");
+  await vi.waitFor(() => expect(count(el)).toBe("1 selected, 1 hidden"));
   all.click();
-  await tableOf(el);
-  expect(count(el)).toBe("2 selected");
+  await vi.waitFor(() => expect(count(el)).toBe("2 selected, 1 hidden"));
   await chooseFilter(el, "modifiers", "has");
-  expect(count(el)).toBe("2 selected");
+  await vi.waitFor(() => expect(count(el)).toBe("2 selected, 2 hidden"));
   await chooseFilter(el, "modifiers", "");
   await typeSearch(el, "");
+  await vi.waitFor(() => expect(count(el)).toBe("2 selected"));
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
   expect((await box("iced")).checked).toBe(true);
