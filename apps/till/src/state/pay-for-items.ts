@@ -19,6 +19,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { counterBillEdit } from "./bill-edit.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 
 /** What Pay for items sends beyond a bill payment's confirmation, fixed when the waiter confirms:
  * the server's retry fingerprint reads all of it, so a resend after no answer sends the same. */
@@ -198,16 +199,29 @@ export function itemsRequestOf(
 }
 
 /** The preview for `asked`: an items choice through Pay for items, every other through today's bill
- * payment preview. */
+ * payment preview. Given up at the till's request time limit. */
 export async function previewPayment(
   api: TillApi,
   billId: string,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
 ): Promise<AllocationPreview> {
-  if (asked.choice.kind === "items")
-    return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
-  return api.previewBillPayment(billId, paymentAsk(asked.choice, asked.pay, expectedEdit));
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  const options = { signal: limit.signal };
+  try {
+    if (asked.choice.kind === "items")
+      return itemsAllocated(
+        await api.previewItemPayment(billId, itemsAsk(asked), options),
+        asked.pay.method,
+      );
+    return await api.previewBillPayment(
+      billId,
+      paymentAsk(asked.choice, asked.pay, expectedEdit),
+      options,
+    );
+  } finally {
+    limit.done();
+  }
 }
 
 /** The edit state Pay for items sends for a Counter order with no party, whose held read carries

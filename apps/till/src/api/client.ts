@@ -5026,8 +5026,17 @@ export class TillApi {
 
   /** How a payment would split between the bill, change and tip, writing nothing →
    * `POST /api/working-orders/:id/payments/preview`. Refuses as the payment would. */
-  previewBillPayment(billId: string, ask: BillPaymentAsk): Promise<AllocationPreview> {
-    return this.#request(`/api/working-orders/${billId}/payments/preview`, "POST", ask);
+  previewBillPayment(
+    billId: string,
+    ask: BillPaymentAsk,
+    options: ReadOptions = {},
+  ): Promise<AllocationPreview> {
+    return this.#request(
+      `/api/working-orders/${billId}/payments/preview`,
+      "POST",
+      ask,
+      options.signal,
+    );
   }
 
   /**
@@ -5048,8 +5057,17 @@ export class TillApi {
 
   /** What paying for the chosen items would take, writing nothing →
    * `POST /api/working-orders/:id/item-payments/preview`. Refuses as the payment would. */
-  previewItemPayment(billId: string, ask: ItemPaymentAsk): Promise<ItemPaymentPreview> {
-    return this.#request(`/api/working-orders/${billId}/item-payments/preview`, "POST", ask);
+  previewItemPayment(
+    billId: string,
+    ask: ItemPaymentAsk,
+    options: ReadOptions = {},
+  ): Promise<ItemPaymentPreview> {
+    return this.#request(
+      `/api/working-orders/${billId}/item-payments/preview`,
+      "POST",
+      ask,
+      options.signal,
+    );
   }
 
   /** Moves the chosen items to a new bill and takes the payment there →

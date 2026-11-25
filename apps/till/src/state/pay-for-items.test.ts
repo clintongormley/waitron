@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
   AllocationPreview,
   BillBalance,
   BillEditExpected,
   BillPaymentResult,
+  ReadOptions,
   TillApi,
 } from "../api/client.js";
 import { formatMoney } from "@waitron/shared";
@@ -11,6 +12,7 @@ import { fill, setLocale, t } from "../i18n/t.js";
 import type { PayLine, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { refusalText } from "../widgets/pay-refusal.js";
 import { confirmationOf, paymentAsk, refusalOf, type Confirmation } from "./bill-payment.js";
+import { TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 import {
   counterItemsEdit,
   itemsAllocated,
@@ -380,6 +382,7 @@ describe("previewPayment and takePayment", () => {
     expect(api.previewBillPayment).toHaveBeenCalledWith(
       "wo-4",
       paymentAsk(whole.choice, whole.pay, edit),
+      { signal: expect.any(AbortSignal) },
     );
     const confirmation = withItems(itemsConfirmation(whole), whole, edit, revisions);
     await expect(
@@ -413,10 +416,11 @@ describe("previewPayment and takePayment", () => {
       charged: "3.00",
       total: "3.00",
     });
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-2", quantity: "1" }],
-      method: "card",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      { picks: [{ lineId: "line-2", quantity: "1" }], method: "card" },
+      { signal: expect.any(AbortSignal) },
+    );
     const confirmation = withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions);
     const request = { ...confirmation, submissionId: "s" } as Confirmation & {
       submissionId: string;
@@ -429,6 +433,33 @@ describe("previewPayment and takePayment", () => {
     expect(api.previewBillPayment).not.toHaveBeenCalled();
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
+
+  it.each(["whole", "items"] as const)(
+    "previewPayment gives up at the till's time limit when the preview never answers (%s)",
+    async (kind) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const never = (_billId: string, _ask: unknown, options?: ReadOptions) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+        );
+      const api = apiStub();
+      api.previewBillPayment.mockImplementation(never);
+      api.previewItemPayment.mockImplementation(never);
+      const asked: PayRequest =
+        kind === "items" ? itemsAsked : { choice: { kind: "whole" }, pay: { method: "card" } };
+      const settled = vi.fn();
+      const preview = previewPayment(api as unknown as TillApi, "wo-4", asked, edit);
+      preview.catch(settled);
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      expect(settled).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(preview).rejects.toMatchObject({ name: "AbortError" });
+    },
+  );
 
   it("takePayment refuses an items choice with no items part", async () => {
     const api = apiStub();

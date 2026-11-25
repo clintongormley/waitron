@@ -240,6 +240,7 @@ describe("stored station-choice ownership", () => {
     expect(api.previewBillPayment).toHaveBeenCalledExactlyOnceWith(
       "wo-4",
       expect.objectContaining({ expectedEdit }),
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -1317,7 +1318,11 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "40.00", "40.00"));
 
     expect(vi.mocked(api.previewItemPayment).mock.calls).toEqual([
-      ["wo-4", { picks: [{ lineId: "line-1" }], method: "cash", tendered: "50" }],
+      [
+        "wo-4",
+        { picks: [{ lineId: "line-1" }], method: "cash", tendered: "50" },
+        { signal: expect.any(AbortSignal) },
+      ],
     ]);
     expect(itemsSent()).toEqual([
       {
@@ -1481,13 +1486,17 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(text(inDialog(el, "[data-pay-charged] dd"))).toBe(money("50.00"));
     await press(el, "[data-pay-confirm]");
 
-    expect(previewBillPayment).toHaveBeenCalledWith("wo-4", {
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-      kind: "contribution",
-      amount: "40",
-      method: "card",
-      addedTip: "10",
-    });
+    expect(previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        kind: "contribution",
+        amount: "40",
+        method: "card",
+        addedTip: "10",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(sent()[0]).toEqual({
       expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
@@ -1729,6 +1738,48 @@ describe("till-app: a device that does not take cash", () => {
 });
 
 describe("till-app: a bill payment's refusals and retries", () => {
+  it("an unanswered preview lets Continue be pressed again once it reaches its time limit", async () => {
+    let previews = 0;
+    // The first preview answers only its abort; with no signal it never answers.
+    const previewBillPayment = vi.fn(
+      (_billId: string, _ask: unknown, options?: { signal?: AbortSignal }) =>
+        new Promise<AllocationPreview>((resolve, reject) => {
+          if (previews++ === 0) {
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+            return;
+          }
+          resolve(cash("40.00", "0.00"));
+        }),
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const { el } = await mountApp({ previewBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40.00");
+    await type(el, "tendered", "40.00");
+    await press(el, "[data-pay-continue]");
+
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
+    await flush(el, 4);
+    expect(dialog(el)!.busy).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await flush(el, 4);
+    expect(dialog(el)!.busy).toBe(false);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("server.internal"));
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+
+    await press(el, "[data-pay-continue]");
+    await flush(el);
+    expect(previewBillPayment).toHaveBeenCalledTimes(2);
+    expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+  });
+
   it.each([
     ["open", false],
     ["placed", false],
@@ -2495,13 +2546,17 @@ describe("till-app: a bill payment's refusals and retries", () => {
       draftId: null,
       draftRevision: null,
     };
-    expect(api.previewBillPayment).toHaveBeenCalledWith("wo-4", {
-      kind: "contribution",
-      amount: "40",
-      method: "cash",
-      tendered: "50",
-      expectedEdit,
-    });
+    expect(api.previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        kind: "contribution",
+        amount: "40",
+        method: "cash",
+        tendered: "50",
+        expectedEdit,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(sent()[0]).toMatchObject({ expectedEdit, applied: "40.00", tip: "0.00" });
   });
 
@@ -5740,6 +5795,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(api.previewBillPayment).toHaveBeenCalledWith(
       "wo-1",
       expect.objectContaining({ expectedEdit }),
+      { signal: expect.any(AbortSignal) },
     );
   });
 });
@@ -6042,12 +6098,16 @@ describe("till-app: a venue that takes no tips", () => {
     expect(inDialog(el, 'wt-input[name="cardTip"]')).toBeNull();
     await press(el, "[data-pay-continue]");
 
-    expect(previewBillPayment).toHaveBeenCalledWith("wo-4", {
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-      kind: "contribution",
-      amount: "150",
-      method: "card",
-    });
+    expect(previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        kind: "contribution",
+        amount: "150",
+        method: "card",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(inDialog(el, 'wt-input[name="amount"]')!.error).toBe(
       t("bill_pay.chargeable").replace("{amount}", money("30.00")),
     );

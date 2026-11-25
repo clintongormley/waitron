@@ -174,11 +174,15 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
 
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
-      method: "cash",
-      tendered: "50",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
+        method: "cash",
+        tendered: "50",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(api.previewBillPayment).not.toHaveBeenCalled();
     expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
       fill(t("bill_pay.scope_items"), { items: "Tarta, Vino", amount: money("30.00") }),
@@ -315,10 +319,14 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await type(el, "externalRef", "OP-73");
     await type(el, "externalMachine", "Bank");
     await press(el, "[data-pay-continue]");
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
-      method: "card",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
+        method: "card",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     await press(el, "[data-pay-confirm]");
     expect(payForItems).toHaveBeenCalledWith(
       "wo-4",
@@ -341,13 +349,17 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await chooseItems(el, [1, 2, 3, 4, 5]);
     await type(el, "tendered", "120");
     await press(el, "[data-pay-continue]");
-    expect(api.previewBillPayment).toHaveBeenCalledWith("wo-4", {
-      kind: "share",
-      shareOf: 1,
-      method: "cash",
-      tendered: "120",
-      expectedEdit: wo4Edit,
-    });
+    expect(api.previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "120",
+        expectedEdit: wo4Edit,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(api.previewItemPayment).not.toHaveBeenCalled();
     expect(api.payForItems).not.toHaveBeenCalled();
   });
@@ -400,11 +412,15 @@ describe("till-app: Pay for items on a bill of their own", () => {
     );
     await press(el, "[data-pay-confirm]");
 
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }],
-      method: "cash",
-      tendered: "50",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }],
+        method: "cash",
+        tendered: "50",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(payForItems).toHaveBeenCalledWith(
       "wo-4",
       expect.objectContaining({ picks: [{ lineId: "line-4" }], expectedEdits: [wo4Edit] }),
@@ -876,6 +892,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)).toEqual([
       "wo-5",
       expect.objectContaining({ picks: [{ lineId: "copy-5" }] }),
+      { signal: expect.any(AbortSignal) },
     ]);
   });
 
@@ -1505,11 +1522,15 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       await press(el, "[data-pay-confirm]");
       await flush(el);
 
-      expect(api.previewItemPayment).toHaveBeenCalledWith("wo-1", {
-        picks: [{ lineId }],
-        method: "cash",
-        tendered: "50",
-      });
+      expect(api.previewItemPayment).toHaveBeenCalledWith(
+        "wo-1",
+        {
+          picks: [{ lineId }],
+          method: "cash",
+          tendered: "50",
+        },
+        { signal: expect.any(AbortSignal) },
+      );
       expect(payForItems).toHaveBeenCalledWith(
         "wo-1",
         {
@@ -1994,6 +2015,45 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       await flush(el);
       expect(getFindBill).toHaveBeenCalledTimes(2);
       expect(api.previewItemPayment).toHaveBeenCalledOnce();
+      expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    });
+
+    it("at the Counter an unanswered items preview lets Continue be pressed again once it reaches its time limit", async () => {
+      let previews = 0;
+      // The first preview answers only its abort; with no signal it never answers.
+      const previewItemPayment = vi.fn(
+        (_billId: string, _ask: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise<ItemPaymentPreview>((resolve, reject) => {
+            if (previews++ === 0) {
+              options?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+              return;
+            }
+            resolve(itemsPreview());
+          }),
+      );
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const el = await retrieved({ previewItemPayment });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(false);
+      expect(formError(el)).toBe(codeMessage("server.internal"));
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+      expect(previewItemPayment).toHaveBeenCalledTimes(2);
       expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
     });
 

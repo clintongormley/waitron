@@ -6431,7 +6431,7 @@ describe("TillApi: a bill's payments", () => {
     );
   });
 
-  it("previewBillPayment POSTs the ask to the preview route and answers the allocation", async () => {
+  it("previewBillPayment POSTs the ask to the preview route under the caller's signal and answers the allocation", async () => {
     const ask: BillPaymentAsk = {
       expectedEdit: null,
       kind: "share",
@@ -6446,11 +6446,13 @@ describe("TillApi: a bill's payments", () => {
       charged: "25.00",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+    const signal = new AbortController().signal;
 
-    await expect(new TillApi("", fetchStub).previewBillPayment("wo-1", ask)).resolves.toEqual(
-      preview,
-    );
+    await expect(
+      new TillApi("", fetchStub).previewBillPayment("wo-1", ask, { signal }),
+    ).resolves.toEqual(preview);
     expect(fetchStub).toHaveBeenCalledWith("/api/working-orders/wo-1/payments/preview", post(ask));
+    expect(fetchStub.mock.calls[0]![1]).toMatchObject({ signal });
   });
 
   it("takeBillPayment POSTs the request under the caller's signal and answers the outcome, balance and invoice", async () => {
