@@ -4152,7 +4152,8 @@ export class TillApi {
    * `POST /api/working-orders/:id/split-after-print`, which asks no approver. Rejects as
    * `cancelOrder` does, and `bill.not_at_table`, `bill.left_unpaid`, `bill.not_issued`,
    * `bill.has_advance` and `bill.unserved_dishes` (`dishes`, as `meal_end.unserved_dishes` lists them,
-   * and `canStop`: whether `stopUnserved` may be sent to stop them and leave them off the new bill).
+   * and `canStop`: whether `stopUnserved` may be sent to stop them and leave them off the new bill,
+   * except a dish the kitchen started or finished, which stays on it, charged).
    */
   splitAfterPrint(
     id: string,

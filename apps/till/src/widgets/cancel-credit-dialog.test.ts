@@ -445,12 +445,14 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
   it("says the stop words in English and Spanish", () => {
     expect(t("split.stop_unserved")).toBe("Stop these dishes and reopen");
     expect(t("split.unserved_stop")).toBe(
-      "If they never came, choose Stop these dishes and reopen.",
+      "If they never came, choose Stop these dishes and reopen. A dish the kitchen started or finished stays on the bill, charged.",
     );
     setLocale("es");
     try {
       expect(t("split.stop_unserved")).toBe("Parar estos platos y reabrir");
-      expect(t("split.unserved_stop")).toBe("Si no llegaron, pulsa Parar estos platos y reabrir.");
+      expect(t("split.unserved_stop")).toBe(
+        "Si no llegaron, pulsa Parar estos platos y reabrir. Un plato que la cocina empezó o terminó se queda en la cuenta y se cobra.",
+      );
     } finally {
       setLocale("en");
     }

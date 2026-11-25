@@ -2210,7 +2210,8 @@ export const en = {
     "Some dishes on this bill are not marked served, so it cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen bill again.",
   "split.unserved_no_mark":
     "Some dishes on this bill are not marked served, so it cannot be reopened yet. This device cannot mark dishes served: mark them served on a device that can, then choose Reopen bill again.",
-  "split.unserved_stop": "If they never came, choose Stop these dishes and reopen.",
+  "split.unserved_stop":
+    "If they never came, choose Stop these dishes and reopen. A dish the kitchen started or finished stays on the bill, charged.",
   "split.stop_unserved": "Stop these dishes and reopen",
   "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
   "split.unconfirmed":
@@ -4614,7 +4615,8 @@ export const es: Record<StringKey, string> = {
     "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir cuenta.",
   "split.unserved_no_mark":
     "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir cuenta.",
-  "split.unserved_stop": "Si no llegaron, pulsa Parar estos platos y reabrir.",
+  "split.unserved_stop":
+    "Si no llegaron, pulsa Parar estos platos y reabrir. Un plato que la cocina empezó o terminó se queda en la cuenta y se cobra.",
   "split.stop_unserved": "Parar estos platos y reabrir",
   "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
   "split.unconfirmed":
