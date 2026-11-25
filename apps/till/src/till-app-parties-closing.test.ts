@@ -12,7 +12,7 @@ import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { completedFor, previewFor } from "./widgets/give-back-dialog.test-helpers.js";
 import type { GiveBackRequest, GiveBackView, GiveBackWrite } from "./api/give-back-types.js";
-import type { PartyBill } from "./api/client.js";
+import type { PartyBill, TableState } from "./api/client.js";
 import {
   seated,
   table4,
@@ -609,6 +609,58 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     });
   }
 
+  /** The server's side of the party's only bill: cancelling it opens an empty one in its place and
+   * moves the party to revision 4 (`cancelPlacedOrder`). */
+  function onlyBillServer() {
+    let done = false;
+    const cancel = () => {
+      done = true;
+    };
+    return {
+      getPartyBills: vi.fn(async () => (done ? [cancelled, tabBill] : [invoiced])),
+      getTablesState: vi.fn(async () => [
+        seated({}, { openingBillId: "wo-check", revision: done ? 4 : 3 }),
+        table7,
+        table9,
+      ]),
+      cancelOrder: vi.fn(async () => cancel()),
+      createPartyBill: vi.fn().mockResolvedValue({ billId: "wo-new", revision: 5 }),
+    };
+  }
+
+  it("the next command after cancelling the party's only bill carries the revision the cancel moved the party to", async () => {
+    const server = onlyBillServer();
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    await confirmCancel(el);
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+    await flush(el);
+
+    emit(tableOrder(el)!, "new-bill", {});
+    await flush(el, 6);
+
+    expect(server.createPartyBill.mock.calls).toEqual([["v1", 4]]);
+  });
+
+  it("a sign-out while the floor is read again after a cancel reads no bills after it", async () => {
+    const server = onlyBillServer();
+    const { el } = await openCancel(server);
+    await typeReason(el, "Wrong table");
+    const read = held();
+    server.getTablesState.mockImplementation(read.call as () => Promise<TableState[]>);
+    await confirmCancel(el);
+    expect(read.call).toHaveBeenCalledOnce();
+    const billReads = server.getPartyBills.mock.calls.length;
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+
+    read.answer.settle([table4, table7, table9]);
+    await flush(el, 6);
+
+    expect(server.getPartyBills).toHaveBeenCalledTimes(billReads);
+  });
+
   it("Cancel closes the dialog and sends nothing", async () => {
     const { el } = await openCancel();
 
@@ -725,6 +777,59 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(doneText(el)).toBe(SPLIT_DONE);
     await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
     expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  /** The floor beside {@link billServer}'s bills: reopening moves the party to revision 4. */
+  function floorOf(server: ReturnType<typeof billServer>) {
+    return vi.fn(async () => [
+      seated({}, { revision: server.splitAfterPrint.mock.calls.length === 0 ? 3 : 4 }),
+      table7,
+      table9,
+    ]);
+  }
+
+  it("the next command after a reopen carries the revision the reopen moved the party to", async () => {
+    const server = billServer();
+    const moveDishes = vi.fn().mockResolvedValue({ billId: "wo-third" });
+    drafts.bills.add("wo-split");
+    const { el } = await openSplit({ ...server, getTablesState: floorOf(server), moveDishes });
+    await confirmSplit(el);
+    await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
+    await flush(el, 6);
+
+    emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: null });
+    await flush(el, 6);
+
+    expect(moveDishes.mock.calls).toEqual([
+      [
+        "wo-split",
+        ["line-1"],
+        null,
+        expect.objectContaining({ partyId: "v1", expectedPartyRevision: 4 }),
+      ],
+    ]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a sign-out while the floor is read again after a reopen reads no bills after it", async () => {
+    const server = billServer();
+    const getTablesState = floorOf(server);
+    const { el } = await openSplit({ ...server, getTablesState });
+    const read = held();
+    getTablesState.mockImplementation(read.call as () => Promise<TableState[]>);
+    await confirmSplit(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-split");
+    expect(read.call).toHaveBeenCalledTimes(2);
+    const billReads = server.getPartyBills.mock.calls.length;
+    emit(tableOrder(el)!, "logout");
+    await flush(el, 6);
+    expect(lock(el)).not.toBeNull();
+
+    read.answer.settle([table4, table7, table9]);
+    await flush(el, 6);
+
+    expect(server.getPartyBills).toHaveBeenCalledTimes(billReads);
   });
 
   it("splits a part-paid bill, saying of it only what it says of any other", async () => {

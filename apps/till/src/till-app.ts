@@ -21773,6 +21773,8 @@ export class TillApp extends LitElement {
     this.#showCancelCredited(id, { corrective: null });
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const shown = this.activeTabId === open.workingOrderId && (await this.#switchToBill(billId));
+    await this.#retakePartyFromFloor();
+    if (this.#hasLeftParty(open.partyId, sent)) return;
     await this.#loadPartyBills();
     if (shown && !this.#hasLeftParty(open.partyId, sent))
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
@@ -21808,6 +21810,8 @@ export class TillApp extends LitElement {
     if (open === null) return;
     this.#showCancelCredited(id, { corrective: null });
     const shown = this.cancelCrediting;
+    if (this.#hasLeftParty(open.partyId, sent)) return;
+    await this.#retakePartyFromFloor();
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting === shown && !this.#hasLeftParty(open.partyId, sent)) {
