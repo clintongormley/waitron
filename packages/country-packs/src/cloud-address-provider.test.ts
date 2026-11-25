@@ -13,7 +13,8 @@ const addressFields = {
   province: "Valencia",
   countryCode: "ES",
 } satisfies NonNullable<CloudAddressReply["fields"]>;
-const selection = { suggestionId: "Main Street 2", sessionToken: "open" };
+const selection = { suggestionId: "Main Street 2, Valencia", sessionToken: "open" };
+const searchRequest = { query: "Main", countryCode: "ES", sessionToken: selection.sessionToken };
 
 it("starts a new workflow after expiry while an ordinary refusal keeps the original workflow", async () => {
   const operations: CloudAddressOperation[] = [];
@@ -61,25 +62,28 @@ it.each([
     lines: ["Main Street 2"],
     code: undefined,
   },
+  {
+    scenario: "an empty second line",
+    addressLine2: "",
+    province: "Valencia",
+    lines: ["Main Street 2"],
+    code: "46",
+  },
 ])("fills the selected address with $scenario", async ({ addressLine2, province, lines, code }) => {
   const read = vi.fn(async (operation: CloudAddressOperation): Promise<CloudAddressReply> => {
     if (operation.kind === "available") return { available: true };
-    if (operation.kind === "suggest") return { candidates: [{ text: "Main Street 2" }] };
+    if (operation.kind === "suggest") return { candidates: [{ text: selection.suggestionId }] };
     return { fields: { ...addressFields, addressLine2, province } };
   });
   const provider = (await cloudAddressProvider(read, () => "en"))!;
-  await provider.suggest({
-    query: "Main",
-    countryCode: "ES",
-    sessionToken: selection.sessionToken,
-  });
+  await provider.suggest(searchRequest);
   const suggestion = read.mock.calls[1]?.[0];
   assert(suggestion?.kind === "suggest");
   const address = await provider.resolve(selection);
   expect(read).toHaveBeenLastCalledWith({
     kind: "validate",
     workflowId: suggestion.workflowId,
-    selectedText: "Main Street 2",
+    selectedText: selection.suggestionId,
   });
   expect(address).toMatchObject({
     lines,
@@ -87,7 +91,8 @@ it.each([
     postalCode: "46001",
     countryCode: "ES",
   });
-  expect(address.administrativeAreaCode).toBe(code);
+  if (code === undefined) expect(address).not.toHaveProperty("administrativeAreaCode");
+  else expect(address.administrativeAreaCode).toBe(code);
   await expect(provider.resolve(selection)).rejects.toThrow("No address search");
   expect(read).toHaveBeenCalledTimes(3);
 });
@@ -101,17 +106,32 @@ it.each([
   const provider = (await cloudAddressProvider(
     async (operation) => {
       if (operation.kind === "available") return { available: true };
-      if (operation.kind === "suggest") return { candidates: [{ text: "Main Street 2" }] };
+      if (operation.kind === "suggest") return { candidates: [{ text: selection.suggestionId }] };
       return fields ? { fields } : {};
     },
     () => "en",
   ))!;
-  await provider.suggest({
-    query: "Main",
-    countryCode: "ES",
-    sessionToken: selection.sessionToken,
-  });
+  await provider.suggest(searchRequest);
   await expect(provider.resolve(selection)).rejects.toThrow("Incomplete address fields");
+  await expect(provider.resolve(selection)).rejects.toThrow("No address search");
+});
+
+it("uses a fresh search after Cloud refuses to validate the selection", async () => {
+  const refusal = { code: "cloud.unavailable" };
+  const read = vi.fn(async (operation: CloudAddressOperation): Promise<CloudAddressReply> => {
+    if (operation.kind === "available") return { available: true };
+    if (operation.kind === "suggest") return { candidates: [{ text: selection.suggestionId }] };
+    throw refusal;
+  });
+  const provider = (await cloudAddressProvider(read, () => "en"))!;
+  await provider.suggest(searchRequest);
+  const before = read.mock.calls[1]?.[0];
+  assert(before?.kind === "suggest");
+  await expect(provider.resolve(selection)).rejects.toBe(refusal);
+  await provider.suggest(searchRequest);
+  const after = read.mock.calls[3]?.[0];
+  assert(after?.kind === "suggest");
+  expect(after.workflowId).not.toBe(before.workflowId);
 });
 
 it("leaves the search hidden when Cloud says it is unavailable", async () => {
