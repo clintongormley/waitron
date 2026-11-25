@@ -294,16 +294,13 @@ export {
   type PlacedOrder,
 } from "./order-places.js";
 export {
-  billParties,
   billPartyTableLabels,
-  billPartyTables,
   orderTableLabels,
   partyFamilies,
   partySurvivorNames,
   partySurvivors,
   partyTableLabels,
   tableNames,
-  type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
 export { withNodeTransaction, withTransaction, withVenueAndNodeTransaction } from "./tenancy.js";

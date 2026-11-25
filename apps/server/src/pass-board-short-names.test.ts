@@ -208,7 +208,7 @@ describe("the pass card names each bill's tables by their short names", () => {
     expect((await onThePass(billId)).tableShortNames).toEqual([shortOf(tableId)]);
   });
 
-  it("a delivered counter order whose table was let go names the name kept when it was let go", async () => {
+  it("shows a released delivery as a counter order on the pass", async () => {
     const billId = await counterBurger();
     await inTx(v, (tx) =>
       tx
@@ -217,7 +217,9 @@ describe("the pass card names each bill's tables by their short names", () => {
         .where(eq(workingOrders.id, billId)),
     );
 
-    expect((await onThePass(billId)).tableShortNames).toEqual(["Garden 9"]);
+    const order = await onThePass(billId);
+    expect(order.counter).toBe(true);
+    expect(order.tableShortNames).toBeUndefined();
   });
 });
 

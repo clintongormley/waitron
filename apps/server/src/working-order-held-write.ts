@@ -40,15 +40,16 @@ export async function setWorkingOrderLabel(
   attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   return withTransaction(db, async (tx) => {
-    const { label, partyId } = await requireEditableOrder(tx, orderId, request.revision);
+    const { label, partyId, billName } = await requireEditableOrder(tx, orderId, request.revision);
     await requireOrderBillEditor(tx, orderId, request);
-    const changed = label !== request.label;
+    const typedName = partyId === null ? normalisePartyName(request.label) : undefined;
+    const changed = label !== request.label || (typedName !== undefined && typedName !== billName);
     if (changed) {
       await tx
         .update(workingOrders)
         .set({
           label: request.label,
-          ...(partyId === null ? { billName: normalisePartyName(request.label) } : {}),
+          ...(typedName === undefined ? {} : { billName: typedName }),
         })
         .where(eq(workingOrders.id, orderId));
     }

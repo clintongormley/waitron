@@ -708,6 +708,7 @@ describe("getHeldOrder", () => {
       expectedEdit: null,
       orderNumber: 1,
       label: "Table 7",
+      billName: "Table 7",
       revision: 0,
       invoiceType: "F2",
       dining: "eat_in",

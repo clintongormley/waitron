@@ -893,6 +893,7 @@ describe("GET /api/orders/counter-waiting", () => {
       ],
       orderNumber: (await orderRow(sent)).orderNumber,
       label: null,
+      counter: true,
       counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
       status: "placed",
       openedAt: (await orderRow(sent)).openedAt,

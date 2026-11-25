@@ -10,6 +10,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listStationNotices } from "@waitron/venue-service";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readPartyTables } from "./orders-list.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk, type CancelItemCommand } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
@@ -249,6 +250,7 @@ describe("A773 requested lifecycle: cancel", () => {
       await cancel(order, await askFor(order, "keep_charge"));
       expect((await jobs()).slice(beforeCancel)).toEqual([]);
       expect(await notices(order, elsewhere)).toEqual([]);
+      const tables = await inTx(venue, (tx) => readPartyTables(tx, [order.partyId]));
       expect(await notices(order)).toEqual([
         {
           cancelledExtra: null,
@@ -259,7 +261,7 @@ describe("A773 requested lifecycle: cancel", () => {
           lineName: "PIZZA",
           movedTo: null,
           note: null,
-          orderLabel: `#${bill.orderNumber}`,
+          orderLabel: `#${bill.orderNumber} · ${tables.get(order.partyId)![0]}`,
           quantity: "3.000",
           reroutedTo: "No HOLD paper here",
           soldInEach: true,

@@ -10519,25 +10519,34 @@ export class TillApp extends LitElement {
     try {
       if (this.#store.persisted) {
         if (!(await this.#flushCounterKitchenNote()) || session !== this.#operatorSession) return;
-        if (!this.#store.dirty && label !== undefined && label !== this.#store.label) {
-          const saved = await this.api.setWorkingOrderLabel(id, {
-            expectedEdit: this.#counterExpectedEdit(id),
-            label,
-            revision: this.#store.revision,
-          });
-          if (session !== this.#operatorSession) return;
-          this.#store.markSaved(saved.revision);
-        } else if (
-          !(await this.#syncIfDirty(
+        const expectedEdit = this.#counterExpectedEdit(id);
+        const rename =
+          label !== undefined &&
+          (label === this.#store.label
+            ? expectedEdit === null && label !== this.#counterBillName()
+            : !this.#store.dirty);
+        if (
+          (!rename || this.#store.dirty) &&
+          (!(await this.#syncIfDirty(
             id,
             lines,
             basketLines,
             label ?? this.#store.label,
             lateSend,
           )) ||
-          basketVisit !== this.#store.loadGeneration
+            basketVisit !== this.#store.loadGeneration)
         )
           return;
+        if (rename) {
+          if (session !== this.#operatorSession) return;
+          const saved = await this.api.setWorkingOrderLabel(id, {
+            expectedEdit,
+            label,
+            revision: this.#store.revision,
+          });
+          if (session !== this.#operatorSession) return;
+          this.#store.markSaved(saved.revision);
+        }
       } else {
         await this.api.parkOrder({
           id,

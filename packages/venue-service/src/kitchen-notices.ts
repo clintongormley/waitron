@@ -192,7 +192,8 @@ export async function recordKitchenNotices(
     fromNumber === null || fromNumber === order.orderNumber
       ? `#${order.orderNumber}`
       : `#${fromNumber} → #${order.orderNumber}`;
-  const label = order.names.length > 0 ? partyTablesName(order.names) : order.billName;
+  const label =
+    movedTo === null && order.names.length > 0 ? partyTablesName(order.names) : order.billName;
   const orderLabel = label === null ? number : `${number} · ${label}`;
   const createdAt = noteEvent?.createdAt ?? nowIso();
   await insertInChunks(

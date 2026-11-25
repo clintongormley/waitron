@@ -307,6 +307,18 @@ describe("an order whose card payment is in flight", () => {
     expectPaymentPending(id);
   });
 
+  it("changes the typed name even when the receipt already uses that label", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: coffeeId, quantity: "1" }] });
+    await db
+      .update(workingOrders)
+      .set({ label: "Garden", billName: "Riley" })
+      .where(eq(workingOrders.id, id));
+    await setWorkingOrderLabel(db, id, { label: "Garden", revision: 0 });
+    expect((await getHeldOrder({ db }, id)).billName).toBe("Garden");
+  });
+
   it("still refuses a quantity change, with or without a note, writing nothing", async () => {
     const { cfg, id, before } = await payingHeldOrder();
 

@@ -905,6 +905,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(after).toEqual({
       ...before,
       label: "Ana",
+      billName: "Ana",
       revision: 1,
       kitchenNote: { ...before.kitchenNote, ownerRevision: 1 },
     });
