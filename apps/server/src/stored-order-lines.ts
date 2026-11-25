@@ -442,16 +442,14 @@ export interface TabLine {
   /** True on a dish line bound to a whole, unmeasured portion: only those may share a till row. */
   portion: boolean;
 }
-/** Counter collection still needs the dish details after placing, while edits retain their open-order guard. */
+/** Counter collection and Pay > Items on a printed bill need a placed order's dishes; edits keep
+ * their open-order guard. */
 export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
   const [order] = await tx
-    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .select({ status: workingOrders.status })
     .from(workingOrders)
     .where(eq(workingOrders.id, tabId));
-  if (
-    order === undefined ||
-    (order.status !== "open" && !(order.status === "placed" && order.partyId === null))
-  ) {
+  if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
     throw new AppError("tab.not_open", { tabId });
   }
   return readBillLines(tx, tabId);

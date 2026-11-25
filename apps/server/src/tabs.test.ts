@@ -1069,16 +1069,15 @@ describe("readTabLines", () => {
     expect(await asApp((tx) => readTabLines(tx, tabId))).toEqual([]);
   });
 
-  it("refuses a placed table bill, a settled tab and an absent id", async () => {
+  it("reads a placed table bill, and refuses a settled tab and an absent id", async () => {
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: coffeeOffer, quantity: "1" }] }),
     );
     await db.execute(sql`update working_orders set status = 'placed' where id = ${tabId}`);
-    await expect(asApp((tx) => readTabLines(tx, tabId))).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId },
-    });
+    expect((await asApp((tx) => readTabLines(tx, tabId))).map((line) => line.name)).toEqual([
+      "ES coffee",
+    ]);
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );

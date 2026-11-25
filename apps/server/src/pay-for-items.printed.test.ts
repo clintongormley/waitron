@@ -521,3 +521,39 @@ describe("previewing Pay for items on a printed bill", () => {
     }
   });
 });
+
+describe("the dishes Pay > Items lists on a printed bill", () => {
+  it("the till's lines read answers a printed table bill's dishes, and an edit stays refused", async () => {
+    const party = await printed(await seated("soup", "hake"));
+
+    const read = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/working-orders/${party.tabId}/lines`,
+    );
+
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    expect(
+      (read.json.lines as { id: string; name: string }[]).map(({ id, name }) => [name, id]),
+    ).toEqual([
+      ["Soup", await lineOf(party.tabId, "soup")],
+      ["Hake", await lineOf(party.tabId, "hake")],
+    ]);
+    const edit = await send(
+      venue.app,
+      venue.cookie,
+      "PATCH",
+      `/api/working-orders/${party.tabId}/lines/1/course`,
+      {
+        courseId: null,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+      },
+    );
+    expect({ status: edit.status, code: edit.json.code }).toEqual({
+      status: 409,
+      code: "tab.not_open",
+    });
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+  });
+});
