@@ -175,7 +175,12 @@ export class WtMasterKeyInput extends LitElement {
     this.#file = undefined;
     this.problem = undefined;
     this.loaded = false;
+    this.#mask();
     this.#scope?.commit({ value: "" });
+  }
+
+  #mask(): void {
+    this.shadowRoot?.querySelector("wt-input")?.maskPassword();
   }
 
   #notify(masterKey?: string): void {
@@ -219,6 +224,7 @@ export class WtMasterKeyInput extends LitElement {
   async #choose(file: File): Promise<void> {
     const reading = this.#start();
     this.value = "";
+    this.#mask();
     this.#file = file;
     this.#scope!.changed();
     this.#notify();

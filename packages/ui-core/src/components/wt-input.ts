@@ -162,7 +162,8 @@ export class WtInput extends LitElement {
     return this.type === "password" && !this.inputLocale ? this.passwordVisibility : undefined;
   }
 
-  private maskPassword(): void {
+  /** Hides a shown password, for a host whose clearing may leave the value as it was. */
+  maskPassword(): void {
     if (this.visibility === "shown") this.visibility = "hidden";
   }
 

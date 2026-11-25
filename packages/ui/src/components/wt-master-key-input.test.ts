@@ -952,6 +952,63 @@ test.each<[string, (el: WtMasterKeyInput) => void]>([
   expect(input.type).toBe("password");
 });
 
+/** An empty field its button shows. */
+async function shownEmptyField(extra: Partial<WtMasterKeyInput> = {}) {
+  const mounted = await field(extra);
+  await visibilityButton(EN.visibility.show).click();
+  expect(native(mounted.el).type).toBe("text");
+  return mounted;
+}
+
+async function nextSymbolIsHidden(el: WtMasterKeyInput): Promise<void> {
+  expect(native(el).type).toBe("password");
+  native(el).focus();
+  await userEvent.keyboard("8");
+  await drawn(el);
+  expect(native(el).value).toBe("8");
+  expect(native(el).type).toBe("password");
+}
+
+test.each<[string, (el: WtMasterKeyInput) => void]>([
+  ["clear()", (el) => el.clear()],
+  ["a new key name", (el) => (el.keyName = "2026-01-02 · AAAA")],
+  [
+    "taking the field off the page and putting it back",
+    (el) => {
+      const parent = el.parentNode!;
+      el.remove();
+      parent.appendChild(el);
+    },
+  ],
+])("%s hides an empty shown field, so the next key typed is hidden", async (_case, change) => {
+  const { el } = await shownEmptyField();
+  change(el);
+  await drawn(el);
+  await nextSymbolIsHidden(el);
+});
+
+test("a PDF refused for its size hides an empty shown field, so the next key typed is hidden", async () => {
+  const { el } = await shownEmptyField();
+  await choose(el, new File([new Uint8Array(LIMIT + 1)], "big.pdf"));
+  await el.pdfRead;
+  expect(message(el)).toBe(EN.notPack);
+  await nextSymbolIsHidden(el);
+});
+
+test("choosing a PDF hides an empty shown field while the PDF is still being read", async () => {
+  let finish!: (value: RecoveryPackReading) => void;
+  const { el } = await shownEmptyField({
+    readPack: async () => () => new Promise((resolve) => (finish = resolve)),
+  });
+  await choose(el);
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  await drawn(el);
+  expect(native(el).value).toBe("");
+  expect(native(el).type).toBe("password");
+  finish(reading());
+  await el.pdfRead;
+});
+
 test("emptying a shown key by hand hides the next one typed", async () => {
   const { el, input } = await shownField("88DP7");
   input.select();

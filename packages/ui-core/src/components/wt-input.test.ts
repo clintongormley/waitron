@@ -420,6 +420,20 @@ test("masks a password when its form replaces or clears it", async () => {
   }
 });
 
+test("maskPassword masks an empty shown password, and says nothing of one never shown", async () => {
+  const { field, input } = await mountPassword();
+  field.value = "";
+  field.maskPassword();
+  await field.updateComplete;
+  expect(page.getByRole("status").element().textContent).toBe("");
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  expect(input.type).toBe("text");
+  field.maskPassword();
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+});
+
 test("keeps edits visible until the person empties the field", async () => {
   const { input } = await mountPassword();
   await page.getByRole("button", { name: "Show password", exact: true }).click();
