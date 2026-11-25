@@ -76,7 +76,8 @@ const least = (a: string, b: string) => (compareDecimal(decimal(a), decimal(b)) 
 
 /** A give-back still under way (D12): what is back, what is left, and the steps that finish it.
  * Closing the window it sits in ends nothing. `give-back-busy` says when a step starts and ends,
- * so the window is not closed before a step's answer is shown. */
+ * so the window is not closed before a step's answer is shown, and, as `held`, whether a step is
+ * out or staff have its answer to read. */
 @customElement("till-give-back-under-way")
 export class TillGiveBackUnderWay extends LitElement {
   static override styles = [baseStyles, giveBackStyles];
@@ -98,8 +99,11 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private terminal: Terminal | null = null;
   /** A card's part whose answer never arrived; while it exists only it is sent again. */
   @state() private lostCard: SavedTenderRefund | null = null;
+  /** A card's part was answered here. */
+  @state() private cardAnswered = false;
   #override?: Override;
   #retry?: Retry;
+  #lastHeld = false;
   #focused = false;
 
   override connectedCallback(): void {
@@ -111,15 +115,29 @@ export class TillGiveBackUnderWay extends LitElement {
     super.disconnectedCallback();
     this.#abandonCard();
   }
+  #held(): boolean {
+    return (
+      this.busy ||
+      this.message !== "" ||
+      this.approvers !== null ||
+      this.lostCard !== null ||
+      this.cashGiven !== null ||
+      this.cardAnswered ||
+      this.correction.state !== "open"
+    );
+  }
   override updated(changed: PropertyValues): void {
-    if (changed.has("busy"))
+    const held = this.#held();
+    if (changed.has("busy") || held !== this.#lastHeld) {
+      this.#lastHeld = held;
       this.dispatchEvent(
         new CustomEvent("give-back-busy", {
-          detail: { busy: this.busy },
+          detail: { busy: this.busy, held },
           bubbles: true,
           composed: true,
         }),
       );
+    }
     if (this.#focused) return;
     const first = this.shadowRoot!.querySelector<LitElement>("[data-choice]");
     if (first === null) return;

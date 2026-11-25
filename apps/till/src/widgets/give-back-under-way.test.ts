@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { deferred } from "../../test/clock-app.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -1262,6 +1263,107 @@ describe("what still works when a read fails", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("what holds back the full-disk screen", () => {
+  /** The latest `give-back-busy`, the first of which comes before `mount` returns. */
+  function listening() {
+    const seen = vi.fn<(detail: { busy: boolean; held: boolean }) => void>();
+    const listen = (event: Event) => seen((event as CustomEvent).detail);
+    document.addEventListener("give-back-busy", listen);
+    onTestFinished(() => document.removeEventListener("give-back-busy", listen));
+    return () => seen.mock.lastCall?.[0];
+  }
+  const answered = { busy: false, held: true };
+
+  it("is nothing before a step, and again once Check again found nothing new", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    const { el } = await mount(OPEN, api);
+    expect(latest()).toEqual({ busy: false, held: false });
+    const read = deferred<InvoiceCorrectionView>();
+    api.getInvoiceCorrection.mockImplementationOnce(() => read.promise);
+    press(el, "check");
+    await el.updateComplete;
+    expect(latest()).toEqual({ busy: true, held: true });
+    read.resolve(OPEN);
+    await vi.waitFor(() => expect(latest()).toEqual({ busy: false, held: false }));
+  });
+
+  it("is a refusal, until the next step is pressed", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(refused("invoice_correction.money_short"));
+    const { el } = await mount(OPEN, api);
+    press(el, "card");
+    await vi.waitFor(() => expect(bottom(el)).not.toBe(""));
+    expect(latest()).toEqual(answered);
+    press(el, "check");
+    await vi.waitFor(() => expect(latest()).toEqual({ busy: false, held: false }));
+  });
+
+  it("is a step waiting for its approver", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.rectify" }),
+    );
+    const { el } = await mount(FILING, api);
+    press(el, "stop");
+    await pinDialog(el);
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is a card's part with no answer, also from an earlier visit", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(lost());
+    const first = await mount(OPEN, api);
+    press(first.el, "card");
+    await vi.waitFor(() =>
+      expect(root(first.el).querySelector("[data-send-again]")).not.toBeNull(),
+    );
+    expect(latest()).toEqual(answered);
+    first.el.remove();
+    await mount(OPEN, api);
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is the cash to hand over", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockResolvedValueOnce({
+      correction: { ...OPEN, moneyBack: "5.00", left: "1.05" },
+      refunds: [],
+      replayed: false,
+    } as never);
+    const { el } = await mount(OPEN, api);
+    press(el, "cash");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-cash-given]")).not.toBeNull());
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is the card company's answer to a card's part", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, pending: "6.05", left: "0.00" });
+    const { el } = await mount(OPEN, api);
+    press(el, "card");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-pending]")).not.toBeNull());
+    expect(bottom(el)).toBe("");
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is how it ended", async () => {
+    const latest = listening();
+    const { el } = await mount(FILING);
+    press(el, "stop");
+    await vi.waitFor(() => expect(outcome(el)).not.toBe(""));
+    expect(latest()).toEqual(answered);
   });
 });
 

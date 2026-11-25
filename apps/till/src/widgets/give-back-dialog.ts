@@ -149,15 +149,18 @@ export class TillGiveBackDialog extends LitElement {
   @state() private step: Step | null = null;
   @state() private sending = false;
   @state() private underWayBusy = false;
+  @state() private underWayHeld = false;
   @state() private sendRefusal: Refusal | null = null;
   @state() private checkingPending = false;
   /** What the last Check again found, while a card refund still waits. */
   @state() private pendingStatus = "";
   @state() private approvers: StaffMember[] | null = null;
   @state() private pinError: ApproverRefusal | null = null;
-  #approval?: Sending;
+  /** The press waiting for an approver, from the read of who may approve. */
+  @state() private approval?: Sending;
   #previewRequest = 0;
   #lastStep = "";
+  #lastHeld = false;
   #filled = false;
   /** The dishes the window opened ticked; the cancel's ids go only with exactly these. */
   #filledLines: string[] = [];
@@ -200,7 +203,29 @@ export class TillGiveBackDialog extends LitElement {
     this.#leave = undefined;
     super.disconnectedCallback();
   }
+  /** Whether the window holds something staff must read or finish, so a full-disk screen waits:
+   * a press out or waiting for its approver, its refusal, lost answer or outcome, or the same of
+   * a step of the under-way view or of Check again. */
+  #held(): boolean {
+    return (
+      this.sending ||
+      this.checkingPending ||
+      this.pendingStatus !== "" ||
+      this.sendRefusal !== null ||
+      this.approval !== undefined ||
+      this.step?.kind === "lost" ||
+      this.step?.kind === "done" ||
+      this.underWayHeld
+    );
+  }
   override updated(): void {
+    const held = this.#held();
+    if (held !== this.#lastHeld) {
+      this.#lastHeld = held;
+      this.dispatchEvent(
+        new CustomEvent("give-back-held", { detail: { held }, bubbles: true, composed: true }),
+      );
+    }
     const step =
       this.step?.kind === "lost" ? "lost" : this.view === null ? "" : (this.purpose ?? "choice");
     if (step === this.#lastStep) return;
@@ -509,7 +534,7 @@ export class TillGiveBackDialog extends LitElement {
     else await this.#askApprover(sending);
   }
   async #askApprover(sending: Sending): Promise<void> {
-    this.#approval = sending;
+    this.approval = sending;
     try {
       const approvers = await readApprovers(this.api, sending.rights);
       if (!this.#open()) return;
@@ -525,7 +550,7 @@ export class TillGiveBackDialog extends LitElement {
     try {
       const outcome = await sending.send(override);
       this.approvers = null;
-      this.#approval = undefined;
+      this.approval = undefined;
       this.#scope?.commit(this.draft);
       this.step = stillStarting(outcome)
         ? lostAfter(sending, this.#saved()?.sent)
@@ -542,7 +567,7 @@ export class TillGiveBackDialog extends LitElement {
     const lost = this.step?.kind === "lost" ? this.step : null;
     if (refusal.code === "network" || (refusal.code === "busy" && lost !== null)) {
       this.approvers = null;
-      this.#approval = undefined;
+      this.approval = undefined;
       this.step =
         refusal.code === "busy"
           ? { ...lost!, busy: true }
@@ -571,7 +596,7 @@ export class TillGiveBackDialog extends LitElement {
    * saved is the session's: while it does, a changed press is refused as locked. */
   #refused(refusal: Refusal): void {
     this.approvers = null;
-    this.#approval = undefined;
+    this.approval = undefined;
     const step = this.step;
     if (step?.kind === "done") {
       this.step = { ...step, notice: this.#sendRefusalText(refusal, true) };
@@ -912,9 +937,10 @@ export class TillGiveBackDialog extends LitElement {
       .refunds=${this.refunds}
       .capabilities=${this.capabilities}
       .close=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
-      @give-back-busy=${(event: CustomEvent<{ busy: boolean }>) => {
+      @give-back-busy=${(event: CustomEvent<{ busy: boolean; held: boolean }>) => {
         event.stopPropagation();
         this.underWayBusy = event.detail.busy;
+        this.underWayHeld = event.detail.held;
       }}
     ></till-give-back-under-way>`;
   }
@@ -969,7 +995,7 @@ export class TillGiveBackDialog extends LitElement {
                 event.stopPropagation();
                 if (this.sending) return;
                 this.approvers = null;
-                this.#approval = undefined;
+                this.approval = undefined;
                 // A first send refused for its PIN wrote nothing, so cancelling forgets it.
                 try {
                   this.session.abandon(this.saleId);
@@ -979,7 +1005,7 @@ export class TillGiveBackDialog extends LitElement {
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
                 event.stopPropagation();
-                const approval = this.#approval;
+                const approval = this.approval;
                 if (approval !== undefined && !this.sending)
                   void this.#send(approval, event.detail);
               }}

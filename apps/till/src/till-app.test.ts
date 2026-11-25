@@ -27672,6 +27672,116 @@ describe("A737 post-invoice refund integration", () => {
       return window;
     }
 
+    describe("on a full disk", () => {
+      const stop = (el: TillApp) => el.shadowRoot!.querySelector("wt-stop-screen");
+      const covering = (el: TillApp) =>
+        vi.waitFor(() => expect(stop(el)?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy());
+      /** Opens the receipt with a disk the box says is full from `fill()` on. */
+      async function filling(over: Record<string, unknown>) {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        onTestFinished(() => void vi.useRealTimers());
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const { el } = await open({ ...giving(over), getDeviceEquipment });
+        const fill = async () => {
+          getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+          await pollDiskNotice(el);
+          await giveBack(el)!.updateComplete;
+          await flush(el);
+        };
+        return { el, fill };
+      }
+      const closed = async (el: TillApp) => {
+        emit(giveBack(el)!, "give-back-close");
+        await covering(el);
+      };
+
+      it("covers the window while nothing has been sent", async () => {
+        const { el, fill } = await filling({});
+        await openGiveBack(el);
+        await fill();
+        await covering(el);
+        expect(giveBack(el)).not.toBeNull();
+      });
+
+      it("waits while a press is out and while its outcome is shown, then covers the till", async () => {
+        const answer = deferred<unknown>();
+        const giveBackCall = vi.fn<(saleId: string, body: GiveBackWrite) => Promise<unknown>>(
+          () => answer.promise,
+        );
+        const { el, fill } = await filling({ giveBack: giveBackCall });
+        await pressGoodwill(el);
+        expect(giveBackCall).toHaveBeenCalledOnce();
+        await fill();
+        expect(stop(el)).toBeNull();
+        answer.resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+        await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+        await flush(el);
+        expect(stop(el)).toBeNull();
+        await closed(el);
+      });
+
+      it.each([
+        ["refused", { code: "storage.disk_full", status: 507 }, "wt-form-actions"],
+        ["unanswered", new TypeError("Failed to fetch"), "[data-send-again]"],
+        [
+          "refused until someone approves it",
+          { code: "authorization.not_permitted", permission: "sale.refund", status: 403 },
+          "till-supervisor-override-dialog",
+        ],
+      ])("waits while a press is %s, then covers the till", async (_state, error, shown) => {
+        const { el, fill } = await filling({ giveBack: vi.fn().mockRejectedValue(error) });
+        await pressGoodwill(el);
+        await vi.waitFor(() => expect(inWindow(el, shown)).not.toBeNull());
+        await fill();
+        expect(stop(el)).toBeNull();
+        await closed(el);
+      });
+
+      it("covers the window again once its refusal is edited away", async () => {
+        const { el, fill } = await filling({
+          giveBack: vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 }),
+        });
+        await pressGoodwill(el);
+        await vi.waitFor(() =>
+          expect(
+            inWindow<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error,
+          ).toBe(codeMessage("storage.disk_full")),
+        );
+        await fill();
+        expect(stop(el)).toBeNull();
+        emit(inWindow(el, "wt-combobox[name=reason]")!, "wt-change", { value: "other" });
+        await covering(el);
+      });
+
+      it("waits while a step of a give-back under way is out and while its answer is shown, then covers the till", async () => {
+        const answer = deferred<unknown>();
+        const giveInvoiceCorrectionCash = vi.fn(() => answer.promise);
+        const { el, fill } = await filling({
+          readGiveBack: vi.fn().mockResolvedValue({ ...VIEW, underWay: UNDER_WAY }),
+          getInvoiceCorrection: vi.fn().mockResolvedValue(UNDER_WAY),
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["take-cash"] }),
+          giveInvoiceCorrectionCash,
+        });
+        await openGiveBack(el);
+        const step = <T extends Element = HTMLElement>(selector: string) =>
+          inWindow(el, "till-give-back-under-way")?.shadowRoot!.querySelector<T>(selector);
+        await vi.waitFor(() => expect(step("[data-choice=cash]")).toBeTruthy());
+        step("[data-choice=cash]")!.click();
+        await vi.waitFor(() => expect(giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
+        await fill();
+        expect(stop(el)).toBeNull();
+        answer.resolve({
+          correction: { ...UNDER_WAY, moneyBack: "5.00", left: "1.00" },
+          refunds: [],
+          replayed: false,
+        });
+        await vi.waitFor(() => expect(step("[data-cash-given]")).toBeTruthy());
+        await flush(el);
+        expect(stop(el)).toBeNull();
+        await closed(el);
+      });
+    });
+
     it("keeps a press whose answer was lost through a reload, and opens its receipt's window on Send again even when the payments cannot be read, sending it under the same ids", async () => {
       const giveBackCall = vi
         .fn()

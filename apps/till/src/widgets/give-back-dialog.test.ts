@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { deferred } from "../../test/clock-app.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -385,6 +386,25 @@ describe("a card refund the box knows is waiting", () => {
     await vi.waitFor(() => expect(status(el)).toBe(t("give_back.read_failed")));
     expect(choice(el, "goodwill")!.getAttribute("aria-disabled")).toBe("true");
     expect(check(el)).not.toBeNull();
+  });
+
+  it("holds back the full-disk screen while Check again is out and while its answer is shown", async () => {
+    const api = fakeGiveBackApi(PENDING);
+    const { el } = await mount(api);
+    const held = vi.fn();
+    el.addEventListener("give-back-held", (event) => held((event as CustomEvent).detail.held));
+    const answer = deferred<GiveBackView>();
+    api.readGiveBack.mockImplementationOnce(() => answer.promise);
+    check(el)!.click();
+    await el.updateComplete;
+    expect(held.mock.calls).toEqual([[true]]);
+    answer.resolve(PENDING);
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(held.mock.calls).toEqual([[true]]);
+    api.readGiveBack.mockResolvedValueOnce(VIEW);
+    check(el)!.click();
+    await vi.waitFor(() => expect(check(el)).toBeNull());
+    expect(held.mock.calls).toEqual([[true], [false]]);
   });
 
   it("offers no Check again while nothing waits for the card company", async () => {

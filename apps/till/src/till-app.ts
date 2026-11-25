@@ -3887,6 +3887,8 @@ export class TillApp extends LitElement {
     refunds: TenderRefundSession;
     fill: GiveBackFill | null;
   } | null = null;
+  /** The open window that has a press out or an answer to read. */
+  @state() private givingBackHeld: object | null = null;
   @state() private findBillError?:
     | StringKey
     | { overLimit: string }
@@ -9592,6 +9594,10 @@ export class TillApp extends LitElement {
         if (this.givingBack !== open) return;
         this.givingBack = null;
         void this.#readRefundableTenders(true);
+      }}
+      @give-back-held=${(event: CustomEvent<{ held: boolean }>) => {
+        event.stopPropagation();
+        this.givingBackHeld = event.detail.held ? open : null;
       }}
       @give-back-signed-out=${(event: Event) => {
         event.stopPropagation();
@@ -24711,7 +24717,6 @@ export class TillApp extends LitElement {
     )
       return nothing;
     const paying = this.billPaying;
-    const refund = this.tenderRefunding;
     const credit = this.cancelCrediting;
     const onCounter =
       this.#shellActive() && this.drill === undefined && this.#activeTab() === "counter";
@@ -24725,7 +24730,7 @@ export class TillApp extends LitElement {
         (this.findingBill && (this.findBillBusy || this.findBillError !== undefined)) ||
         this.billRefunding?.busy === true ||
         this.billRefunding?.refusal != null ||
-        (refund !== null && (refund.busy || refund.result !== null || refund.refusal !== null)) ||
+        (this.givingBack !== null && this.givingBackHeld === this.givingBack) ||
         (credit !== null && (credit.busy || credit.refusal !== null || credit.done !== null)) ||
         this.settlementDocument !== null ||
         this.captureWarning !== null ||
