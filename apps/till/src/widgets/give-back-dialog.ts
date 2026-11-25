@@ -57,6 +57,7 @@ import {
   doneStep,
   lostFor,
   lostStep,
+  readApprovers,
   recoveryLinkOf,
   recoveryText,
   restOutcome,
@@ -507,7 +508,7 @@ export class TillGiveBackDialog extends LitElement {
   async #askApprover(sending: Sending): Promise<void> {
     this.#approval = sending;
     try {
-      const approvers = await this.api.listApprovers(sending.rights);
+      const approvers = await readApprovers(this.api, sending.rights);
       if (!this.#open()) return;
       this.approvers = approvers;
       this.pinError = null;

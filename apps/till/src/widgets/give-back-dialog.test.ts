@@ -13,6 +13,7 @@ import type {
   GiveBackWrite,
 } from "../api/give-back-types.js";
 import { GiveBackSession } from "../state/give-back.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import {
   CARD,
   CASH,
@@ -1048,7 +1049,9 @@ describe("sending", () => {
     answering(api, { needs: ["sale.refund", "sale.rectify"] });
     const el = await press(api);
     await vi.waitFor(() => expect(approval(el)).not.toBeNull());
-    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund", "sale.rectify"]);
+    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund", "sale.rectify"], {
+      signal: expect.any(AbortSignal),
+    });
     expect(approval(el)!.authorizers).toEqual([{ personId: "boss", displayName: "Boss" }]);
     expect(api.giveBack).not.toHaveBeenCalled();
     await approve(el);
@@ -1106,7 +1109,7 @@ describe("sending", () => {
       await vi.waitFor(() =>
         expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
       );
-      expect(api.listApprovers).toHaveBeenCalledWith([right]);
+      expect(api.listApprovers).toHaveBeenCalledWith([right], { signal: expect.any(AbortSignal) });
       expect(sent(api, 1).override).toEqual({ personId: "boss", pin: "1234" });
     },
   );
@@ -1131,6 +1134,37 @@ describe("sending", () => {
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.approvers_failed")));
     expect(approval(el)).toBeNull();
     expect(api.giveBack).not.toHaveBeenCalled();
+  });
+
+  it("gives up reading who may approve at the time limit, says so and sends nothing", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    api.listApprovers.mockImplementationOnce(
+      (_permission, options) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
+    );
+    const el = await ready(api);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      submit(el).click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listApprovers).toHaveBeenCalledOnce();
+      expect(bottom(el)).toBe("");
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(bottom(el)).toBe(t("give_back.approvers_failed"));
+      expect(approval(el)).toBeNull();
+      expect(api.giveBack).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says the press could not be saved, and sends nothing", async () => {
@@ -1200,7 +1234,9 @@ describe("sending", () => {
         "€10.00 given back on the separate card terminal is recorded.",
       ),
     );
-    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"]);
+    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"], {
+      signal: expect.any(AbortSignal),
+    });
     expect(sent(api)).toMatchObject({
       manualConfirmed: true,
       override: { personId: "boss", pin: "1234" },
@@ -1345,7 +1381,9 @@ describe("sending", () => {
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
     );
-    expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"]);
+    expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"], {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   const restRequest: GiveBackRequest = {
@@ -1725,7 +1763,9 @@ describe("sending", () => {
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
     );
-    expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"]);
+    expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"], {
+      signal: expect.any(AbortSignal),
+    });
   });
 });
 

@@ -12,6 +12,8 @@ import type {
 } from "../api/give-back-types.js";
 import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
+import type { StaffMember, TillApi } from "../api/client.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
@@ -21,6 +23,19 @@ export interface Sending {
   rights: GiveBackRight[];
   needs: GiveBackRight[];
   way: string;
+}
+/** Who may approve, read under the till's request limit: a read that stalls is abandoned and
+ * rejects, so the caller shows its refusal rather than waiting for ever. */
+export async function readApprovers(
+  api: Pick<TillApi, "listApprovers">,
+  rights: GiveBackRight | readonly GiveBackRight[],
+): Promise<StaffMember[]> {
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  try {
+    return await api.listApprovers(rights, { signal: limit.signal });
+  } finally {
+    limit.done();
+  }
 }
 export const APPROVER_PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 export const NEEDS_APPROVER = new Set([

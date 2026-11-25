@@ -10,7 +10,13 @@ import {
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
-import { NEEDS_APPROVER, recoveryLinkOf, recoveryText, terminalStep } from "./give-back-steps.js";
+import {
+  NEEDS_APPROVER,
+  readApprovers,
+  recoveryLinkOf,
+  recoveryText,
+  terminalStep,
+} from "./give-back-steps.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -29,7 +35,6 @@ import {
   type TenderRefundSession,
 } from "../state/tender-refund.js";
 import { refusalOf } from "../state/bill-payment.js";
-import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 
 export type GiveBackUnderWayApi = Pick<
   TillApi,
@@ -247,9 +252,8 @@ export class TillGiveBackUnderWay extends LitElement {
   }
   async #askApprover(right: GiveBackRight): Promise<void> {
     this.#override = undefined;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      this.approvers = await this.api.listApprovers(right, { signal: limit.signal });
+      this.approvers = await readApprovers(this.api, right);
       this.pinError = null;
     } catch (error) {
       const read = refusalOf(error);
@@ -260,8 +264,6 @@ export class TillGiveBackUnderWay extends LitElement {
         read.code === "network"
           ? t("give_back.uw_approvers_failed")
           : codeMessage(read.code, currentLocale(), read);
-    } finally {
-      limit.done();
     }
   }
   #signedIn(event: CustomEvent<OverrideConfirmDetail>): void {
