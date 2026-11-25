@@ -141,6 +141,12 @@ export interface PrintApiDeps {
   testPages?: PageTestPages;
 }
 
+type PrintPermissionGate = <T>(
+  sessionId: string,
+  fn: (tx: Transaction, personId: string) => Promise<T>,
+  permission?: Permission,
+) => Promise<T>;
+
 const PRINTER_MANAGE_PERMISSION: Permission = "hardware.manage";
 
 const RECENT_JOBS_LIMIT = 100;
@@ -487,40 +493,41 @@ function requireBluetoothAddress(value: unknown): string {
   return value.toUpperCase();
 }
 
+interface DiscoveredEntry {
+  agentId: string;
+  transport: string;
+  localKey?: string;
+  host?: string;
+  port?: number;
+  make?: string;
+  model?: string;
+  name?: string;
+  serverName?: string;
+  pagePrinter?: true;
+  ipp?: IppQueue;
+  ippOnly?: true;
+  office?: OfficePrinterReport;
+  printerLike?: true;
+  /** The latest paired report's answer; absent when the agent could not tell. */
+  pairedPrinterLike?: boolean;
+  /** Calendar time sent to the dashboard. */
+  lastSeenAt: number;
+  /** Steady time of the latest report of any kind. */
+  reportedAt: number;
+  /** Only a scan sets this, and only it authorizes Pair. */
+  scannedAt?: number;
+  /** Only a paired report sets this and qualifies the box for unpairing on Delete. */
+  pairedAt?: number;
+  /** Only a visible report sets this: the agent can print to the device. */
+  visibleAt?: number;
+}
+
 export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void {
   // Built once, so it is one bucket for the whole mounted API.
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
   // The discovered inventory and the discovery window live in memory only; agent polls rebuild them
   // after a restart.
-  interface DiscoveredEntry {
-    agentId: string;
-    transport: string;
-    localKey?: string;
-    host?: string;
-    port?: number;
-    make?: string;
-    model?: string;
-    name?: string;
-    serverName?: string;
-    pagePrinter?: true;
-    ipp?: IppQueue;
-    ippOnly?: true;
-    office?: OfficePrinterReport;
-    printerLike?: true;
-    /** The latest paired report's answer; absent when the agent could not tell. */
-    pairedPrinterLike?: boolean;
-    /** Calendar time sent to the dashboard. */
-    lastSeenAt: number;
-    /** Steady time of the latest report of any kind. */
-    reportedAt: number;
-    /** Only a scan sets this, and only it authorizes Pair. */
-    scannedAt?: number;
-    /** Only a paired report sets this and qualifies the box for unpairing on Delete. */
-    pairedAt?: number;
-    /** Only a visible report sets this: the agent can print to the device. */
-    visibleAt?: number;
-  }
   const description = (entry: DiscoveredEntry | undefined, now: number) =>
     entry === undefined
       ? undefined
