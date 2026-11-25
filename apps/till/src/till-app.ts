@@ -12728,6 +12728,7 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
+        .itemsOffered=${open.surface !== "counter" || (this.stage !== "collect" && open.balance?.status !== "placed")}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
@@ -23782,6 +23783,8 @@ export class TillApp extends LitElement {
   async #moveToReopened(open: BillPaying, reopened: BillBalance): Promise<void> {
     const now = this.#billPayingNow(open.id);
     if (now !== null) this.billPaying = movedToBill(now, reopened);
+    if (this.#unknownCardOutcome.has(open.billId))
+      this.#unknownCardOutcome.add(reopened.workingOrderId);
     if (this.#hasLeftOrder(open.billId, open.visit)) return;
     if (!(await this.#switchToBill(reopened.workingOrderId))) return;
     this.billBalance = reopened;

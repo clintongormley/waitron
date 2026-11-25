@@ -213,3 +213,65 @@ it.each([undefined, "F1/7"])(
     );
   },
 );
+
+it("a Counter order sent to the kitchen offers no Items in its Pay window, and the other ways", async () => {
+  const id = "placed-order";
+  const api = stubApi({
+    listCounterWaiting: vi.fn().mockResolvedValue([
+      {
+        id,
+        items: [],
+        orderNumber: 7,
+        label: null,
+        status: "placed",
+        total: "30.00",
+        openedAt: "2026-11-10T10:00:00Z",
+        settledAt: null,
+        collectedAt: null,
+        serviceMode: "ticket_then_pay",
+        counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+        canHandOver: false,
+        movableDishes: [],
+      },
+    ]),
+    retrievePlacedOrder: vi.fn().mockResolvedValue({
+      zoneId: null,
+      id,
+      orderNumber: 7,
+      revision: 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        { workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product },
+      ],
+    }),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 0,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
+    getBillBalance: vi
+      .fn()
+      .mockResolvedValue(
+        balanceOf({ workingOrderId: id, status: "placed", total: "30.00", outstanding: "30.00" }),
+      ),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  let counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  emit(counter, "pay-waiting-order", { id });
+  await flush(el, 6);
+  counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await flush(el);
+
+  const ways = [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('[name="way"]')].map(
+    (input) => input.value,
+  );
+  expect(ways).toEqual(["contribution", "share", "whole"]);
+});

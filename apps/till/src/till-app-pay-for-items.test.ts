@@ -573,6 +573,56 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)![0]).toBe("wo-5");
   });
 
+  it("a card still pending on a printed bill moves to the reopened bill, its outcome unknown there", async () => {
+    let paid = false;
+    // The draft fixture serves wo-5, so it stands for the reopened bill.
+    const reopened = balanceOf({ workingOrderId: "wo-5" });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "stripe_terminal",
+        capabilities: [
+          "print-receipt",
+          "integrated-card-payment",
+          "close-deferred",
+        ] as CapabilityFlag[],
+        activeReaders: readers.map((reader) => ({ ...reader, provider: "stripe_terminal" })),
+        defaultReaderId: readers[0]!.id,
+      }),
+      getPartyBills: vi.fn(async () => [
+        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
+      ]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return {
+          ...onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" }),
+          sourceBalance: reopened,
+        };
+      }),
+    });
+    await choosePrintedItems(el, [4, 5]);
+    const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el, 6);
+
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("30.00")),
+    );
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(tableOrder(el).billBalance).toEqual(reopened);
+    expect(dialog(el)!.balance).toEqual(reopened);
+    expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
+    expect(dialog(el)!.deferredOffered).toEqual({
+      state: "off",
+      reason: "deferred_close.payment_unconfirmed",
+    });
+  });
+
   it("Cancel payment stops the reader under the table's bill", async () => {
     let settle!: (result: ItemPaymentResult) => void;
     const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });

@@ -507,6 +507,8 @@ export class TillBillPayDialog extends LitElement {
   /** The answer to the own-receipt question; null while unanswered. */
   @state() private ownReceipt: boolean | null = null;
   @property({ type: Boolean }) confirmationLocked = false;
+  /** False where paying for items is not offered: a Counter order already sent to the kitchen. */
+  @property({ type: Boolean }) itemsOffered = true;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
   @property({ type: Boolean }) tipsEnabled = true;
@@ -1700,18 +1702,19 @@ export class TillBillPayDialog extends LitElement {
           ${t("bill_pay.way")}${helpBadge("help.payment", t("action.pay"), { guide: "table-service.pay-window" })}
         </legend>
         <div class="options">
-          ${BILL_PAY_WAYS.map(({ way, label }) =>
-            this.#radio(
-              "way",
-              way,
-              t(label),
-              this.chosenWay === way,
-              () => {
-                this.chosenWay = way;
-                this.#shareRun = null;
-              },
-              way === "whole" && this.balance === null,
-            ),
+          ${BILL_PAY_WAYS.filter(({ way }) => way !== "items" || this.itemsOffered).map(
+            ({ way, label }) =>
+              this.#radio(
+                "way",
+                way,
+                t(label),
+                this.chosenWay === way,
+                () => {
+                  this.chosenWay = way;
+                  this.#shareRun = null;
+                },
+                way === "whole" && this.balance === null,
+              ),
           )}
         </div>
       </fieldset>
