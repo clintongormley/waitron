@@ -72,7 +72,7 @@ EXACT.push(
 export const PROTECTED = [
   {
     id: "K10",
-    files: ["apps/server/src/till-api.test.ts"],
+    files: ["apps/server/src/till-api.bootstrap.test.ts"],
     pattern: /(?:language|static) catalogue/g,
   },
   {

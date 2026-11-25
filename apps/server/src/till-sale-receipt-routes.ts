@@ -1,5 +1,5 @@
 import { type Transaction, sales, withTransaction } from "@waitron/db";
-import { type Logger, readJsonBody, requireBodyUuid } from "@waitron/server-kit";
+import { readJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -35,6 +35,8 @@ import { tillReceiptPreview } from "./till-receipt-preview.js";
 import { readSettledTicket, printSaleReceipt, reprintSale } from "./till-sale.js";
 import { requireSession, assertRequestDevice } from "./till-session.js";
 import { checkZones, gateZones } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillSaleReceiptRoutes(
   app: Hono,

@@ -28,4 +28,8 @@ Find each till route by job in one PR. `till-api.ts` keeps the mount. All pieces
    cp "$scratch/base/scripts/move-ts-declarations.mjs" "$scratch/branch/scripts/move-ts-declarations.mjs"
    ```
 
+   Run `node scripts/move-ts-declarations.mjs scripts/till-api-split.json` from each scratch root. Use the delta between the two raw outputs. For a standalone typecheck of a raw output, change `readBillSetMenus` in `till-set-menu-routes.ts` to a value import. The delivered files have that correction and each throwing file's error-registry import.
+
+   The replay on Lane E's `5d5b0ce80c8bf707229b8e966a6ff9522472a950` kept its 220-byte mount call and moved its optional dependency. All 12 route group files matched the move on the base. The second reviewer replayed Lane B's regroup edit into `till-working-order-routes.ts`.
+
 6. Move the chosen-device sessions, login/logout, PIN throttle, locale, roster and boot, device/profile admission, reader payments, malformed zone, sale policy and settling edit blocks from `till-api.test.ts`, sharing fixtures under `testing/`. Retarget live doc and profile-action pointers when their cited cases move. Update `apps/server/test-durations.json`. Keep the cited `requireSession` block and grandfathered English-guard text in place. Retarget the sign-out scan in `till-api.session-person.test.ts`. Preserve assertions. Run changed suites plus `till-api`'s `profile-actions`, `profile-zones`, `disk-full-gate`, `till-box-clock-api`, `till-clock.disk-full` and `attendance-till-api`. Run unchanged Fiscal `write-path.e2e` and `inmutabilidad`, Server `till-api.sell-published` and Till `till-app-menu-refresh`. Run Server typecheck and affected root guards. Require current-head Server CI.

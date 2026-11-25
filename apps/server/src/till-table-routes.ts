@@ -1,7 +1,7 @@
 import { withIssuanceTransaction } from "@waitron/core";
 import { type Transaction, withTransaction } from "@waitron/db";
 import { type PinThrottle, canUseDeviceProfile, authorize } from "@waitron/identity";
-import { type Logger, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
+import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { type JoinSide, JOIN_SIDES, isUuid, AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -71,6 +71,9 @@ import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession, assertStillSignedIn, assertRequestDevice } from "./till-session.js";
 import { listTablesWithState } from "./working-order-table-state.js";
 import { readZoneScope, inScope, checkZones } from "./zone-access.js";
+import type { TillSaleDeps } from "./working-order-context.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 /** The other tables a seat names, absent for none; none may be the path table. */
 function requireOtherTables(value: unknown, pathId: string): string[] {
@@ -131,7 +134,7 @@ export function mountTillTableRoutes(
   log: Logger,
   pinThrottle: PinThrottle,
   catchUpFloor: (tx: Transaction) => ReturnType<typeof ensureToday>,
-  fiscal: import("./working-order-context.js").TillSaleDeps,
+  fiscal: TillSaleDeps,
 ): void {
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {

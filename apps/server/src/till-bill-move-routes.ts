@@ -1,6 +1,6 @@
 import { withIssuanceTransaction } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
-import { requireBodyUuid, type Logger, readRawJsonBody } from "@waitron/server-kit";
+import { requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { type DishMove, int4InRange, AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -40,6 +40,9 @@ import { requireSession } from "./till-session.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import type { OrderAttendance } from "./working-order-context.js";
 import { checkZones } from "./zone-access.js";
+import type { TillSaleDeps } from "./working-order-context.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 function requireSetMenuMoves(value: unknown): DishMove[] {
   if (!Array.isArray(value) || value.length === 0) throw invalid("moves");
@@ -58,7 +61,7 @@ export function mountTillBillMoveRoutes(
   app: Hono,
   deps: TillApiDeps,
   log: Logger,
-  fiscal: import("./working-order-context.js").TillSaleDeps,
+  fiscal: TillSaleDeps,
 ): void {
   app.post("/api/bills/:id/set-menu-moves", (c) =>
     run(c, log, async () => {

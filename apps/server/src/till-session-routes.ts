@@ -1,4 +1,4 @@
-import { withTransaction, tillSessions, readNodeMembership } from "@waitron/db";
+import { withTransaction, readNodeMembership } from "@waitron/db";
 import {
   type PinThrottle,
   loginWithPin,
@@ -6,10 +6,11 @@ import {
   setPersonLocale,
   listActiveStaff,
   listStaffAdmittedTo,
+  tillSessions,
 } from "@waitron/identity";
 import { isSharedDisplay } from "@waitron/layouts";
 import { routableServers } from "@waitron/membership";
-import { type Logger, readJsonBody } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import { AppError, isAppError, PERSON_HEADER, SUPPORTED_LOCALES } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -34,6 +35,8 @@ import {
   assertRequestDevice,
 } from "./till-session.js";
 import { completeTillSetup, readTillSetup, setupRevisionOf } from "./till-setup.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillSessionRoutes(
   app: Hono,

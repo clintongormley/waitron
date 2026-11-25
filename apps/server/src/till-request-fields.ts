@@ -8,6 +8,7 @@ import type { MoveTarget, OtherPartyRead, MoveBillOptions } from "./move-bill.js
 import type { SubmitDraftInput } from "./order-drafts.js";
 import type { SubmitGroupsInput, GroupLine } from "./order-group-submission.js";
 import type { SplitGuestCounts, TableActionOptions, SplitSelection } from "./table-actions.js";
+import "./errors.js";
 
 /** A malformed id is refused with the code the route gives an absent or wrong-state order. */
 export function requireUuidId(

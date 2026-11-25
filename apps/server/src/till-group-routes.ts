@@ -1,6 +1,6 @@
 import { withTransaction } from "@waitron/db";
 import { type PinThrottle, canUseDeviceProfile } from "@waitron/identity";
-import { type Logger, readRawJsonBody } from "@waitron/server-kit";
+import { readRawJsonBody } from "@waitron/server-kit";
 import { isUuid, AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { invalid } from "./bill-allocation.js";
@@ -36,6 +36,8 @@ import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession, assertStillSignedIn } from "./till-session.js";
 import { markServed, unmarkServed, markGroupServed } from "./working-order-serving.js";
 import { checkZones } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillGroupRoutes(
   app: Hono,

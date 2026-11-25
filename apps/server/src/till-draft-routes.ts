@@ -1,7 +1,7 @@
 import { withIssuanceTransaction } from "@waitron/core";
 import { workingOrders, parties, withTransaction, newId, workingOrderLines } from "@waitron/db";
 import type { PinThrottle } from "@waitron/identity";
-import { type Logger, readRawJsonBody, readJsonBody, requireUuidParam } from "@waitron/server-kit";
+import { readRawJsonBody, readJsonBody, requireUuidParam } from "@waitron/server-kit";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { inArray, asc, eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -53,13 +53,16 @@ import { paysAfterSending } from "./working-order-context.js";
 import { unsentDishLines } from "./working-order-kitchen-fire.js";
 import { priceOrderLines } from "./working-order-pricing.js";
 import { checkZones } from "./zone-access.js";
+import type { TillSaleDeps } from "./working-order-context.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillDraftRoutes(
   app: Hono,
   deps: TillApiDeps,
   log: Logger,
   pinThrottle: PinThrottle,
-  fiscal: import("./working-order-context.js").TillSaleDeps,
+  fiscal: TillSaleDeps,
 ): void {
   app.get("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {

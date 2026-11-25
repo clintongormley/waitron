@@ -1,5 +1,5 @@
 import { type Transaction, withTransaction } from "@waitron/db";
-import { type Logger, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
+import { requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { requireOrderBillEditor } from "./bill-editing.js";
@@ -16,6 +16,8 @@ import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { checkZones } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillSetMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/bills/:id/set-menus", (c) =>

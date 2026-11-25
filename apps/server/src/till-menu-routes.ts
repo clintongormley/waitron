@@ -1,6 +1,6 @@
 import { withTransaction, workingOrders, workingOrderLines, ticketItems, newId } from "@waitron/db";
 import { updateProduct, setOptionLabelAvailability } from "@waitron/menu";
-import { type Logger, requireUuidParam, readJsonBody } from "@waitron/server-kit";
+import { requireUuidParam, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -20,6 +20,8 @@ import { paysAfterSending } from "./working-order-context.js";
 import { unsentDishLines } from "./working-order-kitchen-fire.js";
 import { priceOrderLines } from "./working-order-pricing.js";
 import { checkZones } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/default-service-zone/offers", (c) =>

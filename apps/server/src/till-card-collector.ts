@@ -1,4 +1,5 @@
-import { withTransaction, venueCredentials } from "@waitron/db";
+import { venueCredentials } from "@waitron/credentials";
+import { withTransaction } from "@waitron/db";
 import {
   readReaderRole,
   cardReaders,
@@ -9,6 +10,7 @@ import {
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import type { TillApiDeps } from "./till-api-deps.js";
+import "./errors.js";
 
 /**
  * The reader a card is charged on: the one the request names, else the device's own. It must be

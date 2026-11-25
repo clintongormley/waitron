@@ -1,6 +1,6 @@
 import { type Database, withTransaction } from "@waitron/db";
 import { type PinThrottle, listActivePersonsWithPermission, authorize } from "@waitron/identity";
-import { type Logger, readJsonBody } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { assertDeviceCapability } from "./device-session.js";
@@ -19,6 +19,8 @@ import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession, assertRequestDevice, canonicaliseUuid } from "./till-session.js";
 import { cancelPlacedOrder } from "./working-order-counter.js";
 import { gateZones } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 async function drawerOverrideToCheck(
   db: Database,

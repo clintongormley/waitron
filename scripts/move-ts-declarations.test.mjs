@@ -86,17 +86,20 @@ describe("move-ts-declarations", () => {
     );
   });
 
-  it("refuses a missing route anchor before writing files", async () => {
-    write("original.ts", mount);
+  it.each([
+    ["missing", mount, "post /missing", /route anchor post \/missing, found 0/i],
+    ["ambiguous", mount.replace(route, `${route}\n\n${route}`), "post /start", /found 2/i],
+  ])("refuses a route anchor when it is %s", async (_reason, source, last, error) => {
+    write("original.ts", source);
     const badLift = {
       ...lift,
-      groups: { mountStart: { ...lift.groups.mountStart, last: "post /missing" } },
+      groups: { mountStart: { ...lift.groups.mountStart, last } },
     };
 
     await expect(
       move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], badLift),
-    ).rejects.toThrow(/route anchor post \/missing/i);
-    expect(read("original.ts")).toBe(mount);
+    ).rejects.toThrow(error);
+    expect(read("original.ts")).toBe(source);
     expect(() => read("start.ts")).toThrow(/ENOENT/);
   });
 

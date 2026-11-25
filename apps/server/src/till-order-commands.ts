@@ -9,6 +9,7 @@ import type { PartyCommandArgs } from "./order-group-records.js";
 import type { StationMoveRequest } from "./station-move.js";
 import { requireRevision } from "./till-request-fields.js";
 import { requireSession, assertStillSignedIn } from "./till-session.js";
+import "./errors.js";
 
 /** The body of a move-station request on order `orderId`. */
 export function stationMoveRequest(

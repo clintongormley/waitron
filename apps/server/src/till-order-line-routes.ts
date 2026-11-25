@@ -2,7 +2,7 @@ import { withIssuanceTransaction } from "@waitron/core";
 import { withTransaction, workingOrders, workingOrderLines } from "@waitron/db";
 import type { PinThrottle } from "@waitron/identity";
 import type { AllergyCommand } from "@waitron/module";
-import { type Logger, readJsonBody } from "@waitron/server-kit";
+import { readJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -34,13 +34,16 @@ import { updateOrderLine } from "./working-order-held-write.js";
 import { unsentDishLines } from "./working-order-kitchen-fire.js";
 import { setLineCourse, sendLines } from "./working-order-kitchen-service.js";
 import { checkZones } from "./zone-access.js";
+import type { TillSaleDeps } from "./working-order-context.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 export function mountTillOrderLineRoutes(
   app: Hono,
   deps: TillApiDeps,
   log: Logger,
   pinThrottle: PinThrottle,
-  fiscal: import("./working-order-context.js").TillSaleDeps,
+  fiscal: TillSaleDeps,
 ): void {
   app.put("/api/working-orders/:id/make-at", (c) =>
     run(c, log, async () => {

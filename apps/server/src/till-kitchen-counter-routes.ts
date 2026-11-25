@@ -1,5 +1,5 @@
 import { withTransaction, ticketItems } from "@waitron/db";
-import { type Logger, readJsonBody, requireBodyUuid } from "@waitron/server-kit";
+import { readJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -20,6 +20,8 @@ import { listCounterWaiting, handOverOrder } from "./working-order-counter.js";
 import { bumpBillReady, advanceTicketItem } from "./working-order-kitchen-service.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { checkZones, visibleOrders } from "./zone-access.js";
+import type { Logger } from "./logger.js";
+import "./errors.js";
 
 function mountBillReady(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/orders/:id/ready", (c) =>
