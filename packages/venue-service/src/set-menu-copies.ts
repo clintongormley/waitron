@@ -62,7 +62,7 @@ export function markNewestOnSale(copies: readonly UnrankedCopy[]): ServedSetMenu
 export async function serveRecordedSetMenus(
   tx: Transaction,
   requests: readonly { versionId: string; menuId: string }[],
-  declarations: "recorded" | "published" = "recorded",
+  declarations: "recorded" | "published",
 ): Promise<ServedSetMenuCopy[]> {
   const documents = await readRecordedDocuments(
     tx,
@@ -94,7 +94,7 @@ export async function serveRecordedSetMenus(
 }
 
 /** The offers with the declarations {@link readPublishedDeclarations} answers for a line ordered
- * from them, so the till shows what the kitchen does; with their own where it answers none. */
+ * from them, so the till shows what the kitchen does. */
 async function withPublishedDeclarations(
   tx: Transaction,
   copies: readonly { versionId: string; offers: ServedSetMenuOffer[] }[],

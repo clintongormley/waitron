@@ -42,11 +42,11 @@ it("reads recorded versions in the requested order after the full menu is republ
     const live = await f.publish();
     const current = (await listZoneOffers(tx, f.zoneId, { at: f.midday })).setMenus[0]!;
     const ask = (versionId: string) => ({ versionId, menuId: f.daily });
-    const copies = await serveRecordedSetMenus(tx, [
-      ask(live.versionId),
-      ask(old.versionId),
-      ask(live.versionId),
-    ]);
+    const copies = await serveRecordedSetMenus(
+      tx,
+      [ask(live.versionId), ask(old.versionId), ask(live.versionId)],
+      "recorded",
+    );
     expect(copies.map(({ key, terms }) => [key, terms.price])).toEqual([
       [current.key, "15.00"],
       [before.key, "14.00"],
@@ -139,7 +139,9 @@ it("applies the same live availability and course rule to a recorded copy", () =
     await tx.update(products).set({ available: false }).where(eq(products.id, f.bravas));
     const requested = [{ versionId, menuId: f.daily }];
     const recordedDish = async () =>
-      (await serveRecordedSetMenus(tx, requested))[0]?.offers.find(({ id }) => id === f.bravasItem);
+      (await serveRecordedSetMenus(tx, requested, "recorded"))[0]?.offers.find(
+        ({ id }) => id === f.bravasItem,
+      );
     expect(await recordedDish()).toMatchObject({
       available: false,
       courseId: override,
@@ -171,7 +173,9 @@ it.each(["without copies", "with another copy", "missing altogether"] as const)(
               })
             ).id
           : f.daily;
-      await expect(serveRecordedSetMenus(tx, [{ versionId, menuId }])).rejects.toMatchObject({
+      await expect(
+        serveRecordedSetMenus(tx, [{ versionId, menuId }], "recorded"),
+      ).rejects.toMatchObject({
         code: "set_menu.not_found",
         params: { menuId },
       });
