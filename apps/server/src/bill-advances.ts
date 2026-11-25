@@ -241,8 +241,6 @@ export interface AdvancePaymentMoney {
   ticket: AdvanceTicket;
   /** What is left of its advance: the advance's total plus its correctives. */
   left: Decimal;
-  /** How many correctives its advance has. */
-  correctives: number;
   /** The tips, in cents, of the completed `refunds` against its tender on the advance. */
   tipGivenBack: number;
   /** The applied amounts, in cents, of those refunds that are no leg of a Correct invoice: what
@@ -360,7 +358,6 @@ export async function readBillAdvances(
         vatBreakdown: advance.vatBreakdown,
       },
       left: gross,
-      correctives: own.length,
       tipGivenBack: givenBack?.tips ?? 0,
       givenBack: givenBack?.plain ?? 0,
     });

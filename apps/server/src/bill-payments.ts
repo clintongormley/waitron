@@ -13,7 +13,6 @@ import { reopenedChainIds } from "./reopened-bills.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
-  billPaymentLines,
   refunds as refundRows,
   appendDrawerEntry,
   billPayments,
@@ -23,7 +22,6 @@ import {
   sales,
   tenders,
   withTransaction,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -40,7 +38,6 @@ import {
   rawCentsToDecimal,
   subtractDecimal,
   sumDecimals,
-  thousandthsToDecimal,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal, Dining } from "@waitron/shared";
@@ -267,8 +264,6 @@ export interface BillPaymentView extends OutsideCardDetails {
   state: "pending" | "received" | "failed" | "declined";
   createdAt: string;
   receivedAt: string | null;
-  /** An item payment's lines; `lineNo` is the line's number on this bill now. */
-  lines: { lineId: string; lineNo: number | null; quantity: Decimal; amount: Decimal }[];
   refunds: BillRefundView[];
 }
 
@@ -290,7 +285,6 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: Decimal;
   payments: BillPaymentView[];
-  paidLines: { lineId: string; lineNo: number; paidQuantity: Decimal }[];
   /** On an open bill: the open bill its chosen items moved to (Pay for items) while a card
    * payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
@@ -317,15 +311,12 @@ function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill
 }
 
 type PaymentRow = typeof billPayments.$inferSelect;
-type PaymentLineRow = typeof billPaymentLines.$inferSelect;
 type RefundRow = typeof refundRows.$inferSelect;
 
 export interface PaymentMoney {
   row: PaymentRow;
   netApplied: Decimal;
   netTip: Decimal;
-  /** How many completed refunds it has; an advance's correctives count as its refunds. */
-  refunds: number;
 }
 
 /** Each payment with what its completed refunds leave of it; `refunds` may hold refunds of other
@@ -344,7 +335,6 @@ function moneyOf(
       row,
       netApplied: advance?.left ?? centsToDecimal(net.applied),
       netTip: centsToDecimal(net.tip - (advance?.tipGivenBack ?? 0)),
-      refunds: net.own.length + (advance?.correctives ?? 0),
     };
   });
 }
@@ -441,22 +431,6 @@ async function readPaymentsAndRefunds(
   return { rows, refunds, advanced };
 }
 
-async function readPaymentLines(
-  tx: Transaction,
-  payments: readonly PaymentMoney[],
-): Promise<PaymentLineRow[]> {
-  if (payments.length === 0) return [];
-  return tx
-    .select()
-    .from(billPaymentLines)
-    .where(
-      inArray(
-        billPaymentLines.billPaymentId,
-        payments.map(({ row }) => row.id),
-      ),
-    );
-}
-
 function fundsOf(
   workingOrderId: string,
   total: Decimal,
@@ -475,76 +449,8 @@ function fundsOf(
   };
 }
 
-/**
- * Each line's paid quantity, in thousandths: what its pending and received item payments cover.
- * An item payment is refunded only whole (design §6), and once it is, its lines are free again.
- */
-function paidQuantitiesOf(
-  payments: readonly PaymentMoney[],
-  lines: readonly Pick<PaymentLineRow, "billPaymentId" | "lineId" | "quantity">[],
-): Map<string, number> {
-  const holding = new Set(
-    payments
-      .filter(
-        ({ row, refunds, netApplied }) =>
-          (row.state === "pending" || row.state === "received") &&
-          !(refunds > 0 && compareDecimal(netApplied, ZERO) === 0),
-      )
-      .map(({ row }) => row.id),
-  );
-  const paid = new Map<string, number>();
-  for (const line of lines) {
-    if (!holding.has(line.billPaymentId)) continue;
-    paid.set(line.lineId, (paid.get(line.lineId) ?? 0) + line.quantity);
-  }
-  return paid;
-}
-
 /** The states in which a payment is held on its bill, one given back in full included. */
 const HOLDING_STATES: readonly PaymentRow["state"][] = ["pending", "received"];
-
-/** {@link paidQuantitiesOf} the bill, read. */
-export async function readPaidQuantities(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<ReadonlyMap<string, number>> {
-  const lines = await tx
-    .select({
-      billPaymentId: billPaymentLines.billPaymentId,
-      lineId: billPaymentLines.lineId,
-      quantity: billPaymentLines.quantity,
-    })
-    .from(billPaymentLines)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
-    .where(
-      and(
-        eq(billPayments.workingOrderId, workingOrderId),
-        inArray(billPayments.state, [...HOLDING_STATES]),
-      ),
-    );
-  if (lines.length === 0) return new Map();
-  return paidQuantitiesOf(await readPaymentMoney(tx, [workingOrderId]), lines);
-}
-
-/**
- * Refuse `bill.line_paid` for the first of these lines of the bill that would hold less than its
- * paid quantity after the write: `keeps` is the quantity, in thousandths, the write leaves on that
- * line's row. A write that must not touch a paid line at all passes 0. `paid` is the bill's
- * {@link readPaidQuantities}, when the caller has read them already.
- */
-export async function refusePaidLines(
-  tx: Transaction,
-  workingOrderId: string,
-  lines: readonly { id: string; lineNo: number; keeps: number }[],
-  paid?: ReadonlyMap<string, number>,
-): Promise<void> {
-  if (lines.length === 0) return;
-  const quantities = paid ?? (await readPaidQuantities(tx, workingOrderId));
-  const refused = lines.find((line) => (quantities.get(line.id) ?? 0) > line.keeps);
-  if (refused !== undefined) {
-    throw new AppError("bill.line_paid", { workingOrderId, lineNo: refused.lineNo });
-  }
-}
 
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
@@ -744,14 +650,6 @@ export async function readPaymentsByBill(
   return { received, holding, holdingMoney };
 }
 
-async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map<string, number>> {
-  const rows = await tx
-    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-  return new Map(rows.map((row) => [row.id, row.lineNo]));
-}
-
 export function toRefundView(refund: RefundRow): BillRefundView {
   return {
     id: refund.id,
@@ -768,9 +666,7 @@ export function toRefundView(refund: RefundRow): BillRefundView {
 
 function toView(
   payment: PaymentRow,
-  lines: readonly PaymentLineRow[],
   refunds: readonly RefundRow[],
-  lineNos: ReadonlyMap<string, number>,
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
   advance:
     | (PaymentMoney &
@@ -808,14 +704,6 @@ function toView(
     state: payment.state,
     createdAt: payment.createdAt,
     receivedAt: payment.receivedAt,
-    lines: lines
-      .filter((line) => line.billPaymentId === payment.id)
-      .map((line) => ({
-        lineId: line.lineId,
-        lineNo: lineNos.get(line.lineId) ?? null,
-        quantity: thousandthsToDecimal(line.quantity),
-        amount: centsToDecimal(line.amount),
-      })),
     refunds: refunds.filter((refund) => refund.billPaymentId === payment.id).map(toRefundView),
   };
 }
@@ -975,8 +863,6 @@ export async function readBillBalance(
   const { rows, refunds, advanced } = await readPaymentsAndRefunds(tx, workingOrderId);
   const advances = await advancesPaidBy(tx, [workingOrderId], advanced);
   const held = moneyOf(rows, refunds, advances.payments);
-  const lines = await readPaymentLines(tx, held);
-  const lineNos = await readLineNos(tx, workingOrderId);
   const manualCards = await manualCardsOf(tx, rows);
   const funds = fundsOf(
     workingOrderId,
@@ -1023,17 +909,7 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map((payment) =>
-      toView(payment.row, lines, refunds, lineNos, manualCards, advanceOf(payment)),
-    ),
-    paidLines: [...paidQuantitiesOf(held, lines)]
-      .flatMap(([lineId, quantity]) => {
-        const lineNo = lineNos.get(lineId);
-        return lineNo === undefined
-          ? []
-          : [{ lineId, lineNo, paidQuantity: thousandthsToDecimal(quantity) }];
-      })
-      .sort((a, b) => a.lineNo - b.lineNo),
+    payments: held.map((payment) => toView(payment.row, refunds, manualCards, advanceOf(payment))),
   };
 }
 

@@ -7,8 +7,7 @@ import { refusePendingPartPayment, refuseRefundInProgress } from "./working-orde
 import "./errors.js";
 
 /**
- * Reopen bill's refusals for the printed bill's money: money still moving, then an advance,
- * then a payment that cannot follow the dishes.
+ * Reopen bill's refusals for the printed bill's money: money still moving, then an advance.
  */
 export async function refuseSplitMoney(tx: Transaction, id: string): Promise<void> {
   await refusePendingPartPayment(tx, [id], "any");
@@ -22,18 +21,6 @@ export async function refuseSplitMoney(tx: Transaction, id: string): Promise<voi
     .where(eq(billAdvances.workingOrderId, id))
     .limit(1);
   if (advance !== undefined) throw new AppError("bill.has_advance", { workingOrderId: id });
-  const [stays] = await tx
-    .select({ id: billPayments.id })
-    .from(billPayments)
-    .where(
-      and(
-        eq(billPayments.workingOrderId, id),
-        eq(billPayments.state, "received"),
-        eq(billPayments.kind, "items"),
-      ),
-    )
-    .limit(1);
-  if (stays !== undefined) throw new AppError("bill.payments_received", { workingOrderId: id });
 }
 
 /**

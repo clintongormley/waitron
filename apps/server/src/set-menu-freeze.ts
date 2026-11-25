@@ -2,15 +2,14 @@ import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
-  billPaymentLines,
   lineServiceCancellations,
   type Transaction,
 } from "@waitron/db";
 
 /**
- * Which of `lineIds` a comp, discount, kept-charge cancel, service cancellation or bill payment
- * names (D15). By the line, not the bill: a comp stays on its bill while its line moves. A stamped
- * list price, the other source, is read from the line itself by `frozenLinesOf`.
+ * Which of `lineIds` a comp, discount, kept-charge cancel or service cancellation names (D15). By
+ * the line, not the bill: a comp stays on its bill while its line moves. A stamped list price, the
+ * other source, is read from the line itself by `frozenLinesOf`.
  */
 export async function namedFrozenLineIds(
   tx: Transaction,
@@ -38,12 +37,6 @@ export async function namedFrozenLineIds(
         .select({ lineId: lineServiceCancellations.lineId })
         .from(lineServiceCancellations)
         .where(inArray(lineServiceCancellations.lineId, ids)),
-    )
-    .union(
-      tx
-        .select({ lineId: billPaymentLines.lineId })
-        .from(billPaymentLines)
-        .where(inArray(billPaymentLines.lineId, ids)),
     );
   return new Set(named.flatMap(({ lineId }) => (lineId === null ? [] : [lineId])));
 }

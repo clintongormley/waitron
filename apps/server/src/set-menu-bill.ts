@@ -2,8 +2,6 @@ import { and, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
-  billPaymentLines,
-  billPayments,
   billSetMenuCopies,
   lineServiceCancellations,
   menuReleases,
@@ -392,22 +390,16 @@ async function placedSetMenuDishes(
   }[],
 ) {
   const billValues = sql`(select value from json_each(${JSON.stringify([...new Set(placed.map(({ billId }) => billId))])}))`;
-  const payments = await tx
-    .select({ lineId: billPaymentLines.lineId })
-    .from(billPaymentLines)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
-    .where(inArray(billPayments.workingOrderId, billValues));
   const cancels = await tx
     .select({ lineId: adjustments.lineId, chargeKept: adjustments.chargeKept })
     .from(adjustments)
     .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
-  const fixed = new Set([
-    ...payments.map(({ lineId }) => lineId),
-    ...(await adjustedDishIds(
+  const fixed = new Set(
+    await adjustedDishIds(
       tx,
       placed.map(({ id }) => id),
-    )),
-  ]);
+    ),
+  );
   const cancelled = new Set<string>();
   for (const { lineId, chargeKept } of cancels) {
     if (lineId === null) continue;

@@ -21,12 +21,7 @@ import {
   decimalToCents,
 } from "@waitron/shared";
 import { eq, inArray, or, sql, and } from "drizzle-orm";
-import {
-  readBillExcess,
-  readPaidQuantities,
-  refusePaidLines,
-  assertLinesKeptExcess,
-} from "./bill-payments.js";
+import { readBillExcess, assertLinesKeptExcess } from "./bill-payments.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { copyAllergyWorkingTicks, refreshKitchenAllergyClashes } from "./kitchen-allergy.js";
@@ -104,7 +99,6 @@ import {
   type WorkingOrderLineInsert,
 } from "./working-order-pricing.js";
 import {
-  paidLineParts,
   addedPortions,
   planHeldCorrections,
   reduceLine,
@@ -365,7 +359,6 @@ export async function applyLineEdits(
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
   let chargesUnchanged = plan.removed.length === 0 && plan.fresh.length === 0;
-  const paid = await readPaidQuantities(tx, orderId);
   const portionOf = await readGrowingPortions(
     tx,
     plan.edits.map(({ parent }) => parent.id),
@@ -438,8 +431,6 @@ export async function applyLineEdits(
     // options answer is filed on the sale line, and a card at the reader files the answer it priced.
     if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
       chargesUnchanged = false;
-    // Changed in place or replaced, a paid line would no longer be what was paid for.
-    await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
     if (changed || refusedDrop) refuseServed(parent);
     const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
@@ -570,7 +561,6 @@ export async function applyLineEdits(
     pricedAs.push({ kind: "check" });
   }
 
-  await refusePaidLines(tx, orderId, plan.removed.flatMap(paidLineParts), paid);
   for (const parent of plan.removed) {
     refuseServed(parent);
     refuseSent(parent, kitchenHas(parent, false));

@@ -316,10 +316,9 @@ async function checkMoveInvoice(
 /**
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
- * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received,
- * unless `sourceMayBeOverpaid` (Pay for items, which settles a source left holding more than it
- * owes). An existing destination may hold payments, and the move may not raise what it holds over
- * what it owes ({@link moveOrderLines}).
+ * paid: it keeps at least what it has received, unless `sourceMayBeOverpaid` (Pay for items, which
+ * settles a source left holding more than it owes). An existing destination may hold payments, and
+ * the move may not raise what it holds over what it owes ({@link moveOrderLines}).
  * `tellKitchen: false` leaves out the MOVED slips and station notices.
  */
 export async function moveDishes(

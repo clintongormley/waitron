@@ -57,7 +57,7 @@ export async function refundPermission(
  * Keep what an open or placed bill was paid over its total as a tip, then issue the bill if that
  * leaves it paid: the excess moves from `applied` to `tip` on its received payments, the newest
  * first, each giving up no more than its refunds have left of its applied money. A payment that
- * paid an advance, already has a tender, or paid for chosen items keeps its money as it is.
+ * paid an advance or already has a tender keeps its money as it is.
  *
  * `bill.not_overpaid` when nothing is paid over the total; `bill.overpaid_changed` when that is not
  * `overpaid`, the amount the till showed staff; `bill.tip_needs_a_sale` when the bill
@@ -115,9 +115,8 @@ export async function keepOverpaidAsTip(
         )
     ).map(({ id }) => id),
   );
-  // An items payment's applied money is what its paid lines record, so it keeps it.
   const newestFirst = received
-    .filter(({ row }) => !tendered.has(row.id) && row.kind !== "items")
+    .filter(({ row }) => !tendered.has(row.id))
     .sort((a, b) => b.row.receivedAt!.localeCompare(a.row.receivedAt!));
   let left = decimalToCents(excess);
   const moved: { billPaymentId: string; amount: string }[] = [];

@@ -13,8 +13,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  billPaymentLines,
-  billPayments,
   diningTables,
   tableInService,
   nowIso,
@@ -3038,49 +3036,6 @@ describe("editing a line the kitchen has and has not started", () => {
 
       expect(await ticketRow(tabId, 2)).toMatchObject({ note: "no onions" });
       expect((await ticketRow(tabId, 2))!.id).not.toBe(tickets[1]!.id);
-    });
-
-    it("refuses a row whose other dish is paid for, changing nothing", async () => {
-      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
-      const [second] = await db
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
-      const paymentId = randomUUID();
-      await withTransaction(db, async (tx) => {
-        await tx.insert(billPayments).values({
-          id: paymentId,
-          workingOrderId: tabId,
-          submissionId: randomUUID(),
-          fingerprint: "fixture",
-          kind: "items",
-          method: "cash",
-          applied: 150,
-          tendered: 150,
-          state: "received",
-          requestedBy: OPERATOR,
-          source: "demo_seed",
-          receivedAt: new Date().toISOString(),
-        });
-        await tx.insert(billPaymentLines).values({
-          billPaymentId: paymentId,
-          lineId: second!.id,
-          quantity: 1000,
-          amount: 150,
-        });
-      });
-      const before = await linesOf(tabId);
-
-      await expect(
-        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
-      ).rejects.toMatchObject({
-        code: "bill.line_paid",
-        params: { workingOrderId: tabId, lineNo: 2 },
-      });
-
-      expect(await linesOf(tabId)).toEqual(before);
-      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
-      expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
     });
   });
 });
