@@ -111,9 +111,6 @@ ya se haya entregado: pregunta al cliente o mira la impresora antes. Si falla el
 no lo tiene, pulsa **Volver a enviar el correo** para repetirlo a la misma dirección o elige otra
 dirección.
 
-Antes de reenviar una factura completa, ábrela en **Buscar cuenta** y comprueba **Última dirección
-de correo**. Puedes verla en una caja que pueda enviar facturas por correo.
-
 Pulsa **Listo** o cierra la ventana para continuar. Salvo que lo hayas enviado por correo
 electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada o no funciona, se
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
@@ -201,6 +198,9 @@ El ticket se muestra en el idioma en que se emitió. Para una copia en papel, el
 **Recibo** para la versión compacta o **Factura** para el formato de factura. Una factura
 simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
+
+En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
+reenviar una factura completa.
 
 Elige una impresora de la lista de tu dispositivo. **Usar el predeterminado** sigue la
 predeterminada del perfil; otra elección se guarda en **Equipo de este dispositivo**. Si otro

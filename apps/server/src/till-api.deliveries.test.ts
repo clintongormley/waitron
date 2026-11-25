@@ -703,12 +703,14 @@ describe("GET /api/sales/:id/deliveries", () => {
   it("ends a lapsed A4 claim before reading, so the attempt reads uncertain and can be retried", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
+    const emailId = await endedEmail(v, orderId, "failed");
     const queued = await printInvoice(v, orderId);
     await lapsedClaim(v);
     const answer = await readStatus(v, orderId);
     expect(answer.body).toMatchObject({
       current: { id: queued.body!.id, status: "unknown", failureCode: "timeout" },
       actions: { retryOriginal: { medium: "a4" } },
+      history: [{ id: queued.body!.id }, { id: emailId, invoiceRecipientEmail: CUSTOMER_EMAIL }],
     });
   });
 });
@@ -1944,9 +1946,16 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
       expect.objectContaining({ recipient: CUSTOMER_EMAIL, personId: v.staffId }),
     ]);
     expect((await readStatus(v, simplified.orderId)).body).toBeNull();
-    expect(
-      (await send(v, "GET", `/api/sales/${simplified.orderId}/deliveries?medium=email`)).body,
-    ).toMatchObject({ current: accepted.body, actions: { email: null } });
+    const simplifiedStatus = await send(
+      v,
+      "GET",
+      `/api/sales/${simplified.orderId}/deliveries?medium=email`,
+    );
+    expect(simplifiedStatus.body).toMatchObject({
+      current: accepted.body,
+      actions: { email: null },
+    });
+    expect(JSON.stringify(simplifiedStatus.body)).not.toContain(CUSTOMER_EMAIL);
     expect(await jobsOf(simplified.saleId)).toEqual([]);
     expect(await emailWorkerPass("throws")).toMatchObject({ processed: true });
     expect(await retry(v, simplified.orderId, accepted.body!.id as string)).toMatchObject({

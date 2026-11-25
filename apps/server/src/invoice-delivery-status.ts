@@ -188,9 +188,12 @@ export async function readReceiptEmailDeliveries(
   saleId: string,
   options: InvoiceDeliveryReadOptions,
 ): Promise<InvoiceDeliveryStatus> {
-  const state = (await readStates(tx, [saleId], { ...options, includeSimplifiedEmail: true })).get(
-    saleId,
-  );
+  const state = (
+    await readStates(tx, [saleId], {
+      emailAvailable: options.emailAvailable,
+      includeSimplifiedEmail: true,
+    })
+  ).get(saleId);
   if (state == null) throw new AppError("invoice_delivery.not_found", {});
   return {
     ...state.status,
@@ -277,7 +280,7 @@ async function readStates(
       withdrawn,
       printers,
       emailable,
-      full && options.includeInvoiceRecipientEmail === true,
+      options.includeInvoiceRecipientEmail === true,
     );
     const latest = saleRows[0];
     if (latest?.medium === "a4" && latest.status === "queued" && latest.printerId !== null) {
@@ -353,7 +356,7 @@ function deliveryStatus(
 ): InvoiceDeliveryStatus {
   const history = rows.map((row) => ({
     ...rowAttempt(row),
-    ...(includeInvoiceRecipientEmail && row.medium === "email" && row.recipient !== null
+    ...(includeInvoiceRecipientEmail && row.recipient !== null
       ? { invoiceRecipientEmail: row.recipient }
       : {}),
   }));

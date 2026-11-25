@@ -1761,15 +1761,16 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     });
 
     it.each([
-      ["F1", true, "guest@example.test"],
-      ["F1", false, null],
-      ["F2", true, null],
+      ["F1", true, "failed", "Last email address: guest@example.test · Not delivered."],
+      ["F1", true, "sent", "Last email address: guest@example.test · Sent by email."],
+      ["F1", false, "sent", null],
+      ["F2", true, "sent", null],
     ] as const)(
-      "shows the last email address for %s with print capability %s",
-      async (invoiceType, canPrintReceipt, address) => {
+      "shows the last email address and outcome after printing for %s with print capability %s and email status %s",
+      async (invoiceType, canPrintReceipt, status, expected) => {
         const printed = attempt({ medium: "receipt", status: "sent" });
         const lastEmail = {
-          ...attempt({ id: "d2", medium: "email", status: "failed" }),
+          ...attempt({ id: "d2", medium: "email", status }),
           invoiceRecipientEmail: "guest@example.test",
         };
         const olderEmail = { ...lastEmail, id: "d3", invoiceRecipientEmail: "older@example.test" };
@@ -1782,9 +1783,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
           { invoiceType },
         );
         expect(button(el, "original-delivery")).not.toBeNull();
-        expect(label(el, "delivery-email-address") ?? null).toBe(
-          address === null ? null : `Last email address: ${address}`,
-        );
+        expect(label(el, "delivery-email-address")?.replace(/\s+/g, " ") ?? null).toBe(expected);
         expect(text(el)).not.toContain(olderEmail.invoiceRecipientEmail);
       },
     );

@@ -108,7 +108,7 @@ function attemptLine(attempt: OrderDeliveryAttempt, mayExport: boolean): string 
         name: attempt.personName ?? t("orders.staff_unknown"),
       }),
     );
-  if (mayExport && attempt.medium === "email" && attempt.invoiceRecipientEmail !== undefined)
+  if (mayExport && attempt.invoiceRecipientEmail !== undefined)
     parts.push(
       fill("orders.detail.delivery_email_address", { address: attempt.invoiceRecipientEmail }),
     );

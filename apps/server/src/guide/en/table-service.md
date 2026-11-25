@@ -105,9 +105,6 @@ email address and press **Send**. Printing and email are separate actions. If th
 look at the printer first. If sending fails, or the customer does not have it, use **Send the email
 again** to retry the same address, or choose another address.
 
-Before resending a full invoice, open it in **Find a bill** and check **Last email address**. You can
-see it on a till that can email invoices.
-
 Press **Done** or close the window to carry on. Unless you emailed it, the receipt prints when you
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
 not printed by the next day, print it from the sale. If the device has no receipt printer, choose one
@@ -188,6 +185,9 @@ Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. T
 the language it was issued in. For a paper copy, choose **Print/Reprint**. For a full invoice, choose **Receipt** for the compact
 version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
 printers. Both versions of a full invoice keep the recorded customer details.
+
+On a till with permission to print receipts, check **Last email address** before you resend a full
+invoice.
 
 Choose a printer from your device’s list. **Use default** follows the profile’s default; another
 choice is saved in **Equipment** for this device. If another device carries the receipt printer,

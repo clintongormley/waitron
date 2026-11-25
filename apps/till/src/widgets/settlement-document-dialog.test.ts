@@ -589,7 +589,7 @@ it("keeps the recorded email address off the full-invoice dialog after payment",
     "till-settlement-document-dialog",
     {
       ...props,
-      result: invoiceOf("30.00"),
+      result: { ...invoiceOf("30.00"), invoiceType: "F1" },
       deliveries: {
         ...props.deliveries,
         current: email,

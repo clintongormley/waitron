@@ -61,7 +61,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     return state === "prints" || state === "switched-off";
   }
 
-  protected override lastInvoiceEmailAddress(): undefined {
+  protected override lastInvoiceEmailAttempt(): undefined {
     return undefined;
   }
 

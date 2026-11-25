@@ -154,7 +154,7 @@ function printLabel(
   ).replace("{printer}", () => printer.name);
 }
 
-/** The current attempt in words; a receipt attempt is worded by the original's print status. */
+/** A receipt attempt is worded by the original's print status. */
 function deliveryWords(
   attempt: InvoiceDeliveryAttempt,
   mayHaveArrived: boolean,
@@ -777,10 +777,9 @@ export class TillTicketView extends LitElement {
     );
   }
 
-  protected lastInvoiceEmailAddress(): string | undefined {
+  protected lastInvoiceEmailAttempt(): InvoiceDeliveryAttempt | undefined {
     if (this.result.invoiceType !== "F1" || !this.canPrintReceipt) return undefined;
-    return this.deliveries?.history.find((attempt) => attempt.medium === "email")
-      ?.invoiceRecipientEmail;
+    return this.deliveries?.history.find((attempt) => attempt.medium === "email");
   }
 
   protected renderDelivery() {
@@ -810,14 +809,19 @@ export class TillTicketView extends LitElement {
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
         ? status.current?.id
         : null;
-    const emailAddress = this.lastInvoiceEmailAddress();
+    const lastEmail = this.lastInvoiceEmailAttempt();
+    const emailAddress = lastEmail?.invoiceRecipientEmail;
+    const emailOutcome =
+      lastEmail !== undefined && (lastEmail.id !== status?.current?.id || doubtAnswered)
+        ? deliveryWords(lastEmail, lastEmail.lateSuccess)
+        : undefined;
     return html`
       ${words === undefined || doubtAnswered ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
       ${
         emailAddress === undefined
           ? nothing
           : html`<p data-test="delivery-email-address">
-              ${fill(t("invoice.delivery_email_address"), { address: emailAddress })}
+              ${fill(t("invoice.delivery_email_address"), { address: emailAddress })}${emailOutcome === undefined ? nothing : ` · ${emailOutcome}`}
             </p>`
       }
       ${
