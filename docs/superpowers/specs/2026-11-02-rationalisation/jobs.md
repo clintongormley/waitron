@@ -654,6 +654,8 @@ README U5 keeps the adoption finisher and the offer, and the finisher refuses `m
 
 **To confirm before `housekeeping`'s service-command step is switched on:** how late a till can retry a command.
 
+**2026-11-25, A1592 b:** The cleanup was removed. See [the command-answer retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 **Where the proposed rules break:**
 
 - **J1** does not cover the watchdog (it must run off the main thread), the folder heartbeat (every start

@@ -717,8 +717,8 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
 ### Command answers stay available for till retries
 
 Keep every saved `service_commands` answer because a manual till retry can reuse the same id
-without an expiry. A1592 b removes the disabled daily cleanup. Reopen retention if measured disk use
-or query cost justifies it. Watcher decision, 25 November 2026 at 21:54.
+without an expiry. Reopen retention if measured disk use or query cost justifies it. Watcher decision,
+25 November 2026 at 21:54.
 
 ### Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 

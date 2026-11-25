@@ -178,7 +178,7 @@ describe("daily housekeeping steps", () => {
       "a".repeat(64),
     ]);
   });
-  it("commits short batches separately, yielding to a stop before another batch", async () => {
+  it("yields to a stop between batches and later advances past a full batch of live challenges", async () => {
     const step = HOUSEKEEPING_STEPS.find((step) => step.name === "sign_in_challenges")!;
     await insertInChunks(
       suite.db,
@@ -188,7 +188,7 @@ describe("daily housekeeping steps", () => {
         kind: "passkey_login" as const,
         challenge: "test",
         createdAt: old,
-        expiresAt: now.toISOString(),
+        expiresAt: index >= 100 && index < 200 ? "2026-11-14T04:05:00.000Z" : now.toISOString(),
       })),
     );
     const controller = new AbortController();
@@ -200,8 +200,14 @@ describe("daily housekeeping steps", () => {
       expect(await suite.db.select().from(signInChallenges)).toHaveLength(101);
       expect(locks).toHaveBeenCalledTimes(2);
       locks.mockClear();
-      await pass(tidy({ steps: [step] }));
-      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+      await pass(tidy({ steps: [step] }), AbortSignal.timeout(5000));
+      const retained = await suite.db
+        .select({ id: signInChallenges.id })
+        .from(signInChallenges)
+        .orderBy(signInChallenges.id);
+      expect(retained.map(({ id }) => id)).toEqual(
+        Array.from({ length: 100 }, (_, index) => String(index + 100)),
+      );
       expect(locks).toHaveBeenCalledTimes(3);
     } finally {
       locks.mockRestore();
