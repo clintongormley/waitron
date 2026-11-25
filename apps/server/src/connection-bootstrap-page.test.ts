@@ -51,6 +51,10 @@ async function open(
 
 it("names the changed Android settings in Spanish", () => {
   const { install, removal } = CONNECTION_DEVICE_ES.android;
+  const html = renderTrustPage({ ...base, connection: retained, locale: "es", device: "android" });
+  expect(html).toContain(
+    "Seguridad y privacidad, Más seguridad y privacidad, Cifrado y credenciales",
+  );
   expect(install[0]).toContain("No abras el archivo descargado.");
   expect(install[0]).toContain("instalar certificados desde el almacenamiento");
   expect(install[1]).toContain("elige instalarlo de todos modos");

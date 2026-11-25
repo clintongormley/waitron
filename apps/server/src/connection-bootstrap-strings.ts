@@ -170,7 +170,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
       "En un Pixel, abre Cifrado y credenciales, Credenciales de confianza, Usuario. En otros teléfonos, como algunos OPPO, abre el almacenamiento de credenciales, los certificados de confianza y, después, Usuario. Elimina solo el certificado antiguo de Waitron.",
     ],
     install: [
-      "No abras el archivo descargado. Busca «certificado» en Ajustes de Android y elige la opción de instalar un certificado o de instalar certificados desde el almacenamiento. En un Pixel, busca Seguridad y privacidad, Más ajustes de seguridad, Cifrado y credenciales.",
+      "No abras el archivo descargado. Busca «certificado» en Ajustes de Android y elige la opción de instalar un certificado o de instalar certificados desde el almacenamiento. En un Pixel, busca Seguridad y privacidad, Más seguridad y privacidad, Cifrado y credenciales.",
       "Elige Certificado de CA y, cuando Android avise de que tus datos no serán privados, elige instalarlo de todos modos. Confirma tu identidad si se solicita y selecciona el archivo descargado.",
       "Cierra el navegador desde las aplicaciones recientes y vuelve a abrir esta página.",
     ],
