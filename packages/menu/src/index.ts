@@ -162,6 +162,7 @@ export {
   syncMenuOffers,
   type MenuStructureNode,
 } from "./menu-structure.js";
+export { saveMenuStructure } from "./menu-structure-save.js";
 export { duplicateMenu } from "./menu-copy.js";
 export {
   addSetMenuDishes,

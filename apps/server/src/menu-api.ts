@@ -1,3 +1,4 @@
+import { mountMenuStructureSaveRoute } from "./menu-structure-save-route.js";
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import {
   isProductOrdering,
@@ -11,6 +12,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
   FALLBACK_LOCALE,
+  normaliseUuid,
   type ContentLanguageRules,
   type MenuDeleteImpact,
 } from "@waitron/shared";
@@ -367,9 +369,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
 
-  // 400 under `runBodySection` and `runBodyRole`, whose routes can name a list, section or member
-  // of the wrong kind only in the body. 409 elsewhere: there the address can name one, and so can
-  // the body (a member's `ref`, a move-in's `listId`); one status for both, as A394-11 chose.
+  // Routes that can name a wrong role only in the body answer 400 through runBodyIds.
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
@@ -438,6 +438,12 @@ const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_
 // `menu_section.not_found`, so that code keeps its 404.
 const runBodyRole = runBodyIds("menu_section.wrong_role");
 const runBodySetMenu = runBodyIds("set_menu.not_found");
+const runStructureSave = runBodyIds(
+  "menu_section.not_found",
+  "menu_section.wrong_role",
+  "set_menu.not_found",
+  "product.not_found",
+);
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
 // PUT names variants in its body, and an unknown one there stays a 400.
 const runVariant = createErrorBoundary(
@@ -1049,6 +1055,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   });
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
+  mountMenuStructureSaveRoute(
+    app,
+    gated,
+    log,
+    deps.venueLocale ?? FALLBACK_LOCALE,
+    runStructureSave,
+  );
   mountMenuHomeRoutes(app, gated, log);
   mountSetMenuRoutes(app, gated, log);
   mountContentTranslationsApi(app, gated, log, translationContextFor(deps), deps.managementOrigin);
@@ -1306,7 +1319,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   app.get("/management-api/menus/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuId = normaliseUuid(c.req.param("id"), "MenuId");
       return c.json(await gated(c, sessionId, (tx) => readMenuStructure(tx, menuId)));
     }),
   );

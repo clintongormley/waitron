@@ -75,21 +75,25 @@ function overridesShapeProblem(value: unknown): "overrides" | "names" | null {
   return null;
 }
 
-async function checkedOverrides(
+export async function checkedOverrides(
   tx: Transaction,
   value: unknown,
-  stored: IncludeFolderOverrides,
+  stored: IncludeFolderOverrides | undefined,
   config: ContentLanguages,
 ): Promise<IncludeFolderOverrides> {
   const problem = overridesShapeProblem(value);
   if (problem !== null) throw new AppError("menu_section.invalid", { field: problem });
   const { names, image, color } = value as IncludeFolderOverrides;
+  let validated: Record<string, string> | null = null;
   try {
-    if (names !== undefined) validateOptionalTranslations(names);
+    if (names !== undefined) validated = validateOptionalTranslations(names);
   } catch {
     throw new AppError("menu_section.invalid", { field: "names" });
   }
-  const trimmed = mergeOptionalTranslations(stored.names ?? null, names ?? {}, config);
+  const trimmed =
+    stored === undefined
+      ? validated
+      : mergeOptionalTranslations(stored.names ?? null, names ?? {}, config);
   return {
     ...(trimmed !== null ? { names: trimmed } : {}),
     ...(image === undefined ? {} : { image: await sectionImageOf(tx, image) }),

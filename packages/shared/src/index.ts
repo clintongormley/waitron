@@ -660,3 +660,10 @@ export {
   type SetMenuGroupingInput,
   type SetMenuGroupingPrevious,
 } from "./set-menu-grouping.js";
+
+export type {
+  MenuStructureMemberInput,
+  MenuStructurePriceInput,
+  MenuStructureSaveInput,
+  MenuStructureSaveResult,
+} from "./menu-document/menu-structure-save-types.js";

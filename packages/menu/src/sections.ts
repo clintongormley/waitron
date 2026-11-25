@@ -268,7 +268,7 @@ export async function deleteSections(tx: Transaction, ids: readonly string[]): P
   await writeStructureChange(tx, graph, named);
 }
 
-async function keepMissingTile(
+export async function keepMissingTile(
   tx: Transaction,
   graph: SectionGraph,
   parent: string,
