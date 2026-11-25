@@ -7,7 +7,6 @@ import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus
 import { deleteMenu } from "./delete.js";
 import { updateExtraList } from "./extras.js";
 import {
-  menusOfVersions,
   onceLiveVersionsAfter,
   patchLiveMenu,
   previewMenu,
@@ -15,7 +14,7 @@ import {
   readLiveDocuments,
   readRecordedDocuments,
 } from "./menu-publication.js";
-import { queueMenuPublication } from "./menu-schedule.js";
+import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, deactivateMenu, updateProduct } from "./operations.js";
 import { productDeclarationValues } from "./product-declarations.js";
 import {
@@ -117,7 +116,6 @@ function placeSetMenu() {
       names: { en: "Daily menu" },
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     });
     await tx.update(products).set({ courseId: f.course }).where(eq(products.id, f.lemonade));
     await addSetMenuDishes(tx, id, [{ productId: f.lemonade, excludedVariantIds: [] }]);
@@ -431,100 +429,106 @@ it("a line with no version or found nowhere is absent", async () => {
   expect(await read()).toEqual(new Map());
 });
 
-it("one read per table however many lines", async () => {
+it("reads a line's own version when it outnumbers the live one", async () => {
   await declare(f.soup, "milk");
-  const versions = [f.lunch, f.dinner, f.drinksMenu];
-  const published: string[] = [];
-  for (const menuId of versions) published.push(await publish(menuId));
-  const dropped = await line(f.lunch, published[0]!, f.soup);
-  const kept: PublishedLine[] = [];
-  for (const [index, menuId] of versions.entries())
-    kept.push(await line(menuId, published[index]!, f.lemonade));
-  await removeFrom(f.lunchRoot, f.soup);
-  await publish(f.lunch);
-  const lines = Array.from({ length: 2001 }, (_, index) => ({
-    ...[...kept, dropped][index % 4]!,
-    id: `line-${index}`,
-  }));
-  vi.clearAllMocks();
-  expect((await read(...lines)).size).toBe(2001);
-  expect(menusOfVersions).toHaveBeenCalledTimes(1);
-  expect(readLiveDocuments).toHaveBeenCalledTimes(1);
-  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
-  expect(readRecordedDocuments).toHaveBeenCalledTimes(1);
-
-  vi.clearAllMocks();
-  expect((await read(...kept)).size).toBe(3);
-  expect(menusOfVersions).toHaveBeenCalledTimes(1);
-  expect(readLiveDocuments).toHaveBeenCalledTimes(1);
-  expect(onceLiveVersionsAfter).not.toHaveBeenCalled();
-  expect(readRecordedDocuments).not.toHaveBeenCalled();
+  const v1 = await publish(f.lunch);
+  await declare(f.soup, "fish");
+  const { versionId: waiting } = await queue(f.lunch, hoursFromNow(24));
+  const soup = await line(f.lunch, v1, f.soup);
+  const ahead = { ...soup, id: "ahead", menuVersionId: waiting };
+  const allergens = async () => {
+    const found = await read(soup, ahead);
+    return [soup, ahead].map(({ id }) => found.get(id)?.allergens);
+  };
+  expect(await allergens()).toEqual([{ milk: {} }, { fish: {} }]);
+  await app((tx) => cancelMenuPublication(tx, f.lunch, waiting, PERSON));
+  expect(await allergens()).toEqual([{ milk: {} }, { fish: {} }]);
 });
 
-it("looks up a version's menu only for a version that is not its menu's live one", async () => {
+it("takes one statement for any number of lines once their documents are kept", async () => {
   await declare(f.soup, "milk");
-  const old = await publish(f.lunch);
-  const stale = await line(f.lunch, old, f.soup);
-  await declare(f.soup, "fish");
+  const published: string[] = [];
+  for (const menuId of [f.lunch, f.dinner]) published.push(await publish(menuId));
+  const [old, dinner] = published as [string, string];
+  const dropped = await line(f.lunch, old, f.soup);
+  const stale = await line(f.lunch, old, f.lemonade);
+  await removeFrom(f.lunchRoot, f.soup);
   const lunch = await publish(f.lunch, hoursFromNow(-3));
-  const current = await line(f.lunch, lunch, f.soup);
-  const { versionId: due } = await queue(f.dinner, hoursFromNow(-1), hoursFromNow(-2));
-  const dinner = await line(f.dinner, due, f.lemonade);
-  await publish(f.drinksMenu);
-  const statements = vi.spyOn(
-    (fx.db as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } })
-      .session,
-    "prepareQuery",
-  );
-  const versionReads = () =>
-    statements.mock.calls.filter(([query]) => query.sql.includes("menu_versions")).length;
-  const lookedUp = () =>
-    vi.mocked(menusOfVersions).mock.calls.flatMap(([, versionIds]) => versionIds);
+  const { versionId: due } = await queue(f.drinksMenu, hoursFromNow(-1), hoursFromNow(-2));
+  const current = [
+    await line(f.lunch, lunch, f.lemonade),
+    await line(f.dinner, dinner, f.lemonade),
+    await line(f.drinksMenu, due, f.lemonade),
+  ];
+  const statements = async (...lines: PublishedLine[]) => {
+    const prepared = vi.spyOn(
+      (fx.db as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } })
+        .session,
+      "prepareQuery",
+    );
+    try {
+      const { size } = await read(...lines);
+      return {
+        size,
+        statements: prepared.mock.calls.filter(([{ sql }]) => sql.includes("menu_versions")).length,
+      };
+    } finally {
+      prepared.mockRestore();
+    }
+  };
+  const many = (lines: PublishedLine[]) =>
+    Array.from({ length: 2001 }, (_, index) => ({
+      ...lines[index % lines.length]!,
+      id: `line-${index}`,
+    }));
 
-  expect(await read(current, dinner)).toHaveProperty("size", 2);
-  expect(lookedUp()).toEqual([]);
-  const live = await vi.mocked(readLiveDocuments).mock.results[0]!.value;
-  expect(new Set(live.keys())).toEqual(new Set([f.lunch, f.dinner]));
-  // Both documents are read once and kept, so a second read costs the live versions alone.
-  statements.mockClear();
-  await read(current, dinner);
-  expect(versionReads()).toBe(1);
-  statements.mockRestore();
+  expect(await statements(...current)).toEqual({ size: 3, statements: 2 });
+  expect(await statements(...current)).toEqual({ size: 3, statements: 1 });
+  expect(await statements(...many(current))).toEqual({ size: 2001, statements: 1 });
+  expect(await statements(...current, stale)).toEqual({ size: 4, statements: 1 });
+  expect(await statements(...current, stale, dropped)).toEqual({ size: 5, statements: 2 });
+  expect(await statements(...many([...current, stale, dropped]))).toEqual({
+    size: 2001,
+    statements: 1,
+  });
+  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(6);
 
   const unknown = Array.from({ length: 600 }, () => crypto.randomUUID());
-  const found = await read(
-    ...unknown.map((id) => ({ ...current, id, menuVersionId: id })),
-    current,
-    dinner,
-    stale,
-  );
-  expect(new Set(found.keys())).toEqual(new Set([current.id, dinner.id, stale.id]));
-  expect(found.get(stale.id)?.allergens).toEqual({ fish: {} });
-  expect(lookedUp()).toEqual([...unknown, old]);
+  expect(
+    await statements(
+      ...unknown.map((id) => ({ ...dropped, id, menuVersionId: id })),
+      ...current,
+      dropped,
+    ),
+  ).toEqual({ size: 4, statements: 2 });
 });
 
-it("reads older versions one at a time, newest first, for the lines still missing", async () => {
+it("reads a long history in a few statements, each line from the newest version holding it", async () => {
   await declare(f.soup, "milk");
   await declare(f.lager, "milk");
-  const v1 = await publish(f.lunch);
-  const soup = await line(f.lunch, v1, f.soup);
-  const lager = await line(f.lunch, v1, f.lager);
-  const lemonade = await line(f.lunch, v1, f.lemonade);
-  const versions = [v1];
-  for (let number = 2; number <= 10; number += 1) {
-    if (number === 10) await removeFrom(f.beer, f.lager);
+  const versions = [await publish(f.lunch)];
+  const [soup, lager, lemonade] = [
+    await line(f.lunch, versions[0]!, f.soup),
+    await line(f.lunch, versions[0]!, f.lager),
+    await line(f.lunch, versions[0]!, f.lemonade),
+  ];
+  for (let number = 2; number <= 41; number += 1) {
     if (number === 3) await removeFrom(f.lunchRoot, f.soup);
+    if (number === 2) await declare(f.soup, "celery");
+    if (number === 20) await removeFrom(f.beer, f.lager);
+    if (number < 20) await declare(f.lager, number === 19 ? "sesame" : "milk", "eggs");
     await declare(f.lemonade, number % 2 === 0 ? "fish" : "eggs");
     versions.push(await publish(f.lunch));
   }
   vi.clearAllMocks();
-  expect((await read(soup, lager, lemonade)).size).toBe(3);
-  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(readRecordedDocuments).mock.calls.map(([, ids]) => ids)).toEqual([
-    [versions[8], versions[8]],
-    ...versions
-      .slice(1, 8)
-      .reverse()
-      .map((version) => [version]),
+  const found = await read(soup, lager, lemonade);
+  expect([soup, lager, lemonade].map(({ id }) => found.get(id)?.allergens)).toEqual([
+    { celery: {} },
+    { sesame: {}, eggs: {} },
+    { eggs: {} },
   ]);
+  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
+  const documentReads = vi.mocked(readRecordedDocuments).mock.calls.map(([, ids]) => ids);
+  expect(new Set(documentReads[0])).toEqual(new Set([versions[40]]));
+  expect(documentReads.length).toBeLessThanOrEqual(6);
 });

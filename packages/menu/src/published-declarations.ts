@@ -5,12 +5,7 @@ import type {
   MenuDocument,
   SetMenuFrozenOffer,
 } from "@waitron/shared";
-import {
-  menusOfVersions,
-  onceLiveVersionsAfter,
-  readLiveDocuments,
-  readRecordedDocuments,
-} from "./menu-publication.js";
+import { onceLiveVersionsAfter, readRecordedDocuments } from "./menu-publication.js";
 import { productDeclarationValues, type DeclarationValues } from "./product-declarations.js";
 
 export interface PublishedLine {
@@ -40,12 +35,7 @@ export function declarationsInDocument(
         : dish?.variants.find(({ id }) => id === line.productId);
     return sold && productDeclarationValues(sold);
   }
-  const item =
-    (dish && extraIn([dish], line)) ??
-    extraIn(
-      offerSets(document).flatMap((offers) => Object.values(offers)),
-      line,
-    );
+  const item = (dish && extraIn(dish, line)) ?? extraInAnyOffer(document, line);
   return (
     item &&
     productDeclarationValues({
@@ -64,25 +54,39 @@ function offerOf(document: MenuDocument, menuItemId: string) {
   return offerSets(document).find((offers) => Object.hasOwn(offers, menuItemId))?.[menuItemId];
 }
 
+type ExtraKey = Pick<PublishedLine, "extraListId" | "productId">;
+
 function extraIn(
-  offers: readonly Pick<FrozenOffer, "offeredModifiers">[],
-  { extraListId, productId }: Pick<PublishedLine, "extraListId" | "productId">,
+  { offeredModifiers }: Pick<FrozenOffer, "offeredModifiers">,
+  { extraListId, productId }: ExtraKey,
 ): FrozenExtraItem | undefined {
-  for (const { offeredModifiers } of offers)
-    for (const list of offeredModifiers) {
-      if (list.kind !== "extras" || list.id !== extraListId) continue;
-      const item = list.items.find((candidate) => candidate.productId === productId);
+  for (const list of offeredModifiers) {
+    if (list.kind !== "extras" || list.id !== extraListId) continue;
+    const item = list.items.find((candidate) => candidate.productId === productId);
+    if (item !== undefined) return item;
+  }
+  return undefined;
+}
+
+function extraInAnyOffer(document: MenuDocument, key: ExtraKey): FrozenExtraItem | undefined {
+  for (const offers of offerSets(document))
+    for (const offer of Object.values(offers)) {
+      const item = extraIn(offer, key);
       if (item !== undefined) return item;
     }
   return undefined;
 }
 
+/** Documents one statement reads for a line at most. */
+const LARGEST_READ = 16;
+
 /**
- * Each line's declarations from its version's menu's live version. A line the live version does not
- * hold exactly takes them from the newest earlier version that was once live and does, going no
- * further back than its own version, which is read last even if it was never live; a menu with no
- * live version starts at its newest once-live one. A line found in none is absent. Whether the menu
- * is sold now makes no difference.
+ * Each line's declarations from the newest version of its version's menu that is live or was once,
+ * holds the line exactly and is newer than the line's own version; otherwise from its own, live
+ * ever or not. A line found in none is absent. Whether the menu is sold now makes no difference.
+ *
+ * A menu's live version outnumbers every other that was once live, so most lines are answered by
+ * the first document; a line it does not hold reads 2, 4, 8, then {@link LARGEST_READ} at a time.
  */
 export async function readPublishedDeclarations(
   tx: Transaction,
@@ -94,40 +98,32 @@ export async function readPublishedDeclarations(
   );
   if (versioned.length === 0) return found;
   const versionIds = [...new Set(versioned.map(({ versionId }) => versionId))];
-  const live = await readLiveDocuments(tx, { ofVersions: versionIds });
-  const menuOf = new Map([...live].map(([menuId, { versionId }]) => [versionId, menuId]));
-  const notLive = versionIds.filter((versionId) => !menuOf.has(versionId));
-  for (const [versionId, menuId] of await menusOfVersions(tx, notLive))
-    menuOf.set(versionId, menuId);
-  const missed = versioned.filter(({ line, versionId }) => {
-    const document = live.get(menuOf.get(versionId) ?? "")?.document;
-    const values = document && declarationsInDocument(document, line);
-    if (values !== undefined) found.set(line.id, values);
-    return values === undefined;
-  });
-  if (missed.length === 0) return found;
-  const after = await onceLiveVersionsAfter(tx, [
-    ...new Set(missed.map(({ versionId }) => versionId)),
-  ]);
-  const earlier = new Map(
-    missed.map(({ versionId }) => {
-      const later = after.get(versionId) ?? [];
-      const liveId = live.get(menuOf.get(versionId) ?? "")?.versionId;
-      return [versionId, [...later.slice(later.indexOf(liveId ?? "") + 1), versionId]] as const;
-    }),
+  const after = await onceLiveVersionsAfter(tx, versionIds);
+  const newestFirst = new Map(
+    versionIds.map((versionId) => [versionId, [...(after.get(versionId) ?? []), versionId]]),
   );
-  let waiting = missed.map(({ line, versionId }) => ({ line, versions: earlier.get(versionId)! }));
-  for (let step = 0; waiting.length > 0; step += 1) {
+  let waiting = versioned.map(({ line, versionId }) => ({
+    line,
+    versions: newestFirst.get(versionId)!,
+  }));
+  let start = 0;
+  for (let size = 1; waiting.length > 0; size = Math.min(size * 2, LARGEST_READ)) {
+    const end = start + size;
     const recorded = await readRecordedDocuments(
       tx,
-      waiting.map(({ versions }) => versions[step]!),
+      waiting.flatMap(({ versions }) => versions.slice(start, end)),
     );
     waiting = waiting.filter(({ line, versions }) => {
-      const document = recorded.get(versions[step]!);
-      const values = document && declarationsInDocument(document, line);
-      if (values !== undefined) found.set(line.id, values);
-      return values === undefined && step + 1 < versions.length;
+      for (const versionId of versions.slice(start, end)) {
+        const document = recorded.get(versionId);
+        const values = document && declarationsInDocument(document, line);
+        if (values === undefined) continue;
+        found.set(line.id, values);
+        return false;
+      }
+      return end < versions.length;
     });
+    start = end;
   }
   return found;
 }
