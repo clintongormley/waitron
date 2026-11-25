@@ -5,9 +5,9 @@ import { SESSION_STATUS } from "./till-session.js";
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 export const STATUS: Record<string, ContentfulStatusCode> = {
   "settings.invalid": 500,
-  "set_menu.no_place_on_target": 409,
+  "set_menu.moves_with_set_menu": 409,
   "set_menu.move_adjusted": 409,
-  "set_menu.remove_from_summary": 409,
+  "set_menu.worked_out_by_bill": 409,
   "set_menu.dish_sold_by_measure": 409,
   "set_menu.not_seated": 409,
   "set_menu.bill_holds_set_menus": 409,

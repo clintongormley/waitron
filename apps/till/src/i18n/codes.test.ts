@@ -1384,9 +1384,9 @@ it.each([
   ["set_menu.needed_by_draft", "Hake and Soup", "Hake y Soup"],
   ["set_menu.no_place", "Hake", "Hake"],
   ["set_menu.place_taken", "Hake", "Hake"],
-  ["set_menu.no_place_on_target", "Hake", "Hake"],
+  ["set_menu.moves_with_set_menu", "Hake", "Hake"],
   ["set_menu.dish_sold_by_measure", "by weight", "al peso"],
-  ["set_menu.remove_from_summary", "Cancel or move its dishes", "Anula o mueve sus platos"],
+  ["set_menu.worked_out_by_bill", "Cancel or move its dishes", "Anula o mueve sus platos"],
 ] as const)("words %s in English and Spanish", (code, english, spanish) => {
   const params = { setMenuName: "Daily", dishNames: ["Hake", "Soup"], dishName: "Hake" };
   expect(codeMessage(code, "en-GB", params)).toContain(english);

@@ -357,7 +357,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
   it("a set-menu dish chosen alone says to choose its set menu too", async () => {
     const { el } = await mountApp({
       previewItemPayment: vi.fn().mockRejectedValue({
-        code: "set_menu.no_place_on_target",
+        code: "set_menu.moves_with_set_menu",
         status: 409,
         dishName: "Tarta",
       }),

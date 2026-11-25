@@ -273,7 +273,7 @@ it("refuses to reprice a cancelled dish whose charge was kept", async () => {
   await cancelKeepingCharge(source);
   const before = await lines(source.billId);
   await expect(move(source, source.dishId)).rejects.toMatchObject({
-    code: "set_menu.no_place_on_target",
+    code: "set_menu.moves_with_set_menu",
   });
   expect(await lines(source.billId)).toEqual(before);
 });

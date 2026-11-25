@@ -11,7 +11,7 @@ import "./errors.js";
 
 /**
  * Refuses moving these set-menu dishes away from their set menu when that would unfreeze them
- * (D18): `set_menu.no_place_on_target` for a dish whose cancel kept its charge, and
+ * (D18): `set_menu.moves_with_set_menu` for a dish whose cancel kept its charge, and
  * `set_menu.move_adjusted` for one frozen by its own comp or discount, or an extra's, or a stamped
  * list price (D15).
  */
@@ -47,7 +47,7 @@ export async function refuseMovingFrozenDishes(
     ({ cancellationLineId, keptChargeId }) => cancellationLineId !== null || keptChargeId !== null,
   );
   if (cancelled !== undefined)
-    throw new AppError("set_menu.no_place_on_target", { dishName: cancelled.name });
+    throw new AppError("set_menu.moves_with_set_menu", { dishName: cancelled.name });
   const named = await namedFrozenLineIds(
     tx,
     rows.map(({ id }) => id),

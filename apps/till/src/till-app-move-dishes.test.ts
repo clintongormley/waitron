@@ -366,7 +366,7 @@ describe("set menus in Move dishes", () => {
   it("shows what to do when the server refuses a move after the preview", async () => {
     const move = await openSetMenuMove({
       moveDishes: vi.fn().mockRejectedValue({
-        code: "set_menu.no_place_on_target",
+        code: "set_menu.moves_with_set_menu",
         dishName: "Sirloin",
         status: 409,
       }),

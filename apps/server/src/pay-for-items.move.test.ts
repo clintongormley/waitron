@@ -449,10 +449,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
     const picks = [{ lineId: dishId }];
 
     await expect(inTx(v, (tx) => priceItemPicks(tx, billId, picks))).rejects.toMatchObject({
-      code: "set_menu.no_place_on_target",
+      code: "set_menu.moves_with_set_menu",
     });
     await expect(payFor(partyId, billId, picks)).rejects.toMatchObject({
-      code: "set_menu.no_place_on_target",
+      code: "set_menu.moves_with_set_menu",
     });
     expect(await billsNaming(billId)).toEqual([]);
   });

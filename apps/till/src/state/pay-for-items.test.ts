@@ -159,14 +159,14 @@ describe("itemsAllocated", () => {
 
 describe("itemsRefusal", () => {
   it("a set-menu dish chosen alone is refused in the Pay window's words", () => {
-    const refusal = itemsRefusal({ code: "set_menu.no_place_on_target", dishName: "Flan" });
+    const refusal = itemsRefusal({ code: "set_menu.moves_with_set_menu", dishName: "Flan" });
 
     expect(refusalText(refusal)).toBe(
       "Flan is part of a set menu. Choose its set menu too, or leave it on this bill.",
     );
     setLocale("es");
     expect(
-      refusalText(itemsRefusal({ code: "set_menu.no_place_on_target", dishName: "Flan" })),
+      refusalText(itemsRefusal({ code: "set_menu.moves_with_set_menu", dishName: "Flan" })),
     ).toBe(fill(t("bill_pay.items_set_menu_dish"), { dishName: "Flan" }));
   });
 

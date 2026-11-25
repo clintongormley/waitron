@@ -381,7 +381,7 @@ it("refuses moving alone a dish whose cancel kept its charge (D18)", async () =>
   const before = await grouping(source.tabId);
 
   await expect(move(source, target, [hake])).rejects.toMatchObject({
-    code: "set_menu.no_place_on_target",
+    code: "set_menu.moves_with_set_menu",
     params: { dishName: "Hake" },
   });
   expect(await grouping(source.tabId)).toEqual(before);

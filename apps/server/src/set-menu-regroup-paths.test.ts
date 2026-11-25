@@ -971,11 +971,11 @@ it("no longer serves setting a count, removing a set menu or moving dishes withi
   expect(await saved(bill.tabId)).toEqual(rows);
 });
 
-it("still refuses cancelling a set-menu row (set_menu.remove_from_summary)", async () => {
+it("still refuses cancelling a set-menu row (set_menu.worked_out_by_bill)", async () => {
   const bill = await seated();
   await sendDraft(bill, ["Soup", "Hake"]);
   const menu = (await saved(bill.tabId)).find(({ role }) => role === "set_menu")!;
   await expect(cancelDish(bill.tabId, menu.id)).rejects.toMatchObject({
-    code: "set_menu.remove_from_summary",
+    code: "set_menu.worked_out_by_bill",
   });
 });

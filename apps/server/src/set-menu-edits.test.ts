@@ -284,7 +284,7 @@ it("an adjustment refuses a set-menu heading", async () => {
   const tab = await bill();
   const before = await rows(tab.tabId);
   await expect(inTx(venue, (tx) => cancelLine(tx, venue.cfg, tab.tabId, 2))).rejects.toMatchObject({
-    code: "set_menu.remove_from_summary",
+    code: "set_menu.worked_out_by_bill",
   });
   expect(await rows(tab.tabId)).toEqual(before);
 });
@@ -343,6 +343,6 @@ it("refuses a request to cancel a set-menu heading while keeping its charge", as
         venue.operator.personId,
       );
     }),
-  ).rejects.toMatchObject({ code: "set_menu.remove_from_summary" });
+  ).rejects.toMatchObject({ code: "set_menu.worked_out_by_bill" });
   expect(await rows(tab.tabId)).toEqual(before);
 });

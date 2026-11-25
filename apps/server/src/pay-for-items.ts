@@ -157,7 +157,7 @@ async function readPicks(
     const row = byId.get(line.id)!;
     if (row.setMenuLineId === null) return line;
     if (!ids.has(row.setMenuLineId))
-      throw new AppError("set_menu.no_place_on_target", { dishName: row.name });
+      throw new AppError("set_menu.moves_with_set_menu", { dishName: row.name });
     return { ...line, familyCents: 0 };
   });
   // A dish leaves whole when chosen whole or brought along by a set menu chosen whole; a part
