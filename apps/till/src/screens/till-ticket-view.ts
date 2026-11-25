@@ -161,6 +161,10 @@ export class TillTicketView extends LitElement {
     css`
       :host {
         display: block;
+        padding-inline: max(
+          var(--wt-space-4),
+          (min(100%, var(--wt-modal-compact-width)) - var(--wt-till-ticket-column-width)) / 2
+        );
       }
 
       .ticket {
@@ -290,8 +294,6 @@ export class TillTicketView extends LitElement {
         margin: 0 auto;
       }
 
-      /* The receipt-hardware actions (reprint the paper, kick the drawer) — a row above New sale, each
-         a full-width secondary button on the same 22rem column as the ticket + New sale. */
       .receipt-actions {
         display: flex;
         flex-wrap: wrap;
@@ -306,9 +308,7 @@ export class TillTicketView extends LitElement {
       }
 
       .original-delivery {
-        inline-size: 100%;
-        max-inline-size: var(--wt-modal-compact-width);
-        box-sizing: border-box;
+        inline-size: min(100%, var(--wt-modal-compact-width));
         margin: var(--wt-space-2) auto var(--wt-space-3);
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);

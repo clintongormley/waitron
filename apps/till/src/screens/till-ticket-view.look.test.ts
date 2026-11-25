@@ -82,6 +82,10 @@ for (const language of ["en-GB", "es-ES"])
           expect(row.getBoundingClientRect().width).toBeLessThanOrEqual(
             delivery.getBoundingClientRect().width + 1,
           );
+          if (width === 390) {
+            expect(row.getBoundingClientRect().left).toBeGreaterThan(0);
+            expect(delivery.getBoundingClientRect().right).toBeLessThan(width);
+          }
           expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
           for (const control of row.querySelectorAll<HTMLElement>("wt-button, wt-combobox")) {
             expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
