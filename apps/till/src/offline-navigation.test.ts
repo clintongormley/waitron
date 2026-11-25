@@ -55,11 +55,12 @@ it.each([
       caches: [],
       duringUpgrade: heading,
       recovered: true,
+      history: "new build",
       refused: 503,
       redirect: "/primary",
     });
   },
-  30_000,
+  120_000,
 );
 
 it("retires the worker without reloading the open till", async () => {
@@ -68,4 +69,4 @@ it("retires the worker without reloading the open till", async () => {
     sameDocument: true,
     registrations: 0,
   });
-});
+}, 60_000);

@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import type { Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 
@@ -63,7 +64,13 @@ export const probeOfflineNavigation: BrowserCommand<
       await subject.evaluate(async () => {
         await (await navigator.serviceWorker.getRegistration())?.update();
       });
-      await subject.waitForFunction(async () => !(await navigator.serviceWorker.getRegistration()));
+      const deadline = performance.now() + 8_000;
+      while (
+        await subject.evaluate(async () => Boolean(await navigator.serviceWorker.getRegistration()))
+      ) {
+        if (performance.now() >= deadline) throw new Error("The retired worker stayed registered");
+        await delay(50);
+      }
       const sameDocument = (await subject.locator("body").getAttribute("data-original")) === "yes";
       await subject.close();
       const reopened = await browser.newPage();
@@ -83,10 +90,10 @@ export const probeOfflineNavigation: BrowserCommand<
     }
     const heading = await subject.locator("h1").textContent();
     const paragraphs = await subject.locator("main > p").allTextContents();
-    const link = subject.getByRole("link");
-    const instructions = await link.getAttribute("href");
-    const target = await link.getAttribute("target");
-    const rel = await link.getAttribute("rel");
+    const link = await subject.getByRole("link").evaluate((element) => {
+      const anchor = element as HTMLAnchorElement;
+      return { instructions: anchor.href, target: anchor.target, rel: anchor.rel };
+    });
     const caches = await subject.evaluate(() => window.caches.keys());
 
     state = "upgrade";
@@ -97,6 +104,10 @@ export const probeOfflineNavigation: BrowserCommand<
     state = "updated";
     await subject.getByRole("heading", { name: "updated" }).waitFor();
     const recovered = subject.url() === entry;
+    await subject.goto(origin + "/primary");
+    state = "new build";
+    await subject.goBack();
+    const history = await subject.locator("h1").textContent();
 
     state = "upgrade";
     const refused = (await subject.reload())?.status();
@@ -105,12 +116,11 @@ export const probeOfflineNavigation: BrowserCommand<
     return {
       heading,
       paragraphs,
-      instructions,
-      target,
-      rel,
+      ...link,
       caches,
       duringUpgrade,
       recovered,
+      history,
       refused,
       redirect: subject.url().slice(origin.length),
     };
