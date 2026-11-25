@@ -369,6 +369,28 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await invoicesOf(billId)).toEqual(["10.00"]);
   });
 
+  it("keeps the excess from payments that still hold money, leaving the oldest alone", async () => {
+    const { billId, paymentIds } = await overpaidBill("cash", false, [
+      "8.00",
+      "4.00",
+      "1.00",
+      "2.00",
+    ]);
+    const [oldest, middle, newer, newest] = paymentIds;
+    expect((await giveBack(billId, newest!, "2.00")).json).toMatchObject({
+      refund: { state: "completed" },
+    });
+
+    const kept = await keepAsTip(billId, "3.00");
+
+    expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+    expect(await paymentOf(oldest!)).toEqual({ applied: "8.00", tip: "0.00" });
+    expect(await paymentOf(middle!)).toEqual({ applied: "2.00", tip: "2.00" });
+    expect(await paymentOf(newer!)).toEqual({ applied: "0.00", tip: "1.00" });
+    expect(await paymentOf(newest!)).toEqual({ applied: "2.00", tip: "0.00" });
+    expect(await invoicesOf(billId)).toEqual(["10.00"]);
+  });
+
   it("giving back the excess in cash issues the bill", async () => {
     const { billId, paymentId } = await overpaidBill();
 
