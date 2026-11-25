@@ -793,6 +793,14 @@ describe("dashboard Orders", () => {
       const full = { ...ROW, invoiceType: "F1" as const };
       const next = { ...full, id: "next-bill", invoiceNumber: "B/13" };
       if (via === "linked") history.replaceState(null, "", `/orders/order/${full.id}`);
+      const guard = new NavigationGuard(window, {
+        isDirty: () => false,
+        request: async (proceed) => {
+          await proceed();
+          return "proceeded";
+        },
+      });
+      onTestFinished(() => guard.dispose());
       const api = stubApi({
         listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full, next] }),
         getOrder: vi
@@ -868,8 +876,7 @@ describe("dashboard Orders", () => {
               : null;
           })
           .toBe(message);
-        history.pushState(null, "", `/orders/order/${next.id}`);
-        window.dispatchEvent(new PopStateEvent("popstate"));
+        await guard.write(`/orders/order/${next.id}`);
       } else
         table
           .shadowRoot!.querySelectorAll("wt-row-actions")[1]!
