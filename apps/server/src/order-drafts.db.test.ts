@@ -90,6 +90,7 @@ import { saveHeldOrderIn, updateOrderLine } from "./working-order-held-write.js"
 import { copyBillDishes } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { insertPartyBill } from "./parties.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -2719,15 +2720,20 @@ describe("when a bill ordered during a period", () => {
     const { partyId } = await seated(v);
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     at("15:05");
-    const edited = await save(v, partyId, ALEX, draft.id, draft.revision, [
-      item(v, "beer", { note: "In a small glass" }),
-      { ...draft.lines[0]!, note: "In a small glass" },
-    ]);
+    const later = await saveOnSeparateBill(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     const revision = await partyRevision(partyId);
+    await inTx((tx) =>
+      mergeBills(tx, v.cfg, later.billId, draft.billId, {
+        operatorId: ALEX,
+        expectedPartyRevision: revision,
+      }),
+    );
+    const [combined] = await draftsOf(partyId);
+    const edited = await save(v, partyId, ALEX, combined!.id, combined!.revision, combined!.lines);
     const { destination, billId } = await inTx(async (tx) =>
       splitDraft(tx, v.cfg, partyId, edited.id, {
         expectedEdit: await expectedDraftEditForTest(tx, edited),
-        expectedPartyRevision: revision,
+        expectedPartyRevision: await partyRevision(partyId),
         operatorId: ALEX,
         submissionId: randomUUID(),
         lineIds: lineIds(edited),
@@ -2785,19 +2791,14 @@ describe("when a bill ordered during a period", () => {
     expect(await tabLines(partyId)).toEqual([]);
     expect(await orderedDuring(billId)).toEqual([lunch]);
 
-    const receiving = randomUUID();
+    const receiving = await inTx((tx) => insertPartyBill(tx, v.cfg, partyId));
     const revision = await partyRevision(partyId);
-    await inTx(async (tx) => {
-      await workingOrderOpen.createOpenOrder(tx, v.cfg, receiving, [], null, {
-        partyId,
-        existingService: true,
-        copyServiceContextFrom: tabId,
-      });
-      await mergeBills(tx, v.cfg, receiving, billId, {
+    await inTx((tx) =>
+      mergeBills(tx, v.cfg, receiving, billId, {
         operatorId: ALEX,
         expectedPartyRevision: revision,
-      });
-    });
+      }),
+    );
     expect(await orderedDuring(receiving)).toEqual([lunch]);
   });
 
@@ -2836,22 +2837,26 @@ describe("when a bill ordered during a period", () => {
     await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
     const [beer] = await tabLines(partyId);
     at("15:05");
-    await inTx(async (tx) => {
-      const revision = await readOrderRevision(tx, tabId);
-      await updateOrderLine(
-        tx,
-        v.cfg,
-        tabId,
-        beer!.lineNo,
-        { quantity: "3", portionLineNos: [] },
-        revision,
-        {
-          expectedEdit: await readBillEditState(tx, tabId),
-          operatorId: ALEX,
-          admission: testTradingAdmission(),
-        },
-      );
-    });
+    const edit = (patch: Pick<Parameters<typeof updateOrderLine>[4], "quantity" | "note">) =>
+      inTx(async (tx) => {
+        const revision = await readOrderRevision(tx, tabId);
+        await updateOrderLine(
+          tx,
+          v.cfg,
+          tabId,
+          beer!.lineNo,
+          { ...patch, portionLineNos: [] },
+          revision,
+          {
+            expectedEdit: await readBillEditState(tx, tabId),
+            operatorId: ALEX,
+            admission: testTradingAdmission(),
+          },
+        );
+      });
+    await edit({ note: "In a small glass" });
+    expect(await orderedDuring(tabId)).toEqual([lunch]);
+    await edit({ quantity: "3" });
     expect(await orderedDuring(tabId)).toEqual([lunch, dinner].sort());
   });
 });
