@@ -184,8 +184,27 @@ describe("findDeclarationDrift", () => {
     ]);
   });
 
+  it("lists two queued versions of one menu earliest first", async () => {
+    await publish(f.lunch);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
+    const soonerAt = hoursFromNow(24);
+    const sooner = await queue(f.lunch, soonerAt);
+    await app((tx) => updateProduct(tx, f.soup, { unitPrice: "5.50" }));
+    const laterAt = hoursFromNow(48);
+    const later = await queue(f.lunch, laterAt);
+    const before = await valuesOf(f.burger);
+    await declare(f.burger, { sesame: {} });
+    const [lunch] = await drift([f.burger], before);
+    expect(lunch!.queued.map(({ versionId, activatesAt }) => ({ versionId, activatesAt }))).toEqual(
+      [
+        { versionId: sooner, activatesAt: soonerAt.toISOString() },
+        { versionId: later, activatesAt: laterAt.toISOString() },
+      ],
+    );
+  });
+
   it("names a live menu not sold at this hour", async () => {
-    // No service period names Dinner, so it is sold nowhere at any hour.
+    // The fixture sets up no service periods, so Dinner is sold nowhere at any hour.
     const v1 = await publish(f.dinner);
     const before = await valuesOf(f.burger);
     await declare(f.burger, { milk: {} });

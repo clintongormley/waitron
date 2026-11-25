@@ -2319,6 +2319,54 @@ describe("mountMenuApi — products", () => {
       expect(updated.status).toBe(200);
       expect(await updated.json()).toMatchObject({ id, unitPrice: "2.50", declarationMenus: [] });
     });
+
+    it("compares the product's variants too: a scheduled variant copy holding a third value is not stillOld", async () => {
+      const app = mountApp();
+      const variant = {
+        name: "Declared glass",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
+        available: true,
+        active: true,
+      };
+      const created = await send(app, "POST", "/management-api/products/editor", {
+        body: await editorBody(app, { allergens: {}, variants: [variant] }),
+      });
+      expect(created.status).toBe(201);
+      const saved = (await created.json()) as { id: string; variants: { id: string }[] };
+      const variantId = saved.variants[0]!.id;
+      const saveWith = async (productId: string, allergens: Record<string, object>) => {
+        const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
+        const body = saveBodyOf((await read.json()) as Record<string, unknown>);
+        const put = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+          body: { ...body, allergens },
+        });
+        expect(put.status).toBe(200);
+        return (await put.json()) as { declarationMenus: unknown };
+      };
+      await saveWith(variantId, { fish: {} });
+      const menuId = await createMenuVia(app, `Declared ${crypto.randomUUID()}`);
+      await offerVia(app, menuId, saved.id);
+      const preview = await send(app, "GET", `/management-api/menus/${menuId}/preview`);
+      const { hash } = (await preview.json()) as MenuPreview;
+      const scheduled = await send(app, "POST", `/management-api/menus/${menuId}/publications`, {
+        body: { expectedHash: hash, activatesAt: { date: "2099-01-01", time: "12:00" } },
+      });
+      expect(scheduled.status).toBe(201);
+      const { versionId } = (await scheduled.json()) as { versionId: string };
+      await saveWith(variantId, { eggs: {} });
+
+      const answer = await saveWith(saved.id, { milk: {} });
+      expect(answer.declarationMenus).toEqual([
+        expect.objectContaining({
+          menuId,
+          live: false,
+          queued: [expect.objectContaining({ versionId, stillOld: false })],
+        }),
+      ]);
+    });
   });
 
   /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
