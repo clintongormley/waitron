@@ -235,7 +235,7 @@ it("commits a submitted profile before refresh refuses, without losing newer del
   await click(mounted.screen, "cancel");
   await expect.poll(() => mounted.screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
 });
-it("authenticator enrollment consumes proof before starting a clean code-entry stage", async () => {
+it("authenticator enrollment opens on a clean code-entry stage", async () => {
   const { app, screen } = await mount({
     getProfile: async () => ({ ...profile, hasTotp: false }),
     beginTotp: async () => ({
@@ -247,8 +247,6 @@ it("authenticator enrollment consumes proof before starting a clean code-entry s
     finishTotp: async () => ({ codes: ["RECOVERY"] }),
   });
   await click(screen, "setup-authenticator");
-  expect(unload()).toBe(false);
-  await click(screen, "save");
   await expect
     .poll(() => screen.shadowRoot!.querySelector("wt-input[name=setupCode]"))
     .not.toBeNull();
@@ -343,7 +341,6 @@ it("a disconnected authenticator enrollment result cannot repopulate secret fiel
       }),
   });
   await click(screen, "setup-authenticator");
-  await click(screen, "save");
   screen.remove();
   resolve({
     enrollmentId: "setup",

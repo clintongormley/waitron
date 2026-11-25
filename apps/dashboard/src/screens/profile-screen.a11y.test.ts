@@ -4,7 +4,8 @@ import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./profile-screen.js";
 import type { ProfileScreen } from "./profile-screen.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, OwnProfile } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 
 function stubApi(): DashboardApi {
   return {
@@ -87,7 +88,7 @@ describe.each(["light", "dark"] as const)("profile-screen a11y (%s theme)", (the
           path: `__screenshots__/look/a319-profile-${locale}-${theme}-${width}-${tab}.png`,
         });
       }
-      for (const action of ["add-passkey", "change-password"]) {
+      for (const action of ["remove-passkey", "change-password"]) {
         el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
         await el.updateComplete;
         await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -137,6 +138,65 @@ describe.each(["light", "dark"] as const)("profile-screen a11y (%s theme)", (the
     await el.updateComplete;
     await save.updateComplete;
     expect([save.variant, save.disabled]).toEqual(["primary", false]);
+    await expectNoA11yViolations(host);
+  });
+
+  async function mountSecurity(
+    overrides: Record<string, unknown>,
+    profile: Partial<OwnProfile> = {},
+  ) {
+    const api = Object.assign(stubApi(), overrides);
+    vi.mocked(api.getProfile).mockResolvedValue({ ...(await api.getProfile()), ...profile });
+    const { el, host } = await mountWidget<ProfileScreen>(
+      "dashboard-profile-screen",
+      { api },
+      theme,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("wt-tabs")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("[data-key=security]")!
+      .click();
+    await el.updateComplete;
+    const press = (action: string) =>
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    return { el, host, press, modal };
+  }
+
+  it("a refused Add passkey, with the reason under its row", async () => {
+    const { el, host, press } = await mountSecurity({
+      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    press("add-passkey");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=start-error-passkey]")?.textContent)
+      .toContain(codeMessage("passkey.challenge_expired"));
+    await expectNoA11yViolations(host);
+  });
+
+  it("the authenticator's code to scan, opened by Set up", async () => {
+    const { el, host, press, modal } = await mountSecurity({
+      beginTotp: vi.fn().mockResolvedValue({
+        enrollmentId: "setup",
+        secret: "SECRET",
+        uri: "otpauth://totp/Waitron:test",
+        expiresAt: "2026-10-07T00:00:00Z",
+      }),
+    });
+    press("setup-authenticator");
+    await expect.poll(() => modal.open).toBe(true);
+    await modal.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=authenticator-qr]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("the code window Add passkey opens on an account with an authenticator", async () => {
+    const { el, host, press, modal } = await mountSecurity({}, { hasTotp: true });
+    press("add-passkey");
+    await expect.poll(() => modal.open).toBe(true);
+    await modal.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-input[name=totp]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

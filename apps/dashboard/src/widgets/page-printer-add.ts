@@ -165,7 +165,7 @@ export class PagePrinterAdd extends LitElement {
     return html`<wt-modal
       size="compact"
       data-test="page-printer-add-modal"
-      heading=${t("printers.page_printer_add")}
+      heading=${t("printers.add_printer")}
       .open=${this.entry !== null}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @keydown=${(event: KeyboardEvent) =>

@@ -2,11 +2,6 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
-  startRegistration,
-  type PublicKeyCredentialCreationOptionsJSON,
-} from "@simplewebauthn/browser";
-import { toDataURL } from "qrcode";
-import {
   baseStyles,
   draftScopeFor,
   FormFeedback,
@@ -30,8 +25,10 @@ import { currentLocale, fill, passwordVisibility, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
+import { enrolmentCode, enrolPasskey } from "../passkey-enrolment.js";
 import { sendAcceptedPasskeys } from "../passkey-signals.js";
+import { beginAuthenticator } from "../authenticator-enrolment.js";
+import { saveFile } from "../save-file.js";
 
 type Mode =
   | "view"
@@ -47,6 +44,8 @@ type Mode =
   | "passkey"
   | "email"
   | "codes";
+/** The changes that start without a window. */
+type StartAction = Extract<Mode, "passkey" | "totp" | "google">;
 type Field =
   | "displayName"
   | "firstNames"
@@ -140,8 +139,10 @@ export class ProfileScreen extends LitElement {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
       }
-      .passkeys-row .hint {
+      .passkeys-row .hint,
+      .passkeys-row .error {
         grid-column: 1 / -1;
+        margin: 0;
       }
       .row {
         display: flex;
@@ -251,6 +252,9 @@ export class ProfileScreen extends LitElement {
   /** Kept apart from `error`, so it never replaces a read's message or shows in an edit dialog. */
   @state() private downloadError = "";
   #download = 0;
+  @state() private starting: StartAction | null = null;
+  /** Kept apart from `error`, like the download's. */
+  @state() private startError: { action: StartAction; message: string } | null = null;
 
   #operation = 0;
   #scope?: DraftScope<Record<Field, string>>;
@@ -298,6 +302,8 @@ export class ProfileScreen extends LitElement {
     this.#download++;
     this.downloading = false;
     this.busy = false;
+    this.starting = null;
+    this.startError = null;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -387,6 +393,7 @@ export class ProfileScreen extends LitElement {
     this.#feedback.reset();
     this.requestRefused = {};
     this.#showError("");
+    this.startError = null;
     this.saved = false;
     this.totpSetup = null;
     this.totpQr = "";
@@ -423,7 +430,6 @@ export class ProfileScreen extends LitElement {
     return (
       this.mode === "password" ||
       this.mode === "pin" ||
-      (this.mode === "totp" && this.totpSetup === null) ||
       this.mode === "recovery" ||
       this.mode === "google" ||
       this.mode === "disable-totp" ||
@@ -528,8 +534,7 @@ export class ProfileScreen extends LitElement {
     if (this.needsCredentials) add(...(this.profile?.hasTotp ? ["totp" as const] : []));
     if (this.mode === "password") add("password", "confirmPassword");
     if (this.mode === "pin") add("pin", "confirmPin");
-    if (this.mode === "email" || (this.mode === "totp" && this.totpSetup !== null))
-      add("setupCode");
+    if (this.mode === "email" || this.mode === "totp") add("setupCode");
     return shown;
   }
 
@@ -555,8 +560,7 @@ export class ProfileScreen extends LitElement {
       else if (f.confirmPin !== f.pin) errors.confirmPin = t("account.pin_mismatch");
     }
     if (this.mode === "email" && !f.setupCode) errors.setupCode = t("profile.email_code_required");
-    if (this.mode === "totp" && this.totpSetup !== null && !f.setupCode)
-      errors.setupCode = t("profile.code_required");
+    if (this.mode === "totp" && !f.setupCode) errors.setupCode = t("profile.code_required");
     return errors;
   }
 
@@ -623,23 +627,7 @@ export class ProfileScreen extends LitElement {
         await this.api.changePassword({ password: f.password, ...credentials });
       else if (this.mode === "pin") await this.api.changePin({ pin: f.pin, ...credentials });
       else if (this.mode === "remove") await this.api.removePasskey(this.removingId, credentials);
-      else if (this.mode === "totp" && this.totpSetup === null) {
-        const setup = await this.api.beginTotp(credentials);
-        if (!active()) return;
-        const qr = await toDataURL(setup.uri, {
-          errorCorrectionLevel: "M",
-          margin: 1,
-          width: 240,
-        });
-        if (!active()) return;
-        scope?.commit(submitted);
-        this.totpQr = qr;
-        this.totpSetup = setup;
-        this.fields = { ...this.fields, totp: "" };
-        this.#registerDraft();
-        this.#feedback.reset();
-        return;
-      } else if (this.mode === "totp") {
+      else if (this.mode === "totp") {
         const result = await this.api.finishTotp(this.totpSetup!.enrollmentId, f.setupCode);
         if (!active()) return;
         scope?.commit(submitted);
@@ -671,7 +659,7 @@ export class ProfileScreen extends LitElement {
       } else if (this.mode === "unlink-google") {
         await this.api.unlinkGoogle(credentials);
       } else if (this.mode === "passkey") {
-        await this.#addPasskey(credentials, active);
+        await enrolPasskey(this.api, credentials, active);
       } else if (this.mode === "email") {
         await this.api.confirmProfileEmail(f.setupCode);
       }
@@ -690,32 +678,12 @@ export class ProfileScreen extends LitElement {
       const sendSignals = ["details", "email", "passkey", "remove"].includes(this.mode);
       scope?.commit(submitted);
       if (!scope?.isDirty()) this.#closeSaved();
-      this.saved = true;
-      const profile = await this.#load();
-      if (sendSignals && profile && this.isConnected && this.#operation === operation)
-        void sendAcceptedPasskeys(profile.passkeySignals);
-      this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
+      await this.#reloadSaved(operation, sendSignals);
     } catch (error) {
       if (!active()) return;
-      // Classified first, so no WebAuthn library `.code` reaches codeOf and degrades to the generic
-      // banner.
-      if (this.mode === "passkey") {
-        const passkey = classifyPasskeyRegistrationError(error);
-        // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing.
-        if (passkey === "cancelled") return;
-        if (passkey === "already_registered") {
-          this.#showError(codeMessage("passkey.already_registered"));
-          return;
-        }
-        if (passkey === "failed") {
-          this.#showError(codeMessage("passkey.verification_failed"));
-          return;
-        }
-        // passkey === null → a server { code } rejection or startRegistration's plain "not supported"
-        // / "not completed" Errors (no `.code`): fall through so codeOf yields the passkey fallback.
-      }
-      const code =
-        this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
+      const code = this.mode === "passkey" ? enrolmentCode(error) : codeOf(error);
+      // A cancelled or aborted prompt is not a failure: leave the modal open, show nothing.
+      if (code === null) return;
       const message =
         code === "account_action.invalid" && this.mode === "email"
           ? t("profile.email_code_refused")
@@ -725,7 +693,7 @@ export class ProfileScreen extends LitElement {
         code === "profile.invalid" && typeof paramsField === "string"
           ? (paramsField as Field)
           : code === "totp.invalid"
-            ? this.mode === "totp" && this.totpSetup !== null
+            ? this.mode === "totp"
               ? "setupCode"
               : "totp"
             : code === "person.email_taken" || code === "person.email_invalid"
@@ -754,12 +722,7 @@ export class ProfileScreen extends LitElement {
   }
   #downloadRecoveryCodes(): void {
     const blob = new Blob([`${this.recoveryCodes.join("\n")}\n`], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "waitron-recovery-codes.txt";
-    link.click();
-    URL.revokeObjectURL(url);
+    saveFile(blob, "waitron-recovery-codes.txt");
   }
   async #downloadDataCopy(): Promise<void> {
     if (this.downloading) return;
@@ -769,29 +732,73 @@ export class ProfileScreen extends LitElement {
     try {
       const file = await this.api.downloadOwnPersonalData();
       if (this.#download !== download) return;
-      const url = URL.createObjectURL(file.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = file.fileName ?? "personal-data.zip";
-      link.click();
-      URL.revokeObjectURL(url);
+      saveFile(file.blob, file.fileName ?? "personal-data.zip");
     } catch (error) {
       if (this.#download === download) this.downloadError = codeMessage(codeOf(error));
     } finally {
       if (this.#download === download) this.downloading = false;
     }
   }
-  async #addPasskey(credentials: { totp?: string }, active: () => boolean): Promise<void> {
-    const { challengeHandle, options } = await this.api.passkeyRegisterOptions(credentials);
-    if (!active()) return;
-    const response = await startRegistration({
-      optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
-    });
-    if (!active()) return;
-    await this.api.passkeyRegisterVerify({
-      challengeHandle,
-      response,
-    });
+  async #reloadSaved(operation: number, sendSignals: boolean): Promise<void> {
+    this.saved = true;
+    const profile = await this.#load();
+    if (sendSignals && profile && this.isConnected && this.#operation === operation)
+      void sendAcceptedPasskeys(profile.passkeySignals);
+    this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
+  }
+  /** Sends the action at once, with no window first. */
+  async #start(action: StartAction): Promise<void> {
+    if (this.busy) return;
+    // For passkey and Google an enrolled authenticator's code goes with the request, so that account
+    // gets a window first.
+    if (action !== "totp" && this.profile!.hasTotp) return this.#edit(action);
+    const operation = ++this.#operation;
+    const active = () => this.isConnected && this.#operation === operation;
+    this.startError = null;
+    this.saved = false;
+    this.busy = true;
+    this.starting = action;
+    try {
+      if (action === "passkey") {
+        await enrolPasskey(this.api, {}, active);
+        if (active()) await this.#reloadSaved(operation, true);
+      } else if (action === "google") {
+        const { authorizationUrl } = await this.api.beginGoogleLink({});
+        if (active()) this.navigate(authorizationUrl);
+      } else {
+        const { setup, qr } = await beginAuthenticator(this.api);
+        if (!active()) return;
+        this.busy = false;
+        this.#edit("totp");
+        this.totpQr = qr;
+        this.totpSetup = setup;
+      }
+    } catch (error) {
+      if (!active()) return;
+      const code = action === "passkey" ? enrolmentCode(error) : codeOf(error);
+      if (code === "totp.invalid") {
+        // The account may have gained an authenticator since this screen loaded.
+        await this.#load();
+        if (!active()) return;
+        if (this.profile!.hasTotp) {
+          this.busy = false;
+          if (action !== "totp") this.#edit(action);
+          return;
+        }
+      }
+      if (code !== null) this.startError = { action, message: codeMessage(code) };
+    } finally {
+      if (this.#operation === operation) {
+        this.busy = false;
+        this.starting = null;
+      }
+    }
+  }
+  #startError(action: StartAction) {
+    if (this.startError?.action !== action) return nothing;
+    return html`<p class="error" role="alert" data-test=${`start-error-${action}`}>
+      ${this.startError.message}
+    </p>`;
   }
   #modalHeading(): string {
     switch (this.mode) {
@@ -926,7 +933,7 @@ export class ProfileScreen extends LitElement {
                     data-test="change-password"
                     class="card-action accent-primary"
                     aria-label=${t(p.hasPassword ? "profile.change_password" : "profile.add_password")}
-                    ?disabled=${this.busy}
+                    ?disabled=${this.starting !== null}
                     @click=${() => this.#edit("password")}
                     >${t(p.hasPassword ? "action.change" : "action.add")}</wt-button
                   >`
@@ -941,7 +948,7 @@ export class ProfileScreen extends LitElement {
                     data-test="change-pin"
                     class="card-action accent-primary"
                     aria-label=${t("profile.change_pin")}
-                    ?disabled=${this.busy}
+                    ?disabled=${this.starting !== null}
                     @click=${() => this.#edit("pin")}
                     >${t("action.change")}</wt-button
                   >
@@ -954,10 +961,12 @@ export class ProfileScreen extends LitElement {
             <wt-button
               data-test="add-passkey"
               class="card-action accent-primary"
-              ?disabled=${this.busy}
-              @click=${() => this.#edit("passkey")}
+              ?disabled=${this.starting !== null && this.starting !== "passkey"}
+              ?loading=${this.starting === "passkey"}
+              @click=${() => void this.#start("passkey")}
               >${t("staff.add_passkey")}</wt-button
             >
+            ${this.#startError("passkey")}
             ${p.passkeys.length === 0 ? html`<span class="field-meta hint">${t("profile.no_passkeys")}</span>` : nothing}
           </div>
           ${p.passkeys.map((key, index) => {
@@ -979,7 +988,7 @@ export class ProfileScreen extends LitElement {
               <wt-button
                 data-test="remove-passkey"
                 class="card-action accent-danger"
-                ?disabled=${this.busy}
+                ?disabled=${this.starting !== null}
                 aria-label=${fill("profile.remove_passkey_name", { name })}
                 @click=${() => this.#edit("remove", key.id)}
                 >${t("action.remove")}</wt-button
@@ -1001,12 +1010,14 @@ export class ProfileScreen extends LitElement {
                       data-test="recovery-codes"
                       class="card-action"
                       aria-label=${t("profile.replace_recovery_codes")}
+                      ?disabled=${this.starting !== null}
                       @click=${() => this.#edit("recovery")}
                       >${t("action.replace")}</wt-button
                     >
                     <wt-button
                       data-test="disable-authenticator"
                       class="card-action accent-danger"
+                      ?disabled=${this.starting !== null}
                       @click=${() => this.#edit("disable-totp")}
                       >${t("profile.disable_authenticator_button")}</wt-button
                     >
@@ -1015,11 +1026,14 @@ export class ProfileScreen extends LitElement {
                     data-test="setup-authenticator"
                     class="card-action accent-primary"
                     aria-label=${t("profile.setup_authenticator")}
-                    @click=${() => this.#edit("totp")}
+                    ?disabled=${this.starting !== null && this.starting !== "totp"}
+                    ?loading=${this.starting === "totp"}
+                    @click=${() => void this.#start("totp")}
                     >${t("action.setup")}</wt-button
                   >`
             }
           </div>
+          ${this.#startError("totp")}
 
           <div class="action-row">
             <div class="text">
@@ -1040,6 +1054,7 @@ export class ProfileScreen extends LitElement {
                     data-test="unlink-google"
                     class="card-action accent-danger"
                     aria-label=${t("profile.unlink_google")}
+                    ?disabled=${this.starting !== null}
                     @click=${() => this.#edit("unlink-google")}
                     >${t("action.remove")}</wt-button
                   >`
@@ -1048,13 +1063,15 @@ export class ProfileScreen extends LitElement {
                       data-test="setup-google"
                       class="card-action accent-primary"
                       aria-label=${t("profile.setup_google")}
-                      ?disabled=${this.busy}
-                      @click=${() => this.#edit("google")}
+                      ?disabled=${this.starting !== null && this.starting !== "google"}
+                      ?loading=${this.starting === "google"}
+                      @click=${() => void this.#start("google")}
                       >${t("action.setup")}</wt-button
                     >`
                   : nothing
             }
           </div>
+          ${this.#startError("google")}
         </div>
       </wt-tabs>
       ${
@@ -1099,9 +1116,8 @@ export class ProfileScreen extends LitElement {
           : nothing
       }
       ${
-        this.needsCredentials
-          ? html`<p class="hint">${t("profile.confirm_identity")}</p>
-              ${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
+        this.needsCredentials && p.hasTotp
+          ? this.#input("totp", "profile.totp", "text", "one-time-code")
           : nothing
       }
       ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
@@ -1141,7 +1157,7 @@ export class ProfileScreen extends LitElement {
     this.#fieldErrors = form.fields;
     return html`
       <wt-modal
-        size=${this.mode === "details" || (this.mode === "totp" && this.totpSetup !== null) ? "standard" : "compact"}
+        size=${this.mode === "details" || this.mode === "totp" ? "standard" : "compact"}
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         .dismissible=${!this.busy}
@@ -1180,7 +1196,7 @@ export class ProfileScreen extends LitElement {
                   data-test="save"
                   ?disabled=${s.unchanged || this.busy || form.blocked}
                   @click=${() => void this.#save()}
-                  >${t(this.mode === "remove" ? "action.remove" : this.mode === "passkey" ? "action.add" : "action.save")}</wt-button
+                  >${t(this.mode === "remove" || this.mode === "unlink-google" ? "action.remove" : this.mode === "passkey" ? "action.add" : "action.save")}</wt-button
                 >`
           }
         </wt-form-actions>

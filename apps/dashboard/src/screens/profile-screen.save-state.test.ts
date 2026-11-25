@@ -127,15 +127,14 @@ const OPENERS = {
   pin: "change-pin",
   remove: "remove-passkey",
   totp: "setup-authenticator",
-  google: "setup-google",
-  passkey: "add-passkey",
   email: "confirm-email",
+  passkey: "add-passkey",
   recovery: "recovery-codes",
   "disable-totp": "disable-authenticator",
   "unlink-google": "unlink-google",
 } as const;
 type Mode = keyof typeof OPENERS;
-const SECURED_MODES: readonly Mode[] = ["recovery", "disable-totp", "unlink-google"];
+const SECURED_MODES: readonly Mode[] = ["passkey", "recovery", "disable-totp", "unlink-google"];
 
 async function openMode(mode: Mode, overrides = {}) {
   const mounted = await mount(SECURED_MODES.includes(mode) ? SECURED : PROFILE, overrides);
@@ -248,19 +247,15 @@ it("an edited detail is ready and sends the stored fields beside it", async () =
   });
 });
 
-it.each([
-  ["remove", "removePasskey"],
-  ["totp", "beginTotp"],
-  ["google", "beginGoogleLink"],
-  ["passkey", "passkeyRegisterOptions"],
-] as const)("%s: confirmation without a draft is ready and sends %s", async (mode, request) => {
-  const { el, api } = await openMode(mode);
+it("remove: confirmation without a draft is ready and sends removePasskey", async () => {
+  const { el, api } = await openMode("remove");
   expect(await state(el)).toEqual(ready);
   await press(el);
-  expect(sent(api)).toEqual([request]);
+  expect(sent(api)).toEqual(["removePasskey"]);
 });
 
 it.each([
+  ["passkey", "passkeyRegisterOptions"],
   ["recovery", "regenerateRecoveryCodes"],
   ["disable-totp", "disableTotp"],
   ["unlink-google", "unlinkGoogle"],
@@ -302,9 +297,8 @@ it("typing the emailed code makes Save ready and sends only that code", async ()
   expect(api.confirmProfileEmail).toHaveBeenCalledExactlyOnceWith("123456");
 });
 
-it("the authenticator's code step, which the first step leaves open, starts quiet", async () => {
+it("the authenticator's code window starts quiet", async () => {
   const { el, api } = await openMode("totp");
-  await press(el);
   expect(q(el, "[data-test=authenticator-qr]")).not.toBeNull();
   expect(await state(el)).toEqual(quiet);
   await press(el);

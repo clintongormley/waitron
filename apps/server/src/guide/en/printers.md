@@ -3,9 +3,8 @@
 ## Add a printer {#add-printer}
 
 In **Printers**, open the **Printers** tab and choose **Add a printer**. Waitron searches for
-network, USB and Bluetooth printers. Choose **Add** beside a receipt printer, change the name if
-you like, and choose **Add** again; calibration opens next. An office printer shows **Add as A4
-printer** instead.
+network, USB and Bluetooth printers. Choose **Add** beside a printer, change the name if you like,
+and choose **Add** again. For a receipt printer, calibration opens next.
 
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
@@ -51,7 +50,7 @@ made-up business name and tax number, in the venue's receipt language, marked as
 an invoice. An A4 printer's
 details have no calibration; **Print test page** checks one. To remove it, choose **Delete** in
 its row menu. The confirmation lists the assignments removed and work ended. To use it again,
-choose **Add a printer**, then **Add as A4 printer** beside it and **Add**. It keeps its saved
+choose **Add a printer**, then **Add** beside it and **Add** again. It keeps its saved
 name and settings. Assign its devices and device profiles again.
 
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.

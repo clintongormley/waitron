@@ -4,8 +4,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   browserSupportsWebAuthnAutofill,
   startAuthentication,
-  startRegistration,
-  type PublicKeyCredentialCreationOptionsJSON,
   WebAuthnAbortService,
 } from "@simplewebauthn/browser";
 import type {
@@ -30,7 +28,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
+import { enrolmentCode, enrolPasskey } from "../passkey-enrolment.js";
+import { classifyPasskeySignInError } from "../passkey-errors.js";
 import type { DashboardApi, PasskeyOptions } from "../api/client.js";
 import { signalUnknownPasskey } from "../passkey-signals.js";
 import { preparePermissionReturn } from "../permission-continuation.js";
@@ -873,42 +872,25 @@ export class LoginScreen extends LitElement {
     if (!this.#check()) return;
     this.busy = true;
     const attempt = ++this.passkeyAttempt;
+    const active = () => this.isConnected && attempt === this.passkeyAttempt;
     try {
       await this.api.confirmFreshSignIn({
         method: "password",
         password: this.password,
         ...(this.secondFactor === "" ? {} : { totp: this.secondFactor }),
       });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      const { challengeHandle, options } = await this.api.passkeyRegisterOptions({
-        ...(this.secondFactor === "" ? {} : { totp: this.secondFactor }),
-      });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      const response = await startRegistration({
-        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
-      });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      await this.api.passkeyRegisterVerify({
-        challengeHandle,
-        response,
-      });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      if (!active()) return;
+      await enrolPasskey(
+        this.api,
+        this.secondFactor === "" ? {} : { totp: this.secondFactor },
+        active,
+      );
+      if (!active()) return;
       await this.#resolvePasskeyOffer(this.completedLogin);
     } catch (error) {
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      // Classified first, so no WebAuthn library `.code` reaches codeOf and degrades to the generic
-      // banner.
-      const passkey = classifyPasskeyRegistrationError(error);
-      if (passkey === "cancelled") return;
-      if (passkey === "already_registered") {
-        this.errorKey = "passkey.already_registered";
-        return;
-      }
-      if (passkey === "failed") {
-        this.errorKey = "passkey.verification_failed";
-        return;
-      }
-      const code = codeOf(error, "passkey.verification_failed");
+      if (!active()) return;
+      const code = enrolmentCode(error);
+      if (code === null) return;
       if (code === "totp.invalid") {
         this.passkeyFactorRequired = true;
         this.secondFactor = "";

@@ -3186,9 +3186,9 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();
   });
 
-  it("keeps one agent's row for a printer two agents see when the other agent's report drops", async () => {
+  it("keeps one agent's row for a USB printer two agents see when the other agent's report drops", async () => {
     const seenOnBoth = (agentId: string, agentName: string): DiscoveredPrinter => ({
-      ...discoveredNetwork[0]!,
+      ...discovered[0]!,
       agentId,
       agentName,
     });
@@ -3223,47 +3223,220 @@ describe("printers-screen", () => {
     }
   });
 
-  it("registers a network printer two agents see once, and offers Add on neither agent's row afterwards", async () => {
-    const seenOnBoth = (agentId: string, agentName: string): DiscoveredPrinter => ({
-      ...discoveredNetwork[0]!,
-      agentId,
-      agentName,
-    });
-    const both = [seenOnBoth("a1", "Kitchen agent"), seenOnBoth("a2", "Bar agent")];
-    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(both) });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    try {
-      await openDiscovery(el);
-      const table = q(el, "[data-test=discovered-table]")!;
-      const addButtons = () =>
-        table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=register-]");
-      expect(addButtons()).toHaveLength(2);
-      // The naming dialog reports its close while the Add dialog, and its table, are still open.
-      const offeredAfterAdd: number[] = [];
-      el.shadowRoot!.addEventListener("wt-close", (event) => {
-        if ((event.target as HTMLElement).dataset.test === "name-printer-modal")
-          offeredAfterAdd.push(addButtons().length);
+  describe("a network printer two agents see", () => {
+    const seenBy = (
+      agentId: string,
+      agentName: string,
+      overrides: Partial<DiscoveredPrinter> = {},
+    ): DiscoveredPrinter => ({ ...discoveredNetwork[0]!, agentId, agentName, ...overrides });
+    const tableRows = (el: PrintersScreen) =>
+      (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
+        .rows as DiscoveredPrinter[];
+    async function mountSeen(
+      devices: DiscoveredPrinter[],
+      listAgents: PrintAgentRow[] = agents,
+    ): Promise<PrintersScreen> {
+      const api = stubApi({
+        listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
+        listAgents: vi.fn().mockResolvedValue(listAgents),
       });
-      const barAgent = [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")].find(
-        (row) => row.textContent!.includes("Bar agent"),
-      )!;
-      await addDiscovered(el, barAgent.querySelector<HTMLElement>("[data-test^=register-]")!);
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(el);
-
-      expect(api.createPrinter).toHaveBeenCalledOnce();
-      expect(api.createPrinter).toHaveBeenCalledWith({
-        name: "Kitchen IP",
-        transport: "network_tcp",
-        host: "10.0.0.77",
-        port: 9100,
-      });
-      // Fails if both the registered set and the reports' registered flag are keyed by agent.
-      expect(offeredAfterAdd).toEqual([0]);
-    } finally {
-      el.remove();
+      await openDiscovery(el);
+      return el;
     }
+
+    it.each(["en-GB", "es-ES"] as const)(
+      "is one row that names no agent, beside a USB and a Bluetooth printer's row for each (%s)",
+      async (locale) => {
+        const before = currentLocale();
+        setLocale(locale);
+        try {
+          const usb = discovered[0]!;
+          const bluetooth: DiscoveredPrinter = {
+            ...usb,
+            transport: "bluetooth",
+            localKey: "00:11:22:33:44:55",
+            name: "POS-58",
+            printerLike: true,
+          };
+          const bar = { agentId: "a2", agentName: "Bar agent" };
+          const el = await mountSeen([
+            seenBy("a1", "Kitchen agent"),
+            seenBy("a2", "Bar agent"),
+            usb,
+            { ...usb, ...bar },
+            bluetooth,
+            { ...bluetooth, ...bar },
+          ]);
+          expect(tableRows(el).map((d) => [d.transport, d.agentId])).toEqual([
+            ["network_tcp", "a1"],
+            ["usb", "a1"],
+            ["usb", "a2"],
+            ["bluetooth", "a1"],
+            ["bluetooth", "a2"],
+          ]);
+          const network = text(el, "[data-test='discovered-row-a1:10.0.0.77:9100']")!;
+          expect(network).toContain("10.0.0.77:9100");
+          expect(network).not.toContain("Kitchen agent");
+          expect(network).not.toContain("Bar agent");
+          const words = locale === "es-ES" ? "Detectada por" : "Found by";
+          for (const key of ["SN-1", "00:11:22:33:44:55"]) {
+            expect(text(el, `[data-test='discovered-row-a1:${key}']`)).toContain(
+              `${words} Kitchen agent`,
+            );
+            expect(text(el, `[data-test='discovered-row-a2:${key}']`)).toContain(
+              `${words} Bar agent`,
+            );
+          }
+        } finally {
+          setLocale(before);
+        }
+      },
+    );
+
+    it.each([
+      ["this box's agent", true, true, "a2"],
+      ["the lower id while this box's agent is off", true, false, "a1"],
+      ["the lower id with no agent on this box", false, true, "a1"],
+    ])("stands for %s", async (_, onThisBox, active, agentId) => {
+      const el = await mountSeen(
+        [seenBy("a2", "Bar agent"), seenBy("a1", "Kitchen agent")],
+        [agents[0]!, { ...agents[1]!, onThisBox, active }],
+      );
+      expect(tableRows(el).map((d) => d.agentId)).toEqual([agentId]);
+    });
+
+    it("prefers a working agent to one switched off", async () => {
+      const el = await mountSeen(
+        [seenBy("a1", "Kitchen agent"), seenBy("a2", "Bar agent")],
+        [
+          { ...agents[0]!, active: false },
+          { ...agents[1]!, onThisBox: false, active: true },
+        ],
+      );
+      expect(tableRows(el).map((d) => d.agentId)).toEqual(["a2"]);
+    });
+
+    it("keeps two printers at one address apart by port, and two addresses apart", async () => {
+      const el = await mountSeen([
+        seenBy("a1", "Kitchen agent"),
+        seenBy("a2", "Bar agent", { port: 9101 }),
+        seenBy("a2", "Bar agent", { host: "10.0.0.78" }),
+      ]);
+      expect(tableRows(el).map((d) => `${d.host}:${d.port}`)).toEqual([
+        "10.0.0.77:9100",
+        "10.0.0.77:9101",
+        "10.0.0.78:9100",
+      ]);
+    });
+
+    it("reads a missing port as the default and a host in any case", async () => {
+      const el = await mountSeen([
+        seenBy("a1", "Kitchen agent", { host: "Printer.local" }),
+        seenBy("a2", "Bar agent", { host: "printer.local", port: null }),
+      ]);
+      expect(tableRows(el)).toHaveLength(1);
+    });
+
+    it("is left out once added, whichever agent saw it, and the list says everything found is added", async () => {
+      const saved = { alreadyRegistered: true, printerId: "p1" };
+      const el = await mountSeen([
+        seenBy("a1", "Kitchen agent", saved),
+        seenBy("a2", "Bar agent", saved),
+      ]);
+      expect(tableRows(el)).toEqual([]);
+      expect(
+        (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable).emptyMessage,
+      ).toBe(t("printers.discovered_all_added"));
+    });
+
+    it.each([
+      ["at the same address", "10.0.0.77"],
+      ["with its host in another case", "PRINTER.local"],
+    ])(
+      "keeps its row, and the focus on its Add, when the agent it stood for stops reporting it and the other reports it %s",
+      async (_, host) => {
+        const both = [
+          seenBy("a1", "Kitchen agent", { host }),
+          seenBy("a2", "Bar agent", { host: host.toLowerCase() }),
+        ];
+        const passive = vi.fn().mockResolvedValue(both);
+        const api = stubApi({
+          listDiscoveredPrinters: vi.fn().mockResolvedValue(both),
+          background: stubApi({ listDiscoveredPrinters: passive }),
+        });
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+        await flush(el);
+        vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+        try {
+          await openDiscovery(el);
+          const table = q(el, "[data-test=discovered-table]")!;
+          const add = q(el, `[data-test='register-a1:${host.toLowerCase()}:9100']`)!;
+          add.focus();
+          expect(table.shadowRoot!.activeElement).toBe(add);
+          passive.mockResolvedValue([both[1]]);
+          await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+          await flush(el);
+          expect(tableRows(el).map((d) => d.agentId)).toEqual(["a2"]);
+          expect(q(el, `[data-test='register-a2:${host.toLowerCase()}:9100']`)).toBe(add);
+          expect(table.shadowRoot!.activeElement).toBe(add);
+        } finally {
+          el.remove();
+          vi.useRealTimers();
+        }
+      },
+    );
   });
+
+  it.each([
+    ["10.0.0.77", "10.0.0.77"],
+    ["Printer.local", "printer.local"],
+  ])(
+    "registers a network printer two agents see, as %s and %s, once, and offers no Add for it afterwards",
+    async (host, otherHost) => {
+      const seenOnBoth = (agentId: string, agentName: string, host: string): DiscoveredPrinter => ({
+        ...discoveredNetwork[0]!,
+        agentId,
+        agentName,
+        host,
+      });
+      const both = [
+        seenOnBoth("a1", "Kitchen agent", host),
+        seenOnBoth("a2", "Bar agent", otherHost),
+      ];
+      const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(both) });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      try {
+        await openDiscovery(el);
+        const table = q(el, "[data-test=discovered-table]")!;
+        const addButtons = () =>
+          table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=register-]");
+        expect(addButtons()).toHaveLength(1);
+        // The naming dialog reports its close while the Add dialog, and its table, are still open.
+        const offeredAfterAdd: number[] = [];
+        el.shadowRoot!.addEventListener("wt-close", (event) => {
+          if ((event.target as HTMLElement).dataset.test === "name-printer-modal")
+            offeredAfterAdd.push(addButtons().length);
+        });
+        await addDiscovered(el, addButtons()[0]!);
+        await flush(el);
+
+        expect(api.createPrinter).toHaveBeenCalledOnce();
+        expect(api.createPrinter).toHaveBeenCalledWith({
+          name: "Kitchen IP",
+          transport: "network_tcp",
+          host,
+          port: 9100,
+        });
+        // Fails if both the registered set and the reports' registered flag are keyed by agent.
+        expect(offeredAfterAdd).toEqual([0]);
+      } finally {
+        el.remove();
+      }
+    },
+  );
 
   it("shows the empty discovery message after scanning finishes", async () => {
     vi.useFakeTimers();
@@ -7049,12 +7222,12 @@ describe("printers-screen discovery and add edges", () => {
     );
   });
 
-  it("omits the seen-on line for a discovered device no agent name is known for", async () => {
+  it("omits the found-by line for a discovered device no agent name is known for", async () => {
     const { el } = await mountWithDiscovered([{ ...discovered[0]!, agentName: null }]);
 
     const row = text(el, "[data-test='discovered-row-a1:SN-1']")!;
     expect(row).toContain("EPSON TM-T20");
-    expect(row).not.toContain(t("printers.discovered_seen_on").replace("{agent}", "").trim());
+    expect(row).not.toContain(t("printers.discovered_found_by").replace("{agent}", "").trim());
   });
 
   it("adds the named printer when Enter is pressed in the name field", async () => {
@@ -8069,6 +8242,32 @@ describe("printers-screen Bluetooth pairing", () => {
       await page.viewport(width, height);
     }
   });
+
+  it.each([
+    ["en-GB", false, "Pair and add"],
+    ["en-GB", true, "Pair"],
+    ["es-ES", false, "Emparejar y añadir"],
+    ["es-ES", true, "Emparejar"],
+  ] as const)(
+    "names the printer to a screen reader on its pairing button (%s, already added: %s)",
+    async (locale, isAdded, words) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountPairing(
+          [{ ...barPrinter, ...(isAdded ? { alreadyRegistered: true, printerId: "p9" } : {}) }],
+          { listPrinters: vi.fn().mockResolvedValue([btPrinter("p9", ADDRESS, true)]) },
+        );
+        await openDiscovery(el);
+        expect(text(el, sel(`pair-a1:${ADDRESS}`))).toBe(words);
+        expect(q(el, sel(`pair-a1:${ADDRESS}`))!.getAttribute("aria-label")).toBe(
+          `${words} Bar printer`,
+        );
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it("names each discovered row by its agent too, so the same device seen by two agents acts on the row pressed", async () => {
     const onBar: DiscoveredPrinter = {
@@ -11915,7 +12114,7 @@ describe("office printers in discovery", () => {
     },
   );
 
-  it("offers Add as A4 printer for a printable office printer, the reason for one that is not, and keeps a receipt printer's Add", async () => {
+  it("offers Add for a printable office printer, the reason for one that is not, and keeps a receipt printer's Add", async () => {
     const { el } = await mountWith([
       ...discoveredNetwork,
       office(),
@@ -11948,9 +12147,7 @@ describe("office printers in discovery", () => {
       }),
     ]);
     expect(q(el, "[data-test='register-a1:10.0.0.77:9100']")).not.toBeNull();
-    expect(text(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_add"),
-    );
+    expect(text(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBe(t("action.add"));
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.60:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")).not.toBeNull();
     expect(q(el, "[data-test='register-a1:10.0.0.61:9100']")).toBeNull();
@@ -11988,17 +12185,456 @@ describe("office printers in discovery", () => {
     ]);
   });
 
-  it("puts an agent name holding a replacement pattern into the add dialog's description as written", async () => {
+  it("puts an agent name holding a replacement pattern into a printer's row as written", async () => {
     const agentName = "Kitchen $& agent";
-    const { el } = await mountWith([office({ agentName })], {
-      listPagePrinters: vi.fn().mockResolvedValue([]),
-    });
-    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
-    await flush(el);
-    expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
-      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").split("{agent}").join(agentName)}`,
+    const { el } = await mountWith([{ ...discovered[0]!, agentName }]);
+    expect(text(el, "[data-test='discovered-row-a1:SN-1']")).toContain(
+      t("printers.discovered_found_by").split("{agent}").join(agentName),
     );
   });
+
+  describe("one row for the two agents that see an A4 printer", () => {
+    const bar = { agentId: "a2", agentName: "Bar agent" };
+    const rows = (el: PrintersScreen) =>
+      (
+        (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
+          .rows as DiscoveredPrinter[]
+      ).map((d) => [d.agentId, d.host]);
+    const unprintable = {
+      ...queue,
+      printable: false as const,
+      reason: "invalid_reply" as const,
+      supportedFormats: [],
+    };
+
+    it("adds it through the agent the row stands for", async () => {
+      const { el, api } = await mountWith([office(bar), office()]);
+      expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+      expect(text(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).not.toContain("agent");
+      q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-add-page-printer]")!.click();
+      await flush(el);
+      expect(api.registerPagePrinter).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ agentId: "a1", host: "10.0.0.56", path: "/ipp/print" }),
+      );
+    });
+
+    it("stands for the agent that can add it, over one that got no usable answer", async () => {
+      const { el } = await mountWith([office({ office: unprintable }), office(bar)]);
+      expect(rows(el)).toEqual([["a2", "10.0.0.56"]]);
+      expect(q(el, "[data-test='add-page-printer-a2:10.0.0.56:9100']")).not.toBeNull();
+    });
+
+    it.each(["first", "last"])(
+      "joins one agent's port-9100 report, listed %s, to another's of the same A4 queue alone",
+      async (place) => {
+        const raw = office({ ...bar, host: "192.168.1.20" });
+        const queues = [
+          sharedOffice("/ipp/print", "HP LaserJet"),
+          sharedOffice("/ipp/other", "Second queue"),
+        ];
+        const { el } = await mountWith(place === "first" ? [raw, ...queues] : [...queues, raw]);
+        const listed = (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
+          .rows as DiscoveredPrinter[];
+        expect(listed.map((d) => [d.agentId, d.office?.resourcePath])).toEqual([
+          ["a1", "/ipp/print"],
+          ["a1", "/ipp/other"],
+        ]);
+      },
+    );
+
+    it("keeps an A4 queue apart from a switched-off receipt printer waiting at the same address", async () => {
+      const { el } = await mountWith(
+        [
+          sharedOffice("/ipp/print", "HP LaserJet"),
+          office({ ...bar, host: "192.168.1.20", printerId: "p1", alreadyRegistered: true }),
+        ],
+        { listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, id: "p1", active: false }]) },
+      );
+      expect(rows(el)).toHaveLength(2);
+    });
+
+    it("leaves an added printer out when the other agent could not check it", async () => {
+      const { el } = await mountWith([office({ ...bar, office: unprintable }), office()], {
+        listPagePrinters: vi.fn().mockResolvedValue([added]),
+      });
+      expect(rows(el)).toEqual([]);
+    });
+
+    it("names the agent on the row that offers to move the printer to it", async () => {
+      const { el } = await mountWith([office(), office(bar)], {
+        listPagePrinters: vi.fn().mockResolvedValue([added]),
+      });
+      expect(rows(el)).toEqual([["a2", "10.0.0.56"]]);
+      expect(text(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toContain(
+        t("printers.discovered_found_by").replace("{agent}", "Bar agent"),
+      );
+    });
+
+    it("offers one move when the agent it prints through is gone and two others see it", async () => {
+      const { el } = await mountWith([office(bar), office()], {
+        listPagePrinters: vi.fn().mockResolvedValue([{ ...added, agentId: null, agentName: null }]),
+      });
+      expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+    });
+
+    const atQueue = (path: string, overrides: Partial<DiscoveredPrinter> = {}) =>
+      office({
+        ipp: { ...queue, resourcePath: path },
+        office: { ...printable, resourcePath: path },
+        ...overrides,
+      });
+
+    it("keeps two queues at one address apart, each with its own Add", async () => {
+      const { el } = await mountWith([atQueue("/queue-a"), atQueue("/queue-b", bar)]);
+      expect(rows(el)).toHaveLength(2);
+      expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+      expect(q(el, "[data-test='add-page-printer-a2:10.0.0.56:9100']")).not.toBeNull();
+    });
+
+    it("lists one queue once, whichever raw port each agent reports for it", async () => {
+      const { el } = await mountWith([office({ ...bar, port: 9101 }), office()]);
+      expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+    });
+
+    it("keeps one queue's path exact, and apart from the same path on another port", async () => {
+      const { el } = await mountWith([
+        atQueue("/queue-a"),
+        atQueue("/Queue-A", bar),
+        office({
+          ...bar,
+          port: 9101,
+          ipp: { port: 632, resourcePath: "/queue-a" },
+          office: { ...printable, port: 632, resourcePath: "/queue-a" },
+        }),
+      ]);
+      expect(rows(el)).toHaveLength(3);
+    });
+
+    it("keeps two announced queues at one address apart when neither agent's check was answered", async () => {
+      const { el } = await mountWith([
+        atQueue("/queue-a", { office: undefined }),
+        atQueue("/queue-b", { ...bar, office: undefined }),
+      ]);
+      expect(rows(el)).toHaveLength(2);
+    });
+
+    describe.each(["first", "last"])(
+      "with the report of the queue guessed at /ipp/print listed %s",
+      (place) => {
+        const announced = atQueue("/ipp/port1");
+        const guess = office(bar);
+        const listing = (...others: DiscoveredPrinter[]) =>
+          place === "first" ? [guess, ...others] : [...others, guess];
+
+        it("lists the printer once, at the queue announced at that address", async () => {
+          const { el } = await mountWith(listing(announced));
+          expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+        });
+
+        it.each([
+          ["announced", { resourcePath: "/ipp/port1" }],
+          ["guessed", { agentId: "a2", agentName: "Bar agent" }],
+        ])("offers no second Add once the %s queue is added", async (_, over) => {
+          const { el } = await mountWith(listing(announced), {
+            listPagePrinters: vi.fn().mockResolvedValue([{ ...added, ...over }]),
+          });
+          expect(rows(el)).toEqual([]);
+        });
+
+        it("lists the printer once when a third agent names no queue", async () => {
+          const unnamed = office({ agentId: "a3", agentName: "Office agent", office: undefined });
+          const { el } = await mountWith(listing(announced, unnamed));
+          expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+        });
+
+        it.each(["first", "last"])(
+          "joins it to /ipp/print itself when that too is announced, its announcement listed %s",
+          async (own) => {
+            const named = atQueue("/ipp/print", { agentId: "a3", agentName: "Office agent" });
+            const { el } = await mountWith(
+              listing(...(own === "first" ? [named, announced] : [announced, named])),
+              {
+                listPagePrinters: vi.fn().mockResolvedValue([{ ...added, agentId: "a3" }]),
+              },
+            );
+            const listed = q(
+              el,
+              "[data-test=discovered-table]",
+            ) as import("@waitron/ui").WtDataTable;
+            expect(
+              (listed.rows as DiscoveredPrinter[])
+                .map((d) => [d.agentId, d.office?.resourcePath])
+                .sort(),
+            ).toEqual([
+              ["a1", "/ipp/port1"],
+              ["a2", "/ipp/print"],
+            ]);
+          },
+        );
+
+        it("keeps its own queue when the one announced is at another raw port", async () => {
+          const { el } = await mountWith(listing({ ...announced, port: 9101 }));
+          expect(rows(el)).toHaveLength(2);
+        });
+
+        it("keeps its own queue beside one reported alone at its address", async () => {
+          const { el } = await mountWith(
+            listing({ ...announced, ippOnly: true, port: 631 }).map((d) =>
+              d === guess ? { ...guess, port: 631 } : d,
+            ),
+          );
+          expect(rows(el)).toHaveLength(2);
+        });
+      },
+    );
+
+    it.each(["first", "last"])(
+      "joins a report naming no queue, listed %s, to a queue reported at its own address",
+      async (place) => {
+        const unnamed = office({ ...bar, host: "PRINTER.local", office: undefined });
+        const queues = ["/queue-a", "/queue-b"].map((path) =>
+          atQueue(path, { host: "printer.local" }),
+        );
+        const { el } = await mountWith(
+          place === "first" ? [unnamed, ...queues] : [...queues, unnamed],
+        );
+        expect(rows(el)).toEqual([
+          ["a1", "printer.local"],
+          ["a1", "printer.local"],
+        ]);
+      },
+    );
+
+    it.each([
+      ["guessed", office()],
+      ["reported alone", atQueue("/queue-a", { port: 631, ippOnly: true })],
+    ])("joins a report naming no queue to a queue %s at its own address", async (_, named) => {
+      const { el } = await mountWith([
+        office({ ...bar, port: named.port, office: undefined }),
+        named,
+      ]);
+      expect(rows(el)).toEqual([["a1", "10.0.0.56"]]);
+    });
+
+    it("lists reports naming no queue once for their address, apart from a queue elsewhere", async () => {
+      const unnamed = { office: undefined, host: "10.0.0.57" };
+      const { el } = await mountWith([office({ ...bar, ...unnamed }), office(unnamed), office()]);
+      expect(rows(el)).toEqual([
+        ["a1", "10.0.0.56"],
+        ["a1", "10.0.0.57"],
+      ]);
+    });
+
+    /** Mounts with the passive reads answered by the returned mock, under a paused poll. */
+    async function mountPolled(
+      devices: DiscoveredPrinter[],
+      overrides: Partial<DashboardApi> = {},
+    ) {
+      const passive = vi.fn().mockResolvedValue(devices);
+      const mounted = await mountWith([], {
+        listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
+        background: stubApi({ listDiscoveredPrinters: passive }),
+        ...overrides,
+      });
+      const poll = async (next: DiscoveredPrinter[]) => {
+        passive.mockResolvedValue(next);
+        await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+        await flush(mounted.el);
+      };
+      return { ...mounted, poll };
+    }
+
+    it("keeps its row, and the focus on its Add, when a report of the queue alone takes over", async () => {
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      try {
+        const alone = sharedOffice("/ipp/print", "HP LaserJet");
+        const { el, poll } = await mountPolled([
+          office({ host: "192.168.1.20" }),
+          { ...alone, ...bar },
+        ]);
+        const table = q(el, "[data-test=discovered-table]")!;
+        const add = q(el, "[data-test='add-page-printer-a1:192.168.1.20:9100']")!;
+        add.focus();
+        await poll([{ ...alone, ...bar }]);
+        expect(rows(el)).toEqual([["a2", "192.168.1.20"]]);
+        expect(table.shadowRoot!.querySelector("[data-test^=add-page-printer-]")).toBe(add);
+        expect(table.shadowRoot!.activeElement).toBe(add);
+      } finally {
+        cleanupWidgets();
+        vi.useRealTimers();
+      }
+    });
+
+    it("stays busy, sends one move and shows its refusal when another agent's report takes the row over", async () => {
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      try {
+        let refuse!: (error: unknown) => void;
+        const registerPagePrinter = vi.fn(
+          () => new Promise<never>((_, reject) => (refuse = reject)),
+        );
+        const { el, poll } = await mountPolled([office(), office(bar)], {
+          registerPagePrinter,
+          listPagePrinters: vi
+            .fn()
+            .mockResolvedValue([{ ...added, agentId: null, agentName: null }]),
+        });
+        q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")!.click();
+        await poll([office(bar)]);
+        const move = q(
+          el,
+          "[data-test='repoint-page-printer-a2:10.0.0.56:9100']",
+        ) as HTMLElementTagNameMap["wt-button"];
+        expect(move.loading).toBe(true);
+        move.click();
+        await flush(el);
+        expect(registerPagePrinter).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ agentId: "a1" }),
+        );
+        refuse({ code: "page_printer.not_found" });
+        await flush(el);
+        expect(move.loading).toBe(false);
+        expect(text(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBe(
+          codeMessage("page_printer.not_found"),
+        );
+      } finally {
+        cleanupWidgets();
+        vi.useRealTimers();
+      }
+    });
+
+    it.each([
+      ["one that can be added", true, "printers.probe_page_printer"],
+      ["one that cannot be added", false, "printers.probe_page_printer"],
+      ["nothing else", null, "printers.probe_registered"],
+    ] as const)(
+      "answers a checked address holding an added queue first and %s",
+      async (_, canAdd, answer) => {
+        const requestedAt = Date.now();
+        const seen = { lastSeenAt: new Date(requestedAt).toISOString() };
+        const other =
+          canAdd === null
+            ? []
+            : [
+                atQueue("/queue-b", {
+                  ...bar,
+                  ...seen,
+                  ...(canAdd ? {} : { office: { ...unprintable, resourcePath: "/queue-b" } }),
+                }),
+              ];
+        const { el } = await mountWith([atQueue("/ipp/print", seen), ...other], {
+          listPagePrinters: vi.fn().mockResolvedValue([added]),
+          probePrinterAddress: vi.fn().mockResolvedValue({
+            host: "10.0.0.56",
+            port: 9100,
+            requestedAt,
+            expiresAt: requestedAt + 30000,
+          }),
+        });
+        typeField(el, "[data-test=probe-host]", "10.0.0.56");
+        typeField(el, "[data-test=probe-port]", "9100");
+        q(el, "[data-test=probe-printer]")!.click();
+        await flush(el);
+        expect(rows(el)).toHaveLength(other.length);
+        expect(text(el, "[data-test=probe-status]")).toBe(t(answer));
+      },
+    );
+
+    it("keeps a switched-off receipt printer's row apart from an A4 queue at its raw address, and answers a check of it with the one to add", async () => {
+      const requestedAt = Date.now();
+      const seen = { lastSeenAt: new Date(requestedAt).toISOString() };
+      const { el } = await mountWith(
+        [
+          office({ ...seen, office: unprintable }),
+          office({ ...bar, ...seen, printerId: "p1", alreadyRegistered: true }),
+        ],
+        {
+          listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, id: "p1", active: false }]),
+          probePrinterAddress: vi.fn().mockResolvedValue({
+            host: "10.0.0.56",
+            port: 9100,
+            requestedAt,
+            expiresAt: requestedAt + 30000,
+          }),
+        },
+      );
+      expect(rows(el)).toEqual([
+        ["a2", "10.0.0.56"],
+        ["a1", "10.0.0.56"],
+      ]);
+      typeField(el, "[data-test=probe-host]", "10.0.0.56");
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_found"));
+    });
+
+    it("answers a checked address with the row shown for it, whichever agent answered", async () => {
+      const requestedAt = Date.now();
+      const { el } = await mountWith(
+        [
+          office({ ...bar, office: unprintable, lastSeenAt: new Date(requestedAt).toISOString() }),
+          office(),
+        ],
+        {
+          listPagePrinters: vi.fn().mockResolvedValue([added]),
+          probePrinterAddress: vi.fn().mockResolvedValue({
+            host: "10.0.0.56",
+            port: 9100,
+            requestedAt,
+            expiresAt: requestedAt + 30000,
+          }),
+        },
+      );
+      typeField(el, "[data-test=probe-host]", "10.0.0.56");
+      typeField(el, "[data-test=probe-port]", "9100");
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
+    });
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "says Add on a receipt and an A4 printer's row alike, each naming its printer to a screen reader (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWith([...discoveredNetwork, office()]);
+        const word = locale === "es-ES" ? "Añadir" : "Add";
+        for (const [selector, name] of [
+          ["register-a1:10.0.0.77:9100", "Kitchen IP"],
+          ["add-page-printer-a1:10.0.0.56:9100", "HP LaserJet"],
+        ]) {
+          expect(text(el, `[data-test='${selector}']`)).toBe(word);
+          expect(q(el, `[data-test='${selector}']`)!.getAttribute("aria-label")).toBe(
+            `${word} ${name}`,
+          );
+        }
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "names the printer to a screen reader on Use this agent, under the same words as before (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWith([office({ agentId: "a2", agentName: "Bar agent" })], {
+          listPagePrinters: vi.fn().mockResolvedValue([added]),
+        });
+        const words = locale === "es-ES" ? "Usar este agente" : "Use this agent";
+        const move = "[data-test='repoint-page-printer-a2:10.0.0.56:9100']";
+        expect(text(el, move)).toBe(words);
+        expect(q(el, move)!.getAttribute("aria-label")).toBe(`${words} HP LaserJet`);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
 
   it("reports the saved name when Add restores an A4 printer", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
@@ -12042,10 +12678,13 @@ describe("office printers in discovery", () => {
       error: string;
       value: string;
     };
+    expect(
+      (q(el, "[data-test=page-printer-add-modal]") as HTMLElementTagNameMap["wt-modal"]).heading,
+    ).toBe(t("printers.add_printer"));
     expect(field.required).toBe(true);
     expect(field.value).toBe("HP LaserJet");
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
-      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Kitchen agent")}`,
+      "HP LaserJet · 10.0.0.56:631/ipp/print",
     );
     expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
     expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe("primary");
@@ -12348,7 +12987,7 @@ describe("office printers in discovery", () => {
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.56:9100']")).toBeNull();
   });
 
-  it("offers nothing on a row whose printable report was lent by another agent", async () => {
+  it("adds through the agent whose own report it is, not the one it was lent to", async () => {
     const { el, api } = await mountWith([
       office(),
       office({ agentId: "a2", agentName: "Bar agent", officeLent: true }),
@@ -12359,10 +12998,7 @@ describe("office printers in discovery", () => {
     expect(q(el, "[data-test='register-a1:10.0.0.56:9100']")).toBeNull();
     const rows = (q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable)
       .rows as DiscoveredPrinter[];
-    expect(rows.map((row) => row.agentId)).toEqual(["a1", "a2"]);
-    expect(text(el, "[data-test='page-printer-a2:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_lent"),
-    );
+    expect(rows.map((row) => row.agentId)).toEqual(["a1"]);
     expect(api.registerPagePrinter).not.toHaveBeenCalled();
   });
 
@@ -12589,7 +13225,6 @@ describe("one table for every printer", () => {
       "printers.paper_roll_80": ["80 mm roll", "Rollo de 80 mm"],
       "printers.invoice_printer_a4": ["A4", "A4"],
       "printers.invoice_printer_letter": ["Letter", "Carta"],
-      "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
       "printers.discovered_all_added": [
         "Every printer found is already added.",
         "Todas las impresoras encontradas ya están añadidas.",
@@ -12604,6 +13239,7 @@ describe("one table for every printer", () => {
       "printers.invoice_printer_rename",
       "printers.invoice_printer_rename_heading",
       "printers.page_printer_added",
+      "printers.page_printer_add",
     ])
       expect(gone in en, gone).toBe(false);
   });
@@ -13260,9 +13896,16 @@ describe("an A4 printer's details", () => {
 });
 
 describe("literal translated printer labels", () => {
-  for (const [locale, actions, sent, added, seen] of [
-    ["en-GB", "Actions for", "Test page sent to", "Added", "Seen on"],
-    ["es-ES", "Acciones de", "Página de prueba enviada a", "Se ha añadido", "Detectada en"],
+  for (const [locale, actions, sent, added, seen, foundBy] of [
+    ["en-GB", "Actions for", "Test page sent to", "Added", "Seen on", "Found by"],
+    [
+      "es-ES",
+      "Acciones de",
+      "Página de prueba enviada a",
+      "Se ha añadido",
+      "Detectada en",
+      "Detectada por",
+    ],
   ] as const) {
     describe(locale, () => {
       const name = "A $& {time}";
@@ -13324,7 +13967,7 @@ describe("literal translated printer labels", () => {
       it("keeps the discovered agent name literal", async () => {
         const el = await mounted();
         await openDiscovery(el);
-        expect(text(el, "[data-test='discovered-row-a1:SN-1']")).toContain(`${seen} ${name}`);
+        expect(text(el, "[data-test='discovered-row-a1:SN-1']")).toContain(`${foundBy} ${name}`);
       });
       it("keeps the ruler answer literal in the disagreement sentence", async () => {
         const el = await mounted();

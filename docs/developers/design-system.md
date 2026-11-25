@@ -3130,8 +3130,8 @@ refused because it names someone not signed in has no line: the till locks inste
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
-A form's submit button says Save whether the form creates or edits. The Add passkey dialog says Add
-(owner, A403). "Add …" belongs to the dialog's
+A form's submit button says Save whether the form creates or edits. The Add passkey dialog, which
+only an account with an authenticator app sees, says Add (owner, A403). "Add …" belongs to the dialog's
 title and to the button that opens a create dialog. The owner kept Add on a discovered printer's
 Add, the home shortcut picker and the till's Add bill (owner, 2026-10-12, A546). A546 also kept it,
 without an owner decision, on a discovered card reader's Add, the Add products and Add to menus
@@ -3564,7 +3564,7 @@ These open already savable:
   filled in from them, and turning them back on is itself the change (`#applyAction` in
   `apps/dashboard/src/screens/backup-screen.ts`);
 - a new receipt printer's name dialog: pressing Add is the add;
-- an office printer's Add as A4 printer, when discovery found a name or address: the dialog opens
+- an office printer's Add, when discovery found a name or address: the dialog opens
   holding it, and pressing Add is the add (`suggestedName` in
   `apps/dashboard/src/widgets/page-printer-add.ts`); with nothing found it opens quiet;
 - the theme name dialog's Make a copy and Save as new theme…: pressing Save is the copy
@@ -4653,15 +4653,22 @@ settled, so it is made once rather than at every sign-in, and both then sign the
 Recording is bookkeeping and never a gate: when it fails, sign the person in anyway, because the
 worst that follows is being offered once more.
 
-The authenticator setup screen presents the enrolment URI as a QR code, keeps the setup key behind
-a manual fallback, and enables the factor only after the server accepts a current six-digit code.
+Set up beside the authenticator app and beside Google login also starts at once, under the same
+rules as Add passkey below (extended from the owner's reason for Add passkey, not asked word for
+word): the first opens straight on its setup screen, the second goes to Google. That setup screen
+presents the enrolment URI as a QR code, keeps the setup key behind a manual fallback, and enables
+the factor only after the server accepts a current six-digit code.
 
 Every authenticated dashboard banner includes a way to reach **Your profile** — the account menu's
 "Account settings" item — including for staff with their two-page sidebar. Profile edits cannot expose role
 or suspension controls.
 Passkey enrollment asks for no typed name. On Security, the quiet Add passkey action shares the
 Passkeys heading line; an empty-list hint sits beneath it with the row’s bottom padding. Listed
-keys label their added date. The enrollment dialog’s primary action says Add.
+keys label their added date. Pressing Add passkey starts adding it at once, with no window of its own
+first (owner, 2026-11-25): the button shows the work, and a refusal appears under the Passkeys heading
+until the next press or until another change opens. An account with an authenticator app is asked for
+its code first, because the server requires it with the request; that dialog’s primary action says
+Add.
 
 ### Empty slots don't reserve space
 
@@ -4758,7 +4765,10 @@ Edit translations opens a dialog where the missing names for one language are ty
 together, with its Kind and Why filters, links to the relevant editors, and Translate all. A second exception (A212): the course
 list, on the Courses page and in the product editor's Courses window, adds and renames
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
-button. A menu's Price overrides tab edits each product and size in its own row and saves with a
+button. A third: Profile's Add passkey
+and its authenticator and Google Set up start with no window of their own first (a stale sign-in is
+still asked to prove itself); an account with an authenticator app gets one for Add passkey and
+Google. A menu's Price overrides tab edits each product and size in its own row and saves with a
 shared Save bar. In the Venue settings exception (owner, 2026-10-16, A755), the Venue details
 tab draws five cards — Business, Venue, Business day, Defaults and Privacy (A980 S1a), in that
 order — with `apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a sixth,
@@ -6131,6 +6141,16 @@ return. A recognised printer skips naming and calibration. System-switched-off p
 listed with an Add-again hint. An A4 printer also offers Delete and Add: it waits under Add after
 Delete or import and retains its name and print settings. Add binds it to an agent; cleared
 assignments and ended jobs stay cleared.
+
+In **Add a printer** the agents' reports of one network printer share a row, which names no agent but
+as below (owner, 2026-11-25): an A4 printer's reports by host, IPP port and queue path, any other's by
+host and port. An A4 report whose agent heard no queue announced joins a queue announced at its host
+and port, unless some agent heard its own queue announced. An A4 printer is added through the agent the row stands for: one that can add it, then this
+box's agent if it is on, then another that is on, then the lowest id (`foundPrinters`,
+`apps/dashboard/src/screens/discovered-printers.ts`). Once added it is left out while the agent it
+prints through reports it, unless another agent can print to it: that row offers **Use this agent**
+and names the agent. A USB or Bluetooth printer keeps a row for each agent, naming the agent that
+found it. A row's action carries the printer's name in its accessible name.
 
 A device offers **Delete** and **Add**, with no Status column or filter. Delete ends sign-ins,
 releases held equipment and ends its request to come back, while retaining its identity, proof,
