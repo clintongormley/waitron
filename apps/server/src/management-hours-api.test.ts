@@ -178,6 +178,21 @@ it("lets only a system manager change the working days before monthly close", as
   });
 });
 
+it("keeps the grace setting available before the first clock entry without promising a close", async () => {
+  const route = "/management-api/attendance/hours?kind=pay-period&date=2025-03-01";
+  const response = await ask(route, undefined, ownerCookie);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    monthClose: {
+      graceDays: 3,
+      canEdit: true,
+      scheduledCloseAt: null,
+      closedAt: null,
+      holidayCoverageComplete: true,
+    },
+  });
+});
+
 it.each(["absent", "ended", "expired", "suspended"] as const)(
   "every new route refuses an %s management session",
   async (kind) => {

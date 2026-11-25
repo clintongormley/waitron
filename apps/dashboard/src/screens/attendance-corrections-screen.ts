@@ -436,16 +436,19 @@ export class AttendanceCorrectionsScreen extends LitElement {
     const hours = this.hours;
     const close = hours?.monthClose;
     if (!close) return nothing;
-    const at = dateTimeFormat(currentLocale(), {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: close.timeZone,
-    }).format(new Date(close.closedAt ?? close.scheduledCloseAt));
+    const instant = close.closedAt ?? close.scheduledCloseAt;
+    const at =
+      instant &&
+      dateTimeFormat(currentLocale(), {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: close.timeZone,
+      }).format(new Date(instant));
     const grace = this.closeGraceDraft ?? String(close.graceDays);
     const error = validCloseGrace(grace) ? "" : t("hours.close_grace_invalid");
     const action = saveActionState(this.#closeGraceScope);
     return html`<section data-month-close aria-label=${t("hours.month_close")}>
-      <p>${fill(close.closedAt ? "hours.closed_at" : "hours.closes_at", { at })}</p>
+      ${at ? html`<p>${fill(close.closedAt ? "hours.closed_at" : "hours.closes_at", { at })}</p>` : nothing}
       ${close.holidayCoverageComplete ? nothing : html`<p>${t("hours.close_holiday_coverage")}</p>`}
       ${
         !close.canEdit

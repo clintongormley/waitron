@@ -148,7 +148,7 @@ export interface ManagerHours {
   monthClose?: {
     graceDays: number;
     canEdit: boolean;
-    scheduledCloseAt: string;
+    scheduledCloseAt: string | null;
     closedAt: string | null;
     holidayCoverageComplete: boolean;
     timeZone: string;

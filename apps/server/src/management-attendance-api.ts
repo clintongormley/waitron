@@ -19,6 +19,7 @@ import {
   readAttendanceInbox,
   readPersonHours,
   readManagerHours,
+  readNextMonthlyPayPeriod,
   readPayPeriodCloseGraceDays,
   readPayPeriodSettings,
   resolvePayPeriod,
@@ -173,9 +174,14 @@ export function mountManagementAttendanceApi(
           const closed = hours.people[0]?.hours.closures.find(
             (closure) => closure.period.start === period.start && closure.period.end === period.end,
           );
-          const schedule = closed
-            ? { scheduledCloseAt: closed.scheduledCloseAt, holidayCoverageComplete: true }
-            : await monthlyHoursCloseSchedule(tx, clock, period.end, graceDays);
+          const next = closed ? null : await readNextMonthlyPayPeriod(tx);
+          const schedule =
+            next !== null && next.start <= period.start
+              ? await monthlyHoursCloseSchedule(tx, clock, period.end, graceDays)
+              : {
+                  scheduledCloseAt: closed?.scheduledCloseAt ?? null,
+                  holidayCoverageComplete: true,
+                };
           return {
             ...hours,
             monthClose: {
