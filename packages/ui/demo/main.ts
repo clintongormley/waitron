@@ -45,6 +45,7 @@ import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
 import "../src/components/wt-master-key-box.js";
+import "../src/components/wt-master-key-input.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 import "../src/components/wt-theme-chooser.js";
@@ -52,6 +53,8 @@ import "../src/components/wt-venue-logo.js";
 import "../src/components/wt-powered-by.js";
 import "../src/components/wt-waitron-lockup.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../src/waitron-lockup.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -107,20 +110,8 @@ const panel = (theme: "light" | "dark") => `
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
     <wt-banner tone="error" message="Disk full: the tills cannot save anything." action-label="Open Box status"></wt-banner>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
-    <wt-master-key-box
-      .masterKey=${"88DP 74BA YPVB RRM5 XFV2 WPQY B5M5"}
-      .keyName=${"2026-11-23 · QZJV"}
-      .pdfUrl=${"about:blank"}
-      .copy=${{
-        name: (name: string) => `Master key · ${name}`,
-        download: "Download",
-        print: "Print",
-        copy: "Copy",
-        copied: "Copied.",
-        copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
-        printFailed: "Your browser blocked printing. Use Download instead.",
-      }}
-    ></wt-master-key-box>
+    <wt-master-key-box></wt-master-key-box>
+    <wt-master-key-input required></wt-master-key-input>
     <p>
       Updated
       <wt-relative-time
@@ -616,7 +607,32 @@ for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {
   });
 }
 
+const DEMO_MASTER_KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+const DEMO_KEY_NAME = "2026-11-23 · QZJV";
+
 for (const panel of app.querySelectorAll(".panel")) {
+  const keyBox = panel.querySelector("wt-master-key-box")!;
+  keyBox.masterKey = DEMO_MASTER_KEY;
+  keyBox.keyName = DEMO_KEY_NAME;
+  keyBox.pdfUrl = "about:blank";
+  keyBox.copy = {
+    name: (name) => `Master key · ${name}`,
+    download: "Download",
+    print: "Print",
+    copy: "Copy",
+    copied: "Copied.",
+    copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
+    printFailed: "Your browser blocked printing. Use Download instead.",
+  };
+  const keyInput = panel.querySelector("wt-master-key-input")!;
+  keyInput.keyName = DEMO_KEY_NAME;
+  keyInput.readPack = async () => async () => ({
+    masterKey: DEMO_MASTER_KEY,
+    masterKeyName: DEMO_KEY_NAME,
+    masterKeyHeldBy: null,
+  });
+  keyInput.copy = MASTER_KEY_FIELD_WORDS.en;
+  keyInput.maxPdfBytes = MAX_PACK_PDF;
   const report = panel.querySelector("wt-report-dialog")!;
   report.copy = {
     heading: "Report a problem",

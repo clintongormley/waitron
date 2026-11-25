@@ -1,6 +1,8 @@
 import { access, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import { makeMasterKey } from "@waitron/credentials";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import {
@@ -16,6 +18,7 @@ import { packArchive } from "./backup-archive.js";
 import { buildManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
+import { recoveryArchiveFileSourceId } from "./recovery-source.js";
 import { restoreFromArtifactFile } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import {
@@ -23,6 +26,7 @@ import {
   stageRestoreRequest,
   validateArchiveForStaging,
 } from "./restore-request.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 
 const RECOVERY_KEY = "rebuilt-baseline-recovery-key";
@@ -293,8 +297,27 @@ it.each([
 );
 
 describe("the setup page staging an archive file", () => {
-  async function stage(artifactPath: string) {
-    const stateDir = await mkdtemp(join(scratch, "state-"));
+  async function stage(artifactPath: string, typed?: string, into?: string) {
+    const stateDir = into ?? (await mkdtemp(join(scratch, "state-")));
+    const keyed =
+      typed === undefined
+        ? {}
+        : {
+            nodeRecoverySecret: typed,
+            recoveryOperation: {
+              binding: {
+                module: "fiscal-verifactu",
+                action: "restore",
+                eventId: "archive-restore-1",
+                sourceId: await recoveryArchiveFileSourceId(artifactPath),
+                targetNodeId: NODE_ID,
+              },
+              input: {
+                allocation: { signed: "public" },
+                approval: { eventId: "archive-restore-1" },
+              },
+            },
+          };
     const staged = await stageRestoreRequest(
       stateDir,
       {
@@ -302,6 +325,7 @@ describe("the setup page staging an archive file", () => {
         artifactPath,
         recoveryKey: RECOVERY_KEY,
         environment: "preproduction",
+        ...keyed,
       },
       (candidate) =>
         validateArchiveForStaging(candidate, {
@@ -340,6 +364,27 @@ describe("the setup page staging an archive file", () => {
   it("stages one this version made", async () => {
     const result = await stage(await archiveOf(await venueFolder(null, "Archive venue")));
     expect(result).toEqual({ staged: "staged", recorded: true });
+  }, 120_000);
+
+  it("stages the copy's current master key name beside a typed master key", async () => {
+    const venue = await venueFolder(null, "Keyed venue");
+    const store = await openVenueDatabase(venue);
+    let current: string;
+    try {
+      await mintMasterKey(store.venue, { madeAt: new Date("2026-11-01T00:00:00Z") });
+      current = (await mintMasterKey(store.venue, { madeAt: new Date("2026-11-02T00:00:00Z") }))
+        .name;
+    } finally {
+      await store.close();
+    }
+    const stateDir = await mkdtemp(join(scratch, "state-"));
+    const typed = encodeMasterKeyCode(makeMasterKey());
+    expect(await stage(await archiveOf(venue), typed, stateDir)).toEqual({
+      staged: "staged",
+      recorded: true,
+    });
+    const record = JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8"));
+    expect(record.request).toMatchObject({ nodeRecoveryKey: true, masterKeyName: current });
   }, 120_000);
 });
 

@@ -38,6 +38,7 @@ const EXEMPT_FILES = new Set([
   "packages/ui/src/components/wt-number-stepper.ts",
   "packages/ui/src/components/wt-data-table.ts",
   "packages/ui/src/components/wt-file-input.ts",
+  "packages/ui/src/components/wt-master-key-input.ts",
 ]);
 
 /** Fields that are not fields: the list shrinks; it does not grow. */

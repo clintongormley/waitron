@@ -1,20 +1,36 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { START_CLOCK_WAITING_WORDS } from "./start-clock-waiting.js";
 
 describe("restore's clock-waiting page wording", () => {
-  // Copied from apps/setup's `restore.allocation_node_key` and `restore.allocation_key_missing`,
-  // so the key is named as on the restore page.
   it.each([
-    ["en-GB", "Selected backup’s box key", "Enter the selected backup’s master key."],
-    [
-      "es-ES",
-      "Clave del servidor de la copia elegida",
-      "Introduce la clave maestra de la copia elegida.",
-    ],
-  ] as const)("names the key in %s as the restore page does", (locale, label, refused) => {
+    ["en-GB", "Master key", "Enter the selected backup’s master key."],
+    ["es-ES", "Clave maestra", "Introduce la clave maestra de la copia elegida."],
+  ] as const)("names the key in %s as every master-key field does", (locale, label, refused) => {
     expect(START_CLOCK_WAITING_WORDS[locale].keyLabel).toBe(label);
     expect(START_CLOCK_WAITING_WORDS[locale].keyRefused).toBe(refused);
+  });
+
+  it.each([
+    ["en-GB", "en"],
+    ["es-ES", "es"],
+  ] as const)("its field's words in %s are every master-key field's", (locale, pack) => {
+    const words = START_CLOCK_WAITING_WORDS[locale];
+    const field = MASTER_KEY_FIELD_WORDS[pack];
+    expect(words.keyLabel).toBe(field.label);
+    expect(words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV")).toBe(
+      field.wrongKey("2026-11-23 · QZJV"),
+    );
+  });
+
+  it("ends its explanation asking for the master key", () => {
+    expect(START_CLOCK_WAITING_WORDS["en-GB"].why).toMatch(
+      / If that page is closed, type the master key below to confirm the time from this device\.$/,
+    );
+    expect(START_CLOCK_WAITING_WORDS["es-ES"].why).toMatch(
+      / Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo\.$/,
+    );
   });
 
   it("never calls the key a node recovery key", () => {

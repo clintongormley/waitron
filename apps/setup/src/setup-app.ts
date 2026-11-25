@@ -78,6 +78,7 @@ import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -619,6 +620,17 @@ function manifestRefusalKey(
     ? params?.reason === "unsupported"
       ? "shell.restore.manifest_unsupported"
       : "shell.restore.manifest_invalid"
+    : undefined;
+}
+
+/** A master key refused by a box that named the key to use: the field's own line, naming it. */
+function keyNamedInRefusal(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+): Message | undefined {
+  const keyName = params?.keyName;
+  return code === "promotion.break_glass_invalid" && typeof keyName === "string"
+    ? () => MASTER_KEY_FIELD_WORDS[setupLocale()].wrongKey(keyName)
     : undefined;
 }
 
@@ -2323,7 +2335,8 @@ export class SetupApp extends LitElement {
         const finishKey =
           manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =
-          finishKey !== undefined
+          keyNamedInRefusal(code, params) ??
+          (finishKey !== undefined
             ? say(finishKey)
             : code === "restore.administrator_password_missing"
               ? say("shell.restore.administrator_password_missing")
@@ -2339,7 +2352,7 @@ export class SetupApp extends LitElement {
                         ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
                         : typeof code === "string"
                           ? sayWith("shell.restore.staging_failed_code", { code })
-                          : say("shell.restore.staging_failed");
+                          : say("shell.restore.staging_failed"));
       }
       this.screen = "restore";
     }
@@ -2407,9 +2420,12 @@ export class SetupApp extends LitElement {
         );
         // The kit's and environment's own refusals already say what is wrong with that field.
         this.bucketRestoreError =
-          code === "setup.request_invalid" && this.bucketInvalidField !== undefined
-            ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
-            : describeBucketRefusal(code, params);
+          keyNamedInRefusal(code, params) ??
+          (code === "promotion.break_glass_invalid"
+            ? say(BUCKET_FIELD_CHECKS.nodeRecoverySecret)
+            : code === "setup.request_invalid" && this.bucketInvalidField !== undefined
+              ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
+              : describeBucketRefusal(code, params));
       }
       this.screen = "restore-bucket";
     }
@@ -2487,7 +2503,8 @@ export class SetupApp extends LitElement {
           this.cloudLiveUnknown = true;
         } else if (code === "promotion.break_glass_invalid") {
           this.cloudInvalidField = "nodeRecoverySecret";
-          this.cloudRecoveryError = say(CLOUD_FIELD_CHECKS.nodeRecoverySecret);
+          this.cloudRecoveryError =
+            keyNamedInRefusal(code, params) ?? say(CLOUD_FIELD_CHECKS.nodeRecoverySecret);
         } else if (code === "setup.request_invalid") {
           this.cloudInvalidField = refusedField(code, params, {}, CLOUD_FIELD_PATHS);
           this.cloudRecoveryError = say(

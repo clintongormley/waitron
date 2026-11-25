@@ -1,7 +1,6 @@
 export const CONFLICT_RECOVERY_STRINGS = {
   en: {
     "conflict_recovery.title": "Recover from an invoice identity conflict",
-    "conflict_recovery.key": "Current box key",
     "conflict_recovery.inspect": "Check conflict",
     "conflict_recovery.stop": "Stop",
     "conflict_recovery.key_required": "Enter the venue's current master key.",
@@ -48,7 +47,6 @@ export const CONFLICT_RECOVERY_STRINGS = {
   },
   es: {
     "conflict_recovery.title": "Recuperar una identidad de facturación en conflicto",
-    "conflict_recovery.key": "Clave del servidor actual",
     "conflict_recovery.inspect": "Consultar conflicto",
     "conflict_recovery.stop": "Detener",
     "conflict_recovery.key_required": "Introduce la clave maestra actual del local.",

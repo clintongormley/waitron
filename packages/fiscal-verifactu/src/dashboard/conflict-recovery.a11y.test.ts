@@ -4,6 +4,7 @@ import { render } from "lit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import { active, committed, prepared } from "../../test/conflict-browser-fixture.js";
 import type { ConflictRequest } from "../conflict-recovery-contract.js";
@@ -16,6 +17,9 @@ afterEach(async () => {
   sessionStorage.removeItem("vf-conflict-attempt");
   await page.viewport(size.width, size.height);
 });
+
+const CURRENT_KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+const KEY_NAME = "2026-10-17 · K7QX";
 
 describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", (theme) => {
   it.each(["en", "es"] as const)(
@@ -53,7 +57,8 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
             if (mode === "connection-refused") throw { code: "node.operation_page_required" };
             if (mode === "isolation-refused" && body.command.kind === "prepare")
               throw { code: "sif.allocation_invalid", params: { reason: "old_machine_active" } };
-            if (mode === "key-refused") throw { code: "promotion.break_glass_invalid" };
+            if (mode === "key-refused")
+              throw { code: "promotion.break_glass_invalid", params: { keyName: KEY_NAME } };
             if (mode === "rate-limited") throw { code: "recovery.rate_limited" };
             if (body.command.kind === "status") {
               if (mode === "uncertain" && body.conflict !== undefined)
@@ -125,9 +130,11 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
           const q = (action: string) =>
             screen.shadowRoot!.querySelector<HTMLElement>(`[data-action=${action}]`)!;
           if (mode !== "initial") {
-            const field = screen.shadowRoot!.querySelector("wt-input")!;
-            await (field as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-            await userEvent.fill(field.shadowRoot!.querySelector("input")!, "CURRENT_PRIVATE_KEY");
+            const keyField = screen.shadowRoot!.querySelector("wt-master-key-input")!;
+            await keyField.updateComplete;
+            const field = keyField.shadowRoot!.querySelector("wt-input")!;
+            await field.updateComplete;
+            await userEvent.fill(field.shadowRoot!.querySelector("input")!, CURRENT_KEY);
             await userEvent.click(q("inspect"));
             if (
               !["key-refused", "rate-limited", "not-primary", "connection-refused"].includes(mode)
@@ -138,6 +145,12 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
             else
               await vi.waitFor(() =>
                 expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
+              );
+            if (mode === "key-refused")
+              await vi.waitFor(() =>
+                expect(field.shadowRoot!.textContent).toContain(
+                  MASTER_KEY_FIELD_WORDS[locale].wrongKey(KEY_NAME),
+                ),
               );
             if (
               [
@@ -187,7 +200,7 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
           await expectNoA11yViolations(host);
           expect(screen.getBoundingClientRect().width).toBeLessThanOrEqual(width);
           expect(screen.scrollWidth).toBeLessThanOrEqual(screen.clientWidth);
-          expect(screen.shadowRoot!.innerHTML).not.toContain("CURRENT_PRIVATE_KEY");
+          expect(screen.shadowRoot!.innerHTML).not.toContain(CURRENT_KEY);
           await page.screenshot({
             path: `__screenshots__/w41s7-${locale}-${theme}-${width}-${mode}.png`,
           });

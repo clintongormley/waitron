@@ -283,7 +283,7 @@ describe("the venue screen's address search", () => {
     field.delay = 0;
     const input = field.shadowRoot!.querySelector("input")!;
     input.focus();
-    await userEvent.keyboard("Calle Mayor");
+    await userEvent.fill(input, "Calle Mayor");
     await new Promise((resolve) => setTimeout(resolve, 20));
     await field.updateComplete;
     await userEvent.keyboard("{ArrowDown}");

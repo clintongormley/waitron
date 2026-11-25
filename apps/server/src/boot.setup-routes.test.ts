@@ -1,4 +1,4 @@
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { randomUUID } from "node:crypto";
 import { SETUP_RECEIVE_LIMITS } from "./request-receive-limits.js";
 import { listener } from "./testing/ephemeral-listener.js";

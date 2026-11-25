@@ -368,6 +368,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   ).toMatchObject({
     recoveryOperation,
     nodeRecoveryKey: true,
+    masterKeyName: oldName,
   });
 });
 

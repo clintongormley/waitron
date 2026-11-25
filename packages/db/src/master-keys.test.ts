@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { triggerRaised } from "./constraint-target.js";
-import { insertMasterKey, readCurrentMasterKey } from "./master-keys.js";
+import { liveBackupQuery } from "./live-backup-query.js";
+import { insertMasterKey, readCurrentMasterKey, readCurrentMasterKeyName } from "./master-keys.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { masterKeys } from "./schema/master-keys.js";
 import { FOREIGN_KEY_VIOLATION } from "./sql-state.js";
@@ -46,6 +47,14 @@ describe("master keys", () => {
       number: 3,
       ...key(3),
     });
+  });
+
+  it("reads the current key's name through a backup copy's query, or none before the first", async () => {
+    const copy = liveBackupQuery(suite.db);
+    expect(await readCurrentMasterKeyName(copy)).toBeNull();
+    await insert(key(3));
+    await insert(key(1));
+    expect(await readCurrentMasterKeyName(copy)).toBe(key(1).name);
   });
 
   it("refuses a maker who is not a person on this venue", async () => {

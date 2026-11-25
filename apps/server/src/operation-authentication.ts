@@ -26,6 +26,11 @@ import {
 import { inTurn } from "./attempt-turns.js";
 import { isUuid } from "./till-session.js";
 
+/** A wrong master key's refusal, naming the key it should have been when that key is known. */
+export function wrongMasterKey(keyName: string | undefined): AppError {
+  return new AppError("promotion.break_glass_invalid", keyName === undefined ? {} : { keyName });
+}
+
 export async function withRecoveryKeyOperation<T>(
   deps: { readonly db: Database; readonly node: NodeDatabase; readonly nodeId: string },
   operation: OperationBinding,
@@ -56,8 +61,12 @@ export async function withRecoveryKeyAuthority<T>(
   };
   if (binding.targetNodeId !== targetNodeId || !allowedActions.includes(binding.action))
     return refuse();
-  const checked = await masterKeyAuthorising(deps.db, secret);
-  if (checked === null) return refuse();
+  const check = await checkMasterKey(deps.db, secret);
+  if (!check?.authorised) {
+    const current = check === null ? await readCurrentMasterKey(deps.db) : check.current;
+    throw wrongMasterKey(current?.name);
+  }
+  const checked = check.current;
   return withOperationAuthority(
     binding,
     { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
@@ -88,8 +97,8 @@ export async function withMasterKeyStillCurrent<R>(
   body: (tx: Transaction) => Promise<R>,
 ): Promise<R> {
   return withVenueAndNodeTransaction(deps.db, deps.node, async (tx) => {
-    if ((await readCurrentMasterKey(tx))?.number !== checked.number)
-      throw new AppError("promotion.break_glass_invalid", {});
+    const current = await readCurrentMasterKey(tx);
+    if (current?.number !== checked.number) throw wrongMasterKey(current?.name);
     return body(tx);
   });
 }
@@ -121,16 +130,32 @@ function authorityFrom(secret: unknown): Uint8Array | null {
   }
 }
 
+type MasterKeyCheck =
+  | { readonly authorised: true; readonly current: MasterKeyRecord }
+  | { readonly authorised: false; readonly current: MasterKeyRecord | null };
+
+/** The venue's current master key and whether `secret` (a typed master key or a staged authority
+ * key) is that key; `null`, having read nothing, when `secret` is neither. */
+async function checkMasterKey(
+  db: Database | Transaction,
+  secret: unknown,
+): Promise<MasterKeyCheck | null> {
+  const authority = authorityFrom(secret);
+  if (authority === null) return null;
+  const current = await readCurrentMasterKey(db);
+  return current !== null && authorityKeyMatches(authority, current.checkValue)
+    ? { authorised: true, current }
+    : { authorised: false, current };
+}
+
 /** The venue's current master key when `secret` (a typed master key or a staged authority key)
  * is that key; `null` otherwise, and before the venue has one. */
 export async function masterKeyAuthorising(
   db: Database | Transaction,
   secret: unknown,
 ): Promise<MasterKeyRecord | null> {
-  const authority = authorityFrom(secret);
-  if (authority === null) return null;
-  const current = await readCurrentMasterKey(db);
-  return current !== null && authorityKeyMatches(authority, current.checkValue) ? current : null;
+  const check = await checkMasterKey(db, secret);
+  return check?.authorised ? check.current : null;
 }
 
 const switchSignedIn = new WeakSet<object>();

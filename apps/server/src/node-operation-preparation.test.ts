@@ -219,10 +219,11 @@ it.each([
   },
 ])("live preparation: $scenario", async ({ rotateAfter, steps }) => {
   const seen: string[] = [];
+  let rotatedTo = "";
   const afterRead = async (step: string) => {
     seen.push(step);
     if (rotateAfter === step) {
-      await mintMasterKey(suite.db);
+      rotatedTo = (await mintMasterKey(suite.db)).name;
     }
   };
   const readHistory = provisioning.readModulePreparationHistory;
@@ -261,7 +262,7 @@ it.each([
     await expect(result).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
-    await expect(result).rejects.toHaveProperty("params", {});
+    await expect(result).rejects.toHaveProperty("params", { keyName: rotatedTo });
   }
   expect(seen).toEqual(steps);
 });

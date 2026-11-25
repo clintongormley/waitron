@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readRecoveryPackPdf } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { createRecoveryDelivery } from "./recovery-delivery.js";
 import { readRecoveryPdf } from "./recovery-reader.js";
 import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";

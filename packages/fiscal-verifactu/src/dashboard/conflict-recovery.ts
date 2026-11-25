@@ -7,8 +7,11 @@ import {
   draftScopeFor,
   LeaveController,
   type DraftScope,
+  type MasterKeyChangeDetail,
+  type MasterKeyInputCopy,
+  type WtMasterKeyInput,
 } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -30,6 +33,9 @@ import type { ActivationResult } from "../allocation-types.js";
 import type { HourClockDecision } from "../hour-clock.js";
 import { clockWaitStrings, renderClockRows } from "../setup/clock-wait.js";
 import { checkVenueStyles } from "../setup/check-venue.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 
 @customElement("vf-conflict-recovery")
 export class ConflictRecovery extends LitElement {
@@ -74,7 +80,10 @@ export class ConflictRecovery extends LitElement {
   ];
   @property({ attribute: false }) request!: DashboardRequest;
   @property() locale: "en" | "es" = "en";
+  /** The field's printed key, present only while it holds a whole one. */
   @state() private key = "";
+  /** The box refused the key sent; `keyName` is the key it named, when it named one. */
+  @state() private keyRefusal: { keyName?: string } | null = null;
   @state() private attempted = false;
   @state() private busy = false;
   @state() private refusal = "";
@@ -164,6 +173,9 @@ export class ConflictRecovery extends LitElement {
     this.waiting = null;
   }
 
+  private keyField(): WtMasterKeyInput | null {
+    return this.shadowRoot?.querySelector("wt-master-key-input") ?? null;
+  }
   private t(key: ConflictRecoveryString): string {
     return CONFLICT_RECOVERY_STRINGS[this.locale][key];
   }
@@ -172,7 +184,9 @@ export class ConflictRecovery extends LitElement {
     this.#abort.abort();
     this.#abort = new AbortController();
     this.cancelWait();
+    this.keyField()?.clear();
     this.key = "";
+    this.keyRefusal = null;
     this.busy = false;
     this.attempted = false;
     this.refusal = "";
@@ -196,7 +210,7 @@ export class ConflictRecovery extends LitElement {
   ): Promise<void> {
     if (this.busy) return;
     this.attempted = true;
-    if (!this.key.trim()) {
+    if (!this.key) {
       await this.updateComplete;
       focusFirstInvalid(this.shadowRoot!);
       return;
@@ -226,16 +240,17 @@ export class ConflictRecovery extends LitElement {
       if (generation !== this.#generation) return;
       this.cancelWait();
       const code = codeOf(error);
-      const reason = (error as { params?: { reason?: unknown } } | null)?.params?.reason;
-      if (code === "recovery.rate_limited") this.key = "";
+      const params = (error as { params?: { reason?: unknown; keyName?: unknown } } | null)?.params;
+      const reason = params?.reason;
+      if (code === "recovery.rate_limited") this.keyField()?.clear();
       if (code === "promotion.break_glass_invalid") {
         this.offline = false;
         this.noParallel = false;
-        this.key = "";
         this.active = null;
         this.selection = null;
         this.toConfirm = null;
-        this.refusal = this.t("conflict_recovery.key_refused");
+        this.keyField()?.clear();
+        this.keyRefusal = typeof params?.keyName === "string" ? { keyName: params.keyName } : {};
       } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
         this.selection = null;
         this.toConfirm = null;
@@ -409,7 +424,8 @@ export class ConflictRecovery extends LitElement {
     this.uncertain = false;
   }
   override render() {
-    const invalid = this.attempted && !this.key.trim();
+    const invalid = this.attempted && !this.key;
+    const keyWords: MasterKeyInputCopy = MASTER_KEY_FIELD_WORDS[this.locale];
     const isolationInvalid = this.isolationAttempted && (!this.offline || !this.noParallel);
     return html`<main>
         <h1>${this.t("conflict_recovery.title")}</h1>
@@ -420,20 +436,21 @@ export class ConflictRecovery extends LitElement {
                 <h2>${this.t("conflict_recovery.complete")}</h2>
                 ${this.completed.series.map((series) => html`<p>${series.code}</p>`)}
               </section>`
-            : html` <wt-input
-                  name="recoveryKey"
-                  .label=${this.t("conflict_recovery.key")}
-                  type="password"
-                  autocomplete="off"
+            : html` <wt-master-key-input
                   required
-                  .value=${this.key}
+                  .draftParent=${this}
+                  .copy=${keyWords}
+                  .readPack=${loadRecoveryPackReader}
+                  .maxPdfBytes=${MAX_PACK_PDF}
+                  .attempted=${this.attempted}
                   .disabled=${this.busy}
-                  .error=${invalid ? this.t("conflict_recovery.key_required") : ""}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.key = event.detail.value;
+                  .error=${this.keyRefusal?.keyName !== undefined ? keyWords.wrongKey(this.keyRefusal.keyName) : this.keyRefusal !== null ? this.t("conflict_recovery.key_refused") : invalid ? this.t("conflict_recovery.key_required") : ""}
+                  @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+                    this.key = event.detail.masterKey ?? "";
+                    this.keyRefusal = null;
                     this.#scope?.changed();
                   }}
-                ></wt-input>
+                ></wt-master-key-input>
                 ${
                   this.active !== null && this.active.length > 0
                     ? html`<section>
@@ -477,7 +494,7 @@ export class ConflictRecovery extends LitElement {
                 ${this.uncertain ? html`<p role="status">${this.t("conflict_recovery.uncertain")}</p>` : nothing}
                 ${this.restart ? html`<p role="status">${this.t("conflict_recovery.restart")}</p>` : nothing}
                 <wt-form-actions
-                  .error=${[invalid || isolationInvalid ? this.t("conflict_recovery.invalid") : "", this.refusal].filter(Boolean).join(" ")}
+                  .error=${[invalid || isolationInvalid || this.keyRefusal !== null ? this.t("conflict_recovery.invalid") : "", this.refusal].filter(Boolean).join(" ")}
                 >
                   <wt-button
                     slot="cancel"
@@ -486,7 +503,7 @@ export class ConflictRecovery extends LitElement {
                     @click=${this.stop}
                     >${this.t("conflict_recovery.stop")}</wt-button
                   >
-                  ${this.restart ? html`<wt-button data-action="again" variant="primary" @click=${this.again}>${this.t("conflict_recovery.again")}</wt-button>` : this.selection !== null || this.activating ? html`<wt-button data-action="switch" variant="primary" .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.switchIdentity}>${this.t("conflict_recovery.switch")}</wt-button>` : this.#conflict !== undefined && this.active !== null && !this.uncertain ? html`<wt-button data-action=${this.toConfirm === null ? "compare" : "confirm-time"} .variant=${this.busy || (this.offline && this.noParallel && !invalid && !isolationInvalid && this.waiting === null) ? "primary" : "secondary"} .disabled=${this.busy || invalid || isolationInvalid || this.waiting !== null} .loading=${this.busy} @click=${() => this.compare(this.toConfirm !== null)}>${this.t(this.toConfirm === null ? "conflict_recovery.compare" : "conflict_recovery.confirm_time")}</wt-button>` : html`<wt-button data-action="inspect" .variant=${this.busy || this.key.trim().length > 0 ? "primary" : "secondary"} .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.inspect}>${this.t("conflict_recovery.inspect")}</wt-button>`}
+                  ${this.restart ? html`<wt-button data-action="again" variant="primary" @click=${this.again}>${this.t("conflict_recovery.again")}</wt-button>` : this.selection !== null || this.activating ? html`<wt-button data-action="switch" variant="primary" .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.switchIdentity}>${this.t("conflict_recovery.switch")}</wt-button>` : this.#conflict !== undefined && this.active !== null && !this.uncertain ? html`<wt-button data-action=${this.toConfirm === null ? "compare" : "confirm-time"} .variant=${this.busy || (this.offline && this.noParallel && !invalid && !isolationInvalid && this.waiting === null) ? "primary" : "secondary"} .disabled=${this.busy || invalid || isolationInvalid || this.waiting !== null} .loading=${this.busy} @click=${() => this.compare(this.toConfirm !== null)}>${this.t(this.toConfirm === null ? "conflict_recovery.compare" : "conflict_recovery.confirm_time")}</wt-button>` : html`<wt-button data-action="inspect" .variant=${this.busy || this.key.length > 0 ? "primary" : "secondary"} .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.inspect}>${this.t("conflict_recovery.inspect")}</wt-button>`}
                 </wt-form-actions>`
         }
       </main>

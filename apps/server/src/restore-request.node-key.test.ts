@@ -14,7 +14,12 @@ import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-co
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { masterKeyAuthorising } from "./operation-authentication.js";
 import * as operations from "./recovery-module-operation.js";
-import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
+import {
+  readStagedMasterKeyName,
+  stageRestoreRequest,
+  runStagedRestore,
+  type RestoreRequest,
+} from "./restore-request.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { ALL_MODULES } from "./modules.js";
 import { firstStartPending } from "./restore-flow.js";
@@ -369,6 +374,67 @@ it("a lock refusal leaves the next attempt as a fresh placement", async () => {
       JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).phase,
     ).toBe("staged");
   });
+});
+
+it("staging a master key stages its name; staging none stages no name", async () => {
+  const stateDir = await fresh();
+  const marker = async () =>
+    JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request;
+  const facts = { adminVerifiers: ["hash"], masterKeyName: "2026-11-23 · QZJV" };
+  await stageRestoreRequest(stateDir, archive(), async () => facts);
+  expect(await marker()).toMatchObject({
+    nodeRecoveryKey: true,
+    masterKeyName: facts.masterKeyName,
+  });
+  expect(await readStagedMasterKeyName(stateDir)).toBe(facts.masterKeyName);
+  // The marker with its name is one a start accepts.
+  const restore = vi.fn(async () => {});
+  await runStagedRestore(deps(stateDir), restore, restore);
+  expect(restore).toHaveBeenCalled();
+
+  const again = await fresh();
+  await stageRestoreRequest(
+    again,
+    { ...archive(), nodeRecoverySecret: undefined },
+    async () => facts,
+  );
+  const unkeyed = JSON.parse(
+    await readFile(join(again, "flows/restore/record.json"), "utf8"),
+  ).request;
+  expect(unkeyed).not.toHaveProperty("nodeRecoveryKey");
+  expect(unkeyed).not.toHaveProperty("masterKeyName");
+  expect(await readStagedMasterKeyName(again)).toBeUndefined();
+});
+
+it("a copy without a master key stages no name beside the key", async () => {
+  const stateDir = await fresh();
+  await stageRestoreRequest(stateDir, archive(), async () => ({
+    adminVerifiers: ["hash"],
+    masterKeyName: null,
+  }));
+  const request = JSON.parse(
+    await readFile(join(stateDir, "flows/restore/record.json"), "utf8"),
+  ).request;
+  expect(request).toHaveProperty("nodeRecoveryKey", true);
+  expect(request).not.toHaveProperty("masterKeyName");
+});
+
+it("refuses a start whose staged key name is not a name, or is staged without the key", async () => {
+  for (const change of ["not-text", "no-key"] as const) {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, archive(), async () => ({
+      adminVerifiers: ["hash"],
+      masterKeyName: "2026-11-23 · QZJV",
+    }));
+    const path = join(stateDir, "flows/restore/record.json");
+    const record = JSON.parse(await readFile(path, "utf8"));
+    if (change === "not-text") record.request.masterKeyName = 42;
+    else delete record.request.nodeRecoveryKey;
+    await writeFile(path, JSON.stringify(record));
+    const restore = vi.fn(async () => {});
+    await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toThrow();
+    expect(restore).not.toHaveBeenCalled();
+  }
 });
 
 it("restaging without a node credential removes the old credential", async () => {

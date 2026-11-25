@@ -111,11 +111,11 @@ Choose a file no larger than 4 GiB. A slow upload can take up to 12 hours.
 If the upload does not finish, keep your selected file, improve the connection and try again.
 
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
-date, node and box key. Check those details before continuing. Keep production and
+date, node and master key. Check those details before continuing. Keep production and
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made; type it in **Box key**. Keep the earlier pack too if it holds that key.
+Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made; type it in **Master key**. Keep the earlier pack too if it holds that key.
 
 On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -129,9 +129,9 @@ At the end of Preparation, the **Recovery pack** step shows the master key once.
 other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose the recovery pack that holds this backup's
-master key in **Recovery PDF**; or type the master key printed on it in **Box key**. A pack with
-a newer master key does not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
-person recovering this taxpayer, across all venues." and "These details are correct."
+master key with **Choose the recovery pack PDF**; or type the master key printed on it in **Master key**. A pack with
+a newer master key does not open an older backup. Tick "The old box has been shut down.", "I am the only
+person recovering this venue." and "These details are correct."
 
 If **Backups** cannot confirm the saved key, keep both the previous key and the key you just
 saved. While changing a key, you can still copy or download both displayed keys after this
@@ -187,7 +187,7 @@ fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Enter the master key in **Box key**, tick both statements and "These details are correct.", then choose
+Enter the master key in **Master key**, tick both statements and "These details are correct.", then choose
 **Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
@@ -212,8 +212,8 @@ this device's time, reconnect to the box, then choose **Compare the clocks again
 If, after you choose the restore button, the box needs its time confirmed again, the page where
 you chose it shows the box's time and this device's: check that both are right, then choose
 **Confirm the time**, or **This device** if the box's time is wrong. If that page was closed, open
-any of the box's pages on a phone, computer or till on the venue's network and enter the selected
-backup's master key to see the same step. The restore then carries on by
+any of the box's pages on a phone, computer or till on the venue's network and type the selected
+backup's master key in **Master key** to see the same step. The restore then carries on by
 itself. If the box instead shows a page saying it could not make its new invoice series, choose
 **Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 

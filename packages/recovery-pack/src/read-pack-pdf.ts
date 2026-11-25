@@ -11,14 +11,13 @@ import {
 import {
   looksLikePdf,
   MAX_PACK_FILE,
+  MAX_PACK_PDF,
   PACK_ATTACHMENT,
   parseRecoveryPackFile,
   RecoveryPackFileError,
   type RecoveryPackFile,
   type RecoveryPackFileRefusal,
 } from "./pack-file.js";
-
-export const MAX_PACK_PDF = 8 * 1024 * 1024;
 
 function refuse(reason: RecoveryPackFileRefusal): never {
   throw new RecoveryPackFileError(reason);
@@ -136,6 +135,8 @@ async function digest(bytes: Uint8Array): Promise<string> {
  * The pack file attached to a recovery pack PDF. `not_a_pack` names a document that is not a pack
  * at all — not a PDF, no attached file, or one attached file of another name (such as the recovery
  * PDF from before the pack) — so a caller can tell it apart from a pack that was tampered with.
+ * Reads only a file chosen in the person's own browser or given to the command line: the
+ * document's own object streams are not bounded.
  */
 export async function readRecoveryPackPdf(bytes: Uint8Array): Promise<RecoveryPackFile> {
   if (bytes.length === 0 || bytes.length > MAX_PACK_PDF) refuse("size");

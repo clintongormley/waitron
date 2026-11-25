@@ -18,6 +18,9 @@
 > checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
 > `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
 
+> **2026-11-24, A1323 PR 3b-field:** the separate key field named below is now the **Master key**
+> field, which also takes the key from **Choose the recovery pack PDF**.
+
 > **2026-11-24, A1323 PR 2c:** the node recovery pack (Backups → Create pack) and the custodian's
 > `sign-register` command, whose output only that pack read, were removed.
 

@@ -156,10 +156,10 @@ for (const theme of ["light", "dark"] as const)
             await el.updateComplete;
             if (state === "invalid") el.readCredentials();
             else if (state !== "empty") {
-              const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+              const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
               await key.updateComplete;
               for (const [name, value] of [
-                ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
+                ["master-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
               ]) {
                 const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
                 await field.updateComplete;
@@ -391,7 +391,7 @@ for (const theme of ["light", "dark"] as const)
             }
             expect((await axe.run(host)).violations).toEqual([]);
             expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
-            expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+            expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
             el.remove();
             host.remove();
           }

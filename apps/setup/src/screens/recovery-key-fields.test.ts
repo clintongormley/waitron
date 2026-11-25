@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, typeMasterKey } from "../widgets/test-helpers.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import { encodeMasterKeyCode } from "@waitron/shared";
 
@@ -27,13 +27,24 @@ async function mount() {
   });
   return el;
 }
-it("mounts the selected module's printed-key fields for a fiscal backup", async () => {
+/** The master-key field's own text field. */
+async function keyField(el: SetupRecoveryAllocation) {
+  const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
+  await key.updateComplete;
+  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
+    '[name="master-key"]',
+  )!;
+  await field.updateComplete;
+  return field;
+}
+it("draws the master-key field for a fiscal backup, expecting the backup's key", async () => {
   const el = await mount();
-  const entry = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key");
-  expect(entry, "selected module owns printed-key and PDF entry").not.toBeNull();
-  await entry!.updateComplete;
-  const field = entry!.shadowRoot!.querySelector('[name="printed-recovery-key"]')!;
-  await (field as LitElement).updateComplete;
+  const key = el.shadowRoot!.querySelector<LitElement & { keyName?: string }>(
+    "wt-master-key-input",
+  );
+  expect(key, "a fiscal backup asks for its master key").not.toBeNull();
+  expect(key!.keyName).toBe("Caja principal");
+  const field = await keyField(el);
   expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.type).toBe("password");
 });
 
@@ -58,19 +69,9 @@ function fillOperation(el: SetupRecoveryAllocation) {
   }
 }
 async function fillKey(el: SetupRecoveryAllocation) {
-  const entry = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await entry.updateComplete;
-  for (const [name, value] of [
-    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
-  ]) {
-    const field = entry.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = value;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  }
+  await typeMasterKey(el, MASTER_KEY.replaceAll(" ", "").toLowerCase());
 }
-it("forwards the decoded secret and clears the real fields with Clear", async () => {
+it("forwards the printed key and clears the real field with Clear", async () => {
   const el = await mount();
   fillOperation(el);
   await fillKey(el);
@@ -82,14 +83,11 @@ it("forwards the decoded secret and clears the real fields with Clear", async ()
   );
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="clear"]')!.click();
   await el.updateComplete;
-  const entry = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await entry.updateComplete;
-  const field = entry.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
-  await field.updateComplete;
+  const field = await keyField(el);
   expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe("");
   expect(el.readCredentials()).toBeNull();
 });
-it("places the server's named-key refusal under the module's actual fields", async () => {
+it("places the server's named-key refusal under the master-key field", async () => {
   const el = await mount();
   fillOperation(el);
   await fillKey(el);
@@ -99,11 +97,7 @@ it("places the server's named-key refusal under the module's actual fields", asy
     refusedField: "nodeRecoverySecret",
   });
   await el.updateComplete;
-  const entry = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await entry.updateComplete;
-  const field = entry.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
+  const field = await keyField(el);
   await vi.waitFor(() => expect(field.error).toBe("The backup needs its older key."));
   expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY);
 });

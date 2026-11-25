@@ -16,7 +16,8 @@ import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { requestFromBox } from "./request-from-box.js";
-import { matchesStagedNodeKey } from "./restore-request.js";
+import { wrongMasterKey } from "./operation-authentication.js";
+import { matchesStagedNodeKey, readStagedMasterKeyName } from "./restore-request.js";
 import { requestIdMiddleware } from "./request-id.js";
 import type { Logger } from "./logger.js";
 import type { SetupClockSetter } from "./setup-clock-set.js";
@@ -91,7 +92,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
         return c.json({ error: { code: err.code, params: err.params } }, 403);
       }
       if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) {
-        const err = new AppError("promotion.break_glass_invalid", {});
+        const err = wrongMasterKey(await readStagedMasterKeyName(options.stateDir));
         c.set("refusalCode", err.code);
         return c.json({ error: { code: err.code, params: err.params } }, 403);
       }
@@ -190,6 +191,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
 
 function renderWaitingPage(locale: SupportedLocale, destination: string): string {
   const words = START_CLOCK_WAITING_WORDS[locale];
+  const keyLines = { keyRefused: words.keyRefused, wrongKey: words.wrongKey };
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
     locale,
@@ -197,7 +199,7 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
     `<p>${escapeHtml(words.why)}</p>
 <form id="clock-key">
 <p><label for="clock-key-field">${escapeHtml(words.keyLabel)} *</label></p>
-<p><input type="password" id="clock-key-field" name="node-recovery-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
+<p><input type="password" id="clock-key-field" name="master-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
 <p id="clock-key-error" hidden>${escapeHtml(words.keyRefused)}</p>
 <p><button type="submit">${escapeHtml(words.keyContinue)}</button></p>
 </form>
@@ -212,6 +214,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
 <script>
 (() => {
   const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
+  const keyLines = ${JSON.stringify(keyLines).replaceAll("<", "\\u003c")};
   const $ = (id) => document.getElementById(id);
   const field = $("clock-key-field");
   const show = (id) => {
@@ -234,12 +237,21 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
         body: JSON.stringify({ key: field.value, ...body }),
       })
     ).json();
+  // A refusal names the backup's master key when the box staged its name.
+  const keyLine = (refusal) => {
+    const keyName = refusal?.error?.params?.keyName;
+    $("clock-key-error").textContent =
+      typeof keyName === "string"
+        ? keyLines.wrongKey.replace("{keyName}", keyName)
+        : keyLines.keyRefused;
+    $("clock-key-error").hidden = refusal === null;
+    field.toggleAttribute("aria-invalid", refusal !== null);
+  };
   // This device's time against a fresh challenge; a refused key shows the key's refusal.
   const timed = async (path) => {
     const challenge = await post("challenge", {});
     const refused = typeof challenge.id !== "string";
-    $("clock-key-error").hidden = !refused;
-    field.toggleAttribute("aria-invalid", refused);
+    keyLine(refused ? challenge : null);
     if (refused) return null;
     return post(path, { challengeId: challenge.id, instantMs: Date.now() });
   };

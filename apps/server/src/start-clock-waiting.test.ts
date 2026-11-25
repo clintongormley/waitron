@@ -22,14 +22,24 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** A state folder holding `key` as the staged authority key, or none when `key` is null. */
-async function stateWith(key: string | null): Promise<string> {
+/** A state folder holding `key` as the staged authority key, or none when `key` is null, and, with
+ * `keyName`, the restore's record naming it as staging does. */
+async function stateWith(key: string | null, keyName?: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "waitron-start-clock-waiting-"));
   dirs.push(dir);
   if (key !== null) {
     const path = attachmentPath(dir, "node-key");
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, key);
+    if (keyName !== undefined)
+      await writeFile(
+        join(dirname(path), "record.json"),
+        JSON.stringify({
+          version: 1,
+          phase: "placing",
+          request: { version: 1, nodeRecoveryKey: true, masterKeyName: keyName },
+        }),
+      );
   }
   return dir;
 }
@@ -102,11 +112,12 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
         ),
       );
-      expect(body).toContain(escapeHtml("Selected backup’s box key"));
-      expect(body).toMatch(/<input [^>]*type="password"[^>]*name="node-recovery-key"/);
+      expect(body).toContain(escapeHtml("Master key"));
+      expect(body).toMatch(/<input [^>]*type="password"[^>]*name="master-key"/);
+      expect(body).not.toContain('type="file"');
     },
   );
 
@@ -315,6 +326,27 @@ describe("the restore's waiting app: the master key as printed on the recovery p
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(refused);
     }
+  });
+});
+
+describe("the restore's waiting app: naming the master key a wrong key is refused for", () => {
+  const NAME = "2026-11-23 · QZJV";
+  const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+  const named = { error: { code: "promotion.break_glass_invalid", params: { keyName: NAME } } };
+
+  it.each(["challenge", "compare", "confirm", "set"])(
+    "/restore-clock/%s refuses a wrong typed key naming the staged key",
+    async (path) => {
+      const w = await waiting({ stateDir: await stateWith(STAGED, NAME) });
+      const res = await w.post(path, { key: other, challengeId: "x", instantMs: BOX_MS });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(named);
+    },
+  );
+
+  it("still serves the right key with a name staged (control)", async () => {
+    const w = await waiting({ stateDir: await stateWith(STAGED, NAME) });
+    expect((await w.post("challenge", { key: KEY })).status).toBe(200);
   });
 });
 

@@ -6,7 +6,6 @@ export const restoreEn = {
     "Use the current outside recovery record. An old pack cannot replace it.",
   "restore.allocation_record": "Recovery record",
   "restore.allocation_placeholder": "Paste the recovery record from your custodian or phone.",
-  "restore.allocation_node_key": "Selected backup’s box key",
   "restore.allocation_invalid": "Check the recovery record and its selected backup.",
   "restore.allocation_key_missing": "Enter the selected backup’s master key.",
   "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
@@ -26,7 +25,7 @@ export const restoreEn = {
   "restore.preview_business": "Business",
   "restore.preview_venue": "Venue",
   "restore.preview_date": "Backup date",
-  "restore.preview_node_key": "Box key",
+  "restore.preview_node_key": "Master key",
   "restore.preview_node": "Node",
   "restore.preview_no_master_key":
     "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
@@ -200,7 +199,6 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Usa el registro externo actual de recuperación. Un paquete antiguo no lo sustituye.",
   "restore.allocation_record": "Registro de recuperación",
   "restore.allocation_placeholder": "Pega el registro de recuperación de tu custodio o teléfono.",
-  "restore.allocation_node_key": "Clave del servidor de la copia elegida",
   "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
   "restore.allocation_key_missing": "Introduce la clave maestra de la copia elegida.",
   "restore.allocation_isolated":
@@ -222,7 +220,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_business": "Negocio",
   "restore.preview_venue": "Local",
   "restore.preview_date": "Fecha de la copia",
-  "restore.preview_node_key": "Clave del servidor",
+  "restore.preview_node_key": "Clave maestra",
   "restore.preview_node": "Nodo",
   "restore.preview_no_master_key":
     "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",

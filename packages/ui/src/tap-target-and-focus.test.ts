@@ -42,7 +42,7 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-help-tooltip, wt-icon-button, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
+test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-help-tooltip, wt-icon-button, wt-input, wt-master-key-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
   // A primitive leaving or joining the set otherwise changes only how many tests run below.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
     "wt-address-lookup",
@@ -54,6 +54,7 @@ test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-cho
     "wt-help-tooltip",
     "wt-icon-button",
     "wt-input",
+    "wt-master-key-input",
     "wt-number-stepper",
     "wt-price-input",
     "wt-row-actions",
@@ -99,6 +100,20 @@ async function mountNarrow(
     search.provider = {
       suggest: async () => [],
       resolve: () => Promise.reject(new Error("unused")),
+    };
+  }
+  if (tag === "wt-master-key-input") {
+    const field = el as HTMLElementTagNameMap["wt-master-key-input"];
+    field.copy = {
+      label: "Master key",
+      button: "Choose the recovery pack PDF",
+      visibility: { show: "Show key", hide: "Hide key", shown: "", hidden: "" },
+      loaded: "",
+      notPack: "",
+      damaged: "",
+      notWhole: "",
+      wrongKey: () => "",
+      elsewhere: () => "",
     };
   }
   await el.updateComplete;

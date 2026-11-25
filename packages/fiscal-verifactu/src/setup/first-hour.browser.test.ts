@@ -629,9 +629,6 @@ it("a recorded wait the load's preview shows only after the tick changed does no
     vi.useRealTimers();
   }
 });
-const SERIES_LINE = "Waitron will start this box's invoice series.";
-const seriesLine = (el: LitElement) =>
-  el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.trim();
 it("with the clocks agreeing, ticking the details and pressing Proceed makes the series", async () => {
   fakeClock();
   try {
@@ -648,7 +645,7 @@ it("with the clocks agreeing, ticking the details and pressing Proceed makes the
     vi.useRealTimers();
   }
 });
-it("without the tick nothing asks for the series, and the page says Waitron will start the series", async () => {
+it("without the tick nothing asks for the series", async () => {
   fakeClock();
   try {
     const { el, calls } = await mount({ preview: { status: "preview", identity: "0CSQW" } });
@@ -659,7 +656,6 @@ it("without the tick nothing asks for the series, and the page says Waitron will
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     expect(calls.filter((c) => c.action === "candidates" || c.action === "request")).toEqual([]);
-    expect(seriesLine(el)).toBe(SERIES_LINE);
   } finally {
     vi.useRealTimers();
   }
@@ -683,23 +679,28 @@ it("with the tick and the clocks agreeing, nothing asks for the series until Pro
     vi.useRealTimers();
   }
 });
-it("the page says Waitron will start the series only while the button reads Proceed, not during the wait after it", async () => {
-  const answers: unknown[] = [
-    { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
-    selected,
-  ];
-  fakeClock();
-  try {
-    const { el } = await mount({ select: async () => answers.shift() });
-    await ready(el);
-    expect(seriesLine(el)).toBe(SERIES_LINE);
-    await proceed(el);
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
-    expect(el.shadowRoot!.querySelector("[data-test=series-line]")).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
-});
+it.each(["en", "es"] as const)(
+  "%s: no line says Waitron will start the series, before Proceed or during the wait after it",
+  async (locale) => {
+    const answers: unknown[] = [
+      { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
+      selected,
+    ];
+    fakeClock();
+    try {
+      const { el } = await mount({ locale, select: async () => answers.shift() });
+      await ready(el);
+      expect(text(el)).not.toContain("start this box's invoice series");
+      expect(text(el)).not.toContain("las series de facturas de este servidor");
+      await proceed(el);
+      await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+      expect(text(el)).not.toContain("start this box's invoice series");
+      expect(text(el)).not.toContain("las series de facturas de este servidor");
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 it("Proceed is quiet and disabled until the details are ticked", async () => {
   const { el } = await mount();
   await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
@@ -756,7 +757,6 @@ it("with no second clock on load it explains itself before the tick, and makes t
     const { el, calls } = await mount({ decision: () => decision });
     await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
     expect(text(el)).toContain(WHY_SECOND);
-    expect(seriesLine(el)).toBe(SERIES_LINE);
     expect(text(el)).not.toContain(SETUP_ENDS);
     expect(detailsTick(el).checked).toBe(false);
     await ready(el);
@@ -1978,7 +1978,6 @@ it("a missing second clock reported by the server starts the 15-second check", a
 it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
   const { el } = await mount({ locale: "es", decision: { ...clock, disagreement: true } });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull());
-  const series = seriesLine(el);
   await ready(el);
   await proceed(el);
   await vi.waitFor(() =>
@@ -1988,7 +1987,6 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
     dt.textContent!.trim(),
   );
   expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
-  expect(series).toBe("Waitron creará las series de facturas de este servidor.");
 });
 const differ = (el: LitElement) => vi.waitFor(() => expect(text(el)).toContain(DIFFER));
 const failed = (el: LitElement) =>

@@ -11,6 +11,8 @@ import { mountPublicModulePage } from "./public-module-page.js";
 import { diag } from "./diagnostics.js";
 import { userEvent } from "vitest/browser";
 
+/** A whole printed master key, so the page sends it. */
+const SECRET = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const path = location.pathname;
 const locale = currentLocale();
 afterEach(() => {
@@ -36,20 +38,24 @@ it("boots the real module recovery page before creating a dashboard session clie
   };
   expect(page).not.toBeNull();
   await page.updateComplete;
-  expect(page.shadowRoot!.querySelector("wt-input[name=recoveryKey]")).not.toBeNull();
+  const keyField = page.shadowRoot!.querySelector("wt-master-key-input")!;
+  await keyField.updateComplete;
+  const field = keyField.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<boolean> }
+  >("wt-input[name=master-key]");
+  expect(field).not.toBeNull();
   expect(fetchImpl).not.toHaveBeenCalled();
   const trail = diag.snapshot();
   const writes = vi.spyOn(Storage.prototype, "setItem");
-  const field = page.shadowRoot!.querySelector("wt-input")!;
-  await (field as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
-  await userEvent.fill(field.shadowRoot!.querySelector("input")!, "BOOTSTRAP_PRIVATE_KEY");
+  await field!.updateComplete;
+  await userEvent.fill(field!.shadowRoot!.querySelector("input")!, SECRET);
   await userEvent.click(page.shadowRoot!.querySelector("[data-action=inspect]")!);
   await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
   expect(fetchImpl.mock.calls[0]![0]).toBe("/api/module-recovery/fiscal-verifactu/conflict");
   expect(diag.snapshot()).toEqual(trail);
-  expect(JSON.stringify(writes.mock.calls)).not.toContain("BOOTSTRAP_PRIVATE_KEY");
-  expect(location.href).not.toContain("BOOTSTRAP_PRIVATE_KEY");
-  expect(app.innerHTML).not.toContain("BOOTSTRAP_PRIVATE_KEY");
+  expect(JSON.stringify(writes.mock.calls)).not.toContain(SECRET);
+  expect(location.href).not.toContain(SECRET);
+  expect(app.innerHTML).not.toContain(SECRET);
   writes.mockRestore();
 });
 

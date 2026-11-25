@@ -1,6 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  type DraftScope,
+  type MasterKeyChangeDetail,
+  type MasterKeyInputCopy,
+} from "@waitron/ui";
 import { readInvoiceEvidenceReport } from "@waitron/fiscal/src/invoice-evidence.js";
 import { classifySavedTimeZone } from "@waitron/shared";
 import type {
@@ -9,7 +16,10 @@ import type {
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
 import { isMinuteIdentity } from "../hour-identity.js";
-import "./recovery-key.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
@@ -214,9 +224,8 @@ export const recoveryHourStrings = {
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
       "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete.",
-    stopped: "The old box is stopped and will stay offline.",
-    sole: "I am the only person recovering this taxpayer, across all venues.",
-    seriesLine: "Waitron will start new invoice series for this box.",
+    stopped: "The old box has been shut down.",
+    sole: "I am the only person recovering this venue.",
     continue: "Continue",
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
@@ -244,9 +253,8 @@ export const recoveryHourStrings = {
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
       "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta.",
-    stopped: "El servidor anterior está apagado y seguirá desconectado.",
-    sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-    seriesLine: "Waitron creará series de facturas nuevas para este servidor.",
+    stopped: "El servidor anterior se ha apagado.",
+    sole: "Soy la única persona recuperando este local.",
     continue: "Continuar",
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
@@ -309,6 +317,8 @@ export class RecoveryHourEntry extends LitElement {
   @state() private error = false;
   #failure: unknown;
   @state() private keyError = false;
+  /** The key the box named when it refused the key sent; read only while `keyError`. */
+  #refusedKeyName?: string;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
@@ -421,7 +431,7 @@ export class RecoveryHourEntry extends LitElement {
     this.#secret = undefined;
     this.draft = empty();
     this.attempted = false;
-    this.shadowRoot?.querySelector("vf-recovery-key")?.clear();
+    this.shadowRoot?.querySelector("wt-master-key-input")?.clear();
     this.#scope?.commit(empty());
     this.#notify();
   }
@@ -581,10 +591,12 @@ export class RecoveryHourEntry extends LitElement {
   #failed(cause: unknown): void {
     this.error = true;
     this.#failure = cause;
-    this.keyError =
-      record(cause) &&
-      (cause.code === "promotion.break_glass_invalid" ||
-        (record(cause.params) && cause.params.field === "nodeRecoverySecret"));
+    const wrongKey = record(cause) && cause.code === "promotion.break_glass_invalid";
+    const params: Record<string, unknown> =
+      record(cause) && record(cause.params) ? cause.params : {};
+    this.keyError = wrongKey || params.field === "nodeRecoverySecret";
+    this.#refusedKeyName =
+      wrongKey && typeof params.keyName === "string" ? params.keyName : undefined;
   }
   /** `press`: Confirm the time, whose step stays up until the answer replaces it. */
   async #run(automatic = false, press = false): Promise<void> {
@@ -660,6 +672,7 @@ export class RecoveryHourEntry extends LitElement {
     const emergencyWords = isEmergency(context) ? emergencyClockWords[this.locale] : undefined;
     const emergency = emergencyWords !== undefined;
     const baseWords = en ? recoveryHourStrings.en : recoveryHourStrings.es;
+    const keyWords: MasterKeyInputCopy = MASTER_KEY_FIELD_WORDS[this.locale];
     const words = promote
       ? {
           ...baseWords,
@@ -737,18 +750,23 @@ export class RecoveryHourEntry extends LitElement {
         ${
           promote
             ? nothing
-            : html`<vf-recovery-key
-                  .selection=${context.selection}
-                  .locale=${this.locale}
-                  .errorMessage=${this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? this.errorMessage : undefined}
-                  @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
+            : html`<wt-master-key-input
+                  .draftParent=${this}
+                  required
+                  .keyName=${context.selection.keyName}
+                  .copy=${keyWords}
+                  .readPack=${loadRecoveryPackReader}
+                  .maxPdfBytes=${MAX_PACK_PDF}
+                  .attempted=${this.attempted}
+                  .error=${this.keyError && this.#refusedKeyName !== undefined ? keyWords.wrongKey(this.#refusedKeyName) : this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? (this.errorMessage ?? "") : ""}
+                  @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
                     event.stopPropagation();
-                    this.#secret = event.detail.secret;
+                    this.#secret = event.detail.masterKey;
                     this.#edited("nodeRecoverySecret");
                     this.#invalidate();
                     this.#notify();
                   }}
-                ></vf-recovery-key>
+                ></wt-master-key-input>
                 <label
                   ><input
                     type="checkbox"
@@ -838,7 +856,6 @@ export class RecoveryHourEntry extends LitElement {
             : undefined,
         )}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
-        ${action === "proceed" && !sending && !emergency ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
       </div>
       ${
         selectedHour && !emergency

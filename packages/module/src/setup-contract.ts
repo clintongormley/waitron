@@ -40,10 +40,6 @@ export interface SetupContribution {
     boxAddress?: string;
   }): ModuleRecoveryEntry;
   createPromotion?(context: ModulePromotionContext): ModulePromotionEntry;
-  createRecoveryKey?(context: {
-    locale: "en" | "es";
-    selection?: RecoveryKeySelection;
-  }): ModuleRecoveryKeyEntry;
   create(context: { locale: "en" | "es"; request: unknown; api: InitialSetupActions }): HTMLElement;
 }
 
@@ -52,11 +48,6 @@ export interface RecoveryKeySelection {
   readonly environment: "production" | "preproduction";
   readonly nodeId: string;
   readonly keyName: string;
-}
-export interface ModuleRecoveryKeyEntry extends HTMLElement {
-  locale: "en" | "es";
-  errorMessage?: string;
-  clear(): void;
 }
 
 export interface RecoveryOperationBinding {

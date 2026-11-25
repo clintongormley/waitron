@@ -11,9 +11,10 @@ collections or refunds stop. Money already captured remains recorded for later c
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
-box over HTTPS. Use the venue's current master key (the field still says **Current box key**). A dashboard sign-in, backup password or
-older master key does not replace it. Enter the key and choose **Check conflict** to inspect
-the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
+box over HTTPS. Use the venue's current master key: type it in **Master key**, or choose **Choose
+the recovery pack PDF** and pick the pack that holds it. A dashboard sign-in, backup password or
+older master key does not replace it. Then choose **Check conflict** to inspect the affected invoice
+and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
 page then shows the box's time and this device's: check that both are right, then choose **Confirm
 the time**.
@@ -57,8 +58,8 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Choose the recovery pack that holds
-this backup's master key in the recovery picker, or type the master key. There is no
+and key name. Keep production and preproduction separate. Choose **Choose the recovery pack PDF** and
+pick the pack that holds this backup's master key, or type the master key in **Master key**. There is no
 installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
 authenticate the selected backup; its short typing check is not authentication.
@@ -117,8 +118,8 @@ There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last
 offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
-to the box; while the button reads **Proceed** it says "Waitron will start new invoice series for this box." (the same
-file's "the key, both statements and the details tick send nothing until Proceed, and the page says new series will be made"). After **Proceed** the box asks its internet time service whether it is synchronised and
+to the box (the same file's "the key, both statements and the details tick send nothing until
+Proceed"). After **Proceed** the box asks its internet time service whether it is synchronised and
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
 it), and when the time service is synchronised the page asks the box for the invoice series, all by
 itself (`recovery-hour.browser.test.ts`, "decodes the printed key and sends independent recovery
@@ -265,7 +266,9 @@ selected backup's master key: the waiting page then shows the same step
 with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
 secret the setup page sends (the same file's "takes the master key as printed on the recovery pack,
 typed in lower case without spaces"; `start-clock-waiting.test.ts`, "the clock page accepts the master key
-typed %s"). Every clock route refuses a missing or wrong key
+typed %s"). The page takes the key typed only; it offers no recovery pack PDF
+(`start-clock-waiting-page.test.ts`, "the page labels the field Master key with no hint, says 'type
+the master key below' and offers no PDF (%s)"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
 setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
 file's "/restore-clock/%s refuses the right key from another site's page (%o)"), and the box's own

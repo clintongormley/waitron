@@ -40,6 +40,8 @@ async function open(
     setMovesClock?: boolean;
     /** The page's clock moves only when the test moves it. */
     paused?: boolean;
+    /** Absent, the suite's state folder, which names no key. */
+    stateDir?: string;
   } = {},
 ) {
   const started = Date.now();
@@ -49,7 +51,7 @@ async function open(
   const control = { finished: false, stallLooks: false, stalled: 0 };
   let ahead = aheadMs;
   const subject = createStartClockWaiting({
-    stateDir,
+    stateDir: options.stateDir ?? stateDir,
     clock: {
       wall: () => NOON_MS + ahead + (Date.now() - started),
       monotonic: () => performance.now(),
@@ -162,6 +164,32 @@ async function withPage(locale: string, run: (page: Page) => Promise<void>) {
   }
 }
 
+it.each(["en-GB", "es-ES"] as const)(
+  "the page labels the field Master key with no hint, says 'type the master key below' and offers no PDF (%s)",
+  (locale) =>
+    withPage(locale, async (page) => {
+      await open(page, 0);
+      const field = page.getByLabel(START_CLOCK_WAITING_WORDS[locale].keyLabel);
+      expect(await field.getAttribute("type")).toBe("password");
+      expect(await field.getAttribute("placeholder")).toBeNull();
+      expect(await page.locator('input[type="file"]').count()).toBe(0);
+      expect(
+        await page.locator("p", { hasText: START_CLOCK_WAITING_WORDS[locale].why }).count(),
+      ).toBe(1);
+      if (locale === "en-GB") {
+        expect(await page.getByLabel("Master key").count()).toBe(1);
+        expect(
+          await page
+            .locator("p", {
+              hasText:
+                "If that page is closed, type the master key below to confirm the time from this device.",
+            })
+            .count(),
+        ).toBe(1);
+      }
+    }),
+);
+
 it("shows nothing of the clock until the key is entered, and refuses a wrong key beside its field", () =>
   withPage("en-GB", async (page) => {
     await open(page, 0);
@@ -173,6 +201,49 @@ it("shows nothing of the clock until the key is entered, and refuses a wrong key
     expect(await page.getByLabel(words.keyLabel).getAttribute("aria-invalid")).toBe("");
     expect(await page.locator("#clock-step").isVisible()).toBe(false);
   }));
+
+it.each(["en-GB", "es-ES"] as const)(
+  "a wrong key typed says which master key to use (%s)",
+  (locale) =>
+    withPage(locale, async (page) => {
+      const named = await mkdtemp(join(tmpdir(), "waitron-start-clock-page-named-"));
+      try {
+        const keyPath = attachmentPath(named, "node-key");
+        await mkdir(dirname(keyPath), { recursive: true });
+        await writeFile(keyPath, authorityKey(decodeMasterKeyCode(KEY)).toString("hex"));
+        // What staging records beside the key: the backup's current master key's name.
+        await writeFile(
+          join(dirname(keyPath), "record.json"),
+          JSON.stringify({
+            version: 1,
+            phase: "placing",
+            request: { version: 1, nodeRecoveryKey: true, masterKeyName: "2026-11-23 · QZJV" },
+          }),
+        );
+        await open(page, 0, { stateDir: named });
+        const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+        const words = START_CLOCK_WAITING_WORDS[locale];
+        await page.getByLabel(words.keyLabel).fill(other);
+        await page.getByRole("button", { name: words.keyContinue }).click();
+        const wrongLine = words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV");
+        const line = page.locator("#clock-key-error");
+        await expect.poll(() => line.isVisible()).toBe(true);
+        expect(await line.innerText()).toBe(wrongLine);
+        expect(await page.locator("#clock-step").isVisible()).toBe(false);
+        // The right key clears the line, and a wrong key typed after it names the key again.
+        await page.getByLabel(words.keyLabel).fill(KEY);
+        await page.getByRole("button", { name: words.keyContinue }).click();
+        await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+        expect(await line.isVisible()).toBe(false);
+        await page.getByLabel(words.keyLabel).fill(other);
+        await page.getByRole("button", { name: words.keyContinue }).click();
+        await expect.poll(() => line.isVisible()).toBe(true);
+        expect(await line.innerText()).toBe(wrongLine);
+      } finally {
+        await rm(named, { recursive: true, force: true });
+      }
+    }),
+);
 
 it("with the key, shows the done screen's step with both times and their dates", () =>
   withPage("en-GB", async (page) => {

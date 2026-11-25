@@ -121,12 +121,12 @@ Elige un archivo de hasta 4 GiB. Una carga lenta puede tardar hasta 12 horas.
 Si la carga no termina, conserva el archivo seleccionado, mejora la conexión y vuelve a intentarlo.
 
 Después elige **Revisar copia**. La página muestra la copia elegida: su origen, el negocio, el
-local, la fecha, el nodo y la clave del servidor. Compruébalos antes de continuar.
+local, la fecha, el nodo y la clave maestra. Compruébalos antes de continuar.
 Mantén separados producción y preproducción. Si el manifiesto está dañado o incompleto, elige otra
 copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
 de volver a intentarlo.
 
-Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida; escríbela en **Clave del servidor**. Conserva también el paquete anterior si contiene esa clave.
+Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida; escríbela en **Clave maestra**. Conserva también el paquete anterior si contiene esa clave.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -140,12 +140,11 @@ vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clav
 archivo con tus otros documentos de recuperación. Abre **Copias de seguridad** desde el aviso del
 panel para configurar tus copias.
 
-Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** el paquete de
+Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
 recuperación que tenga la clave maestra de esta copia; o escribe la clave maestra impresa en él en
-**Clave del servidor**. Un paquete con una clave maestra más nueva no abre una copia anterior.
-Marca «El servidor anterior está apagado y seguirá desconectado.»,
-«Soy la única persona recuperando este contribuyente, en todos sus locales.» y «Estos datos son
-correctos.».
+**Clave maestra**. Un paquete con una clave maestra más nueva no abre una copia anterior.
+Marca «El servidor anterior se ha apagado.», «Soy la única persona recuperando este local.» y
+«Estos datos son correctos.».
 
 Si **Copias** no puede confirmar la clave guardada, conserva tanto la clave anterior como la que
 acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas claves mostradas
@@ -205,7 +204,7 @@ observaciones en otros dispositivos.
 
 La restauración sustituye la base de datos que ya está en este servidor.
 
-Escribe la clave maestra en **Clave del servidor**, marca las dos declaraciones y «Estos datos son
+Escribe la clave maestra en **Clave maestra**, marca las dos declaraciones y «Estos datos son
 correctos.», y elige **Continuar**. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Si el servidor no puede comprobar su hora
@@ -234,8 +233,8 @@ Si, después de elegir el botón de restaurar, el servidor necesita que vuelvas 
 la página donde lo elegiste muestra la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**, o **Este dispositivo** si la hora del servidor está
 mal. Si esa página se cerró, abre cualquier página del servidor en un móvil, ordenador o caja de la
-red del local e introduce la clave maestra de la copia elegida para ver
-el mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
+red del local y escribe la clave maestra de la copia elegida en **Clave maestra** para ver el
+mismo paso. Después la restauración sigue sola. Si en cambio el servidor muestra una página que
 dice que no pudo crear sus nuevas series de facturas, elige **Reintentar un arranque normal**, o
 **Descartar esta restauración** donde esa página lo ofrece y vuelve a restaurar.
 

@@ -1,8 +1,9 @@
 import type { SupportedLocale } from "@waitron/shared";
 
 /** The words of the page a restore's start shows while it waits to confirm its time. The key
- * field's label and refusal are the restore page's (`apps/setup` `restore.allocation_node_key`,
- * `restore.allocation_key_missing`); the clock step's are the done screen's. */
+ * field's label and wrong-key line are every master-key field's (`@waitron/recovery-pack`'s
+ * `MASTER_KEY_FIELD_WORDS`), copied so this module imports only types; its unnamed wrong-key line
+ * repeats setup's `restore.allocation_key_missing`; the clock step's are the done screen's. */
 export const START_CLOCK_WAITING_WORDS: Readonly<
   Record<
     SupportedLocale,
@@ -10,7 +11,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       title: string;
       why: string;
       keyLabel: string;
+      /** A wrong key with no name staged for the backup. */
       keyRefused: string;
+      /** `{keyName}` stands for the backup's master key's name. */
+      wrongKey: string;
       keyContinue: string;
       waitingForClock: string;
       deviceTime: string;
@@ -25,9 +29,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
 > = {
   "en-GB": {
     title: "The box is restoring your backup and is waiting to confirm its time.",
-    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
-    keyLabel: "Selected backup’s box key",
+    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
+    keyLabel: "Master key",
     keyRefused: "Enter the selected backup’s master key.",
+    wrongKey: "Wrong master key. Use the one dated {keyName}.",
     keyContinue: "Continue",
     waitingForClock:
       "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.",
@@ -43,9 +48,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   },
   "es-ES": {
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
-    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, introduce abajo la clave maestra de la copia para confirmar la hora desde este dispositivo.",
-    keyLabel: "Clave del servidor de la copia elegida",
+    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
+    keyLabel: "Clave maestra",
     keyRefused: "Introduce la clave maestra de la copia elegida.",
+    wrongKey: "Clave maestra incorrecta. Usa la del {keyName}.",
     keyContinue: "Continuar",
     waitingForClock:
       "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",

@@ -25,12 +25,18 @@ async function mount() {
   );
   const screen = host.querySelector("vf-conflict-recovery") as ConflictRecovery;
   await screen.updateComplete;
+  await screen.shadowRoot!.querySelector("wt-master-key-input")!.updateComplete;
   return screen;
+}
+function keyInput(screen: ConflictRecovery): HTMLElement {
+  return screen
+    .shadowRoot!.querySelector("wt-master-key-input")!
+    .shadowRoot!.querySelector("wt-input")!;
 }
 it("protects a typed recovery key on leaving, and Stop releases that draft", async () => {
   const screen = await mount();
   expect(unload()).toBe(false);
-  screen.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+  keyInput(screen).dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "private-key" },
       bubbles: true,
@@ -44,13 +50,11 @@ it("protects a typed recovery key on leaving, and Stop releases that draft", asy
   await screen.updateComplete;
   expect(unload()).toBe(false);
   expect(leaveCoordinatorFor(screen)?.isDirty()).toBe(false);
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("");
+  expect(keyInput(screen).shadowRoot!.querySelector("input")!.value).toBe("");
 });
 it("discards the key through the shared leave question, without making a request", async () => {
   const screen = await mount();
-  screen.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+  keyInput(screen).dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "private-key" },
       bubbles: true,
@@ -76,7 +80,13 @@ it("discards the key through the shared leave question, without making a request
   expect(await result).toBe("proceeded");
   expect(left).toBe(true);
   await screen.updateComplete;
-  expect(
-    screen.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value,
-  ).toBe("");
+  expect(keyInput(screen).shadowRoot!.querySelector("input")!.value).toBe("");
+});
+it("counts a partly typed key as the page's own draft", async () => {
+  const screen = await mount();
+  const input = keyInput(screen).shadowRoot!.querySelector("input")!;
+  input.value = "ABCD";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(leaveCoordinatorFor(screen)?.isDirty([screen])).toBe(true);
 });

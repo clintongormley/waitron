@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import type { Mock } from "vitest";
@@ -25,7 +25,7 @@ const selection = {
   taxId: "B12345674",
   environment: "production" as const,
   nodeId: "node-1",
-  keyName: "Caja principal",
+  keyName: "2026-10-17 · K7QX",
   country: "ES",
   fiscalTerritory: "common",
   timeZone: "Europe/Madrid",
@@ -101,18 +101,24 @@ function check(el: LitElement, name: string, value = true) {
   input!.checked = value;
   input!.dispatchEvent(new Event("change", { bubbles: true }));
 }
-async function enterKey(el: Entry) {
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+/** The master-key field's own text field, whose `error` is the line drawn under it. */
+async function keyInput(el: Entry) {
+  const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
   await key.updateComplete;
-  for (const [name, value] of [
-    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
-  ]) {
-    const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = value!;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  }
+  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
+    '[name="master-key"]',
+  )!;
+  await field.updateComplete;
+  return field;
+}
+async function typeKey(el: Entry, value: string) {
+  const field = await keyInput(el);
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+}
+async function enterKey(el: Entry) {
+  await typeKey(el, MASTER_KEY.replaceAll(" ", "").toLowerCase());
 }
 /** The key, both statements and the details tick, which on their own send nothing. */
 async function fill(el: Entry) {
@@ -299,10 +305,7 @@ it.each([
     expect(prepare).not.toHaveBeenCalled();
   },
 );
-const RESTORE_SERIES_LINE = "Waitron will start new invoice series for this box.";
-const seriesLine = (el: Entry) =>
-  el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.replace(/\s+/g, " ").trim();
-it("the key, both statements and the details tick send nothing until Proceed, and the page says new series will be made", async () => {
+it("the key, both statements and the details tick send nothing until Proceed", async () => {
   const { prepare } = scripted();
   const { el } = await mount(prepare);
   fakeClock();
@@ -312,42 +315,74 @@ it("the key, both statements and the details tick send nothing until Proceed, an
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     expect(prepare).not.toHaveBeenCalled();
-    expect(seriesLine(el)).toBe(RESTORE_SERIES_LINE);
     await proceed(el);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-    expect(el.shadowRoot!.querySelector("[data-test=series-line]")).toBeNull();
   } finally {
     vi.useRealTimers();
   }
 });
-it("the page says new series will be made only while the button reads Proceed, not during the wait after it", async () => {
-  const { prepare } = scripted([
-    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
-    selected,
-  ]);
-  const { el } = await mount(prepare);
-  fakeClock();
-  try {
-    await fill(el);
-    expect(seriesLine(el)).toBe(RESTORE_SERIES_LINE);
-    await proceed(el);
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
-    expect(el.shadowRoot!.querySelector("[data-test=series-line]")).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
+const statement = (el: LitElement, name: string) =>
+  el
+    .shadowRoot!.querySelector(`input[name="${name}"]`)
+    ?.closest("label")
+    ?.textContent?.replace(/\s+/g, " ")
+    .trim();
+it.each([
+  ["en", "The old box has been shut down. *", "I am the only person recovering this venue. *"],
+  ["es", "El servidor anterior se ha apagado. *", "Soy la única persona recuperando este local. *"],
+] as const)(
+  "%s: the statements say the old box has been shut down and name this venue, and no line says new series will be made",
+  async (locale, stopped, sole) => {
+    const { prepare } = scripted([
+      { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+      selected,
+    ]);
+    const { el } = await mount(prepare);
+    el.locale = locale;
+    await el.updateComplete;
+    fakeClock();
+    try {
+      expect(statement(el, "recovery-old-box-stopped")).toBe(stopped);
+      expect(statement(el, "recovery-sole-operation")).toBe(sole);
+      await fill(el);
+      expect(text(el)).not.toContain("invoice series for this box");
+      expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
+      await proceed(el);
+      await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
+      expect(text(el)).not.toContain("invoice series for this box");
+      expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+it("Clear hides an empty master key the person chose to show, so the next one typed is hidden", async () => {
+  const { el } = await mount();
+  const input = (await keyInput(el)).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  await page.getByRole("button", { name: "Show key", exact: true }).click();
+  expect(input.type).toBe("text");
+  await userEvent.click(button(el, "clear"));
+  await keyInput(el);
+  expect(input.type).toBe("password");
+  input.focus();
+  await userEvent.keyboard("8");
+  await keyInput(el);
+  expect(input.value).toBe("8");
+  expect(input.type).toBe("password");
 });
-const REFUSED_KEY = { code: "promotion.break_glass_invalid", params: {}, status: 403 };
+/** The key the box names, which is not the previewed backup's (`2026-10-17 · K7QX`). */
+const REFUSED_NAME = "2026-11-02 · QZJV";
+const REFUSED_KEY = {
+  code: "promotion.break_glass_invalid",
+  params: { keyName: REFUSED_NAME },
+  status: 403,
+};
+const WRONG_KEY = `Wrong master key. Use the one dated ${REFUSED_NAME}.`;
 /** The words under the printed key's own field. */
 async function keyFieldError(el: Entry) {
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
-  await field.updateComplete;
-  return field.error;
+  await el.updateComplete;
+  return (await keyInput(el)).error;
 }
 /** Proceed's enabled state, read on the host and on the native button inside it. */
 async function proceedEnabled(el: Entry) {
@@ -366,9 +401,7 @@ it("after the box refuses the key, Proceed stays enabled, and pressing it sends 
   });
   const { el } = await mount(prepare);
   await ready(el);
-  await vi.waitFor(async () =>
-    expect(await keyFieldError(el)).toBe("Check the key for this backup."),
-  );
+  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(WRONG_KEY));
   expect(await proceedEnabled(el)).toBe(true);
   expect(prepare).toHaveBeenCalledTimes(1);
   await userEvent.click(button(el, "compare"));
@@ -393,22 +426,18 @@ it.each([
     });
     const { el } = await mount(prepare);
     await ready(el);
-    await vi.waitFor(async () =>
-      expect(await keyFieldError(el)).toBe("Check the key for this backup."),
-    );
+    await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(WRONG_KEY));
     expect(await proceedEnabled(el)).toBe(true);
     check(el, name, false);
     expect(await proceedEnabled(el)).toBe(false);
-    expect(await keyFieldError(el)).toBe("Check the key for this backup.");
+    expect(await keyFieldError(el)).toBe(WRONG_KEY);
     check(el, name, true);
     expect(await proceedEnabled(el)).toBe(true);
-    expect(await keyFieldError(el)).toBe("Check the key for this backup.");
+    expect(await keyFieldError(el)).toBe(WRONG_KEY);
     expect(prepare).toHaveBeenCalledTimes(1);
     await userEvent.click(button(el, "compare"));
     await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
-    await vi.waitFor(async () =>
-      expect(await keyFieldError(el)).toBe("Check the key for this backup."),
-    );
+    await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(WRONG_KEY));
     await enterKey(el);
     expect(await keyFieldError(el)).toBe("");
     expect(await proceedEnabled(el)).toBe(true);
@@ -489,11 +518,7 @@ it.each(["key", "isolation", "clear", "disconnect"])(
     await ready(el);
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
     if (fault === "key") {
-      const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-      const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
-      const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-      input.value = "bad";
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await typeKey(el, "bad");
     }
     if (fault === "isolation") check(el, "recovery-sole-operation", false);
     if (fault === "clear") el.clear();
@@ -514,12 +539,7 @@ it("keeps a refused named key beside its native field and leaves Proceed enabled
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
     ).toBe("Could not complete this step."),
   );
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
-  await field.updateComplete;
+  const field = await keyInput(el);
   expect(field.error).toBe("Check the key for this backup.");
   expect(button(el, "compare").disabled).toBe(false);
 });
@@ -620,12 +640,7 @@ it("clears a parent request's key refusal when the printed control is edited", a
   el.addEventListener("recovery-field-edited", (event) =>
     edited.push((event as CustomEvent).detail.field),
   );
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
-  await field.updateComplete;
+  const field = await keyInput(el);
   expect(field.error).toBe("This backup needs its older key.");
   expect(
     (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
@@ -634,7 +649,6 @@ it("clears a parent request's key refusal when the printed control is edited", a
   input.value = input.value.toUpperCase();
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
-  await key.updateComplete;
   await field.updateComplete;
   expect(field.error).toBe("");
   expect(edited).toEqual(["nodeRecoverySecret"]);
@@ -662,11 +676,7 @@ it("drops a late selected answer after the matching printed key changes", async 
       comparisonId: "comparison",
     }),
   );
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
-  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = "bad";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await typeKey(el, "bad");
   release(selected);
   await held;
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -688,12 +698,7 @@ it("explains a missing key at its real field and focuses it after an attempted r
   const { el } = await mount();
   el.readCredentials();
   await el.updateComplete;
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
-  await field.updateComplete;
+  const field = await keyInput(el);
   expect(field.error).not.toBe("");
   await vi.waitFor(() =>
     expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input")),
@@ -734,15 +739,24 @@ it("tracks declarations and clears native fields and selected input on Discard",
   expect(await pending).toBe("proceeded");
   await el.updateComplete;
   expect(el.readCredentials()).toBeNull();
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
-  await field.updateComplete;
+  const field = await keyInput(el);
   expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe("");
   expect(
     el.shadowRoot!.querySelector<HTMLInputElement>('[name="recovery-old-box-stopped"]')!.checked,
   ).toBe(false);
   expect(shell.leave.coordinator.isDirty([el])).toBe(false);
+});
+it("counts a partly typed key as the recovery form's draft", async () => {
+  const shell = document.createElement("recovery-hour-test-shell") as RecoveryShell;
+  document.body.append(shell);
+  hosts.push(shell);
+  await shell.updateComplete;
+  const { el } = await mount();
+  shell.append(el);
+  await el.updateComplete;
+  await typeKey(el, "ABCD");
+  await el.updateComplete;
+  expect(shell.leave.coordinator.isDirty([el])).toBe(true);
 });
 it("places the recovery authenticator's real refusal beside the key and leaves Proceed enabled to send it again", async () => {
   const { el } = await mount(
@@ -756,12 +770,7 @@ it("places the recovery authenticator's real refusal beside the key and leaves P
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
     ).not.toBe(""),
   );
-  const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
-  await key.updateComplete;
-  const field = key.shadowRoot!.querySelector<LitElement & { error: string }>(
-    '[name="printed-recovery-key"]',
-  )!;
-  await field.updateComplete;
+  const field = await keyInput(el);
   expect(field.error).toBe("Check the key for this backup.");
   expect(button(el, "compare").disabled).toBe(false);
 });
@@ -1352,7 +1361,6 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   state.decision = noSecondClock;
   el.locale = "es";
   await el.updateComplete;
-  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
   fakeClock();
   try {
     await ready(el);
@@ -1882,13 +1890,13 @@ it("a Spanish handover start names each new series' use and offers Continuar", a
     return promotionSelected;
   });
   const el = await mountPromotion(prepare);
+  expect(text(el)).not.toContain("invoice series for this box");
   el.locale = "es";
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.trim()).toBe(
-    "Waitron creará series de facturas nuevas para este servidor.",
-  );
   check(el, "recovery-details-confirmed");
   await el.updateComplete;
+  expect(action(el)).toBe("Continuar");
+  expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
   await proceed(el);
   await vi.waitFor(() =>
     expect(seriesRows(el)).toEqual([
@@ -1958,7 +1966,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
   });
   host.append(el);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
   expect(
     [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
       (input) => input.name,
@@ -2461,12 +2469,6 @@ it.each([
     await vi.waitFor(() => expect(text(el)).toContain(words));
   },
 );
-it("the Spanish series line says new series will be made", async () => {
-  const { el } = await mount();
-  el.locale = "es";
-  await el.updateComplete;
-  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
-});
 const detailRows = (el: LitElement, list: string) =>
   [...el.shadowRoot!.querySelectorAll(`[data-test=${list}] > div`)].map((row) => [
     row.querySelector("dt")?.textContent?.trim(),
@@ -2882,7 +2884,7 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
   expect(text(el)).not.toContain("These details are correct.");
   expect(text(el)).not.toContain("Check this venue");
   expect(el.shadowRoot!.querySelector("[data-test=venue-review]")).toBeNull();
-  for (const name of ["series-line", "edit-details", "clear", "compare", "continue"])
+  for (const name of ["edit-details", "clear", "compare", "continue"])
     expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
   el.requestUpdate();
   await el.updateComplete;
@@ -3459,4 +3461,213 @@ it("on an emergency switch a refused check shows its refusal and Try again with 
     error: string;
   };
   expect(actions.error).toBe(recoveryHourStrings.en.promotionThrottled);
+});
+
+async function recoveryPack(
+  file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const { default: monoUrl } = await import("../assets/register-noto-sans-mono.ttf?url");
+  const { renderRecoveryPack } = await import("@waitron/recovery-pack");
+  const fontUrl = (await import("../assets/register-noto-sans.ttf?url")).default;
+  const madeAt = "2026-10-17T12:40:00.000Z";
+  return renderRecoveryPack({
+    locale: "en",
+    timeZone: "Europe/Madrid",
+    loadFonts: async () => ({
+      regular: new Uint8Array(await (await fetch(fontUrl)).arrayBuffer()),
+      mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
+    }),
+    pack: { venueName: "Olivo Centro", madeAt, number: 3 },
+    parts: [],
+    file: {
+      kind: "waitron-recovery-pack",
+      version: 2,
+      number: 3,
+      madeAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      serverKey: null,
+      serverKeyName: null,
+      serverKeyHeldBy: null,
+      masterKey: MASTER_KEY,
+      masterKeyName: selection.keyName,
+      masterKeyHeldBy: null,
+      ...file,
+    },
+  });
+}
+/**
+ * Chooses a PDF through the field's own file input, as the button's file dialog would, and waits
+ * for the field to show what it read.
+ */
+async function choosePdf(el: Entry, bytes: Uint8Array<ArrayBuffer>) {
+  const key = el.shadowRoot!.querySelector<LitElement & { pdfRead: Promise<void> | null }>(
+    "wt-master-key-input",
+  )!;
+  await key.updateComplete;
+  const chooser = key.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const files = new DataTransfer();
+  files.items.add(new File([bytes], "recovery.pdf", { type: "application/pdf" }));
+  chooser.files = files.files;
+  chooser.dispatchEvent(new Event("change", { bubbles: true }));
+  await key.pdfRead;
+  await el.updateComplete;
+}
+/** The markup and text of a node and of every shadow root under it. */
+function markupWithin(node: Element): string {
+  const root = node.shadowRoot;
+  if (root === null) return "";
+  return [
+    root.innerHTML,
+    root.textContent,
+    ...[...root.querySelectorAll("*")].map(markupWithin),
+  ].join("\n");
+}
+const sentKeys = (prepare: Mock<(request: { proposal: unknown }) => Promise<unknown>>) =>
+  prepare.mock.calls.map(
+    ([r]) => (r as unknown as { nodeRecoverySecret?: string }).nodeRecoverySecret,
+  );
+it("the restore review takes the master key, typed in any form, and sends its printed form as nodeRecoverySecret", async () => {
+  const { el, prepare } = await mount();
+  const key = el.shadowRoot!.querySelector<LitElement & { keyName?: string }>(
+    "wt-master-key-input",
+  )!;
+  expect(key, "the restore review draws the master-key field").not.toBeNull();
+  expect(key.keyName).toBe(selection.keyName);
+  const field = await keyInput(el);
+  expect((field as unknown as { label: string }).label).toBe("Master key");
+  expect(field.shadowRoot!.querySelector("input")!.placeholder).toBe("");
+  expect(text(key as unknown as Entry)).toContain("Choose the recovery pack PDF");
+  const raw = MASTER_KEY.replaceAll(" ", "");
+  await typeKey(
+    el,
+    `${raw.slice(0, 9).toLowerCase()}-\t${raw.slice(9, 20)}\n ${raw.slice(20).toLowerCase()}`,
+  );
+  check(el, "recovery-old-box-stopped");
+  check(el, "recovery-sole-operation");
+  check(el, "recovery-details-confirmed");
+  await proceed(el);
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  expect(el.readCredentials()!.nodeRecoverySecret).toBe(MASTER_KEY);
+  expect(new Set(sentKeys(prepare))).toEqual(new Set([MASTER_KEY]));
+});
+it("choosing a pack PDF fills the master key", async () => {
+  const { el, prepare } = await mount();
+  await choosePdf(el, await recoveryPack({}));
+  expect(field(await keyInput(el)).value).toBe(MASTER_KEY);
+  const shown = [el.outerHTML, markupWithin(el)].join("\n");
+  expect(shown, "the check reads the master-key field's own markup").toContain('name="master-key"');
+  for (const form of [MASTER_KEY, MASTER_KEY.replaceAll(" ", "")]) {
+    expect(el.outerHTML).not.toContain(form);
+    expect(el.shadowRoot!.textContent).not.toContain(form);
+    expect(shown).not.toContain(form);
+  }
+  check(el, "recovery-old-box-stopped");
+  check(el, "recovery-sole-operation");
+  check(el, "recovery-details-confirmed");
+  await proceed(el);
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  expect(new Set(sentKeys(prepare))).toEqual(new Set([MASTER_KEY]));
+});
+const field = (input: LitElement) => input.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+it.each([
+  [
+    "a pack for another master key",
+    () => recoveryPack({ masterKeyName: "2026-09-02 · ABCD" }),
+    "Wrong master key. Use the one dated 2026-10-17 · K7QX.",
+  ],
+  [
+    "a pack that does not hold the master key",
+    () => recoveryPack({ masterKey: null, masterKeyHeldBy: 1 }),
+    "This recovery pack does not hold the master key. It is on recovery pack 1: choose that pack, or type the key from it.",
+  ],
+  [
+    "a PDF that is not a recovery pack",
+    async () => {
+      const { PDFDocument } = await import("pdf-lib");
+      const stripped = await PDFDocument.create();
+      stripped.addPage();
+      return new Uint8Array(await stripped.save());
+    },
+    "This PDF is not a recovery pack.",
+  ],
+] as const)("choosing %s says so under the field and sends no key", async (_, bytes, line) => {
+  const { el, prepare } = await mount();
+  await choosePdf(el, await bytes());
+  expect(await keyFieldError(el)).toBe(line);
+  expect(field(await keyInput(el)).value).toBe("");
+  check(el, "recovery-old-box-stopped");
+  check(el, "recovery-sole-operation");
+  check(el, "recovery-details-confirmed");
+  expect(el.readCredentials()).toBeNull();
+  expect(prepare).not.toHaveBeenCalled();
+});
+it.each([
+  ["names another key than the preview's", REFUSED_KEY, WRONG_KEY],
+  [
+    "names no key",
+    { code: "promotion.break_glass_invalid", params: {}, status: 403 },
+    "Check the key for this backup.",
+  ],
+])("a refusal that %s says so under the field until the key changes", async (_, refusal, line) => {
+  const { prepare } = scripted();
+  prepare.mockImplementation(async () => {
+    throw refusal;
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(line));
+  await typeKey(el, "q");
+  expect(await keyFieldError(el)).toBe("");
+});
+it("a key refused twice shows the wrong-key line both times", async () => {
+  const { prepare } = scripted();
+  prepare.mockImplementation(async () => {
+    throw REFUSED_KEY;
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(WRONG_KEY));
+  await enterKey(el);
+  expect(await keyFieldError(el)).toBe("");
+  const before = prepare.mock.calls.length;
+  await proceed(el);
+  await vi.waitFor(() => expect(prepare.mock.calls.length).toBeGreaterThan(before));
+  await vi.waitFor(async () => expect(await keyFieldError(el)).toBe(WRONG_KEY));
+});
+it.each(["controlled", "emergency"] as const)(
+  "promoting draws no master-key field (%s)",
+  async (scenario) => {
+    const el = await mountPromotion(
+      vi.fn(async () => new Promise<never>(() => {})),
+      scenario,
+    );
+    expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+  },
+);
+it("the parent's refusal of the master key shows under the field, and twice", async () => {
+  const { el } = await mount();
+  await fill(el);
+  const edited: string[] = [];
+  el.addEventListener("recovery-field-edited", (event) =>
+    edited.push((event as CustomEvent).detail.field),
+  );
+  const refuse = async () => {
+    el.errorMessage = WRONG_KEY;
+    el.refusedField = "nodeRecoverySecret";
+    await el.updateComplete;
+  };
+  await refuse();
+  expect(await keyFieldError(el)).toBe(WRONG_KEY);
+  expect(
+    (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+  ).toBe("Could not complete this step.");
+  await enterKey(el);
+  expect(await keyFieldError(el)).toBe("");
+  expect(edited).toEqual(["nodeRecoverySecret"]);
+  el.refusedField = undefined;
+  await el.updateComplete;
+  await refuse();
+  expect(await keyFieldError(el)).toBe(WRONG_KEY);
 });

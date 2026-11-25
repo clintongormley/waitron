@@ -6473,9 +6473,9 @@ describe("a recovery request refused because another setup holds the server", ()
     await allocation.updateComplete;
     const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
     await entry.updateComplete;
-    const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+    const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
     await key.updateComplete;
-    const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
+    const field = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
     input.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();

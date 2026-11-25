@@ -420,6 +420,20 @@ test("masks a password when its form replaces or clears it", async () => {
   }
 });
 
+test("maskPassword masks an empty shown password, and says nothing of one never shown", async () => {
+  const { field, input } = await mountPassword();
+  field.value = "";
+  field.maskPassword();
+  await field.updateComplete;
+  expect(page.getByRole("status").element().textContent).toBe("");
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  expect(input.type).toBe("text");
+  field.maskPassword();
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+});
+
 test("keeps edits visible until the person empties the field", async () => {
   const { input } = await mountPassword();
   await page.getByRole("button", { name: "Show password", exact: true }).click();
@@ -432,6 +446,59 @@ test("keeps edits visible until the person empties the field", async () => {
   expect(input.value).toBe("");
   expect(input.type).toBe("password");
   expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+});
+
+test("keeps a password shown when its form puts back its own form of what was typed", async () => {
+  const { field, input } = await mountPassword();
+  field.addEventListener("wt-change", () => (field.value = field.value.toUpperCase()));
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  await userEvent.keyboard("x");
+  await field.updateComplete;
+  expect(input.value).toContain("X");
+  expect(input.value).toBe(field.value);
+  expect(input.type).toBe("text");
+});
+
+test("masks a password its form replaces once it has handled what was typed", async () => {
+  const { field, input } = await mountPassword();
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  await userEvent.keyboard("x");
+  await field.updateComplete;
+  expect(input.type).toBe("text");
+  field.value = field.value.toUpperCase();
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+});
+
+test("masks a password its form replaces with one the person typed before", async () => {
+  const { field, input } = await mountPassword();
+  input.focus();
+  await userEvent.keyboard("x");
+  const typed = field.value;
+  for (const value of ["", typed]) {
+    await page.getByRole("button", { name: "Show password", exact: true }).click();
+    field.value = value;
+    await field.updateComplete;
+    expect(input.value).toBe(value);
+    expect(input.type).toBe("password");
+  }
+});
+
+test.each([
+  ["empties what was typed", "x", ""],
+  ["fills the field the person emptied", "{Backspace}", "a saved secret"],
+])("masks a password when its form %s", async (_case, keys, replacement) => {
+  const { field, input } = await mountPassword();
+  field.addEventListener("wt-change", () => (field.value = replacement));
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  input.select();
+  await userEvent.keyboard(keys);
+  await field.updateComplete;
+  expect(input.value).toBe(replacement);
+  expect(input.type).toBe("password");
 });
 
 test("masks a password while its form disables the field", async () => {
@@ -504,6 +571,21 @@ test.each(["light", "dark"])(
     expect(getComputedStyle(slash).stroke).toBe("rgb(24, 25, 26)");
   },
 );
+
+test("draws the password eye's slash only while the password is shown", async () => {
+  const { field } = await mountPassword();
+  const paths = () => [...field.shadowRoot!.querySelectorAll("wt-button svg path")];
+  expect(paths()).toHaveLength(1);
+
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  await vi.waitFor(() => expect(paths()).toHaveLength(2));
+  const slash = paths()[1]!;
+  expect.soft(slash.namespaceURI).toBe("http://www.w3.org/2000/svg");
+  expect.soft(slash.getBoundingClientRect().width).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Hide password", exact: true }).click();
+  await vi.waitFor(() => expect(paths()).toHaveLength(1));
+});
 
 test("select() selects the whole value of the native input", async () => {
   const el = (await mount(

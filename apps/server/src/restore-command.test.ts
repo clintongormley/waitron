@@ -804,10 +804,28 @@ describe("waitron-restore restore --from-bucket", () => {
       new AppError("restore.environment_mismatch", { backup: "production", target: "x" }),
       "restore failed: restore.environment_mismatch",
     ],
+    [
+      new AppError("promotion.break_glass_invalid", {}),
+      "restore failed: promotion.break_glass_invalid — use the selected backup's master key",
+    ],
     [new AppError("server.config_invalid", { variable: "x", reason: "y" }), "restore failed"],
     [new Error("EACCES: open '/var/lib/waitron/S3CR3T'"), "restore failed"],
   ])("says what went wrong in words: %s", async (error, line) => {
     expect(await refusedWith(error)).toEqual({ code: 1, out: [BUCKET_NOTICE, line] });
+  });
+
+  it("names the master key from the refusal in the terminal", async () => {
+    expect(
+      await refusedWith(
+        new AppError("promotion.break_glass_invalid", { keyName: "2026-11-02 · QZJV" }),
+      ),
+    ).toEqual({
+      code: 1,
+      out: [
+        BUCKET_NOTICE,
+        "restore failed: promotion.break_glass_invalid — wrong master key; use the one dated 2026-11-02 · QZJV",
+      ],
+    });
   });
 
   it("reports a file with no kit in it by what is wrong, never its contents", async () => {
