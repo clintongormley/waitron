@@ -77,6 +77,7 @@ export class TillLockScreen extends LitElement {
 
       /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
       .screen {
+        inline-size: 100%;
         max-width: var(--wt-till-form-column-width);
         margin-inline: auto;
       }
@@ -85,11 +86,14 @@ export class TillLockScreen extends LitElement {
         display: flex;
         flex: 1;
         flex-direction: column;
-        inline-size: 100%;
       }
 
-      .pin-screen .pad-wrap {
-        margin-block-start: auto;
+      /* A live notice scrolls within its own space so it cannot move keys under a finger. */
+      .pin-notices {
+        flex: 1;
+        min-block-size: var(--wt-tap-min);
+        overflow: auto;
+        contain: size;
       }
 
       .pin-screen .switch-device {
@@ -704,7 +708,7 @@ export class TillLockScreen extends LitElement {
         >
         ${throttled ? html`<span class="pin-countdown" aria-hidden="true">${t("login.throttled").replace("{n}", String(this.#throttle.remaining))}</span>` : nothing}
       </div>
-      ${this.compact ? nothing : html`${this.#renderNotices()}${this.#renderServers()}`}
+      ${this.compact ? nothing : html`<div class="pin-notices">${this.#renderNotices()}${this.#renderServers()}</div>`}
       <div class="pad-wrap" ?inert=${throttled}>
         <till-numeric-pad
           mode="pin"
@@ -722,7 +726,7 @@ export class TillLockScreen extends LitElement {
           ?disabled=${this.compact && this.signingIn}
           @click=${() => this.#cancel()}
         >
-          ${this.compact ? t("action.cancel") : t("login.not_person").replace("{name}", person.displayName)}
+          ${this.compact ? t("action.cancel") : t("login.not_person").replace("{name}", () => person.displayName)}
         </wt-button>
         <wt-button
           class="submit"

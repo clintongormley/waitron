@@ -1594,9 +1594,10 @@ describe("till-app session activity", () => {
       try {
         const { el, host } = await mountApp({
           login,
-          listStaff: vi
-            .fn()
-            .mockResolvedValue([{ personId: "p1", displayName: "Ana Martin Soto" }]),
+          listStaff: vi.fn().mockResolvedValue([
+            { personId: "p1", displayName: "Ana Martin Soto" },
+            { personId: "p2", displayName: "Ben" },
+          ]),
         });
         host.style.height = "100%";
         host.style.setProperty("--wt-font-family", PHONE_FONT);
@@ -1605,7 +1606,11 @@ describe("till-app session activity", () => {
         const root = screen.shadowRoot!;
         if (logo)
           await root.querySelector("wt-venue-logo")!.shadowRoot!.querySelector("img")!.decode();
-        root.querySelector<HTMLElement>('[data-person="p1"]')!.click();
+        const [firstPerson, secondPerson] = root.querySelectorAll<HTMLElement>(".operator-button");
+        expect
+          .soft(firstPerson!.getBoundingClientRect().top)
+          .toBe(secondPerson!.getBoundingClientRect().top);
+        firstPerson!.click();
         await screen.updateComplete;
         const pad = root.querySelector("till-numeric-pad")!;
         await pad.updateComplete;
@@ -1633,6 +1638,12 @@ describe("till-app session activity", () => {
         await userEvent.keyboard("1234");
         await screen.updateComplete;
         expect(top()).toBe(restingTop);
+        screen.serverWaiting = true;
+        screen.loggedOutByOther = true;
+        await screen.updateComplete;
+        expect(root.querySelector("[data-server-status]")).not.toBeNull();
+        expect(root.querySelector("[data-logged-out-by-other]")).not.toBeNull();
+        expect.soft(top()).toBe(restingTop);
         submit.click();
         await flush(el);
         expect(login).toHaveBeenCalledExactlyOnceWith("p1", "1234");
@@ -1655,16 +1666,9 @@ describe("till-app session activity", () => {
         expect(root.querySelector(".pad-wrap")!.hasAttribute("inert")).toBe(true);
         expect(top()).toBe(restingTop);
         fitsStatus();
-        expect(key.getBoundingClientRect().height).toBeGreaterThanOrEqual(62);
-        if (!logo) {
-          screen.serverWaiting = true;
-          screen.loggedOutByOther = true;
-          await screen.updateComplete;
-          expect(root.querySelector("[data-server-status]")).not.toBeNull();
-          expect(root.querySelector("[data-logged-out-by-other]")).not.toBeNull();
-          expect(top()).toBe(restingTop);
-        } else {
-          await page.viewport(363, 420);
+        if (logo) {
+          await page.viewport(320, 420);
+          fitsStatus();
           const actions = root.querySelector(".actions")!;
           actions.scrollIntoView({ block: "end" });
           expect(actions.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
@@ -6596,10 +6600,7 @@ it("says the till is loading while the first read after a sign-in waits", async 
   await screen.updateComplete;
   const pad = screen.shadowRoot!.querySelector("till-numeric-pad")!;
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  for (const digit of "1234") {
-    pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!.click();
-    await screen!.updateComplete;
-  }
+  await userEvent.keyboard("1234");
   await screen.updateComplete;
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await flush(el);

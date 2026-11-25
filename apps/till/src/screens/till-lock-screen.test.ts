@@ -362,32 +362,21 @@ describe("till-lock-screen", () => {
     expect(query(el, ".pin-countdown")!.textContent?.trim()).toBe("1 s");
   });
 
-  it("clears selection and PIN when Not Ana? is used", async () => {
-    const api = stubApi();
+  it("clears selection and PIN when the named button is used", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([{ ...ana, displayName: "Ana $&" }, ben]),
+    });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     await type(el, "12");
-    expect(query(el, ".cancel")!.textContent?.trim()).toBe("Not Ana?");
+    expect(query(el, ".cancel")!.textContent?.trim()).toBe("Not Ana $&?");
     click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, "till-numeric-pad")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("login.pick_operator"));
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
-  });
-
-  it("keeps Log in disabled until four digits are entered", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
-    await flush(el);
-    click(el, 'wt-button.operator-button[data-person="p1"]');
-    await el.updateComplete;
-    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
-    await type(el, "123");
-    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
-    await press(el, "4");
-    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("logs in with (personId, pin) and emits logged-in with the confirmed personId, name + permissions", async () => {
@@ -1497,9 +1486,10 @@ describe("typing on the sign-in PIN pad with a keyboard", () => {
   it("requires four digits for Log in by keyboard or button", async () => {
     const api = stubApi();
     const el = await pinFor(api);
+    const submit = query(el, "wt-button.submit") as HTMLElement;
+    expect(submit.hasAttribute("disabled")).toBe(true);
     await userEvent.keyboard("012");
     await el.updateComplete;
-    const submit = query(el, "wt-button.submit") as HTMLElement;
     expect(submit.hasAttribute("disabled")).toBe(true);
     submit.click();
     await userEvent.keyboard("{Enter}");
