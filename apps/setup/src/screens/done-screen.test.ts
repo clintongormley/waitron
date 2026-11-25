@@ -113,61 +113,49 @@ afterEach(() => {
 });
 
 describe("setup-done-screen", () => {
-  it.each(["key label from copy", "2026-02-30 · K7QF", "2026-99-15 · K7QF"])(
-    "keeps a malformed stored label visible without inventing a date: %s",
-    async (name) => {
-      const el = await mountDone(() => new Promise(() => {}), {
-        breakGlassSecret: "key-on-paper",
-        breakGlassKeyName: name,
-      });
-      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
-      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
-    },
-  );
-
-  it.each([
-    ["en-GB", "Box key 15 Oct 2026 · K7QF"],
-    ["es-ES", "Clave del servidor 15 oct 2026 · K7QF"],
-  ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
-    setLocale(locale);
-    const el = await mountDone(() => new Promise(() => {}), {
-      breakGlassSecret: "key-on-paper",
-      breakGlassKeyName: "2026-10-15 · K7QF",
-    });
-    expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
-    expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
-    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
-    setLocale(locale === "en-GB" ? "es-ES" : "en-GB");
-    await el.updateComplete;
-    expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
-      locale === "en-GB" ? "Clave del servidor 15 oct 2026 · K7QF" : "Box key 15 Oct 2026 · K7QF",
-    );
-    expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
-  });
-
-  it("links to the Preparation PDF while the page is open", async () => {
+  it("hands the master key box the pack PDF while the page is open, and drops it on leaving", async () => {
     const el = await mountDone(() => new Promise(() => {}), {
       onboardingIntent: "prepare",
-      breakGlassSecret: "key-on-paper",
+      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      masterKeyName: "2026-11-23 · QZJV",
       recoveryPackPdf: btoa("%PDF-test"),
     });
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
-      "[data-test=download-recovery-pack]",
-    );
-    expect(link).not.toBeNull();
-    expect(link!.textContent?.trim()).toBe("Download recovery pack (PDF)");
-    expect(q(el, "[data-test=break-glass-warning]")?.textContent).toContain(
-      "The recovery pack contains the box key",
-    );
-    expect(link!.download).toBe("waitron-recovery-pack.pdf");
-    const response = await fetch(link!.href);
+    const box = el.shadowRoot!.querySelector<HTMLElement & { pdfUrl?: string }>(
+      "wt-master-key-box",
+    )!;
+    const href = box.pdfUrl!;
+    const response = await fetch(href);
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(await response.text()).toBe("%PDF-test");
-    expect(q(el, "[data-test=break-glass-save]")).toBeNull();
-    const href = link!.href;
     el.remove();
     await expect(fetch(href)).rejects.toThrow();
   });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "a preparation setup's finished page shows no box key (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), {
+        onboardingIntent: "prepare",
+        masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+        masterKeyName: "2026-11-23 · QZJV",
+        recoveryPackPdf: btoa("%PDF-pack"),
+      });
+      expect(q(el, "[data-test=master-key-box]")).not.toBeNull();
+      el.shadowRoot!.querySelector("wt-master-key-box")!.dispatchEvent(
+        new CustomEvent("wt-master-key-used", { bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      await userEvent.click(q(el, "[data-test=pack-continue]")!);
+      await el.updateComplete;
+      expect(q(el, "[data-test=links]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-test^="break-glass"]')).toBeNull();
+      expect(q(el, "[data-test=recovery-pack-replacement]")).toBeNull();
+      expect(el.shadowRoot!.textContent).not.toMatch(/box key|clave del servidor/i);
+      const declared = [...SetupDoneScreen.elementProperties.keys()].map(String);
+      expect(declared.filter((name) => name.startsWith("breakGlass"))).toEqual([]);
+    },
+  );
 
   it("announces the restart on the provision/restore path", async () => {
     const el = await mountDone(() => new Promise(() => {}));
@@ -1133,7 +1121,6 @@ describe("setup-done-screen", () => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), {
         mirrorJoin: true,
-        breakGlassSecret: "bg-9f3a",
         contactUrl: "https://box-41aa.waitron.local",
       });
       const tasks = [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")];
@@ -1143,8 +1130,6 @@ describe("setup-done-screen", () => {
       expect(status.getAttribute("role")).toBe("status");
       expect(q(el, "h1")!.nextElementSibling).toBe(q(el, "[data-test=joining-tasks]"));
       expect(q(el, "[data-test=joining-tasks]")!.nextElementSibling).toBeNull();
-      expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
-      expect(q(el, "[data-test=break-glass]")).toBeNull();
       expect(q(el, "setup-box-label")).toBeNull();
       expect(el.shadowRoot!.textContent!).not.toMatch(/will not change|no cambiará/);
       expect(el.shadowRoot!.textContent!).not.toMatch(/encryption key|cifrado/);
@@ -1212,7 +1197,7 @@ describe("setup-done-screen", () => {
     async (locale) => {
       setLocale(locale);
       const getStatus = vi.fn().mockRejectedValue(new Error("404"));
-      const el = await mountDone(getStatus, { mirrorJoin: true, breakGlassSecret: "bg-9f3a" });
+      const el = await mountDone(getStatus, { mirrorJoin: true });
       await afterATimerTurn(el);
       expect(getStatus).not.toHaveBeenCalled();
       const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
@@ -1233,26 +1218,6 @@ describe("setup-done-screen", () => {
     expect(getStatus).not.toHaveBeenCalled();
     expect(q(el, "[data-test=status]")).toBeNull();
     expect(q(el, "[data-test=reload]")).toBeNull();
-  });
-
-  it("sets the break-glass secret in the design system's monospace font", async () => {
-    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
-      api: apiWith(() => new Promise(() => {})),
-      startDelayMs: 0,
-      breakGlassSecret: "bg-9f3a",
-    });
-    host.style.setProperty("--wt-font-family-mono", "serif");
-    const secret = q(el, "[data-test=break-glass-secret]")!;
-    expect(getComputedStyle(secret).fontFamily).toBe("serif");
-  });
-
-  it("tells the operator how to keep the break-glass secret on a trading server", async () => {
-    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
-    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
-    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning.trim()).toBe(
-      "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
-    );
   });
 
   it("shows the finished setup in Spanish", async () => {
@@ -1317,25 +1282,11 @@ describe("setup-done-screen", () => {
     expect(steps).toContain("puerto 9110");
   });
 
-  it("shows the joining screen in Spanish, keeping the key back until the box has joined", async () => {
+  it("shows the joining screen in Spanish", async () => {
     setLocale("es-ES");
-    const el = await mountDone(() => new Promise(() => {}), {
-      mirrorJoin: true,
-      breakGlassSecret: "bg-9f3a",
-    });
+    const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
-    expect(q(el, "[data-test=break-glass]")).toBeNull();
-    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
     expect(q(el, "[data-test=status]")).toBeNull();
-  });
-
-  it("tells a trading server's operator in Spanish how to keep the break-glass code", async () => {
-    setLocale("es-ES");
-    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
-    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning.trim()).toBe(
-      "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
-    );
   });
 
   it("redraws in Spanish on a live language switch", async () => {
@@ -1345,139 +1296,6 @@ describe("setup-done-screen", () => {
     await el.updateComplete;
     expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
     expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("En vivo");
-  });
-});
-
-describe("saving the server key as a file", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  /** Spies the browser download so a test reads the file the button saves instead. */
-  function captureSaves() {
-    const realURL = URL.createObjectURL.bind(URL);
-    const blobs: Blob[] = [];
-    const urls: string[] = [];
-    const names: string[] = [];
-    const hrefs: string[] = [];
-    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
-      blobs.push(blob as Blob);
-      const url = realURL(blob);
-      urls.push(url);
-      return url;
-    });
-    const revoke = vi.spyOn(URL, "revokeObjectURL");
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      names.push(this.download);
-      hrefs.push(this.href);
-    });
-    return { blobs, urls, names, hrefs, revoke };
-  }
-
-  it("saves the key and its name as one text file, and keeps the key on screen", async () => {
-    const saves = captureSaves();
-    const el = await mountDone(() => new Promise(() => {}), {
-      breakGlassSecret: "key-on-paper",
-      breakGlassKeyName: "2026-10-15 · K7QF",
-    });
-    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
-    expect(saves.names).toEqual(["waitron-server-key-2026-10-15-K7QF.txt"]);
-    expect(saves.hrefs).toEqual([saves.urls[0]]);
-    expect(saves.blobs).toHaveLength(1);
-    expect(saves.blobs[0]!.type).toBe("text/plain;charset=utf-8");
-    expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
-      "Waitron box key",
-      "Box key 15 Oct 2026 · K7QF",
-      "",
-      "key-on-paper",
-      "",
-      "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
-      "",
-    ]);
-    expect(saves.revoke).toHaveBeenCalledWith(saves.urls[0]);
-    expect(document.querySelector(`a[href="${saves.urls[0]}"]`)).toBeNull();
-    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
-    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
-  });
-
-  it("writes the file in Spanish when the screen is in Spanish", async () => {
-    setLocale("es-ES");
-    const saves = captureSaves();
-    const el = await mountDone(() => new Promise(() => {}), {
-      breakGlassSecret: "key-on-paper",
-      breakGlassKeyName: "2026-10-15 · K7QF",
-    });
-    const button = q(el, "[data-test=break-glass-save]")!;
-    expect(button.textContent!.trim()).toBe("Guardar en un archivo");
-    await userEvent.click(button);
-    expect(saves.names).toEqual(["waitron-server-key-2026-10-15-K7QF.txt"]);
-    expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
-      "Clave del servidor de Waitron",
-      "Clave del servidor 15 oct 2026 · K7QF",
-      "",
-      "key-on-paper",
-      "",
-      "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
-      "",
-    ]);
-    setLocale("en-GB");
-  });
-
-  it.each([
-    ["a Preparation setup", { onboardingIntent: "prepare" }],
-    ["a Live setup", { onboardingIntent: "live" }],
-  ] as const)(
-    "claims in neither the screen nor the file of %s that the key restores or promotes",
-    async (_, extra) => {
-      const saves = captureSaves();
-      const el = await mountDone(() => new Promise(() => {}), {
-        ...extra,
-        breakGlassSecret: "key-on-paper",
-      });
-      const claim = /need it|promot|restor/i;
-      expect(q(el, "[data-test=break-glass-warning]")!.textContent).not.toMatch(claim);
-      await userEvent.click(q(el, "[data-test=break-glass-save]")!);
-      const text = await saves.blobs[0]!.text();
-      expect(text).not.toMatch(claim);
-    },
-  );
-
-  it("falls back to a plain file name and leaves out the name line when the key has no name", async () => {
-    const saves = captureSaves();
-    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "key-on-paper" });
-    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
-    expect(saves.names).toEqual(["waitron-server-key.txt"]);
-    expect((await saves.blobs[0]!.text()).split("\n").slice(0, 4)).toEqual([
-      "Waitron box key",
-      "",
-      "key-on-paper",
-      "",
-    ]);
-  });
-
-  it("says the file could not be saved and keeps the key on screen when the download fails", async () => {
-    const realURL = URL.createObjectURL.bind(URL);
-    vi.spyOn(URL, "createObjectURL")
-      .mockImplementationOnce(() => {
-        throw new Error("Download refused");
-      })
-      .mockImplementation(realURL);
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "key-on-paper" });
-    const button = q(el, "[data-test=break-glass-save]")!;
-    await userEvent.click(button);
-    await el.updateComplete;
-    const error = q(el, "[data-test=break-glass-save-error]")!;
-    expect(error.getAttribute("role")).toBe("alert");
-    expect(error.textContent!.trim()).toBe(
-      "The file could not be saved. Write the key down instead.",
-    );
-    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
-    await userEvent.click(button);
-    await el.updateComplete;
-    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
   });
 });
 
@@ -1551,7 +1369,6 @@ describe("setup-done-screen layout", () => {
     async (_, extra) => {
       const el = await mountDone(() => new Promise(() => {}), {
         onboardingIntent: "live",
-        breakGlassSecret: "bg-9f3a",
         ...extra,
       });
       const steps = q(el, "[data-test=device-steps]");
@@ -1619,73 +1436,20 @@ describe("setup-done-screen layout", () => {
     expect(steps.querySelectorAll(":scope > ul > li")).toHaveLength(3);
   });
 
-  it("puts the replacement link in a card and uses the wizard's help link colour", async () => {
-    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
-      api: apiWith(() => new Promise(() => {})),
-      startDelayMs: 0,
-      onboardingIntent: "prepare",
-      breakGlassKeyInBackups: true,
-    });
-    host.style.setProperty("--wt-color-primary-text", "rgb(31, 32, 33)");
-    host.style.setProperty("--wt-color-primary", "rgb(91, 92, 93)");
-    const nudge = q(el, "[data-test=recovery-pack-replacement]")!;
-    expect(nudge.localName).toBe("wt-card");
-    expect(getComputedStyle(nudge.querySelector("a")!).color).toBe("rgb(31, 32, 33)");
-  });
-
-  it("draws the break-glass box from tokens, with a warning edge at its start", async () => {
-    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
-      api: apiWith(() => new Promise(() => {})),
-      startDelayMs: 0,
-      breakGlassSecret: "bg-9f3a",
-    });
-    host.style.setProperty("--wt-space-1", "5px");
-    host.style.setProperty("--wt-space-2", "9px");
-    host.style.setProperty("--wt-space-3", "13px");
-    host.style.setProperty("--wt-space-4", "21px");
-    host.style.setProperty("--wt-radius-lg", "17px");
-    host.style.setProperty("--wt-radius-md", "11px");
-    host.style.setProperty("--wt-font-size-lg", "23px");
-    host.style.setProperty("--wt-color-warning", "rgb(1, 2, 3)");
-    host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
-    const box = getComputedStyle(q(el, "[data-test=break-glass]")!);
-    expect([box.paddingTop, box.paddingRight, box.paddingBottom, box.paddingLeft]).toEqual([
-      "21px",
-      "21px",
-      "21px",
-      "21px",
-    ]);
-    expect(box.borderTopLeftRadius).toBe("17px");
-    expect(box.backgroundColor).toBe("rgb(4, 5, 6)");
-    expect([box.borderTopColor, box.borderRightColor, box.borderLeftColor]).toEqual([
-      "rgb(1, 2, 3)",
-      "rgb(1, 2, 3)",
-      "rgb(1, 2, 3)",
-    ]);
-    expect([box.borderTopWidth, box.borderLeftWidth]).toEqual(["1px", "5px"]);
-    const heading = getComputedStyle(q(el, "[data-test=break-glass] h2")!);
-    expect(heading.fontSize).toBe("23px");
-    expect([heading.marginTop, heading.marginBottom]).toEqual(["0px", "9px"]);
-    const secret = getComputedStyle(q(el, "[data-test=break-glass-secret]")!);
-    expect(secret.fontSize).toBe("23px");
-    expect(secret.borderTopLeftRadius).toBe("11px");
-    expect([secret.marginTop, secret.paddingTop, secret.paddingLeft]).toEqual([
-      "9px",
-      "9px",
-      "13px",
-    ]);
-  });
-
   it.each([
-    ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass"]],
-    ["a rebuild", { restored: "bucket" }, ["links", "device-steps", "break-glass"]],
-    ["an archive restore", { restored: "archive" }, ["links", "device-steps", "break-glass"]],
-    ["a Waitron Cloud restore", { restored: "cloud" }, ["links", "device-steps", "break-glass"]],
+    [
+      "an ordinary setup",
+      { onboardingIntent: "live", contactUrl: "https://box-41aa.waitron.local" },
+      ["links", "main-label"],
+    ],
+    ["a rebuild", { restored: "bucket" }, ["links", "device-steps"]],
+    ["an archive restore", { restored: "archive" }, ["links", "device-steps"]],
+    ["a Waitron Cloud restore", { restored: "cloud" }, ["links", "device-steps"]],
   ] as const)("spaces its blocks by the same token after %s", async (_, extra, order) => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
       startDelayMs: 0,
-      breakGlassSecret: "bg-9f3a",
+      drawQr: async () => PIXEL,
       ...extra,
     });
     host.style.setProperty("--wt-space-4", "21px");
@@ -1821,13 +1585,12 @@ describe("setup-done-screen after a start that failed", () => {
     ["a file restore", { restored: "archive" }],
     ["a fresh Live setup", { onboardingIntent: "live" }],
   ] as const)(
-    "after %s whose start failed, hides the cards that say the server trades but keeps the server key",
+    "after %s whose start failed, hides the cards that say the server trades",
     async (_, extra) => {
       const { box, getStatus, getRecoveryStatus } = failingBox();
       box.answer = GONE;
       const el = await mountDone(getStatus, {
         api: { getStatus, getRecoveryStatus } as unknown as SetupApi,
-        breakGlassSecret: "key-on-paper",
         ...extra,
       });
       await vi.waitFor(() =>
@@ -1835,7 +1598,6 @@ describe("setup-done-screen after a start that failed", () => {
       );
       expect(q(el, "[data-test=backup-nudge]")).toBeNull();
       expect(q(el, "[data-test=device-steps]")).toBeNull();
-      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
     },
   );
 
@@ -2270,12 +2032,8 @@ describe("the joining page", () => {
   });
 
   it("the joining page shows no key task", async () => {
-    const { el } = await mountJoined({
-      breakGlassSecret: "key-on-paper",
-      breakGlassKeyName: "2026-10-15 · K7QF",
-    });
+    const { el } = await mountJoined();
     expect(taskIds(el)).toEqual(["task-join", "task-label"]);
-    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
     expect(q(el, "[data-test=key-wrote]")).toBeNull();
   });
 

@@ -140,9 +140,6 @@ export interface ProvisionResult {
   /** The venue's new master key as printed, and its name; answered once, never stored here. */
   masterKey?: string;
   masterKeyName?: string;
-  breakGlassSecret?: string;
-  breakGlassKeyName?: string;
-  breakGlassKeyInBackups?: true;
   cloudStaffEmailUnavailable?: true;
   /** This box's own address, which its label's QR opens. */
   contactUrl?: string;
