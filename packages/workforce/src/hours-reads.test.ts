@@ -145,7 +145,7 @@ it("reads the venue snapshot once for the whole team and keeps each person's tot
   await freeze();
   const readClosures = vi.spyOn(closureReads, "readClosures");
   try {
-    const hours = await manager({ kind: "month", date: "2026-01-05" });
+    const hours = await manager({ kind: "pay-period", date: "2026-01-05" });
     expect(hours.people.length).toBeGreaterThan(1);
     expect(
       hours.people.find((person) => person.personId === f.personId)?.hours.closures[0]

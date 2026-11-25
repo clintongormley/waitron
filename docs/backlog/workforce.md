@@ -129,7 +129,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. Send a reminder before close and include later adjustments in the next export.**
+- **MONTH-CLOSE. List the month’s issues, send a reminder and include later adjustments in the next export.**
   [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it

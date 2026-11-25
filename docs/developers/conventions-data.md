@@ -5308,9 +5308,10 @@ See the [steady-clock plan and changed checks](https://github.com/clintongormley
 **2026-11-17, jr4:** attendance day processing now runs through `attendanceJob` and
 `runAttendancePass`; the row below retains the earlier loop name from the clock-step experiment.
 
-**2026-11-25, MONTH-CLOSE:** the attendance job waits to freeze monthly hours while the box's
-clock hold is active or a jump awaits the clock watch. It checks inside the write turn and wakes
-on confirmation. Attendance day processing continues during the wait.
+**2026-11-25, MONTH-CLOSE:** the pay-period close row below describes the audit before the
+attendance job acquired its monthly caller. The job waits to freeze monthly hours while a clock jump
+awaits the clock watch, and on filing boxes it also checks the existing clock hold. It checks inside
+the write turn and wakes at confirmation. Attendance day processing continues during the wait.
 
 **2026-11-17, jr8:** backup scheduling now runs through `createBackupSchedule` and
 `backupsJob`; the table retains the earlier loop name from the clock-step experiment.

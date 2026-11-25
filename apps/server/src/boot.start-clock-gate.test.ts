@@ -55,13 +55,17 @@ const built = vi.hoisted(() => ({
   start: undefined as StartClockState | undefined,
   correction: undefined as ReturnType<typeof clockCorrection> | undefined,
   watch: undefined as ClockWatch | undefined,
+  wallOffset: 0,
 }));
 vi.mock("./clock-watch.js", async (original) => {
   const actual = await original<typeof import("./clock-watch.js")>();
   return {
     ...actual,
     createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) =>
-      (built.watch = actual.createClockWatch(...args)),
+      (built.watch = actual.createClockWatch({
+        ...args[0],
+        wall: () => (args[0].wall ?? Date.now)() + built.wallOffset,
+      })),
   };
 });
 vi.mock("./start-clock-check.js", async (original) => {
@@ -139,6 +143,7 @@ const suite = useVenueDb({
 
 const scratches: string[] = [];
 afterEach(async () => {
+  built.wallOffset = 0;
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -230,7 +235,7 @@ function sellOnce(boxHost: BoxHostClient, after?: () => Promise<void>) {
 }
 
 describe("the start clock gate as boot wires it", () => {
-  it("freezes due hours as soon as the box confirms its clock", async () => {
+  it("freezes due hours after the box confirms its clock and the watch checks a jump", async () => {
     const today = new Date();
     const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 2, 1))
       .toISOString()
@@ -249,14 +254,26 @@ describe("the start clock gate as boot wires it", () => {
     });
     const closed = () =>
       venue.db.all(sql`select period_start from pay_period_closures where period_start = ${month}`);
-    await serving(unsynchronisedHost().host, async (server) => {
+    let synchronised = false;
+    const { host } = unsynchronisedHost();
+    host.clockStatus = async () => clockServiceAnswer(synchronised);
+    await serving(host, async (server) => {
       const job = () => server.health.readJobs?.()["attendance.end_of_day"];
       await vi.waitFor(() => expect(job()?.lastOkAt).toEqual(expect.any(String)));
+      const waitingAt = job()!.lastOkAt;
       expect(built.start!.unconfirmed()).toBe(true);
       expect(closed()).toEqual([]);
+
+      built.wallOffset = 120_000;
       built.start!.confirm("by_devices", {});
+      await vi.waitFor(() => expect(job()?.lastOkAt).not.toBe(waitingAt), { timeout: 5_000 });
+      expect(closed()).toEqual([]);
+
+      synchronised = true;
+      await built.watch!.check();
+      expect(built.start!.unconfirmed()).toBe(false);
       await vi.waitFor(() => expect(closed()).toEqual([{ period_start: month }]), {
-        timeout: 3000,
+        timeout: 5_000,
       });
     });
   });

@@ -554,23 +554,28 @@ it("uses the employment that overlaps the period instead of a newer one", async 
   ]);
 });
 
-it("freezes worked hours without whole-month overtime for a mid-month contract change", async () => {
-  await automatic();
-  await suite.db
-    .update(api.employments)
-    .set({ endDate: "2026-10-29" })
-    .where(eq(api.employments.personId, worker));
-  await suite.db.insert(api.employments).values({
-    personId: worker,
-    startDate: "2026-10-30",
-    contractedMinutesPerWeek: 300,
-    contractType: "full_time",
-    payRate: 1500,
-  });
-  const { snapshot } = await close();
-  expect(snapshot.sessions).toMatchObject([{ personId: worker, workedMinutes: 480 }]);
-  expect(snapshot.summaries).toEqual([{ personId: worker, summary: null }]);
-});
+it.each(["ends", "changes"])(
+  "freezes worked hours without whole-month overtime when a contract %s mid-month",
+  async (caseName) => {
+    await automatic();
+    await suite.db
+      .update(api.employments)
+      .set({ endDate: "2026-10-29" })
+      .where(eq(api.employments.personId, worker));
+    if (caseName === "changes") {
+      await suite.db.insert(api.employments).values({
+        personId: worker,
+        startDate: "2026-10-30",
+        contractedMinutesPerWeek: 300,
+        contractType: "full_time",
+        payRate: 1500,
+      });
+    }
+    const { snapshot } = await close();
+    expect(snapshot.sessions).toMatchObject([{ personId: worker, workedMinutes: 480 }]);
+    expect(snapshot.summaries).toEqual([{ personId: worker, summary: null }]);
+  },
+);
 
 it("starts closing in the effective month of a retimed first clock-in", async () => {
   await run((tx) => backend.clockIn(tx, event("2026-11-01T00:30:00Z")));

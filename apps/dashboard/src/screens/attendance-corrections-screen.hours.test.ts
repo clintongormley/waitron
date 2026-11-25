@@ -86,6 +86,21 @@ it("keeps the existing unresolved hours view beside the read-only close date", a
   expect(m.root.querySelector("[data-month-issues]")).toBeNull();
 });
 
+it("shows no closing panel to a supervisor when there is no closing date", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      scheduledCloseAt: null,
+      closedAt: null,
+      holidayCoverageComplete: true,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")).toBeNull();
+});
+
 it.each(["approve", "decline"])(
   "%s reads the current day before using the existing command owner and rereads Hours with a silent feed",
   async (action) => {

@@ -398,6 +398,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     const close = hours?.monthClose;
     if (!close) return nothing;
     const instant = close.closedAt ?? close.scheduledCloseAt;
+    if (instant === null && close.holidayCoverageComplete && !close.canEdit) return nothing;
     const at =
       instant &&
       dateTimeFormat(currentLocale(), {

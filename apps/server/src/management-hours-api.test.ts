@@ -168,7 +168,12 @@ it("lets only a system manager change the working days before monthly close", as
   const hours = "/management-api/attendance/" + path("pay-period");
   await setBuiltInRoleForTest(suite.db, venue.personId, "supervisor");
   expect(await (await ask(hours)).json()).toMatchObject({
-    monthClose: { graceDays: 3, canEdit: false, closedAt: null },
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      closedAt: null,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+    },
   });
   expect((await ask(settings, { graceDays: 0 })).status).toBe(403);
   expect((await ask(settings, { graceDays: 1.5 }, ownerCookie)).status).toBe(400);
@@ -181,7 +186,12 @@ it("lets only a system manager change the working days before monthly close", as
     ).rows,
   ).toEqual([{ module: "workforce", doc: '{"closeGraceDays":0}', updated_by: owner }]);
   expect(await (await ask(hours, undefined, ownerCookie)).json()).toMatchObject({
-    monthClose: { graceDays: 0, canEdit: true, closedAt: null },
+    monthClose: {
+      graceDays: 0,
+      canEdit: true,
+      closedAt: null,
+      scheduledCloseAt: "2026-02-01T04:00:00.000Z",
+    },
   });
 });
 

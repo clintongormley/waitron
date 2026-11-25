@@ -569,8 +569,10 @@ describe("attendance runner job", () => {
       await backend.clockIn(tx, { ...event, at: "2026-01-05T09:00:00Z" });
       await backend.clockOut(tx, { ...event, at: "2026-01-05T17:00:00Z" });
     });
-    const { attendanceJob } = await import("./attendance-loop.js");
+    await settle();
+    const { attendanceJob, attendanceWorkPending } = await import("./attendance-loop.js");
     const at = new Date("2026-02-05T04:00:00Z");
+    expect(await attendanceWorkPending(suite.db, at)).toBe(false);
     let waiting = false;
     const job = attendanceJob({
       ...deps(),
@@ -584,7 +586,9 @@ describe("attendance runner job", () => {
       return withWriteLock(work);
     });
     try {
-      await job.pass({ now: at, signal: new AbortController().signal });
+      expect(await job.pass({ now: at, signal: new AbortController().signal })).toEqual({
+        nextDueAt: at,
+      });
       expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(0);
       expect(lock).toHaveBeenCalledOnce();
     } finally {

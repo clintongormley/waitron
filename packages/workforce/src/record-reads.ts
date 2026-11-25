@@ -131,7 +131,6 @@ async function readSelectedEntries(
   return rows.map(recordFromRow);
 }
 
-/** Filter projected sessions by the requested work dates. Rows outside the period supply context. */
 export async function readFirstEffectiveClockInDate(tx: Transaction): Promise<string | null> {
   const entries = await readSelectedEntries(
     tx,
@@ -157,6 +156,7 @@ export async function readFirstEffectiveClockInDate(tx: Transaction): Promise<st
   return first;
 }
 
+/** Filter projected sessions by the requested work dates. Rows outside the period supply context. */
 export async function readPeriodEntries(
   tx: Database | Transaction,
   { period, personId }: TimeRecordQuery,
