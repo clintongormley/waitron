@@ -292,9 +292,6 @@ export const workingOrderLines = table(
     unitId: id("unit_id"),
     soldInEach: flag("sold_in_each"),
     hardwareUnit: label("hardware_unit"),
-    allergens: json<AllergenMap>("allergens"),
-    diet: json<unknown>("diet"),
-    dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),
     // A recorded agreement survives deleting its service period.
     latePeriodId: id("late_period_id"),

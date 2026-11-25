@@ -2515,11 +2515,10 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("records a variant line with the variant's own VAT class and declarations, and a plain line with the dish's", async () => {
+  it("records a variant line with the variant's own VAT class, and a plain line with the dish's", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      await updateProduct(tx, venue.lemonade, { allergens: { sulphites: {} } });
-      await updateProduct(tx, venue.large, { vatClass: "reduced", allergens: { milk: {} } });
+      await updateProduct(tx, venue.large, { vatClass: "reduced" });
       await publish(tx, venue.dinner);
       const orderId = await openOrder(tx, venue, 1);
       await recordOrderServiceContext(tx, orderId, venue.diningZone);
@@ -2538,13 +2537,10 @@ describe("zone offers from the published menus", () => {
       const recorded = new Map(
         (await listWorkingLineContexts(tx, orderId)).map((row) => [
           row.workingOrderLineId,
-          [row.vatClass, row.allergens],
+          row.vatClass,
         ]),
       );
-      expect([recorded.get(plain), recorded.get(large)]).toEqual([
-        ["general", { sulphites: {} }],
-        ["reduced", { milk: {} }],
-      ]);
+      expect([recorded.get(plain), recorded.get(large)]).toEqual(["general", "reduced"]);
     });
   });
 

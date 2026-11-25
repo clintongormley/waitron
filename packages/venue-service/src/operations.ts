@@ -46,7 +46,6 @@ import {
   NO_LIVE_FIELDS,
   units,
   type MenuDocument,
-  type MenuOffer,
   type ServedMenu,
 } from "@waitron/menu";
 import type {
@@ -1284,9 +1283,6 @@ export async function listWorkingLineContexts(
     unitPrecision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
     vatClass: string;
-    allergens: MenuOffer["allergens"];
-    diet: unknown;
-    dietOverride: unknown;
   }[]
 > {
   const rows = await tx
@@ -1303,9 +1299,6 @@ export async function listWorkingLineContexts(
       unitPrecision: workingOrderLines.offerUnitPrecision,
       hardwareUnit: workingOrderLines.hardwareUnit,
       vatClass: workingOrderLines.offerVatClass,
-      allergens: workingOrderLines.allergens,
-      diet: workingOrderLines.diet,
-      dietOverride: workingOrderLines.dietOverride,
     })
     .from(workingOrderLines)
     .where(
@@ -1498,9 +1491,6 @@ export async function lineContextColumns(
           }),
           hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
           offerVatClass: sold.vatClass,
-          allergens: sold.allergens,
-          diet: sold.diet,
-          dietOverride: sold.dietOverride,
           latePeriodId: line.late?.periodId ?? null,
           latePeriodName: line.late?.periodName ?? null,
           lateConfirmedBy: line.late?.confirmedBy ?? null,
