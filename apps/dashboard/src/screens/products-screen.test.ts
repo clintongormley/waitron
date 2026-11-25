@@ -615,7 +615,7 @@ describe("menu-screen", () => {
       el
         .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!
         .getAttribute("heading"),
-    ).toBe(t("product.archive_named").split("{name}").join("Croquettes $&"));
+    ).toBe(t("product.delete_named").split("{name}").join("Croquettes $&"));
   });
 
   it("names affected extras lists in the product Archive warning", async () => {
@@ -723,7 +723,7 @@ describe("menu-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
     const bodyOf = (el: ProductsScreen) =>
       dialogOf(el).querySelector("p")!.textContent!.replace(/\s+/g, " ").trim();
-    async function openArchive(api: DashboardApi, productId = "p1", locale = "en-GB") {
+    async function openDeleteConfirmation(api: DashboardApi, productId = "p1", locale = "en-GB") {
       const before = currentLocale();
       setLocale(locale);
       onTestFinished(() => setLocale(before));
@@ -736,23 +736,27 @@ describe("menu-screen", () => {
 
     it("says how many menus it comes off when the product is on two", async () => {
       const api = stubApi({ countProductMenus: vi.fn().mockResolvedValue(2) });
-      const el = await openArchive(api);
+      const el = await openDeleteConfirmation(api);
       expect(api.countProductMenus).toHaveBeenCalledWith(["p1"]);
       expect(bodyOf(el)).toBe(`${warning} It comes off the 2 menus it is on.`);
     });
 
     it("says the one menu it comes off in the singular", async () => {
-      const el = await openArchive(stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }));
+      const el = await openDeleteConfirmation(
+        stubApi({ countProductMenus: vi.fn().mockResolvedValue(1) }),
+      );
       expect(bodyOf(el)).toBe(`${warning} It comes off the one menu it is on.`);
     });
 
     it("adds nothing when the product is on no menu", async () => {
-      const el = await openArchive(stubApi({ countProductMenus: vi.fn().mockResolvedValue(0) }));
+      const el = await openDeleteConfirmation(
+        stubApi({ countProductMenus: vi.fn().mockResolvedValue(0) }),
+      );
       expect(bodyOf(el)).toBe(warning);
     });
 
     it("in Spanish, names the menus as cartas", async () => {
-      const el = await openArchive(
+      const el = await openDeleteConfirmation(
         stubApi({ countProductMenus: vi.fn().mockResolvedValue(3) }),
         "p1",
         "es",
@@ -764,7 +768,7 @@ describe("menu-screen", () => {
 
     it("says every menu while the count is still loading, and Archive works meanwhile", async () => {
       const api = stubApi({ countProductMenus: vi.fn().mockReturnValue(new Promise(() => {})) });
-      const el = await openArchive(api);
+      const el = await openDeleteConfirmation(api);
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
@@ -778,7 +782,7 @@ describe("menu-screen", () => {
       const api = stubApi({
         countProductMenus: vi.fn().mockRejectedValue({ code: "server.internal" }),
       });
-      const el = await openArchive(api);
+      const el = await openDeleteConfirmation(api);
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
       expect(dialogOf(el).textContent).not.toContain(codeMessage("server.internal"));
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
@@ -797,7 +801,7 @@ describe("menu-screen", () => {
       const api = stubApi({
         countProductMenus: vi.fn().mockImplementation(() => counts.shift()!.promise),
       });
-      const el = await openArchive(api);
+      const el = await openDeleteConfirmation(api);
       dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
       await flush(el);
       emit(list(el), "delete-product", { productId: "p1" });
@@ -818,7 +822,7 @@ describe("menu-screen", () => {
           .mockResolvedValueOnce(4)
           .mockReturnValueOnce(new Promise(() => {})),
       });
-      const el = await openArchive(api);
+      const el = await openDeleteConfirmation(api);
       expect(bodyOf(el)).toContain("the 4 menus");
       dialogOf(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
       await flush(el);
@@ -2895,7 +2899,7 @@ describe("menu-screen", () => {
       emit(list(el), "delete-product", { productId: "p1" });
       await flush(el);
       const warning = () =>
-        el.shadowRoot!.querySelector("[data-test=delete-dialog] [data-test=archive-extra-lists]");
+        el.shadowRoot!.querySelector("[data-test=delete-dialog] [data-test=delete-extra-lists]");
       expect(warning()!.querySelectorAll("li")).toHaveLength(1);
       expect(warning()!.textContent).toContain("Affected variant list");
       expect(warning()!.textContent).not.toContain("Archived baseline list");

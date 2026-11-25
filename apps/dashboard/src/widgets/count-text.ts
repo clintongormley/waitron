@@ -7,7 +7,7 @@ export function countOf(
     | "folders.route_count"
     | "folders.move_heading"
     | "folders.delete_heading"
-    | "folders.archive_products_heading"
+    | "folders.delete_products_heading"
     | "folders.routes_warning"
     | "folders.selected"
     | "menus.section_count"

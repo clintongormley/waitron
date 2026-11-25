@@ -94,7 +94,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
   });
   await expect(
     withTransaction(suite.db, (tx) => updateProduct(tx, negroniId, { active: true })),
-  ).rejects.toMatchObject({ code: "product.archived", params: { productId: negroniId } });
+  ).rejects.toMatchObject({ code: "product.deleted", params: { productId: negroniId } });
   expect(
     await suite.db
       .select({ categoryId: products.categoryId, active: products.active })

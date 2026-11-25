@@ -213,7 +213,7 @@ describe("setProductVariants stores each variant as a product under its parent",
     await expect(
       app((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en")),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: w175!.id, field: "variants.1.active" },
     });
     expect(await storedVariants(f.parentId)).toEqual(beforeRestore);
@@ -278,7 +278,7 @@ describe("setProductVariants stores each variant as a product under its parent",
         ),
       ),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: w175!.id, field: "variants.1.active" },
     });
     expect(await storedVariants(f.parentId)).toEqual(beforeRestore);
@@ -739,7 +739,7 @@ describe("a variant's per-menu settings", () => {
     await expect(
       app((tx) => setProductVariants(tx, f.parentId, [w125!, { ...w175!, active: true }], "en")),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: w175!.id, field: "variants.1.active" },
     });
     expect(await app((tx) => listMenuVariants(tx, f.offerId))).toEqual([

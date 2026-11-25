@@ -963,7 +963,7 @@ deleted variant sent inactive or omitted keeps its row (`writeProductVariants`,
 
 Delete sets `active: false` and keeps the row. Product management lists and configuration
 exports leave those rows out. The product and variant writers refuse reactivation with
-`product.archived`. Translation fixes and internal category-key moves can still reach retained rows.
+`product.deleted`. Translation fixes and internal category-key moves can still reach retained rows.
 
 **Available / Unavailable** is "sold out for now": a save sends `available` only when the editor's
 Available switch changed. Omission preserves an existing row; a new row defaults to available. This

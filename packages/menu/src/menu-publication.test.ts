@@ -1593,7 +1593,7 @@ describe("menuStatus", () => {
 
     it("flags both for Extra lemon deleted, naming the product and each dish's extras", async () => {
       const f = await published();
-      await app((tx) => storedArchive(tx, f.extraLemon));
+      await app((tx) => markStoredProductDeleted(tx, f.extraLemon));
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
       expect(changeBodies((await app((tx) => previewMenu(tx, f.dinner))).changes)).toEqual([
         {
@@ -1619,7 +1619,7 @@ describe("menuStatus", () => {
       await app((tx) => addMember(tx, f.dinnerRoot, product(f.extraLemon)));
       await publish(f.lunch);
       await publish(f.dinner);
-      await app((tx) => storedArchive(tx, f.extraLemon));
+      await app((tx) => markStoredProductDeleted(tx, f.extraLemon));
 
       const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes.filter(
         (change) => "productId" in change && change.productId === f.extraLemon,
@@ -1665,8 +1665,8 @@ describe("menuStatus", () => {
       );
       await publish(f.dinner);
       await app(async (tx) => {
-        await storedArchive(tx, f.soup);
-        await storedArchive(tx, f.extraLemon);
+        await markStoredProductDeleted(tx, f.soup);
+        await markStoredProductDeleted(tx, f.extraLemon);
       });
 
       for (const [menuId, productId, name] of [
@@ -2441,7 +2441,7 @@ describe("previewMenu", () => {
     const soupMember = await memberOf(f.lunchRoot, f.soup);
     await app(async (tx) => {
       await removeMember(tx, f.lunchRoot, soupMember);
-      await storedArchive(tx, f.lager);
+      await markStoredProductDeleted(tx, f.lager);
     });
     expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
       {
@@ -2774,7 +2774,7 @@ describe("the management prices read", () => {
       await addMember(tx, f.dinnerRoot, product(f.lager));
     });
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(1);
-    await app((tx) => storedArchive(tx, f.lager));
+    await app((tx) => markStoredProductDeleted(tx, f.lager));
     for (const menuId of [f.dinner, f.drinksMenu])
       expect(
         (await app((tx) => operations.menuPrices(tx, menuId))).map(({ productId }) => productId),
@@ -2992,7 +2992,7 @@ it("enriches preview changes after source refinement with exact live parent-extr
     ),
   );
   expect(parents.length).toBeGreaterThan(0);
-  await app((tx) => storedArchive(tx, f.extraLemon));
+  await app((tx) => markStoredProductDeleted(tx, f.extraLemon));
   const preview = await app((tx) => previewMenu(tx, f.dinner));
   const deletion = preview.changes.find(
     (c) => c.kind === "product_deleted" && c.productId === f.extraLemon,
@@ -3031,7 +3031,7 @@ function changeBodies(changes: readonly MenuChange[]): MenuChangeBody[] {
   });
 }
 
-async function storedArchive(tx: Transaction, productId: string): Promise<void> {
+async function markStoredProductDeleted(tx: Transaction, productId: string): Promise<void> {
   await tx.update(products).set({ active: false }).where(eq(products.id, productId));
   await takeOffMenus(tx, [productId]);
 }

@@ -179,10 +179,10 @@ it.each([
   ["dark", "product.not_found", codeMessage("product.not_found", "es-ES")],
   [
     "light",
-    "product.archived",
+    "product.deleted",
     "This dish or size has been deleted. Close this window and choose another dish or size.",
   ],
-  ["dark", "product.archived", codeMessage("product.archived", "es-ES")],
+  ["dark", "product.deleted", codeMessage("product.deleted", "es-ES")],
 ] as const)(
   "availability controls, sending and refusal are accessible in %s for %s",
   async (theme, code, expected) => {
@@ -223,7 +223,9 @@ it.each([
     expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     reject({ code });
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
-    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(expected);
+    const message = el.shadowRoot!.querySelector('[role="alert"]')!.textContent;
+    expect(message).toBe(expected);
+    expect(message).not.toBe(codeMessage("unknown.code"));
     await expectNoA11yViolations(host);
   },
 );

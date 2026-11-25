@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import type { ExtraList, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-export function archiveExtraListWarning(
+export function deleteExtraListWarning(
   products: readonly Product[],
   productIds: readonly string[],
   lists: readonly ExtraList[],
@@ -24,8 +24,8 @@ export function archiveExtraListWarning(
     ),
   ];
   return names.length
-    ? html`<div class="archive-extra-lists" data-test="archive-extra-lists">
-        <p>${t("product.archive_extra_lists")}</p>
+    ? html`<div class="delete-extra-lists" data-test="delete-extra-lists">
+        <p>${t("product.delete_extra_lists")}</p>
         <ul>
           ${names.map((name) => html`<li>${name}</li>`)}
         </ul>

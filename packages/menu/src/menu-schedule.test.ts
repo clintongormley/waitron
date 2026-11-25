@@ -40,7 +40,7 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
-import { deleteMenu } from "./archive.js";
+import { deleteMenu } from "./delete.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useMenuDb();

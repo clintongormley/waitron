@@ -460,7 +460,7 @@ describe("folder routing projection", () => {
         [f, null],
       ]),
     );
-    expect(projected.archivedProductIds).toEqual(new Set());
+    expect(projected.deletedProductIds).toEqual(new Set());
     expect(await app(listCategories)).toEqual(before);
     expect(await product(cola)).toMatchObject({ categoryId: d, active: true });
     expect(await product(lager)).toMatchObject({ categoryId: b, active: false });
@@ -479,7 +479,7 @@ describe("folder routing projection", () => {
         projectProductItems(tx, { kind: "delete", selection, contents }),
       );
       expect(projected.categories.map(({ id, parentId }) => [id, parentId])).toEqual([[f, null]]);
-      expect(projected.archivedProductIds).toEqual(
+      expect(projected.deletedProductIds).toEqual(
         new Set(contents === "delete" ? [burger, cola, lager] : [burger]),
       );
       if (contents === "move_up") {
@@ -493,7 +493,7 @@ describe("folder routing projection", () => {
       expect(await app(listCategories)).toEqual(projected.categories);
       for (const id of [cola, lager, burger]) {
         const stored = await product(id);
-        expect(stored.active).toBe(!projected.archivedProductIds.has(id));
+        expect(stored.active).toBe(!projected.deletedProductIds.has(id));
         if (stored.active) expect(stored.categoryId).toBe(projected.categoryOf.get(id));
       }
     },

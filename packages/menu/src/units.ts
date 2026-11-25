@@ -238,11 +238,11 @@ export async function reassignProductsToUnit(
     inArray(products.id, productIds),
     isTopLevelProduct,
   );
-  const [archived] = await tx
+  const [deleted] = await tx
     .select({ id: products.id })
     .from(products)
     .where(and(eq(products.active, false), scope));
-  if (archived !== undefined) throw new AppError("product.archived", { productId: archived.id });
+  if (deleted !== undefined) throw new AppError("product.deleted", { productId: deleted.id });
   if (targetUnitId !== null) {
     const [target] = await tx
       .select({ id: units.id })

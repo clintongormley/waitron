@@ -268,7 +268,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.not_found": 404,
   "menu.not_found": 404,
   "product.not_found": 404,
-  "product.archived": 409,
+  "product.deleted": 409,
 };
 
 const run = createErrorBoundary(STATUS, "management.failed");

@@ -154,7 +154,7 @@ describe("update", () => {
     await app((tx) => updateProduct(tx, cola, { active: false }));
     await make("Cola");
     await expect(app((tx) => updateProduct(tx, cola, { active: true }))).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: cola },
     });
     expect((await app((tx) => readProductEditor(tx, cola))).active).toBe(false);
@@ -162,12 +162,12 @@ describe("update", () => {
   it("refuses new duplicate-named variants and restoration of an archived product", async () => {
     const lemonade = await make("Lemonade", { active: false });
     await expect(variants(lemonade, [variant("Small"), variant(" small ")])).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: lemonade },
     });
     expect(await app((tx) => listProductVariants(tx, lemonade))).toEqual([]);
     await expect(app((tx) => updateProduct(tx, lemonade, { active: true }))).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: lemonade },
     });
   });
@@ -178,7 +178,7 @@ describe("update", () => {
       variant("small"),
     ]);
     await expect(app((tx) => updateProduct(tx, small!.id, { active: true }))).rejects.toMatchObject(
-      { code: "product.archived", params: { productId: small!.id } },
+      { code: "product.deleted", params: { productId: small!.id } },
     );
   });
   it("allows a variant renamed onto its own parent's name", async () => {
@@ -195,7 +195,7 @@ describe("rows the rule leaves to the write", () => {
     const [small] = await variants(lemonade, [variant("Small")]);
     await app((tx) => updateProduct(tx, lemonade, { active: false }));
     await expect(app((tx) => updateProduct(tx, small!.id, { name: "Cola" }))).rejects.toMatchObject(
-      { code: "product.archived", params: { productId: small!.id } },
+      { code: "product.deleted", params: { productId: small!.id } },
     );
     expect((await app((tx) => readProductEditor(tx, small!.id))).name).toBe("Small");
   });
@@ -247,7 +247,7 @@ describe("variant save", () => {
   it("refuses new variants of an archived product without reserving their names", async () => {
     const lemonade = await make("Lemonade", { active: false });
     await expect(variants(lemonade, [variant("Cola"), variant("Half")])).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: lemonade },
     });
     expect(await app((tx) => listProductVariants(tx, lemonade))).toEqual([]);

@@ -464,7 +464,7 @@ function variantTable(el: ProductEditor) {
     HTMLElement & {
       variants: EditorVariant[];
       errors: Record<number, string>;
-      archivedIds: ReadonlySet<string>;
+      deletedIds: ReadonlySet<string>;
       updateComplete: Promise<unknown>;
     }
   >("dashboard-variant-table");

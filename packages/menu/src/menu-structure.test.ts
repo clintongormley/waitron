@@ -543,7 +543,7 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
     await expect(
       app((tx) => updateProduct(tx, f.lemonade, { active: true })),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: f.lemonade } });
+    ).rejects.toMatchObject({ code: "product.deleted", params: { productId: f.lemonade } });
     expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
     expect(await offerNames(f.dinner)).toEqual([]);
     const { rows } = await fx.db.execute<{ id: string }>(

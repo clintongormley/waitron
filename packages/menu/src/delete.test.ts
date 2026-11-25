@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { documentProductIds } from "./archive.js";
+import { documentProductIds } from "./delete.js";
 import type { MenuDocument } from "@waitron/shared";
 
 const home: MenuDocument["home"] = {

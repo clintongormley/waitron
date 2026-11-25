@@ -1,4 +1,4 @@
-import { assertMenuWritable } from "./archive.js";
+import { assertMenuWritable } from "./delete.js";
 import { columnsFromOverrides } from "./include-folder.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";

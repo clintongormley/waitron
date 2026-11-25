@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
-import { refusalText } from "./archive-refusal.js";
+import { refusalText } from "./delete-refusal.js";
 
 afterEach(() => setLocale("es"));
 
 describe.each([
   ["en", "Menus", "Products"],
   ["es", "Cartas", "Productos"],
-])("archive refusal (%s)", (locale, menusLabel, productsLabel) => {
+])("delete refusal (%s)", (locale, menusLabel, productsLabel) => {
   it("names menus, adding products only for a bulk refusal", () => {
     setLocale(locale!);
     const menus = [
@@ -56,7 +56,9 @@ describe.each([
     expect(refusalText("product.offered_as_extra", params)).toBe(
       `${codeMessage("product.offered_as_extra")} Sauces, Toppings`,
     );
-    expect(refusalText("product.archived", params)).toBe(codeMessage("product.archived"));
+    const deleted = refusalText("product.deleted", params);
+    expect(deleted).toBe(codeMessage("product.deleted"));
+    expect(deleted).not.toBe(codeMessage("unknown.code"));
   });
 
   it.each([

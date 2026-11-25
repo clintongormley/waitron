@@ -1183,7 +1183,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This product has active variants, so it can't be offered as an extra.",
     es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
   },
-  "product.archived": {
+  "product.deleted": {
     en: "This product was deleted and can no longer be changed.",
     es: "Este producto se eliminó y ya no se puede modificar.",
   },

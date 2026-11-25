@@ -18,7 +18,7 @@ import {
 } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { priceOrNull } from "./offer-price.js";
-import { archiveProducts } from "./archive.js";
+import { deleteProducts } from "./delete.js";
 import { MENU_SETTINGS } from "./settings.js";
 import { assertFamilyNamesFree, readUpdatedName, type StoredName } from "./product-names.js";
 import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
@@ -157,7 +157,7 @@ export async function saveProductEditor(
     const product = await readUpdatedName(tx, productId);
     if (!product) throw new AppError("product.not_found", { productId });
     if (!product.active || product.parentActive === false)
-      throw new AppError("product.archived", { productId });
+      throw new AppError("product.deleted", { productId });
     storedParentId = product.parentId;
     stored = product;
   }
@@ -165,9 +165,9 @@ export async function saveProductEditor(
   const value = parseProductEditorInput(input, { isVariant });
   if (value.parentId !== undefined && value.parentId !== storedParentId)
     throw new AppError("product.invalid", { field: "parentId" });
-  // Archiving preserves the stored details, rather than rewriting the editor's draft.
+  // Deleting saves nothing else from the editor draft.
   if (productId !== null && !value.active) {
-    await archiveProducts(tx, [productId], personId);
+    await deleteProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
   // One read for both documents: a create also needs the menu settings' hidden eat-in class.

@@ -298,7 +298,7 @@ export async function readStoredOrder(
 }
 /**
  * Use `refuseUnsentUnavailable: false` only to record money already captured. That path must
- * still record it after product archival or on a takeaway bill holding a set menu.
+ * still record it after product deletion or on a takeaway bill holding a set menu.
  */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,

@@ -69,7 +69,7 @@ Not observed in a real password manager — the tests replace the browser's meth
 
 - Large datasets keep SQL sorting unless a measurement justifies sorting matching keys in memory.
 - Products stays on its current read. The nested extras editor uses the whole catalogue for its
-  picker and for saved items. Folder counts, move selections and archive warnings also use
+  picker and for saved items. Folder counts, move selections and delete warnings also use
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
 - Find a bill retains its existing request state until its own adoption.
 

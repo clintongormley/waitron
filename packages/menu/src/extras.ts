@@ -171,7 +171,7 @@ function listValues(input: ExtraListInput) {
   return values;
 }
 
-/** Refuses missing and archived products with the item's body position for the editor. */
+/** Refuses missing and deleted products with the item's body position for the editor. */
 async function assertProductsExist(tx: Transaction, input: ExtraListInput): Promise<void> {
   const named = [...new Set(input.items.map((item) => item.productId))];
   if (named.length === 0) return;
@@ -183,11 +183,11 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
   const held = new Map(rows.map((row) => [row.id, row.active && row.parentActive !== false]));
   const at = input.items.findIndex((item) => !held.has(item.productId));
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
-  const archived = input.items.findIndex((item) => held.get(item.productId) === false);
-  if (archived !== -1)
-    throw new AppError("product.archived", {
-      productId: input.items[archived]!.productId,
-      field: `items.${archived}.productId`,
+  const deletedIndex = input.items.findIndex((item) => held.get(item.productId) === false);
+  if (deletedIndex !== -1)
+    throw new AppError("product.deleted", {
+      productId: input.items[deletedIndex]!.productId,
+      field: `items.${deletedIndex}.productId`,
     });
 }
 

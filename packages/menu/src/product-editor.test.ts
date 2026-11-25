@@ -491,7 +491,7 @@ describe("a removed variant in the parent's editor", () => {
     await expect(
       save(saved.id, { ...saved, variants: [small!, { ...large!, active: true }] }),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: large!.id, field: "variants.1.active" },
     });
     expect(flags(await read(saved.id))).toEqual([
@@ -532,7 +532,7 @@ describe("a removed variant in the parent's editor", () => {
         ],
       }),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: large!.id, field: "variants.1.active" },
     });
     expect(await read(saved.id)).toEqual(updated);
@@ -548,12 +548,12 @@ describe("a removed variant in the parent's editor", () => {
     });
     const own = await read(large!.id!);
     await expect(save(large!.id!, { ...own, active: false })).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: large!.id },
     });
     expect(await read(large!.id!)).toMatchObject({ ...spanishOnly, active: false });
     await expect(save(large!.id!, { ...own, active: true })).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: large!.id },
     });
     expect(await read(large!.id!)).toMatchObject({ active: false });
@@ -1156,7 +1156,7 @@ describe("a product an extras list offers", () => {
         variants: [{ ...withInactive.variants[0]!, active: true }],
       }),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: withInactive.variants[0]!.id, field: "variants.0.active" },
     });
     expect((await read(coffeeId)).variants.map((variant) => variant.active)).toEqual([false]);
@@ -1168,7 +1168,7 @@ describe("a product an extras list offers", () => {
     const own = await read(variantId);
 
     await expect(save(variantId, { ...own, active: true })).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: variantId },
     });
     expect(await read(variantId)).toMatchObject({ active: false });
@@ -1186,7 +1186,7 @@ describe("a product an extras list offers", () => {
     await expect(
       save(variantId, { ...own, name: "Small cup", active: false }),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: variantId },
     });
     expect(await read(variantId)).toEqual(own);
@@ -1207,7 +1207,7 @@ describe("a product an extras list offers", () => {
         variants: [{ ...added.variants[0]!, active: true }, added.variants[1]!],
       }),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: added.variants[0]!.id, field: "variants.0.active" },
     });
     expect((await read(juice.id)).variants.map((variant) => variant.active)).toEqual([false, true]);
@@ -1215,10 +1215,10 @@ describe("a product an extras list offers", () => {
     const variantId = added.variants[0]!.id;
     await expect(
       save(variantId, { ...(await read(variantId)), active: false }),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: variantId } });
+    ).rejects.toMatchObject({ code: "product.deleted", params: { productId: variantId } });
     await expect(
       save(variantId, { ...(await read(variantId)), active: true }),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: variantId } });
+    ).rejects.toMatchObject({ code: "product.deleted", params: { productId: variantId } });
     expect(await read(variantId)).toMatchObject({ active: false });
   });
 });

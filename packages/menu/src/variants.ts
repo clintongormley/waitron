@@ -1,4 +1,4 @@
-import { assertMenuWritable } from "./archive.js";
+import { assertMenuWritable } from "./delete.js";
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import {
   extraListItems,
@@ -29,7 +29,7 @@ import { reachableMenuItem } from "./menu-structure.js";
 import { refuseSetMenu } from "./set-menus.js";
 import { batches } from "./batches.js";
 import { dropMenuPrices } from "./menu-removal.js";
-import { assertOffPublishedMenus, removeFromExtraLists } from "./archive.js";
+import { assertOffPublishedMenus, removeFromExtraLists } from "./delete.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 export type { MenuVariant } from "@waitron/shared";
@@ -163,7 +163,7 @@ export async function assertNotOfferedAsExtra(
 }
 
 /**
- * Archived variants sent inactive or omitted remain untouched. Active rows keep the input's
+ * Deleted variants sent inactive or omitted remain untouched. Active rows keep the input's
  * positions so the editor's field paths still identify the same rows. The caller owns the transaction.
  */
 export async function setProductVariants(
@@ -217,7 +217,7 @@ async function writeProductVariants(
     checked.push({ ...input, cents: price === null ? null : decimalToCents(price) });
   }
   const parent = await assertProductForWrite(tx, productId);
-  if (!parent.active) throw new AppError("product.archived", { productId });
+  if (!parent.active) throw new AppError("product.deleted", { productId });
   const current = await listProductVariants(tx, productId);
   const currentById = new Map(current.map((variant) => [variant.id, variant]));
   const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
@@ -240,13 +240,13 @@ async function writeProductVariants(
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
   }
-  const archivedOn = normalized.findIndex(
+  const reactivationIndex = normalized.findIndex(
     (input) => input.id !== undefined && currentActive.get(input.id) === false && input.active,
   );
-  if (archivedOn !== -1)
-    throw new AppError("product.archived", {
-      productId: normalized[archivedOn]!.id!,
-      field: `variants.${archivedOn}.active`,
+  if (reactivationIndex !== -1)
+    throw new AppError("product.deleted", {
+      productId: normalized[reactivationIndex]!.id!,
+      field: `variants.${reactivationIndex}.active`,
     });
   const left = current.filter((variant) => !seen.has(variant.id));
   const madeInactive = [

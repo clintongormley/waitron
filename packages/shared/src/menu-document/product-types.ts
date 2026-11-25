@@ -169,7 +169,7 @@ export interface ProductEditorInput {
    * and clears a unit the variant still stores. */
   unitId: string | null;
   unitPrice: string | null;
-  /** Writes `products.active`; Archive sends false. Required. */
+  /** Writes `products.active`; Delete sends false. Required. */
   active: boolean;
   /** Writes `products.available`: "sold out for now". */
   available: boolean;

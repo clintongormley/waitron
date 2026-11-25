@@ -19,13 +19,13 @@ import { useMenuDb } from "../test/fixtures.js";
 import { saveBodyOf } from "../test/save-body.js";
 import { menusFixture, product, section } from "../test/menus-fixture.js";
 import {
-  archiveProducts,
+  deleteProducts,
   deleteMenu,
   menusDependingOnDelete,
   assertProductWritable,
   assertOffPublishedMenus,
   publishedMenusHolding,
-} from "./archive.js";
+} from "./delete.js";
 import {
   addMember,
   createSectionIn,
@@ -104,7 +104,7 @@ it.each([
     app((tx) => tx.delete(mediaImages).where(eq(mediaImages.filename, photo)).returning());
   await expect(deletePhoto()).rejects.toThrow("products_media_image_fk");
 
-  if (kind === "dish") await app((tx) => archiveProducts(tx, [id], "person-1"));
+  if (kind === "dish") await app((tx) => deleteProducts(tx, [id], "person-1"));
   else if (kind === "dish with a photo in the delete request")
     await app((tx) => updateProduct(tx, id, { active: false, image: photo }));
   else if (kind === "variant omitted from the save")
@@ -445,7 +445,10 @@ describe("assertOffPublishedMenus", () => {
   });
 });
 
-const archived = (productId: string) => ({ code: "product.archived", params: { productId } });
+const deletedProductRefusal = (productId: string) => ({
+  code: "product.deleted",
+  params: { productId },
+});
 const switchOff = (id: string) =>
   app((tx) => tx.update(products).set({ active: false }).where(eq(products.id, id)));
 const row = async (id: string) =>
@@ -470,7 +473,7 @@ const blocked = (f: Awaited<ReturnType<typeof menusFixture>>) => ({
   },
 });
 
-describe("archiving", () => {
+describe("deleting products", () => {
   it("archives a product and its variants and removes draft placements", async () => {
     const f = await menusFixture(fx.db);
     expect((await row(f.lemonade))!.active).toBe(true);
@@ -521,7 +524,7 @@ describe("archiving", () => {
     const before = await row(f.burger);
     for (const patch of [{ active: true }, { unitPrice: "9" }])
       await expect(app((tx) => updateProduct(tx, f.burger, patch))).rejects.toMatchObject(
-        archived(f.burger),
+        deletedProductRefusal(f.burger),
       );
     expect(await row(f.burger)).toEqual(before);
   });
@@ -530,7 +533,7 @@ describe("archiving", () => {
     await switchOff(f.lemonade);
     const before = await row(f.large);
     await expect(app((tx) => updateProduct(tx, f.large, { unitPrice: "3" }))).rejects.toMatchObject(
-      archived(f.large),
+      deletedProductRefusal(f.large),
     );
     expect(await row(f.large)).toEqual(before);
   });
@@ -541,7 +544,7 @@ describe("archiving", () => {
     expect(before[1]).toMatchObject({ active: true, available: true });
     await expect(
       app((tx) => setProductAvailability(tx, [f.burger, f.large], false)),
-    ).rejects.toMatchObject(archived(f.large));
+    ).rejects.toMatchObject(deletedProductRefusal(f.large));
     expect([await row(f.burger), await row(f.large)]).toEqual(before);
   });
   it("refuses editor saves of an archived product", async () => {
@@ -550,7 +553,7 @@ describe("archiving", () => {
     const value = await app((tx) => readProductEditor(tx, f.burger));
     await expect(
       app((tx) => saveProductEditor(tx, f.burger, { ...value, active: true }, "en")),
-    ).rejects.toMatchObject(archived(f.burger));
+    ).rejects.toMatchObject(deletedProductRefusal(f.burger));
     expect(await app((tx) => readProductEditor(tx, f.burger))).toEqual(value);
   });
   it("a deleting editor save releases photos without saving the other draft changes", async () => {
@@ -623,7 +626,7 @@ describe("archiving", () => {
   });
 });
 
-describe("archive path boundaries", () => {
+describe("deletion boundaries", () => {
   it("archives a variant alone and removes its draft price without removing its parent", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
@@ -636,7 +639,7 @@ describe("archive path boundaries", () => {
     });
     expect(await app((tx) => tx.select().from(menuItemVariantOverrides))).toHaveLength(1);
     const parent = await row(f.lemonade);
-    await app((tx) => archiveProducts(tx, [f.large, f.large]));
+    await app((tx) => deleteProducts(tx, [f.large, f.large]));
     expect((await row(f.large))!.active).toBe(false);
     expect(await row(f.lemonade)).toEqual(parent);
     expect(await app((tx) => tx.select().from(menuItemVariantOverrides))).toEqual([]);
@@ -656,19 +659,19 @@ describe("archive path boundaries", () => {
     expect((await row(f.burger))!.name).toBe("Cheeseburger");
     await app((tx) => updateProduct(tx, f.burger, { active: false }));
     await expect(app((tx) => assertProductWritable(tx, f.burger))).rejects.toMatchObject(
-      archived(f.burger),
+      deletedProductRefusal(f.burger),
     );
     await switchOff(f.lemonade);
     await expect(app((tx) => assertProductWritable(tx, f.large))).rejects.toMatchObject(
-      archived(f.large),
+      deletedProductRefusal(f.large),
     );
   });
   it("an empty or missing archive request writes nothing", async () => {
     await menusFixture(fx.db);
     const before = await snapshot();
     await app(async (tx) => {
-      await archiveProducts(tx, []);
-      await archiveProducts(tx, ["missing"]);
+      await deleteProducts(tx, []);
+      await deleteProducts(tx, ["missing"]);
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -693,7 +696,7 @@ describe("variants and extras", () => {
         ),
       ),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: f.large, field: "variants.1.active" },
     });
     expect(await snapshot()).toEqual(before);
@@ -771,7 +774,7 @@ describe("variants and extras", () => {
     await app((tx) => updateProduct(tx, f.lemonade, { active: false }));
     const before = await snapshot();
     await expect(app((tx) => setProductVariants(tx, f.lemonade, [], "en"))).rejects.toMatchObject(
-      archived(f.lemonade),
+      deletedProductRefusal(f.lemonade),
     );
     expect(await snapshot()).toEqual(before);
   });
@@ -851,7 +854,7 @@ describe("variants and extras", () => {
             : updateExtraList(tx, f.extrasList, input, "en"),
         ),
       ).rejects.toMatchObject({
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: f.extraLemon, field: "items.1.productId" },
       });
       expect(
@@ -905,7 +908,7 @@ it.each(["create", "update"] as const)(
           : updateExtraList(tx, f.extrasList, input, "en"),
       ),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: f.large, field: "items.1.productId" },
     });
     expect(
@@ -939,7 +942,7 @@ it.each(["create", "update"] as const)(
 
 it("keeps reporting-category and single-selection folder moves available after Archive", async () => {
   const f = await menusFixture(fx.db);
-  await app((tx) => archiveProducts(tx, [f.burger]));
+  await app((tx) => deleteProducts(tx, [f.burger]));
   await app((tx) => setMainReportingCategory(tx, f.burger, f.softDrinks));
   expect(await row(f.burger)).toMatchObject({ active: false, categoryId: f.softDrinks });
   await app((tx) => moveProductItems(tx, { productIds: [f.burger], categoryIds: [] }, null));
@@ -949,7 +952,7 @@ it("keeps reporting-category and single-selection folder moves available after A
 it("lets an active variant reuse an archived variant's staff name while preserving the archived row", async () => {
   const f = await menusFixture(fx.db);
   const [large] = await app((tx) => listProductVariants(tx, f.lemonade));
-  await app((tx) => archiveProducts(tx, [f.large]));
+  await app((tx) => deleteProducts(tx, [f.large]));
   const before = await row(f.large);
   await app((tx) =>
     setProductVariants(
@@ -978,7 +981,7 @@ it("lets an active variant reuse an archived variant's staff name while preservi
   ).rejects.toMatchObject({ code: "product.name_taken" });
 });
 
-describe("product archive history", () => {
+describe("product deletion history", () => {
   it.each(["person-1", null])(
     "records an archived product with its variants and person %s",
     async (personId) => {
@@ -1008,15 +1011,15 @@ describe("product archive history", () => {
         .filter((v) => v.active)
         .map((v) => v.id)
         .sort();
-      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      await app((tx) => deleteProducts(tx, [f.lemonade], personId));
       const entries = await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade });
       expect(entries).toHaveLength(1);
       expect(entries[0]).toMatchObject({
-        kind: "product.archived",
+        kind: "product.deleted",
         personId,
         data: { name: "Lemonade", variantIds: variants },
       });
-      await app((tx) => archiveProducts(tx, [f.lemonade], personId));
+      await app((tx) => deleteProducts(tx, [f.lemonade], personId));
       expect(await readActivityForSubject(fx.db, { kind: "product", id: f.lemonade })).toEqual(
         entries,
       );
@@ -1049,6 +1052,6 @@ it("records each product once when a bulk folder deletion also selects its produ
   const events = await fx.db
     .select({ subjectId: activityLog.subjectId })
     .from(activityLog)
-    .where(eq(activityLog.kind, "product.archived"));
+    .where(eq(activityLog.kind, "product.deleted"));
   expect(events.map((row) => row.subjectId).sort()).toEqual(ids);
 });

@@ -441,7 +441,7 @@ it.each(["target", "each"])(
         destination === "each" ? null : target.id,
       ),
     );
-    await expect(reassignment).rejects.toMatchObject({ code: "product.archived" });
+    await expect(reassignment).rejects.toMatchObject({ code: "product.deleted" });
     await expect(reassignment).rejects.toHaveProperty("params", { productId: archived });
     expect(await app((tx) => storedUnitId(tx, active))).toBe(source.id);
     expect(await app((tx) => storedUnitId(tx, archived))).toBe(source.id);
@@ -515,7 +515,7 @@ it("keeps a deleted product's unit until removing the unit and refuses reassignm
     await expect(
       app((tx) => reassignProductsToUnit(tx, source.id, [archivedId], destination)),
     ).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: archivedId },
     });
     expect(await snapshot()).toEqual(before);

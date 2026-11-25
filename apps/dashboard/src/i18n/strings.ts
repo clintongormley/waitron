@@ -575,9 +575,9 @@ export const en = {
   "folders.move_heading_one": "Move 1 item",
   "folders.destination": "Destination",
   "folders.cancel_selection": "Cancel",
-  "folders.archive_products_heading": "Delete {count} products?",
-  "folders.archive_products_heading_one": "Delete 1 product?",
-  "folders.archive_products_body":
+  "folders.delete_products_heading": "Delete {count} products?",
+  "folders.delete_products_heading_one": "Delete 1 product?",
+  "folders.delete_products_body":
     "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.",
   "folders.off_menus": "They come off the {count} menus they are on.",
   "folders.off_menus_one": "They come off the one menu they are on.",
@@ -2900,7 +2900,7 @@ export const en = {
   "editor.base_price": "Base price",
   "editor.base_price_unit": "Base price per {unit}",
   "editor.open_variant": "Open",
-  "editor.variants_all_archived": "No variants.",
+  "editor.variants_all_deleted": "No variants.",
   "editor.open_variant_blocked": "Save your changes before opening a variant's own page.",
   "editor.ordered_on_own": "Standalone ordering by",
   "editor.section_kitchen": "Prep station",
@@ -2982,15 +2982,15 @@ export const en = {
   "product.category": "Category",
   "product.course": "Course",
   "product.search": "Search products",
-  "product.archive_extra_lists": "Removed from these extras lists:",
-  "product.archive_named": "Delete {name}",
-  "product.archive_variant_named": "Delete {name}",
-  "product.archive_warning":
+  "product.delete_extra_lists": "Removed from these extras lists:",
+  "product.delete_named": "Delete {name}",
+  "product.delete_variant_named": "Delete {name}",
+  "product.delete_warning":
     "This can't be undone. The till stops selling the product, and it comes off the extras lists that offer it. Its past sales are kept, and a new product can take its name.",
-  "product.archive_variant_warning":
+  "product.delete_variant_warning":
     "This can't be undone. The till stops offering the variant. Its past sales are kept.",
-  "product.archived_badge": "Deleted",
-  "product.variant_archive_pending_badge": "Deleted when saved",
+  "product.deleted_badge": "Deleted",
+  "product.variant_delete_pending_badge": "Deleted when saved",
   "product.keep_variant": "Keep",
   "product.refusal_menus": "Menus",
   "product.refusal_products": "Products",
@@ -5405,9 +5405,9 @@ export const es: Record<StringKey, string> = {
   "folders.move_heading_one": "Mover 1 elemento",
   "folders.destination": "Destino",
   "folders.cancel_selection": "Cancelar",
-  "folders.archive_products_heading": "¿Eliminar {count} productos?",
-  "folders.archive_products_heading_one": "¿Eliminar 1 producto?",
-  "folders.archive_products_body":
+  "folders.delete_products_heading": "¿Eliminar {count} productos?",
+  "folders.delete_products_heading_one": "¿Eliminar 1 producto?",
+  "folders.delete_products_body":
     "No se puede deshacer. La caja deja de vender los productos y estos salen de las listas de extras que los ofrecen. Sus ventas pasadas se conservan.",
   "folders.off_menus": "Salen de las {count} cartas en las que están.",
   "folders.off_menus_one": "Salen de la carta en la que están.",
@@ -7795,7 +7795,7 @@ export const es: Record<StringKey, string> = {
   "editor.base_price": "Precio base",
   "editor.base_price_unit": "Precio base por {unit}",
   "editor.open_variant": "Abrir",
-  "editor.variants_all_archived": "No hay variantes.",
+  "editor.variants_all_deleted": "No hay variantes.",
   "editor.open_variant_blocked": "Guarda los cambios antes de abrir la página de una variante.",
   "editor.ordered_on_own": "Pedir por separado",
   "editor.section_kitchen": "Estación de preparación",
@@ -7878,15 +7878,15 @@ export const es: Record<StringKey, string> = {
   "product.category": "Categoría",
   "product.course": "Curso",
   "product.search": "Buscar productos",
-  "product.archive_extra_lists": "Sale de estas listas de extras:",
-  "product.archive_named": "Eliminar {name}",
-  "product.archive_variant_named": "Eliminar {name}",
-  "product.archive_warning":
+  "product.delete_extra_lists": "Sale de estas listas de extras:",
+  "product.delete_named": "Eliminar {name}",
+  "product.delete_variant_named": "Eliminar {name}",
+  "product.delete_warning":
     "No se puede deshacer. La caja deja de vender el producto y este sale de las listas de extras que lo ofrecen. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
-  "product.archive_variant_warning":
+  "product.delete_variant_warning":
     "No se puede deshacer. La caja deja de ofrecer la variante. Sus ventas pasadas se conservan.",
-  "product.archived_badge": "Eliminado",
-  "product.variant_archive_pending_badge": "Se elimina al guardar",
+  "product.deleted_badge": "Eliminado",
+  "product.variant_delete_pending_badge": "Se elimina al guardar",
   "product.keep_variant": "Conservar",
   "product.refusal_menus": "Cartas",
   "product.refusal_products": "Productos",
