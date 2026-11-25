@@ -283,8 +283,8 @@ export async function lunchBill(
 /**
  * Groups the bill by hand rather than by the cheapest grouping: each of `menus` holds the dish rows
  * it names, at no charge, and every other dish row is charged a la carte. A set-menu row already on
- * the bill for the same copy is kept. For a grouping the calculation would not choose, such as a
- * dish at 0.00 inside a set menu.
+ * the bill for the same copy is kept. For a grouping a fresh calculation of the test's order would
+ * not produce, such as a dish at 0.00 inside a set menu.
  */
 export function groupSpecBillByHand(
   spec: SpecVenue,
