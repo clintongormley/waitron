@@ -15,7 +15,7 @@ import {
   sales,
   workingOrders,
 } from "@waitron/db";
-import { adjustments, computeAdjustmentReport } from "@waitron/adjustments";
+import { adjustments, computeAdjustmentReport, listAdjustmentReasons } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import {
   computeCategorySales,
@@ -390,7 +390,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     ).toHaveLength(1);
   });
 
-  it("refuses a bill holding an advance, whose ticket takes the advance off", async () => {
+  it("refuses a bill that has had an advance, whose ticket takes the advance off", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     const paid = await send(
       venue.app,
@@ -441,6 +441,82 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(await salesOf()).toEqual(issued);
     expect(await creditsOf(invoice.id)).toEqual([]);
     expect(await advancesOf()).toEqual([advance]);
+  });
+
+  it("refuses a bill that has had an advance, even one given back in full", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "30.00",
+        method: "cash",
+        tendered: "30.00",
+        applied: "30.00",
+        tip: "0.00",
+        ownReceipt: true,
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [advance] = await inTx(venue, (tx) =>
+      tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, party.tabId)),
+    );
+    const override = { personId: venue.adminId, pin: "1234" };
+    const shown = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advance!.advanceSaleId}/corrections/preview`,
+      { gross: "30.00" },
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advance!.advanceSaleId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "30.00",
+        reasonId: reason!.id,
+        note: "Given back",
+        expectedSplit: shown.json.vatBreakdown,
+        override,
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json.correction as { id: string }).id;
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "30.00", override },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack.json)).toBe(200);
+    expect((await creditsOf(advance!.advanceSaleId)).map((credit) => credit.total)).toEqual([
+      -3000,
+    ]);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    const ticket = await printBill(party, party.tabId);
+    expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+    const invoice = await invoiceOf(party.tabId);
+    expect(invoice.total).toBe(4800);
+
+    await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "bill.has_advance",
+    });
+
+    expect(await creditsOf(invoice.id)).toEqual([]);
+    expect((await creditsOf(advance!.advanceSaleId)).map((credit) => credit.total)).toEqual([
+      -3000,
+    ]);
   });
 
   it("refuses a full invoice naming a customer before its unserved dishes", async () => {

@@ -524,7 +524,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
-  it("a printed bill holding an advance says it cannot be split and names the Pay window's other buttons", async () => {
+  it("a printed bill that has had an advance says its dishes cannot be paid for separately and names the Pay window's other buttons", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockResolvedValue([printedWo4]),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
@@ -535,7 +535,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await press(el, "[data-pay-continue]");
 
     expect(formError(el)).toBe(codeMessage("bill.has_advance"));
-    expect(formError(el)).toContain("so it cannot be split.");
+    expect(formError(el)).toContain("so its dishes cannot be paid for separately.");
     expect(formError(el)).toContain("with An amount or Split equally");
     expect(api.payForItems).not.toHaveBeenCalled();
     onTestFinished(() => setLocale("en"));

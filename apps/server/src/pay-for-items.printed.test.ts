@@ -384,9 +384,50 @@ describe("Pay for items on a printed bill", () => {
       outstanding: "11.00",
     });
     const itemsBill = paid.json.billId as string;
+    // The till reads the answer's status to say where the dishes are (apps/till's keptOnOwnBill).
+    expect(paid.json.payment).toMatchObject({
+      balance: { workingOrderId: itemsBill, status: "abandoned" },
+    });
     expect(await statusOf(venue, itemsBill)).toBe("abandoned");
     expect(await ticketsOf(itemsBill)).toEqual([]);
     expect(await paymentRows(venue, itemsBill)).toMatchObject([{ state: "failed" }]);
+  });
+
+  it("a declined card leaves the dishes on their own bill when the reopened bill was printed again meanwhile", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    let offered!: () => void;
+    let release!: () => void;
+    const atReader = new Promise<void>((resolve) => (offered = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const collect = venue.card.collect.bind(venue.card);
+    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+      offered();
+      await released;
+      venue.card.failNextCollect();
+      return collect(params);
+    });
+    const body = await itemsBody(party, [{ lineId: await lineOf(party.tabId, "hake") }], {
+      method: "card",
+      entry: "reader",
+      applied: "15.00",
+    });
+
+    const paying = payItems(party.tabId, body);
+    await atReader;
+    const [reopened] = await reopenedFrom(party.tabId);
+    const reprinted = await fixture.printBill(venue, party, reopened!).finally(release);
+    const paid = await paying;
+
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const itemsBill = paid.json.billId as string;
+    expect(paid.json.payment).toMatchObject({
+      outcome: "declined",
+      balance: { workingOrderId: itemsBill, status: "open", outstanding: "15.00" },
+    });
+    expect(await statusOf(venue, itemsBill)).toBe("open");
+    expect(await dishes(itemsBill)).toEqual([["Hake", "1.000", "15.00"]]);
+    expect(await dishes(reopened!)).toEqual([["Soup", "1.000", "6.00"]]);
   });
 
   it("Cancel payment at the reader leaves every dish on the reopened bill, as a declined card does", async () => {

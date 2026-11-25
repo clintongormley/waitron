@@ -435,7 +435,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   );
 
   it.each(["en", "es"] as const)(
-    "says a bill holding an advance cannot be reopened to split in its own words, in %s",
+    "says a bill that has had an advance cannot be reopened to split in its own words, in %s",
     async (locale) => {
       setLocale(locale);
       try {
