@@ -15,7 +15,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { createPinThrottle } from "@waitron/identity";
 import { menuItems } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeCategorySales, currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
@@ -179,10 +178,7 @@ describe("a whole credit", () => {
     const { saleId } = await printSpecBill(spec, bill.partyId, bill.tabId);
     expect(await rowsOf(saleId!)).toEqual(DIVIDED_ROWS);
 
-    await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, {
-      ...venue.operator,
-      attempts: { throttle: createPinThrottle(), slot: "split" },
-    });
+    await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
     const [credit] = await correctivesOf(saleId!);
     expect(await rowsOf(credit!.id)).toEqual(
       DIVIDED_ROWS.map((row) => ({
