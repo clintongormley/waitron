@@ -677,8 +677,57 @@ describe("till-tender-pay", () => {
     click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, ".pay")).not.toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
+    expect(query(el, "wt-price-input")).toBeNull();
     expect(store.lines).toHaveLength(0); // the weighed product was not rung up
+  });
+
+  it.each([false, true])("keeps Cancel with Add blocked (sending %s)", async (sending) => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", ham);
+    await el.updateComplete;
+    await type(el, "0.320");
+    if (sending) store.sending = true;
+    else store.lockEdits();
+    await el.updateComplete;
+    expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it.each([true, false])("allows Cancel during a payment hold only (held %s)", async (held) => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", ham);
+    await el.updateComplete;
+    el.busy = true;
+    el.held = held;
+    await el.updateComplete;
+
+    expect(query(el, ".cancel")!.hasAttribute("disabled")).toBe(!held);
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, "till-numeric-pad") === null).toBe(held);
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it("keeps a declined card's Retry when staff tap a measured product", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardOutcome: { outcome: "declined" },
+      cardProvider: "simulator",
+    });
+    expect(query(el, ".retry")).not.toBeNull();
+    store.emit("product-selected", {
+      ...portion,
+      unit: { ...portion.unit!, precision: 0, measure: true },
+    } satisfies TillProduct);
+    await el.updateComplete;
+    expect(query(el, ".retry")).not.toBeNull();
+    expect(query(el, "till-numeric-pad")).toBeNull();
   });
 
   it("prompts for kg when a weight product is selected", async () => {
@@ -686,8 +735,10 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.emit("product-selected", ham);
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("weigh.prompt"));
+    expect(query(el, 'wt-price-input[unit="kg"]')).not.toBeNull();
+    expect(query(el, ".prompt")).toBeNull();
     expect(query(el, "till-numeric-pad")).not.toBeNull();
+    expect(query(el, "[data-quantity-step]")).toBeNull();
   });
 
   it("ignores a non-weight product selection", async () => {
@@ -695,7 +746,7 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.emit("product-selected", coffee); // an `each` product never weighs
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
+    expect(query(el, "wt-price-input")).toBeNull();
     expect(query(el, ".pay")).not.toBeNull(); // still idle
   });
 
@@ -1295,7 +1346,7 @@ describe("till-tender-pay", () => {
     store.emit("product-selected", ham);
     await el.updateComplete;
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true); // never heard the add
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
+    expect(query(el, "wt-price-input")).toBeNull(); // never heard the pick
   });
 
   describe("integrated card terminal", () => {
@@ -2991,12 +3042,24 @@ describe("typing cash and weights with a keyboard", () => {
     expect(store.lines).toEqual([]);
   });
 
-  it("draws no text field while the cash or weight pad shows", async () => {
+  it("Escape from the focused weight field cancels amount entry", async () => {
+    const { el, store } = await weighing();
+    const field = el.shadowRoot!.querySelector("wt-price-input")!;
+    await field.updateComplete;
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "0.3");
+    await userEvent.keyboard("{Escape}");
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(store.lines).toEqual([]);
+  });
+
+  it("draws one editable amount for weight and keeps the cash pad field-free", async () => {
     const cash = await paying();
     expect(query(cash.el, "till-numeric-pad")).not.toBeNull();
     expect(textFieldsIn(cash.el.shadowRoot!)).toEqual([]);
     const weight = await weighing();
     expect(query(weight.el, "till-numeric-pad")).not.toBeNull();
-    expect(textFieldsIn(weight.el.shadowRoot!)).toEqual([]);
+    const inputs = textFieldsIn(weight.el.shadowRoot!);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toMatchObject({ name: "quantity", readOnly: false });
   });
 });

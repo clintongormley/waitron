@@ -353,7 +353,8 @@ A newly priced line uses the published unit facts: its receipt map holds the def
 or staff abbreviation under the default key, while its line context holds the full unit name.
 The server prepares these through `prepareUnitSnapshot` and `newCustomerText`; the till uses
 the same preparation for previews. Changing a unit requires publication before new orders use
-it. Retained lines and reprints keep their recorded maps. The parent, added-extra, retained-pick
+it. Retained lines and reprints keep their recorded maps. When you reopen a parked order, the
+till uses the saved abbreviation and whether the line was counted in portions. The parent, added-extra, retained-pick
 cases in `apps/server/src/working-order.test.ts` and `working-order-held-write.test.ts`,
 and the complete stored-row
 comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundaries.
@@ -743,10 +744,12 @@ shortcut to a section a diet filter emptied shows that section's faded tile in t
 display and the shortcuts come from the menu's published version, so a change reaches the till
 only when the menu is published.
 
-Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
-(`pickProduct`, `apps/till/src/widgets/product-pick.ts`). A parent sold by weight or in fractions, or
-tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
-`apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
+Tapping a parent sold as whole portions opens the picker at once
+(`pickProduct`, `apps/till/src/widgets/product-pick.ts`). For a measure, a unit that accepts
+decimals or a unit mapped to a scale, enter the amount in the product's field with its fixed
+unit, directly or with the till keypad. Tap an unsent line's amount to edit it.
+**Add** opens the same picker
+(`#addWeight`, `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
 variants were sent in). The first available one is chosen to start with, except on a reopened line
 not yet stored on an order, which starts on its own variant even when that is no longer available and

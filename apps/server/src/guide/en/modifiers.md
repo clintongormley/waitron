@@ -127,9 +127,9 @@ declarations.
 ## What the till does with a list {#till}
 
 Tapping a dish that carries a list opens one window that asks all of its lists, in the order you
-arranged them. A dish sold by weight, or by a unit that allows decimal places, asks how much first,
-and then shows only its options lists: extras cannot be added to it. A dish in a unit switched to
-**Measures a quantity (ml, g…) — no extras** shows only its options lists too. An extras list shows each
+arranged them. If you sell the dish by weight or in a unit that allows decimal places or has
+**Measures a quantity (ml, g…) — no extras** on, the till asks how much first. Then it shows only
+the options lists. An extras list shows each
 entry's price per portion, with a tick box each, or a stepper where you allowed more than one.
 Under each entry's name are its own allergens. A
 list you made required keeps **Add** shut until something is picked. An options list shows its

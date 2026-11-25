@@ -154,8 +154,12 @@ export interface HeldOrder {
       variantKitchenName?: string | null;
       unit: {
         id: string;
+        staffName: string;
+        staffAbbreviation: string;
         name: Readonly<Record<string, string>>;
+        abbreviation: Readonly<Record<string, string>>;
         precision: number;
+        measure?: true;
         hardwareUnit: "kg" | "g" | "mg" | null;
       };
       offeredModifiers?: OfferedOptionsList[];
@@ -314,6 +318,8 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
         name: workingOrderLines.name,
+        unitName: workingOrderLines.unitName,
+        countAsPortions: workingOrderLines.countAsPortions,
       })
       .from(workingOrderLines)
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
@@ -405,6 +411,9 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
           listId: child.extraListId,
           ...extraDeclarationValues(declarationOf(child)),
         }));
+        const abbreviation = line.unitName ?? context.unitName;
+        const measured =
+          context.hardwareUnit === null && context.unitPrecision === 0 && !line.countAsPortions;
         return {
           workingOrderLineId: line.id,
           optionSnapshots: line.optionSnapshots,
@@ -435,8 +444,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             unit: {
               id: context.unitId,
               name: context.unitName,
+              staffName: Object.values(context.unitName)[0] ?? "",
+              abbreviation,
+              staffAbbreviation: Object.values(abbreviation)[0] ?? "",
               precision: context.unitPrecision,
               hardwareUnit: context.hardwareUnit,
+              ...(measured ? { measure: true as const } : {}),
             },
             ...(options?.length ? { offeredModifiers: options } : {}),
             unitPrice: line.unitPriceGross,

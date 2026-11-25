@@ -58,7 +58,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
-import { productName, productTilePrice } from "./product-name.js";
+import { productName, productTilePrice, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import {
   draftMenuDishes,
@@ -479,8 +479,7 @@ export class TillMenuBrowser extends LitElement {
   /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
 
-  /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
-   * pay widget does not take the dish. */
+  /** Uses the shared amount keypad when this screen takes payment elsewhere. */
   @property({ type: Boolean }) weighs = false;
 
   #waitingForMenu(): boolean {
@@ -992,6 +991,18 @@ export class TillMenuBrowser extends LitElement {
     );
   }
 
+  #keepTileAboveAmount(tile: HTMLElement): void {
+    const panel = this.renderRoot.querySelector("till-tender-pay");
+    if (!panel) return;
+    requestAnimationFrame(() => {
+      if (!tile.isConnected || panel.offsetHeight === 0) return;
+      const tileBox = tile.getBoundingClientRect();
+      const panelBox = panel.getBoundingClientRect();
+      if (tileBox.bottom > panelBox.top && tileBox.top < panelBox.bottom)
+        tile.scrollIntoView({ block: "start" });
+    });
+  }
+
   #productButton(product: TillProduct, onTap: () => void): TemplateResult {
     const price = productTilePrice(product);
     const sellable = hasSomethingToSell(product);
@@ -1021,7 +1032,11 @@ export class TillMenuBrowser extends LitElement {
       @click=${(event: MouseEvent) => {
         if (event.detail === 0 || !this.#suppressClick) {
           if (!sellable) this.infoProduct = product;
-          else onTap();
+          else {
+            onTap();
+            if (this.weighs && !soldByTheUnit(product))
+              this.#keepTileAboveAmount(event.currentTarget as HTMLElement);
+          }
         }
       }}
     >

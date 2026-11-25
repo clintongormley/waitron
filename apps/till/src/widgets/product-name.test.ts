@@ -169,6 +169,7 @@ describe("soldByTheUnit", () => {
     expect(soldByTheUnit(product())).toBe(true);
     expect(soldByTheUnit(product({ pricingUnit: "weight" }))).toBe(false);
     expect(soldByTheUnit(product({ unit: unit(0, null) }))).toBe(true);
+    expect(soldByTheUnit(product({ unit: { ...unit(0, null), measure: true } }))).toBe(false);
     expect(soldByTheUnit(product({ unit: unit(2, null) }))).toBe(false);
     expect(soldByTheUnit(product({ unit: unit(0, "kg") }))).toBe(false);
   });

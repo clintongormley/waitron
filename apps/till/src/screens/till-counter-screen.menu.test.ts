@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { UNDECLARED_DIET } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
@@ -253,6 +254,110 @@ describe("the Pay entry while the basket's pay controls are held", () => {
   it("keeps Pay blue while a payment is being sent", async () => {
     expect(await mountHeld(true)).toBe("primary");
   });
+});
+
+it("adds a chosen variant at the entered litre amount while payment is held", async () => {
+  const previous = currentLocale();
+  setLocale("es-ES");
+  try {
+    const parent = {
+      ...salad,
+      unit: {
+        id: "litre",
+        staffName: "Litre",
+        staffAbbreviation: "L",
+        name: { en: "Litre" },
+        abbreviation: { en: "L" },
+        precision: 3,
+        hardwareUnit: null,
+        measure: true as const,
+      },
+    };
+    const product = {
+      ...parent,
+      variants: [
+        {
+          ...sellingValuesOf(parent),
+          id: "still",
+          name: "Still",
+          unitPrice: "2.00",
+          unitPriceDifference: null,
+          available: true,
+        },
+      ],
+    };
+    const { el, browser } = await mountBrowser({ payHeld: true, products: [product, steak] });
+    const panel = el.shadowRoot!.querySelector("till-tender-pay")!;
+    const root = panel.shadowRoot!;
+    const add = () => root.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add");
+    const tile = browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!;
+    const amount = () => root.querySelector("wt-price-input")!;
+    const input = () => amount().shadowRoot!.querySelector("input")!;
+    tile.click();
+    await panel.updateComplete;
+    expect(add()?.disabled).toBe(true);
+    expect(add()?.variant).toBe("secondary");
+    expect(amount()?.label).toBe(product.name);
+    await amount().updateComplete;
+    expect(input().value).toBe("");
+    const unit = amount().shadowRoot!.querySelector('[part="unit"]')!;
+    expect(unit.textContent).toBe("L");
+    expect(getComputedStyle(unit).visibility).toBe("visible");
+    expect(root.querySelector("[data-quantity-step]")).toBeNull();
+    await userEvent.fill(input(), "999999999");
+    expect(add()?.disabled).toBe(false);
+    expect(add()?.variant).toBe("primary");
+    await userEvent.fill(input(), "1000000000");
+    expect(add()?.disabled).toBe(true);
+    await userEvent.fill(input(), "0,");
+    expect(amount().error).toBe("");
+    await userEvent.keyboard("125");
+    expect(input().value).toBe("0,125");
+    expect(getComputedStyle(input()).textAlign).toBe("end");
+    input().dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(root.querySelector("till-modifier-picker")).toBeNull();
+    await userEvent.keyboard("{Enter}");
+    await panel.updateComplete;
+    const picker = () => root.querySelector("till-modifier-picker")!;
+    await picker().updateComplete;
+    picker().shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await panel.updateComplete;
+    expect(el.store.lines).toEqual([]);
+
+    tile.click();
+    await panel.updateComplete;
+    const pad = root.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    for (const key of ["0", ".", "1", "2", "5"]) {
+      await userEvent.click(pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!);
+    }
+    expect(input().value).toBe("0,125");
+    add()!.click();
+    await panel.updateComplete;
+    await picker().updateComplete;
+    picker().shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    expect(el.store.lines.map((line) => [line.product.variantId, line.quantity])).toEqual([
+      ["still", "0.125"],
+    ]);
+    const basket = el.shadowRoot!.querySelector("till-basket")!;
+    await basket.updateComplete;
+    expect(basket.shadowRoot!.querySelector(".stepper")).toBeNull();
+    const lineAmount = basket.shadowRoot!.querySelector<HTMLElement>("wt-button[data-edit-amount]");
+    expect(lineAmount?.textContent?.trim()).toBe("0,125 L");
+    await userEvent.click(lineAmount!);
+    const editor = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("wt-price-input")?.value).toBe("0.125");
+  } finally {
+    setLocale(previous);
+  }
 });
 
 it("forwards active exclusions to the menu browser and counter weighing panel", async () => {

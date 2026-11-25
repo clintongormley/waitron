@@ -48,6 +48,7 @@ export default defineConfig({
       "lit/directives/keyed.js",
       "lit/directives/live.js",
       "lit/async-directive.js",
+      "lit/static-html.js",
     ],
     entries: ["src/main.ts"],
   },

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtTextarea } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -115,16 +116,91 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(rows(el)).toEqual([]);
     const weigh = browser(el).shadowRoot!.querySelector<HTMLElement>("till-tender-pay")!;
     await (weigh as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const amount = weigh.shadowRoot!.querySelector("wt-price-input");
+    expect(amount?.label).toBe("Jamón");
+    await amount?.updateComplete;
+    expect(amount?.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("kg");
     const pad = weigh.shadowRoot!.querySelector<HTMLElement>("till-numeric-pad")!;
-    pad.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.25" } }));
+    pad.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.250" } }));
     await (weigh as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
 
     weigh.shadowRoot!.querySelector<HTMLElement>("wt-button.add")!.click();
     await el.updateComplete;
 
-    expect(rows(el)).toEqual(["Jamón ×0.25"]);
-    expect(barText(el)).toContain("Jamón");
+    expect(rows(el)).toEqual(["Jamón ×0.250"]);
+    expect(barText(el)).toContain("Jamón 0.250 kg");
+    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
+      /Jamón\s+0.250 kg/,
+    );
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
+  });
+
+  it("takes an integer millilitre amount as one draft line", async () => {
+    const juice: TillProduct = {
+      ...beer,
+      name: "Juice",
+      unit: {
+        id: "millilitre",
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
+        name: { en: "Millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        hardwareUnit: null,
+        measure: true,
+      },
+    };
+    const { el } = await mount({ products: [juice] });
+    await tap(el, "Juice");
+    expect(store(el).lines).toHaveLength(0);
+    const panel = browser(el).shadowRoot!.querySelector("till-tender-pay")!;
+    await panel.updateComplete;
+    const add = () =>
+      panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
+    const input = panel
+      .shadowRoot!.querySelector("wt-price-input")!
+      .shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "1,000");
+    expect(add().disabled).toBe(true);
+    await userEvent.fill(input, "250.5");
+    expect(add().disabled).toBe(true);
+    expect(panel.shadowRoot!.querySelector("wt-price-input")?.error).toBe(
+      t("line.quantity_invalid"),
+    );
+    await userEvent.keyboard("{Backspace}{Backspace}");
+    expect(add().disabled).toBe(false);
+    expect(getComputedStyle(input).textAlign).toBe("end");
+    add().click();
+    await el.updateComplete;
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
+    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
+      /Juice\s+250 ml/,
+    );
+    expect(el.shadowRoot!.querySelector("[data-split-draft-line]")).toBeNull();
+    expect(barText(el)).toContain("Juice 250 ml");
+    expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
+
+    await userEvent.click(bar(el)!.querySelector<HTMLElement>("[data-last-added-detail]")!);
+    const basket = [...el.shadowRoot!.querySelectorAll("till-basket")].find((each) =>
+      each.lineIndexes?.includes(0),
+    )!;
+    await basket.updateComplete;
+    expect(basket.shadowRoot!.querySelector(".stepper")).toBeNull();
+    const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    const amount = picker.shadowRoot!.querySelector("wt-price-input")!;
+    expect(amount?.label).toBe("Juice");
+    await amount.updateComplete;
+    expect(amount.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("ml");
+    const field = amount.shadowRoot!.querySelector("input")!;
+    expect(field.value).toBe("250");
+    expect(getComputedStyle(field).textAlign).toBe("end");
+    await userEvent.fill(field, "1,000");
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
+    await userEvent.fill(field, "300");
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["300"]);
   });
 
   it("shows no weighing prompt until a weighed dish is tapped", async () => {

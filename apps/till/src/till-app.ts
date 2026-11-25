@@ -171,7 +171,7 @@ import "./screens/till-table-order-screen.js";
 import { offeredReceiptLanguage, shownReceiptLanguage } from "./widgets/receipt-language.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
-import { lineProductName, productUnit, soldByTheUnit } from "./widgets/product-name.js";
+import { lineProductName, soldByTheUnit, unitName } from "./widgets/product-name.js";
 import { optionAnswers } from "./widgets/option-snapshot.js";
 import type {
   InvoiceEmailRefusal,
@@ -15664,7 +15664,7 @@ export class TillApp extends LitElement {
       listed.map((line) => ({
         quantity: line.quantity,
         name: lineProductName(line.product),
-        unitName: productUnit(line.product).name,
+        unitName: { [currentLocale()]: unitName(line.product) },
         soldInEach: soldByTheUnit(line.product),
         ...(purpose === "extras" && line.extras !== undefined
           ? {

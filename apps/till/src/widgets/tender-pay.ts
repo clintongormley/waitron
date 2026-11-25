@@ -37,7 +37,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
-import { pressIfEnabled } from "../state/pad-keys.js";
+import "@waitron/ui/src/components/wt-price-input.js";
+import { padInputFor, pressIfEnabled } from "../state/pad-keys.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -52,9 +53,10 @@ import type {
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
-import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
+import { lineProductName, productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
-import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
+import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
+import { needsModifierPicker } from "../state/order-line.js";
 import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 
@@ -144,8 +146,6 @@ const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
   ["customer_canceled", "card.cancelled"],
 ]);
 
-const ZERO = decimal("0");
-
 type EntryDraft = {
   entry: string;
   label: string;
@@ -215,6 +215,10 @@ export class TillTenderPay extends LitElement {
       .amount {
         font-variant-numeric: tabular-nums;
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      wt-price-input {
+        margin-block-end: var(--wt-space-3);
       }
 
       .change .amount {
@@ -310,10 +314,10 @@ export class TillTenderPay extends LitElement {
    */
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
-  /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */
+  /** The pay controls are held while nothing is being sent, so amount entry can stay available. */
   @property({ type: Boolean }) held = false;
   @property() mode: OrderFlow = "prepay";
-  /** Only a weighed dish's weight entry, for a screen that takes payment elsewhere. */
+  /** Only amount entry, for a screen that takes payment elsewhere. */
   @property({ type: Boolean }) weighOnly = false;
   @property({ type: Boolean }) paymentWindow = false;
   /** Ignored when {@link mode} is `"prepay"`, which has no separate collect stage. */
@@ -510,19 +514,27 @@ export class TillTenderPay extends LitElement {
     this.#entryBaseline = undefined;
   }
 
+  #quantityBlocked(): boolean {
+    return (this.busy && !this.held) || this.store.sending || this.store.editsLocked;
+  }
+
+  #cancelBlocked(): boolean {
+    return this.busy && (this.view !== "weighing" || !this.held);
+  }
+
   #requestCancel(): void {
     if (!this.isConnected) return;
     if (this.view === "collecting" || this.view === "card_outcome") {
       this.#cancel();
       return;
     }
-    if (this.busy) return;
+    if (this.#cancelBlocked()) return;
     if (this.#entryScope && this.#leave) {
       void this.#leave.request({
         scopes: [this.#entryOwner],
         reason: "cancel",
         proceed: () => {
-          if (this.isConnected && !this.busy) this.#cancel();
+          if (this.isConnected && !this.#cancelBlocked()) this.#cancel();
         },
       });
     } else this.#cancel();
@@ -540,13 +552,23 @@ export class TillTenderPay extends LitElement {
   }
 
   #onProductSelected(product: TillProduct): void {
-    if (!this.isConnected || this.busy || soldByTheUnit(product)) return;
+    const canOpen = () =>
+      this.isConnected &&
+      !this.#quantityBlocked() &&
+      this.view !== "card_outcome" &&
+      this.view !== "collecting";
+    if (soldByTheUnit(product) || !canOpen()) return;
     const select = () => {
-      if (!this.isConnected || this.busy) return;
+      if (!canOpen()) return;
       this.#finishEntry();
       this.selected = product;
       this.entry = "";
       this.view = "weighing";
+      if (!this.weighOnly)
+        requestAnimationFrame(() => {
+          if (this.isConnected && this.view === "weighing" && this.selected === product)
+            this.scrollIntoView({ block: "nearest" });
+        });
     };
     if (this.#entryScope && this.#leave)
       void this.#leave.request({
@@ -600,8 +622,10 @@ export class TillTenderPay extends LitElement {
 
   #onPadChange(event: Event): void {
     event.stopPropagation();
-    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
-    this.entry = (event as CustomEvent<{ value: string }>).detail.value;
+    const blocked = this.view === "weighing" ? this.#quantityBlocked() : this.busy;
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || blocked) return;
+    const { value } = (event as CustomEvent<{ value: string }>).detail;
+    this.entry = this.view === "weighing" && /^\d+,$/.test(value) ? value.replace(",", ".") : value;
     this.#entryScope?.changed();
   }
 
@@ -932,9 +956,9 @@ export class TillTenderPay extends LitElement {
    * returns.
    */
   #addWeight(product: TillProduct): void {
-    if (!this.isConnected || this.busy || this.view !== "weighing") return;
-    const quantity = this.#enteredDecimal();
-    if (compareDecimal(quantity, ZERO) <= 0 || !this.#quantityFitsUnit(product)) return;
+    if (!this.isConnected || this.#quantityBlocked() || this.view !== "weighing") return;
+    const quantity = this.#quantityEntry();
+    if (!this.#quantityFitsUnit(product, quantity)) return;
     this.#finishEntry();
     this.selected = undefined;
     this.entry = "";
@@ -950,9 +974,30 @@ export class TillTenderPay extends LitElement {
     return formatDecimalInput(this.entry === "" ? "0" : this.entry, currentLocale());
   }
 
-  /** Ignore insignificant zeroes, matching the server's exact decimal-string check. */
-  #quantityFitsUnit(product: TillProduct): boolean {
-    return quantityPlaces(this.entry) <= productUnit(product).precision;
+  #quantityFitsUnit(product: TillProduct, quantity: string): boolean {
+    const { precision } = productUnit(product);
+    if (precision === 0 && !/^\d+$/.test(this.entry)) return false;
+    try {
+      assertQuantityPrecision(quantity, precision, { positive: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  #onQuantityKey(event: KeyboardEvent): void {
+    if (event.defaultPrevented || event.repeat) return;
+    if (padInputFor(event, "decimal")?.kind === "escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      pressIfEnabled(this.#button(".cancel"));
+    } else {
+      submitOnEnter(event, this.#button(".add"));
+    }
+  }
+
+  #quantityEntry(): string {
+    return this.entry.replace(/^(\d+)\.$/, "$1");
   }
 
   override render() {
@@ -1612,18 +1657,30 @@ export class TillTenderPay extends LitElement {
   #renderWeighing() {
     // `view === "weighing"` is only ever entered with a product set (see #onProductSelected).
     const product = this.selected as TillProduct;
-    const invalid =
-      compareDecimal(this.#enteredDecimal(), ZERO) <= 0 || !this.#quantityFitsUnit(product);
+    const quantity = this.#quantityEntry();
+    const invalid = !this.#quantityFitsUnit(product, quantity);
+    const blocked = this.#quantityBlocked();
+    const canAdd = !invalid && !blocked;
+    const showError = invalid && quantity !== "" && quantity !== "0";
     return html`
-      <p class="prompt">${t("weigh.prompt")}</p>
-      <div class="summary">
-        <div class="row">
-          <span class="label">${unitName(product)}</span>
-          <span class="amount kg">${this.#entryDisplay()}</span>
-        </div>
-      </div>
+      <wt-price-input
+        name="quantity"
+        label=${lineProductName(product)}
+        unit=${unitName(product)}
+        fixed-unit
+        align-amount-end
+        placeholder=" "
+        required
+        decimal-locale=${currentLocale()}
+        .value=${this.entry}
+        .error=${showError ? t("line.quantity_invalid") : ""}
+        ?disabled=${blocked}
+        @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @keydown=${this.#onQuantityKey}
+      ></wt-price-input>
       <till-numeric-pad
         .value=${this.entry}
+        ?inert=${blocked}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
         @pad-enter=${() => pressIfEnabled(this.#button(".add"))}
         @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
@@ -1631,14 +1688,19 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="add"
-          variant="primary"
+          variant=${canAdd ? "primary" : "secondary"}
           size="lg"
-          ?disabled=${invalid}
+          ?disabled=${!canAdd}
           @click=${() => this.#addWeight(product)}
         >
           ${t("action.add")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
+        <wt-button
+          class="cancel"
+          variant="secondary"
+          ?disabled=${this.#cancelBlocked()}
+          @click=${() => this.#requestCancel()}
+        >
           ${t("action.cancel")}
         </wt-button>
       </div>

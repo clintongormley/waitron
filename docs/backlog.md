@@ -511,9 +511,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
-- **A821f. A product sold by a measure with no scale (ml) asks its amount** — queued as MEASURE-AMOUNT
-  (lane E). Owner, 2026-11-24: "yes type the amount, or use the +- … but that should be a single value, not
-  a line per ml". [Detail](backlog/menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
+- **Remaining actions on measured dishes** (adjustments, part payment and set-menu replacements).
+  [Detail](backlog/menu.md#remaining-actions-on-measured-dishes)
 
 - **Each unit literal** (bundle of 1, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
 

@@ -137,10 +137,10 @@ son texto y no llevan declaraciones.
 ## Qué hace la caja con una lista {#till}
 
 Al tocar un plato que lleva una lista se abre una sola ventana que pregunta todas sus listas, en el
-orden en que las colocaste. Un plato que se vende por peso, o en una unidad que admite decimales,
-pregunta primero la cantidad y después muestra solo sus listas de opciones: no se le pueden añadir
-extras. Un plato en una unidad con **Mide una cantidad (ml, g…) — sin extras** activado también muestra
-solo sus listas de opciones. Una lista de extras muestra el precio por porción de cada elemento, con una casilla para cada
+orden en que las colocaste. Si vendes el plato por peso o en una unidad que admite decimales
+o tiene **Mide una cantidad (ml, g…) — sin extras** activado, la caja pregunta primero la cantidad.
+Después muestra solo las listas de opciones. Una lista de extras muestra el precio por porción
+de cada elemento, con una casilla para cada
 uno, o un selector de cantidad donde permitiste más de uno. Bajo el nombre de cada elemento
 aparecen sus propios alérgenos. Una lista que hiciste obligatoria mantiene
 **Añadir** desactivado hasta que se elige algo. Una lista de opciones muestra sus opciones disponibles

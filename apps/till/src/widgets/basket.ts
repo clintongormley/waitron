@@ -33,7 +33,7 @@ import type {
 } from "../state/working-order.js";
 import type { BlockReason } from "../state/menu-refresh.js";
 import type { StringKey } from "../i18n/strings.js";
-import { lineProductName, productUnit } from "./product-name.js";
+import { lineProductName, soldByTheUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
   adjustableListing,
@@ -343,7 +343,7 @@ export class TillBasket extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Dish-line quantity stepper: -/N/+ for a whole, non-hardware unit; other units stay static. */
+      /* The stepper fits a whole-portion count in the quantity column. */
       .stepper {
         display: inline-flex;
         align-items: center;
@@ -1200,9 +1200,20 @@ export class TillBasket extends LitElement {
   #quantityCell(line: OrderLine, index: number, sent: boolean) {
     if (this.readOnly || line.setMenuId !== undefined)
       return html`<span class="qty">${quantityLabel(line)}</span>`;
-    const unit = productUnit(line.product);
-    if (unit.hardwareUnit !== null || unit.precision > 0) {
-      return html`<span class="qty">${quantityLabel(line)}</span>`;
+    if (!soldByTheUnit(line.product)) {
+      const amount = quantityLabel(line);
+      return this.lineDetails && !sent
+        ? html`<wt-button
+            class="qty"
+            data-edit-amount
+            variant="ghost"
+            size="sm"
+            aria-label=${`${amount} · ${t("modifier.edit")} · ${this.#lineName(line)}`}
+            ?disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
+            @click=${() => this.openLineDetails(line)}
+            >${amount}</wt-button
+          >`
+        : html`<span class="qty">${amount}</span>`;
     }
     const count = Number(line.quantity);
     const name = this.#lineName(line);

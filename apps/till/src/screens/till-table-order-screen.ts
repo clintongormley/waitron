@@ -85,7 +85,7 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { lineProductName, productName } from "../widgets/product-name.js";
+import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import {
   quantityText,
   servableDishes,
@@ -97,6 +97,7 @@ import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
 import {
   takesExtras,
+  quantityLabel,
   toWireLineExtras,
   toWireModifiers,
   toWireProductIdentity,
@@ -4233,10 +4234,18 @@ export class TillTableOrderScreen extends LitElement {
 
   #newOrderBar(store: WorkingOrderStore): TemplateResult {
     const items = newOrderItems(store.lines);
-    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product))
-      .map((dish) => fill(t("table.new_order_dish"), { n: String(dish.items), name: dish.name }))
+    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product));
+    const names = dishes
+      .map(({ name, items, amount }) =>
+        amount === undefined
+          ? fill(t("table.new_order_dish"), { n: String(items), name })
+          : `${name} ${amount}`,
+      )
       .join(" · ");
-    const text = `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${dishes}`;
+    const text =
+      dishes.length === 1 && dishes[0]?.amount !== undefined
+        ? names
+        : `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${names}`;
     const disabled = this.#sendAllDisabled(store);
     return html`<div class="new-order-bar" data-new-order-bar>
       <button
@@ -4690,7 +4699,9 @@ export class TillTableOrderScreen extends LitElement {
       scope === this.#draftArrangementScope() &&
       api === this.api;
     const name = lineProductName(line.product);
-    const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
+    const amount = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
+    const quantity =
+      line.notOffered || soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =
@@ -4706,7 +4717,7 @@ export class TillTableOrderScreen extends LitElement {
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
         ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
           >${name}</span
-        >${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+        >${this.#nutrition(line)}${this.#draftAllergyMark(line)}${quantity}</span
       >`;
     return html`${
         family?.[0] === line
@@ -4745,7 +4756,7 @@ export class TillTableOrderScreen extends LitElement {
         <span class="draft-line-name"
           ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
             >${name}</span
-          >${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+          >${this.#nutrition(line)}${this.#draftAllergyMark(line)}${quantity}</span
         >
       </button>
       ${
@@ -5647,7 +5658,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#takeServeAuthority();
     const most =
       members === undefined ? this.#mostToServe(row, undo) : decimal(String(members.length));
-    if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
+    if (
+      row.unitPrecision === 0 &&
+      row.countsWholePortions !== false &&
+      compareDecimal(most, decimal("1")) > 0
+    ) {
       this.#openServeDialog({
         row,
         undo,

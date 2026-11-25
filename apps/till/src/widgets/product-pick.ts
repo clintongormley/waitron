@@ -3,7 +3,7 @@ import { needsModifierPicker } from "../state/order-line.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { menuOfferToTillProduct } from "../api/client.js";
 import type { PickSetMenuDishDetail } from "./set-menu-folder.js";
-import { productUnit } from "./product-name.js";
+import { soldByTheUnit } from "./product-name.js";
 
 /** A product with variants is sold only as one of them, so one whose variants are all unavailable
  * here has nothing to sell. It keeps its tile, greyed, so the tiles around it do not move (D12). */
@@ -14,7 +14,7 @@ export function hasSomethingToSell(product: TillProduct): boolean {
 }
 
 /**
- * What a tap on a product does: a weighed or fractional-unit product asks for its quantity (the
+ * What a tap on a product does: a product sold by measure asks for its amount (the
  * store's `product-selected`), one with variants or modifiers opens the picker through
  * `openModifiers`, and any other rings up one. A product with nothing to sell does nothing.
  */
@@ -25,8 +25,7 @@ export function pickProduct(
   replacing?: OrderLine,
 ): void {
   if (!hasSomethingToSell(product)) return;
-  const unit = productUnit(product);
-  if (unit.hardwareUnit !== null || unit.precision > 0) {
+  if (!soldByTheUnit(product)) {
     store.emit("product-selected", product);
   } else if (needsModifierPicker(product)) {
     openModifiers(product);
