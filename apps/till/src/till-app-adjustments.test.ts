@@ -27,6 +27,8 @@ import {
   openTableMenu,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
+import { transactionRow } from "../test/find-bill-fixtures.js";
+import { UNDER_WAY, VIEW } from "./widgets/give-back-dialog.test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -4557,11 +4559,8 @@ describe("till-app: service cancellation consent", () => {
       await closed;
       await flush(el);
       expect(refundForm(el)).toBeNull();
-      await userEvent.click(
-        page.elementLocator(
-          ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]")!,
-        ),
-      );
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-give-back]")).not.toBeNull();
+      emit(ticket(el)!, "tender-refund-open");
       await flush(el);
       expect(refundForm(el)?.attempt?.refundId).toBe(refunded.id);
       await userEvent.click(
@@ -4732,32 +4731,31 @@ describe("till-app: service cancellation consent", () => {
       await expect.poll(() => ticket(el)).not.toBeNull();
       await flush(el);
       expect(refundForm(el)).toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
-    it("offers Correct invoice beside Refund a payment on the paid receipt, closing it on leaving", async () => {
-      const readInvoiceCorrectionLines = vi.fn(() => new Promise(() => {}));
-      const methods = paidMethods({ readInvoiceCorrectionLines });
+    it("offers Give money back on the paid receipt in place of Correct invoice and Refund a payment, closing it on leaving", async () => {
+      const readGiveBack = vi.fn(() => new Promise(() => {}));
+      const methods = paidMethods({ readGiveBack });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
       await expect.poll(() => refundForm(el)).not.toBeNull();
       emit(refundForm(el)!, "tender-refund-close");
       await flush(el);
-      const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>(
-        "[data-invoice-correction]",
-      )!;
-      expect(button.textContent!.trim()).toBe(t("invoice_correction.title"));
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
+      const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!;
+      expect(button.textContent!.trim()).toBe(t("give_back.title"));
       await userEvent.click(page.elementLocator(button));
       await flush(el);
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
-      expect(correcting()!.saleId).toBe("own-sale");
-      expect(readInvoiceCorrectionLines).toHaveBeenCalledWith("own-sale", {});
+      const giving = () => el.shadowRoot!.querySelector("till-give-back-dialog");
+      expect(giving()!.saleId).toBe("own-sale");
+      expect(readGiveBack).toHaveBeenCalledWith("own-sale", {});
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      expect(correcting()).toBeNull();
+      expect(giving()).toBeNull();
     });
 
     it("gives a correction's card leg through Refund a payment, then has the correction read again", async () => {
@@ -4827,11 +4825,12 @@ describe("till-app: service cancellation consent", () => {
       expect(correcting().session).toBeDefined();
     });
 
-    it("opens a correction chosen in Find bill on its receipt, even with nothing left to refund", async () => {
-      const getInvoiceCorrection = vi.fn(() => new Promise(() => {}));
+    it("opens a money back under way chosen in Find bill on its receipt, even with nothing left to refund", async () => {
+      const underWay = { ...UNDER_WAY, saleId: "own-sale" };
+      const readGiveBack = vi.fn().mockResolvedValue({ ...VIEW, underWay });
       const methods = paidMethods({
         getRefundableTenders: vi.fn().mockResolvedValue([]),
-        getInvoiceCorrection,
+        readGiveBack,
       });
       const { el } = await mountApp(methods);
       await flush(el);
@@ -4844,15 +4843,16 @@ describe("till-app: service cancellation consent", () => {
         correction: { id: "correction-1", saleId: "own-sale" },
       });
       await flush(el);
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
-      await expect.poll(() => correcting()).not.toBeNull();
+      const giving = () => el.shadowRoot!.querySelector("till-give-back-dialog");
+      await expect.poll(() => giving()).not.toBeNull();
       expect(api.getTransactionReceipt).toHaveBeenCalledWith("own-sale", expect.anything());
       expect(ticket(el)).not.toBeNull();
-      expect([correcting()!.saleId, correcting()!.correctionId]).toEqual([
-        "own-sale",
-        "correction-1",
-      ]);
-      expect(getInvoiceCorrection).toHaveBeenCalledWith("correction-1", {});
+      expect(giving()!.saleId).toBe("own-sale");
+      expect(readGiveBack).toHaveBeenCalledWith("own-sale", {});
+      await expect
+        .poll(() => giving()!.shadowRoot!.querySelector("till-give-back-under-way")?.correction.id)
+        .toBe("correction-1");
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     });
 
     const resumedCard = {
@@ -4885,9 +4885,11 @@ describe("till-app: service cancellation consent", () => {
       emit(shell(el), "find-bill");
       const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
       await expect.poll(findBill).not.toBeNull();
-      emit(findBill()!, "find-correction-open", {
-        correction: { id: "correction-1", saleId: "own-sale" },
-      });
+      emit(findBill()!, "find-transaction-open", { row: transactionRow({ saleId: "own-sale" }) });
+      await expect.poll(() => ticket(el)).not.toBeNull();
+      await flush(el);
+      // Correct invoice has no button now; its window stays until the till's old windows go.
+      emit(ticket(el)!, "invoice-correction-open", { correctionId: "correction-1" });
       const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
       return { el, correcting };
     }

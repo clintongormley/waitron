@@ -271,6 +271,8 @@ import "./widgets/tender-refund-dialog.js";
 import "./widgets/invoice-correction-dialog.js";
 import type { InvoiceCorrectionCardLeg } from "./widgets/invoice-correction-dialog.js";
 import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
+import "./widgets/give-back-dialog.js";
+import { GiveBackSession } from "./state/give-back.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 import type {
   RefundableTender,
@@ -3195,6 +3197,7 @@ export class TillApp extends LitElement {
     this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
     this.invoiceCorrecting = null;
+    this.givingBack = null;
     this.#tenderRefundRead++;
     this.#stopClocking();
     this.#cancelFindBillRead();
@@ -4029,6 +4032,12 @@ export class TillApp extends LitElement {
     session: InvoiceCorrectionSession;
     legsRevision: number;
     cardNotice: { key: StringKey } | null;
+  } | null = null;
+  @state() private givingBack: {
+    saleId: string;
+    session: GiveBackSession;
+    corrections: InvoiceCorrectionSession;
+    refunds: TenderRefundSession;
   } | null = null;
   @state() private tenderRefunding: {
     visit: object;
@@ -5405,6 +5414,7 @@ export class TillApp extends LitElement {
       if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
       this.#closeTenderRefund();
       this.invoiceCorrecting = null;
+      this.givingBack = null;
       if (this.#tenderRefundScope !== undefined)
         this.#tenderRefundSession = new TenderRefundSession(
           this.#tenderRefundScope,
@@ -5417,6 +5427,7 @@ export class TillApp extends LitElement {
       if (this.drill?.kind !== "ticket") {
         this.#closeTenderRefund();
         this.invoiceCorrecting = null;
+        this.givingBack = null;
       }
       if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
       if (this.drill?.kind !== "find-bill" && this.drill?.kind !== "ticket")
@@ -9641,6 +9652,7 @@ export class TillApp extends LitElement {
     this.#tenderRefundRead++;
     this.refundableTenders = [];
     this.#closeTenderRefund();
+    this.givingBack = null;
   }
 
   #openTenderRefund(fill?: RefundFill): void {
@@ -9856,10 +9868,67 @@ export class TillApp extends LitElement {
     event: CustomEvent<{ correction: OpenInvoiceCorrection }>,
   ): Promise<void> {
     if (this.drill?.kind !== "find-bill") return;
-    const { id, saleId } = event.detail.correction;
+    const { saleId } = event.detail.correction;
     await this.#openHistoricalReceipt({ saleId, workingOrderId: null, refundId: null });
     if (this.historicalReceipt?.kind === "invoice" && this.historicalReceipt.saleId === saleId)
-      this.#openInvoiceCorrection(id);
+      this.#openGiveBack(true);
+  }
+
+  /** Offered while money is left to give back, or while a press or rest is saved on this device. */
+  #giveBackOffered(): boolean {
+    if (this.#hasRefundableTenders()) return true;
+    const receipt = this.historicalReceipt;
+    if (receipt?.kind !== "invoice" || this.#tenderRefundScope === undefined) return false;
+    try {
+      return new GiveBackSession(this.#tenderRefundScope, this.api).read(receipt.saleId) !== null;
+    } catch {
+      return true;
+    }
+  }
+
+  /** With `underWay`, opens on a receipt whose give-back is under way, which may have nothing left
+   * to start: the window reads it and opens on what is left to do. */
+  #openGiveBack(underWay = false): void {
+    const receipt = this.historicalReceipt;
+    const scope = this.#tenderRefundScope;
+    const refunds = this.#tenderRefundSession;
+    if (
+      !this.isConnected ||
+      this.drill?.kind !== "ticket" ||
+      receipt?.kind !== "invoice" ||
+      this.givingBack ||
+      scope === undefined ||
+      refunds === undefined ||
+      (!underWay && !this.#giveBackOffered())
+    )
+      return;
+    this.givingBack = {
+      saleId: receipt.saleId,
+      session: new GiveBackSession(scope, this.api),
+      corrections: new InvoiceCorrectionSession(scope, this.api),
+      refunds,
+    };
+  }
+
+  #renderGiveBack(): TemplateResult | typeof nothing {
+    const open = this.givingBack;
+    if (!open) return nothing;
+    return html`<till-give-back-dialog
+      .api=${this.api}
+      .saleId=${open.saleId}
+      .invoiceNumber=${this.result?.invoiceNumber ?? ""}
+      .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
+      .session=${open.session}
+      .corrections=${open.corrections}
+      .refunds=${open.refunds}
+      .capabilities=${this.capabilities}
+      @give-back-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.givingBack !== open) return;
+        this.givingBack = null;
+        void this.#readRefundableTenders(true);
+      }}
+    ></till-give-back-dialog>`;
   }
 
   /** With `correctionId`, carries on with that open correction, which may have nothing left to
@@ -25060,9 +25129,11 @@ export class TillApp extends LitElement {
             @back-to-find-bill=${() => this.#backToFindBill()}
           ></till-refund-acknowledgment>`;
         return html`<till-ticket-view
-          .refundable=${this.#hasRefundableTenders()}
+          .refundable=${this.#giveBackOffered()}
+          @give-back-open=${() => this.#openGiveBack()}
           @tender-refund-open=${() => this.#openTenderRefund()}
-          @invoice-correction-open=${() => this.#openInvoiceCorrection()}
+          @invoice-correction-open=${(event: CustomEvent<{ correctionId?: string } | null>) =>
+            this.#openInvoiceCorrection(event.detail?.correctionId)}
           .historical=${this.historicalReceipt !== null}
           .receiptCopiesOnly=${this.#ticketDeliveryTarget()?.transaction === true}
           .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.#ticketDeliveryTarget() !== undefined}
@@ -25755,7 +25826,8 @@ export class TillApp extends LitElement {
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
         ${this.#renderBillPaying()} ${this.#renderDeferredClosing()}
         ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderInvoiceCorrection()} ${this.#renderCancelCrediting()}
+        ${this.#renderInvoiceCorrection()} ${this.#renderGiveBack()}
+        ${this.#renderCancelCrediting()}
         ${
           this.settlementDocument === null
             ? nothing

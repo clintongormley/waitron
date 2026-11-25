@@ -391,6 +391,10 @@ export class TillTicketView extends LitElement {
       .receipt-actions wt-button {
         flex: 1;
       }
+
+      .receipt-actions .give-back {
+        flex-basis: 100%;
+      }
     `,
   ];
 
@@ -1095,17 +1099,12 @@ export class TillTicketView extends LitElement {
         ${
           this.historical && this.refundable
             ? html`<wt-button
-                  data-tender-refund
-                  variant="secondary"
-                  @click=${() => this.dispatchEvent(new CustomEvent("tender-refund-open", { bubbles: true, composed: true }))}
-                  >${t("tender_refund.title")}</wt-button
-                >
-                <wt-button
-                  data-invoice-correction
-                  variant="secondary"
-                  @click=${() => this.dispatchEvent(new CustomEvent("invoice-correction-open", { bubbles: true, composed: true }))}
-                  >${t("invoice_correction.title")}</wt-button
-                >`
+                class="give-back"
+                data-give-back
+                variant="secondary"
+                @click=${() => this.dispatchEvent(new CustomEvent("give-back-open", { bubbles: true, composed: true }))}
+                >${t("give_back.title")}</wt-button
+              >`
             : nothing
         }
         ${

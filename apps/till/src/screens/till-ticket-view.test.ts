@@ -2229,3 +2229,48 @@ describe("a corrective invoice", () => {
     expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
   });
 });
+
+describe("Give money back", () => {
+  const giveBack = (el: TillTicketView) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-give-back]");
+  it("a past receipt with money to give back offers one Give money back, full width, which asks to open the window", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      historical: true,
+      refundable: true,
+    });
+    expect(giveBack(el)!.textContent!.trim()).toBe(uiText("give_back.title"));
+    expect(el.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
+    const actions = el.shadowRoot!.querySelector<HTMLElement>(".receipt-actions")!;
+    expect(giveBack(el)!.getBoundingClientRect().width).toBe(actions.getBoundingClientRect().width);
+    const opened: Event[] = [];
+    el.addEventListener("give-back-open", (event) => opened.push(event));
+    await userEvent.click(page.elementLocator(giveBack(el)!));
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.bubbles && opened[0]!.composed).toBe(true);
+  });
+
+  it("is worded from the Spanish strings in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      historical: true,
+      refundable: true,
+    });
+    expect(giveBack(el)!.textContent!.trim()).toBe(uiText("give_back.title", "es-ES"));
+  });
+
+  it("is not offered on a new sale's receipt nor on a past one with nothing to give back", async () => {
+    const fresh = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      refundable: true,
+    });
+    expect(giveBack(fresh.el)).toBeNull();
+    const spent = await mountWidget<TillTicketView>("till-ticket-view", {
+      result,
+      historical: true,
+    });
+    expect(giveBack(spent.el)).toBeNull();
+  });
+});

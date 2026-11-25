@@ -49,6 +49,11 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillMainServerStrip } from "./widgets/main-server-strip.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
+import type { TillGiveBackDialog } from "./widgets/give-back-dialog.js";
+import { GiveBackSession } from "./state/give-back.js";
+import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
+import { TenderRefundSession } from "./state/tender-refund.js";
+import { UNDER_WAY, VIEW } from "./widgets/give-back-dialog.test-helpers.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -26306,8 +26311,11 @@ describe("A737 Find a bill page", () => {
     expect(getTransactionReceipt).not.toHaveBeenCalled();
     expect(getRefundableTenders).not.toHaveBeenCalled();
     expect(ticket(el)).toBeNull();
+    expect(refundView(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
+    emit(refundView(el)!, "give-back-open");
     emit(refundView(el)!, "tender-refund-open");
     await flush(el);
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     emit(refundView(el)!, "back-to-find-bill");
     await flush(el);
@@ -27333,6 +27341,8 @@ describe("A737 post-invoice refund integration", () => {
     el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("[data-tender-refund-approval]");
   const refundKeys = () =>
     Object.keys(localStorage).filter((key) => key.startsWith("waitron.tender-refund:"));
+  const giveBackButton = (el: TillApp) =>
+    ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]");
   beforeEach(() => {
     for (const key of refundKeys()) localStorage.removeItem(key);
   });
@@ -27374,9 +27384,8 @@ describe("A737 post-invoice refund integration", () => {
     return { el, basket, view, getRefundableTenders, refundTransaction };
   }
   async function openRefund(el: TillApp) {
-    const action = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]");
-    expect(action, "the paid receipt offers Refund").not.toBeNull();
-    await userEvent.click(page.elementLocator(action!));
+    expect(giveBackButton(el), "the paid receipt offers Give money back").not.toBeNull();
+    emit(ticket(el)!, "tender-refund-open");
     await vi.waitFor(() => expect(dialog(el)?.reasons ?? null).not.toBeNull());
     await dialog(el)!.updateComplete;
     return dialog(el)!;
@@ -27391,6 +27400,138 @@ describe("A737 post-invoice refund integration", () => {
     );
     await flush(el);
   }
+  const giveBack = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillGiveBackDialog>("till-give-back-dialog");
+  async function openGiveBack(el: TillApp) {
+    expect(giveBackButton(el), "the paid receipt offers Give money back").not.toBeNull();
+    await userEvent.click(page.elementLocator(giveBackButton(el)!));
+    await vi.waitFor(() => expect(giveBack(el)).not.toBeNull());
+    await giveBack(el)!.updateComplete;
+    return giveBack(el)!;
+  }
+  const appCapabilities = (el: TillApp) =>
+    (el as unknown as { capabilities: readonly string[] }).capabilities;
+  /** What the till Refund a payment uses: its window, opened on the same receipt. */
+  const refundSession = (el: TillApp) =>
+    (el as unknown as { tenderRefunding: { session: TenderRefundSession } | null }).tenderRefunding
+      ?.session;
+  describe("Give money back", () => {
+    it("opens one window on the receipt in place of Refund a payment and Correct invoice, with the sessions Refund a payment uses", async () => {
+      const readGiveBack = vi.fn().mockResolvedValue(VIEW);
+      const { el } = await open({ readGiveBack });
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
+      const window = await openGiveBack(el);
+      expect([window.saleId, window.invoiceNumber]).toEqual(["sale-1", "F-0001"]);
+      expect(readGiveBack).toHaveBeenCalledWith("sale-1", {});
+      expect(window.session).toBeInstanceOf(GiveBackSession);
+      expect(window.corrections).toBeInstanceOf(InvoiceCorrectionSession);
+      expect(window.capabilities).toEqual(appCapabilities(el));
+      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+      const refunds = window.refunds;
+      expect(refunds).toBeInstanceOf(TenderRefundSession);
+
+      emit(window, "give-back-close");
+      await flush(el);
+      expect(giveBack(el)).toBeNull();
+      emit(ticket(el)!, "tender-refund-open");
+      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+      expect(refundSession(el)).toBe(refunds);
+    });
+
+    it("leaves the receipt with the window closed", async () => {
+      const { el } = await open({ readGiveBack: vi.fn().mockResolvedValue(VIEW) });
+      await openGiveBack(el);
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      expect(ticket(el)).toBeNull();
+      expect(giveBack(el)).toBeNull();
+    });
+
+    it("opens on what is left to do when a give-back on the receipt is still under way", async () => {
+      const { el } = await open({
+        readGiveBack: vi.fn().mockResolvedValue({ ...VIEW, underWay: UNDER_WAY }),
+        getInvoiceCorrection: vi.fn().mockResolvedValue(UNDER_WAY),
+      });
+      const window = await openGiveBack(el);
+      await vi.waitFor(() =>
+        expect(window.shadowRoot!.querySelector("till-give-back-under-way")).not.toBeNull(),
+      );
+      const view = window.shadowRoot!.querySelector("till-give-back-under-way")!;
+      expect(view.saleId).toBe("sale-1");
+      expect(view.refunds).toBe(window.refunds);
+      expect(view.corrections).toBe(window.corrections);
+      expect(view.capabilities).toEqual(appCapabilities(el));
+    });
+
+    it("opens on the part still to follow the card company's answer, even with no money left to start", async () => {
+      const rest = { purpose: "goodwill" as const, amount: "3.00", extra: "0.00", way: "card-1" };
+      const giveBackCall = vi.fn().mockResolvedValue({
+        parts: [
+          { kind: "refund", amount: "2.00", state: "pending", refundId: "refund-1" },
+          { kind: "correction", amount: "3.00", state: "not_started" },
+        ],
+        refusal: null,
+        underWay: null,
+        rest,
+      });
+      const { el } = await open({
+        readGiveBack: vi.fn().mockResolvedValue(VIEW),
+        giveBack: giveBackCall,
+      });
+      const first = await openGiveBack(el);
+      await first.session.submit("sale-1", {
+        request: { ...rest, amount: "5.00" },
+        reasonId: "r-request",
+        note: null,
+        expected: [{ kind: "refund", amount: "5.00", way: "card-1" }],
+      });
+      emit(first, "give-back-close");
+      await flush(el);
+      vi.mocked(currentApi.getRefundableTenders).mockResolvedValue([]);
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
+        row: transactionRow(),
+      });
+      await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+      await flush(el);
+
+      const window = await openGiveBack(el);
+      await vi.waitFor(() =>
+        expect(window.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull(),
+      );
+      const spaced = (words: string) => words.replace(/\s+/g, " ");
+      expect(spaced(window.shadowRoot!.querySelector("[data-outcome]")!.textContent!)).toContain(
+        spaced(t("give_back.rest").replace("{amount}", formatMoney("3.00", currentLocale()))),
+      );
+    });
+
+    it("opens Find a bill's money back under way on its receipt, showing what is left, even with no money left to start", async () => {
+      const { el, view } = await open({
+        readGiveBack: vi.fn().mockResolvedValue({ ...VIEW, underWay: UNDER_WAY }),
+        getInvoiceCorrection: vi.fn().mockResolvedValue(UNDER_WAY),
+        getRefundableTenders: vi.fn().mockResolvedValue([]),
+      });
+      expect(giveBackButton(el)).toBeNull();
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      vi.mocked(currentApi.getTransactionReceipt).mockClear();
+
+      emit(view, "find-correction-open", {
+        correction: { id: "correction-1", saleId: "sale-1" },
+      });
+      await vi.waitFor(() => expect(giveBack(el)).not.toBeNull());
+      expect(currentApi.getTransactionReceipt).toHaveBeenCalledWith("sale-1", expect.anything());
+      expect(ticket(el)).not.toBeNull();
+      expect(giveBack(el)!.saleId).toBe("sale-1");
+      await vi.waitFor(() =>
+        expect(giveBack(el)!.shadowRoot!.querySelector("till-give-back-under-way")).not.toBeNull(),
+      );
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+    });
+  });
   it("a definitive first amount refusal leaves the native amount editable and a corrected request can complete", async () => {
     const refundTransaction = vi
       .fn()
@@ -27493,7 +27634,7 @@ describe("A737 post-invoice refund integration", () => {
       getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, method: "voucher" }]),
     });
     await flush(el);
-    expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+    expect(giveBackButton(el)).toBeNull();
   });
   it("uses the same saved request after a lost answer and a receipt reopen", async () => {
     const refundTransaction = vi
@@ -27777,7 +27918,7 @@ describe("A737 post-invoice refund integration", () => {
     resolve([cash]);
     await flush(el);
     await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+    expect(giveBackButton(el)).toBeNull();
   });
   it("a pending response keeps one known attempt and repeated retry clicks cannot create another payout", async () => {
     const pending: TenderRefundView = { ...returned, state: "pending", completedAt: null };
@@ -28136,8 +28277,8 @@ describe("A737 post-invoice refund integration", () => {
     try {
       el.requestUpdate();
       await flush(el);
-      const action = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]")!;
-      await userEvent.click(page.elementLocator(action));
+      expect(giveBackButton(el), "the paid receipt offers Give money back").not.toBeNull();
+      emit(ticket(el)!, "tender-refund-open");
       await flush(el);
       expect(dialog(el)).toBeNull();
       expect(el.shadowRoot!.textContent).toContain(t("tender_refund.storage"));
