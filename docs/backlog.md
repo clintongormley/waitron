@@ -1422,6 +1422,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   daily during the urgent period and after expiry.
   Orders and Sales can run the receipt helper, receipt line, VAT table, invoice selection,
   Find a bill search and date, bill allocation, receipt figures, receipt issuer, invoice typing and receipt facts suites independently.
+  Orders and Sales measures coverage for those implementations in its own package.
   When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,
   `invoice-document.set-menus`, `receipt-ticket`, `invoice-layout`, `receipt-adjustments`,
   `list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-group`,

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
@@ -74,4 +75,40 @@ it("checks venue permission, the primary and the exact body before calling Cloud
   expect(await signedOut.json()).toEqual({
     error: { code: "management_session.required", params: {} },
   });
+});
+
+it("offers manual entry without a Cloud connection and still validates requests", async () => {
+  const { managerCookie } = await setupVenue(venue.db);
+  const app = new Hono();
+  mountVenueSettingsApi(
+    app,
+    {
+      db: venue.db,
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
+      addressLookup: { isPrimary: () => true },
+    },
+    () => {},
+  );
+  const post = (body: unknown, contentType = "application/json") =>
+    app.request(path, {
+      method: "POST",
+      headers: { cookie: managerCookie, "content-type": contentType },
+      body: JSON.stringify(body),
+    });
+  const status = await post(available);
+  expect(status.status).toBe(200);
+  expect(await status.json()).toEqual({ available: false });
+  const search = {
+    kind: "suggest",
+    workflowId: randomUUID(),
+    query: "Main Street",
+    language: "en",
+  };
+  const unavailable = await post(search);
+  expect(unavailable.status).toBe(409);
+  expect(await unavailable.json()).toEqual({ error: { code: "cloud.not_configured", params: {} } });
+  for (const invalid of [await post(null), await post(available, "text/plain")]) {
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: { code: "cloud.request_invalid", params: {} } });
+  }
 });
