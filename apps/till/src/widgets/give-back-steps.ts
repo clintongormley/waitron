@@ -9,24 +9,37 @@ import type {
   GiveBackPreview,
   GiveBackRight,
   GiveBackSubmissionIds,
+  GiveBackView,
   GiveBackWay,
 } from "../api/give-back-types.js";
-import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
+import type { TenderRefundView } from "../api/tender-refund-types.js";
+import type { GiveBackRest, GiveBackSent, RestCheck } from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { HoldReloadDetail } from "../screens/till-station-screen.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import { refusalOf } from "../state/bill-payment.js";
-import { TenderRefundAttemptError } from "../state/tender-refund.js";
+import {
+  TenderRefundAttemptError,
+  type RefundAskedAgain,
+  type TenderRefundSession,
+} from "../state/tender-refund.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
- * then wants an approver, and the payment the outcome names. */
+ * then wants an approver, and the payment the outcome names. A `check` is a Check again: with no
+ * answer it is only pressed again, where a press is sent again under its ids. */
 export interface Sending {
-  send: (override?: Override) => Promise<GiveBackOutcome>;
+  send: (override?: Override) => Promise<Sent>;
   rights: GiveBackRight[];
   needs: GiveBackRight[];
   way: string;
+  check?: true;
+}
+/** What the window shows once a send is answered, and a send that follows it. */
+export interface Sent {
+  step: Step | null;
+  next?: Sending;
 }
 /** Who may approve, read under the till's request limit: a read that stalls is abandoned and
  * rejects, so the caller shows its refusal rather than waiting for ever. */
@@ -154,6 +167,13 @@ export function terminalStep(
     </wt-form-actions>`;
 }
 
+const cardBack = (amount: string, card: string) =>
+  card === ""
+    ? t("give_back.done_card_any").replace("{amount}", () => amount)
+    : t("give_back.done_card")
+        .replace("{amount}", () => amount)
+        .replace("{card}", () => card);
+
 /** What went back, what waits, and why anything did not, from the write's answer. A cash
  * correction prints its own receipt; any other says where to print it (D14). */
 function outcomeLines(
@@ -179,11 +199,7 @@ function outcomeLines(
         ? t("give_back.done_cash").replace("{amount}", () => money(back))
         : way?.manual
           ? t("give_back.done_terminal").replace("{amount}", () => money(back))
-          : card === ""
-            ? t("give_back.done_card_any").replace("{amount}", () => money(back))
-            : t("give_back.done_card")
-                .replace("{amount}", () => money(back))
-                .replace("{card}", () => card),
+          : cardBack(money(back), card),
     );
   if (
     way?.way !== "cash" &&
@@ -296,13 +312,17 @@ export function doneStep(
     >`;
 }
 
-/** The outcome once Check again read the card refund it waits for: still waiting, failed (the
+const balanceReason = (reason: TenderRefundView["refusalReason"]) =>
+  reason === undefined ? [] : [t(`refund.${reason}`)];
+
+/** The outcome once Check again asked about the card refund it waits for: still waiting, failed (the
  * rest is dropped), or through. */
 export function afterCheck(
   step: Extract<Step, { kind: "done" }>,
-  state: "pending" | "failed" | "completed",
+  check: RestCheck,
 ): Extract<Step, { kind: "done" }> {
   const { outcome } = step;
+  const { state } = check;
   if (state === "pending") return { ...step, notice: t("give_back.still_waiting") };
   const parts = outcome.parts.map((part) =>
     part.state === "pending" && part.kind !== "correction"
@@ -312,12 +332,64 @@ export function afterCheck(
   if (state === "completed") return { ...step, notice: null, outcome: { ...outcome, parts } };
   return {
     ...step,
-    notice:
+    notice: [
       outcome.rest === null
         ? codeMessage("give_back.refund_failed", currentLocale())
         : t("give_back.rest_failed"),
+      ...balanceReason(check.refusalReason),
+    ].join(" "),
     outcome: { ...outcome, parts, rest: null },
   };
+}
+
+/** What is said when a Check again was refused or got no answer: asking again is always safe, and
+ * the money it asks about may already be back. */
+export function checkRefusalText(refusal: ReturnType<typeof refusalOf>): string {
+  if (refusal.code === "approvers") return t("give_back.uw_approvers_failed");
+  if (refusal.code === "busy") return t("give_back.busy");
+  if (refusal.code === "network" || refusal.code === "storage") return t("give_back.uw_unknown");
+  return recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
+}
+
+/** What the card company answered about a refund asked about again. */
+function askedAgainText(refund: RefundAskedAgain): string {
+  if (refund.state === "failed")
+    return [t("tender_refund.failed"), ...balanceReason(refund.refusalReason)].join(" ");
+  const back = money(sumOf([refund.appliedAmount, refund.tipAmount]));
+  return cardBack(back, refund.last4 === null ? "" : `···${refund.last4}`);
+}
+
+/** Check again on the choices: reads the receipt and, while a card refund on it waits, has the box
+ * ask the card company again. Answers what to say, and the receipt as last read. */
+export async function checkReceipt(
+  from: {
+    api: Pick<TillApi, "readGiveBack" | "getRefundableTenders">;
+    refunds: TenderRefundSession;
+    saleId: string;
+    capabilities: readonly string[];
+  },
+  override?: Override,
+): Promise<{ view: GiveBackView | null; status: string }> {
+  const read = () => from.api.readGiveBack(from.saleId, {});
+  let view: GiveBackView;
+  try {
+    view = await read();
+  } catch (error) {
+    if (refusalOf(error).code !== "network") throw error;
+    return { view: null, status: t("give_back.read_failed") };
+  }
+  if (!view.ways.some((way) => way.pending)) return { view, status: "" };
+  const tenders = await from.api.getRefundableTenders(from.saleId, {});
+  const answers = await from.refunds.askAgain(tenders, from.capabilities, override);
+  const said = answers.filter((refund) => refund.state !== "pending").map(askedAgainText);
+  if (said.length > 0)
+    try {
+      view = await read();
+    } catch {
+      return { view, status: [...said, t("tender_refund.read_failed")].join(" ") };
+    }
+  if (view.ways.some((way) => way.pending)) said.push(t("give_back.pending_unanswered"));
+  return { view, status: said.join(" ") };
 }
 
 /** The lost step for a press saved earlier, with what the server answered it last. */
@@ -332,7 +404,7 @@ export const lostFor = (sent: GiveBackSent): Extract<Step, { kind: "lost" }> => 
 /** A press whose answer is not known: `saved`, the press this device holds, else the one sent
  * with `ids`. */
 export const lostAfter = (
-  sending: Sending,
+  sending: Pick<Sending, "way" | "needs">,
   saved: GiveBackSent | null | undefined,
   ids: GiveBackSubmissionIds | null = null,
 ): Extract<Step, { kind: "lost" }> =>

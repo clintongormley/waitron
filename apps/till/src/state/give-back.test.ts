@@ -8,6 +8,11 @@ import type {
 } from "../api/give-back-types.js";
 import { GiveBackSession } from "./give-back.js";
 
+type GiveBackRetry = (
+  refundId: string,
+  override?: { personId: string; pin: string },
+) => Promise<{ state: string; refusalReason?: "provider_balance_unavailable" }>;
+
 const scope = { deviceId: "device-1", personId: "person-1" };
 const request: GiveBackRequest = {
   purpose: "dishes",
@@ -68,6 +73,7 @@ function fakeApi() {
     }),
     previewGiveBack: vi.fn(async (): Promise<GiveBackPreview> => restPreview),
     getTenderRefund: vi.fn(async () => ({ state: "completed" as string })),
+    retryTenderRefund: vi.fn<GiveBackRetry>(async () => ({ state: "pending" })),
   };
 }
 
@@ -297,6 +303,121 @@ it("says a rest still waits while the card company has not answered", async () =
   await session.submit("sale-1", ask);
   expect(await session.checkRest("sale-1")).toEqual({ state: "pending" });
   expect(api.previewGiveBack).not.toHaveBeenCalled();
+});
+
+it("has the box ask the card company again about the same refund while it waits, with the approver's PIN, and takes its answer", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValue({ state: "pending" });
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const approver = { personId: "boss", pin: "1234" };
+
+  expect(await session.checkRest("sale-1")).toEqual({ state: "pending" });
+  api.retryTenderRefund.mockResolvedValueOnce({ state: "completed" });
+  expect(await session.checkRest("sale-1", approver)).toEqual({
+    state: "completed",
+    preview: restPreview,
+  });
+  expect(api.retryTenderRefund.mock.calls).toEqual([
+    ["refund-1", undefined],
+    ["refund-1", approver],
+  ]);
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it.each(["completed", "failed"])(
+  "only reads a refund the box already knows is %s, asking the card company nothing",
+  async (state) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValueOnce({ state });
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask);
+    expect(await session.checkRest("sale-1")).toMatchObject({ state });
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  },
+);
+
+it("forgets a rest whose refund the asked card company did not make, saying why when it says", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  api.retryTenderRefund.mockResolvedValueOnce({
+    state: "failed",
+    refusalReason: "provider_balance_unavailable",
+  });
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  expect(await session.checkRest("sale-1")).toEqual({
+    state: "failed",
+    refusalReason: "provider_balance_unavailable",
+  });
+  expect(session.read("sale-1")).toBeNull();
+});
+
+it.each([
+  ["refused", { code: "authorization.not_permitted", permission: "sale.refund" }],
+  ["lost", new TypeError("Failed to fetch")],
+])(
+  "keeps the rest when the box's asking again is %s, so it can be asked again",
+  async (_, error) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValue({ state: "pending" });
+    api.retryTenderRefund.mockRejectedValueOnce(error);
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask);
+    const saved = session.read("sale-1");
+    await expect(session.checkRest("sale-1")).rejects.toBe(error);
+    expect(session.read("sale-1")).toEqual(saved);
+    api.retryTenderRefund.mockResolvedValueOnce({ state: "completed" });
+    expect(await session.checkRest("sale-1")).toMatchObject({ state: "completed" });
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1", "refund-1"]);
+  },
+);
+
+it("asks about a waiting refund once while that is out, and answers it though it cannot be forgotten afterwards", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce({ ...pendingWithRest, rest: null });
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  let answer!: (value: { state: string }) => void;
+  api.retryTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const out = session.checkRest("sale-1");
+  await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+  await expect(session.checkRest("sale-1")).rejects.toMatchObject({ kind: "busy" });
+  expect(api.getTenderRefund).toHaveBeenCalledOnce();
+
+  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    throw new Error("Storage blocked");
+  });
+  answer({ state: "completed" });
+  expect(await out).toEqual({ state: "completed", preview: null });
+  expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+});
+
+it("leaves a press saved since the device locked alone when the old asking is answered", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  let answer!: (value: { state: string }) => void;
+  api.retryTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const locked = new GiveBackSession(scope, api);
+  await locked.submit("sale-1", ask);
+  const out = locked.checkRest("sale-1");
+  await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+  localStorage.clear();
+  api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask).catch(() => {});
+  const saved = session.read("sale-1");
+  expect(saved?.sent).toBeTruthy();
+
+  answer({ state: "failed" });
+  expect(await out).toEqual({ state: "failed" });
+  expect(session.read("sale-1")).toEqual(saved);
 });
 
 it("keeps no rest after a refusal: what is left is given back from a new press", async () => {

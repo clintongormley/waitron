@@ -102,6 +102,10 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private lostCard: SavedTenderRefund | null = null;
   /** A card's part was answered here. */
   @state() private cardAnswered = false;
+  /** The last Check again found a card refund still waiting. */
+  @state() private unanswered = false;
+  /** The step out may have had the box ask the card company. */
+  #asked = false;
   #override?: Override;
   #retry?: Retry;
   #lastHeld = false;
@@ -124,6 +128,7 @@ export class TillGiveBackUnderWay extends LitElement {
       this.lostCard !== null ||
       this.cashGiven !== null ||
       this.cardAnswered ||
+      this.unanswered ||
       this.correction.state !== "open"
     );
   }
@@ -204,11 +209,16 @@ export class TillGiveBackUnderWay extends LitElement {
   #refreshAfter(): Promise<void> {
     return this.#refresh().catch(() => undefined);
   }
-  /** Check again: a card part waiting for the card company is asked first, so its saved request
-   * is settled before the correction is read. */
+  /** Check again: reads what is back, settling a saved card refund first, then has the box ask the
+   * card company about each refund on the receipt that still waits for it. */
   async #checkAgain(): Promise<void> {
     if (this.#savedOnReceipt()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
     await this.#refresh();
+    this.#asked = true;
+    const answers = await this.refunds.askAgain(this.tenders, this.capabilities, this.#override);
+    for (const answer of answers) this.#cardDone(answer);
+    if (answers.length > 0) await this.#refreshAfter();
+    this.unanswered = this.tenders.some((row) => row.pendingRefundId !== null);
   }
   /** Runs `step`, asking for an approver when the person signed in may not, and running it again
    * with their PIN; the PIN lasts for that one step. */
@@ -217,6 +227,8 @@ export class TillGiveBackUnderWay extends LitElement {
     this.busy = true;
     this.message = "";
     this.refused = null;
+    this.unanswered = false;
+    this.#asked = false;
     const approverId = this.#override?.personId;
     try {
       await holdingReload(this, step);
@@ -260,7 +272,8 @@ export class TillGiveBackUnderWay extends LitElement {
     this.terminal = null;
     if (refusal.code === "network") {
       this.lostCard = this.#lostCard();
-      if (this.lostCard === null) this.message = t(retry.lost);
+      if (this.lostCard === null)
+        this.message = t(this.#asked ? "give_back.uw_unknown" : retry.lost);
       return;
     }
     this.refused = refusal;
@@ -361,7 +374,7 @@ export class TillGiveBackUnderWay extends LitElement {
     };
   }
   #cardDone(result: TenderRefundView): void {
-    this.lostCard = null;
+    this.lostCard = this.#lostCard();
     this.terminal = null;
     this.cardAnswered = true;
     if (result.state === "failed")
@@ -525,6 +538,11 @@ export class TillGiveBackUnderWay extends LitElement {
           ? html`<p data-pending>
               ${t("give_back.pending").replace("{amount}", () => this.#money(correction.pending))}
             </p>`
+          : nothing
+      }
+      ${
+        this.unanswered
+          ? html`<p data-pending-status role="status">${t("give_back.pending_unanswered")}</p>`
           : nothing
       }
       ${this.#choice("check", t("give_back.check_again"), "", () => void this.#run(() => this.#checkAgain(), "give_back.read_failed"))}

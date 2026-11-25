@@ -8,6 +8,7 @@ import {
   VIEW,
   completedFor,
   fakeGiveBackApi,
+  refundsOn,
 } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
@@ -27,6 +28,7 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
       {
         api,
         session: new GiveBackSession(SCOPE, api),
+        refunds: refundsOn(api),
         saleId: "s1",
         invoiceNumber: "A/1042",
         namesLocale: "es",

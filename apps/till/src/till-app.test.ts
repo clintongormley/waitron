@@ -59,9 +59,11 @@ import {
   CARD,
   REASONS,
   UNDER_WAY,
+  WAITING_TENDER,
   VIEW,
   completedFor,
   previewFor,
+  refundAnswer,
 } from "./widgets/give-back-dialog.test-helpers.js";
 import type { GiveBackRequest, GiveBackWrite } from "./api/give-back-types.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
@@ -27646,6 +27648,10 @@ describe("A737 post-invoice refund integration", () => {
       listAdjustmentReasons: vi.fn().mockResolvedValue(REASONS),
       listApprovers: vi.fn().mockResolvedValue(APPROVERS),
       giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite) => completedFor(body)),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "integrated-card-payment"],
+      }),
       ...over,
     });
     const inWindow = <T extends Element = HTMLElement>(el: TillApp, selector: string) =>
@@ -27671,6 +27677,57 @@ describe("A737 post-invoice refund integration", () => {
       await flush(el);
       return window;
     }
+
+    const inStep = <T extends Element = HTMLElement>(el: TillApp, selector: string) =>
+      inWindow(el, "till-give-back-under-way")?.shadowRoot!.querySelector<T>(selector) ?? null;
+    /** Presses Check again in each place that has the box ask the card company about a refund still
+     * waiting, whose asking answers as `out` does. */
+    const askingAgain: readonly [
+      string,
+      (el: TillApp, out: () => Promise<unknown>) => Promise<void>,
+    ][] = [
+      [
+        "the box asks about this press's card refund",
+        async (el, out) => {
+          currentApi.giveBack = vi.fn().mockResolvedValue({
+            parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
+            refusal: null,
+            underWay: null,
+            rest: null,
+          });
+          currentApi.getTenderRefund = vi.fn().mockResolvedValue({ state: "pending" });
+          currentApi.retryTenderRefund = out as never;
+          await pressGoodwill(el);
+          await vi.waitFor(() => expect(inWindow(el, "[data-check-again]")).not.toBeNull());
+          inWindow(el, "[data-check-again]")!.click();
+        },
+      ],
+      [
+        "the box asks about a card refund it knows",
+        async (el, out) => {
+          currentApi.readGiveBack = vi
+            .fn()
+            .mockResolvedValue({ ...VIEW, ways: [{ ...CARD, pending: true }] });
+          currentApi.getRefundableTenders = vi.fn().mockResolvedValue([WAITING_TENDER]);
+          currentApi.retryTenderRefund = out as never;
+          await openGiveBack(el);
+          await vi.waitFor(() => expect(inWindow(el, "[data-check-pending]")).not.toBeNull());
+          inWindow(el, "[data-check-pending]")!.click();
+        },
+      ],
+      [
+        "the box asks about a card refund of a give-back under way",
+        async (el, out) => {
+          currentApi.readGiveBack = vi.fn().mockResolvedValue({ ...VIEW, underWay: UNDER_WAY });
+          currentApi.getInvoiceCorrection = vi.fn().mockResolvedValue(UNDER_WAY);
+          currentApi.getRefundableTenders = vi.fn().mockResolvedValue([WAITING_TENDER]);
+          currentApi.retryTenderRefund = out as never;
+          await openGiveBack(el);
+          await vi.waitFor(() => expect(inStep(el, "[data-choice=check]")).not.toBeNull());
+          inStep(el, "[data-choice=check]")!.click();
+        },
+      ],
+    ];
 
     describe("on a full disk", () => {
       const stop = (el: TillApp) => el.shadowRoot!.querySelector("wt-stop-screen");
@@ -27752,6 +27809,33 @@ describe("A737 post-invoice refund integration", () => {
         emit(inWindow(el, "wt-combobox[name=reason]")!, "wt-change", { value: "other" });
         await covering(el);
       });
+
+      it.each(askingAgain)(
+        "waits while %s, though the box refuses it for the disk, then covers the till",
+        async (_where, ask) => {
+          const { el, fill } = await filling({});
+          const answer = deferred<never>();
+          const out = vi.fn(() => answer.promise);
+          await ask(el, out);
+          await vi.waitFor(() => expect(out).toHaveBeenCalledOnce());
+          await fill();
+          expect(stop(el)).toBeNull();
+          answer.reject({ code: "storage.disk_full", status: 507 });
+          const shown = codeMessage("storage.disk_full").replace(/\s+/g, " ");
+          await vi.waitFor(() => {
+            const window = giveBack(el)!.shadowRoot!;
+            const step = window.querySelector("till-give-back-under-way")?.shadowRoot;
+            const said = [window, step].map(
+              (at) =>
+                `${at?.textContent ?? ""} ${at?.querySelector("wt-form-actions")?.error ?? ""}`,
+            );
+            expect(said.join(" ").replace(/\s+/g, " ")).toContain(shown);
+          });
+          await flush(el);
+          expect(stop(el)).toBeNull();
+          await closed(el);
+        },
+      );
 
       it("waits while a step of a give-back under way is out and while its answer is shown, then covers the till", async () => {
         const answer = deferred<unknown>();
@@ -27841,6 +27925,7 @@ describe("A737 post-invoice refund integration", () => {
           stop()!.click();
         },
       ],
+      ...askingAgain,
     ] as const)(
       "keeps the till from reloading for a box update while %s is out, though the device locked",
       async (_what, send) => {
@@ -27867,6 +27952,29 @@ describe("A737 post-invoice refund integration", () => {
 
         answer.reject(new TypeError("Failed to fetch"));
         await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
+      },
+    );
+
+    it.each(askingAgain)(
+      "shows nothing of an answer that arrives after the device locked while %s",
+      async (_where, ask) => {
+        const answer = deferred<unknown>();
+        const out = vi.fn(() => answer.promise);
+        const activity = fakeSessionActivity();
+        const { el } = await open(giving(), "F2", activity);
+        await ask(el, out);
+        await vi.waitFor(() => expect(out).toHaveBeenCalledOnce());
+        (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(refundKeys()).toEqual([]);
+        answer.resolve(refundAnswer({ state: "completed" }));
+        await answer.promise;
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+        expect(giveBack(el)).toBeNull();
+        expect(refundKeys()).toEqual([]);
+        expect(out).toHaveBeenCalledOnce();
       },
     );
 

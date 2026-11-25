@@ -18,6 +18,8 @@ export interface SavedTenderRefund {
   request: Omit<TenderRefundRequest, "override">;
   refundId: string | null;
 }
+/** The card company's answer about a refund asked about again, and the card it goes back to. */
+export type RefundAskedAgain = TenderRefundView & Pick<RefundableTender, "last4">;
 type RefundApi = Pick<TillApi, "refundTransaction" | "getTenderRefund" | "retryTenderRefund">;
 
 export class TenderRefundAttemptError extends Error {
@@ -216,7 +218,7 @@ export class TenderRefundSession {
     return this.attempts.read(this.scope, saleId);
   }
 
-  async #run(work: () => Promise<TenderRefundView>): Promise<TenderRefundView> {
+  async #run<T>(work: () => Promise<T>): Promise<T> {
     if (this.#busy) return fail("busy");
     this.#busy = true;
     try {
@@ -331,5 +333,40 @@ export class TenderRefundSession {
       this.#answer(sent, result);
       return result;
     });
+  }
+
+  /** Has the box ask the card company again about each refund of `rows` still waiting for it, on the
+   * payments a device with `capabilities` may refund: under the refund's own id, so nothing goes back
+   * twice. An outcome already had is answered even when a later refund's asking fails. */
+  askAgain(
+    rows: readonly RefundableTender[],
+    capabilities: readonly string[],
+    override?: TenderRefundRequest["override"],
+  ): Promise<RefundAskedAgain[]> {
+    return this.#run(async () => {
+      const answers: RefundAskedAgain[] = [];
+      for (const row of rows) {
+        if (row.pendingRefundId === null || !refundMethodAllowed(row, capabilities)) continue;
+        try {
+          const result = await this.api.retryTenderRefund(row.pendingRefundId, override);
+          this.#settleSaved(result);
+          answers.push({ ...result, last4: row.last4 });
+        } catch (error) {
+          if (answers.every((answer) => answer.state === "pending")) throw error;
+          break;
+        }
+      }
+      return answers;
+    });
+  }
+
+  /** Settles the request this device saved for the refund, if it saved one it can read. */
+  #settleSaved(result: TenderRefundView): void {
+    try {
+      const saved = this.read(result.saleId);
+      if (saved?.refundId === result.id) this.#answer(saved, result);
+    } catch (error) {
+      if (!(error instanceof TenderRefundAttemptError && error.kind === "storage")) throw error;
+    }
   }
 }

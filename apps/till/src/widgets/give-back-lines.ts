@@ -2,7 +2,15 @@ import { html, nothing } from "lit";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-switch.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { GiveBackLine, GiveBackView } from "../api/give-back-types.js";
+import type {
+  GiveBackAvailability,
+  GiveBackLine,
+  GiveBackPurpose,
+  GiveBackView,
+  GiveBackWaitReason,
+  GiveBackWay,
+} from "../api/give-back-types.js";
+import { usable } from "./give-back-draft.js";
 import { lineName } from "../screens/till-ticket-view.js";
 import { unservedDishText } from "./dish-format.js";
 
@@ -73,4 +81,75 @@ export function dishLines(view: GiveBackView, options: DishLinesOptions) {
         )}
     </div>
   </fieldset>`;
+}
+
+/** "How it goes back": each payment, up to what it holds for `purpose`, or why it must wait. */
+export function wayLines(
+  ways: readonly GiveBackWay[],
+  options: {
+    purpose: GiveBackPurpose;
+    chosen: string;
+    onChoose: (way: GiveBackWay) => void;
+    reasonText: (reason: GiveBackWaitReason) => string;
+  },
+) {
+  return html`<fieldset data-how>
+    <legend>${t("give_back.how")}</legend>
+    ${ways.map((way) => {
+      const upTo = formatMoney(
+        options.purpose === "extra" ? way.extraLeft : way.moneyLeft,
+        currentLocale(),
+      );
+      const words =
+        way.way === "cash"
+          ? t("give_back.way_cash").replace("{amount}", () => upTo)
+          : t("give_back.way_card")
+              .replace("{card}", () => (way.last4 === null ? "" : `···${way.last4}`))
+              .replace("{amount}", () => upTo)
+              .replace(/\s+/g, " ");
+      return html`<label class="option"
+          ><input
+            type="radio"
+            name="way"
+            .value=${way.way}
+            .checked=${way.way === options.chosen}
+            .disabled=${!usable(way)}
+            @change=${(event: Event) => {
+              event.stopPropagation();
+              options.onChoose(way);
+            }}
+          /><span>${words}</span></label
+        >${
+          usable(way)
+            ? nothing
+            : html`<p class="reason" data-way-reason=${way.way}>
+                ${way.reason === null ? t("give_back.way_not_here") : options.reasonText(way.reason)}
+              </p>`
+        }`;
+    })}
+  </fieldset>`;
+}
+
+/** One answer to "What is it for?", or why it must wait. */
+export function choiceRow(
+  purpose: GiveBackPurpose,
+  hint: string,
+  { available, reason }: GiveBackAvailability,
+  onChoose: () => void,
+  reasonText: (reason: GiveBackWaitReason) => string,
+) {
+  const heading = t(`give_back.${purpose}`);
+  if (available)
+    return html`<wt-choice-row data-choice=${purpose} heading=${heading} @click=${onChoose}
+      >${hint}</wt-choice-row
+    >`;
+  return html`<div class="unavailable" data-choice=${purpose} aria-disabled="true">
+    <span class="title">${heading}</span>
+    <span class="hint">${hint}</span>
+    ${
+      reason === null
+        ? nothing
+        : html`<span data-choice-reason=${purpose}>${reasonText(reason)}</span>`
+    }
+  </div>`;
 }

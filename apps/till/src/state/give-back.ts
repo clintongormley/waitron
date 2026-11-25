@@ -9,6 +9,7 @@ import type {
   GiveBackSubmissionIds,
   GiveBackWrite,
 } from "../api/give-back-types.js";
+import type { TenderRefundView } from "../api/tender-refund-types.js";
 import {
   TenderRefundAttemptError,
   fail,
@@ -44,11 +45,15 @@ export interface SavedGiveBack {
   sent: GiveBackSent | null;
   rest: GiveBackRest | null;
 }
+type RefundAnswer = Pick<TenderRefundView, "refusalReason"> & { state: string };
 export type RestCheck =
-  { state: "pending" | "failed" } | { state: "completed"; preview: GiveBackPreview | null };
+  | { state: "pending" }
+  | ({ state: "failed" } & Pick<TenderRefundView, "refusalReason">)
+  | { state: "completed"; preview: GiveBackPreview | null };
 
 type GiveBackApi = Pick<TillApi, "giveBack" | "previewGiveBack"> & {
-  getTenderRefund(refundId: string, options: object): Promise<{ state: string }>;
+  getTenderRefund(refundId: string, options: object): Promise<RefundAnswer>;
+  retryTenderRefund(refundId: string, override?: GiveBackWrite["override"]): Promise<RefundAnswer>;
 };
 
 /**
@@ -291,18 +296,39 @@ export class GiveBackSession {
       this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
   }
 
-  /** Whether the waiting card refund, if any, is done and, once it is, what any rest would do. A
-   * settled refund with nothing to follow is forgotten. */
-  checkRest(saleId: string): Promise<RestCheck> {
+  /** The refund's state. While it waits, the box asks the card company again under the refund's own
+   * id, so nothing goes back twice; that needs `sale.refund`, which reading its state does not. */
+  async #askAgain(refundId: string, override: GiveBackWrite["override"]): Promise<RefundAnswer> {
+    const known = await this.api.getTenderRefund(refundId, {});
+    return known.state === "pending" ? this.api.retryTenderRefund(refundId, override) : known;
+  }
+
+  /** Forgets `rest`, unless what is saved is no longer it: the device may have locked meanwhile. */
+  #forgetRest(saleId: string, rest: GiveBackRest): void {
+    try {
+      const saved = this.read(saleId);
+      if (!saved?.rest || saved.rest.waitFor !== rest.waitFor) return;
+      this.#write(saved.sent === null ? null : { ...saved, rest: null }, saleId);
+    } catch (error) {
+      // The refund's outcome is what staff must see; what stays saved is only checked again.
+      if (!(error instanceof TenderRefundAttemptError)) throw error;
+    }
+  }
+
+  /** Whether the waiting card refund, if any, is done, asking the card company again while it is
+   * not, and, once it is, what any rest would do. A settled refund with nothing to follow is
+   * forgotten. */
+  checkRest(saleId: string, override?: GiveBackWrite["override"]): Promise<RestCheck> {
     return this.#run(saleId, async () => {
       const rest = this.read(saleId)?.rest ?? fail("missing");
-      const { state } =
+      const { state, refusalReason }: RefundAnswer =
         rest.waitFor === undefined
           ? { state: "completed" }
-          : await this.api.getTenderRefund(rest.waitFor, {});
+          : await this.#askAgain(rest.waitFor, override);
       if (state === "pending") return { state };
-      if (state === "failed" || rest.request === null) this.#write(null, saleId);
-      if (state === "failed") return { state };
+      if (state === "failed" || rest.request === null) this.#forgetRest(saleId, rest);
+      if (state === "failed")
+        return { state, ...(refusalReason === undefined ? {} : { refusalReason }) };
       return {
         state: "completed",
         preview:

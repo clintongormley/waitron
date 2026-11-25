@@ -1,5 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
-import type { TenderRefundRequest, TenderRefundView } from "../api/tender-refund-types.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TillApi } from "../api/client.js";
+import type {
+  RefundableTender,
+  TenderRefundRequest,
+  TenderRefundView,
+} from "../api/tender-refund-types.js";
 import { TenderRefundAttempts, TenderRefundSession } from "./tender-refund.js";
 
 const scope = { deviceId: "device-1", personId: "person-1" };
@@ -764,4 +769,114 @@ it("keeps a request refused because another refund waits after its answer was lo
   await expect(session.submit("sale-1", ask)).rejects.toThrow("Failed to fetch");
   await expect(session.retry("sale-1")).rejects.toEqual({ code: "tender.refund_in_progress" });
   expect(session.read("sale-1")).not.toBeNull();
+});
+
+describe("having the box ask the card company again about what waits on a receipt", () => {
+  const row = (over: Partial<RefundableTender> = {}): RefundableTender => ({
+    tenderId: "tender-1",
+    method: "card",
+    last4: "4242",
+    appliedRemaining: "0.00",
+    tipRemaining: "0.00",
+    pendingRefundId: "refund-1",
+    manual: false,
+    ...over,
+  });
+  const CARDS = ["integrated-card-payment"];
+  const fakeApi = () => ({
+    refundTransaction: vi.fn(async () => reply()),
+    getTenderRefund: vi.fn(async () => reply()),
+    retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(async (id) =>
+      reply({ id, state: "completed", completedAt: "2026-10-16T10:01:00Z" }),
+    ),
+  });
+
+  it("asks under each waiting refund's own id with the approver's PIN, and nothing about the rest", async () => {
+    const api = fakeApi();
+    const session = new TenderRefundSession(scope, api);
+    const approver = { personId: "boss", pin: "1234" };
+    const answers = await session.askAgain(
+      [
+        row({ tenderId: "settled", pendingRefundId: null }),
+        row(),
+        row({ tenderId: "tender-2", pendingRefundId: "refund-2", last4: null }),
+      ],
+      CARDS,
+      approver,
+    );
+    expect(api.retryTenderRefund.mock.calls).toEqual([
+      ["refund-1", approver],
+      ["refund-2", approver],
+    ]);
+    expect(answers).toMatchObject([
+      { id: "refund-1", state: "completed", last4: "4242" },
+      { id: "refund-2", state: "completed", last4: null },
+    ]);
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks nothing for a payment this device's profile does not take", async () => {
+    const api = fakeApi();
+    const session = new TenderRefundSession(scope, api);
+    expect(await session.askAgain([row()], ["take-cash"])).toEqual([]);
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
+  it("settles the request this device saved for the refund, and leaves another alone", async () => {
+    const api = fakeApi();
+    const session = new TenderRefundSession(scope, api);
+    await session.submit("sale-1", ask);
+    await session.askAgain([row({ pendingRefundId: "refund-2" })], CARDS);
+    expect(session.read("sale-1")).not.toBeNull();
+    api.retryTenderRefund.mockResolvedValueOnce(reply());
+    await session.askAgain([row()], CARDS);
+    expect(session.read("sale-1")?.refundId).toBe("refund-1");
+    await session.askAgain([row()], CARDS);
+    expect(session.read("sale-1")).toBeNull();
+    expect((await session.resume("sale-1")).state).toBe("completed");
+  });
+
+  it("answers what the card company said though the saved request cannot be read", async () => {
+    const session = new TenderRefundSession(scope, fakeApi());
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
+    });
+    expect(await session.askAgain([row()], CARDS)).toMatchObject([{ state: "completed" }]);
+  });
+
+  it("refuses an answer that is not the refund this device saved", async () => {
+    const api = fakeApi();
+    const session = new TenderRefundSession(scope, api);
+    await session.submit("sale-1", ask);
+    api.retryTenderRefund.mockResolvedValueOnce(reply({ tenderId: "tender-9" }));
+    await expect(session.askAgain([row()], CARDS)).rejects.toMatchObject({ kind: "mismatch" });
+    expect(session.read("sale-1")).not.toBeNull();
+  });
+
+  it("asks about a refund once while that is out", async () => {
+    const api = fakeApi();
+    let answer!: (value: TenderRefundView) => void;
+    api.retryTenderRefund.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const session = new TenderRefundSession(scope, api);
+    const out = session.askAgain([row()], CARDS);
+    await expect(session.askAgain([row()], CARDS)).rejects.toMatchObject({ kind: "busy" });
+    answer(reply());
+    expect(await out).toMatchObject([{ state: "pending" }]);
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an outcome already had when a later refund is refused, and throws the refusal when it has none", async () => {
+    const api = fakeApi();
+    const session = new TenderRefundSession(scope, api);
+    const refusal = { code: "authorization.not_permitted", permission: "sale.refund" };
+    const both = [row(), row({ tenderId: "tender-2", pendingRefundId: "refund-2" })];
+    api.retryTenderRefund.mockResolvedValueOnce(reply()).mockRejectedValueOnce(refusal);
+    await expect(session.askAgain(both, CARDS)).rejects.toBe(refusal);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(reply({ state: "failed" }))
+      .mockRejectedValueOnce(refusal);
+    expect(await session.askAgain(both, CARDS)).toMatchObject([{ state: "failed" }]);
+  });
 });

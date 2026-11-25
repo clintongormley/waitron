@@ -10,7 +10,8 @@ import type {
   GiveBackWay,
 } from "../api/give-back-types.js";
 import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
-import type { RefundableTender } from "../api/tender-refund-types.js";
+import { TenderRefundSession } from "../state/tender-refund.js";
+import type { RefundableTender, TenderRefundView } from "../api/tender-refund-types.js";
 
 const reason = (id: string, name: string, noteRequired = false) =>
   ({
@@ -137,6 +138,29 @@ export const UNDER_WAY: InvoiceCorrectionView = {
 export const APPROVERS: StaffMember[] = [{ personId: "boss", displayName: "Boss" }];
 export const SCOPE = { deviceId: "device-1", personId: "person-1" };
 
+/** The box's answer about a card refund of €5.00, waiting for the card company unless `over` says. */
+export const refundAnswer = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
+  id: "refund-1",
+  saleId: "sale-1",
+  tenderId: "card-1",
+  state: "pending",
+  appliedAmount: "5.00",
+  tipAmount: "0.00",
+  createdAt: "2026-11-25T10:00:00.000Z",
+  completedAt: null,
+  ...over,
+});
+/** A card payment whose refund waits for the card company. */
+export const WAITING_TENDER: RefundableTender = {
+  tenderId: "card-1",
+  method: "card",
+  last4: "4242",
+  appliedRemaining: "12.00",
+  tipRemaining: "0.00",
+  pendingRefundId: "refund-1",
+  manual: false,
+};
+
 /** Every part of `body` given back. */
 export const completedFor = (body: GiveBackWrite): GiveBackOutcome => ({
   parts: body.expected.map((part) => ({
@@ -170,6 +194,10 @@ export function fakeGiveBackApi(view: GiveBackView = VIEW) {
   };
 }
 
+/** The saved card refunds a window on `api` uses. */
+export const refundsOn = (api: ReturnType<typeof fakeGiveBackApi>) =>
+  new TenderRefundSession(SCOPE, api as unknown as TillApi);
+
 /** The reads and writes the under-way view sends, each answering an open correction. */
 export function underWayStubs(correction: InvoiceCorrectionView = UNDER_WAY) {
   return {
@@ -195,6 +223,6 @@ export function underWayStubs(correction: InvoiceCorrectionView = UNDER_WAY) {
     })),
     giveInvoiceCorrectionCash: vi.fn<TillApi["giveInvoiceCorrectionCash"]>(),
     refundTransaction: vi.fn<TillApi["refundTransaction"]>(),
-    retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(),
+    retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(async (id) => refundAnswer({ id })),
   };
 }
