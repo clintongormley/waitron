@@ -10,9 +10,9 @@ export const en = {
   "permission.sale.void.help":
     "Void a recorded sale or authorise recording that a party left without paying. Other staff can ask for your PIN approval.",
   "permission.sale.refund.help":
-    "Refund payments and authorise removing charges for dishes already sent or served. Refunding money during an invoice correction needs this permission too.",
+    "Refund payments and authorise removing charges for dishes already sent or served. Give money back on the till needs it too, unless the money is only for cancelled dishes whose cancellation already approved giving it back.",
   "permission.sale.rectify.help":
-    "Authorise correcting an issued invoice, including cancelling an invoiced order. Refunding its payment is a separate permission.",
+    "Authorise correcting an issued invoice, including cancelling an invoiced order. Give money back on the till may need it when money for dishes or goodwill goes back beyond what is owed for cancelled dishes. Refunding its payment is a separate permission.",
   "permission.order.custom_item.help":
     "Ring up something that is not on the menu, with a name and price typed at the till. Someone without it can ask a person who has it to enter their PIN.",
   "permission.cash.drawer.help":
@@ -4798,9 +4798,9 @@ export const es: Record<StringKey, string> = {
   "permission.sale.void.help":
     "Anula una venta registrada o autoriza registrar que un grupo se ha ido sin pagar. Otros empleados pueden pedir tu autorización con PIN.",
   "permission.sale.refund.help":
-    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. También necesitas este permiso para devolver dinero durante una rectificación de factura.",
+    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolver dinero en la caja también lo necesita, salvo si el dinero es solo de platos cancelados cuya cancelación ya aprobó devolverlo.",
   "permission.sale.rectify.help":
-    "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver su pago requiere un permiso aparte.",
+    "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver dinero en la caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver su pago requiere un permiso aparte.",
   "permission.order.custom_item.help":
     "Añade a la venta algo que no está en la carta, con un nombre y un precio escritos en la caja. Quien no tenga este permiso puede pedir a alguien que lo tenga que introduzca su PIN.",
   "permission.cash.drawer.help":
