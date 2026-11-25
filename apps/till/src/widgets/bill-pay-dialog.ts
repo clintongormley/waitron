@@ -786,6 +786,17 @@ export class TillBillPayDialog extends LitElement {
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("asked") && this.asked === null) this.ownReceipt = null;
+    const billBefore = (changed.get("balance") as BillBalance | null | undefined)?.workingOrderId;
+    if (
+      billBefore !== undefined &&
+      this.balance !== null &&
+      billBefore !== this.balance.workingOrderId
+    ) {
+      // Another bill's dishes carry other ids and numbers, so a choice from the bill left is not
+      // carried across, and nothing chosen there is marked missing here.
+      this.picks = new Map();
+      this.#feedback.reset();
+    }
     if (!this.busy && this.asked === null && !this.confirmationLocked) {
       // A line moved back from a failed Pay for items keeps its id but takes a new line number.
       const before = (changed.get("lines") as PayLine[] | undefined) ?? this.lines;

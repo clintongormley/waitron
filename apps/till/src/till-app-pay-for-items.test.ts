@@ -24,9 +24,11 @@ import {
   stubApi,
   takenOf,
   tableOrder,
+  tarta,
   text,
   till,
   type,
+  vino,
 } from "../test/bill-pay-app.js";
 import { cancelReason, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
@@ -34,7 +36,13 @@ import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { fill, setLocale, t } from "./i18n/t.js";
-import type { BillBalance, BillPaymentResult, BillPaymentView, TillApi } from "./api/client.js";
+import type {
+  BillBalance,
+  BillPaymentResult,
+  BillPaymentView,
+  TabLine,
+  TillApi,
+} from "./api/client.js";
 import type {
   ItemPaymentPreview,
   ItemPaymentRequest,
@@ -539,6 +547,31 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
   });
 
+  it("a declined card on an open bill keeps the dishes chosen, back under new numbers", async () => {
+    let paid = false;
+    // The declined dishes come back to the table's bill with their ids, at its end.
+    const back = [...bill120.slice(0, 3), { ...tarta, lineNo: 6 }, { ...vino, lineNo: 7 }];
+    const { el } = await mountApp({
+      ...withReader(),
+      getTabLines: vi.fn(async () => ({ lines: paid ? back : bill120, revision: 0 })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return onWo9("declined", "failed");
+      }),
+    });
+    await confirmOnReader(el);
+    await flush(el, 6);
+
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "#lines-error")).toBeNull();
+    expect(
+      [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="line"]')]
+        .filter((box) => box.checked)
+        .map((box) => box.value),
+    ).toEqual(["6", "7"]);
+  });
+
   it("a declined card on a printed bill moves to the reopened bill and says so", async () => {
     let paid = false;
     // The draft fixture serves wo-5, so it stands for the reopened bill.
@@ -569,8 +602,83 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(tableOrder(el).billBalance).toEqual(reopened);
     expect(dialog(el)!.balance).toEqual(reopened);
     expect(vi.mocked(api.getTabLines).mock.calls).toContainEqual(["wo-5"]);
+    await press(el, 'input[name="line"][value="4"]');
     await press(el, "[data-pay-continue]");
     expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)![0]).toBe("wo-5");
+  });
+
+  /** A declined card on the printed bill wo-4, whose dishes are `printed`, after choosing the
+   * dishes on `chosen`. The reopened bill wo-5 holds copies of them, with ids of their own and
+   * numbered from 1, the chosen ones moved back to its end under new numbers, as the server's
+   * reopen and the declined card leave them. */
+  async function declinedOnPrinted(printed: TabLine[], chosen: number[]): Promise<TillApp> {
+    let paid = false;
+    // The draft fixture serves wo-5, so it stands for the reopened bill.
+    const copies = printed.map((dish, index) => ({
+      ...dish,
+      id: `copy-${dish.lineNo}`,
+      lineNo: index + 1,
+    }));
+    const back = copies.filter((_, index) => chosen.includes(printed[index]!.lineNo));
+    const reopenedLines = [
+      ...copies.filter((copy) => !back.includes(copy)),
+      ...back.map((copy, index) => ({ ...copy, lineNo: copies.length + index + 1 })),
+    ];
+    const { el } = await mountApp({
+      ...withReader(),
+      getPartyBills: vi.fn(async () => [
+        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
+      ]),
+      getTabLines: vi.fn(async (billId: string) => ({
+        lines: billId === "wo-5" ? reopenedLines : printed,
+        revision: 0,
+      })),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return {
+          ...onWo9("declined", "failed"),
+          sourceBalance: balanceOf({ workingOrderId: "wo-5" }),
+        };
+      }),
+    });
+    await choosePrintedItems(el, chosen);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el, 6);
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    return el;
+  }
+
+  const ticked = (el: TillApp) =>
+    [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="line"]')]
+      .filter((box) => box.checked)
+      .map((box) => box.value);
+
+  it("a declined card on a printed bill says only that it was declined, and the dishes are chosen again", async () => {
+    const el = await declinedOnPrinted(bill120, [4, 5]);
+
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "#lines-error")).toBeNull();
+    expect(ticked(el)).toEqual([]);
+    await press(el, 'input[name="line"][value="7"]');
+    await press(el, "[data-pay-continue]");
+    expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)).toEqual([
+      "wo-5",
+      expect.objectContaining({ picks: [{ lineId: "copy-5" }] }),
+    ]);
+  });
+
+  it("a declined card on a printed bill never leaves another dish chosen under a reused number", async () => {
+    // A printed bill whose numbers start at 2, as when its first dish was moved off it.
+    const printed = bill120.map((dish) => ({ ...dish, lineNo: dish.lineNo + 1 }));
+    const el = await declinedOnPrinted(printed, [5]);
+
+    expect(ticked(el)).toEqual([]);
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
   });
 
   it("a card still pending on a printed bill moves to the reopened bill, its outcome unknown there", async () => {
