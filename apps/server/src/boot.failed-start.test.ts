@@ -1774,7 +1774,6 @@ describe("settled-tender recovery boot lifetime", () => {
     const deadline = new AbortController();
     try {
       await Promise.race([shutdownStarted, result]);
-      expect(stopTenderRefundResolvers).toHaveBeenCalledOnce();
       expect(recoverTenderRefunds).not.toHaveBeenCalled();
       expect(await Promise.race([result, delay(50, "waiting", { signal: deadline.signal })])).toBe(
         "waiting",
@@ -1782,6 +1781,7 @@ describe("settled-tender recovery boot lifetime", () => {
       expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
       release();
       expect(await result).toBe(failure);
+      expect(stopTenderRefundResolvers).toHaveBeenCalledOnce();
       expect(readVenueHolder(venueDir)).toBeNull();
     } finally {
       deadline.abort();
