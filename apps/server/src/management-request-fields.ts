@@ -1,10 +1,15 @@
 import { type Transaction, withTransaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
+// Error declaration for the `product.not_found` code in `requireProductId`.
 import "@waitron/menu";
 import { isUuid, AppError, int4InRange } from "@waitron/shared";
 import type { ManagementApiDeps } from "./management-api-deps.js";
 import type { TradingContext } from "./trading-context.js";
 
+/**
+ * Path id checks refuse a malformed id with the resource's not-found code before it reaches a
+ * plain text column. The query checks whether a well-formed id names a row.
+ */
 export function requireStationId(id: string): string {
   if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
   return id;

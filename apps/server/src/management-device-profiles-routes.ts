@@ -17,6 +17,7 @@ import {
   updateDeviceProfile,
   deleteDeviceProfile,
 } from "@waitron/layouts";
+// Error declaration for the `printer.not_found` code in `requireListedPrinters`.
 import "@waitron/printing";
 import {
   requireBodyUuid,

@@ -1,6 +1,7 @@
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
 import { isUuid, AppError } from "@waitron/shared";
 import type { Hono } from "hono";
+// Error declaration for `course.not_found` in the route and path id check.
 import "@waitron/venue-service";
 import { readCourseDeleteImpact, deleteCourse } from "./course-delete.js";
 import {

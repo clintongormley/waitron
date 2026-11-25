@@ -4,6 +4,7 @@ import { isUuid, AppError } from "@waitron/shared";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { and, eq } from "drizzle-orm";
 import type { Hono } from "hono";
+// Error declarations for host codes thrown here, including `zone.not_found`.
 import "./errors.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { type ZonePlanSave, readLayout, saveLayout } from "./floor-plan.js";
