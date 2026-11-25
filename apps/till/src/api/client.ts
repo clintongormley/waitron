@@ -4149,13 +4149,20 @@ export class TillApi {
    * Credit a printed table bill's ticket in full and put its dishes on a new open bill →
    * `POST /api/working-orders/:id/split-after-print`, which asks no approver. Rejects as
    * `cancelOrder` does, and `bill.not_at_table`, `bill.left_unpaid`, `bill.not_issued`,
-   * `bill.has_advance` and `bill.unserved_dishes` (`dishes`, as `meal_end.unserved_dishes` lists them).
+   * `bill.has_advance` and `bill.unserved_dishes` (`dishes`, as `meal_end.unserved_dishes` lists them,
+   * and `canStop`: whether `stopUnserved` may be sent to stop them and leave them off the new bill).
    */
   splitAfterPrint(
     id: string,
-    options: ReadOptions = {},
+    options: ReadOptions & { stopUnserved?: true } = {},
   ): Promise<{ billId: string; correctiveNumber: string }> {
-    return this.#request(`/api/working-orders/${id}/split-after-print`, "POST", {}, options.signal);
+    const body = options.stopUnserved ? { stopUnserved: true } : {};
+    return this.#request(
+      `/api/working-orders/${id}/split-after-print`,
+      "POST",
+      body,
+      options.signal,
+    );
   }
 
   /** Who may approve cancelling and crediting an invoiced bill → `GET /api/cancel-credit-authorizers`. */

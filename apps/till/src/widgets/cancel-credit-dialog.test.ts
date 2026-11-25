@@ -415,6 +415,94 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     expect(markServed(el)).toBeNull();
   });
 
+  const stopButton = (el: TillCancelCreditDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-split-stop-unserved]");
+  const stopNote = (el: TillCancelCreditDialog) =>
+    root(el).querySelector("[data-split-unserved-stop]");
+
+  it.each(["en", "es"] as const)(
+    "when the dishes can be stopped, offers Stop these dishes and reopen beside Mark served, in %s",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const el = await mount({
+          mode: "split",
+          refusal: { code: "bill.unserved_dishes", dishes: [served, held], canStop: true },
+          canMarkServed: true,
+        });
+
+        expect(text(unservedBox(el)!.querySelector("span"))).toBe(t("split.unserved_held"));
+        expect(text(stopNote(el))).toBe(t("split.unserved_stop"));
+        expect(text(stopButton(el))).toBe(t("split.stop_unserved"));
+        expect(markServed(el)).not.toBeNull();
+        expect(actions(el).error).toBe("");
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
+  it("says the stop words in English and Spanish", () => {
+    expect(t("split.stop_unserved")).toBe("Stop these dishes and reopen");
+    expect(t("split.unserved_stop")).toBe(
+      "If they never came, choose Stop these dishes and reopen.",
+    );
+    setLocale("es");
+    try {
+      expect(t("split.stop_unserved")).toBe("Parar estos platos y reabrir");
+      expect(t("split.unserved_stop")).toBe("Si no llegaron, pulsa Parar estos platos y reabrir.");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("offers the stop on a device that cannot mark dishes served", async () => {
+    const el = await mount({
+      mode: "split",
+      refusal: { code: "bill.unserved_dishes", dishes: [served], canStop: true },
+      canMarkServed: false,
+    });
+
+    expect(text(unservedBox(el)!.querySelector("span"))).toBe(t("split.unserved_no_mark"));
+    expect(stopButton(el)).not.toBeNull();
+    expect(markServed(el)).toBeNull();
+  });
+
+  it.each([false, undefined])(
+    "with canStop %s, offers no stop and says nothing of it",
+    async (canStop) => {
+      const el = await mount({
+        mode: "split",
+        refusal: { code: "bill.unserved_dishes", dishes: [served], canStop },
+        canMarkServed: true,
+      });
+
+      expect(unservedBox(el)).not.toBeNull();
+      expect(stopButton(el)).toBeNull();
+      expect(stopNote(el)).toBeNull();
+      expect(text(unservedBox(el))).not.toContain(t("split.stop_unserved"));
+    },
+  );
+
+  it("Stop these dishes and reopen asks for the reopen with the dishes stopped, once", async () => {
+    const el = await mount({
+      mode: "split",
+      refusal: { code: "bill.unserved_dishes", dishes: [served], canStop: true },
+      canMarkServed: true,
+    });
+    const continued = capture(el, "cancel-credit-continue");
+    const asked = capture(el, "split-mark-served");
+
+    stopButton(el)!.click();
+    el.busy = true;
+    await el.updateComplete;
+    expect(stopButton(el)!.disabled).toBe(true);
+    stopButton(el)!.click();
+
+    expect(continued).toEqual([{ reason: "", stopUnserved: true }]);
+    expect(asked).toEqual([]);
+  });
+
   it.each(["sale.correction_unsupported", "working_order.not_placed"])(
     "says %s in its own sentence above the action",
     async (code) => {
@@ -480,7 +568,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
       const el = await mount({ mode: "split", done: { corrective } });
 
       expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-        "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.",
+        "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.",
       );
     },
   );
@@ -563,7 +651,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     el.done = { corrective: "R/3" };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Ticket anulado. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
+      "Ticket anulado y cuenta reabierta. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
     );
 
     el.done = { corrective: "R/3", creditedElsewhere: true };

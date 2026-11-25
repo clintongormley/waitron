@@ -3998,7 +3998,7 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
       shown: "Bill 2 · Company dinner for the visiting architects",
     });
     expect(credited).toBe(
-      "Receipt cancelled. The dishes are on Bill 2 · Company dinner for the visiting architects.",
+      "Receipt cancelled and the bill reopened. The dishes are on Bill 2 · Company dinner for the visiting architects.",
     );
     const el = await mount({ ...over, credited });
     const line = root(el).querySelector("[data-pay-credited]")!;

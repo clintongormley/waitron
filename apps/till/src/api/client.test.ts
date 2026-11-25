@@ -2631,6 +2631,20 @@ describe("TillApi", () => {
     expect(fetchStub.mock.calls[0]![1].signal).toBe(signal);
   });
 
+  it("splitAfterPrint asked to stop the unserved dishes sends that flag alone", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ billId: "wo2", correctiveNumber: "R/3" }));
+    const { signal } = new AbortController();
+
+    await new TillApi("", fetchStub).splitAfterPrint("wo1", { signal, stopUnserved: true });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/api/working-orders/wo1/split-after-print", "POST", JSON.stringify({ stopUnserved: true })],
+    ]);
+    expect(fetchStub.mock.calls[0]![1].signal).toBe(signal);
+  });
+
   it("cancelOrder hands the caller's signal to the request, still sending the reason alone", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const { signal } = new AbortController();

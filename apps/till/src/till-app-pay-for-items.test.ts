@@ -111,7 +111,8 @@ const windowCredited = (el: TillApp) => {
 };
 
 /** The screen's notice once Pay for items credited wo-4's receipt, its dishes on `shown`. */
-const creditedNotice = (shown: string) => `Receipt cancelled. The dishes are on ${shown}.`;
+const creditedNotice = (shown: string) =>
+  `Receipt cancelled and the bill reopened. The dishes are on ${shown}.`;
 
 /** Pay > Items on wo-4, the dishes on `lineNos` chosen. */
 async function chooseItems(el: TillApp, lineNos: number[]): Promise<void> {
@@ -523,6 +524,28 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
     expect(api.payForItems).not.toHaveBeenCalled();
     expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("Pay for items offers no Stop these dishes and reopen, even when the refusal says they could be stopped", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([printedWo4]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockRejectedValue({
+        code: "bill.unserved_dishes",
+        status: 409,
+        dishes: [{ lineId: "l-1", dishName: "Steak", quantity: "1", released: true }],
+        canStop: true,
+      }),
+    });
+    await choosePrintedItems(el, [4]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+
+    expect(formError(el)).toBe(codeMessage("bill.unserved_dishes"));
+    expect(formError(el)).not.toContain(t("split.unserved_stop"));
+    expect(inDialog(el, "[data-split-stop-unserved]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-cancel-credit-dialog")).toBeNull();
+    expect(api.payForItems).not.toHaveBeenCalled();
   });
 
   it("a printed bill that has had an advance says its dishes cannot be paid for separately and names the Pay window's other buttons", async () => {

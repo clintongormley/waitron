@@ -283,11 +283,13 @@ import "./widgets/bill-edit-conflicts-dialog.js";
 import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
-import type {
-  CancelCreditDone,
-  CancelCreditMode,
-  CancelCreditRefusal,
-  TillCancelCreditDialog,
+import {
+  cancelCreditRefusalOf,
+  type CancelCreditContinue,
+  type CancelCreditDone,
+  type CancelCreditMode,
+  type CancelCreditRefusal,
+  type TillCancelCreditDialog,
 } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
@@ -21218,11 +21220,11 @@ export class TillApp extends LitElement {
 
   /** The reason confirmed: sent in the operator's own name first, as a departure is. */
   async #onCancelCreditContinue(event: Event): Promise<void> {
-    const { reason } = (event as CustomEvent<{ reason: string }>).detail;
+    const { reason, stopUnserved } = (event as CustomEvent<CancelCreditContinue>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
     const open = this.cancelCrediting!;
     if (open.busy) return;
-    await this.#sendCancelCredit({ ...open, reason });
+    await this.#sendCancelCredit({ ...open, reason }, undefined, stopUnserved);
   }
 
   /** The approver's PIN leaves in the request and is never kept. */
@@ -21239,6 +21241,7 @@ export class TillApp extends LitElement {
   async #sendCancelCredit(
     open: CancelCrediting,
     override?: { personId: string; pin: string },
+    stopUnserved?: true,
   ): Promise<void> {
     if (this.orderParty?.id !== open.partyId) {
       this.#closeCancelCrediting();
@@ -21251,7 +21254,10 @@ export class TillApp extends LitElement {
     let split: { billId: string } | undefined;
     try {
       if (open.mode === "split")
-        split = await this.api.splitAfterPrint(open.workingOrderId, { signal: limit.signal });
+        split = await this.api.splitAfterPrint(open.workingOrderId, {
+          signal: limit.signal,
+          stopUnserved,
+        });
       else
         await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
           signal: limit.signal,
@@ -21374,15 +21380,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.#closeCancelCreditApprovers();
-    const dishes = (error as { dishes?: unknown } | null)?.dishes;
-    this.cancelCrediting = {
-      ...open,
-      refusal:
-        refusal.code === "bill.unserved_dishes" && Array.isArray(dishes)
-          ? { ...refusal, dishes: dishes as MealEndUnservedDish[] }
-          : refusal,
-      busy: false,
-    };
+    this.cancelCrediting = { ...open, refusal: cancelCreditRefusalOf(error, refusal), busy: false };
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();

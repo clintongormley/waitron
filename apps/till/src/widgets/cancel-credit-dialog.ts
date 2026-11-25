@@ -26,9 +26,24 @@ export interface CancelCreditDone {
   creditedElsewhere?: boolean;
 }
 
-/** A refusal; `bill.unserved_dishes` carries the dishes it lists. */
+/** A refusal; `bill.unserved_dishes` carries the dishes it lists, and `canStop` when Reopen bill
+ * may stop them instead. */
 export interface CancelCreditRefusal extends DialogRefusal {
   dishes?: readonly MealEndUnservedDish[];
+  canStop?: boolean;
+}
+
+/** `cancel-credit-continue`'s detail: `stopUnserved` when Stop these dishes and reopen was pressed. */
+export interface CancelCreditContinue {
+  reason: string;
+  stopUnserved?: true;
+}
+
+/** The refusal the dialog shows for `error`, keeping `bill.unserved_dishes`' dishes and `canStop`. */
+export function cancelCreditRefusalOf(error: unknown, refusal: DialogRefusal): CancelCreditRefusal {
+  const { dishes, canStop } = (error ?? {}) as { dishes?: unknown; canStop?: unknown };
+  if (refusal.code !== "bill.unserved_dishes" || !Array.isArray(dishes)) return refusal;
+  return { ...refusal, dishes: dishes as MealEndUnservedDish[], canStop: canStop === true };
 }
 
 const REFUSALS: Record<string, StringKey> = {
@@ -272,6 +287,7 @@ export class TillCancelCreditDialog extends LitElement {
 
   #unservedBody(dishes: readonly MealEndUnservedDish[]) {
     const servable = servableDishes(dishes, this.canMarkServed);
+    const canStop = this.shownRefusal?.canStop === true;
     const notice = !this.canMarkServed
       ? t("split.unserved_no_mark")
       : servable.length === dishes.length
@@ -279,6 +295,7 @@ export class TillCancelCreditDialog extends LitElement {
         : t("split.unserved_held");
     return html`<div class="unserved" role="alert" data-split-unserved>
       <span>${notice}</span>
+      ${canStop ? html`<span data-split-unserved-stop>${t("split.unserved_stop")}</span>` : nothing}
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
         ${dishes.map((dish) => {
@@ -300,7 +317,24 @@ export class TillCancelCreditDialog extends LitElement {
               ${t("meal_end.mark_served")}
             </wt-button>`
       }
+      ${
+        canStop
+          ? html`<wt-button
+              size="sm"
+              data-split-stop-unserved
+              .disabled=${this.busy}
+              @click=${() => this.#stopUnserved()}
+            >
+              ${t("split.stop_unserved")}
+            </wt-button>`
+          : nothing
+      }
     </div>`;
+  }
+
+  #stopUnserved(): void {
+    if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
+    this.#emit("cancel-credit-continue", { reason: "", stopUnserved: true });
   }
 
   #markServed(dishes: readonly MealEndUnservedDish[]): void {

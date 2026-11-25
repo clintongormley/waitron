@@ -54,7 +54,9 @@ describe("creditedNotice and billNoticeText", () => {
     });
     const notice = creditedNotice([printed, reopened], reopen);
 
-    expect(billNoticeText(notice)).toBe("Receipt cancelled. The dishes are on Bill 2.");
+    expect(billNoticeText(notice)).toBe(
+      "Receipt cancelled and the bill reopened. The dishes are on Bill 2.",
+    );
     setLocale("es");
     try {
       const spanish = fill(t("table.bill_credited"), { shown: "Cuenta 2" });
@@ -67,7 +69,7 @@ describe("creditedNotice and billNoticeText", () => {
 
   it("says the same when the read names no corrective, and nothing while the reopened bill is unlisted", () => {
     expect(billNoticeText(creditedNotice([reopened], reopen))).toBe(
-      "Receipt cancelled. The dishes are on Bill 2.",
+      "Receipt cancelled and the bill reopened. The dishes are on Bill 2.",
     );
     expect(creditedNotice([billOf()], reopen)).toBeNull();
   });
@@ -78,10 +80,10 @@ describe("creditedNotice and billNoticeText", () => {
     const kept = { from: "wo-4", to: "wo-9" };
 
     expect(billNoticeText(creditedNotice([printed, own], kept))).toBe(
-      "Receipt cancelled. The dishes are on Bill 3.",
+      "Receipt cancelled and the bill reopened. The dishes are on Bill 3.",
     );
     expect(billNoticeText(creditedNotice([own], kept))).toBe(
-      "Receipt cancelled. The dishes are on Bill 3.",
+      "Receipt cancelled and the bill reopened. The dishes are on Bill 3.",
     );
   });
 

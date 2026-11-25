@@ -701,7 +701,7 @@ describe("till-app: reopening a printed bill", () => {
       .trim() ?? null;
 
   const SPLIT_DONE =
-    "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.";
+    "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.";
   const ALREADY_CANCELLED =
     "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.";
 
@@ -1024,6 +1024,69 @@ describe("till-app: reopening a printed bill", () => {
 
     expect(server.splitAfterPrint).toHaveBeenCalledOnce();
     expect(bottom(el)).toBe(codeMessage("group.line_held"));
+  });
+
+  /** The first reopen refused for `unserved`, saying whether they can be stopped; later ones
+   * answer as `then` does. */
+  function unservedServer(canStop: boolean, then: () => Promise<void> = async () => {}) {
+    let refused = false;
+    return billServer(async () => {
+      if (refused) return then();
+      refused = true;
+      throw {
+        code: "bill.unserved_dishes",
+        status: 409,
+        workingOrderId: "wo-check",
+        dishes: unserved,
+        canStop,
+      };
+    });
+  }
+  const stopButton = (el: TillApp) =>
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-split-stop-unserved]");
+
+  it("Stop these dishes and reopen sends the reopen once more with the dishes stopped, and reopens", async () => {
+    const server = unservedServer(true);
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+
+    expect(dialog(el)!.refusal).toMatchObject({ dishes: unserved, canStop: true });
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-split-mark-served]")).not.toBeNull();
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(server.splitAfterPrint.mock.calls).toEqual([
+      ["wo-check", { signal: expect.any(AbortSignal) }],
+      ["wo-check", { signal: expect.any(AbortSignal), stopUnserved: true }],
+    ]);
+    expect(api.markServed).not.toHaveBeenCalled();
+    expect(doneText(el)).toBe(SPLIT_DONE);
+    await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
+  });
+
+  it("a refusal of Stop these dishes and reopen is said as a reopen's is", async () => {
+    const server = unservedServer(true, async () => {
+      throw { code: "bill.left_unpaid", status: 409, workingOrderId: "wo-check" };
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
+    expect(bottom(el)).toBe(t("split.refused_left_unpaid"));
+    expect(doneText(el)).toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
+
+  it("when nothing was served, offers no Stop these dishes and reopen", async () => {
+    const server = unservedServer(false);
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+
+    expect(dialog(el)!.refusal).toMatchObject({ dishes: unserved, canStop: false });
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-split-unserved]")).not.toBeNull();
+    expect(stopButton(el)).toBeNull();
   });
 
   it.each([
