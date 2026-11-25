@@ -24,7 +24,7 @@ async function download(personId: string) {
 }
 
 it("shows each person's editions and cancellations, including the original author and time on a requeued edition", async () => {
-  const { lunch, soup, lemonade } = await menusFixture(suite.db);
+  const { lunch, soup } = await menusFixture(suite.db);
   const publisher = await seedPerson(suite.db, { displayName: "Publisher" });
   const editor = await seedPerson(suite.db, { displayName: "Editor" });
   const canceller = await seedPerson(suite.db, { displayName: "Canceller" });
@@ -35,7 +35,7 @@ it("shows each person's editions and cancellations, including the original autho
     await updateProduct(tx, soup, { unitPrice: "5.50" });
     const next = await previewMenu(tx, lunch);
     await queueMenuPublication(tx, lunch, next.hash, activatesAt, publisher, { at: queuedAt });
-    const menuItemId = await offerOf(tx, lunch, lemonade);
+    const menuItemId = await offerOf(tx, lunch, soup);
     const edited = await patchLiveMenu(
       tx,
       lunch,

@@ -77,9 +77,14 @@ async function lemonadeItem(menuId = f.lunch): Promise<string> {
   return app((tx) => offerOf(tx, menuId, f.lemonade));
 }
 
+async function soupItem(): Promise<string> {
+  return app((tx) => offerOf(tx, f.lunch, f.soup));
+}
+
+/** A price patch on Soup, a dish without variants. */
 async function priceChange(price: string) {
   return [
-    { target: { kind: "offer", menuItemId: await lemonadeItem() }, field: "price", value: price },
+    { target: { kind: "offer", menuItemId: await soupItem() }, field: "price", value: price },
   ];
 }
 
@@ -185,6 +190,35 @@ describe("patchLiveMenu", () => {
       .from(menuReleases)
       .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
     expect(pointer).toMatchObject({ versionId: result.versionId, activatesAt: later });
+  });
+
+  it("prices a dish whose live copy has no variants, though its product has gained one since", async () => {
+    const item = await app((tx) => offerOf(tx, f.lunch, f.lager));
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lager,
+        [
+          {
+            name: "Pint",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "5.00",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+    const result = await patch(v1, await lagerPriceChange("5.5"));
+    const live = await app((tx) => readLiveMenu(tx, f.lunch));
+    expect(live!.versionId).toBe(result.versionId);
+    expect(live!.document.offers[item]).toMatchObject({
+      unitPrice: "5.50",
+      grossPrice: "5.50",
+      variants: [],
+    });
   });
 
   it("readLiveMenu answers nothing for a menu never published, and the clock's live version", async () => {
@@ -386,10 +420,11 @@ describe("patchLiveMenu", () => {
       ).toEqual([]);
       const item = await lemonadeItem();
       const target = { kind: "offer", menuItemId: item };
+      const soup = { kind: "offer", menuItemId: await soupItem() };
       await refuses(
         () =>
           patch(v1, [
-            { target, field: "price", value: "5.5" },
+            { target: soup, field: "price", value: "5.5" },
             { target, field: "image", value: picture },
           ]),
         {
@@ -402,14 +437,15 @@ describe("patchLiveMenu", () => {
 
   it("takes a picture away without asking the library", async () => {
     const item = await lemonadeItem();
-    const target = { kind: "offer", menuItemId: item };
+    const soup = await soupItem();
     const result = await patch(v1, [
-      { target, field: "image", value: null },
-      { target, field: "price", value: "5.5" },
+      { target: { kind: "offer", menuItemId: item }, field: "image", value: null },
+      { target: { kind: "offer", menuItemId: soup }, field: "price", value: "5.5" },
     ]);
     expect(result.number).toBe(2);
     const live = await app((tx) => readLiveMenu(tx, f.lunch));
-    expect(live!.document.offers[item]).toMatchObject({ image: null, unitPrice: "5.50" });
+    expect(live!.document.offers[item]).toMatchObject({ image: null });
+    expect(live!.document.offers[soup]).toMatchObject({ unitPrice: "5.50" });
   });
 
   it("merges translations against the venue's saved content languages", async () => {

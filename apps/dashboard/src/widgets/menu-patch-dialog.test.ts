@@ -648,6 +648,21 @@ it("lists a dish's variants as links that pick them, and says it sells through t
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
 });
 
+it("offers no price on a dish sold through its variants", async () => {
+  const el = await mount();
+  await pick(el, "Lemonade");
+  expect(fieldNames(el)).toEqual([
+    "name",
+    "customer-name-en",
+    "customer-name-es",
+    "kitchen-name",
+    "description-en",
+    "description-es",
+    "dashboard-image-upload",
+    "declarations",
+  ]);
+});
+
 /** Each variant row of the dish's form: its link's text and the values shown beside it. */
 const variantRows = (el: MenuPatchDialog) =>
   [...form(el).querySelectorAll('[data-test="variant"]')].map((row) => ({

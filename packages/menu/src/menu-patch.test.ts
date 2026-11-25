@@ -127,6 +127,35 @@ describe("applyMenuPatch", () => {
     expect(patched.offers[soup]!.grossPrice).toBeNull();
   });
 
+  it("refuses a price on a dish whose live copy lists variants, and still prices its variant", async () => {
+    const { f, document } = await liveLunch();
+    const lemonade = await menuItem(f, f.lemonade);
+    const dish = { kind: "offer", menuItemId: lemonade } as const;
+    expect(document.offers[lemonade]!.variants).toHaveLength(1);
+    expect(
+      refusal(() =>
+        applyMenuPatch(
+          document,
+          parseMenuPatch([{ target: dish, field: "price", value: "9" }]),
+          languages,
+        ),
+      ),
+    ).toEqual({
+      code: "menu_patch.invalid",
+      params: { change: 0, field: "target" },
+    });
+    expect(patchFieldValue(document, dish, "price")).toBeUndefined();
+    expect(patchFieldValue(document, dish, "name")).toBe("Lemonade");
+    const variant = { kind: "variant", menuItemId: lemonade, variantId: f.large } as const;
+    expect(patchFieldValue(document, variant, "price")).toBe("3.50");
+    const patched = applyMenuPatch(
+      document,
+      parseMenuPatch([{ target: variant, field: "price", value: "4" }]),
+      languages,
+    );
+    expect(patched.offers[lemonade]!.variants[0]!.unitPrice).toBe("4.00");
+  });
+
   it("patches a variant's price and leaves its dish alone", async () => {
     const { f, document } = await liveLunch();
     const lemonade = await menuItem(f, f.lemonade);
@@ -170,29 +199,26 @@ describe("applyMenuPatch", () => {
   });
 
   it("patching a dish leaves every variant as it was, but for its declarations", async () => {
-    const { f, document } = await liveLunch(async (tx, f) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
-        grossPrice: "2.80",
-      });
-    });
+    const { f, document } = await liveLunch();
     const lemonade = await menuItem(f, f.lemonade);
     const target = { kind: "offer", menuItemId: lemonade };
     const patched = applyMenuPatch(
       document,
       parseMenuPatch(
-        PATCH_FIELDS.offer.map((field) => ({
-          target,
-          field,
-          value: {
-            name: "Lemon soda",
-            customerName: { en: "Fizzy lemon" },
-            kitchenName: "LEMSODA",
-            description: { en: "Fresh" },
-            image: "soda.jpg",
-            price: "9",
-            declarations: "product",
-          }[field],
-        })),
+        PATCH_FIELDS.offer
+          .filter((field) => field !== "price")
+          .map((field) => ({
+            target,
+            field,
+            value: {
+              name: "Lemon soda",
+              customerName: { en: "Fizzy lemon" },
+              kitchenName: "LEMSODA",
+              description: { en: "Fresh" },
+              image: "soda.jpg",
+              declarations: "product",
+            }[field],
+          })),
       ),
       languages,
       new Map([
@@ -209,8 +235,8 @@ describe("applyMenuPatch", () => {
       kitchenName: "LEMSODA",
       description: { en: "Fresh" },
       image: "soda.jpg",
-      unitPrice: "9.00",
-      grossPrice: "9.00",
+      unitPrice: document.offers[lemonade]!.unitPrice,
+      grossPrice: null,
     });
   });
 
