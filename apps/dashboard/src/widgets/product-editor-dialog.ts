@@ -1,7 +1,13 @@
 import { html, nothing, type LitElement, type ReactiveController } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
 import type { WtModal } from "@waitron/ui";
-import type { CategorySummary, ProductSaveBody, Unit, UnitInput } from "../api/catalog-api.js";
+import type {
+  CategoryInput,
+  CategorySummary,
+  ProductSaveBody,
+  Unit,
+  UnitInput,
+} from "../api/catalog-api.js";
 import type { Course } from "../api/kitchen-api.js";
 import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import type {
@@ -18,6 +24,7 @@ import type {
 import { allergenRefusalText, codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { ProductChildCreate, type ProductChildKind } from "../state/product-child-create.js";
+import { categoryRefusalErrors } from "./category-form.js";
 import { refusalText } from "./delete-refusal.js";
 import { missingChoiceField } from "./product-editor-missing-choice.js";
 import { productEditorField, type ProductEditor } from "./product-editor.js";
@@ -26,6 +33,7 @@ import type { CourseList } from "./course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "./unit-form.js";
 import "./product-editor.js";
 import "./course-list.js";
+import "./category-create-form.js";
 import "./extra-list-form.js";
 import "./option-list-form.js";
 import "./unit-form.js";
@@ -52,7 +60,10 @@ interface Effects {
   afterClose?(): void;
   saved(product: ProductEditorValue, created: boolean, current: () => boolean): Promise<void>;
   lateRefused?(product: ProductEditorValue | null, error: unknown): void;
-  changeChoices(kind: ProductChildKind, current: () => boolean): Promise<void>;
+  changeChoices(
+    kind: Exclude<ProductChildKind, "categories">,
+    current: () => boolean,
+  ): Promise<void>;
 }
 
 /** The screen owns the address and its lookups; the editor owns the window and its related forms. */
@@ -63,6 +74,10 @@ export class ProductEditorDialog implements ReactiveController {
   reading = false;
   #initialField = "";
   #newCategoryId: string | null = null;
+  #categorySeed = "";
+  #categoryParent: string | null = null;
+  #submittedCategoryParent: string | null = null;
+  readonly #savedCategories = new Map<string, CategorySummary>();
   #editingList: { kind: "extras" | "options"; value: ExtraList | OptionList } | null = null;
   #fieldErrors: Record<string, string> = {};
   #editorGeneration = 0;
@@ -104,6 +119,7 @@ export class ProductEditorDialog implements ReactiveController {
     this.#fieldErrors = {};
     this.#addedCourse = null;
     this.#newCategoryId = null;
+    this.#savedCategories.clear();
     this.#initialField = "";
     this.value = null;
     this.open = false;
@@ -266,7 +282,9 @@ export class ProductEditorDialog implements ReactiveController {
   #childRefusalErrors(): ChildRefusals {
     const error = this.#child.error ?? null;
     if (this.#childRefusals?.error === error) return this.#childRefusals.errors;
-    const errors: ChildRefusals = { unit: {}, lists: {} };
+    const errors: ChildRefusals = { unit: {}, lists: {}, category: {} };
+    if (error !== null && this.#child.kind === "categories")
+      errors.category = categoryRefusalErrors(error, this.#submittedCategoryParent);
     if (error !== null && this.#child.kind === "unit") errors.unit = unitRefusalErrors(error);
     if (error !== null && (this.#child.kind === "extras" || this.#child.kind === "options")) {
       // Keyed by the field path the server named, or `_form` when it names none.
@@ -279,6 +297,7 @@ export class ProductEditorDialog implements ReactiveController {
   }
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
+    if (kind === "categories") return;
     const generation = this.#editorGeneration;
     await this.effects.changeChoices(kind, () => generation === this.#editorGeneration);
   }
@@ -313,10 +332,27 @@ export class ProductEditorDialog implements ReactiveController {
   }
 
   /** Every submission is a new refusal, even one the API answers with an identical error object. */
-  #submitChild(write: () => Promise<{ id: string }>, committed?: () => void): Promise<void> {
+  #submitChild<T extends { id: string }>(
+    write: () => Promise<T>,
+    committed?: (value: T) => void,
+  ): Promise<void> {
     this.#childRefusals = null;
     return this.#child.submit(write, committed);
   }
+
+  #submitCategory = (event: CustomEvent<{ value: Required<CategoryInput> }>): void => {
+    event.stopPropagation();
+    const value = event.detail.value;
+    const form = this.host.shadowRoot!.querySelector("dashboard-category-create-form")!;
+    this.#submittedCategoryParent = value.parentId;
+    void this.#submitChild(
+      () => this.#api.createCategory(value),
+      (saved) => {
+        this.#savedCategories.set(saved.id, saved);
+        form.closeSaved(value);
+      },
+    );
+  };
 
   #submitUnit = (event: CustomEvent<{ value: UnitInput }>): void => {
     event.stopPropagation();
@@ -386,6 +422,10 @@ export class ProductEditorDialog implements ReactiveController {
   render(choices: ProductEditorChoices, busy = this.busy) {
     const locales = choices.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
+    for (const { id } of choices.categories) this.#savedCategories.delete(id);
+    const categories = this.#savedCategories.size
+      ? [...choices.categories, ...this.#savedCategories.values()]
+      : choices.categories;
     return html`
       <dashboard-product-editor
         @wt-close=${(event: Event) => this.#afterClose(event)}
@@ -403,15 +443,20 @@ export class ProductEditorDialog implements ReactiveController {
         .newCategoryId=${this.#newCategoryId}
         .fieldErrors=${this.#fieldErrors}
         .units=${choices.units}
-        .categories=${choices.categories}
+        .categories=${categories}
         .extraLists=${choices.extraLists}
         .optionLists=${choices.optionLists}
         .courses=${choices.courses}
         .api=${this.#api}
         @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft; body: ProductSaveBody }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => this.#cancel(event)}
-        @wt-create-related=${(event: CustomEvent<{ kind: ProductChildKind }>) => {
+        @wt-create-related=${(event: CustomEvent<{ kind: ProductChildKind; text?: string }>) => {
           event.stopPropagation();
+          if (this.#child.kind !== null) return;
+          if (event.detail.kind === "categories") {
+            this.#categorySeed = event.detail.text ?? "";
+            this.#categoryParent = this.#editor()!.currentValue.primaryCategoryId;
+          }
           this.#child.open(event.detail.kind);
         }}
         @wt-edit-related=${this.#editRelated}
@@ -448,6 +493,17 @@ export class ProductEditorDialog implements ReactiveController {
           ></wt-form-actions
         >
       </wt-modal>
+      <dashboard-category-create-form
+        .open=${this.#child.kind === "categories"}
+        .draftParent=${this.#editor() ?? undefined}
+        .busy=${this.#child.busy}
+        .seed=${this.#categorySeed}
+        .parentId=${this.#categoryParent}
+        .categories=${categories}
+        .fieldErrors=${refusals.category}
+        @wt-submit=${this.#submitCategory}
+        @wt-cancel=${() => this.#cancelChild("categories")}
+      ></dashboard-category-create-form>
       <dashboard-unit-form
         .open=${this.#child.kind === "unit"}
         .draftParent=${this.#editor() ?? undefined}
@@ -502,12 +558,14 @@ export function knowsEditorProduct(products: Product[], productId: string): bool
 
 /** The nested forms that draw their own dialog; the courses window is the screen's own. */
 const CHILD_FORMS: Partial<Record<ProductChildKind, string>> = {
+  categories: "dashboard-category-create-form",
   unit: "dashboard-unit-form",
   extras: "dashboard-extra-list-form",
   options: "dashboard-option-list-form",
 };
 
 interface ChildRefusals {
+  category: Record<string, string>;
   unit: UnitFormErrors;
   lists: Record<string, string>;
 }

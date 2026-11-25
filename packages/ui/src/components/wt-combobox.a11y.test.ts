@@ -85,15 +85,8 @@ const WITH_DISABLED: ComboboxOption[] = [
 ];
 
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
-  test.each(
-    ["field", "link"].flatMap((appearance) =>
-      [undefined, "end" as const].map((iconPosition) => ({ appearance, iconPosition })),
-    ),
-  )("picked named icon, $appearance/$iconPosition", async ({ appearance, iconPosition }) => {
-    const el = (await mountThemed(
-      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
-      theme,
-    )) as WtCombobox;
+  test.each([undefined, "end"] as const)("picked named icon, %s", async (iconPosition) => {
+    const el = (await mountThemed(`<wt-combobox label="Show"></wt-combobox>`, theme)) as WtCombobox;
     el.options = [
       { value: "station", label: "Bar", icon: "leaf", iconLabel: "Prep station", iconPosition },
     ];
@@ -230,20 +223,6 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     },
   );
 
-  test("a required link trigger, closed and open", async () => {
-    const el = (await mountThemed(
-      '<wt-combobox label="Category" appearance="link" required></wt-combobox>',
-      theme,
-    )) as WtCombobox;
-    el.options = TAGS;
-    await el.updateComplete;
-    const trigger = el.shadowRoot!.querySelector(".trigger")!;
-    expect(trigger.getAttribute("role")).toBe("combobox");
-    expect(trigger.getAttribute("aria-required")).toBe("true");
-    await expectNoA11yViolations(host);
-    await userEvent.click(trigger);
-    await expectNoA11yViolations(host);
-  });
   test("closed, with a value chosen", async () => {
     const el = (await mountThemed(
       '<wt-combobox label="Tags" value="vegan"></wt-combobox>',
@@ -509,52 +488,6 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
         getComputedStyle(el.shadowRoot!.querySelector('[role="option"]')!).paddingInlineStart,
       ),
     );
-    await expectNoA11yViolations(host);
-  });
-
-  async function mountLink(attrs: string): Promise<WtCombobox> {
-    const el = (await mountThemed(
-      `<wt-combobox label="Category" appearance="link" ${attrs}></wt-combobox>`,
-      theme,
-    )) as WtCombobox;
-    el.options = TREE;
-    el.actionLabel = "Change";
-    await el.updateComplete;
-    // Without this the scan could pass on a field-box trigger.
-    expect(el.shadowRoot!.querySelector(".field")).toBeNull();
-    return el;
-  }
-
-  test("link appearance, closed, with a value chosen", async () => {
-    await mountLink('value="cocktails"');
-    await expectNoA11yViolations(host);
-  });
-
-  test("link appearance, closed, with nothing chosen", async () => {
-    await mountLink('show-empty-option value=""');
-    await expectNoA11yViolations(host);
-  });
-
-  test("link appearance, focused", async () => {
-    const el = await mountLink('value="cocktails"');
-    el.focus();
-    await expectNoA11yViolations(host);
-  });
-
-  test("link appearance, open", async () => {
-    const el = await mountLink('value="cocktails"');
-    await userEvent.click(el.shadowRoot!.querySelector(".trigger")!);
-    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-    await expectNoA11yViolations(host);
-  });
-
-  test("link appearance, with an error", async () => {
-    await mountLink('value="cocktails" error="Choose a category"');
-    await expectNoA11yViolations(host);
-  });
-
-  test("link appearance, disabled", async () => {
-    await mountLink('value="cocktails" disabled');
     await expectNoA11yViolations(host);
   });
 

@@ -429,3 +429,23 @@ it("clears a post-save read failure when the product list retry succeeds", async
     .toBe("Double burger");
   expect(menu.root.querySelector('[data-test="structure-write-error"]')).toBeNull();
 });
+
+it("returns from Add category to Category, then back to the same Structure row", async () => {
+  const menu = await openMenu();
+  const editor = await menu.open();
+  const category = editor.shadowRoot!.querySelector<HTMLElement>('[name="primary"]')!;
+  await userEvent.click(category.shadowRoot!.querySelector("button")!);
+  await userEvent.keyboard("{Home}{Enter}");
+  const form = menu.root.querySelector("dashboard-category-create-form");
+  expect(form).not.toBeNull();
+  const modal = form!.shadowRoot!.querySelector("wt-modal")!;
+  expect(modal.open).toBe(true);
+  const childClosed = dialogClosed(modal);
+  await userEvent.keyboard("{Escape}");
+  await childClosed;
+  await expect.poll(() => editor.shadowRoot!.activeElement).toBe(category);
+  const editorClosed = dialogClosed(editor.shadowRoot!.querySelector("wt-modal")!);
+  await userEvent.keyboard("{Escape}");
+  await editorClosed;
+  await expect.poll(() => menu.table()?.activeElement).toBe(menu.row());
+});

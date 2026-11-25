@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { html, render } from "lit";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { categoryPathField } from "./classification-fields.js";
 afterEach(cleanupWidgets);
@@ -18,7 +19,6 @@ describe.each(["light", "dark"] as const)("category path field (%s)", (theme) =>
         html`${categoryPathField({
           name: "primary",
           label: "Category",
-          actionLabel: "Change",
           categories: [category],
           value: state === "chosen" ? category.id : null,
           noneLabel: "Uncategorised",
@@ -26,6 +26,7 @@ describe.each(["light", "dark"] as const)("category path field (%s)", (theme) =>
           error: state === "invalid" ? "Choose another category." : "",
           disabled: state === "disabled",
           change: () => {},
+          add: () => {},
         })}`,
         el,
       );
@@ -35,6 +36,11 @@ describe.each(["light", "dark"] as const)("category path field (%s)", (theme) =>
       expect(fields).toHaveLength(1);
       await Promise.all(fields.map((field) => field.updateComplete));
       await expectNoA11yViolations(host);
+      if (state === "chosen") {
+        await userEvent.click(fields[0]!.shadowRoot!.querySelector("button")!);
+        await userEvent.keyboard("vermouth");
+        await expectNoA11yViolations(host);
+      }
     },
   );
 });

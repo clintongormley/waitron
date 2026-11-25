@@ -188,12 +188,7 @@ export { WtRowActions, rowActionTail } from "./components/wt-row-actions.js";
 export { WtMenuRow } from "./components/wt-menu-row.js";
 export { WtHelpSwitch } from "./components/wt-help-switch.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
-export {
-  DROPDOWN_ICONS,
-  WtCombobox,
-  type ComboboxOption,
-  type WtComboboxAppearance,
-} from "./components/wt-combobox.js";
+export { DROPDOWN_ICONS, WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
 export { WtColourChooser, type ColourChoice } from "./components/wt-colour-chooser.js";
 export {
   WtAddressLookup,
