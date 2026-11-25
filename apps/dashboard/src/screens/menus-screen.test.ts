@@ -8605,12 +8605,22 @@ function priceSave(el: MenusScreen) {
   )!;
 }
 
+/** Lunch's prices with Burger, a product without variants, at this menu's own 11.00. */
+function pricedBurgerRows(): MenuPriceRow[] {
+  return lunchPrices().map((row) =>
+    row.menuItemId === "mi-burger" ? { ...row, override: "11.00" } : row,
+  );
+}
+
 it("stages two price edits on blur, then saves both with one refresh", async () => {
-  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const client = api({
+    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? pricedBurgerRows() : [])),
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+  });
   const el = await mountPrices(client);
   await expandPrices(el, "mi-lemonade");
   const reads = client.getMenuPrices.mock.calls.length;
-  const product = priceField(el, "mi-lemonade");
+  const product = priceField(el, "mi-burger");
   const variant = priceField(el, "mi-lemonade:v-small");
   product.focus();
   type(product, "");
@@ -8624,7 +8634,7 @@ it("stages two price edits on blur, then saves both with one refresh", async () 
   await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
   await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1));
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", { grossPrice: null }],
+    ["menu-lunch", "mi-burger", { grossPrice: null }],
   ]);
   expect(client.setMenuVariantPrice.mock.calls).toEqual([
     ["menu-lunch", "mi-lemonade", "v-small", "1.90"],
@@ -8671,9 +8681,12 @@ it("writes only that variant's price when only a variant's field changed, then r
 });
 
 it("writes nothing and marks nothing as saving for Enter on an unchanged field", async () => {
-  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const client = api({
+    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? pricedBurgerRows() : [])),
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+  });
   const el = await mountPrices(client);
-  await commitPrice(el, "mi-lemonade", "2.50");
+  await commitPrice(el, "mi-burger", "11.00");
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(writeCalls(client)).toEqual([]);
   expect(priceSave(el).disabled).toBe(true);
@@ -8687,12 +8700,12 @@ it("keeps a refused price and its refusal in the field, which stays editable, an
       .mockRejectedValue({ code: "management.request_invalid", params: { field: "grossPrice" } }),
   });
   const el = await mountPrices(client);
-  await commitPrice(el, "mi-lemonade", "2.80");
+  await commitPrice(el, "mi-burger", "11.80");
   await vi.waitFor(() =>
-    expect(priceField(el, "mi-lemonade").error).toBe(codeMessage("management.request_invalid")),
+    expect(priceField(el, "mi-burger").error).toBe(codeMessage("management.request_invalid")),
   );
-  expect(priceField(el, "mi-lemonade").value).toBe("2.80");
-  expect(priceField(el, "mi-lemonade").disabled).toBe(false);
+  expect(priceField(el, "mi-burger").value).toBe("11.80");
+  expect(priceField(el, "mi-burger").disabled).toBe(false);
   expect(writeCalls(client)).toEqual(["updateMenuItem"]);
   expect(priceSave(el).disabled).toBe(false);
 });
@@ -8707,7 +8720,7 @@ it("keeps a refused variant staged and retries only that variant after the produ
   });
   const el = await mountPrices(client);
   await expandPrices(el, "mi-lemonade");
-  type(priceField(el, "mi-lemonade"), "2.80");
+  type(priceField(el, "mi-burger"), "11.80");
   type(priceField(el, "mi-lemonade:v-small"), "1.90");
   await prices(el).updateComplete;
   expect(writeCalls(client)).toEqual([]);

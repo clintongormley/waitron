@@ -195,11 +195,7 @@ describe("parkOrder", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const offer = await addProductToMenu(tx, {
-        menuId: menuId,
-        productId: product.id,
-        grossPrice: "2.50",
-      });
+      const offer = await addProductToMenu(tx, { menuId: menuId, productId: product.id });
       // "Large" carries all three names; "Small" carries only its staff name, so the row it freezes
       // shows each of the other two falling back on its own.
       const variants = await setProductVariants(

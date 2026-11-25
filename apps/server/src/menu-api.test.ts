@@ -2093,7 +2093,7 @@ describe("mountMenuApi — products", () => {
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(saved);
-    const offerId = await offerVia(app, menuId, saved.id, "2.40");
+    const offerId = await offerVia(app, menuId, saved.id);
     const published = await send(
       app,
       "PUT",
@@ -5553,7 +5553,7 @@ describe("menu routes whose own checks refuse a negative price", () => {
       error: { code: "product.invalid", params: { field: "unitPrice" } },
     });
 
-    const itemId = await offerVia(app, menuId, saved.id, "1.00");
+    const itemId = await offerVia(app, menuId, saved.id);
     const badOfferVariant = await send(
       app,
       "PUT",

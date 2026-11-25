@@ -145,14 +145,23 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
   });
 
   it("draws a set price bold and an inherited one as a muted placeholder", async () => {
-    const { el, host } = await mount(theme, {});
+    const lager: MenuPriceRow = {
+      ...rows[0]!,
+      menuItemId: "mi-lager",
+      productId: "p-lager",
+      name: "Lager",
+      combined: combinedFixture("p-lager", "2.50", [], "2.50", "2.00"),
+      override: "2.50",
+      effectivePrice: "2.50",
+    };
+    const { el, host } = await mount(theme, { rows: [...rows, lager] });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const input = (key: string) =>
       table
         .shadowRoot!.querySelector(`wt-price-input[data-row="${key}"]`)!
         .shadowRoot!.querySelector("input")!;
-    const set = input("mi-lemonade");
+    const set = input("mi-lager");
     const inherited = input("mi-burger");
     expect(Number(getComputedStyle(set).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(inherited).fontWeight),
@@ -225,7 +234,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
-      'wt-price-input[data-row="mi-lemonade"]',
+      'wt-price-input[data-row="mi-burger"]',
     )!;
     field.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "-1" }, bubbles: true, composed: true }),

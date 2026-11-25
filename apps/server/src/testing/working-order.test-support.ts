@@ -399,11 +399,7 @@ export async function seedVariantOffer(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  const offer = await addProductToMenu(tx, {
-    menuId: menuId,
-    productId: product.id,
-    grossPrice: "2.50",
-  });
+  const offer = await addProductToMenu(tx, { menuId: menuId, productId: product.id });
   const variants = await setProductVariants(
     tx,
     product.id,

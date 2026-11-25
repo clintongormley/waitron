@@ -115,6 +115,14 @@ const lager: MenuPriceRow = {
   available: true,
   variants: [],
 };
+/** Lager at this menu's own 2.50: a stored price on a product without variants. */
+const pricedLager: MenuPriceRow = {
+  ...lager,
+  combined: combinedFixture("p-lager", "2.50", [], "2.50", "2.00"),
+  override: "2.50",
+  effectivePrice: "2.50",
+};
+const withPricedLager = { rows: [burger, lemonade, pricedLager] };
 
 async function mount(props: Partial<MenuPricesTable> = {}): Promise<MenuPricesTable> {
   const { el } = await mountWidget<MenuPricesTable>("dashboard-menu-prices-table", {
@@ -905,15 +913,15 @@ it("sends nothing for an Enter that confirms an input method's text (key code 22
 
 it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each variant's typed text on that variant when the variants are read back in another order", async () => {
   const reversed = { ...lemonade, variants: [...lemonade.variants].reverse() };
-  const el = await mount({ rows: [burger, reversed, lager] });
+  const el = await mount({ rows: [burger, reversed, pricedLager] });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const heard = priceSaves(el);
-  await typeIn(el, "mi-lemonade", "2.5");
-  await press(el, "mi-lemonade", "Enter");
+  await typeIn(el, "mi-lager", "2.5");
+  await press(el, "mi-lager", "Enter");
   expect(heard).not.toHaveBeenCalled();
   await typeIn(el, "mi-lemonade:v-large", "4.00");
-  el.rows = [burger, lemonade, lager];
+  el.rows = [burger, lemonade, pricedLager];
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-lemonade:v-small").value).toBe("");
@@ -923,34 +931,32 @@ it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each var
 it.each(["-1", "2.555", "abc", "007", "2,5,5"])(
   "says nothing about %j until Save, then marks the field and rechecks edits",
   async (value) => {
-    const el = await mount();
+    const el = await mount(withPricedLager);
     const save = priceSaves(el);
-    await typeIn(el, "mi-lemonade", value);
-    expect(override(el, "mi-lemonade").error).toBe("");
+    await typeIn(el, "mi-lager", value);
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(false);
     button(el).click();
 
-    await vi.waitFor(() =>
-      expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid")),
-    );
+    await vi.waitFor(() => expect(override(el, "mi-lager").error).toBe(t("editor.price_invalid")));
     expect(actions(el).error).toBe(t("form.fix_fields"));
-    expect(override(el, "mi-lemonade").shadowRoot!.activeElement).toBe(
-      override(el, "mi-lemonade").shadowRoot!.querySelector("input"),
+    expect(override(el, "mi-lager").shadowRoot!.activeElement).toBe(
+      override(el, "mi-lager").shadowRoot!.querySelector("input"),
     );
     expect(button(el).disabled).toBe(true);
     expect(save).not.toHaveBeenCalled();
 
-    await typeIn(el, "mi-lemonade", "3.00");
+    await typeIn(el, "mi-lager", "3.00");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").error).toBe("");
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(false);
-    await typeIn(el, "mi-lemonade", "-3");
+    await typeIn(el, "mi-lager", "-3");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
-    await press(el, "mi-lemonade", "Escape");
+    expect(override(el, "mi-lager").error).toBe(t("editor.price_invalid"));
+    await press(el, "mi-lager", "Escape");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").value).toBe("2.50");
-    expect(override(el, "mi-lemonade").error).toBe("");
+    expect(override(el, "mi-lager").value).toBe("2.50");
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(true);
   },
 );
@@ -990,18 +996,18 @@ it("keeps the search and names a filtered invalid price in the footer", async ()
 });
 
 it("Cancel restores prices and feedback, leaving Save quiet", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   const save = priceSaves(el);
   await typeIn(el, "mi-burger", "9.00");
-  await typeIn(el, "mi-lemonade", "-2");
+  await typeIn(el, "mi-lager", "-2");
   button(el).click();
   await vi.waitFor(() => expect(actions(el).error).toBe(t("form.fix_fields")));
   button(el, "cancel").click();
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-burger").value).toBe("");
-  expect(override(el, "mi-lemonade").value).toBe("2.50");
-  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(override(el, "mi-lager").value).toBe("2.50");
+  expect(override(el, "mi-lager").error).toBe("");
   expect(actions(el).error).toBe("");
   expect(button(el).disabled).toBe(true);
   expect(button(el).variant).toBe("secondary");
@@ -1032,22 +1038,22 @@ it("opens a collapsed variant on a named refusal and clears only its error when 
 });
 
 it("keeps what was typed when the rows are read again", async () => {
-  const el = await mount();
-  await typeIn(el, "mi-lemonade", "2.90");
-  el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
+  const el = await mount(withPricedLager);
+  await typeIn(el, "mi-lager", "2.90");
+  el.rows = [burger, lemonade, { ...pricedLager, override: "2.60" }];
   await el.updateComplete;
   await table(el).updateComplete;
-  expect(override(el, "mi-lemonade").value).toBe("2.90");
+  expect(override(el, "mi-lager").value).toBe("2.90");
 });
 
 it("shows a stored price read again while the field holds nothing typed", async () => {
-  const el = await mount();
-  await typeIn(el, "mi-lemonade", "2.90");
-  await press(el, "mi-lemonade", "Escape");
-  el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
+  const el = await mount(withPricedLager);
+  await typeIn(el, "mi-lager", "2.90");
+  await press(el, "mi-lager", "Escape");
+  el.rows = [burger, lemonade, { ...pricedLager, override: "2.60" }];
   await el.updateComplete;
   await table(el).updateComplete;
-  expect(override(el, "mi-lemonade").value).toBe("2.60");
+  expect(override(el, "mi-lager").value).toBe("2.60");
 });
 
 it("names a variant the product list does not hold as missing, in its row and its field's label", async () => {
@@ -1117,12 +1123,12 @@ it("treats an unfinished product price as no change for its variants' hints", as
 });
 
 it("restores the stored price on Escape, and sends nothing", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   const heard = priceSaves(el);
-  await typeIn(el, "mi-lemonade", "9.99");
-  expect(override(el, "mi-lemonade").value).toBe("9.99");
-  await press(el, "mi-lemonade", "Escape");
-  expect(override(el, "mi-lemonade").value).toBe("2.50");
+  await typeIn(el, "mi-lager", "9.99");
+  expect(override(el, "mi-lager").value).toBe("9.99");
+  await press(el, "mi-lager", "Escape");
+  expect(override(el, "mi-lager").value).toBe("2.50");
   expect(heard).not.toHaveBeenCalled();
 });
 
@@ -2185,8 +2191,8 @@ it.each(["product", "variant"])(
 );
 
 it("shows a clashing product's stored price, takes native typing, and restores the stored price on Escape", async () => {
-  const el = await mount({ rows: [clashRow(lemonade)] });
-  const key = "mi-lemonade";
+  const el = await mount({ rows: [clashRow(pricedLager)] });
+  const key = "mi-lager";
   expect(override(el, key).value).toBe("2.50");
   const field = override(el, key);
   await field.updateComplete;
@@ -2256,11 +2262,11 @@ const innerLabel = (field: HTMLElement) =>
   field.shadowRoot!.querySelector("input")!.getAttribute("aria-label");
 
 it("marks a price this menu sets as overriding and names it set on this menu; an inherited one is neither", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const want: [string, string, boolean][] = [
-    ["mi-lemonade", "Lemonade", true],
+    ["mi-lager", "Lager", true],
     ["mi-lemonade:v-large", "Lemonade — Large", true],
     ["mi-burger", "Burger", false],
     ["mi-lemonade:v-small", "Lemonade — Small", false],
@@ -2274,7 +2280,7 @@ it("marks a price this menu sets as overriding and names it set on this menu; an
 });
 
 it("a price typed into an inherited field is drawn as set but named plainly until it is stored; Escape, malformed text and a cleared field put the look back", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   await typeIn(el, "mi-burger", "4.00");
   expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
     true,
@@ -2287,12 +2293,12 @@ it("a price typed into an inherited field is drawn as set but named plainly unti
   ]);
   await typeIn(el, "mi-burger", "abc");
   expect(override(el, "mi-burger").overriding).toBe(false);
-  await typeIn(el, "mi-lemonade", "");
-  expect([override(el, "mi-lemonade").overriding, override(el, "mi-lemonade").label]).toEqual([
+  await typeIn(el, "mi-lager", "");
+  expect([override(el, "mi-lager").overriding, override(el, "mi-lager").label]).toEqual([
     false,
-    setLabel("Lemonade"),
+    setLabel("Lager"),
   ]);
-  el.rows = [{ ...burger, override: "4.00" }, lemonade, lager];
+  el.rows = [{ ...burger, override: "4.00" }, lemonade, pricedLager];
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-burger").label).toBe(setLabel("Burger"));
@@ -3152,15 +3158,15 @@ describe("without a switch of the menu's own", () => {
       expect(body.querySelector(`[name="offered-${id}"]`), id).toBeNull();
     expect(body.querySelector("wt-combobox")).toBeNull();
     const heard = priceSaves(el);
-    await typeIn(el, "mi-lemonade", "2.80");
+    await typeIn(el, "mi-lager", "2.80");
     await typeIn(el, "mi-lemonade:v-large", "4.00");
     await press(el, "mi-lemonade:v-large", "Enter");
     expect(heard).toHaveBeenCalledExactlyOnceWith([
       {
-        key: "mi-lemonade",
-        menuItemId: "mi-lemonade",
+        key: "mi-lager",
+        menuItemId: "mi-lager",
         variantId: null,
-        name: "Lemonade",
+        name: "Lager",
         price: "2.80",
       },
       {
