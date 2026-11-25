@@ -10,32 +10,32 @@ answer, recorded in the watcher’s small-questions list, item 5. Keep per-porti
 per-dish cancellation choices and refund links. Scope the cancel-slip change to Finish table.
 Use the current commands and station setting. No migration or invoice changes.
 
-1. **Fire the row.** The existing `fire-held-line` event and `fireHeldLine` client carry an optional
-   `lineIds` alongside the first `lineId`, from the till screen’s resolved row in
-   `screens/till-table-order-screen.ts` through `till-app.ts` and `api/client.ts`. The write
-   (`till-api.ts`) and allergy preview (`party-allergy-api.ts`, shared target in
-   `packages/module/src/party-allergy.ts`) accept the same member list. The route and
-   `order-group-release.ts` require unique top-level active members of the same bill and held
-   group in the party, with the first id included. `party-allergy.ts` previews the same dishes
-   that the write checks. Include all members in the replay identity and set-menu late-send check.
-   Move members and extras into one group and call the existing `fireOrderLines` once with the
-   row. Use the existing held-paper correction with all the moved items.
-2. **Group the cancellation paper.** In `finish-party-service.ts`, use a print batch for the
-   existing per-line `cancelItem` calls. In `line-cancel.ts`, `line-service-cancel.ts` and
-   `kitchen-ticket-corrections.ts`, keep the current kitchen notice and eligibility checks and
-   collect the print items with their kitchen details before the ticket rows are removed. Flush
-   in the same transaction before closing the table. Fold identical whole portions only within
-   the same bill, station, and correction, using the existing print equivalence key. In
-   `kitchen-ticket.ts`, let a correction slip render several entries so the Finish table batch can
-   use the station’s current grouping choice. Separate paper can show the three entries under
-   one header. Keep HOLD paper routing and separate slips for different corrections.
+1. **Fire the row.** Carry optional `lineIds` alongside `lineId` from the resolved row in the till’s
+   `screens/till-table-order-screen.ts`, through `till-app.ts` and the `api/client.ts` command body.
+   Extend the write in `till-api.ts` and the held-line preview in `party-allergy-api.ts` and
+   `packages/module/src/party-allergy.ts`. Both `order-group-release.ts` and `party-allergy.ts`
+   must refuse a batch unless its unique top-level members include the first id and are active in
+   one bill and held group of that party. Preview and late-send check the whole selection.
+   Use sorted member ids in the replay fingerprint and event for a batch. Preserve the single-line
+   form. Correct the source HOLD paper before moving members and extras, then call the existing
+   `fireOrderLines` once for the new group. HOLD CHANGED prints the summed correction in both modes.
+2. **Group the cancellation paper.** Once Finish table validates the choices, use the existing
+   `serviceCancellationFamilies` and `dishKitchenItems` before any cancel deletes ticket details.
+   Extract the VOID and HOLD CANCELLED enqueue logic from `line-cancel.ts` into
+   `line-service-cancel.ts` and call it with all the validated families for each bill from
+   `finish-party-service.ts`. Keep notice grouping within each dish, preserve the HOLD routing
+   checks and tell the subsequent `cancelItem` calls that corrections are already queued. Keep
+   the enqueue and cancellation writes in the existing transaction. In `kitchen-ticket-corrections.ts`,
+   pass the station setting to the Finish table slip. In `kitchen-ticket.ts`, reuse
+   `arrangeTicketItems` to print the folded whole portion as one entry of three or three
+   entries of one under one header. Keep different print keys and correction kinds on separate slips.
 3. **Prove and document.** Start with failing cases. The till’s `sent-portions.test.ts` pins the
-   clicked row’s three ids. The client and allergy tests pin the same selection in preview and
-   write. `till-api.groups.test.ts` pins invalid membership and a replay with no repeat writes.
-   `order-group-release.test.ts` pins one group, all extras, the unrelated held dish and paper
-   in both station modes. `order-portions.adjustments.test.ts` pins both ways of printing the
-   three cancelled portions and preserves the assertions on each keep-charge record. Record
-   the changed assertions in the PR. Update both `table-service.md` guide twins and remove
-   A1193/A1194 from `docs/backlog.md` and `docs/backlog/till.md`.
+   clicked row’s three ids. `api/client.test.ts` and the allergy tests pin the selection through
+   preview and write. `till-api.groups.test.ts` pins invalid membership and replay.
+   `order-group-release.test.ts` pins one group, all extras, the unrelated held dish and both
+   ticket modes. `order-portions.adjustments.test.ts` checks both slip layouts and keeps the
+   per-dish keep-charge assertions. Check existing HOLD routing and refund tests. Record changed
+   assertions in the PR. Update the English and Spanish `table-service.md` and `kitchen-service.md`
+   guides and `docs/developers/design-system.md`. Remove A1193/A1194 from the two backlog entries.
 
 Expected added or replaced lines are about 240 product and 150 test lines, plus the guide edits.
