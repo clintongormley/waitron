@@ -168,6 +168,11 @@ correct it in **Venue settings → Venue details**: choose **Change registered a
 first. Invoices issued afterwards print the new address; invoices
 already issued keep the one they were issued with.
 
+When **Find the address** appears in either address form, start typing the street and number,
+choose a suggestion, then review and save the address. If suggestions stop updating as you type,
+press Enter in the search field. Waitron Cloud sends what you type in the search and the
+suggestion you choose to Google. You can also type directly into the address fields.
+
 For bills closed as a [deferred payment](table-service.md#deferred-payment), set your bank account with **Change
 bank account** on the same **Business** card: enter the **IBAN** and, if you want, the bank.
 If you [add your own mail server](email.md#set-up), Waitron emails every administrator with an

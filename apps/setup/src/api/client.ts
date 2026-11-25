@@ -1,5 +1,9 @@
 import type { RecoveryOperationBinding } from "@waitron/module/src/setup-contract.js";
-import type { RegisteredAddressParts } from "@waitron/country-packs";
+import type {
+  CloudAddressOperation,
+  CloudAddressReply,
+  RegisteredAddressParts,
+} from "@waitron/country-packs";
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
   FirstSetupOwner,
@@ -575,24 +579,7 @@ export class SetupApi {
     });
   }
 
-  cloudAddressLookup(
-    tab: string,
-    operation:
-      | { kind: "available" }
-      | { kind: "suggest"; workflowId: string; query: string; language: "en" | "es" }
-      | { kind: "validate"; workflowId: string; selectedText: string },
-  ): Promise<{
-    available?: boolean;
-    candidates?: { text: string }[];
-    fields?: {
-      addressLine1: string;
-      addressLine2: string | null;
-      postalCode: string;
-      city: string;
-      province: string;
-      countryCode: "ES";
-    };
-  }> {
+  cloudAddressLookup(tab: string, operation: CloudAddressOperation): Promise<CloudAddressReply> {
     return this.#request("/setup-api/cloud/sign-in/address-lookup", "POST", { tab, ...operation });
   }
 

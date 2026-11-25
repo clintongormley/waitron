@@ -834,7 +834,57 @@ async function choose(panel: Panel, address: AddressLookupResult): Promise<void>
   await dialogHost(panel).updateComplete;
 }
 
-it("puts the address search above the registered address, in the business's country", async () => {
+it("checks Cloud as the registered address opens and loads the search into that window", async () => {
+  const answers: ((value: { available: boolean }) => void)[] = [];
+  const addressLookup = vi.fn(
+    () => new Promise<{ available: boolean }>((resolve) => answers.push(resolve)),
+  );
+  const panel = await mount(Object.assign(stubApi(), { addressLookup }));
+  expect(addressLookup).not.toHaveBeenCalled();
+  await open(panel);
+  expect(addressLookup).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
+  const closed = dialogClosed(dialog(panel));
+  dialogHost(panel).dismiss();
+  await closed;
+  await open(panel);
+  expect(addressLookup).toHaveBeenCalledTimes(2);
+  answers[0]!({ available: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(search(panel)!.hidden).toBe(true);
+  answers[1]!({ available: true });
+  await expect.poll(() => search(panel)?.hidden).toBe(false);
+});
+
+it("keeps the search limit when the separate address is hidden and shown again", async () => {
+  const suggest = vi.fn(provider.suggest);
+  const panel = await mountSearching(stubApi(), { ...provider, suggest });
+  await open(panel);
+  const lookup = search(panel)!;
+  lookup.delay = 0;
+  for (const query of ["Main", "Main S", "Main St", "Main Street", "Main Street 1"]) {
+    const input = lookup.shadowRoot!.querySelector("input")!;
+    input.value = query;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  await turn(panel, true);
+  await turn(panel, false);
+  const reopened = search(panel)!;
+  reopened.delay = 0;
+  const input = reopened.shadowRoot!.querySelector("input")!;
+  input.value = "Main Street 12";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(suggest.mock.calls.map(([request]) => request.query)).toEqual([
+    "Main",
+    "Main S",
+    "Main St",
+    "Main Street",
+    "Main Street 1",
+  ]);
+});
+
+it("aligns the address search with the street field, below the switch and its hint", async () => {
   const panel = await mountSearching(stubApi());
   await open(panel);
   const lookup = search(panel)!;
@@ -843,9 +893,19 @@ it("puts the address search above the registered address, in the business's coun
   expect(lookup.countryCode).toBe("ES");
   expect(lookup.label).toBe("Find the address");
   const order = [
-    ...dialog(panel).querySelectorAll("wt-address-lookup, wt-switch, wt-input, wt-combobox"),
-  ].map((node) => node.getAttribute("name"));
-  expect(order).toEqual(["domicile-search", "registeredSameAsVenue", ...PARTS]);
+    ...dialog(panel).querySelectorAll(
+      "wt-address-lookup, wt-switch, [data-test=registered-same-hint], wt-input, wt-combobox",
+    ),
+  ].map((node) => node.getAttribute("name") ?? node.getAttribute("data-test"));
+  expect(order).toEqual([
+    "registeredSameAsVenue",
+    "registered-same-hint",
+    "domicile-search",
+    ...PARTS,
+  ]);
+  const street = part(panel, "registeredStreet").getBoundingClientRect();
+  expect(lookup.getBoundingClientRect().width).toBeCloseTo(street.width);
+  expect(lookup.getBoundingClientRect().left).toBeCloseTo(street.left);
 });
 
 it("fills the parts from a chosen address, its second line into Line 2, and Save sends them joined", async () => {
@@ -864,11 +924,14 @@ it("fills the parts from a chosen address, its second line into Line 2, and Save
   });
 });
 
-it("a chosen address turns the switch off, keeps a typed Line 2 when it brings none, and takes the province from its area", async () => {
+it("shows search only for a separate address, keeps a typed Line 2 and takes the province from the chosen area", async () => {
   const api = stubApi(VENUE);
   const panel = await mountSearching(api);
   await open(panel);
   expect(same(panel).checked).toBe(true);
+  await expect.poll(() => search(panel)?.getBoundingClientRect().height).toBe(0);
+  await turn(panel, false);
+  await expect.poll(() => search(panel)?.hidden).toBe(false);
   await choose(panel, {
     lines: ["Carrer de Mallorca 1"],
     locality: "Barcelona",

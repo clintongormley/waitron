@@ -4,8 +4,10 @@ import { Socket } from "node:net";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { hashSessionToken } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountSetupCloudSignIn } from "./setup-cloud-sign-in.js";
@@ -341,3 +343,125 @@ it("keeps manual entry for a Cloud refusal and never calls Cloud for another set
     await f.close();
   }
 });
+
+it("asks Cloud for availability on each opening and recognises an expired search", async () => {
+  let availableStatus = 503;
+  const f = await installationFixture(undefined, {
+    addressLookup: async (values, _saved, _req, res) => {
+      const { kind } = JSON.parse(String(values[7]));
+      if (kind === "available") {
+        res.writeHead(availableStatus);
+        res.end(availableStatus === 503 ? '{"error":"temporarily_unavailable"}' : "{}");
+      } else {
+        res.writeHead(410);
+        res.end('{"error":"expired"}');
+      }
+    },
+  });
+  try {
+    const lookup = (
+      operation:
+        | { kind: "available" }
+        | { kind: "suggest"; workflowId: string; query: string; language: "en" },
+    ) => f.client.addressLookup(operation, async () => {}, new AbortController().signal);
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: false });
+    availableStatus = 201;
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: false });
+    availableStatus = 200;
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: true });
+    const suggest = {
+      kind: "suggest",
+      workflowId: randomUUID(),
+      query: "Main Street",
+      language: "en",
+    } as const;
+    await expect(lookup(suggest)).rejects.toMatchObject({ code: "cloud.address_lookup_expired" });
+    const calls = f.requests.filter((call) => call[2] === "address-lookup");
+    expect(calls.map((call) => JSON.parse(String(call[7])))).toEqual([
+      { version: 1, kind: "available" },
+      { version: 1, kind: "available" },
+      { version: 1, kind: "available" },
+      { version: 1, ...suggest },
+    ]);
+    expect(new Set(calls.map((call) => call[4])).size).toBe(4);
+  } finally {
+    await f.close();
+  }
+});
+
+const registeredSearch = () =>
+  ({ kind: "suggest", workflowId: randomUUID(), query: "Main Street", language: "en" }) as const;
+
+it.each(["before sending", "before returning"])(
+  "rechecks permission %s an address search",
+  async (when) => {
+    const operation = registeredSearch();
+    const f = await installationFixture(undefined, {
+      addressLookup: async (_values, _saved, _req, res) => {
+        res.end(
+          JSON.stringify({ provider: "google", workflowId: operation.workflowId, candidates: [] }),
+        );
+      },
+    });
+    try {
+      const authorize = vi.fn(async () => {});
+      if (when === "before returning") authorize.mockResolvedValueOnce(undefined);
+      authorize.mockRejectedValueOnce(
+        new AppError("authorization.not_permitted", { permission: "venue.configure" }),
+      );
+      await expect(
+        f.client.addressLookup(operation, authorize, new AbortController().signal),
+      ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+      expect(
+        f.requests
+          .map((request) => request[2])
+          .filter((kind) => kind === "renew" || kind === "address-lookup"),
+      ).toEqual(when === "before sending" ? ["renew"] : ["renew", "address-lookup"]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("discards the Cloud reply after the box's registration changes", async () => {
+  const operation = registeredSearch();
+  const f = await installationFixture(undefined, {
+    addressLookup: async (_values, _saved, _req, res) => {
+      const file = join(f.stateDir, "cloud/connection.json");
+      const state = JSON.parse(await readFile(file, "utf8"));
+      state.view.registration.installationId = randomUUID();
+      delete state.lifecycle;
+      await writeFile(file, JSON.stringify(state));
+      res.end(
+        JSON.stringify({ provider: "google", workflowId: operation.workflowId, candidates: [] }),
+      );
+    },
+  });
+  try {
+    await expect(
+      f.client.addressLookup(operation, async () => {}, new AbortController().signal),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("ends the Cloud exchange when the caller aborts", async () => {
+  const controller = new AbortController();
+  const disconnected = gate();
+  const operation = registeredSearch();
+  const f = await installationFixture(undefined, {
+    addressLookup: async (_values, _saved, _req, res) => {
+      res.once("close", disconnected.resolve);
+      controller.abort();
+    },
+  });
+  try {
+    await expect(
+      f.client.addressLookup(operation, async () => {}, controller.signal),
+    ).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await disconnected.promise;
+  } finally {
+    await f.close();
+  }
+}, 6000);

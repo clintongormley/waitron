@@ -3,6 +3,7 @@ export const PATH_PATTERNS = [
   "/management-api/absences",
   "/management-api/account-actions/complete",
   "/management-api/account-actions/inspect",
+  "/management-api/address-lookup",
   "/management-api/alerts",
   "/management-api/alerts/handled",
   "/management-api/menu-settings",

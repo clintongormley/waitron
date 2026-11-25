@@ -2,7 +2,7 @@ import { html, render } from "lit";
 import { applyTokens, startWithPopover, startThemeChoice } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture, watchBuild } from "@waitron/diagnostics";
 import { diag, setReportBuild } from "./diagnostics.js";
-import { makeSetupId } from "./random-id.js";
+import { makeBrowserUuid } from "@waitron/shared";
 import { SetupApi } from "./api/client.js";
 import "./setup-app.js";
 import "./screens/handover-screen.js";
@@ -16,7 +16,7 @@ const app = document.querySelector<HTMLElement>("#app")!;
 const transport = createInstrumentedFetch(
   watchBuild(fetch, { origin: location.origin, onFirstBuild: setReportBuild, onChange() {} }),
   diag,
-  { makeId: makeSetupId },
+  { makeId: makeBrowserUuid },
 );
 installErrorCapture(window, diag);
 startWithPopover(

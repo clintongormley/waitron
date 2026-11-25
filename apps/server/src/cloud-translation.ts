@@ -158,6 +158,7 @@ export async function serviceExchange(
   onRefusal?: OnRefusal,
   options: {
     requireVersion?: boolean;
+    successStatus?: number;
     refusal?: (status: number, value: unknown, headers: Headers) => AppError;
   } = {},
 ): Promise<Record<string, unknown>> {
@@ -193,7 +194,12 @@ export async function serviceExchange(
         await onRefusal?.("invalid_proof", used, state.publicKey);
       throw (options.refusal ?? refusalOf)(response.status, value, response.headers);
     }
-    if (!object(value) || (options.requireVersion !== false && value.version !== 1)) unavailable();
+    if (
+      (options.successStatus !== undefined && response.status !== options.successStatus) ||
+      !object(value) ||
+      (options.requireVersion !== false && value.version !== 1)
+    )
+      unavailable();
     return value;
   } catch (error) {
     if (error instanceof AppError) throw error;

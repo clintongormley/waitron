@@ -1183,7 +1183,7 @@ _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/rep
 
 Not in any track until the standalone primary is done.
 
-- **Address search provider, province names, guide lines** (bundle of 2, size M). Holds A1171, A1171. The [plan to finish it](superpowers/plans/2026-11-24-address-lookup-finish.md) (owner, 2026-11-24) splits it between Cloud and the box. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
+- **Address search on the till and privacy wording** (size M). Holds A1171. The [plan to finish it](superpowers/plans/2026-11-24-address-lookup-finish.md) (owner, 2026-11-24) splits it between Cloud and the box. [Detail](backlog/replication-cloud.md#a1171-address-search-on-the-till-and-privacy-wording)
 
 - **A1018: physical-box qualification remains the owner's.** The local two-box test covers a
   controlled handover and a reset/rejoin emergency takeover with Veri*Factu. Cloud emergency start

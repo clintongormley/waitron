@@ -15,7 +15,7 @@ import {
 } from "@waitron/diagnostics";
 import "@waitron/ui/src/components/wt-report-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
-import { makeSetupId } from "./random-id.js";
+import { makeBrowserUuid } from "@waitron/shared";
 import { diag, reportBuild } from "./diagnostics.js";
 import { currentLocale, t } from "./i18n/t.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
@@ -46,7 +46,7 @@ export class SetupProblemReport extends LitElement {
       agent = navigator.userAgent;
     this.snapshot = captureClientReport({
       app: "setup",
-      makeId: makeSetupId,
+      makeId: makeBrowserUuid,
       trail: diag.snapshot(),
       client: {
         build: reportBuild,

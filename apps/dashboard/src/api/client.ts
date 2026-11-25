@@ -88,6 +88,7 @@ export interface HandoverIntervals {
  * (`scripts/dashboard-browser-purity.test.ts`).
  */
 import type { LegalAbout, TimingBand } from "@waitron/shared";
+import type { CloudAddressOperation, CloudAddressReply } from "@waitron/country-packs";
 import type { DashboardMenuSummary, ProductItemsChange, SetMenuDetails } from "@waitron/menu";
 import type { ProductItemsRoutingPreview, RoutingView } from "@waitron/venue-service/routing";
 import {
@@ -4245,6 +4246,10 @@ export class DashboardApi {
     confirmed: true;
   }): Promise<{ repaired: true; clockRevision: number; admission: "restart_required" }> {
     return this.#request("/management-api/venue-details/time-zone-repair", "POST", input);
+  }
+
+  addressLookup(operation: CloudAddressOperation): Promise<CloudAddressReply> {
+    return this.#request("/management-api/address-lookup", "POST", operation);
   }
 
   getVenueDetails(): Promise<VenueDetailsModel> {

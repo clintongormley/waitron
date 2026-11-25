@@ -131,6 +131,7 @@ declare module "@waitron/shared" {
     "fiscal.certificate_diagnosis_unavailable": Record<string, never>;
     "cloud.owner_recovery_admin_required": Record<string, never>;
     "cloud.owner_recovery_not_available": Record<string, never>;
+    "cloud.address_lookup_expired": Record<string, never>;
     "cloud.unavailable": Record<string, never>;
     "cloud.emergency_hosting_closed": { reason: string };
     "cloud.emergency_code_rate_limited": { seconds: number };

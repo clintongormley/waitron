@@ -3328,6 +3328,7 @@ async function bootServer(
       db,
       fiscal: enabledFiscal,
       readBackupDeadlines: () => ({ ...backupDeadlines }),
+      addressLookup: { connection: cloudConnection, isPrimary: () => cloudServing() },
     },
     log,
   );

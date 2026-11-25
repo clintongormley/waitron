@@ -29,7 +29,7 @@ import {
   formMessageStyles,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { formatDuration, isValidEmail } from "@waitron/shared";
+import { formatDuration, isValidEmail, makeBrowserUuid } from "@waitron/shared";
 import {
   SetupApi,
   type HandoverStatus,
@@ -38,7 +38,6 @@ import {
   type EmergencyHandoverDeclaration,
   type FollowedCopyTake,
 } from "../api/client.js";
-import { makeSetupId } from "../random-id.js";
 import { passwordVisibility, currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -1336,7 +1335,7 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       this.#pendingDeclaration ??= {
-        operationId: makeSetupId(),
+        operationId: makeBrowserUuid(),
         expectedCopy: this.copyPreview!.copy,
         reason: this.reason,
         locale: currentLocale().startsWith("es") ? "es" : "en",

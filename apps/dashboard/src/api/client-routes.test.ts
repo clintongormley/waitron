@@ -1864,6 +1864,20 @@ it("downloads the corrections workbook for the chosen period as an ordinary GET,
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
 });
 
+it("puts address search text in the POST body", async () => {
+  const reply = { candidates: [{ text: "Main Street 2" }] };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
+  const api = new DashboardApi("", fetchImpl);
+  const operation = {
+    kind: "suggest",
+    query: "Main Street",
+    language: "en",
+    workflowId: "9c5408a7-656a-4e81-a888-1e586cca6964",
+  } as const;
+  await expect(api.addressLookup(operation)).resolves.toEqual(reply);
+  expect(callsOf(fetchImpl)).toEqual([["/management-api/address-lookup", "POST", operation]]);
+});
+
 it("reads current venue details and submits only the changed fields with the original snapshot", async () => {
   const model = venueDetailsFixture();
   const saved = { changed: true, model: venueDetailsFixture({ name: "New venue" }) };
