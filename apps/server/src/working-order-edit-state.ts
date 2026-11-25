@@ -105,7 +105,7 @@ export interface EditableLine {
   groupId: string | null;
   groupState: string | null;
   creditedTo: string | null;
-  /** A comp or discount has set its price (`list_unit_price_gross` is set). */
+  /** A comp or discount has stamped it (`list_unit_price_gross` is set). */
   adjusted: boolean;
   ticket: {
     id: string;

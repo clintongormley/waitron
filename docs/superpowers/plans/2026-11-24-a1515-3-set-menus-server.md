@@ -1279,7 +1279,8 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
 - **D37 (3b). What was replaced or fell away is kept on the bill and answered with its set menus**,
   so every till can say so whichever path regrouped it (a send, a cancel, a move). Alternative: a
   notice in each route's answer, about ten routes.
-- **D38 (3c). FOR THE OWNER. What a whole-bill discount covers after it is given.** The spec says it
+- **D38 (3c). FOR THE OWNER. What a whole-bill discount covers after it is given.** Owner, 2026-11-25
+  20:51: "Build it", 3c-1 and 3c-2 as in lane B's `questions.md` 20:20 note; a fixed amount does not grow with later dishes. The spec says it
   is "spread again over the bill's charged lines whenever the grouping changes" (the writer's call)
   and does not say what happens to a coffee ordered afterwards, or to a guest who then pays for
   their own dishes. Today, on every bill, it is taken "off the bill as it stands now"
@@ -1521,11 +1522,11 @@ row's own comp or discount. Files: `packages/db/src/schema/orders.ts` (column, b
 over the set menu and its supplements, D36), `set-menu-bill.ts` (the answer's dropped discounts),
 the carves and copies that list the set-menu columns, and readers of `adjustment_lines`
 (`packages/adjustments/src/record.ts:111`, `apps/server/src/free-items.ts:150`, `carryLineReductions`,
-`reducedLineIds` in `set-menu-bill.ts:361`, `set-menu-freeze.ts`).
+`reducedLineIds` and `frozenLineIdSources` in `set-menu-freeze.ts`).
 
 ### 3c — A whole-bill discount: scope
 
-D38 as the owner answers it. `adjustedDishIds` and `reducedLineIds` (`set-menu-bill.ts:341-378`) stop
+D38 as the owner answers it. `reducedLineIds` and `frozenLineIdSources` (`set-menu-freeze.ts`) stop
 counting a share of one (spec section 6). D2's freeze for comps and discounts is gone after 3c; only
 kept-charge cancels, service cancellations and, until A1515-1 PR 3, item payments freeze.
 

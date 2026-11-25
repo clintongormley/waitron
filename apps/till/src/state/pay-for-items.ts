@@ -119,8 +119,7 @@ export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPrevie
   return { ...preview, total: preview.applied };
 }
 
-/** The Pay window's words for a set-menu dish that leaves only with its set menu, its cancel having
- * kept its charge, or it or an extra of it having a comp or discount. */
+/** The Pay window's words for a set-menu dish that leaves only with its set menu. */
 export function itemsRefusal(refusal: PayRefusal): PayRefusal {
   const { dishNames = [] } = refusal;
   if (refusal.code === "set_menu.move_adjusted" && dishNames.length > 0)

@@ -11,7 +11,7 @@ import { refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
 
 /**
- * A bill's rows as a comp or discount on a dish prices them (D31): each dish it acts on that can
+ * A bill's rows as a comp or discount on a dish prices them (A1515-3 D31): each dish it acts on that can
  * leave its set menu at its a la carte price. A till row is read so as a whole or not at all, since
  * {@link standInRow} prices it from its first dish: only when every dish of it in a set menu can
  * leave and all then have one price.
