@@ -2581,6 +2581,7 @@ describe("waitron.sh installs Debian Realtek firmware", () => {
           /could not install firmware-realtek.*network.*non-free-firmware/.test(line),
         ),
     ).toHaveLength(1);
+    expect(r.stderr).toContain("run 'sudo apt update' and 'sudo apt install firmware-realtek'");
     expect(loggedCalls(sb).filter((call) => installFirmware.test(call))).toHaveLength(attempts);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });

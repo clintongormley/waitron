@@ -242,7 +242,9 @@ sudo deploy/waitron.sh install
 An existing box uses the installer you ran for host package steps throughout its checked upgrade.
 Candidate preparation uses a retained script from the fixed driver revision. An older running copy
 can skip the new firmware step even when it fetches the updated retained script. Use the current
-installer with the ref you intend to deploy. `install` defaults to `main` if you omit the ref.
+installer with the ref you intend to deploy. For numbered releases, use the retained installer at
+`/opt/waitron-host/waitron.sh`. `install` defaults to `main` if you omit the ref. To add just the
+firmware, use the APT commands above.
 
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).

@@ -278,7 +278,7 @@ ensure_realtek_firmware() {
   if ! (apt_get update \
     && LC_ALL=C apt-cache policy firmware-realtek | grep -E '^[[:space:]]*Candidate:[[:space:]]+[0-9]' >/dev/null \
     && apt_get install -y --no-install-recommends firmware-realtek); then
-    echo "waitron.sh: could not install firmware-realtek for Realtek Bluetooth adapters. Check the network and enable non-free-firmware in Debian's APT sources, then re-run the current installer." >&2
+    echo "waitron.sh: could not install firmware-realtek for Realtek Bluetooth adapters. Check the network and enable non-free-firmware in Debian's APT sources, then run 'sudo apt update' and 'sudo apt install firmware-realtek'." >&2
   fi
 }
 
