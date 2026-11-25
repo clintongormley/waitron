@@ -15,7 +15,6 @@ const daily: DashboardMenuSummary = {
   kind: "set_menu",
   active: true,
   setPrice: "14.00",
-  setVatClass: "reduced",
   heldBy: [],
 };
 const budget: DashboardMenuSummary = {
@@ -33,7 +32,6 @@ async function mount(offers: DashboardMenuSummary[]) {
     api: {
       liveData: live,
       listMenus,
-      getMenuSettings: async () => ({ defaultProductVatClass: "general" }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     } as unknown as DashboardApi,
   });

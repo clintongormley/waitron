@@ -203,8 +203,6 @@ export async function buildMenuDocuments(
         menuName: menus.name,
         names: root.names,
         setPrice: menus.setPrice,
-        setVatClass: menus.setVatClass,
-        setTakeawayVatClass: menus.setTakeawayVatClass,
         updatedAt: menus.updatedAt,
       })
       .from(menus)
@@ -1328,11 +1326,6 @@ export function diffEntries(
     if (was === undefined) continue;
     const fields: SetMenuChangeField[] = [];
     if (was.terms.price !== copy.terms.price) fields.push("price");
-    if (
-      was.terms.vatClass !== copy.terms.vatClass ||
-      was.terms.takeawayVatClass !== copy.terms.takeawayVatClass
-    )
-      fields.push("vat");
     if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
     if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
     const offersChanged = !same(was.offers, copy.offers);

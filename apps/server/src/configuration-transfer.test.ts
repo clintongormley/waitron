@@ -1442,7 +1442,6 @@ describe("configuration transfer database path", () => {
         name: "Daily menu",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       });
       const dish = await createProduct(tx, {
         categoryId: null,
@@ -1488,7 +1487,6 @@ describe("configuration transfer database path", () => {
         name: "Daily menu",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       });
       const product = await createProduct(tx, {
         categoryId: null,

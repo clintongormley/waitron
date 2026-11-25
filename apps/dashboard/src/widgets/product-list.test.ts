@@ -11,7 +11,7 @@ import {
   chooseOptions,
   expectRowMenusOnScreen,
 } from "@waitron/ui/src/test-helpers.js";
-import { allergenStateName, vatClassName } from "../i18n/domain.js";
+import { allergenStateName } from "../i18n/domain.js";
 import type { Course, Product, Unit } from "../api/client.js";
 import type { ListedVariant, VatClass } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
@@ -1247,9 +1247,7 @@ describe("product-list", () => {
     expect(note("wine:w175")).toBeNull();
     expect(note("wine:w125")).toBeNull();
     expect(note("wine")).toBeNull();
-    expect(cellUnder(root, "wine:w175", t("product.price")).textContent).not.toContain(
-      vatClassName("general"),
-    );
+    expect(cellUnder(root, "wine:w175", t("product.price")).textContent).not.toContain("General");
     expect(takeawayNote("wine:w175")!.textContent!.trim()).toBe("IVA para llevar: 21 %");
     for (const [rowKey, name] of [
       ["wine:w175", "175 ml"],

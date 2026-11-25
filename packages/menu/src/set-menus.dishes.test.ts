@@ -35,7 +35,7 @@ import { listMenuVariants, setMenuVariantPrice, setMenuVariants } from "./varian
 
 const suite = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as const;
+const terms = { kind: "set_menu", setPrice: "14.00" } as const;
 
 async function fixture(tx: Transaction) {
   const menu = await createMenu(tx, { ...terms, name: "Daily menu", names: { en: "Lunch" } });
@@ -256,13 +256,14 @@ it("reads the full menus holding the draft as well as its own names and terms", 
     await addMember(tx, await requireMenuRoot(tx, full.id), { kind: "set_menu", menuId: f.menuId });
     return full;
   });
-  expect(await reading()).toMatchObject({
+  const read = await reading();
+  expect(read).toMatchObject({
     name: "Daily menu",
     names: { en: "Lunch" },
     price: "14.00",
-    vatClass: "reduced",
     heldBy: [{ id: full.id, name: "Dinner" }],
   });
+  expect(read).not.toHaveProperty("vatClass");
   await app((tx) => deactivateMenu(tx, full.id));
   expect((await reading()).heldBy).toEqual([]);
 });
@@ -382,7 +383,13 @@ it("duplicates the set-menu kind, terms, lines and dish choices", async () => {
   await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine, f.bottle)]));
   const before = await reading();
   const copy = await app((tx) => duplicateMenu(tx, f.menuId, "Daily copy"));
-  expect(copy).toMatchObject({ kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" });
+  expect(copy).toEqual({
+    id: copy.id,
+    name: "Daily copy",
+    active: true,
+    kind: "set_menu",
+    setPrice: "14.00",
+  });
   const after = await app((tx) => readSetMenu(tx, copy.id));
   expect(after.lines).toEqual([{ id: expect.any(String), ...line(f.mains) }]);
   expect(after.lines[0]!.id).not.toBe(before.lines[0]!.id);

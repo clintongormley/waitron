@@ -1173,7 +1173,6 @@ it("combines covered soups of the same type but separates a surcharge and anothe
       versionId: id,
       name: setMenuId,
       priceCents: 1400,
-      terms: { vatClass: "reduced", takeawayVatClass: "reduced" },
       lines: [],
       dishes: [],
     })),

@@ -11,10 +11,8 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
   FALLBACK_LOCALE,
-  VAT_CLASSES,
   type ContentLanguageRules,
   type MenuDeleteImpact,
-  type VatClass,
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -516,17 +514,9 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
   });
 }
 
-// Products are shared; menu_items own their offers. Ignoring a retired field would answer success
-// without saving what the caller asked for.
-function refuseRetiredFields(body: Record<string, unknown>): void {
-  for (const retired of [
-    "modifierIds",
-    "optionGroupIds",
-    "soldAlone",
-    "menuId",
-    "vatClass",
-    "takeawayVatClass",
-  ])
+// Ignoring a retired field would answer success without saving what the caller asked for.
+function refuseRetiredFields(body: Record<string, unknown>, fields: readonly string[]): void {
+  for (const retired of fields)
     if (body[retired] !== undefined)
       throw new AppError("management.request_invalid", { field: retired });
 }
@@ -834,22 +824,14 @@ async function readMenuStatus(tx: Transaction, menuId: string) {
   return status;
 }
 
+const RETIRED_SET_MENU_FIELDS = ["setVatClass", "setTakeawayVatClass"] as const;
+
 function setMenuTerms(body: Record<string, unknown>) {
   const { setPrice } = body;
   if (setPrice !== undefined && setPrice !== null && typeof setPrice !== "string")
     throw new AppError("set_menu.invalid", { field: "setPrice" });
-  const vat = (field: "setVatClass" | "setTakeawayVatClass"): VatClass | null | undefined => {
-    const value = body[field];
-    if (value === undefined || value === null) return value;
-    if (typeof value !== "string" || !VAT_CLASSES.some((candidate) => candidate === value))
-      throw new AppError("set_menu.invalid", { field });
-    return value as VatClass;
-  };
-  return {
-    setPrice,
-    setVatClass: vat("setVatClass"),
-    setTakeawayVatClass: vat("setTakeawayVatClass"),
-  };
+  refuseRetiredFields(body, RETIRED_SET_MENU_FIELDS);
+  return { setPrice };
 }
 
 function setMenuRows(value: unknown, field: string): Record<string, unknown>[] {
@@ -1181,12 +1163,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const presentation = sectionInput({ ...body, internalName: name }, true);
       const kind =
         body.kind === undefined ? undefined : requireEnum(body.kind, "kind", ["menu", "set_menu"]);
-      if (
-        kind !== "set_menu" &&
-        [body.setPrice, body.setVatClass, body.setTakeawayVatClass].some(
-          (value) => value !== undefined,
-        )
-      )
+      if (kind !== "set_menu" && body.setPrice !== undefined)
         throw new AppError("management.request_invalid", { field: "kind" });
       const terms = setMenuTerms(body);
       const created = await gated(c, sessionId, (tx) =>
@@ -1780,7 +1757,14 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       }
       screenDietOverride(body.dietOverride);
       // Applied in the SAME transaction as the create, so a product and its lists land atomically.
-      refuseRetiredFields(body);
+      refuseRetiredFields(body, [
+        "modifierIds",
+        "optionGroupIds",
+        "soldAlone",
+        "menuId",
+        "vatClass",
+        "takeawayVatClass",
+      ]);
       const modifiers = parseProductModifiers(body.modifiers);
       const input = {
         categoryId: body.categoryId,

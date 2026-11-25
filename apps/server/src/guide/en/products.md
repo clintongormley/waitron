@@ -304,8 +304,8 @@ list and the reason.
 ## Set menus {#set-menus}
 
 To sell several courses for one price, open **Set menus** under **Products and menus** and
-choose **Add set menu**. Give it a name and price. Eaten
-here, it is charged the one rate in [How VAT is charged](products.md#vat). Add customer names in the languages you use, then save.
+choose **Add set menu**. Give it a name and price, add customer names in the languages you use,
+then save.
 
 In **Dishes**, add the dishes you want to offer. Keep dishes sold by weight on the full menu,
 where staff can sell them separately. Use **Variants** to choose which versions are included.

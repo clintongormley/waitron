@@ -2725,8 +2725,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
     name: "Daily menu",
     names: {},
     price: "14.00",
-    vatClass: "reduced",
-    takeawayVatClass: "general",
     dishes: [],
     lines: [],
     courses: [],
@@ -2736,8 +2734,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
   const terms = {
     kind: "set_menu",
     setPrice: "14.00",
-    setVatClass: "reduced",
-    setTakeawayVatClass: "general",
   } as const;
   const menu = {
     id: "set",
@@ -2745,7 +2741,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
     active: true,
     kind: "set_menu",
     setPrice: "14.00",
-    setVatClass: "reduced",
   };
   const line = { count: 1, courseIds: ["main"] };
   const addedLines = [{ id: "line", ...line }];
@@ -2767,9 +2762,7 @@ it("sends set-menu terms and editor commands on their management routes", async 
   const api = new DashboardApi("", fetchImpl);
 
   await expect(api.createMenu("Daily menu", terms)).resolves.toEqual(menu);
-  await expect(
-    api.updateMenuDetails("set", { setTakeawayVatClass: null }),
-  ).resolves.toBeUndefined();
+  await expect(api.updateMenuDetails("set", { setPrice: "15.00" })).resolves.toBeUndefined();
   await expect(api.readSetMenu("set")).resolves.toEqual(details);
   await expect(api.saveSetMenuLines("set", [line])).resolves.toEqual({ lines: addedLines });
   await expect(api.saveSetMenuDishCourse("set", "item", null)).resolves.toEqual({
@@ -2783,7 +2776,7 @@ it("sends set-menu terms and editor commands on their management routes", async 
   await expect(api.placeSetMenu("root", "set")).resolves.toEqual(member);
   expect(callsOf(fetchImpl)).toEqual([
     ["/management-api/menus", "POST", { name: "Daily menu", ...terms }],
-    ["/management-api/menus/set", "PATCH", { setTakeawayVatClass: null }],
+    ["/management-api/menus/set", "PATCH", { setPrice: "15.00" }],
     ["/management-api/menus/set/set-menu", "GET", undefined],
     ["/management-api/menus/set/set-menu/lines", "PUT", { lines: [line] }],
     ["/management-api/menus/set/set-menu/items/item/course", "PUT", { courseId: null }],

@@ -342,7 +342,7 @@ it("groups Soup and Hake into one Daily menu and answers it as exact", async () 
     servedAt: expect.any(String),
     servedQuantity: 1000,
     vatClass: "reduced",
-    takeawayVatClass: "general",
+    takeawayVatClass: "reduced",
   });
   const counted = await seated();
   const [countedRow] = (await setSpecCount(spec, counted.tabId, spec.daily, 1)).setMenus;

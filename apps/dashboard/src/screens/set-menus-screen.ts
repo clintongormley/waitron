@@ -4,7 +4,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { keyed } from "lit/directives/keyed.js";
 import { ref } from "lit/directives/ref.js";
 import { tableNoMatches, type DashboardPermissionContinuation } from "@waitron/dashboard-kit";
-import { formatMoney, type VatClass } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import {
   baseStyles,
   ContentLanguageController,
@@ -86,7 +86,6 @@ export class SetMenusScreen extends LitElement {
   @state() private creating = false;
   @state() private copying: MenuSummary | null = null;
   @state() private deleting: MenuSummary | null = null;
-  @state() private defaultVatClass: VatClass = "general";
 
   readonly #listLayout = new MenuListLayout(this, (layout) => (this.layout = layout));
   readonly #url = new UrlStateController(this, () => this.#restore(), dashboardPath);
@@ -121,9 +120,6 @@ export class SetMenusScreen extends LitElement {
     try {
       await Promise.all([
         this.#watchMenus(),
-        this.#queries.watch("getMenuSettings", [], ({ defaultProductVatClass }) => {
-          this.defaultVatClass = defaultProductVatClass;
-        }),
         this.#queries.watch("getContentLanguages", [], setContentLanguages),
       ]);
     } catch {
@@ -351,7 +347,6 @@ export class SetMenusScreen extends LitElement {
               creating
               .api=${this.api}
               .languages=${currentContentLanguages()}
-              .defaultVatClass=${this.defaultVatClass}
               @set-menu-terms-cancelled=${() => {
                 this.creating = false;
               }}

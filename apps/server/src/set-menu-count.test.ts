@@ -48,7 +48,7 @@ function rowsOf(billId: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 
-it("charges both empty menus and stores their copy, service marks, prices and VAT classes", async () => {
+it("charges both empty menus and stores their copy, service marks, prices and the placeholder VAT classes", async () => {
   const { venue, copy } = fixture;
   const { tabId } = await emptyBill();
   const state = await setCount(tabId, 2);
@@ -63,7 +63,7 @@ it("charges both empty menus and stores their copy, service marks, prices and VA
       unitPriceGross: 1400,
       lineTotal: 1400,
       vatClass: "reduced",
-      takeawayVatClass: "general",
+      takeawayVatClass: "reduced",
       sentAt: expect.any(String),
       servedAt: expect.any(String),
       servedQuantity: 1000,

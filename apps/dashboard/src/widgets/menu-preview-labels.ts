@@ -77,7 +77,6 @@ export const SECTION_FIELDS: Record<SectionChangeField, StringKey> = {
 
 export const SET_MENU_FIELDS: Record<SetMenuChangeField, StringKey> = {
   price: "menu_preview.field_price",
-  vat: "menu_preview.field_vat",
   names: "menu_preview.field_names",
   lines: "menu_preview.field_included",
   allergens: "menu_preview.field_allergens",

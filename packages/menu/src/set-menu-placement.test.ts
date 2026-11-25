@@ -26,7 +26,6 @@ async function menusFixture(tx: Transaction) {
     name: "Daily menu",
     kind: "set_menu",
     setPrice: "14.00",
-    setVatClass: "reduced",
   });
   return {
     full,

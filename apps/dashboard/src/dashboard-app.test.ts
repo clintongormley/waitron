@@ -3748,7 +3748,6 @@ describe("dashboard-app", () => {
             kind: "menu",
             active: true,
             setPrice: null,
-            setVatClass: null,
           },
           {
             id: "lunch",
@@ -3756,7 +3755,6 @@ describe("dashboard-app", () => {
             kind: "set_menu",
             active: true,
             setPrice: "12.00",
-            setVatClass: "reduced",
             heldBy: [],
           },
         ]),

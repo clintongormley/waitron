@@ -676,7 +676,6 @@ describe("a set menu's revision after a sync with no earlier graph", () => {
         name: "Daily menu",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       });
       await addSetMenuDishes(tx, set.id, [{ productId: f.water, excludedVariantIds: [] }]);
       await tx.update(menus).set({ updatedAt: saved }).where(eq(menus.id, set.id));

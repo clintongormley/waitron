@@ -18,8 +18,6 @@ const fixture = {
   name: "Daily menu",
   names: {},
   price: "14.00",
-  vatClass: "reduced",
-  takeawayVatClass: null,
 };
 
 class SetMenuLeaveHost extends LitElement {

@@ -19,7 +19,7 @@ import { mountMenuApi } from "./menu-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 const menus = "/management-api/menus";
-const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as const;
+const terms = { kind: "set_menu", setPrice: "14.00" } as const;
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -132,34 +132,47 @@ it("lists the full menu that offers a set menu", async () => {
   });
 });
 
-it("creates a set-menu draft with its own price and rates", async () => {
+it("creates a set-menu draft with its own price and no VAT terms", async () => {
   const { send } = await fixture();
   const created = await json<{ id: string }>(
-    await send("POST", menus, { ...terms, name: "New set", setTakeawayVatClass: "general" }),
+    await send("POST", menus, { ...terms, name: "New set" }),
     201,
   );
-  expect(created).toEqual({ id: expect.any(String), active: true, name: "New set", ...terms });
-  expect(await json(await send("GET", `${menus}/${created.id}/set-menu`), 200)).toMatchObject({
-    price: "14.00",
-    vatClass: "reduced",
-    takeawayVatClass: "general",
+  expect(created).toEqual({
+    id: expect.any(String),
+    active: true,
+    name: "New set",
+    ...terms,
   });
+  const draft = await json(await send("GET", `${menus}/${created.id}/set-menu`), 200);
+  expect(draft).toMatchObject({ price: "14.00" });
+  expect(draft).not.toHaveProperty("vatClass");
+  expect(draft).not.toHaveProperty("takeawayVatClass");
 });
 
-it("names an invalid takeaway VAT class on creation and update", async () => {
-  const { send, set } = await fixture();
+it.each([
+  ["setVatClass", "general"],
+  ["setVatClass", null],
+  ["setTakeawayVatClass", "general"],
+  ["setTakeawayVatClass", null],
+])("refuses the retired %s (%j) by name on creation and update", async (field, value) => {
+  const { send, set, draft } = await fixture();
   await refused(
-    await send("POST", menus, { ...terms, name: "New set", setTakeawayVatClass: ["general"] }),
+    await send("POST", menus, { ...terms, name: "New set", [field]: value }),
     400,
-    "set_menu.invalid",
-    { field: "setTakeawayVatClass" },
+    "management.request_invalid",
+    { field },
   );
+  const listed = await json<{ name: string }[]>(await send("GET", menus), 200);
+  expect(listed.map(({ name }) => name)).not.toContain("New set");
+  const before = await json(await send("GET", draft), 200);
   await refused(
-    await send("PATCH", `${menus}/${set.id}`, { setTakeawayVatClass: "other" }),
+    await send("PATCH", `${menus}/${set.id}`, { setPrice: "19.50", [field]: value }),
     400,
-    "set_menu.invalid",
-    { field: "setTakeawayVatClass" },
+    "management.request_invalid",
+    { field },
   );
+  expect(await json(await send("GET", draft), 200)).toEqual(before);
 });
 
 it.each([undefined, "menu"])(
@@ -175,40 +188,22 @@ it.each([undefined, "menu"])(
   },
 );
 
-it("updates set-menu terms and clears the takeaway override with null", async () => {
+it("updates a set menu's price", async () => {
   const { send, draft, set } = await fixture();
-  const path = `${menus}/${set.id}`;
-  expect(
-    (
-      await send("PATCH", path, {
-        setPrice: "19.50",
-        setVatClass: "general",
-        setTakeawayVatClass: "reduced",
-      })
-    ).status,
-  ).toBe(204);
-  expect(await json(await send("GET", draft), 200)).toMatchObject({
-    price: "19.50",
-    vatClass: "general",
-    takeawayVatClass: "reduced",
-  });
-  expect((await send("PATCH", path, { setTakeawayVatClass: null })).status).toBe(204);
-  expect(await json(await send("GET", draft), 200)).toMatchObject({
-    price: "19.50",
-    vatClass: "general",
-    takeawayVatClass: null,
-  });
+  expect((await send("PATCH", `${menus}/${set.id}`, { setPrice: "19.50" })).status).toBe(204);
+  const read = await json(await send("GET", draft), 200);
+  expect(read).toMatchObject({ price: "19.50" });
+  expect(read).not.toHaveProperty("vatClass");
+  expect(read).not.toHaveProperty("takeawayVatClass");
 });
 
 it("reads the draft details and refuses an ordinary menu at the same route", async () => {
   const { send, draft, set, full, starter, main } = await fixture();
-  expect(await json(await send("GET", draft), 200)).toMatchObject({
+  expect(await json(await send("GET", draft), 200)).toEqual({
     id: set.id,
     name: "Daily menu",
     names: {},
     price: "14.00",
-    vatClass: "reduced",
-    takeawayVatClass: null,
     dishes: [],
     lines: [],
     courses: [

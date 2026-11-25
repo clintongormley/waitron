@@ -295,7 +295,6 @@ describe("ordering uses period membership while browsing follows the timetable",
           kind: "set_menu",
           name: "Daily menu",
           setPrice: "14.00",
-          setVatClass: "reduced",
         });
         await addProducts(tx, await requireMenuRoot(tx, daily), [soup]);
         const [{ id: menuItemId }] = await tx

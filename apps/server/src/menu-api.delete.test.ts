@@ -38,7 +38,6 @@ async function fixture(permissions = fullAccess) {
       name: "Daily set",
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "general",
     });
     const [period] = await tx
       .insert(menuPeriods)

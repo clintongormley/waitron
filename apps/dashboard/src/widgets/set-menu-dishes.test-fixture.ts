@@ -39,8 +39,6 @@ export const details: SetMenuDetails = {
   name: "Daily menu",
   names: {},
   price: "14.00",
-  vatClass: "reduced",
-  takeawayVatClass: null,
   dishes: [hake, bravas, soup],
   lines: [sharingLine],
   courses: [starters, sharing],
@@ -68,14 +66,13 @@ export async function mountDishes(initial = details, theme?: "light" | "dark") {
   const api: DishesApi = {
     readSetMenu: vi.fn().mockResolvedValue(initial),
     listMenus: vi.fn().mockResolvedValue([
-      { id: "lunch", name: "Lunch", kind: "menu", active: true, setPrice: null, setVatClass: null },
+      { id: "lunch", name: "Lunch", kind: "menu", active: true, setPrice: null },
       {
         id: "daily",
         name: "Daily menu",
         kind: "set_menu",
         active: true,
         setPrice: "14.00",
-        setVatClass: "reduced",
       },
       {
         id: "special",
@@ -83,7 +80,6 @@ export async function mountDishes(initial = details, theme?: "light" | "dark") {
         kind: "set_menu",
         active: true,
         setPrice: "20.00",
-        setVatClass: "general",
       },
     ]),
     listCategories: vi.fn().mockResolvedValue([]),

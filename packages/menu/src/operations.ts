@@ -77,7 +77,6 @@ import {
   requireSetMenu,
   setMenuPriceCents,
   setMenuSurchargeCents,
-  setMenuVatClass,
   touchSetMenu,
 } from "./set-menus.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -125,7 +124,6 @@ export interface Menu {
   active: boolean;
   kind: MenuKind;
   setPrice: string | null;
-  setVatClass: VatClass | null;
 }
 
 export interface CreateProductInput {
@@ -202,14 +200,12 @@ const MENU_COLUMNS = {
   active: menus.active,
   kind: menus.kind,
   setPrice: menus.setPrice,
-  setVatClass: menus.setVatClass,
 };
 
 function menuSummary(row: Pick<typeof menus.$inferSelect, keyof Menu>): Menu {
   return {
     ...row,
     setPrice: priceOrNull(row.setPrice),
-    setVatClass: row.setVatClass as VatClass | null,
   };
 }
 
@@ -363,8 +359,6 @@ export async function createMenu(
     color?: string | null;
     kind?: MenuKind;
     setPrice?: string | null;
-    setVatClass?: VatClass | null;
-    setTakeawayVatClass?: VatClass | null;
   },
 ): Promise<Menu> {
   const presentation = await sectionPatchValues(tx, {
@@ -375,15 +369,7 @@ export async function createMenu(
   });
   const terms =
     input.kind === "set_menu"
-      ? {
-          kind: input.kind,
-          setPrice: setMenuPriceCents(input.setPrice),
-          setVatClass: setMenuVatClass(input.setVatClass),
-          setTakeawayVatClass:
-            input.setTakeawayVatClass == null
-              ? null
-              : setMenuVatClass(input.setTakeawayVatClass, "setTakeawayVatClass"),
-        }
+      ? { kind: input.kind, setPrice: setMenuPriceCents(input.setPrice) }
       : undefined;
   const row = await insertMenu(tx, presentation.internalName!, terms);
   await createMenuShell(tx, row.id, presentation);
@@ -394,15 +380,14 @@ export async function createMenu(
 export async function insertMenu(
   tx: Transaction,
   name: string,
-  terms?: Pick<
-    typeof menus.$inferInsert,
-    "kind" | "setPrice" | "setVatClass" | "setTakeawayVatClass"
-  >,
+  terms?: Pick<typeof menus.$inferInsert, "kind" | "setPrice">,
 ): Promise<Menu> {
   await assertMenuNameFree(tx, name);
+  // `menus_set_terms_ck` still requires a set menu's own VAT class; no price or tax reads it.
+  const setVatClass = terms?.kind === "set_menu" ? ("reduced" as const) : null;
   const [row] = await tx
     .insert(menus)
-    .values({ name, ...terms })
+    .values({ name, ...terms, setVatClass, setTakeawayVatClass: null })
     .returning(MENU_COLUMNS);
   return menuSummary(row!);
 }
@@ -903,22 +888,12 @@ export async function updateMenuDetails(
     image?: string | null;
     color?: string | null;
     setPrice?: string | null;
-    setVatClass?: VatClass | null;
-    setTakeawayVatClass?: VatClass | null;
   },
   fallbackLanguage?: string,
 ): Promise<void> {
-  const changesTerms =
-    patch.setPrice !== undefined ||
-    patch.setVatClass !== undefined ||
-    patch.setTakeawayVatClass !== undefined;
+  const changesTerms = patch.setPrice !== undefined;
   if (changesTerms) await requireSetMenu(tx, menuId);
   else await assertMenuWritable(tx, menuId);
-  const vatClass = patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass);
-  const takeawayVatClass =
-    patch.setTakeawayVatClass == null
-      ? patch.setTakeawayVatClass
-      : setMenuVatClass(patch.setTakeawayVatClass, "setTakeawayVatClass");
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const [stored] =
     patch.names === undefined
@@ -945,8 +920,6 @@ export async function updateMenuDetails(
       .set({
         name: internalName,
         setPrice: patch.setPrice === undefined ? undefined : setMenuPriceCents(patch.setPrice),
-        setVatClass: vatClass,
-        setTakeawayVatClass: takeawayVatClass,
         updatedAt: now(),
       })
       .where(eq(menus.id, menuId));

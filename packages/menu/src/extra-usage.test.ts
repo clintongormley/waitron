@@ -140,7 +140,6 @@ it("names a full menu whose set menu alone offers the extras list", async () => 
       name: "Daily menu",
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     });
     const list = await createExtraList(
       tx,

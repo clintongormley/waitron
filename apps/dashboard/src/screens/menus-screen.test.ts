@@ -160,7 +160,6 @@ const menus: MenuSummary[] = [
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   },
   {
     id: "menu-dinner",
@@ -168,7 +167,6 @@ const menus: MenuSummary[] = [
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   },
 ];
 
@@ -1566,7 +1564,6 @@ describe("the menus list's Status column and its changes link", () => {
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   };
 
   /** Lunch has changes on its live version 2, Dinner is current, Brunch was never published. */
@@ -2205,7 +2202,6 @@ describe("the menus list's Status column and its changes link", () => {
       active: true,
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     };
     await at([1280, 900], "en-GB", async () => {
       const el = await listed(
@@ -2727,7 +2723,6 @@ describe("copying a menu from the list", () => {
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   };
   const form = (el: MenusScreen) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-menu-copy-dialog"]>(
@@ -10105,7 +10100,6 @@ describe("publishing", () => {
       active: true,
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     };
     const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([...menus, set]) }));
     const headerTexts = () =>
@@ -10512,7 +10506,6 @@ describe("publishing", () => {
       active: true,
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     };
     const client = api({
       listMenus: vi.fn().mockResolvedValue([...menus, set]),
@@ -11766,7 +11759,6 @@ describe("the menus list just wider than its narrow layout", () => {
           active: true,
           kind: "menu",
           setPrice: null,
-          setVatClass: null,
         },
         menus[1]!,
       ];

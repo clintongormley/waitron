@@ -77,7 +77,6 @@ function api(
       active: true,
       kind: "menu",
       setPrice: null,
-      setVatClass: null,
     },
     {
       id: "menu-dinner",
@@ -85,7 +84,6 @@ function api(
       active: true,
       kind: "menu",
       setPrice: null,
-      setVatClass: null,
     },
   ],
 ): DashboardApi {
@@ -676,9 +674,7 @@ describe("the menu editor's heading", () => {
     onTestFinished(() => page.viewport(width, height));
     await page.viewport(390, 844);
     return mount(
-      api(undefined, [
-        { id: "menu-lunch", name, active: true, kind: "menu", setPrice: null, setVatClass: null },
-      ]),
+      api(undefined, [{ id: "menu-lunch", name, active: true, kind: "menu", setPrice: null }]),
     );
   }
 

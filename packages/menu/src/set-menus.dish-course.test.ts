@@ -15,7 +15,7 @@ import {
 
 const suite = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as const;
+const terms = { kind: "set_menu", setPrice: "14.00" } as const;
 
 async function fixture(tx: Transaction) {
   const menu = await createMenu(tx, { ...terms, name: "Daily menu" });

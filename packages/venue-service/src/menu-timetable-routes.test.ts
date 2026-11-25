@@ -381,7 +381,6 @@ describe("the opening-hours routes", () => {
         name: "Lunch set",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       }),
     );
     await answers(

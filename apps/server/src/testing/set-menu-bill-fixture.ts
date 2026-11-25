@@ -33,8 +33,6 @@ export async function setMenuOnFullMenu(
     kind: "set_menu",
     name,
     setPrice: price,
-    setVatClass: "reduced",
-    setTakeawayVatClass: "general",
   });
   const [{ id: courseId }] = await tx
     .insert(kitchenCourses)

@@ -908,7 +908,6 @@ it.each([
             active: true,
             kind: "menu",
             setPrice: null,
-            setVatClass: null,
           },
           {
             id: "menu-two",
@@ -916,7 +915,6 @@ it.each([
             active: true,
             kind: "menu",
             setPrice: null,
-            setVatClass: null,
           },
         ],
         listLibraryProducts: async () => [],

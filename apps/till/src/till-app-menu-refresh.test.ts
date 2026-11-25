@@ -3352,8 +3352,6 @@ it.each(["recorded", "live"] as const)(
       changedAt: "2026-11-19T08:00:00Z",
       terms: {
         price: "14.00",
-        vatClass: "reduced" as const,
-        takeawayVatClass: "reduced" as const,
         names: {},
         lines: [],
       },

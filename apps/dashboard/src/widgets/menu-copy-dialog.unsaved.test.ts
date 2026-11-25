@@ -16,7 +16,6 @@ const copied: MenuSummary = {
   active: true,
   kind: "menu",
   setPrice: null,
-  setVatClass: null,
 };
 class CopyLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);

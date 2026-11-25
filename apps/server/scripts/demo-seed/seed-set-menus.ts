@@ -45,7 +45,6 @@ export async function seedSetMenus(
       names: inLanguages(setMenu.customerName, languages),
       kind: "set_menu",
       setPrice: setMenu.price,
-      setVatClass: setMenu.vatClass,
     });
     const dishes = [];
     for (const dish of setMenu.dishes) {

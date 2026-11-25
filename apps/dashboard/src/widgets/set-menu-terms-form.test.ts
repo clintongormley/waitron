@@ -13,8 +13,6 @@ const value = {
   name: "Daily menu",
   names: { en: "Today's menu", es: "Daily lunch for guests" },
   price: "14.00",
-  vatClass: "reduced",
-  takeawayVatClass: null,
 } as const;
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
 
@@ -31,7 +29,6 @@ async function mount(
       api: { updateMenuDetails } as unknown as DashboardApi,
       value: options.create ? null : value,
       languages,
-      defaultVatClass: "super_reduced",
     } as Partial<HTMLElement>,
     options.theme,
   );
@@ -48,21 +45,43 @@ function save(root: ShadowRoot) {
   return root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
 }
 
-it("starts a new draft on the venue VAT rate and marks the required fields", async () => {
-  const { root } = await mount({ create: true });
+it("asks for a name, customer names and a price, and no VAT", async () => {
+  const created = { id: "lunch", name: "Lunch", kind: "set_menu", active: true, setPrice: "14.00" };
+  const createMenu = vi.fn().mockResolvedValue(created);
+  const { el } = await mountWidget("dashboard-set-menu-terms-form", {
+    api: { createMenu } as unknown as DashboardApi,
+    creating: true,
+    languages,
+  } as Partial<HTMLElement>);
+  const root = el.shadowRoot!;
   expect(root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')?.required).toBe(
     true,
   );
-  expect(
-    root.querySelector<HTMLElementTagNameMap["wt-price-input"]>('[name="setPrice"]')?.required,
-  ).toBe(true);
-  const eatIn = root.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="setVatClass"]');
-  expect(eatIn?.required).toBe(true);
-  expect(eatIn?.value).toBe("super_reduced");
+  const price = root.querySelector<HTMLElementTagNameMap["wt-price-input"]>('[name="setPrice"]');
+  expect(price?.required).toBe(true);
+  expect([...root.querySelectorAll("[name]")].map((field) => field.getAttribute("name"))).toEqual([
+    "name",
+    "names-en",
+    "names-es",
+    "setPrice",
+  ]);
+  expect(root.querySelector("wt-combobox")).toBeNull();
+  expect(page.getByText(/VAT/).query()).toBeNull();
   expect(save(root).disabled).toBe(true);
+  change(root, "name", "Lunch");
+  change(root, "setPrice", "14");
+  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
+  save(root).click();
+  await vi.waitFor(() =>
+    expect(createMenu).toHaveBeenCalledExactlyOnceWith("Lunch", {
+      kind: "set_menu",
+      names: {},
+      setPrice: "14.00",
+    }),
+  );
 });
 
-it("keeps Save quiet until an edit and saves or clears the separate takeaway rate", async () => {
+it("keeps Save quiet until an edit and saves a changed price", async () => {
   const { root, updateMenuDetails } = await mount();
   expect(save(root).disabled).toBe(true);
   change(root, "setPrice", "14.0");
@@ -70,25 +89,13 @@ it("keeps Save quiet until an edit and saves or clears the separate takeaway rat
   expect(save(root).disabled).toBe(true);
   save(root).click();
   expect(updateMenuDetails).not.toHaveBeenCalled();
-  change(root, "setTakeawayVatClass", "general");
+  change(root, "setPrice", "15.50");
   await vi.waitFor(() => expect(save(root).disabled).toBe(false));
   save(root).click();
   await vi.waitFor(() =>
-    expect(updateMenuDetails).toHaveBeenLastCalledWith(
-      "daily",
-      expect.objectContaining({ setTakeawayVatClass: "general" }),
-    ),
+    expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", { setPrice: "15.50" }),
   );
   await vi.waitFor(() => expect(save(root).disabled).toBe(true));
-  change(root, "setTakeawayVatClass", "");
-  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
-  save(root).click();
-  await vi.waitFor(() =>
-    expect(updateMenuDetails).toHaveBeenLastCalledWith(
-      "daily",
-      expect.objectContaining({ setTakeawayVatClass: null }),
-    ),
-  );
 });
 
 it("puts an invalid price beside the price and blocks another submission until corrected", async () => {
@@ -140,21 +147,6 @@ it("refuses a blank name beside the name and sends nothing", async () => {
   const name = root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!;
   await vi.waitFor(() => expect(name.error).toBe("Enter a name for the set menu."));
   expect(updateMenuDetails).not.toHaveBeenCalled();
-});
-
-it("ignores a cleared eat-in VAT rate and saves a newly chosen one", async () => {
-  const { root, updateMenuDetails } = await mount();
-  const eatIn = root.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="setVatClass"]')!;
-  change(root, "setVatClass", "");
-  await (root.host as HTMLElementTagNameMap["dashboard-set-menu-terms-form"]).updateComplete;
-  expect(eatIn.value).toBe("reduced");
-  expect(save(root).disabled).toBe(true);
-  change(root, "setVatClass", "general");
-  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
-  save(root).click();
-  await vi.waitFor(() =>
-    expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", { setVatClass: "general" }),
-  );
 });
 
 it("saves a customer-facing name typed for one language", async () => {

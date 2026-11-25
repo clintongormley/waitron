@@ -1,10 +1,4 @@
-import {
-  BUILT_IN_ROLE_NAMES,
-  PERSON_STATUS_NAMES,
-  localToday,
-  vatRateOn,
-  type VatClass,
-} from "@waitron/shared";
+import { BUILT_IN_ROLE_NAMES, PERSON_STATUS_NAMES } from "@waitron/shared";
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type {
   AccessRole,
@@ -14,13 +8,6 @@ import type {
   Printer,
 } from "../api/client.js";
 import { fill, t } from "./t.js";
-
-const VAT_CLASS_NAMES: NameTable = {
-  general: { en: "General", es: "General" },
-  reduced: { en: "Reduced", es: "Reducido" },
-  super_reduced: { en: "Super-reduced", es: "Superreducido" },
-  zero: { en: "No tax", es: "Sin impuestos" },
-};
 
 const UNIT_NAMES: NameTable = {
   each: { en: "Per unit", es: "Por unidad" },
@@ -191,10 +178,6 @@ export function homeDeviceName(device: HomeDevice): string {
   return t(device === "handheld" ? "home.device_handheld" : "home.device_till");
 }
 
-export function vatClassName(value: string, locale: string = currentLocale()): string {
-  return resolveNameTable(VAT_CLASS_NAMES, value, locale);
-}
-
 /** A rate ("7.50") as the person's locale writes a number, "7.5" or "7,5". */
 export function vatRateNumber(rate: string, locale: string = currentLocale()): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(rate));
@@ -203,11 +186,6 @@ export function vatRateNumber(rate: string, locale: string = currentLocale()): s
 /** A rate ("7.50") as a percentage: "7.5%", "7,5 %". */
 export function vatRateText(rate: string): string {
   return fill("editor.rate_percent", { rate: vatRateNumber(rate) });
-}
-
-export function vatClassLabel(value: VatClass): string {
-  const rate = vatRateOn(value, localToday()).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
-  return `${vatClassName(value)} (${rate}%)`;
 }
 
 export function unitName(value: string, locale: string = currentLocale()): string {

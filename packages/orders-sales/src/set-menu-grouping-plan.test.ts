@@ -67,8 +67,6 @@ const dailyCopy: ServedSetMenuCopy = {
   name: "Daily",
   terms: {
     price: "14.00",
-    vatClass: "reduced",
-    takeawayVatClass: "general",
     names: { en: "Daily" },
     lines: [
       { id: "first", count: 1, courseIds: ["starters"] },

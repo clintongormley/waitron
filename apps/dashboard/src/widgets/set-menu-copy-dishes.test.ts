@@ -15,7 +15,6 @@ const daily = {
   kind: "set_menu",
   active: true,
   setPrice: "14.00",
-  setVatClass: "reduced",
 };
 const special = { ...daily, id: "special", name: "Special menu", setPrice: "20.00" };
 const lunch = { ...daily, id: "lunch", name: "Lunch", kind: "menu", setPrice: null };

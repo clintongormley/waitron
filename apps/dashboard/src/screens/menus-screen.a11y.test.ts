@@ -127,7 +127,6 @@ function api(state: State): DashboardApi {
                             active: true,
                             kind: "set_menu",
                             setPrice: "14.00",
-                            setVatClass: "reduced",
                           },
                         ]
                       : []),

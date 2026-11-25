@@ -85,8 +85,6 @@ function daily(offers: ServedSetMenuOffer[]): ServedSetMenuCopy {
     name: "Daily menu",
     terms: {
       price: "14.00",
-      vatClass: "reduced",
-      takeawayVatClass: "general",
       names: { en: "Daily menu" },
       lines: [
         { id: "first", count: 1, courseIds: ["starters"] },
@@ -128,15 +126,15 @@ describe("set-menu copies", () => {
     ]);
   });
 
-  it("carries the published identity, version and tax classes used by the bill", () => {
+  it("carries the published identity and version used by the bill, and no VAT terms", () => {
     const copy = shared.setMenuCopyOf(daily([]), "version-2");
     expect(copy).toMatchObject({
       id: "daily:published",
       setMenuId: "daily",
       versionId: "version-2",
       name: "Daily menu",
-      terms: { vatClass: "reduced", takeawayVatClass: "general" },
     });
+    expect(copy).not.toHaveProperty("terms");
   });
 
   it("lists copies by both product and variant", () => {

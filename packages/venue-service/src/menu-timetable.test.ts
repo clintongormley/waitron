@@ -224,7 +224,6 @@ describe("deleting a period menu", () => {
         name: "Lunch set",
         kind: "set_menu",
         setPrice: "8.00",
-        setVatClass: "general",
       });
       await addSetMenuDishes(tx, set.id, [{ productId: dish!.id, excludedVariantIds: [] }]);
       await addMember(tx, await requireMenuRoot(tx, Lunch), { kind: "set_menu", menuId: set.id });

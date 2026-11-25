@@ -33,8 +33,6 @@ export async function duplicateMenu(
   const copy = await insertMenu(tx, internalName!, {
     kind: details.kind,
     setPrice: details.setPrice,
-    setVatClass: details.setVatClass,
-    setTakeawayVatClass: details.setTakeawayVatClass,
   });
   const sectionIds = new Map(owned.map((section) => [section.id, newId()]));
   const itemIds = new Map(items.map((item) => [item.id, newId()]));

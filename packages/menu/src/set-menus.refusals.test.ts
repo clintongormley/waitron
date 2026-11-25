@@ -7,7 +7,6 @@ import {
   createMenu,
   createProduct,
   listMenuOffers,
-  updateMenuDetails,
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
@@ -23,7 +22,7 @@ import { setProductVariants } from "./variants.js";
 
 const suite = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-const terms = { kind: "set_menu", setPrice: "14.00", setVatClass: "reduced" } as const;
+const terms = { kind: "set_menu", setPrice: "14.00" } as const;
 const pick = (productId: string, ...excludedVariantIds: string[]) => ({
   productId,
   excludedVariantIds,
@@ -105,12 +104,12 @@ function measuredUnit(tx: Transaction) {
 }
 
 it.each(["add", "add products", "add member", "replace", "copy"] as const)(
-  "%s accepts another VAT rate and refuses a dish sold by measure",
+  "%s accepts a dish of any VAT rate and refuses a dish sold by measure",
   async (operation) => {
     const ref = { kind: "product", productId: f.sirloin } as const;
     const member = await app((tx) => addMember(tx, f.root, { kind: "product", productId: f.soup }));
     const source = await app(async (tx) => {
-      const menu = await createMenu(tx, { ...terms, name: "Evening menu", setVatClass: "general" });
+      const menu = await createMenu(tx, { ...terms, name: "Evening menu" });
       await addSetMenuDishes(tx, menu.id, [pick(f.sirloin)]);
       return menu;
     });
@@ -143,7 +142,7 @@ it.each(["add", "add products", "add member", "replace", "copy"] as const)(
   },
 );
 
-it("can keep a variant whose rate differs from the set menu's", async () => {
+it("refuses to include a variant while its dish is sold by measure, and includes it once it is not", async () => {
   await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine, f.bottle)]));
   const [dish] = (await reading()).dishes;
   expect(dish!.variants.map(({ id, included }) => ({ id, included }))).toEqual([
@@ -182,12 +181,6 @@ it("can keep a variant whose rate differs from the set menu's", async () => {
     { id: f.glass, included: true },
     { id: f.bottle, included: true },
   ]);
-});
-
-it("can change the menu rate when an existing dish has a different rate", async () => {
-  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.soup)]));
-  await app((tx) => updateMenuDetails(tx, f.menuId, { setVatClass: "general" }));
-  expect(await reading()).toMatchObject({ vatClass: "general", dishes: [{ productId: f.soup }] });
 });
 
 it("keeps the same draft problems after a dish's VAT rate changes", async () => {

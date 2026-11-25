@@ -4083,7 +4083,6 @@ describe("fresh drafts alongside existing bill families", () => {
         name: "Lunch set menu",
         kind: "set_menu",
         setPrice: "18.00",
-        setVatClass: "reduced",
       }),
     );
     const reservation = {

@@ -15,7 +15,6 @@ import {
   swapStatusName,
   transportName,
   unitName,
-  vatClassName,
   vatKindName,
 } from "./domain.js";
 import { currentLocale, setLocale } from "./t.js";
@@ -57,16 +56,6 @@ it("resolves a status token to Spanish and English, unknown value raw", () => {
   expect(statusName("suspended", "en")).toBe("Disabled");
   expect(statusName("active", "en")).toBe("Active");
   expect(statusName("frozen", "es")).toBe("frozen");
-});
-
-it("resolves a VAT-class token to Spanish and English, unknown value raw", () => {
-  expect(vatClassName("general", "es")).toBe("General");
-  expect(vatClassName("reduced", "es")).toBe("Reducido");
-  expect(vatClassName("super_reduced", "es")).toBe("Superreducido");
-  expect(vatClassName("zero", "es")).toBe("Sin impuestos");
-  expect(vatClassName("zero", "en")).toBe("No tax");
-  expect(vatClassName("reduced", "en")).toBe("Reduced");
-  expect(vatClassName("luxury", "es")).toBe("luxury");
 });
 
 it("resolves a unit token to Spanish and English, unknown value raw", () => {
@@ -141,7 +130,6 @@ it("names both swap directions, raw fallback for an unknown token (staff portal)
 it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {
   expect(roleName("toString", "es")).toBe("toString");
   expect(allergenName("constructor", "es")).toBe("constructor");
-  expect(vatClassName("valueOf", "en")).toBe("valueOf");
 });
 
 it("falls back to English for a known value in an unknown language", () => {
@@ -189,7 +177,6 @@ it("strips a region subtag before the language lookup", () => {
 it("defaults to the active locale when none is passed", () => {
   expect(roleName("manager")).toBe("Encargado");
   expect(statusName("active")).toBe("Activo");
-  expect(vatClassName("zero")).toBe("Sin impuestos");
   expect(unitName("each")).toBe("Por unidad");
   expect(allergenStateName("none")).toBe("Ninguno");
   expect(allergenName("eggs")).toBe("Huevos");

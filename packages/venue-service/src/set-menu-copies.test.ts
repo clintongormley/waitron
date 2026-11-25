@@ -93,7 +93,6 @@ it.each(["without copies", "with another copy", "missing altogether"] as const)(
                 kind: "set_menu",
                 name: "Special",
                 setPrice: "20.00",
-                setVatClass: "reduced",
               })
             ).id
           : f.daily;

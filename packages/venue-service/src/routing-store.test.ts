@@ -1689,7 +1689,6 @@ describe("routing previews", () => {
           name: "Daily menu",
           kind: "set_menu",
           setPrice: "14.00",
-          setVatClass: "reduced",
         });
         await addProductToMenu(tx, { menuId: set.id, productId: f.burger });
         await addMember(tx, await requireMenuRoot(tx, f.menu), {

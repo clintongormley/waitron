@@ -262,8 +262,7 @@ export interface MenuOccurrence {
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu" | "set_menu";
 
-export type SetMenuChangeField =
-  "price" | "vat" | "names" | "lines" | "allergens" | "diet" | "dishes";
+export type SetMenuChangeField = "price" | "names" | "lines" | "allergens" | "diet" | "dishes";
 
 export type MenuChangeBody = {
   source: MenuChangeSource;
