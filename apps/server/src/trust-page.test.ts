@@ -90,7 +90,7 @@ describe("the guessed device", () => {
     expect(html).toMatch(heading("3. Install it on your device"));
   });
 
-  it("never prints a device it was not asked for", () => {
+  it("opens no Mac steps on an iPhone", () => {
     const html = renderTrustPage({ ...base, device: "ios" });
     expect(html).toMatch(heading(`3. ${DEVICE_HELP.ios.heading}`));
     expect(html).not.toMatch(heading(`3. ${DEVICE_HELP.macos.heading}`));
@@ -108,10 +108,6 @@ describe("the words at the top", () => {
     );
     expect(html).not.toContain("tax-agency");
   });
-});
-
-it("warns that a download may need confirming before it reaches the disk", () => {
-  expect(renderTrustPage(base)).toMatch(/Keep/);
 });
 
 it("names the button Android shows as well as the desktop one", () => {

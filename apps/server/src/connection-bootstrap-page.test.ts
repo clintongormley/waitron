@@ -49,6 +49,24 @@ async function open(
   await page.goto("http://waitron.local:8080/setup/connection");
 }
 
+it("names the changed Android settings in Spanish", () => {
+  const { install, removal } = CONNECTION_DEVICE_ES.android;
+  expect(install[0]).toContain("No abras el archivo descargado.");
+  expect(install[0]).toContain("instalar certificados desde el almacenamiento");
+  expect(install[1]).toContain("elige instalarlo de todos modos");
+  expect(removal.join(" ")).toContain("Credenciales de confianza, Usuario");
+  expect(removal.join(" ")).toContain("los certificados de confianza y, después, Usuario");
+  expect(removal.join(" ")).not.toContain("Credenciales de usuario");
+});
+
+it.each([
+  ["en", "choose Keep or Download", "delete the old waitron-ca.crt"],
+  ["es", "elige conservar o descargar", "elimina el waitron-ca.crt antiguo"],
+] as const)("says on the %s page what to do about the download", (locale, choose, remove) => {
+  const html = renderTrustPage({ ...base, connection: retained, locale });
+  expect(html).toMatch(new RegExp(`<p class="note">[^<]*${choose}[^<]*${remove}`));
+});
+
 it.each(["en", "es"] as const)("links the declaration at the foot of the %s page", (locale) => {
   const html = renderTrustPage({ ...base, connection: retained, locale });
   expect(html).toContain(
@@ -590,7 +608,7 @@ async function expectHelpOpenedFor(
 }
 
 it.each(["en", "es"] as const)(
-  "opens Android's steps first on a touch device that says it is Linux (%s)",
+  "opens Android's steps first on a touch device guessed as Linux (%s)",
   (locale) => expectHelpOpenedFor(TOUCH, "linux", "android", { locale, coarse: true }),
 );
 

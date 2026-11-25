@@ -26,7 +26,7 @@ export interface TrustPageInput {
   caDownloadPath: string;
   qrSvg?: string;
   httpsUrl: string;
-  /** Which device's steps to open, guessed by `detectTrustDevice`. "unknown" opens none. */
+  /** The server's guess, from `detectTrustDevice`; the page may replace "linux" in the browser. "unknown" opens none. */
   device: DeviceId | "unknown";
   /** This box's own HTTPS origin, offered first because another box answers `httpsUrl`'s name. */
   ownAddress?: string;
@@ -109,8 +109,9 @@ function certificateSteps(device: DeviceId | "unknown", caDownloadPath: string):
 }
 
 /**
- * An Android tablet asking for the desktop site sends a Linux user-agent, so only the page itself
- * can tell it from a Linux PC, by its touchscreen. Without the script, the Linux steps stay.
+ * An Android tablet can be answered `linux` (`detect-device.ts`), so a touch-first device is shown
+ * Android's steps. That is a guess too: "Using a different device?" still lists Linux. Without the
+ * script, the Linux steps stay.
  */
 function stepsOrTouchSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
   const steps = certificateSteps(device, caDownloadPath);

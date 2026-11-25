@@ -11,15 +11,15 @@
  * guide read 2026-09-13 and not from a device: that a physical iPad in its default mode sends
  * exactly that string.
  *
- * KNOWN LIMIT: an Android tablet asking for the desktop site sends no "Android" in its user-agent
- * (a Pixel Tablet's Chrome 158, 2026-11-25), so it answers `linux`. The certificate and connection
- * pages correct that in the browser with `TOUCH_FIRST_CONDITION`.
+ * KNOWN LIMIT: a Pixel Tablet's Chrome 158 was answered `linux` (2026-11-25). Assumed, its headers not
+ * read: it asks for the desktop site and so names no Android. The certificate and connection pages
+ * guess again in the browser with `TOUCH_FIRST_CONDITION`, for a `linux` answer only.
  */
 
 export type TrustDevice =
   "macos" | "windows" | "linux" | "chromeos" | "android" | "ios" | "firefox-linux" | "unknown";
 
-/** Browser code: true on a device whose main pointer is a touchscreen. */
+/** Browser code. It asks about the touchscreen and main pointer, not the system. */
 export const TOUCH_FIRST_CONDITION = `navigator.maxTouchPoints>0&&matchMedia("(pointer: coarse)").matches`;
 
 /**

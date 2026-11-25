@@ -33,7 +33,7 @@ describe("DEVICE_HELP", () => {
     expect(DEVICE_HELP[id].install.length).toBeGreaterThan(1);
   });
 
-  it("names the settings a Pixel and an OPPO phone use on Android", () => {
+  it("names the Android settings an OPPO phone showed and the Pixel ones", () => {
     const { install, removal } = DEVICE_HELP.android;
     expect(install[0]).toContain("“Install a certificate” or “Install certificates from storage”");
     expect(install[0]).toContain("Do not open the downloaded file itself.");

@@ -65,7 +65,7 @@ async function expectStepsFor(page: Page, device: DeviceId, other: DeviceId): Pr
   expect(await page.getByRole("link", { name: "Download the certificate" }).isVisible()).toBe(true);
 }
 
-it("shows a touch device that says it is Linux the Android steps as its own", () =>
+it("shows a touch device guessed as Linux the Android steps as its own", () =>
   withPage(TOUCH, base, (page) => expectStepsFor(page, "android", "linux")));
 
 it("leaves a Linux PC its own steps", () =>
@@ -99,7 +99,7 @@ it("leaves a coarse pointer with no touchscreen the Linux steps", () =>
     () => Object.defineProperty(navigator, "maxTouchPoints", { get: () => 0 }),
   ));
 
-it("leaves a touch device that names another system that system's steps", () =>
+it("leaves a touch device guessed as Firefox on Linux those steps", () =>
   withPage(TOUCH, { ...base, device: "firefox-linux" }, (page) =>
     expectStepsFor(page, "firefox-linux", "android"),
   ));
