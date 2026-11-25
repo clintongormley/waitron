@@ -431,9 +431,10 @@ local cuando lo guardas y se reinicia el servidor. Comprueba la conexión en **S
 Cloud**.
 
 Si tu cuenta de pruebas de Cloud tiene una sola empresa española, sin NIF ni locales, elige
-una sugerencia en **Buscar el domicilio fiscal** o **Buscar la dirección**. Revisa los campos
-que se han rellenado y corrígelos antes de continuar. Si añades un local a una empresa que ya
-usa Cloud o la búsqueda no está disponible, escribe las direcciones a mano.
+una sugerencia en **Buscar la dirección**. Si el domicilio fiscal es distinto, desactiva
+**Igual que la dirección del local** para ver **Buscar el domicilio fiscal**. Revisa y corrige
+los campos que se han rellenado antes de continuar. Si añades un local a una empresa que ya usa
+Cloud o la búsqueda no está disponible, escribe las direcciones a mano.
 
 En **Preparación**, puedes [elegir Cloud para el correo del personal](email.md#cloud-staff-email) y
 continuar con el servidor de correo en blanco. Si eliges **Omitir** antes de abrir Cloud o importas

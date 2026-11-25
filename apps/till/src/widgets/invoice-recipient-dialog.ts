@@ -140,7 +140,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     signal: AbortSignal,
   ) => Promise<CloudAddressReply>;
   @state() private cloudProvider?: AddressLookupProvider;
-  @state() private addressAttribution?: string;
+  @state() private addressAttribution?: { text: string };
   #addressRequest?: { controller: AbortController; isAvailability: boolean };
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
   @property({ attribute: false }) offerSimplified = false;
@@ -264,8 +264,10 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const opening = this.#opening;
     const submitted = this.#submitted;
     const scope = this.#scope;
+    const addressAttribution = this.addressAttribution;
     return () => {
       if (!this.isConnected || !this.active || this.#opening !== opening) return false;
+      if (this.addressAttribution === addressAttribution) this.addressAttribution = undefined;
       if (submitted) {
         this.#baseline = { ...submitted };
         scope?.commit(submitted);
@@ -555,7 +557,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       return;
     }
     this.foreignAddressCountry = undefined;
-    this.addressAttribution = address.attribution;
+    this.addressAttribution = address.attribution ? { text: address.attribution } : undefined;
     const pack = getCountryPack(this.countryCode);
     const area = pack === undefined ? undefined : areaOfChosenAddress(pack, address);
     this.streetAddress = address.lines.join(", ");
@@ -710,7 +712,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         ></wt-input>
         <wt-address-lookup
           name="address-search"
-          .appliedAttribution=${this.addressAttribution}
+          .appliedAttribution=${this.addressAttribution?.text}
           .provider=${this.countryCode === "" ? undefined : (this.addressProvider ?? this.cloudProvider)}
           country-code=${this.countryCode}
           label=${t("invoice.address_lookup.label").replace("{country}", () =>

@@ -383,9 +383,10 @@ and sign in or create an account. Setup resumes at the venue form in the same ta
 the venue after you save it and the box restarts. Check **System → Cloud services** for the connection.
 
 If your test Cloud account has one Spanish business with no tax number or venues, choose a
-suggestion in **Find the registered address** or **Find the address**. Check the filled fields
-and correct them before continuing. If you add a venue to an existing Cloud business or the
-search is unavailable, enter the addresses by hand.
+suggestion in **Find the address**. If the business uses a separate registered address, turn off
+**Same as the venue's address** to see **Find the registered address**. Check and correct the
+filled fields before continuing. If you add a venue to an existing Cloud business or the search
+is unavailable, enter the addresses by hand.
 
 In Prepare, [choose Cloud for staff email](email.md#cloud-staff-email) to continue with the mail
 server blank. If you choose **Skip** before opening Cloud or import a configuration, fill in the

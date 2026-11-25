@@ -25,7 +25,11 @@ import {
   ticketItems,
 } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { loginWithPin } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { fireableLineColumns, fireLines } from "./working-order-kitchen-fire.js";
@@ -135,6 +139,9 @@ async function withServer(
     };
     if (env.WAITRON_STAFF_PORT) {
       cloud = await installationFixture(undefined, {
+        addressLookup: async (_values, _saved, _request, response) => {
+          response.end("{}");
+        },
         remoteAccess: () => ({
           state: "ready",
           configuration: { staffHostname: "staff.example.test" },
@@ -505,6 +512,34 @@ it("boots and closes a separate staff entrance over the real dashboard API", asy
     },
   );
   expect(served.listeners.every(({ server }) => !server.listening)).toBe(true);
+});
+
+it("a signed-in till sees address suggestions available on a connected box", async () => {
+  const [port] = await freePorts(1);
+  let cookie: string;
+  await withServer(
+    { WAITRON_STAFF_PORT: String(port) },
+    async ({ app }) => {
+      const response = await app.request("/api/address-lookup", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ kind: "available" }),
+      });
+      expect(await answerOf(response)).toEqual({ status: 200, body: { available: true } });
+    },
+    async () => {
+      const [cashier] = await seedPersons(suite.db, {
+        displayName: "Cashier",
+        role: "staff",
+        pinHash: fixturePinHash("1234"),
+      });
+      const deviceId = await seedSessionDevice(suite.db);
+      const session = await withTransaction(suite.db, (tx) =>
+        loginWithPin(tx, { personId: cashier!.id, deviceId, pin: "1234" }),
+      );
+      cookie = await sessionCookieForTest(suite.db, session.token);
+    },
+  );
 });
 
 it("lets a till on an allowed origin read the device live endpoint's answer", async () => {
