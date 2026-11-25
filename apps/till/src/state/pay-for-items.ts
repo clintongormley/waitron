@@ -93,8 +93,8 @@ export function itemsAllocated(
 }
 
 /** Why the Pay window offers no Items: from Find a bill; or on a Counter order sent to the kitchen
- * (`placed` in the Counter window, or with no receipt since moved to a table), which Pay for items
- * refuses; else null. */
+ * (in the Counter window's collect stage or `placed` there, or `placed` with no receipt since moved
+ * to a table), which Pay for items refuses; else null. */
 export function itemsBarredReason(open: {
   found: boolean;
   counter: boolean;

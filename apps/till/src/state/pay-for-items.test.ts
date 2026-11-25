@@ -70,7 +70,7 @@ describe("itemsBarredReason", () => {
     status: "open" as const,
   };
 
-  it("bars Items on a Counter order sent to the kitchen, even once its receipt is issued", () => {
+  it("bars Items on a Counter order sent to the kitchen, even once its receipt is issued, not on one unsent", () => {
     expect(itemsBarredReason({ ...at, counter: true, status: "placed" })).toBe(
       "bill_pay.items_barred_counter",
     );
@@ -80,13 +80,13 @@ describe("itemsBarredReason", () => {
     expect(itemsBarredReason({ ...at, counter: true, counterCollect: true })).toBe(
       "bill_pay.items_barred_counter",
     );
+    expect(itemsBarredReason({ ...at, counter: true })).toBeNull();
   });
 
   it("bars Items on a table bill placed with no receipt, but not on a printed one or an open one", () => {
     expect(itemsBarredReason({ ...at, status: "placed" })).toBe("bill_pay.items_barred_counter");
     expect(itemsBarredReason({ ...at, printed: true, status: "placed" })).toBeNull();
     expect(itemsBarredReason(at)).toBeNull();
-    expect(itemsBarredReason({ ...at, counter: true })).toBeNull();
   });
 
   it("bars Items from Find a bill with its own reason", () => {
