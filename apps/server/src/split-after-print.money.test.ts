@@ -368,7 +368,7 @@ describe("Reopen to split carries a card's provider row", () => {
         submissionId: randomUUID(),
         appliedAmount: "5.00",
         tipAmount: "0.00",
-        reason: "El cliente pagó de más",
+        reason: "The guest overpaid",
         override: { personId: venue.adminId, pin: "1234" },
       },
     );

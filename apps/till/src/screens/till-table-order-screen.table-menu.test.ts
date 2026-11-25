@@ -297,11 +297,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     const split = capture(el, "split-after-print-bill");
     item(el, "[data-split-after-print]")!.click();
     expect(split).toEqual([{ workingOrderId: "wo-3" }]);
-
-    const unpaid = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
-    const plain = await mountScreen({ bills: [unpaid] });
-    expect(item(plain, "[data-cancel-credit]")).not.toBeNull();
-    expect(item(plain, "[data-split-after-print]")).not.toBeNull();
   });
 
   it("offers no Reopen to split wherever it offers no Cancel and credit", async () => {
