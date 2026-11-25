@@ -297,7 +297,7 @@ are unchanged by this pass. Q46, on selling by weight, was added afterwards the 
 Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494). Q47, on keeping the
 later records of a chain unsent, was added on 2026-10-12 as S19 at the owner's request; the Word
 copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were added on 2026-10-18
-(A793) and are not in this list yet.
+(A793) and are not in this list yet. Nor is Q16, reopened on 2026-11-25 with Q11(a) and (d).
 
 ### What happened to each question sent on 6 October
 
@@ -2643,6 +2643,16 @@ mechanics). The convenio side can be asked directly at `comunicacion.sepri@corre
 
 ### Q16. Where may an *active* cloud SIF run — issuing invoices from abroad? (added 2026-08-01)
 
+> **Reopened 2026-11-25 (owner): for the next list sent to the adviser.** The 2026-09-05 closing below
+> rested on cloud instances being in Spain. On 2026-11-06 the owner said venue data "can be anywhere in
+> Europe", so the question is live for a venue hosted elsewhere in the EU (Cloud's plans keep Spanish data,
+> logs and keys in AWS Spain, and its full-scale test runs are in Stockholm). Ask it for a server **inside
+> the EU** only. Each venue files for itself under its own certificate, a company seal or a representative
+> certificate, so the Spanish text's "certificado de sello de entidad" becomes "certificado (de sello o de
+> representante)". Send Q11(a) and (d), whether we may hold that key and whether the kind of certificate
+> changes the answer, with it. Until answered, the working reading is best guess: nothing found forbids it
+> inside the EU, and ROF art. 22.2's prior notice may apply.
+
 > **Closed 2026-09-05 by an owner decision, not an answer: cloud instances are hosted in Spain.** The
 > premise — a SIF operating from abroad — does not arise, for a cloud-only primary or for a promoted
 > cloud standby. Do not send this question. The Q11/Q12 custody remnant folded in here dies with it
@@ -4140,8 +4150,8 @@ claims were checked in primary sources; live-service acceptance remains a separa
 - **Q9(a) is the standing consulta candidate**, and it is a lawyer's question. RD-ley 15/2025 moved
   the obligation to January 2027, so a 3–6 month consulta fits comfortably — file it rather than
   building on an opinion.
-- *(2026-09-30: out of date. Q16 was closed on 2026-09-05 by an owner decision, not an answer:
-  cloud instances are hosted in Spain. See its banner. Do not send it.)* **Q16 is the live
+- *(2026-11-25: reopened, see its banner; send it. 2026-09-30: out of date, Q16 having been closed on
+  2026-09-05 by an owner decision that cloud instances are hosted in Spain.)* **Q16 is the live
   architecture question**, and only if a cloud-primary or standalone topology is on
   the table. It absorbs the retired **Q11/Q12** (certificate custody in a hosted deployment): under
   the default architecture (client's own local server is the SIF) that custody question does not
