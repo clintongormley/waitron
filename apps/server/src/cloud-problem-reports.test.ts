@@ -26,11 +26,13 @@ async function fixture() {
   const venueDir = dirname(suite.db.get<{ file: string }>(sql`pragma database_list`)!.file);
   let registration: string | undefined = "first";
   const delivered = vi.fn<CloudConnection["sendStaffReport"]>(async () => "sent");
+  const readRegistration = vi.fn(async () => registration);
   const log = vi.fn();
   let now = new Date("2026-01-01T00:00:00Z");
   return {
     stateDir,
     delivered,
+    readRegistration,
     log,
     setNow: (time: string) => {
       now = new Date(time);
@@ -51,7 +53,7 @@ async function fixture() {
         now: () => now,
         log,
         connection: {
-          errorReportRegistration: async () => registration,
+          errorReportRegistration: readRegistration,
           sendStaffReport: delivered,
         },
       }),
@@ -393,10 +395,17 @@ it("refuses a preview replaced by a newer one while its send was being checked",
   const reports = f.reports();
   const preview = await reports.preview("till", "staff");
   if (!preview.available) throw new Error("Preview unavailable");
-  const sending = reports.send("till", "staff", preview.id);
-  const newer = await reports.preview("till", "staff");
-  await expect(sending).rejects.toMatchObject({ code: "cloud.request_invalid" });
-  expect(newer.available).toBe(true);
+  let replaced = false;
+  f.readRegistration.mockImplementationOnce(async () => {
+    const newer = await reports.preview("till", "staff");
+    expect(newer.available).toBe(true);
+    replaced = true;
+    return "first";
+  });
+  await expect(reports.send("till", "staff", preview.id)).rejects.toMatchObject({
+    code: "cloud.request_invalid",
+  });
+  expect(replaced).toBe(true);
   expect(f.delivered).not.toHaveBeenCalled();
 });
 
