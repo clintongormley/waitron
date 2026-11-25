@@ -737,7 +737,8 @@ export class TillBasket extends LitElement {
 
   /**
    * A pick's own allergens and diet, read live from the dish's offer rather than frozen onto the line.
-   * `undefined` when no offered list names the product, so the row claims no empty declaration.
+   * `undefined` when the list it was taken from does not offer it, so the row claims no empty
+   * declaration.
    */
   #extraOwnNutrition(
     line: OrderLine,
@@ -761,7 +762,7 @@ export class TillBasket extends LitElement {
           };
     }
     const item = (line.product.offeredModifiers ?? [])
-      .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
+      .flatMap((entry) => (entry.kind === "extras" && entry.id === extra.listId ? entry.items : []))
       .find((candidate) => candidate.productId === extra.productId);
     return item === undefined
       ? undefined

@@ -310,18 +310,19 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
     .map((part) => ({ lineNo, ...part, units }));
 }
 
+/**
+ * `product` with the declarations of the one of `liveProducts` that is its own menu item. Never
+ * those of another menu's offer of the same product, whose published allergens can differ: a
+ * dish, variant or extra that its own menu item does not hold keeps what it says.
+ */
 export function refreshProductDeclarations(
   product: TillProduct,
   liveProducts: readonly TillProduct[],
 ): TillProduct {
-  const live =
-    liveProducts.find(
-      (candidate) =>
-        candidate.menuItemId !== undefined && candidate.menuItemId === product.menuItemId,
-    ) ??
-    liveProducts.find(
-      (candidate) => (candidate.productId ?? candidate.id) === (product.productId ?? product.id),
-    );
+  const live = liveProducts.find(
+    (candidate) =>
+      candidate.menuItemId !== undefined && candidate.menuItemId === product.menuItemId,
+  );
   if (live === undefined) return product;
   const own =
     product.variantId === undefined || product.variantId === live.variantId
@@ -345,7 +346,9 @@ export function refreshProductDeclarations(
             ...entry,
             items: entry.items.map((item) => {
               const current = (live.modifierAvailability ?? live.offeredModifiers)
-                ?.flatMap((list) => (list.kind === "extras" ? list.items : []))
+                ?.flatMap((list) =>
+                  list.kind === "extras" && list.id === entry.id ? list.items : [],
+                )
                 .find((candidate) => candidate.productId === item.productId);
               return current === undefined
                 ? item

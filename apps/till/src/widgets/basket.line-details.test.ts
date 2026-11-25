@@ -14,6 +14,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 const dish: TillProduct = {
   id: "soup",
+  menuItemId: "offer-soup",
   name: "Staff soup",
   customerName: { en: "Customer soup" },
   unitPrice: "5.00",
@@ -27,7 +28,7 @@ afterEach(cleanupWidgets);
 
 async function opening() {
   const store = new WorkingOrderStore();
-  store.addProduct({ ...dish, id: "other", name: "Other dish" }, "1");
+  store.addProduct({ ...dish, id: "other", menuItemId: "offer-other", name: "Other dish" }, "1");
   store.addProduct(dish, "2", { note: "No salt" });
   const { el } = await mountWidget<TillBasket>("till-basket", { store, lineDetails: true });
   return { store, el, line: store.lines[1]! };

@@ -443,7 +443,7 @@ it("refreshes an open choice without replacing its staged selection or prices", 
   expect(store.lines).toHaveLength(0);
 });
 
-it("updates the open information window from the current product declarations", async () => {
+it("updates the open information window from its offer's new declarations", async () => {
   const { el, button, store } = await mount();
   button.dispatchEvent(
     new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),

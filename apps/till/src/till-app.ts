@@ -7056,19 +7056,51 @@ export class TillApp extends LitElement {
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     if (loaded && zoneOffers.context !== undefined)
       this.#store.setDiningStart(zoneOffers.context.dining ?? null);
-    if (loaded) {
-      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
-      const keep = new Set(
-        this.#store.lines.flatMap((line) => {
-          const id = line.workingOrderLineId;
-          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
-            ? []
-            : [id];
-        }),
-      );
-      this.#store.refreshDeclarations(this.#counterOffers.products(), keep);
-    }
+    if (loaded) this.#refreshCounterDeclarations();
     this.#showCounterOffers();
+  }
+
+  #refreshCounterDeclarations(): void {
+    const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+    const keep = new Set(
+      this.#store.lines.flatMap((line) => {
+        const id = line.workingOrderLineId;
+        return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+          ? []
+          : [id];
+      }),
+    );
+    this.#store.refreshDeclarations(
+      this.#counterOffers.products(),
+      this.#counterSetMenuLookup(),
+      keep,
+    );
+  }
+
+  /** The recorded copies the open order came with hold the allergens published when it was read. */
+  async #rereadCounterSetMenuCopies(): Promise<void> {
+    const id = this.#currentCounterSetMenuBill?.id;
+    if (id === undefined || this.stage === "collect") return;
+    const visit = this.#store.loadGeneration;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const current = () =>
+      visit === this.#store.loadGeneration && session === this.#operatorSession && api === this.api;
+    try {
+      const { setMenuCopies = [] } = await api.retrieveWorkingOrder(id);
+      const bill = this.#currentCounterSetMenuBill;
+      if (bill === undefined || !current()) return;
+      const read = new Map(setMenuCopies.map((copy) => [copy.key, copy]));
+      this.#counterSetMenuBill = {
+        ...bill,
+        setMenuCopies: bill.setMenuCopies?.map((copy) => read.get(copy.key) ?? copy),
+      };
+      this.#refreshCounterDeclarations();
+      this.requestUpdate();
+    } catch {
+      // The next poll finds the offers moved, and asks again.
+      if (current()) this.#counterOffers.liveFields = undefined;
+    }
   }
 
   #showCounterOffers(): void {
@@ -7127,12 +7159,17 @@ export class TillApp extends LitElement {
     const { versions } = this.#tableOffers;
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
       this.#draftRefreshDue = true;
-    const sync = this.#draftSync;
     this.#reshowDraftOffers();
-    sync?.store.refreshDeclarations(this.#tableOffers.products());
-    this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
+    const products = this.#tableOffers.products();
+    this.#refreshDraftDeclarations(products);
+    this.#partylessDraft.refreshDeclarations(products);
     this.#markRounds(true);
     this.#markDraft("zone");
+  }
+
+  #refreshDraftDeclarations(products: readonly TillProduct[]): void {
+    const sync = this.#draftSync;
+    sync?.store.refreshDeclarations(products, this.#tableSetMenuLookup(sync.billId));
   }
 
   /** A round refused because a dish in it cannot be sold as it stands is marked against the table's
@@ -7567,6 +7604,7 @@ export class TillApp extends LitElement {
         }
         this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
+        void this.#rereadCounterSetMenuCopies();
       } catch {
         return "failed";
       }
@@ -15124,6 +15162,7 @@ export class TillApp extends LitElement {
         this.#syncDraftBillStatus();
         if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {
           this.#reshowDraftOffers();
+          this.#refreshDraftDeclarations([]);
           this.#markDraft("bill");
         }
         answer.balance = this.#loadBillBalance(balance);

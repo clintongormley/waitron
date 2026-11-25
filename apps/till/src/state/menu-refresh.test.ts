@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ProductAllergens } from "@waitron/shared";
 import {
   lineBlock,
   refreshBasket,
@@ -6,7 +7,7 @@ import {
   withUnavailable,
   refreshProductDeclarations,
 } from "./menu-refresh.js";
-import { menuOfferToTillProduct, type TillMenuOffer } from "../api/client.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
 import type { OrderLine } from "./working-order.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
@@ -1082,24 +1083,84 @@ describe("refreshProductDeclarations", () => {
     expect(chosen.allergens).toEqual({ milk: {} });
   });
 
-  it("takes null and empty declarations by product identity across offers", () => {
+  it("takes null and empty declarations from the dish's own offer and nothing from another menu's offer of the product", () => {
     const before = menuOfferToTillProduct(
       { ...burger, allergens: { milk: {} }, dietaryDeclarations: ["vegan"] },
       "v1",
     );
-    const live = menuOfferToTillProduct({
-      ...burger,
-      id: "another-offer",
-      allergens: null,
-      dietaryDeclarations: [],
-      diet: null,
-      dietOverride: null,
-    });
-    const next = refreshProductDeclarations(before, [live]);
+    const own = menuOfferToTillProduct(
+      { ...burger, allergens: null, dietaryDeclarations: [], diet: null, dietOverride: null },
+      "v2",
+    );
+    const otherMenu = menuOfferToTillProduct(
+      { ...burger, id: "another-offer", menuId: "dinner", allergens: { fish: {} } },
+      "v2",
+    );
+    const next = refreshProductDeclarations(before, [otherMenu, own]);
     expect(next.allergens).toBeNull();
     expect(next.dietaryDeclarations).toEqual([]);
     expect(next.menuItemId).toBe("offer-burger");
+    expect(refreshProductDeclarations(before, [otherMenu])).toBe(before);
     expect(refreshProductDeclarations(before, [])).toBe(before);
+  });
+
+  it("keeps a variant's declarations when its offer no longer holds that variant", () => {
+    const dish = { ...burger, allergens: { milk: {} } };
+    const before = {
+      ...menuOfferToTillProduct({ ...dish, variants: [variant("small", "7.00")] }, "v1"),
+      variantId: "small",
+      allergens: { fish: {} },
+    };
+    const live = menuOfferToTillProduct({ ...dish, variants: [variant("large", "9.00")] }, "v2");
+    expect(refreshProductDeclarations(before, [live]).allergens).toEqual({ fish: {} });
+  });
+
+  it("refreshes an extra offered by two lists from the item of its own list", () => {
+    const listing = (first: ProductAllergens, second: ProductAllergens | undefined) =>
+      menuOfferToTillProduct(
+        {
+          ...burger,
+          offeredModifiers: [
+            extrasList("toppings", [{ ...extraItem("cheese", "1.00"), addAllergens: first }]),
+            extrasList(
+              "sides",
+              second === undefined
+                ? []
+                : [
+                    {
+                      ...extraItem("cheese", "2.00"),
+                      addAllergens: second,
+                      suitableFor: ["vegetarian"],
+                    },
+                  ],
+            ),
+          ],
+        },
+        "v1",
+      );
+    const shown = (product: TillProduct) =>
+      [product.offeredModifiers!, product.modifierAvailability!].map((lists) =>
+        lists.flatMap((list) =>
+          list.kind === "extras" ? list.items.map((item) => [list.id, item.addAllergens]) : [],
+        ),
+      );
+    const before = listing({ milk: {} }, { eggs: {} });
+
+    const both = [
+      ["toppings", { fish: {} }],
+      ["sides", { sesame: {} }],
+    ];
+    expect(
+      shown(refreshProductDeclarations(before, [listing({ fish: {} }, { sesame: {} })])),
+    ).toEqual([both, both]);
+    const dropped = [
+      ["toppings", { fish: {} }],
+      ["sides", { eggs: {} }],
+    ];
+    expect(shown(refreshProductDeclarations(before, [listing({ fish: {} }, undefined)]))).toEqual([
+      dropped,
+      dropped,
+    ]);
   });
 });
 
