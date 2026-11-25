@@ -121,6 +121,7 @@ function renderReceipt(result: TillSaleResult, language: string) {
         const { caption, indent } = element;
         const prefix =
           typeof indent === "object" && indent.after.startsWith(" ") ? indent.after : undefined;
+        const count = prefix?.trimStart();
         return html`<p
           class="receipt-line receipt-amount"
           data-align=${alignment}
@@ -128,10 +129,12 @@ function renderReceipt(result: TillSaleResult, language: string) {
           ?data-double=${element.style?.double}
         >
           ${
-            prefix === undefined
+            prefix === undefined || count === undefined
               ? html`<span style=${styleMap(indentation(indent))}>${caption.trimStart()}</span>`
-              : html`<span class="receipt-counted-extra"
-                  ><span>${prefix}</span><span>${caption.slice(prefix.length)}</span></span
+              : html`<span
+                  class="receipt-counted-extra"
+                  style=${styleMap(indentation(prefix.length - count.length))}
+                  ><span>${count}</span><span>${caption.slice(prefix.length)}</span></span
                 >`
           }
           <span>${element.amount}</span>
