@@ -176,7 +176,7 @@ export class WtPriceInput extends WtInput {
       :host([align-amount-end]) .fixed .amount-box {
         --amount-end-inset: 0px;
         flex: 1;
-        min-width: 0;
+        min-inline-size: var(--wt-tap-min);
       }
 
       :host([align-amount-end]) .fixed .field-control {
@@ -187,6 +187,7 @@ export class WtPriceInput extends WtInput {
       }
 
       :host([align-amount-end]) .fixed span.unit {
+        margin-inline-start: auto;
         padding-inline-start: var(--wt-space-1);
       }
 

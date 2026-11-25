@@ -1198,6 +1198,17 @@ test("an end-aligned amount sits next to its fixed unit at the end of the field"
   expect(box.getBoundingClientRect().right - unitBox.right).toBeLessThan(4);
 });
 
+test("a long fixed unit wraps before it hides an end-aligned amount", async () => {
+  const el = await mount(
+    '<wt-price-input label="Juice" unit="millilitres per standard serving" fixed-unit align-amount-end value="250" style="width: 400px"></wt-price-input>',
+  );
+  const { input } = field(el);
+  const unit = el.shadowRoot!.querySelector<HTMLElement>('[part="unit"]')!;
+  el.style.width = `${unit.getBoundingClientRect().width + 12}px`;
+  expect(input.getBoundingClientRect().width).toBeGreaterThanOrEqual(32);
+  expect(unit.getBoundingClientRect().top).toBeGreaterThan(input.getBoundingClientRect().top);
+});
+
 for (const locale of ["en", "es"]) {
   for (const separator of [".", ","]) {
     test(`decimal input accepts ${separator} in ${locale} without changing cents`, async () => {
