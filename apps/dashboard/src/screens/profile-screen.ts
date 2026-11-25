@@ -1196,7 +1196,7 @@ export class ProfileScreen extends LitElement {
                   data-test="save"
                   ?disabled=${s.unchanged || this.busy || form.blocked}
                   @click=${() => void this.#save()}
-                  >${t(this.mode === "remove" ? "action.remove" : this.mode === "passkey" ? "action.add" : "action.save")}</wt-button
+                  >${t(this.mode === "remove" || this.mode === "unlink-google" ? "action.remove" : this.mode === "passkey" ? "action.add" : "action.save")}</wt-button
                 >`
           }
         </wt-form-actions>
