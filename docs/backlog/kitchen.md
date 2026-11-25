@@ -153,8 +153,8 @@ refusals still stop the save when encountered first. Checks such as paid work, s
 allowed options can refuse a dish before its started check. An unchanged dish or a quantity
 increase on its own leaves the started work alone.
 
-Under the earlier ruling, a dish the kitchen has started is refused
-first. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as
+For a change to one dish, the started check comes before the station's changes-after-sending
+policy. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as
 started: the extra goes to the kitchen as a new line, and Changes after sending still decides it. Otherwise the dish's own station and the station of each extra routed elsewhere must all
 allow the change. A dish with no kitchen record, on it or on any of its extras, can be recalled whatever the
 stations allow (A773-1 open

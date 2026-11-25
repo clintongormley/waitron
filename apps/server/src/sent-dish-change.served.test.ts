@@ -162,6 +162,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
   it.each([
     "waiting first",
     "started first",
+    "waiting then served then started",
     "waiting omitted",
     "waiting and started omitted",
     "waiting omitted after a menu publish",
@@ -169,6 +170,9 @@ describe("the whole-basket save of a bill with a sent dish", () => {
     const names = ["Steak", "Red wine bottle", "House salad", "Small beer"] as const;
     const [steak, ...otherItems] = names;
     const billId = await firedTabOf(steak, "1", ...otherItems);
+    if (scenario === "waiting then served then started") {
+      await inTx(venue, (tx) => serveLine(tx, venue.cfg, billId, 2));
+    }
     const lineNos = [1, 2, 3, 4];
     const originals = await Promise.all(lineNos.map((lineNo) => lineOf(billId, lineNo)));
     const [waiting, sent, started, kept] = originals.map((line, index) => ({
@@ -196,6 +200,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       const lines = {
         "waiting first": [...edited, sent!],
         "started first": [...edited].reverse().concat(sent!),
+        "waiting then served then started": [edited[0]!, { ...sent!, note: "a glass" }, edited[1]!],
         "waiting omitted": [edited[1]!, sent!],
         "waiting and started omitted": [],
         "waiting omitted after a menu publish": [
@@ -209,8 +214,6 @@ describe("the whole-basket save of a bill with a sent dish", () => {
         status: 409,
         json: { code: "ticket.already_started", params: { ticketItemId: ticket!.id } },
       });
-      expect(await Promise.all(lineNos.map((lineNo) => lineOf(billId, lineNo)))).toEqual(originals);
-
       if (scenario === "waiting first") {
         for (const quantity of ["1", "2"]) {
           expect(
@@ -221,6 +224,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
           });
         }
       }
+      expect(await Promise.all(lineNos.map((lineNo) => lineOf(billId, lineNo)))).toEqual(originals);
     } finally {
       await inTx(venue, async (tx) => {
         for (const [id, policy] of stations) await setChangesAfterSending(tx, policy, [id]);
