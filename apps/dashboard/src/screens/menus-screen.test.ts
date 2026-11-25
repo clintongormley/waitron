@@ -10770,8 +10770,7 @@ describe("publishing", () => {
   it("says there is nothing to publish when the menu matches its live version", async () => {
     const client = api({
       getMenuPreview: vi.fn().mockResolvedValue({
-        clashes: [],
-        hash: LUNCH_HASH,
+        ...lunchPreview(),
         changes: [],
         warnings: [],
         status: {
@@ -10781,8 +10780,7 @@ describe("publishing", () => {
           publishedAt: PUBLISHED_AT,
           hash: LUNCH_HASH,
         },
-        document: lunchDocument(),
-      }),
+      } satisfies MenuPreview),
     });
     const el = await mount(client, PREVIEW_PATH);
     await vi.waitFor(() =>

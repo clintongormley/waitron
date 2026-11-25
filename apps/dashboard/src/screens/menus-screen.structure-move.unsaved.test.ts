@@ -61,6 +61,7 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
     }),
     status: async () => ({ state: "unpublished", clashes: 0 }),
     preview: async () => ({
+      setMenuProblems: [],
       live: null,
       clashes: [],
       hash: "b".repeat(64),
