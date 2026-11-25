@@ -5573,6 +5573,8 @@ export class TillApp extends LitElement {
       this.errorKey = "boot.error";
       return;
     }
+    // Staff can sell while the first identity read is still pending.
+    if (!chooseDevice && this.#makeNow.source === undefined) this.#makeNow.selectDevice(Symbol());
     this.#setScreen("lock");
     if (chooseDevice && (await this.#openDevChooser(overtaken))) return;
     try {
@@ -5702,9 +5704,6 @@ export class TillApp extends LitElement {
         this.#makeNow.selectDevice(undefined);
         if (await this.#openDevChooser(overtaken)) return;
         this.frontDoor = "enrol";
-      } else if (this.#makeNow.source === undefined) {
-        // A sellable till can show the instruction even when there is no device list to update.
-        this.#makeNow.selectDevice(Symbol());
       }
     }
     this.#configureSessionActivity();

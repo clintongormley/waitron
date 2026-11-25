@@ -1,7 +1,11 @@
 # Till and kitchen backlog repairs
 
 **Watcher, 06:12 on 25 November.** Keep the kitchen labels and slips as built. The till pull
-request covers points 1 and 2 and records that kitchen decision in the backlog.
+request covers points 1 and 2 and records that kitchen decision in the backlog. Point 3 below
+records the original proposal.
+
+**Watcher, 09:48 on 25 November.** Show instructions while the device is unconfirmed, using a
+temporary list with no saved device key.
 
 Staff can keep or dismiss Make now through a device recheck, answer a required choice on a recalled
 dish off the live menu, and tell two same-numbered kitchen groups apart after a join.

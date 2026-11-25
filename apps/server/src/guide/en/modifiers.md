@@ -105,8 +105,8 @@ products before you confirm. Deleting cannot be undone.
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
 answer is stored as the wording that was chosen. An extra picked from a deleted list stays on a
 parked counter order with its charge. To remove it, open the dish and save a change. If the dish
-is off the menu and asks for a new choice, answer it and save first. The next change you save on
-that dish removes the extra.
+is off the menu and asks for a new choice, answer it and save first. Reopen the dish and save a
+change to remove the extra.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes

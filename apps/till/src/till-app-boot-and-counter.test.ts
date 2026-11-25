@@ -1768,7 +1768,8 @@ describe("till-app content languages", () => {
 });
 
 describe("till-app receipt issuance", () => {
-  it.each([true, false])("shows Make now after cash payment, device known %s", async (known) => {
+  const identityChecks = ["ready", "refused", "waiting"];
+  it.each(identityChecks)("Make now after cash, identity %s", async (check) => {
     const item = {
       lineId: "lager-pay",
       name: "Lager",
@@ -1780,12 +1781,10 @@ describe("till-app receipt issuance", () => {
       note: null,
     };
     const client = new TillClient("", async () => Response.json({ madeHere: [item] }));
+    const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "server.internal", status: 500 });
+    if (check === "waiting") getDeviceIdentity.mockReturnValueOnce(new Promise(() => {}));
     const { el } = await mountApp({
-      ...(!known
-        ? {
-            getDeviceIdentity: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
-          }
-        : {}),
+      ...(check === "ready" ? {} : { getDeviceIdentity }),
       onMadeHere: client.onMadeHere.bind(client),
       recordSale: vi.fn(async () => {
         await client.getTill();
@@ -1798,7 +1797,7 @@ describe("till-app receipt issuance", () => {
     await flush(el);
     const card = el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!;
     await vi.waitFor(() => expect(card.textContent).toContain("Lager"));
-    expect(localStorage.getItem("waitron.makeNow.till-dev") !== null).toBe(known);
+    expect(localStorage.getItem("waitron.makeNow.till-dev") !== null).toBe(check === "ready");
   });
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {

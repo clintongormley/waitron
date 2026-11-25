@@ -1644,7 +1644,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     });
   });
 
-  it("reads the choices needed to save a recalled dish removed from the live menu", async () => {
+  it("reads the choices needed to save a dish after its menu is withdrawn", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
