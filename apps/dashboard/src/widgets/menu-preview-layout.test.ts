@@ -53,6 +53,8 @@ it.each([
     );
     const changes = el.shadowRoot!.querySelector<HTMLElement>('[data-test="changes-pane"]')!;
     const menu = el.shadowRoot!.querySelector<HTMLElement>('[data-test="document-pane"]')!;
+    expect(changes.querySelector("#changes-heading")).not.toBeNull();
+    expect(menu.querySelector('[data-test="document"]')).not.toBeNull();
     expect(changes.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

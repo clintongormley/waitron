@@ -48,6 +48,7 @@ const LISTED: MenuPublicationsAnswer = {
 };
 
 const PREVIEW = {
+  setMenuProblems: [],
   clashes: [],
   hash: "d".repeat(64),
   changes: [],

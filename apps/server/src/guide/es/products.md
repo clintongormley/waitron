@@ -401,10 +401,10 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
-Elige **Revisar y publicar** en el encabezado de la carta. Resuelve lo que impide publicar al
-principio de **Vista previa** y abre los avisos que quieras revisar. Pulsa el nombre de un
-elemento en la lista de cambios para encontrarlo en la carta propuesta. En el móvil, cambia
-entre **Cambios** y **Carta**. Usa el selector de idioma sobre la carta para revisar las
+Elige **Revisar y publicar** en el encabezado de la carta. En **Corrige antes de publicar**,
+elige un precio o abre el menú que debas corregir. Después, abre los avisos que quieras revisar.
+Pulsa el nombre de un elemento en la lista de cambios para encontrarlo en la carta propuesta.
+En el móvil, cambia entre **Cambios** y **Carta**. Usa el selector de idioma sobre la carta para revisar las
 traducciones o ver los **Nombres internos**.
 
 Cuando tengas todo listo, elige **Publicar ahora** o **Publicar más tarde** en el encabezado. Para

@@ -82,6 +82,9 @@ export class MenuDocumentTree extends LitElement {
         white-space: nowrap;
         font-variant-numeric: tabular-nums;
       }
+      wt-data-table::part(price-clash) {
+        color: var(--wt-color-danger);
+      }
       wt-data-table[narrow]::part(preview-row) {
         max-inline-size: calc(
           100cqw - var(--wt-tap-min) - (min(var(--tree-depth, 0), 4) + 2) * var(--wt-space-3)
@@ -307,13 +310,14 @@ export class MenuDocumentTree extends LitElement {
       ({ productId, variantId }) =>
         productId === offer?.productId && (variant === undefined || variantId === variant.id),
     );
-    const price =
-      item && !disputed
+    const price = disputed
+      ? t("menu_preview.price_clash")
+      : item
         ? tilePrice(item.unitPrice, variant ? [] : offer!.variants, unit, locale)
         : set && formatMoney(set.terms.price, locale);
     return html`<span part="preview-row"
       >${menuTreeCell(folder ? "section" : "product", media, stack)}
-      ${price ? html`<span part="preview-price" data-test="price">${price}</span>` : nothing}
+      ${price ? html`<span part=${disputed ? "preview-price price-clash" : "preview-price"} data-test="price">${price}</span>` : nothing}
     </span>`;
   }
 

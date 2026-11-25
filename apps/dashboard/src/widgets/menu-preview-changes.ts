@@ -121,7 +121,9 @@ export function changeWords(change: MenuChange, subject: (name: string) => unkno
             fields: change.fields.map((field) => t(SECTION_FIELDS[field])).join(", "),
           });
     case "order_changed":
-      return subject(change.list.length ? place(change.list) : t("menus.move_top_level"));
+      return words("menu_preview.reordered", {
+        name: change.list.length ? place(change.list) : t("menus.move_top_level"),
+      });
     case "home_shortcuts_changed":
       return subject(t("menu_preview.home_shortcuts_changed"));
     case "home_display_changed":

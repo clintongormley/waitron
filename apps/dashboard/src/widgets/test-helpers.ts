@@ -137,7 +137,7 @@ export function attachScheduleAction(panel: MenuPublicationsPanel): void {
       const preview = panel.preview;
       render(
         available && preview
-          ? scheduleAction((event) =>
+          ? scheduleAction(preview, (event) =>
               panel.openSchedule(event.currentTarget as HTMLElement, preview),
             )
           : nothing,

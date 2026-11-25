@@ -332,7 +332,13 @@ it("places every change kind in its named group and keeps the groups in working 
       from: 1,
       to: 2,
     },
-    order_changed: { ...shared, id: "order", kind: "order_changed", listSectionId: null, list: [] },
+    order_changed: {
+      ...shared,
+      id: "order",
+      kind: "order_changed",
+      listSectionId: "mains",
+      list: ["Mains"],
+    },
     home_shortcuts_changed: { ...shared, id: "shortcuts", kind: "home_shortcuts_changed" },
     home_display_changed: {
       ...shared,
@@ -342,23 +348,33 @@ it("places every change kind in its named group and keeps the groups in working 
   };
   const el = await mount(fixture(Object.values(kinds).reverse()));
   const groups = [...el.shadowRoot!.querySelectorAll("[data-group]")];
+  const order = el.shadowRoot!.querySelector('[data-change-row="order"]')!;
+  expect(order.textContent?.trim()).toBe("Mains reordered");
+  expect(getComputedStyle(order.parentElement!).listStyleType).toBe("disc");
   expect(
     groups.map((group) => [
       group.querySelector("h3")!.textContent,
       [...group.querySelectorAll("li")].map((row) => row.getAttribute("data-change-row")),
     ]),
   ).toEqual([
-    ["Menu", ["rename"]],
     ["Added", ["set-add", "product-add", "section-add"]],
     ["Removed", ["set-remove", "product-delete", "product-remove", "section-remove"]],
-    ["Moved", ["product-move"]],
     ["Prices", ["price"]],
-    ["Order", ["order"]],
+    ["Order", ["order", "product-move"]],
     [
       "Details",
-      ["extra-max", "extra-portion", "extra-unit", "details", "set-change", "section-change"],
+      [
+        "home-display",
+        "shortcuts",
+        "extra-max",
+        "extra-portion",
+        "extra-unit",
+        "details",
+        "set-change",
+        "section-change",
+        "rename",
+      ],
     ],
-    ["Home page", ["home-display", "shortcuts"]],
   ]);
 });
 

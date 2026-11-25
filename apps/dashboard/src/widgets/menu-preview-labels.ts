@@ -2,26 +2,17 @@ import type { SetMenuChangeField } from "@waitron/shared";
 import type { MenuChange, ProductChangeField, SectionChangeField } from "../api/client.js";
 import type { StringKey } from "../i18n/strings.js";
 
-export const CHANGE_GROUP_ORDER = [
-  "menu",
-  "added",
-  "removed",
-  "moved",
-  "prices",
-  "order",
-  "details",
-  "home",
-] as const;
+export const CHANGE_GROUP_ORDER = ["added", "removed", "prices", "order", "details"] as const;
 export type ChangeGroup = (typeof CHANGE_GROUP_ORDER)[number];
 export const CHANGE_GROUPS: Record<MenuChange["kind"], ChangeGroup> = {
-  menu_renamed: "menu",
+  menu_renamed: "details",
   section_added: "added",
   section_removed: "removed",
   section_changed: "details",
   product_added: "added",
   product_removed: "removed",
   product_deleted: "removed",
-  product_moved: "moved",
+  product_moved: "order",
   set_menu_added: "added",
   set_menu_removed: "removed",
   set_menu_changed: "details",
@@ -31,18 +22,15 @@ export const CHANGE_GROUPS: Record<MenuChange["kind"], ChangeGroup> = {
   extra_portion_changed: "details",
   extra_max_quantity_changed: "details",
   order_changed: "order",
-  home_shortcuts_changed: "home",
-  home_display_changed: "home",
+  home_shortcuts_changed: "details",
+  home_display_changed: "details",
 };
 export const GROUP_LABELS: Record<ChangeGroup, StringKey> = {
-  menu: "menu_preview.group_menu",
   added: "menu_preview.group_added",
   removed: "menu_preview.group_removed",
-  moved: "menu_preview.group_moved",
   prices: "menu_preview.group_prices",
   details: "menu_preview.group_details",
   order: "menu_preview.group_order",
-  home: "menu_preview.group_home",
 };
 
 export const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {

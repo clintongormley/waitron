@@ -4,6 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-card.js";
 import type { MenuView, MenuTarget } from "@waitron/shared";
 import { menuTargetKey } from "@waitron/menu/src/menu-navigation.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -24,7 +25,11 @@ import {
 import { placeName } from "./price-source.js";
 import { setMenuAddress, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import { previewLiveVersion, type MenuPublicationHeading } from "./menu-publication-actions.js";
+import {
+  publicationBlockerCount,
+  previewLiveVersion,
+  type MenuPublicationHeading,
+} from "./menu-publication-actions.js";
 import "./menu-publications.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
 import { changeSource, changeWords } from "./menu-preview-changes.js";
@@ -100,10 +105,22 @@ export class MenuPreviewPanel extends LitElement {
         gap: var(--wt-space-3);
         min-width: 0;
       }
+      .changes-column {
+        display: grid;
+        gap: var(--wt-space-4);
+        min-width: 0;
+      }
       .pane {
         min-width: 0;
       }
+      .changes-pane {
+        display: grid;
+        gap: var(--wt-space-4);
+      }
       @container (width < 800px) {
+        .changes-column {
+          display: contents;
+        }
         .panes[data-view="changes"] .menu-pane,
         .panes[data-view="menu"] .changes-pane {
           display: none;
@@ -115,19 +132,33 @@ export class MenuPreviewPanel extends LitElement {
           align-items: start;
           gap: var(--wt-space-5);
         }
-        .panes .pane {
-          display: block;
-          max-block-size: calc(var(--wt-tap-min) * 12);
-          overflow: auto;
-          scrollbar-gutter: stable;
-        }
         wt-segmented-control {
           display: none;
         }
       }
-      [data-test="changes"] {
+      [data-test="changes"],
+      .blockers ul {
         display: grid;
-        gap: var(--wt-space-3);
+        gap: var(--wt-space-4);
+      }
+      .blockers {
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-danger);
+        border-radius: var(--wt-radius-lg);
+      }
+      .blockers ul {
+        list-style: none;
+        padding-inline-start: 0;
+      }
+      .blockers li {
+        display: grid;
+        gap: var(--wt-space-1);
+        justify-items: start;
+      }
+      .clash-name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .clash-detail {
+        color: var(--wt-color-text-muted);
       }
       section {
         display: grid;
@@ -139,7 +170,15 @@ export class MenuPreviewPanel extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
+      h2[slot="header"] {
+        margin-block-end: var(--wt-space-3);
+        color: var(--wt-color-text);
+      }
+      .blockers h2 {
+        color: var(--wt-color-danger);
+      }
       h3 {
+        color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-md);
       }
       p {
@@ -151,9 +190,8 @@ export class MenuPreviewPanel extends LitElement {
         margin: 0;
         padding-inline-start: var(--wt-space-5);
       }
-      [data-test="changes"] ul {
-        list-style: none;
-        padding-inline-start: 0;
+      .source {
+        display: block;
       }
       li {
         overflow-wrap: anywhere;
@@ -314,7 +352,12 @@ export class MenuPreviewPanel extends LitElement {
 
   #publish(event: Event, confirmed = false): void {
     event.stopPropagation();
-    if (this.failed || this.publishing || this.preview === null || this.preview.clashes.length > 0)
+    if (
+      this.failed ||
+      this.publishing ||
+      this.preview === null ||
+      publicationBlockerCount(this.preview) > 0
+    )
       return;
     if (this.preview.warnings.length && !confirmed) {
       this.confirmingPreview = this.preview;
@@ -397,7 +440,7 @@ export class MenuPreviewPanel extends LitElement {
                   const source = changeSource(change);
                   return html`<li data-change-row=${change.id}>
                     ${changeWords(change, (name) => this.#changeLink(change, name))}
-                    ${source ? html`<span class="source"> · ${source}</span>` : nothing}
+                    ${source ? html`<span class="source">${source}</span>` : nothing}
                   </li>`;
                 })}
               </ul>
@@ -405,11 +448,10 @@ export class MenuPreviewPanel extends LitElement {
           })}
         </div>`,
       );
-    return html`<section>
-      ${this.#renderClashes()} ${this.#renderSetMenuProblems()} ${this.#renderWarnings()}
-      <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
+    return html`<wt-card>
+      <h2 slot="header" id="changes-heading">${t("menu_preview.changes_heading")}</h2>
       ${body}
-    </section>`;
+    </wt-card>`;
   }
 
   #changeLink(change: MenuChange, name: string) {
@@ -442,10 +484,10 @@ export class MenuPreviewPanel extends LitElement {
   #renderWarnings() {
     const warnings = this.failed ? [] : (this.preview?.warnings ?? []);
     if (warnings.length === 0) return nothing;
-    return html`<section class="warnings" aria-labelledby="warnings-heading">
-      <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
+    return html`<wt-card>
+      <h2 slot="header">${t("menu_preview.warnings_heading")}</h2>
       ${renderFoldedMenuWarnings(warnings, this.menuName)}
-    </section>`;
+    </wt-card>`;
   }
 
   /** The whole menu, as the publish would make it live, or as it is live when there is nothing to
@@ -516,118 +558,102 @@ export class MenuPreviewPanel extends LitElement {
       });
   }
 
-  #renderClashes() {
-    const clashes = this.preview?.clashes ?? [];
-    if (!clashes.length) return nothing;
-    return html`<section>
-      <p class="error" role="status" data-test="clash-count">
-        ${fill(clashes.length === 1 ? "menu_preview.clash_count" : "menu_preview.clashes_count", { count: String(clashes.length) })}
-      </p>
-      <ul data-test="clashes">
-        ${clashes.map((clash) => {
-          const offer = Object.values(this.preview!.document.offers).find(
-            (offer) => offer.productId === clash.productId,
+  #renderBlockers(preview: MenuPreview) {
+    const count = publicationBlockerCount(preview);
+    if (count === 0) return nothing;
+    const href = `/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/prices/filter/clashes`;
+    return html`<wt-card class="blockers" data-test="publish-blockers">
+      <h2 slot="header" id="publish-blockers-heading">
+        ${fill("menu_preview.blockers_heading", { count: String(count) })}
+      </h2>
+      <ul role="list" data-test="clashes">
+        ${preview.clashes.map((clash) => {
+          const offer = Object.values(preview.document.offers).find(
+            ({ productId }) => productId === clash.productId,
           );
           const name = offer?.name ?? clash.productId;
           const variant = clash.variantId
-            ? (offer?.variants.find((variant) => variant.id === clash.variantId)?.name ??
-              clash.variantId)
+            ? (offer?.variants.find(({ id }) => id === clash.variantId)?.name ?? clash.variantId)
             : null;
-          const candidates = clash.candidates
-            .map((candidate) =>
-              fill("menu_prices.source_candidate", {
-                price:
-                  "value" in candidate
-                    ? formatMoney(candidate.value, currentLocale())
-                    : t("menu_prices.clash"),
-                place: placeName(candidate.place, t),
-              }),
-            )
-            .join(", ");
-          const words = fill("menu_prices.clash_prices", { candidates });
           return html`<li>
-            ${name}${variant ? ` — ${variant}` : ""}:
-            ${words.replace(/^./, (letter) => letter.toLocaleLowerCase(currentLocale()))}
+            <span class="clash-name">${name}${variant ? ` › ${variant}` : ""}</span>
+            ${clash.candidates.map(
+              (candidate) =>
+                html`<span class="clash-detail">
+                  ${fill("menu_prices.source_candidate", {
+                    price:
+                      "value" in candidate
+                        ? formatMoney(candidate.value, currentLocale())
+                        : t("menu_prices.clash"),
+                    place: placeName(candidate.place, t),
+                  })}
+                </span>`,
+            )}
+            <a data-test="clash-prices" data-own-click href=${href} @click=${this.#openClashes}
+              >${t("menu_preview.choose_price")} <span aria-hidden="true">›</span></a
+            >
           </li>`;
         })}
-      </ul>
-      <a
-        data-test="clash-prices"
-        data-own-click
-        @click=${(event: MouseEvent) => {
-          if (leftToBrowser(event)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          this.dispatchEvent(
-            new CustomEvent("wt-preview-clashes", {
-              detail: {},
-              bubbles: true,
-              composed: true,
-            }),
-          );
-        }}
-        href=${`/menus/menu/${encodeURIComponent(this.preview!.document.menuId)}/view/prices/filter/clashes`}
-        >${t("menu_prices.show_clashes")}</a
-      >
-    </section>`;
-  }
-
-  #renderSetMenuProblems() {
-    const drafts = this.preview?.setMenuProblems ?? [];
-    if (this.failed || drafts.length === 0) return nothing;
-    return html`<section>
-      <h2>${t("menu_preview.set_menu_problems")}</h2>
-      <ul>
-        ${drafts.map(
-          ({ menuId, name, problems }) => html`
-            <li>
-              <a href=${setMenuAddress(menuId)}
-                >${fill(
-                  problems.length === 1
-                    ? "menu_preview.set_menu_problem_count_one"
-                    : "menu_preview.set_menu_problem_count",
-                  { name, count: String(problems.length) },
-                )}</a
-              >
-            </li>
-          `,
+        ${preview.setMenuProblems.map(
+          ({ menuId, name, problems }) =>
+            html`<li>
+              <a href=${setMenuAddress(menuId)}>
+                ${fill(problems.length === 1 ? "menu_preview.set_menu_problem_count_one" : "menu_preview.set_menu_problem_count", { name, count: String(problems.length) })}
+              </a>
+            </li>`,
         )}
       </ul>
-    </section>`;
+    </wt-card>`;
+  }
+
+  #openClashes(event: MouseEvent): void {
+    if (leftToBrowser(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-preview-clashes", {
+        detail: {},
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #renderPanes(preview: MenuPreview) {
     const count = preview.changes.length;
     return html`<div class="panes" data-view=${this.pane}>
-      <wt-segmented-control
-        name="menu-preview-pane"
-        label=${t("menu_preview.pane_label")}
-        hide-label
-        equal-width
-        .value=${this.pane}
-        .options=${[
-          {
-            value: "changes",
-            label:
-              count === 0
-                ? t("menu_preview.pane_changes")
-                : fill("menu_preview.pane_count", { count: String(count) }),
-          },
-          { value: "menu", label: t("menu_preview.pane_menu") },
-        ]}
-        @wt-change=${(event: CustomEvent<{ value: "changes" | "menu" }>) => {
-          event.stopPropagation();
-          this.pane = event.detail.value;
-        }}
-      ></wt-segmented-control>
-      <div
-        class="pane changes-pane"
-        data-test="changes-pane"
-        tabindex="0"
-        role="region"
-        aria-labelledby="changes-heading"
-      >
-        ${this.#renderChanges(preview)}
+      <div class="changes-column">
+        ${this.#renderBlockers(preview)}
+        <wt-segmented-control
+          name="menu-preview-pane"
+          label=${t("menu_preview.pane_label")}
+          hide-label
+          equal-width
+          .value=${this.pane}
+          .options=${[
+            {
+              value: "changes",
+              label:
+                count === 0
+                  ? t("menu_preview.pane_changes")
+                  : fill("menu_preview.pane_count", { count: String(count) }),
+            },
+            { value: "menu", label: t("menu_preview.pane_menu") },
+          ]}
+          @wt-change=${(event: CustomEvent<{ value: "changes" | "menu" }>) => {
+            event.stopPropagation();
+            this.pane = event.detail.value;
+          }}
+        ></wt-segmented-control>
+        <div
+          class="pane changes-pane"
+          data-test="changes-pane"
+          tabindex="0"
+          role="region"
+          aria-labelledby="changes-heading"
+        >
+          ${this.#renderWarnings()} ${this.#renderChanges(preview)}
+        </div>
       </div>
       <div
         class="pane menu-pane"

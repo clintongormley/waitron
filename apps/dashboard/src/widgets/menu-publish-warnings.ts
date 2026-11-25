@@ -3,6 +3,7 @@ import type { MenuPreview } from "../api/client.js";
 import { staffPresentationName } from "@waitron/shared";
 import { localizedName } from "../i18n/localized.js";
 import { fill, t } from "../i18n/t.js";
+import { publicationBlockerCount } from "./menu-publication-actions.js";
 import { leftToBrowser } from "../navigation.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -104,10 +105,7 @@ export function renderFoldedMenuWarnings(warnings: MenuPreview["warnings"], menu
     );
     return count === 0
       ? nothing
-      : html`<wt-disclosure
-          card
-          heading=${fill(count === 1 ? one : many, { count: String(count) })}
-        >
+      : html`<wt-disclosure heading=${fill(count === 1 ? one : many, { count: String(count) })}>
           ${renderMenuWarnings(entries, menuName, true)}
         </wt-disclosure>`;
   });
@@ -152,7 +150,7 @@ export function renderPublishWarningConfirmation(
         variant="primary"
         data-test="publish-confirm"
         .loading=${options.busy}
-        ?disabled=${options.busy || options.preview.clashes.length > 0}
+        ?disabled=${options.busy || publicationBlockerCount(options.preview) > 0}
         @click=${(event: Event) => {
           event.stopPropagation();
           options.confirm();

@@ -46,6 +46,7 @@ const states = ["empty", "loading", "failed", "listed", "cancel dialog", "cancel
 type State = (typeof states)[number];
 
 const PREVIEW = {
+  setMenuProblems: [],
   clashes: [],
   hash: "d".repeat(64),
   changes: [],

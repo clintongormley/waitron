@@ -3377,7 +3377,7 @@ and the staffing grid's block editor in the A761 entry):
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
-  these under it: Publish on a menu's Preview while the menu has clashes, which
+  these under it: Publish on a menu's Preview while the menu has blockers, which
   keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
   editor while the variant window, the image picker or any window the Products screen opens for the
   editor is open, which keeps its own variant while the Products screen is sending a request for the
@@ -5919,9 +5919,10 @@ or **Unpublished**. These words wrap below the title on a phone. A changed live 
 dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
 the heading. On Price overrides, it is outlined while the prices have edits to save or a save is
 sending. On Preview,
-the heading offers **Publish later** and **Publish now** when each action is available. A menu with
-price clashes keeps the line that links to its Price overrides tab filtered to the clashes, in
-`--wt-color-danger`. On the Price overrides tab it uses plain words. See
+the heading offers **Publish later** and **Publish now** when each action is available, or both
+disabled when Preview has blockers. Outside Preview, a menu with price clashes keeps the line that
+links to its Price overrides tab filtered to the clashes, in `--wt-color-danger`. On the Price
+overrides tab it uses plain words. See
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
 beside it.
 
@@ -5953,7 +5954,7 @@ its sentence goes when that field changes, its language is removed or fixed by a
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
 either step's footer, with the refusal's sentence above the buttons.
 
-The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
+Each **Choose a price** link in Preview opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later
 filter choices stay in place through refreshes; an ordinary tab change keeps the remembered choice.
 
@@ -5962,14 +5963,16 @@ the editor heading. Put the Changes pane on the left and the proposed menu on th
 800 px, **Changes** (with a count when there are changes) and **Menu** switch between the same
 panes, which scroll with the page. Scheduled versions go below the panes.
 
-Keep anything that stops publishing at the top of Changes. Show each warning category as a
-counted disclosure, with its details and links inside. Show the warning details in full when
-you ask the manager to confirm publishing or scheduling.
+Put **Fix before publishing** in one card at the top of the left column, and above the view selector
+on phones. Show one row per price clash or set menu with problems. Give each price and its source
+and link to where you can fix it. Leave **Publish now** and **Publish later** visible and disabled
+while the card has any blockers. Put each warning category in a plain disclosure within the Warnings
+card. Show the warning details in full when you ask the manager to confirm publishing or scheduling.
 
-Use one line per change under a small group heading. Added and removed items carry their section
-path. A variant price change names the dish and size and shows both amounts. Say when a price
-is set here or cleared if the amount stays the same. A muted note names where a shared change
-came from and any other menus it affects.
+In the **Unpublished changes** card, use a bullet for each change under Added, Removed, Prices,
+Order or Details. Added and removed items carry their section path. A variant price change names the
+dish and size and shows both amounts. Say when a price is set here or cleared if the amount stays the
+same. Put the source of a shared change and any other menus it affects on their own muted line.
 
 Link the item's name to its proposed row. Expand its ancestors, scroll it into view and mark it
 with `aria-current`. Keep keyboard focus on the link on desktop. On a phone, switch to Menu and
@@ -5977,7 +5980,7 @@ focus the row. Removed rows without a destination read as text. Set-menu names l
 editor while the set menu exists, and Home page changes link to the Home page tab.
 
 Draw the menu as a read-only Structure tree with prices, variant rows, set menus and photos.
-Show prices once they resolve. An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
+Show **Price clash** in the price slot for a disputed price. An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
 and **Expand all** above the tree. Draw the actual translation's language tag and name a missing
 requested language beside its fallback. A replacement preview resets the tree's expansion and
 highlight. Changing the content language makes no request.
@@ -5986,8 +5989,8 @@ Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and
 `menu-preview-navigation.test.ts` beside it; publication and accessibility checks remain beside
 them. Screen freshness checks in `apps/dashboard/src/screens/menus-screen.test.ts` keep the
 displayed snapshot and publish hash together. A failed refresh retires warning confirmation and
-publish controls, drops the Preview heading's old clash count and keeps its known publication
-facts and existing refresh error. Recovery supplies the new count. After a stale-hash refusal,
+publish controls, drops the blockers card and keeps the known publication facts and existing
+refresh error. Recovery supplies the current blockers. After a stale-hash refusal,
 hide the old document while reading its replacement. Changing the dashboard interface language
 rebuilds its screen, so that separate operation reads the preview again.
 
