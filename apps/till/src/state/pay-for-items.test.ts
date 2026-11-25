@@ -542,6 +542,7 @@ describe("previewEdit", () => {
     ["no edit state for a Counter order's whole payment", null, counter, whole, null, false],
     ["no edit state for a found Counter order's whole payment", null, found, whole, null, false],
     ["no edit state for Pay for items on a Counter order", null, counter, items, null, true],
+    ["a held edit state for Pay for items on a Counter order", edit, counter, items, edit, false],
   ] as const)("keeps %s", (_, held, open, choice, expectedEdit, readCounterEdit) => {
     expect(previewEdit(held, open, choice)).toEqual({ expectedEdit, readCounterEdit });
   });
