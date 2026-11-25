@@ -188,7 +188,7 @@ export class WtPriceInput extends WtInput {
 
       :host([align-amount-end]) .fixed span.unit {
         margin-inline-start: auto;
-        padding-inline-start: var(--wt-space-1);
+        padding-inline-start: var(--wt-space-2);
       }
 
       /* A unit too long for the field gives up width before the amount does; its text is cut with

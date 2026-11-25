@@ -1193,7 +1193,7 @@ test("an end-aligned amount sits next to its fixed unit at the end of the field"
   const unitBox = unit.getBoundingClientRect();
   const unitStart = unitBox.left + parseFloat(getComputedStyle(unit).paddingLeft);
   expect(amountStyle.textAlign).toBe("end");
-  expect(unitStart - amountEnd).toBeGreaterThanOrEqual(0);
+  expect(unitStart - amountEnd).toBeGreaterThanOrEqual(8);
   expect(unitStart - amountEnd).toBeLessThan(12);
   expect(box.getBoundingClientRect().right - unitBox.right).toBeLessThan(4);
 });

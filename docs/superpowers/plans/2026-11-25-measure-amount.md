@@ -4,7 +4,7 @@ At Counter or a table, tap a product sold by amount. Type into the field labelle
 
 The owner first asked for a single value in small question 8 on 24 November. In Lane E's questions.md at 10:19 on 25 November, the watcher recorded the owner's revision verbatim: “change of plan. the +- steppers don't make sense here. you enter the volume directly, so show a text field with the name of the product and the field, with the unit embedded in the field (but not editable). don't put "introduce la cantidad" on the handheld button”. The watcher confirmed the work at 14:07 and cleared the mixed-order summary at 15:04. At 15:22 the watcher cleared the layout and input review fixes, replacement pictures on a longer menu, and up to 725 added TypeScript lines for that revision.
 
-At 16:11 the watcher relayed the owner's picture feedback, “i'd right align the number”. A shared input option puts the amount beside its unit at the right edge in Counter, at a table, and when editing an unsent amount. The watcher requested one fresh read of that change and two new pictures, a dark Spanish phone and a wide light Counter. The owner's approval of the new pictures is required before landing.
+At 16:11 the watcher relayed the owner's picture feedback, “i'd right align the number”. A shared input option puts the amount beside its unit at the right edge in Counter, at a table, and when editing an unsent amount. The watcher requested one fresh read of that change and two new pictures, a dark Spanish phone and a wide light Counter. At 16:23 the watcher recorded the owner's response to the new pictures, “slightly more space between the number and the unit, then land it”. The gap increases by one spacing step before the branch goes through CI and lands.
 
 ## One pull request
 
