@@ -1874,6 +1874,25 @@ describe("pressing Give back", () => {
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
     await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledOnce());
   });
+
+  it("gives nothing back when the window is taken away while the preview is asked again", async () => {
+    const api = fakeGiveBackApi();
+    let release!: () => void;
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await reason(el, "complaint");
+    api.previewGiveBack.mockImplementation(
+      (_saleId: string, request: GiveBackRequest) =>
+        new Promise((resolve) => (release = () => resolve(previewFor(request)))),
+    );
+    await type(el, "5");
+    submit(el).click();
+    await vi.waitFor(() => expect(api.previewGiveBack).toHaveBeenCalledTimes(2));
+    el.remove();
+    release();
+    await settle();
+    expect(api.giveBack).not.toHaveBeenCalled();
+  });
 });
 
 describe("layout and focus", () => {
@@ -1894,6 +1913,24 @@ describe("layout and focus", () => {
     await choose(el, "dishes");
     await vi.waitFor(() =>
       expect(dish(el, "croquetas")!.shadowRoot!.contains(focused())).toBe(true),
+    );
+  });
+
+  it("opens a press whose answer was lost with focus on Send again", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await expect(
+      new GiveBackSession(SCOPE, api).submit("sale-1", {
+        request: { purpose: "goodwill", amount: "5.00", extra: "0.00", way: "cash" },
+        reasonId: "complaint",
+        note: null,
+        expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+      }),
+    ).rejects.toThrow();
+    const { el } = await mount(api);
+    const again = root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-send-again]")!;
+    await vi.waitFor(() =>
+      expect(again.contains(focused()) || again.shadowRoot!.contains(focused())).toBe(true),
     );
   });
 

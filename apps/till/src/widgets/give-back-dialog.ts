@@ -162,6 +162,11 @@ export class TillGiveBackDialog extends LitElement {
   readonly #beforeClose = async (reason: LeaveReason) =>
     !this.#writing() &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+  /** Whether the window is still on the page and not closed: once it is not, nothing more is sent.
+   * A write already sent still reaches its outcome. */
+  #open(): boolean {
+    return this.isConnected && this.active;
+  }
   /** A write in flight keeps the window open until its answer can be shown. */
   #writing(): boolean {
     return this.sending || this.underWayBusy;
@@ -192,16 +197,21 @@ export class TillGiveBackDialog extends LitElement {
     super.disconnectedCallback();
   }
   override updated(): void {
-    const step = this.view === null ? "" : (this.purpose ?? "choice");
+    const step =
+      this.step?.kind === "lost" ? "lost" : this.view === null ? "" : (this.purpose ?? "choice");
     if (step === this.#lastStep) return;
     this.#lastStep = step;
     void this.#focusFirstControl();
   }
-  /** A step replaces the control that was pressed, so the new step's first control takes focus. */
+  /** A step replaces the control that was pressed, so the new step's first control takes focus;
+   * a press whose answer was lost, its Send again. */
   async #focusFirstControl(): Promise<void> {
     await this.shadowRoot!.querySelector<WtDialog>("wt-dialog")?.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>(
-      ".body :is(wt-choice-row, wt-switch, wt-price-input, wt-button):not([disabled])",
+    (
+      this.shadowRoot!.querySelector<HTMLElement>("[data-send-again]:not([disabled])") ??
+      this.shadowRoot!.querySelector<HTMLElement>(
+        ".body :is(wt-choice-row, wt-switch, wt-price-input, wt-button):not([disabled])",
+      )
     )?.focus();
   }
   async #load(): Promise<void> {
@@ -437,6 +447,7 @@ export class TillGiveBackDialog extends LitElement {
       this.confirming = true;
       await this.#preview();
       this.confirming = false;
+      if (!this.#open()) return;
       if (JSON.stringify(this.#comparable(this.draft)) !== pressed) {
         this.changedWhileChecking = true;
         return;
@@ -496,7 +507,9 @@ export class TillGiveBackDialog extends LitElement {
   async #askApprover(sending: Sending): Promise<void> {
     this.#approval = sending;
     try {
-      this.approvers = await this.api.listApprovers(sending.rights);
+      const approvers = await this.api.listApprovers(sending.rights);
+      if (!this.#open()) return;
+      this.approvers = approvers;
       this.pinError = null;
     } catch {
       this.#refused({ code: "approvers" });
@@ -588,7 +601,7 @@ export class TillGiveBackDialog extends LitElement {
       this.sending = false;
     }
     this.step = afterCheck(step, check.state);
-    if (check.state !== "completed" || check.preview === null) return;
+    if (check.state !== "completed" || check.preview === null || !this.#open()) return;
     const { preview } = check;
     await this.#authorized({
       send: (override) => this.session.sendRest(this.saleId, preview, override),
