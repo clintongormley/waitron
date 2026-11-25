@@ -400,9 +400,10 @@ it.each(["production", "preproduction"] as const)(
     f.facts = { ...f.facts, scope: { ...f.facts.scope, environment } };
     const selected = await f.select();
     expect(selected).toMatchObject({ input: { allocation: { environment } } });
-    expect(f.revisions.at(-1)).toMatchObject({
-      entries: [{ kind: "wait" }, { kind: "intent", scope: { environment } }],
-    });
+    expect(f.revisions).toMatchObject([
+      { entries: [{ kind: "wait" }] },
+      { entries: [{ kind: "intent", scope: { environment } }] },
+    ]);
   },
 );
 

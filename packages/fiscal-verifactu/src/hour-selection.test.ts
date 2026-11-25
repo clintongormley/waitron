@@ -598,10 +598,15 @@ it("retains abandoned or uncertain intent and skips its minute for the replaceme
   });
   f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
   expect(await f.run(next)).toMatchObject({ status: "selected", identity: "0CNPG" });
-  expect((f.value as { entries: unknown[] }).entries).toEqual([
-    expect.objectContaining({ identity: "0CNNW" }),
-    expect.objectContaining({ kind: "wait", targetMs: Date.parse("2026-10-16T11:41:00Z") }),
-    expect.objectContaining({ identity: "0CNPG" }),
+  expect(f.writes).toEqual([
+    { version: 1, entries: [expect.objectContaining({ identity: "0CNNW" })] },
+    {
+      version: 1,
+      entries: [
+        expect.objectContaining({ kind: "wait", targetMs: Date.parse("2026-10-16T11:41:00Z") }),
+      ],
+    },
+    { version: 1, entries: [expect.objectContaining({ identity: "0CNPG" })] },
   ]);
 });
 it.each(["contextKey", "scope", "bases"])(
@@ -1284,7 +1289,9 @@ it.each([
     f.at(at(when), 0);
     expect(await f.run(setup)).toMatchObject(expected);
     expect(
-      (f.value as { entries: { kind: string }[] }).entries.filter((entry) => entry.kind === "wait"),
+      (f.writes as { entries: { kind: string }[] }[])
+        .flatMap((value) => value.entries)
+        .filter((entry) => entry.kind === "wait"),
     ).toHaveLength(waits);
   },
 );

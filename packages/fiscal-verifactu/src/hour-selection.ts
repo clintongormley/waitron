@@ -494,11 +494,10 @@ export function createHourSelection(options: {
       const write = async (entry: Entry) => {
         authorize();
         await state.replace(
-          { version: 1, entries: structuredClone([...entries, entry]) },
+          { version: 1, entries: [structuredClone(entry)] },
           entry.kind === "wait" ? "wait" : "intent",
         );
         authorize();
-        entries.push(entry);
       };
       const readBoot = (): SelectBoot | undefined => {
         const read = options.readBoot?.();
@@ -524,15 +523,7 @@ export function createHourSelection(options: {
         ) {
           const refreshed: Intent = { ...original!, boot };
           authorize();
-          await state.replace(
-            {
-              version: 1,
-              entries: structuredClone(
-                entries.map((entry) => (entry === original ? refreshed : entry)),
-              ),
-            },
-            "intent",
-          );
+          await state.replace({ version: 1, entries: [structuredClone(refreshed)] }, "intent");
           authorize();
         }
         return material(intent);

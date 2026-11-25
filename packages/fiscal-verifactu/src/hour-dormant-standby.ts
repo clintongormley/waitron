@@ -164,12 +164,11 @@ export function createHourDormantPreparation(
         const result = await body();
         if (held.established !== undefined && previous === undefined) {
           check();
-          const current = state.value;
           // A crash before this write leaves admission incomplete; promotion requires the retained configuration.
           await state.replace({
             version: 1,
-            entries: record(current) ? current.entries : [],
-            dormant: [...known, held.established],
+            entries: [],
+            dormant: [held.established],
           });
           check();
         }

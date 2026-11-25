@@ -24,9 +24,9 @@ spare wait loop and series and module-preparation bundles.
   assertions. Test a WAL with committed frames and a nonempty journal directly at placement, with
   unchanged main bytes, and prove each protection once by removing it in a disposable checkout.
 - If the full hash cannot be verified, including across SQLite versions that rewrite the writer
-  version field, the box stays stopped. Test that version mismatch. The recovery page offers
-  “Retry a normal boot” after someone restores the exact `accepted.db`. Its source is the old box's
-  `handover/<operation>/venue.db`, if it is still available there.
+  version field, the box stays stopped. Test that version mismatch. Keep the recovery page wording. In the backlog, say to restore the exact
+  `accepted.db` from the old box's `handover/<operation>/venue.db` if it is still available, then
+  choose “Retry a normal boot.”
 
 ## Save each new preparation entry once
 
@@ -37,9 +37,12 @@ spare wait loop and series and module-preparation bundles.
 - `apps/server/src/handover-minute-history.test.ts` makes 45 real setup attempts, checks the merge
   fits, transfers the revisions and promotes after waiting past the last selected minute. The old
   writes fail with `setup.attempt_invalid`. Run the existing selection, preparation, resumption and
-  dormant suites. In `hour-selection.test.ts`, check the wait and intent assertions across writes.
-  Give fixtures that span events the same history the real host gives them. Replace stale size
-  claims there and in `packages/provisioning/src/module-preparation-state.ts`.
+  dormant suites. In `hour-selection.test.ts` and
+  `hour-preparation.test.ts`, keep wait and intent assertions across writes and list the changed
+  checks in the PR. Give fixtures that span events the history the real host gives them. In the
+  server file, test merge room in the 45-attempt case and raise the filled-case counts to 110/105,
+  70+70 and 65+65. Replace their stale titles and the reserve comment in
+  `packages/provisioning/src/module-preparation-state.ts`.
 - Update `docs/backlog.md` and `docs/backlog/replication-cloud.md`. Remove the placed-copy issue and
   record its version limit. Narrow the preparation issue to the remaining growth from intent
   references, existing cumulative files and the estimated reserve. The cap can still be reached.

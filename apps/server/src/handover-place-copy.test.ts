@@ -266,6 +266,7 @@ describe("placeAcceptedCopyAtStart", () => {
       anotherBoxIsAMirror?: boolean;
       /** The chart the accepted copy holds. */
       acceptedChart?: unknown;
+      acceptedSqliteVersion?: number;
     } = {},
   ) {
     const root = scratch();
@@ -277,6 +278,11 @@ describe("placeAcceptedCopyAtStart", () => {
     mkdirSync(join(stateDir, "handover", OP), { recursive: true });
     sqliteFile(accepted, "placed");
     if (options.acceptedChart !== undefined) holdChart(accepted, options.acceptedChart);
+    if (options.acceptedSqliteVersion !== undefined) {
+      const file = readFileSync(accepted);
+      file.writeUInt32BE(options.acceptedSqliteVersion, 96);
+      writeFileSync(accepted, file);
+    }
     const live = join(venueDir, "venue.db");
     sqliteFile(live, "old_mirror");
     writeFileSync(`${live}-wal`, "stale wal");
@@ -1318,30 +1324,36 @@ describe("placeAcceptedCopyAtStart", () => {
       });
     });
 
-    it("cannot identify an opened accepted copy by its signed size and empty summaries alone", async () => {
-      const b = await box();
-      const acceptedDigest = sha(b.accepted);
-      const acceptedBytes = statSync(b.accepted).size;
+    async function openPlacedCopy(b: Awaited<ReturnType<typeof box>>): Promise<void> {
       await placeAcceptedCopyAtStart(b.args);
       const opened = await openVenueDatabase(b.venueDir);
       await opened.close();
+      rmSync(b.accepted);
+    }
+
+    it("recognizes an opened accepted copy by recovering its exact signed digest", async () => {
+      const b = await box();
+      const acceptedDigest = sha(b.accepted);
+      const acceptedBytes = statSync(b.accepted).size;
+      await openPlacedCopy(b);
       const placedDigest = sha(b.live);
       expect(placedDigest).not.toBe(acceptedDigest);
-      const before = readFileSync(b.accepted);
-      const after = readFileSync(b.live);
-      const changed = [...before.keys()].filter((offset) => before[offset] !== after[offset]);
-      // These offsets characterize this fixture; ignoring a real start's WAL remains unqualified.
-      expect(changed).toEqual([18, 19, 27, 95]);
-      const normalized = Buffer.from(after);
-      for (const offset of changed) normalized[offset] = before[offset]!;
-      expect(createHash("sha256").update(normalized).digest("hex")).toBe(acceptedDigest);
       expect(statSync(b.live).size).toBe(acceptedBytes);
-      expect(tableNames(b.live)).toContain("placed");
-      rmSync(b.accepted);
-      await expect(placeAcceptedCopyAtStart(b.args)).rejects.toMatchObject({
-        code: "handover.accepted_copy_missing",
+
+      expect(await placeAcceptedCopyAtStart(b.args)).toEqual({
+        kind: "copy_placed_owed",
+        operationId: OP,
+        swapped: false,
       });
       expect(sha(b.live)).toBe(placedDigest);
+      expect(tableNames(b.live)).toContain("placed");
+    });
+
+    it("refuses a changed database even when it has the same signed size", async () => {
+      const b = await box();
+      const acceptedBytes = statSync(b.accepted).size;
+      await openPlacedCopy(b);
+      const placedDigest = sha(b.live);
       const different = new DatabaseSync(b.live);
       try {
         different.exec("insert into placed(a) values ('different valid data')");
@@ -1356,6 +1368,38 @@ describe("placeAcceptedCopyAtStart", () => {
       });
       expect(sha(b.live)).toBe(changedDigest);
     });
+
+    it("refuses recognition when SQLite rewrites the signed writer version", async () => {
+      const b = await box({ acceptedSqliteVersion: 3_040_000 });
+      await openPlacedCopy(b);
+      expect(readFileSync(b.live).readUInt32BE(96)).not.toBe(3_040_000);
+      await expect(placeAcceptedCopyAtStart(b.args)).rejects.toMatchObject({
+        code: "handover.accepted_copy_missing",
+      });
+    });
+
+    it.each(["-wal", "-journal"])(
+      "refuses recognition while the opened copy has a nonempty %s",
+      async (suffix) => {
+        const b = await box();
+        await openPlacedCopy(b);
+        const main = sha(b.live);
+        const side = `${b.live}${suffix}`;
+        if (suffix === "-wal") {
+          realOldWal(b.live, "insert into placed(a) values ('committed in the WAL')");
+        } else {
+          writeFileSync(side, "rollback data");
+        }
+        expect(sha(b.live)).toBe(main);
+        const sideDigest = sha(side);
+
+        await expect(placeAcceptedCopyAtStart(b.args)).rejects.toMatchObject({
+          code: "handover.accepted_copy_missing",
+        });
+        expect(sha(b.live)).toBe(main);
+        expect(sha(side)).toBe(sideDigest);
+      },
+    );
 
     it("an accepted.db that is no longer what the indicator describes refuses, changing nothing", async () => {
       const b = await box();

@@ -68,6 +68,42 @@ function killedPlacing(b: Box, at: string): Promise<NodeJS.Signals | null> {
   return new Promise((resolve) => child.once("close", (_code, signal) => resolve(signal)));
 }
 
+const BOOT_ENTRY = fileURLToPath(new URL("./node-entry.ts", import.meta.url));
+const BOOT_KILL_PRELOAD = new URL("./testing/place-copy-boot-kill.ts", import.meta.url).href;
+
+async function killedEntry(b: Box, at: "swapped" | "opened" | "wal"): Promise<void> {
+  const child = spawn(
+    process.execPath,
+    ["--import", import.meta.resolve("tsx"), "--import", BOOT_KILL_PRELOAD, BOOT_ENTRY],
+    {
+      env: { ...process.env, ...b.env, PLACE_COPY_KILL_AT: at },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += String(chunk);
+  });
+  child.stderr.on("data", (chunk) => {
+    output += String(chunk);
+  });
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, 30_000);
+  try {
+    const signal = await new Promise<NodeJS.Signals | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (_code, signal) => resolve(signal));
+    });
+    expect(timedOut, output).toBe(false);
+    expect(signal, output).toBe("SIGKILL");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function withoutNodeId(b: Box): Record<string, string> {
   return Object.fromEntries(Object.entries(b.env).filter(([key]) => key !== "WAITRON_NODE_ID"));
 }
@@ -186,6 +222,44 @@ describe("a spare's real start at filing_assumed", () => {
     expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
     expect(copyPlacedEvents(b)).toBe(1);
     expect(existsSync(b.accepted)).toBe(false);
+  }, 120_000);
+
+  it.each(["swapped", "opened", "opened with a successor chart"] as const)(
+    "recovers the live copy after production entry is killed at %s and accepted.db is lost",
+    async (at) => {
+      const b = await buildBox(
+        at === "opened with a successor chart" ? { copyNamesOldBox: "sell-only" } : {},
+      );
+      await killedEntry(b, at === "swapped" ? "swapped" : "opened");
+      expect(copyPlacedEvents(b)).toBe(0);
+      rmSync(b.accepted);
+      watchLog();
+
+      const start = await entryStart(b);
+      expect(start.thrown).toBeUndefined();
+      await start.started!.close();
+      expect(copyPlacedEvents(b)).toBe(1);
+      expect(userVersion(b.live)).toBe(ACCEPTED_VERSION);
+      expect(loggedLines(PLACED_LINE)).toBe(0);
+    },
+    120_000,
+  );
+
+  it("preserves a same-size committed change left in the killed start's WAL", async () => {
+    const b = await buildBox();
+    const signedBytes = statSync(b.accepted).size;
+    await killedEntry(b, "wal");
+    expect(statSync(`${b.live}-wal`).size).toBeGreaterThan(32);
+    expect(statSync(b.live).size).toBe(signedBytes);
+    expect(userVersion(b.live)).toBe(778);
+    expect(copyPlacedEvents(b)).toBe(0);
+    rmSync(b.accepted);
+
+    const start = await entryStart(b);
+    expect(start.thrown?.code).toBe("handover.accepted_copy_missing");
+    expect(copyPlacedEvents(b)).toBe(0);
+    expect(userVersion(b.live)).toBe(778);
+    expect(statSync(b.live).size).toBe(signedBytes);
   }, 120_000);
 
   it("the event recorded and accepted.db still there: not placed again", async () => {
