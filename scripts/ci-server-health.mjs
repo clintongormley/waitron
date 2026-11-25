@@ -164,6 +164,7 @@ const assigned = (job) =>
   job.status !== "completed" && (job.status === "in_progress" || job.runner_id > 0);
 const waitingForRunner = (job) =>
   ["queued", "pending", "waiting", "requested"].includes(job.status);
+const hostedJob = (job) => job.labels.length > 0 && !job.labels.includes("self-hosted");
 const old = (job, now) => now - Date.parse(job.started_at || job.created_at) >= 300_000;
 
 async function readInventory(read, unavailable) {
@@ -177,7 +178,8 @@ async function readInventory(read, unavailable) {
 }
 
 export async function serverHealth(options, unavailable, staleQueuedCount, plannerShortfall) {
-  const { request, repository, repositoryId, now = Date.now() } = options;
+  const { request, repository, repositoryId, now = Date.now(), prefix = "dt" } = options;
+  const labelPrefix = options.plannersOnly ? prefix || "dt" : prefix;
   assert.match(repository, /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
@@ -202,6 +204,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
     deferredPlanners = [];
   let running = 0,
     queued = 0,
+    hosted = 0,
     progressing = false,
     recent = false;
   for (const run of runs.values()) {
@@ -215,10 +218,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
     }
     let jobs;
     try {
-      jobs = await readInventory(
-        () => (options.plannersOnly ? runJobs(options, run) : serverJobs(options, run)),
-        unavailable,
-      );
+      jobs = await readInventory(() => runJobs(options, run), unavailable);
     } catch (error) {
       if (!options.plannerSkipReason) throw error;
       options.report?.(
@@ -253,10 +253,14 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
         if (reason) plannerSkip(options, run, [job], reason);
       }
       if (options.plannerSkipReason) continue;
-      jobs = jobs.filter((job) =>
-        serverLabel(job, repositoryId, options.prefix || "dt", run.id, run.run_attempt),
-      );
     }
+    if (options.countHosted)
+      hosted += jobs.filter(
+        (job) => hostedJob(job) && (job.status === "in_progress" || waitingForRunner(job)),
+      ).length;
+    jobs = jobs.filter((job) =>
+      serverLabel(job, repositoryId, labelPrefix, run.id, run.run_attempt),
+    );
     running += jobs.filter(assigned).length;
     queued += jobs.filter((job) => waitingForRunner(job) && !assigned(job)).length;
     progressing ||= jobs.some(
@@ -287,6 +291,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
     stuck: !options.plannersOnly && (running || progressing) ? [] : stuck,
     running,
     queued,
+    hosted,
     recent,
     ...(options.plannersOnly ? { deferredPlanners } : {}),
   };
@@ -308,6 +313,7 @@ export async function serverRoute(options) {
   let retriedJobCountDrift = false;
   const recent = {
     ...options,
+    countHosted: Boolean(firstBatch),
     retryJobCountDrift: async (message) => {
       if (!firstBatch || retriedJobCountDrift) return false;
       retriedJobCountDrift = true;
@@ -395,13 +401,15 @@ export async function serverRoute(options) {
         (sum, family) => sum + (family.enabled ? family.count : 0),
         0,
       );
-      const serverLoad = serverRunning + Math.max(serverWaiting, state.queued);
+      const visibleServer = state.running + state.queued;
+      // The same admitted job can occupy a published slot and still appear queued in CI.
+      const serverLoad = Math.max(serverRunning + serverWaiting, visibleServer);
       const freeSlots = Math.max(0, slots - serverLoad);
-      const hostedLoad = hostedRunning + hostedWaiting;
+      const hostedLoad = Math.max(hostedRunning + hostedWaiting, state.hosted);
       // Solve (serverLoad + s) / slots = (hostedLoad + batch - s) / 20.
       const balanced = Math.ceil(((hostedLoad + batch) * slots - serverLoad * 20) / (slots + 20));
       serverJobLimit = Math.min(batch, Math.max(freeSlots, balanced));
-      balanceSummary = ` Capacity observed at ${observedAt}; ${state.queued} visible unassigned server jobs; GitHub: ${hostedRunning} running, ${hostedWaiting} queued / 20 slots; ${serverJobLimit} of ${batch} jobs on server (${Math.max(0, serverJobLimit - freeSlots)} beyond free slots).`;
+      balanceSummary = ` Capacity observed at ${observedAt}; ${visibleServer} visible server jobs; GitHub: ${hostedRunning} running, ${hostedWaiting} queued / 20 slots, ${state.hosted} visible hosted jobs; ${serverJobLimit} of ${batch} jobs on server (${Math.max(0, serverJobLimit - freeSlots)} beyond free slots).`;
     }
     return {
       route: "hosted",
@@ -429,7 +437,7 @@ export async function serverRoute(options) {
     queued = 0;
   for (const run of runs.values()) {
     for (const job of await runJobs(options, run)) {
-      if (!job.labels.length || job.labels.includes("self-hosted")) continue;
+      if (!hostedJob(job)) continue;
       if (job.status === "in_progress") running++;
       if (waitingForRunner(job)) queued++;
     }

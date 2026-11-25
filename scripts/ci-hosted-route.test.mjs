@@ -68,6 +68,21 @@ function fixture(running = 0, queued = 0) {
   return { options, jobs, run, calls };
 }
 
+function showInHealthInventory(options, run) {
+  run.head_repository.id = options.repositoryId;
+  const read = options.request;
+  options.request = (path, requestOptions) => {
+    if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
+      return { total_count: 1, workflow_runs: [run] };
+    if (path.includes("/actions/runs?")) throw new Error("Unexpected hosted queue read");
+    return read(path, requestOptions);
+  };
+}
+
+function labelServerJobs(jobs) {
+  for (const job of jobs) job.labels = ["self-hosted", `dt-42-50-2-test-server-${job.id}`];
+}
+
 describe("queue-pressure routing", () => {
   it("fills free server slots without reading GitHub queue pressure on the first attempt", async () => {
     const { options } = fixture();
@@ -97,23 +112,25 @@ describe("queue-pressure routing", () => {
   });
 
   it.each([
-    ["a lively hosted queue", 39, 1_000, 0, 31],
-    ["earlier server assignments visible in the queue", 39, 1_000, 25, 16],
-    ["a full batch worth moving", 119, 1_000, 0, 45],
-    ["a quiet GitHub pool", 0, 1_000, 0, 9],
-    ["missing hosted counts", undefined, 1_000, 0, 0],
-    ["an expired snapshot", 39, 300_000, 0, 0],
-    ["a future snapshot", 39, -1, 0, 0],
-  ])("places first-batch jobs with %s", async (_case, hostedWaiting, age, visible, selected) => {
-    const { options, run, jobs } = fixture(0, visible);
-    run.head_repository.id = 42;
+    ["a lively hosted queue", [20, 39], 1_000, 0, 31],
+    ["earlier server assignments visible in the queue", [20, 39], 1_000, 25, 16],
+    ["a full batch worth moving", [20, 119], 1_000, 0, 45],
+    ["a quiet GitHub pool", [0, 0], 1_000, 0, 9],
+    ["missing hosted waiting count", [20, undefined], 1_000, 0, 0],
+    ["unreadable hosted running count", [null, 39], 1_000, 0, 0],
+    ["negative hosted running count", [-1, 39], 1_000, 0, 0],
+    ["an expired snapshot", [20, 39], 300_000, 0, 0],
+    ["a future snapshot", [20, 39], -1, 0, 0],
+  ])("places first-batch jobs with %s", async (_case, hosted, age, visible, selected) => {
+    const [hostedRunning, hostedWaiting] = hosted;
+    const { options, run, jobs } = fixture(visible ? 12 : 0, visible);
     options.now = Date.parse("2026-01-01T00:10:00Z");
     options.capacity = {
       observedAt: options.now - age,
       slots: 12,
       serverRunning: 12,
       serverWaiting: 1,
-      hostedRunning: hostedWaiting === 0 ? 0 : 20,
+      hostedRunning,
       hostedWaiting,
     };
     options.families = [
@@ -127,18 +144,10 @@ describe("queue-pressure routing", () => {
       { id: "bundle-smoke", count: 1, enabled: true },
       { id: "test-heavy", count: 3, enabled: false },
     ];
-    for (const [index, job] of jobs.entries()) {
-      job.labels = ["self-hosted", `dt-42-50-2-test-server-${index + 1}`];
-      job.created_at = "2026-01-01T00:09:00Z";
-      if (index === 0) job.status = "pending";
-    }
-    const read = options.request;
-    options.request = (path, requestOptions) => {
-      if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
-        return { total_count: 1, workflow_runs: [run] };
-      if (path.includes("/actions/runs?")) throw new Error("Unexpected hosted queue read");
-      return read(path, requestOptions);
-    };
+    labelServerJobs(jobs);
+    for (const job of jobs) job.created_at = "2026-01-01T00:09:00Z";
+    if (visible) jobs[12].status = "pending";
+    showInHealthInventory(options, run);
     const outputs = [];
     await healthCommand("route", options, {
       output: (line) => outputs.push(line),
@@ -163,6 +172,51 @@ describe("queue-pressure routing", () => {
       ),
     };
     expect(outputs).toContain(`server_jobs=${JSON.stringify(expected[selected])}`);
+  });
+
+  it.each([
+    ["six admitted jobs being prepared", 6, 0, 6],
+    ["six admitted jobs and two new jobs waiting", 8, 0, 4],
+    ["six admitted jobs with one runner assigned", 6, 1, 6],
+  ])("fills free server slots with %s", async (_case, visible, runnerId, selected) => {
+    const { options, run, jobs } = fixture(0, visible);
+    showInHealthInventory(options, run);
+    labelServerJobs(jobs);
+    jobs[0].runner_id = runnerId;
+    options.now = 2;
+    options.capacity = {
+      observedAt: 1,
+      slots: 12,
+      serverRunning: 6,
+      serverWaiting: 0,
+      hostedRunning: 0,
+      hostedWaiting: 0,
+    };
+    options.families = [{ id: "test-server", count: 10, enabled: true }];
+
+    expect((await serverRoute(options)).serverJobLimit).toBe(selected);
+  });
+
+  it("keeps two successive batches balanced as both queues grow between snapshots", async () => {
+    const { options, run, jobs } = fixture(32, 45);
+    showInHealthInventory(options, run);
+    labelServerJobs(jobs.slice(0, 12));
+    const firstBatch = jobs.splice(32);
+    labelServerJobs(firstBatch.slice(0, 17));
+    options.now = 2;
+    options.capacity = {
+      observedAt: 1,
+      slots: 12,
+      serverRunning: 12,
+      serverWaiting: 0,
+      hostedRunning: 20,
+      hostedWaiting: 0,
+    };
+    options.families = [{ id: "test-server", count: 45, enabled: true }];
+
+    expect((await serverRoute(options)).serverJobLimit).toBe(17);
+    jobs.push(...firstBatch);
+    expect((await serverRoute({ ...options, runId: 52 })).serverJobLimit).toBe(17);
   });
 
   it("fills free server slots even when GitHub has less work per slot", async () => {
