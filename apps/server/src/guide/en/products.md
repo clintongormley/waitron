@@ -15,8 +15,9 @@ something set, so you can see what is set without opening it. Click its heading 
 it contains something you need to fix, it opens itself and stays open until you have fixed it.
 
 Use **Filters** to narrow the Products list. Matching categories open while you filter, with a
-count that includes products in their subcategories. Choose **Available → No** to find dishes or
-variants that are off sale. A dish with an unavailable variant can appear under **Yes** and **No**.
+count that includes products in their subcategories. Under **Available**, choose **No** to find
+dishes or variants that are off sale. A dish with an unavailable variant can appear under **Yes**
+and **No**.
 
 Categories stay in alphabetical order when you sort the products within them. Search by name to
 find a dish or category and see where it belongs. If a search finds nothing or hides a product you

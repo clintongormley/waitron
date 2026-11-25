@@ -16,8 +16,8 @@ encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se
 abierta hasta que lo corriges.
 
 Usa **Filtros** para acotar la lista de Productos. Al filtrar se abren las categorías con
-coincidencias y se cuentan también los productos de sus subcategorías. Elige **Disponible → No**
-para encontrar platos o variantes que no están a la venta. Un plato con una variante no
+coincidencias y se cuentan también los productos de sus subcategorías. En **Disponible**, elige
+**No** para encontrar platos o variantes que no están a la venta. Un plato con una variante no
 disponible puede aparecer bajo **Sí** y **No**.
 
 Las categorías siguen en orden alfabético cuando ordenas los productos dentro de ellas. Busca por
