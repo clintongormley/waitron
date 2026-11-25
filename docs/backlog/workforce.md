@@ -98,6 +98,9 @@ contract's part of the month, then add those amounts. Days without a contract co
 hours only. The watcher recorded the owner's calculation decision on 25 November 2026 at 10:02
 and the owner's choice to deliver it “With the contracts screen (Recommended)” at 16:37.
 
+The January examples use period-net overtime, which compares worked and contracted minutes
+over each contract's part of the month.
+
 - Ana moves from 40 to 20 hours a week on 15 January. She works 5,100 minutes against 4,800
   contracted minutes in the first part and 2,800 against 2,914 in the second. The month has 300
   minutes of overtime.
@@ -106,7 +109,8 @@ and the owner's choice to deliver it “With the contracts screen (Recommended)�
   300 minutes of overtime.
 
 Reuse `summarisePeriod` for each contract span, including its last day. Use the latest applicable
-contract start and show the separate calculations in the export.
+contract start, sum each overtime measure over the spans and show the separate calculations in
+the export.
 Check both January examples in `pay-period-closure.test.ts`.
 
 ## MONTH-CLOSE. Reminder and adjustments after a month closes
@@ -171,9 +175,10 @@ another offset) goes back to the owner as a picture. Check the shared helper's o
   (watcher, 2026-11-25). A snapshot that never reached the spare can be lost with the former box.
   [Implementation plan](../superpowers/plans/2026-11-25-month-close.md#pr-1-settings-automatic-close-and-hours).
 
-- Hours keeps the full history for a person with a correction awaiting a decision, to check
-  whether it can still be applied. Open shifts, disputed corrections, unanswered questions
-  and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
+- Hours reads a person's full clock history to check whether a correction awaiting a decision can
+  still be applied. Personal Hours and shorter pay periods can show open work from outside the
+  chosen dates (watcher, 2026-11-18). Monthly manager Hours groups open work by shift start
+  (watcher, 2026-11-25).
 
 - Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept by the watcher 2026-11-24, not asked (A644).
 

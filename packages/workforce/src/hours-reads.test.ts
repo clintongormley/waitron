@@ -643,14 +643,15 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
       await f.backend.clockOut(tx, f.event(`${day}T17:00:00Z`));
     }
   });
-  const start = await f.open("2027-01-11T09:00:00Z");
-  const pause = await event("breakStart", "2027-01-11T12:00:00Z");
+  await automaticEnd("2027-01-11");
+  const start = await f.open("2027-01-12T09:00:00Z");
+  const pause = await event("breakStart", "2027-01-12T12:00:00Z");
   const getHours = (date: string) =>
     f.run((tx) =>
       api.readManagerHours(tx, {
         selection: { kind: "pay-period", date },
         clock,
-        now: new Date("2027-01-11T12:30:00Z"),
+        now: new Date("2027-01-12T12:30:00Z"),
       }),
     );
   const loadOutstanding = recordReads.readOutstandingHoursEntries;
@@ -696,7 +697,7 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
   await expectFullHistoryResult(june, () => getHours("2026-06-16"));
   await expectFullHistoryResult(january, () => getHours("2026-01-05"));
   const ownJuly = () =>
-    read({ kind: "month", date: "2026-07-01" }, f.personId, new Date("2027-01-11T12:30:00Z"));
+    read({ kind: "month", date: "2026-07-01" }, f.personId, new Date("2027-01-12T12:30:00Z"));
   await expectFullHistoryResult(await ownJuly(), ownJuly);
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {

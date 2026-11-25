@@ -164,6 +164,21 @@ it("keeps the requested month visible and can return from a failed read", async 
   expect(m.root.querySelector("[data-hours-period]")?.textContent?.trim()).toBe("January 2026");
 });
 
+it("includes the year when a manager opens a day from another year", async () => {
+  const m = await mountManagerHours();
+  await record(m.root);
+  m.data.hours.people[0]!.hours.record.entries[0]!.entry = attendanceEntry({
+    eventAt: "2025-01-05T09:00:00.000Z",
+    offsetMinutes: 60,
+  });
+  await change(m.root, "attendanceDay", "2025-01-05");
+  await click(m.root, "[data-open-day]");
+  await expect
+    .poll(() => m.root.querySelector("[data-day] h2")?.textContent)
+    .toContain("5 Jan 2025");
+  expect(m.root.querySelector("[data-day] time")?.textContent).toContain("5 Jan 2025, 10:00");
+});
+
 it("a worker response refreshes counted and frozen changes without replacing a staged manager proposal", async () => {
   const m = await mountManagerHours({ live: true });
   await openDay(m.root);

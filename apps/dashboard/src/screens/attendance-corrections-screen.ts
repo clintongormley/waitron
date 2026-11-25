@@ -3,7 +3,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   QueryController,
   dateTimeFormat,
-  formatBusinessDate,
   type DashboardRequest,
   type LiveData,
 } from "@waitron/dashboard-kit";
@@ -34,7 +33,13 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { wallClock } from "../date-utils.js";
-import { hoursTime, periodLabel, periodStep, requestedPeriodLabel } from "../hours-format.js";
+import {
+  hoursDate,
+  hoursTime,
+  periodLabel,
+  periodStep,
+  requestedPeriodLabel,
+} from "../hours-format.js";
 import { storedAttendanceTime } from "../widgets/attendance-history.js";
 import "../widgets/attendance-proposal-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -787,7 +792,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
           : t("attendance.original");
     const timeZone = this.mode === "hours" ? this.view?.timeZone : undefined;
     const time = timeZone
-      ? hoursTime(entry.eventAt, entry.offsetMinutes, timeZone)
+      ? hoursTime(entry.eventAt, entry.offsetMinutes, timeZone, undefined, this.periodFrom?.start)
       : storedAttendanceTime(entry.eventAt, entry.offsetMinutes);
     const recordedAt = timeZone
       ? dateTimeFormat(currentLocale(), {
@@ -874,7 +879,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
           ? html`<section data-day>
               <h2>
                 ${this.#person(this.view.personId)} ·
-                ${this.mode === "hours" ? formatBusinessDate(this.view.date) : this.view.date}
+                ${this.mode === "hours" ? hoursDate(this.view.date, this.periodFrom?.start) : this.view.date}
               </h2>
               ${this.view.record.entries.length === 0 ? html`<p>${t("attendance.no_times")}</p>` : nothing}
               <ul>

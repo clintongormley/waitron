@@ -109,6 +109,9 @@ The final text may differ: a revised draft exists that the research could not ob
     overtime out for each part of the month separately (more work, later)”. The first release
     closes worked hours while the separate overtime calculation is pending.
 
+    **25 November 2026, 16:37.** The owner chose to deliver the separate overtime calculation
+    [with the contracts screen, A586](../../backlog/workforce.md#overtime-when-a-contract-changes).
+
 ## What the record gains (library)
 
 These change how the legal record is written, so the land takes the owner's sign-off (as
