@@ -155,12 +155,13 @@ export function isCounterOrder(order: StationQueueGroup): boolean {
   return order.party === undefined && order.tableShortNames === undefined;
 }
 
-/** Each distinct place its bills are at, in their order: a bill's tables by their short names, as
- * the Ready bar names a join, else its label. */
+/** The tables' short names and the typed name of a counter order, each shown once. */
 export function cardPlaces(card: KitchenCard): string[] {
-  const places = card.orders.map((order) =>
-    order.tableShortNames === undefined ? order.label : mergeLabel(order.tableShortNames),
-  );
+  const places = card.orders.flatMap((order) => {
+    if (order.tableShortNames === undefined) return [order.label];
+    const table = mergeLabel(order.tableShortNames);
+    return order.party === undefined ? [table, order.label] : [table];
+  });
   return [...new Set(places.filter((place): place is string => !!place))];
 }
 

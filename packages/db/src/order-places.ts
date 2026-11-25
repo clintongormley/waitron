@@ -30,7 +30,16 @@ export interface OrderPlaceFacts {
  * A party's own active seats win. Once it has let them all go, follow its merges to the last party.
  * A bill without a party uses only its delivery table. Saved receipt labels can name a former place.
  */
-export function orderPlaceFactsSql(partyId: SQL, deliveryTableId: SQL): SQL<string> {
+export function orderPlaceFactsSql(
+  partyId: SQL,
+  deliveryTableId: SQL,
+  { searchable = false }: { searchable?: boolean } = {},
+): SQL<string> {
+  const searchNames = searchable
+    ? sql`'searchNames', json((select json_group_array(value) from (
+        select shown as value from at_tables union select name from at_tables union select label from at_tables
+      ))),`
+    : sql``;
   return sql`(
     with recursive chain(id, next, name) as (
       select id, merged_into_party_id, name from parties where id = ${partyId}
@@ -46,7 +55,7 @@ export function orderPlaceFactsSql(partyId: SQL, deliveryTableId: SQL): SQL<stri
       union all
       select ${deliveryTableId}, '', 0 where ${partyId} is null and ${deliveryTableId} is not null
     ), at_tables as (
-      select d.id, coalesce(d.today_name, d.label) as name, coalesce(d.short_name, d.label) as short_name,
+      select d.id, d.label, coalesce(d.today_name, d.label) as name, coalesce(d.short_name, d.label) as short_name,
         coalesce(g.name, d.today_name, d.label) as shown, s.joined_at, s.row_order,
         row_number() over (
           partition by g.name is not null, case when g.name is null then d.id else g.id end
@@ -58,6 +67,7 @@ export function orderPlaceFactsSql(partyId: SQL, deliveryTableId: SQL): SQL<stri
       'tables', json((select json_group_array(json_object('id', id, 'name', name, 'shortName', short_name)
         order by joined_at, row_order) from at_tables)),
       'names', json((select json_group_array(shown order by joined_at, row_order) from at_tables where group_member = 1)),
+      ${searchNames}
       'partyName', (select name from chain where id = ${partyId}),
       'sittingWith', (select name from chain
         where next is null or (id = ${partyId} and not exists (select 1 from chain where next is null))

@@ -43,7 +43,7 @@ import { listCounterWaiting } from "./working-order-counter.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";
-import { partyFamily, readFamilyBills, setPartyGuestCount } from "./parties.js";
+import { partyFamily, readFamilyBills, setPartyGuestCount, setPartyName } from "./parties.js";
 import { fireGroup } from "./order-group-release.js";
 import { recordHeldPaper } from "./order-group-hold-paper.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -775,7 +775,8 @@ describe("a bill sent to the counter waits there until handed over", () => {
     expect(shown.screen).toHaveLength(1);
     expect(shown.monitor).toHaveLength(1);
     expect(shown.station).toHaveLength(1);
-    expect(shown.station[0]).toMatchObject({ counter: true, label: null });
+    expect(shown.station[0]).toMatchObject({ label: null });
+    expect(shown.station[0]!.tableShortNames).toBeUndefined();
     expect(shown.waiting).toEqual([
       expect.objectContaining({
         id: billId,
@@ -845,6 +846,10 @@ async function filed(billIds: string[]) {
 describe("sending a paid bill to the counter changes nothing filed", () => {
   it("keeps the filed record, the sale, its lines, tenders and receipt as they were", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const expectedPartyRevision = await partyRevision(t.partyId);
+    await inTx(venue, (tx) =>
+      setPartyName(tx, { partyId: t.partyId, name: "Ann", expectedPartyRevision }),
+    );
     const body = await collect(t.partyId, await bodyFor(t));
     const before = await filed(t.billIds);
     expect(before.records.length).toBeGreaterThan(0);
@@ -853,7 +858,7 @@ describe("sending a paid bill to the counter changes nothing filed", () => {
 
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
-    expect((await billRow(t.billIds[0]!)).partyId).toBeNull();
+    expect(await billRow(t.billIds[0]!)).toMatchObject({ partyId: null, billName: "Ann" });
     expect(await filed(t.billIds)).toEqual(before);
   });
 });

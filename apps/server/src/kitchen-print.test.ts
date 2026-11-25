@@ -531,18 +531,22 @@ describe("the table a slip names (spec decision 9)", () => {
     expect(await inTx(v, async (tx) => (await readOrderHeader(tx, checkId)).tableLabel)).toBeNull();
   });
 
-  it("names a counter order's delivery table, and an unlabelled walk-up nothing", async () => {
+  it("names a delivered counter order and its table, and an unlabelled walk-up nothing", async () => {
     const v = await setupPartyVenue(db);
     const terraceTable = await v.table("Terrace 2");
     const [delivered, walkUp] = [randomUUID(), randomUUID()];
     await inTx(v, async (tx) => {
-      await createOpenOrder(tx, v.cfg, delivered, [], null, { deliveryTableId: terraceTable });
+      await createOpenOrder(tx, v.cfg, delivered, [], "Riley", {
+        deliveryTableId: terraceTable,
+        billName: "Riley",
+      });
       await createOpenOrder(tx, v.cfg, walkUp, [], null);
     });
 
-    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, delivered)).tableLabel)).toBe(
-      "Terrace 2",
-    );
+    expect(await inTx(v, (tx) => readOrderHeader(tx, delivered))).toMatchObject({
+      tableLabel: "Terrace 2",
+      partyName: "Riley",
+    });
     expect(await inTx(v, async (tx) => (await readOrderHeader(tx, walkUp)).tableLabel)).toBeNull();
   });
 });

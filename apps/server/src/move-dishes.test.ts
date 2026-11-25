@@ -502,18 +502,23 @@ describe("A803 move dishes: the moves that succeed", () => {
     ]);
   });
 
-  it("A803 move dishes: a bill with no party moves to a new counter order and copies its kitchen note", async () => {
+  it("A803 move dishes: a new counter bill keeps the typed name and kitchen note", async () => {
     const id = await counterOrder(v, "Burger", "Flan");
+    await v.db.update(workingOrders).set({ billName: "Riley" }).where(eq(workingOrders.id, id));
     await inTx(v, (tx) => writeKitchenNote(tx, { workingOrderId: id }, 0, "All together"));
     const [burger] = await dishIds(id, "Burger");
 
     const { billId } = await move(null, id, null, [burger!]);
 
     const [made] = await v.db
-      .select({ partyId: workingOrders.partyId, status: workingOrders.status })
+      .select({
+        partyId: workingOrders.partyId,
+        status: workingOrders.status,
+        billName: workingOrders.billName,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, billId));
-    expect(made).toEqual({ partyId: null, status: "open" });
+    expect(made).toEqual({ partyId: null, status: "open", billName: "Riley" });
     expect(await dishIds(billId)).toEqual([burger]);
     const note = await inTx(v, async (tx) =>
       (await readKitchenNotes(tx, [{ workingOrderId: billId }])).get(

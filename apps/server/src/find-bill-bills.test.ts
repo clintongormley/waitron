@@ -19,6 +19,7 @@ import {
   tenders,
   saleSettlements,
   lineServiceCancellations,
+  diningTables,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -52,6 +53,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import { listOrders } from "./orders-list.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -90,6 +92,31 @@ async function contribute(
 }
 
 describe("Find Bills SQL paging", () => {
+  it("finds the same live table by its own label or its name for today", async () => {
+    const { tableId, tabId } = await seatedWith(venue, "Tarta");
+    const [table] = await venue.db
+      .update(diningTables)
+      .set({ todayName: "Window" })
+      .where(eq(diningTables.id, tableId))
+      .returning({ label: diningTables.label });
+    const orders = {
+      status: "open",
+      dates: "any",
+      credited: false,
+      limit: 50,
+      scope: "all",
+    } as const;
+    for (const name of [table!.label, "Window"]) {
+      expect((await list({ q: name })).rows.map((row) => row.workingOrderId)).toEqual([tabId]);
+      for (const key of ["table", "search"] as const)
+        expect(
+          (await inTx(venue, (tx) => listOrders(tx, { ...orders, [key]: name }))).rows.map(
+            (row) => row.id,
+          ),
+        ).toEqual([tabId]);
+    }
+  });
+
   it("finds a moved order by its typed name and drops its former table from search", async () => {
     const id = await named("Old terrace");
     await inTx(venue, (tx) =>
@@ -992,8 +1019,8 @@ describe("Find Bills SQL paging", () => {
       stillOwed: "18.00",
     });
     expect(debt.departedAt).not.toBeNull();
-    expect(debt.tables).toEqual([]);
-    expect((await list({ q: debt.invoiceNumber! })).rows.map((r) => r.workingOrderId)).toEqual([
+    expect(debt.tables).toHaveLength(1);
+    expect((await list({ q: debt.tables[0]! })).rows.map((r) => r.workingOrderId)).toEqual([
       party.tabId,
     ]);
   });

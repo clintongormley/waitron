@@ -4010,11 +4010,11 @@ describe("till-station-queue: a card's place", () => {
     expect(flat(headOf(el)).startsWith("Counter #5 Ana")).toBe(true);
   });
 
-  it("names a counter order delivered to a table by the table, without Counter", async () => {
-    const el = await mount([{ ...groupA, label: "Garden 4", tableShortNames: ["G4"] }]);
+  it("shows a delivered counter order's table and typed name", async () => {
+    const el = await mount([{ ...groupA, label: "Riley", tableShortNames: ["G4"] }]);
     expect(headOf(el).querySelector(".counter")).toBeNull();
     expect(flat(headOf(el)).startsWith("#5 G4")).toBe(true);
-    expect(placesOf(el)).toEqual(["G4"]);
+    expect(placesOf(el)).toEqual(["G4", "Riley"]);
   });
 
   it("names a place two bills of one group share once", async () => {

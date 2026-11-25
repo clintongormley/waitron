@@ -1,6 +1,10 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
+import {
+  addTabRound,
+  setWorkingOrderLabel,
+  updateHeldOrder,
+} from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { configureZone, createDepartment, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
@@ -919,6 +923,48 @@ describe("move a bill to the counter (A82)", () => {
 });
 
 describe("move a counter order into a party", () => {
+  it("keeps the Park name through receipt-label edits, releasing the table and payment", async () => {
+    const id = randomUUID();
+    await parkOrder({ db: v.db }, v.cfg, {
+      id,
+      label: "Riley",
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+      operatorId: OPERATOR,
+    });
+    const tableId = await v.table("Table D0");
+    const { partyId } = await seat(v, tableId);
+    await move(id, { tableId });
+
+    const next = await setWorkingOrderLabel(v.db, id, {
+      label: "Side table",
+      revision: (await billRow(v, id)).revision,
+    });
+    expect(await billRow(v, id)).toMatchObject({ label: "Side table", billName: "Riley" });
+    const [line] = await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await updateHeldOrder({ db: v.db, admission: testTradingAdmission() }, v.cfg, id, {
+      revision: next,
+      label: "Other table",
+      lines: [{ menuItemId: line!.menuItemId!, quantity: "1", workingOrderLineId: line!.id }],
+    });
+    expect(await billRow(v, id)).toMatchObject({ label: "Other table", billName: "Riley" });
+    await move(id, { counter: { zoneId: v.counter.zoneId } });
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      finishTable(tx, {
+        partyId,
+        expectedPartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+    expect(await activeTablesOf(v, partyId)).toEqual([]);
+    await pay(v, id, "12.00");
+    expect(await billRow(v, id)).toMatchObject({ status: "settled", billName: "Riley" });
+  });
+
   it("takes a parked counter order into the party as its own bill with the next number, though both are untouched", async () => {
     const table = await v.table("Table D1");
     const anna = await seat(v, table);

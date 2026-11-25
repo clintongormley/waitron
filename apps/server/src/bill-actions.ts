@@ -343,6 +343,7 @@ export async function moveDishes(
       );
       const [delivery] = await tx
         .select({
+          billName: workingOrders.billName,
           deliveryTableId: workingOrders.deliveryTableId,
           deliveryTableLabel: workingOrders.deliveryTableLabel,
         })

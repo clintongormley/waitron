@@ -179,7 +179,6 @@ export interface StationQueueGroup {
   label: string | null;
   /** The short names of the order’s current tables, when it has any. */
   tableShortNames?: string[];
-  counter?: true;
   dining: Dining;
   queuedAt: string;
   /** The station queue offers Collect on a `settled` order alone; a placed counter order is handed
@@ -561,7 +560,6 @@ export async function listStationQueues(
         orderNumber: row.orderNumber,
         label: row.partyId === null ? place.billName : null,
         ...optional("tableShortNames", place.tableShortNames),
-        ...(place.counter ? { counter: true as const } : {}),
         dining: row.dining,
         queuedAt: row.queuedAt,
         status: row.status,

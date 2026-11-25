@@ -50,7 +50,7 @@ import {
 } from "./invoice-delivery-status.js";
 import {
   LIVE_ORDER_PLACE,
-  liveTableNames,
+  liveSearchTableNames,
   ordersWordRank,
   readOrderListPlaces,
 } from "./orders-list-places.js";
@@ -301,7 +301,7 @@ function staffClause(staffId: string): SQL {
 }
 
 function tableClause(table: string): SQL {
-  return sql`case when ${LIVE_ORDER_PLACE} then exists (select 1 from json_each(${liveTableNames})
+  return sql`case when ${LIVE_ORDER_PLACE} then exists (select 1 from json_each(${liveSearchTableNames})
     where value = ${table} collate nocase) else (r.delivery_label = ${table} collate nocase
     or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
                where pt.party_id = r.party_id and dt.label = ${table} collate nocase)

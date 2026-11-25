@@ -195,7 +195,8 @@ y puedes volver a entrar al regresar. La pantalla ofrece **Entrar** cuando su pe
 
 La pantalla de estación muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
 cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
-mesa dice **Mostrador #12**. La cabecera de la tarjeta de un pedido para llevar, y su comanda
+mesa dice **Mostrador #12**. Busca el nombre que se escribió junto al número de pedido o la mesa
+de entrega. La cabecera de la tarjeta de un pedido para llevar, y su comanda
 impresa, dicen **Para llevar**, para que lo empaquetes. Una tarjeta está en la columna de su plato
 menos avanzado, **Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo
 esperando. Sus minutos cuentan desde que su primer plato se envió a esta estación para prepararlo, o se pasó a

@@ -374,7 +374,7 @@ export async function readOrderHeaders(
           orderNumber: String(places.orderNumber),
           tableLabel: places.names.length === 0 ? billLabel : partyTablesName(places.names),
           partyId,
-          partyName: sittingWith,
+          partyName: places.names.length === 0 ? sittingWith : (sittingWith ?? billLabel),
           takeAway,
         },
       ];

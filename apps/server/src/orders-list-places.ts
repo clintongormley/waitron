@@ -2,14 +2,16 @@ import { orderPlaceFactsSql, type OrderPlaceFacts, type Transaction } from "@wai
 import { sql } from "drizzle-orm";
 
 export const LIVE_ORDER_PLACE = sql`r.kind = 'bill' and r.status in ('open', 'waiting_for_payment')`;
-const livePlace = orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`);
-export const liveTableNames = sql`(${livePlace} -> '$.names')`;
+const livePlace = orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`, {
+  searchable: true,
+});
+export const liveSearchTableNames = sql`(${livePlace} -> '$.searchNames')`;
 
 export function ordersWordRank(words: string) {
   return sql`case when ${LIVE_ORDER_PLACE} then (
       with place as materialized (select ${livePlace} as facts)
       select waitron_search_rank(${words}, r.bill_name, facts ->> '$.sittingWith',
-        (select group_concat(value, ' ') from json_each(facts -> '$.names'))) from place
+        (select group_concat(value, ' ') from json_each(facts -> '$.searchNames'))) from place
     )
     else waitron_search_rank(${words}, r.party_name, r.delivery_label,
       coalesce(

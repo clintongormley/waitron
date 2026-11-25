@@ -196,7 +196,8 @@ describe("a delivered counter order whose table was let go", () => {
     );
 
     const order = await queued(billId);
-    expect(order).toMatchObject({ counter: true, label: null });
+    expect(order.label).toBeNull();
+    expect(order).not.toHaveProperty("party");
     expect(order).not.toHaveProperty("tableShortNames");
   });
 });

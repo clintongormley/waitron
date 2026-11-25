@@ -21,6 +21,7 @@ type RawBill = {
   order_number: number;
   party_id: string | null;
   bill_name: string | null;
+  departed_tables: string | null;
   place?: string | null;
   zone_id: string | null;
   zone_name: string | null;
@@ -43,7 +44,13 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
   const takenOff = sql`(select coalesce(-sum(dl.line_gross), 0) from sale_lines dl
        where dl.sale_id = s.id and dl.deducts_sale_id is not null)`;
   return sql`with facts as (
-    select wo.id, wo.opened_at, wo.order_number, wo.party_id, wo.bill_name, wo.delivery_table_id,
+    select wo.id, wo.opened_at, wo.order_number, wo.party_id,
+      case when ud.id is null then wo.bill_name else wo.label end as bill_name,
+      wo.delivery_table_id,
+      case when ud.id is not null then coalesce(p.table_names,
+        (select json_group_array(d.label order by pt.joined_at, pt.rowid)
+          from party_tables pt join dining_tables d on d.id = pt.table_id where pt.party_id = wo.party_id)
+      ) end as departed_tables,
       wo.status as order_status,
       ${zone} as zone_id,
       s.id as sale_id, case when s.id is null then null else sr.code || '/' || s.invoice_number end as invoice_number,
@@ -81,6 +88,7 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
     left join sales s on s.working_order_id = wo.id
     left join invoice_series sr on sr.id = s.series_id
     left join unpaid_departures ud on ud.working_order_id = wo.id
+    left join parties p on p.id = wo.party_id
     where (${inZones?.(sql`wo.id`) ?? sql`1`})
       and (wo.status in ('open','placed') or (wo.status = 'settled' and wo.party_id is null
         and wo.collected_at is null and exists(select 1 from working_order_lines wl join ticket_items ti on ti.working_order_line_id = wl.id where wl.working_order_id = wo.id)
@@ -121,7 +129,7 @@ const sorts: Readonly<Record<string, SQL>> = {
 const selection = sql`r.id, r.opened_at, r.order_number, r.party_id, r.bill_name, r.zone_id, r.zone_name, r.item_count,
   cast(r.total_cents as text) as total_cents, cast(r.paid_cents as text) as paid_cents,
   cast(r.owing_cents as text) as owing_cents, r.state, r.invoice_number, r.departed_at,
-  r.order_status, r.collection_status`;
+  r.order_status, r.collection_status, r.departed_tables`;
 
 async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]> {
   if (raw.length === 0) return [];
@@ -161,7 +169,7 @@ async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]>
       label: row.bill_name,
       partyId: row.party_id,
       partyName: sittingWith,
-      tables: names,
+      tables: row.departed_tables === null ? names : (JSON.parse(row.departed_tables) as string[]),
       zoneId: row.zone_id,
       zoneName: row.zone_name,
       staff: staff
@@ -190,13 +198,16 @@ export async function readFindBills(
   const place =
     query.q === "" && query.sort.key !== "tableName"
       ? sql`null`
-      : orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`);
-  const tableText = sql`(select group_concat(value, ' ') from json_each(r.place -> '$.names'))`;
+      : orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`, {
+          searchable: query.q !== "",
+        });
+  const tableText = sql`(select group_concat(value, ' ') from json_each(coalesce(r.departed_tables, r.place -> '$.names')))`;
+  const searchTables = sql`(select group_concat(value, ' ') from json_each(coalesce(r.departed_tables, r.place -> '$.searchNames')))`;
   const partyName = sql`r.place ->> '$.sittingWith'`;
   const ranked = sql`${relation}, named as materialized (select r.*, ${place} as place from bills r),
     ranked as materialized (
       select r.*, coalesce(${tableText}, r.bill_name, ${partyName}) as table_key,
-        ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q}, r.bill_name, ${partyName}, ${tableText}, cast(r.order_number as text), r.invoice_number)`} as search_rank
+        ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q}, r.bill_name, ${partyName}, ${searchTables}, cast(r.order_number as text), r.invoice_number)`} as search_rank
       from named r
     )`;
   const where = filtered(query);
