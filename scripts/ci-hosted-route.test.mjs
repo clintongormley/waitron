@@ -98,6 +98,7 @@ describe("queue-pressure routing", () => {
 
   it.each([
     ["one stalled job", 1, 299_999, 11],
+    ["capacity observed at the decision time", 1, 0, 11],
     ["twelve stalled jobs", 12, 1_000, 0],
     ["stale capacity", 1, 300_000, 0],
     ["future capacity", 1, -1, 0],
@@ -135,6 +136,7 @@ describe("queue-pressure routing", () => {
       selected ? `server_jobs={"test-server":${selected}}` : "server_jobs={}",
     );
     expect(reports.join("\n")).toContain("server work has waited five minutes in runs 50");
+    if (age === null) expect(reports.join("\n")).toContain("CI capacity could not be verified");
   });
 
   it("logs the whole route on a fresh rerun without a first-batch candidate list", async () => {
