@@ -24,15 +24,133 @@ function read(file) {
   return readFileSync(join(root, file), "utf8");
 }
 
-async function move(source, targets, keep = []) {
+async function move(source, targets, keep = [], lift) {
   write(
     "moves.json",
-    JSON.stringify({ tsconfig: "tsconfig.json", moves: [{ source, targets, keep }] }),
+    JSON.stringify({ tsconfig: "tsconfig.json", moves: [{ source, targets, keep, lift }] }),
   );
   return main(["moves.json"], root);
 }
 
 describe("move-ts-declarations", () => {
+  const route = [
+    "  // Keep the branch's callback and comment together.",
+    '  app.post("/start", () => throttle.claim("branch edit"));',
+  ].join("\n");
+  const mount = [
+    'import type { Router, Throttle } from "./router.js";',
+    "",
+    "export function mount(app: Router, throttle: Throttle, otherThrottle: Throttle) {",
+    '  app.get("/before", () => otherThrottle.claim("before"));',
+    "",
+    route,
+    "",
+    '  app.get("/after", () => otherThrottle.claim("after"));',
+    "}\n",
+  ].join("\n");
+  const lift = {
+    mount: "mount",
+    groups: {
+      mountStart: {
+        first: "post /start",
+        last: "post /start",
+        parameters: { app: "Router", throttle: "Throttle" },
+      },
+    },
+  };
+
+  it("lifts an edited route callback and passes the original shared throttle in order", async () => {
+    write("original.ts", mount);
+    write(
+      "router.ts",
+      [
+        "export interface Throttle { claim(value: string): string }",
+        "export interface Router {",
+        "  get(path: string, handler: () => string): void;",
+        "  post(path: string, handler: () => string): void;",
+        "}\n",
+      ].join("\n"),
+    );
+
+    await move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], lift);
+
+    expect(read("start.ts")).toContain(`{\n${route}\n}`);
+    expect(read("original.ts")).toContain(
+      [
+        '  app.get("/before", () => otherThrottle.claim("before"));',
+        "",
+        "  mountStart(app, throttle);",
+        "",
+        '  app.get("/after", () => otherThrottle.claim("after"));',
+      ].join("\n"),
+    );
+  });
+
+  it.each([
+    ["missing", mount, "post /missing", /route anchor post \/missing, found 0/i],
+    ["ambiguous", mount.replace(route, `${route}\n\n${route}`), "post /start", /found 2/i],
+  ])("refuses a route anchor when it is %s", async (_reason, source, last, error) => {
+    write("original.ts", source);
+    const badLift = {
+      ...lift,
+      groups: { mountStart: { ...lift.groups.mountStart, last } },
+    };
+
+    await expect(
+      move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], badLift),
+    ).rejects.toThrow(error);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("start.ts")).toThrow(/ENOENT/);
+  });
+
+  it("refuses formatting that would change a lifted callback", async () => {
+    const source = mount.replace('claim("branch edit")', 'claim(  "branch edit")');
+    write("original.ts", source);
+
+    await expect(
+      move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], lift),
+    ).rejects.toThrow(/mountStart.*changed body/i);
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("start.ts")).toThrow(/ENOENT/);
+  });
+
+  it("keeps a shared closure in the mount before passing it to lifted routes", async () => {
+    const closure = '  const read = () => throttle.claim("shared");';
+    const finish = '  app.post("/finish", () => read());';
+    const source = mount.replace(route, [route, closure, finish].join("\n\n"));
+    write("original.ts", source);
+    const withClosure = {
+      ...lift,
+      groups: {
+        mountStart: {
+          ...lift.groups.mountStart,
+          last: "post /finish",
+          parameters: { ...lift.groups.mountStart.parameters, read: "() => string" },
+          hoist: "read",
+        },
+      },
+    };
+
+    await move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], withClosure);
+
+    expect(read("start.ts")).toContain(`{\n${route}\n\n${finish}\n}`);
+    expect(read("original.ts")).toContain(`${closure}\n\n  mountStart(app, throttle, read);`);
+  });
+
+  it("refuses a range whose end route comes before its start", async () => {
+    write("original.ts", mount);
+    const reversed = {
+      ...lift,
+      groups: { mountStart: { ...lift.groups.mountStart, last: "get /before" } },
+    };
+
+    await expect(
+      move("original.ts", { "start.ts": ["mountStart"] }, ["mount"], reversed),
+    ).rejects.toThrow(/out-of-order.*mountStart/i);
+    expect(read("original.ts")).toBe(mount);
+    expect(() => read("start.ts")).toThrow(/ENOENT/);
+  });
+
   it("takes a moved function's alias, body and comment to their new homes", async () => {
     const declaration = [
       "// The order in this tuple is part of the return value.",

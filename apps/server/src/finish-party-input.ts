@@ -3,7 +3,7 @@ import { invalid } from "./bill-allocation.js";
 import { submissionIdOf } from "./bill-payments-api.js";
 import { parseCancellationContext } from "./line-cancel-input.js";
 import type { CounterCollection, FinishCancellation } from "./finish-party-service.js";
-import { requireRevision } from "./till-api.js";
+import { requireRevision } from "./till-request-fields.js";
 
 export function parseFinishCancellations(body: Record<string, unknown>): {
   submissionId?: string;

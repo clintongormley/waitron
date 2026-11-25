@@ -20,7 +20,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";
 import type { PartyAllergyRead } from "@waitron/module";
-import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { mountTillApi } from "./till-api.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { noteSessionPerson } from "./testing/tab-person.js";

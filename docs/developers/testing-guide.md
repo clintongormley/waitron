@@ -4502,7 +4502,7 @@ person-refusal cases in `till-api.drafts.test.ts`, `till-api.groups.test.ts`
 and `draft-discard.test.ts` do. A test of a request naming nobody calls
 `leaveSessionAlone(token)` from `testing/tab-person.ts`: that session's requests then carry only the
 header the test gives them, or none. `till-session.person.test.ts`,
-`till-api.session-person.test.ts`, `till-api.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database
+`till-api.session-person.test.ts`, `till-api.sign-in.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database
 itself notes it with `noteSessionPerson(token, personId)`, as the allergy suites and
 `testing/kitchen-allergy-fixture.ts` do. The cost: a server test that sets no header and leaves no
 session alone sends the noted person, so it reaches the refusal only by setting the header itself or

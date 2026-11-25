@@ -1343,7 +1343,7 @@ clears the cookie only when it carries no person header.
 
 The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
 device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in
-`device-api.test.ts`, more sign-out cases in `till-api.test.ts`, and the refusals of a save, a
+`device-api.test.ts`, more sign-out cases in `till-api.sign-in.test.ts`, and the refusals of a save, a
 take-over, a line split and a discard naming someone else in `till-api.drafts.test.ts`,
 `till-api.groups.test.ts` and `draft-discard.test.ts`. The till's are in
 `apps/till/src/api/client.test.ts` ("TillApi: the tab's person on every request") and

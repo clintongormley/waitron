@@ -366,7 +366,7 @@ describe("the sign-in cookie's readers", () => {
       if (!entry.isFile() || !file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
       if (file.startsWith("testing/") || file === "till-session.ts") continue;
       let text = readFileSync(join(root, file), "utf8").replace(/^import[^;]*;/gm, "");
-      if (file === "till-api.ts") {
+      if (file === "till-session-routes.ts") {
         const start = text.indexOf('app.delete("/api/session"');
         const end = text.indexOf("\n  );\n", start);
         expect(start, "the sign-out handler's start").toBeGreaterThan(-1);

@@ -1,0 +1,230 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/till-api.ts",
+      "keep": ["TILL_OPEN_WHILE_DISK_FULL", "mountTillApi"],
+      "lift": {
+        "mount": "mountTillApi",
+        "groups": {
+          "mountTillSessionRoutes": {
+            "first": "post /api/session",
+            "last": "get /api/locales",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle"
+            }
+          },
+          "mountTillMenuRoutes": {
+            "first": "get /api/default-service-zone/offers",
+            "last": "post /api/dead-ends/sale",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountTillWorkingOrderRoutes": {
+            "first": "post /api/working-orders",
+            "last": "post /api/working-orders/:id/place",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle",
+              "fiscal": "import(\"./working-order-context.js\").TillSaleDeps",
+              "readEmailTransport": "(tx: Transaction) => Promise<boolean>"
+            },
+            "hoist": "readEmailTransport"
+          },
+          "mountTillKitchenCounterRoutes": {
+            "first": "get /api/stations",
+            "last": "post /api/orders/:id/reprint",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountTillSaleReceiptRoutes": {
+            "first": "get /api/sales/:id",
+            "last": "post /api/sales/:id/reprint",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "readEmailTransport": "(tx: Transaction) => Promise<boolean>"
+            }
+          },
+          "mountTillDrawerAndCancelRoutes": {
+            "first": "get /api/drawer/authorizers",
+            "last": "post /api/working-orders/:id/split-after-print",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle"
+            }
+          },
+          "mountTillTableRoutes": {
+            "first": "get /api/tables/state",
+            "last": "get /api/parties/:id/bills",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle",
+              "catchUpFloor": "(tx: Transaction) => ReturnType<typeof ensureToday>",
+              "fiscal": "import(\"./working-order-context.js\").TillSaleDeps"
+            }
+          },
+          "mountTillSetMenuRoutes": {
+            "first": "get /api/bills/:id/set-menus",
+            "last": "delete /api/bills/:id/set-menu-lines/:lineId",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountTillGroupRoutes": {
+            "first": "get /api/parties/:id/groups",
+            "last": "post /api/parties/:id/groups/move",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle"
+            }
+          },
+          "mountTillDraftRoutes": {
+            "first": "get /api/parties/:id/drafts",
+            "last": "post /api/dead-ends/order",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle",
+              "fiscal": "import(\"./working-order-context.js\").TillSaleDeps"
+            }
+          },
+          "mountTillOrderLineRoutes": {
+            "first": "put /api/working-orders/:id/make-at",
+            "last": "post /api/working-orders/:id/lines/send",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "pinThrottle": "PinThrottle",
+              "fiscal": "import(\"./working-order-context.js\").TillSaleDeps"
+            }
+          },
+          "mountTillBillMoveRoutes": {
+            "first": "post /api/bills/:id/set-menu-moves",
+            "last": "post /api/bills/:id/move",
+            "parameters": {
+              "app": "Hono",
+              "deps": "TillApiDeps",
+              "log": "Logger",
+              "fiscal": "import(\"./working-order-context.js\").TillSaleDeps"
+            }
+          }
+        }
+      },
+      "targets": {
+        "apps/server/src/till-api-deps.ts": ["TillApiDeps"],
+        "apps/server/src/till-session-routes.ts": ["mountTillSessionRoutes"],
+        "apps/server/src/till-menu-routes.ts": ["mountTillMenuRoutes"],
+        "apps/server/src/till-working-order-routes.ts": ["mountTillWorkingOrderRoutes"],
+        "apps/server/src/till-kitchen-counter-routes.ts": [
+          "mountBillReady",
+          "mountTillKitchenCounterRoutes"
+        ],
+        "apps/server/src/till-sale-receipt-routes.ts": ["mountTillSaleReceiptRoutes"],
+        "apps/server/src/till-drawer-and-cancel-routes.ts": [
+          "drawerOverrideToCheck",
+          "mountTillDrawerAndCancelRoutes"
+        ],
+        "apps/server/src/till-table-routes.ts": [
+          "requireOtherTables",
+          "JoinMerge",
+          "requireMerge",
+          "movingRooms",
+          "mountTillTableRoutes"
+        ],
+        "apps/server/src/till-set-menu-routes.ts": ["mountTillSetMenuRoutes"],
+        "apps/server/src/till-group-routes.ts": ["mountTillGroupRoutes"],
+        "apps/server/src/till-draft-routes.ts": ["mountTillDraftRoutes"],
+        "apps/server/src/till-order-line-routes.ts": ["mountTillOrderLineRoutes"],
+        "apps/server/src/till-bill-move-routes.ts": [
+          "requireSetMenuMoves",
+          "mountTillBillMoveRoutes"
+        ],
+        "apps/server/src/till-api-errors.ts": [
+          "STATUS",
+          "run",
+          "runAvailability",
+          "runBodyIds",
+          "runBodyGroup",
+          "runBodyCourse",
+          "runBodyLines",
+          "runMoveStation",
+          "runSubmitGroups",
+          "runSaveDraft",
+          "runDeadEndsDraft",
+          "runDeadEndsOrder",
+          "Run"
+        ],
+        "apps/server/src/till-request-fields.ts": [
+          "requireUuidId",
+          "parseDrawerOverride",
+          "REASON_LIMIT",
+          "parseReason",
+          "parseOverrideField",
+          "overridePinAttempts",
+          "requireTabParam",
+          "requireRevision",
+          "requireRecipient",
+          "requirePartyParam",
+          "requireGuestCount",
+          "requireGuestCountOrNull",
+          "requireSplitGuestCounts",
+          "billCommand",
+          "hasExactly",
+          "requireMoveTarget",
+          "otherPartyRead",
+          "moveCommand",
+          "tableActionCommand",
+          "requireOtherBill",
+          "requireSplitSelection",
+          "selectionObject",
+          "selectionId",
+          "requireLineIds",
+          "joinGroupOf",
+          "groupDestinationOf",
+          "billOf",
+          "parseSubmittedGroups",
+          "requireDraftPartyParam",
+          "requireDraftParam",
+          "requireStepParam",
+          "requireShownDueAt",
+          "requireDraftId",
+          "parseDraftGroups",
+          "parseLineQuantities",
+          "parseMoveTarget",
+          "requireLineNo"
+        ],
+        "apps/server/src/till-order-zones.ts": ["resolveHttpOrderZone", "newOrderZoneIn", "named"],
+        "apps/server/src/till-card-collector.ts": ["resolvePayReader", "resolveCardCollector"],
+        "apps/server/src/till-order-commands.ts": [
+          "stationMoveRequest",
+          "groupCommand",
+          "allergyCommand",
+          "recheckFireSession"
+        ]
+      }
+    }
+  ]
+}

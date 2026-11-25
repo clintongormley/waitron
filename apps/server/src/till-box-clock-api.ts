@@ -32,7 +32,7 @@ import {
 } from "./start-clock-check.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
-import { parseOverrideField } from "./till-api.js";
+import { parseOverrideField } from "./till-request-fields.js";
 import {
   assertRequestDevice,
   assertStillSignedIn,

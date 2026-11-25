@@ -5,8 +5,8 @@ server's till HTTP API (`/api/*`): the operator logs in on a lock screen, rings 
 counter screen, takes cash, and gets a filed Veri\*Factu ticket with its QR.
 
 Slice 1 (**7a — walk-up cash sale**) of the Counter POS, built in #60.
-The matching HTTP surface lives in `@waitron/server` (`apps/server/src/till-api.ts`); this app never
-talks to the database directly.
+The till sends its requests over HTTP. The Server handles database access and registers till route
+groups in `apps/server/src/till-api.ts` and device routes in `apps/server/src/device-api.ts`.
 
 ## Counter ordering
 

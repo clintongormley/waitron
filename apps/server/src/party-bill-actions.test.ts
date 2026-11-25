@@ -64,7 +64,7 @@ import {
 import "./errors.js";
 import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
-import { overridePinAttempts } from "./till-api.js";
+import { overridePinAttempts } from "./till-request-fields.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { numbersOf } from "./testing/bill-identities.js";

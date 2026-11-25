@@ -24,7 +24,8 @@ import {
   writePartyAllergy,
 } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
-import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { mountTillApi } from "./till-api.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { noteSessionPerson } from "./testing/tab-person.js";
 import {
   OPERATOR,

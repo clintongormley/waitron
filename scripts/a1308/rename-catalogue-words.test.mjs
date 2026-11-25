@@ -87,6 +87,8 @@ it.each([
   ["packages/staffing/src/dashboard/painter-parts.ts", "catalogueText", "K6"],
   ["docs/developers/testing-guide.md", "AEAT error catalogue", "K7"],
   ["apps/server/src/job-catalogue.test.ts", "job catalogue", "K8"],
+  ["apps/server/src/till-api.bootstrap.test.ts", "language catalogue", "K10"],
+  ["apps/server/src/till-api.bootstrap.test.ts", "static catalogue", "K10"],
 ])("keeps the other meaning in %s", (file, text, rule) => {
   expect(rewriteWords(text, file)).toMatchObject({
     text,

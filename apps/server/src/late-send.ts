@@ -2,7 +2,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { authorize, type PinThrottle } from "@waitron/identity";
 import { invalid } from "./bill-allocation.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { overridePinAttempts, parseOverrideField } from "./till-api.js";
+import { overridePinAttempts, parseOverrideField } from "./till-request-fields.js";
 import { isUuid } from "./till-session.js";
 import "./errors.js";
 

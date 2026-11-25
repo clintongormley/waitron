@@ -19,7 +19,8 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { mountTillApi } from "./till-api.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { TradingAdmission } from "./trading-admission.js";
 
 // Split a table through its route to a genuine chained fiscal record: what a split leaves paid is

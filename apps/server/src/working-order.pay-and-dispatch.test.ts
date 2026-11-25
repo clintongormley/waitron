@@ -79,7 +79,7 @@ import { setRoutingCell } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { fireDishesAtPayment } from "./till-sale.js";
-import { overridePinAttempts } from "./till-api.js";
+import { overridePinAttempts } from "./till-request-fields.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";

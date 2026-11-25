@@ -95,7 +95,7 @@ import type { TranslationItemPage } from "@waitron/menu/src/content-translation-
 import { mountTillApi } from "./till-api.js";
 import { readSettledTicket, type TillSaleResult } from "./till-sale.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import type { TradingContext } from "./trading-context.js";
 
 import { enrolDeviceForTest } from "./testing/enrol.js";

@@ -65,7 +65,7 @@ import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { systemClock } from "./till-backend.js";
-import { overridePinAttempts } from "./till-api.js";
+import { overridePinAttempts } from "./till-request-fields.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
 /** The starter Comp reason Complaint, by its English or Spanish name. */

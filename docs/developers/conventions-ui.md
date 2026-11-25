@@ -657,7 +657,7 @@ was (W100).
   `packages/layouts/src/device-profile.ts`). A handheld whose profile has it opens the drawer like a
   till; a till whose profile lacks it opens none, and so does a kitchen display, whatever its
   stored list names.
-- **The Open drawer button** (`POST /api/drawer/open`, `apps/server/src/till-api.ts`) needs a
+- **The Open drawer button** (`POST /api/drawer/open`, `apps/server/src/till-drawer-and-cancel-routes.ts`) needs a
   signed-in session, and a session always belongs to a device. Deleting a device ends its
   sessions, so they answer `session.required`; a session left open on a device turned off outside
   Delete answers `device.unauthorized` (`requireSession`,
@@ -1063,7 +1063,7 @@ right PIN that the approval does not admit (`apps/server/src/adjustments-apply.t
 `packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
 (the dashboard sign-in),
 `handover-activation.test.ts` (the spare's sign-in), `operation-authentication.test.ts` (the enrolled
-authenticator), `till-api.test.ts` (the till's sign-in) and `till-api.receipt.test.ts` (a drawer override) and `box-join-person-api.test.ts` (the Check route only). The membership read
+authenticator), `till-api.sign-in.test.ts` (the till's sign-in) and `till-api.receipt.test.ts` (a drawer override) and `box-join-person-api.test.ts` (the Check route only). The membership read
 (`management-api.membership.test.ts`), adjustment approver (`adjustments-api.test.ts`), refund
 override and manual-refund confirmer (`bill-payments-api.test.ts`) also compare the 401
 status, full JSON body and asynchronous scrypt count for unknown, suspended and wrong-secret credentials.
@@ -1217,7 +1217,7 @@ an Add, landing while the PIN is checked therefore leaves no session open
 session" and "a sign-in that Delete and then Add both overtook is refused, and opens no
 session"). The same check hands back the device as it stands at that moment, and the sign-in
 refuses it `device.forbidden_action` (`action: "sign_in"`) if a reassignment between an ordering
-and a kitchen profile overtook the PIN check (`apps/server/src/till-api.ts`). A move onto a
+and a kitchen profile overtook the PIN check (`apps/server/src/till-session-routes.ts`). A move onto a
 kitchen profile during the check opens no session (`apps/server/src/join-e2e.test.ts`,
 "refuses a PIN sign-in overtaken by reassignment"). A bill payment checks again inside the transaction that writes it, before anything is written: the
 operator's session is still open on that device, then the device is still active and not deleted,

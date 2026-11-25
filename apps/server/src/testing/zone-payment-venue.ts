@@ -10,7 +10,7 @@ import { provisionBillVenue } from "./bill-venue.js";
 import { offerProducts } from "./zone-offers.js";
 import { createTable } from "./live-table.js";
 import { openPartyTab, fireAll } from "./serve-line.js";
-import { overridePinAttempts } from "../till-api.js";
+import { overridePinAttempts } from "../till-request-fields.js";
 import { TradingAdmission } from "../trading-admission.js";
 import { readBillEditState } from "../bill-editing.js";
 

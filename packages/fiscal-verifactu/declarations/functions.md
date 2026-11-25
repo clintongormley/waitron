@@ -1,5 +1,5 @@
 <!-- Each line is "- <the function's text as published> — <the route or file that serves it>"; the declaration lists them in this order. -->
-- toma de pedidos por mesa o en barra — POST /api/tables/:id/seat and POST /api/working-orders (apps/server/src/till-api.ts)
+- toma de pedidos por mesa o en barra — POST /api/tables/:id/seat (apps/server/src/till-table-routes.ts) and POST /api/working-orders (apps/server/src/till-working-order-routes.ts)
 - cobro en efectivo y con tarjeta — POST /api/working-orders/:id/payments (apps/server/src/bill-payments-api.ts)
 - expedición de facturas simplificadas y completas — TipoFactura F2 and F1 in packages/fiscal-verifactu/src/backend.ts
 - facturas rectificativas — apps/server/src/cancel-credit.ts

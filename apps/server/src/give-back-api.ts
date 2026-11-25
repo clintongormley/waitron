@@ -16,7 +16,9 @@ import { requestCfg } from "./request-config.js";
 import { overrideOf, pathId } from "./tender-refund-api.js";
 import { checkAccess } from "./tender-refund-authorization.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
-import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
+import { overridePinAttempts } from "./till-request-fields.js";
+import { STATUS } from "./till-api-errors.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";
 import "./errors.js";
 

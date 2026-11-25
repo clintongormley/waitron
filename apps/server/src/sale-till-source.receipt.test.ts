@@ -32,7 +32,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import type { TradingContext } from "./trading-context.js";
 
 import { enrolDeviceForTest } from "./testing/enrol.js";

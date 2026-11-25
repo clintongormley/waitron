@@ -28,7 +28,8 @@ import {
   saleReceiptLayout,
 } from "./receipt-print.js";
 import { requestCfg } from "./request-config.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";

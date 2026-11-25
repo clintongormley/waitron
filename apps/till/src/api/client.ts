@@ -2698,7 +2698,7 @@ export type A4HoldCode = (typeof a4HoldCodes)[number];
 export type InvoiceDeliveryMedium = "email" | "a4" | "receipt";
 
 /** How one bill's full invoice can be delivered (`/api/invoice-delivery-options`,
- * `apps/server/src/till-api.ts`). */
+ * `apps/server/src/till-working-order-routes.ts`). */
 export interface InvoiceDeliveryOptions {
   /** The device's invoice printer when it is an A4 printer, else null. */
   invoicePrinter: { id: string; name: string } | null;

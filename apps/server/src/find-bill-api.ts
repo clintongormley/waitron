@@ -8,7 +8,8 @@ import { findTransactionsRelation, readFindTransactions } from "./find-bill-tran
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import type { FindBillOptions } from "./find-bill-types.js";
 import type { Logger } from "./logger.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
 import { checkZones, orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
