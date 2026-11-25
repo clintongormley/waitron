@@ -136,7 +136,6 @@ const FOUR_TILES: DocumentTile[] = [
 ];
 const COUNTER_TILES: DocumentTile[] = [sectionTile("sec-beer"), productTile("jamon")];
 
-/** A Device Home Page at the default display settings holding `tiles`. */
 function withShortcuts(tiles: DocumentTile[]): Pick<TillZoneMenu, "home"> {
   return {
     home: {

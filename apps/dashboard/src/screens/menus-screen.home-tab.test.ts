@@ -757,39 +757,45 @@ describe("the Home page tab's shortcuts", () => {
     });
   });
 
-  it.each([360, 390, 1280])("places Shown first above the preview at %s px", async (width) => {
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(width, 900);
-    onTestFinished(() => page.viewport(viewport.width, viewport.height));
-    const el = await mountHome();
-    const control = q<HTMLElementTagNameMap["wt-segmented-control"]>(
-      el,
-      'wt-segmented-control[name="home-order"]',
-    )!;
-    const widget = preview(el)!;
-    await widget.updateComplete;
-    await control.updateComplete;
-    expect(control.getBoundingClientRect().bottom).toBeLessThan(widget.getBoundingClientRect().top);
-    const grid = widget.shadowRoot!.querySelector(".grid")!;
-    const tracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
-    expect(tracks).toHaveLength(width === 1280 ? 6 : 3);
-    const label = control.shadowRoot!.querySelector(".label")!.getBoundingClientRect();
-    const row = control.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
-    if (width === 1280) {
-      expect(row.width).toBeLessThan(350);
-      expect(label.right).toBeLessThan(row.left);
-      expect(label.top + label.height / 2).toBeCloseTo(row.top + row.height / 2, 1);
-    }
-    if (width <= 390) {
-      expect(label.bottom).toBeLessThan(row.top);
-      const buttons = [...control.shadowRoot!.querySelectorAll("button")];
-      const [first, second] = buttons.map((button) => button.getBoundingClientRect().width);
-      expect(first).toBeCloseTo(second!, 1);
-      expect(widget.getBoundingClientRect().width).toBeCloseTo(
-        control.getBoundingClientRect().width,
+  it.each([360, 390, 768, 769, 1280])(
+    "places Shown first above the preview at %s px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      await page.viewport(width, 900);
+      onTestFinished(() => page.viewport(viewport.width, viewport.height));
+      const el = await mountHome();
+      const control = q<HTMLElementTagNameMap["wt-segmented-control"]>(
+        el,
+        'wt-segmented-control[name="home-order"]',
+      )!;
+      const widget = preview(el)!;
+      await widget.updateComplete;
+      await control.updateComplete;
+      expect(control.getBoundingClientRect().bottom).toBeLessThan(
+        widget.getBoundingClientRect().top,
       );
-    }
-  });
+      const grid = widget.shadowRoot!.querySelector(".grid")!;
+      const tracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
+      expect(tracks).toHaveLength(width >= 768 ? 6 : 3);
+      const label = control.shadowRoot!.querySelector(".label")!.getBoundingClientRect();
+      const row = control.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
+      if (width > 768) {
+        expect(row.width).toBeLessThan(350);
+        expect(label.right).toBeLessThan(row.left);
+        expect(label.top + label.height / 2).toBeCloseTo(row.top + row.height / 2, 1);
+      }
+      if (width === 768) expect(row.width).toBeLessThanOrEqual(576);
+      if (width <= 390) {
+        expect(label.bottom).toBeLessThan(row.top);
+        const buttons = [...control.shadowRoot!.querySelectorAll("button")];
+        const [first, second] = buttons.map((button) => button.getBoundingClientRect().width);
+        expect(first).toBeCloseTo(second!, 1);
+        expect(widget.getBoundingClientRect().width).toBeCloseTo(
+          control.getBoundingClientRect().width,
+        );
+      }
+    },
+  );
 
   it("keeps the saved order when reloading fails and restores it after a refused change", async () => {
     const client = api();
@@ -800,6 +806,10 @@ describe("the Home page tab's shortcuts", () => {
     )!;
     const choose = (index: number) =>
       control.shadowRoot!.querySelectorAll("button")[index]!.click();
+    const blocks = () =>
+      [...preview(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-region]")].map(
+        (block) => block.dataset.region,
+      );
     const save = deferred<void>();
     client.setHomeDisplay.mockImplementationOnce(() => save.promise);
     client.getMenuHome.mockRejectedValueOnce(new Error("offline"));
@@ -807,13 +817,10 @@ describe("the Home page tab's shortcuts", () => {
     await vi.waitFor(() => expect(control.disabled).toBe(true));
     expect(control.value).toBe("menu_first");
     expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "menu_first");
+    await vi.waitFor(() => expect(blocks()).toEqual(["search", "structure", "shortcuts"]));
     save.resolve();
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
     expect(control.value).toBe("menu_first");
-    const blocks = () =>
-      [...preview(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-region]")].map(
-        (block) => block.dataset.region,
-      );
     expect(blocks()).toEqual(["search", "structure", "shortcuts"]);
     client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
     choose(0);

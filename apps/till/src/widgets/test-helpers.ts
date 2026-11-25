@@ -327,7 +327,7 @@ export interface ServedOffer {
 /**
  * Gives each menu what a zone-offers body serves beside it: a structure listing that menu's own
  * offers in order, a section placed where its first offer falls, and a Device Home Page at the
- * default display settings with no shortcuts, so a menu browser shows each offer once. With
+ * default order with no shortcuts, so a menu browser shows each offer once. With
  * `shortcuts`, each menu's shortcuts are its offers.
  */
 export function servedMenus<M extends { id: string }>(

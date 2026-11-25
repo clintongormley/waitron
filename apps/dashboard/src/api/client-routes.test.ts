@@ -1299,7 +1299,7 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads a menu's Device Home Page and writes its shortcuts and display settings", async () => {
+  it("reads a menu's Device Home Page and writes its shortcuts and order", async () => {
     const home = {
       homeSectionId: "s-home",
       shortcuts: [

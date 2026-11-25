@@ -129,6 +129,7 @@ export class DeviceHomePreview extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container-type: inline-size;
       }
 
       .frame {
@@ -137,12 +138,15 @@ export class DeviceHomePreview extends LitElement {
         align-content: start;
         inline-size: 100%;
         max-inline-size: 792px;
-        padding-block: var(--wt-space-3);
-        /* Three 100px tiles, two 12px gaps and the frame's two border pixels stay visible. */
-        padding-inline: clamp(0px, (100% - 326px) / 2, var(--wt-space-4));
+        padding: var(--wt-space-3) var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);
+      }
+      @container (inline-size >= 792px) {
+        .frame {
+          padding-inline: var(--wt-space-4);
+        }
       }
 
       section,

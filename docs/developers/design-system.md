@@ -574,7 +574,8 @@ the prices are equal. It appends the unit once for units other than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
 **Shown first** sits above a single preview with two equal choices, **Shortcuts** and **Full
-menu**. On a phone the control fills the available width. On a wide screen it fits its labels.
+menu**. On a phone the control fills the available width with the label above it. On a wide
+screen the label sits beside the buttons, which fit their text.
 The preview is at most 792px wide. Each
 shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove
 shortcut: <name>"). The bin is disabled while a shortcut is added, removed or reordered and
@@ -869,7 +870,7 @@ this floor — removing the `min-width` regresses that guard.
 `wt-segmented-control` shows a short single-choice list as joined buttons. Give it `name`,
 `label`, `options` (`{ value, label }`), and `value`. Use `hide-label` in a labelled table column;
 the group keeps its accessible name. Set `equal-width` to fill the available row with equal
-segments. Each choice exposes the `button` part for spacing adjustments.
+segments. Use the `label` and `button` parts to adjust their spacing.
 The chosen button uses the primary colour;
 `disabled`, `hint` and `error` carry the group state. A different choice emits `wt-change` with
 `{ value }`. Tab reaches the selected choice, arrow keys move and select, and Home/End select

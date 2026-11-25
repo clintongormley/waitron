@@ -49,8 +49,12 @@ it.each(
       const token = `--wt-font-size-${size}`;
       host.style.setProperty(token, `calc(${styles.getPropertyValue(token)} * ${scale / 100})`);
     }
-    await widen(host, width === 792 ? width : width - 34);
+    await widen(host, width === 792 ? width : width - 16);
     const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
+    if (width <= 390) {
+      const frame = root(el).querySelector(".frame")!.getBoundingClientRect();
+      expect(grid.getBoundingClientRect().left - frame.left).toBeCloseTo(9);
+    }
     expect(tracks(grid)).toBe(columns);
     expect(tiles(el, "structure")).toHaveLength(3);
     for (const cell of tiles(el, "structure")) {

@@ -413,7 +413,10 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
-      @media (min-width: 800px) {
+      .home-settings {
+        max-inline-size: var(--wt-form-max-width);
+      }
+      @media (width > 48rem) {
         .home-settings {
           display: flex;
           align-items: center;
