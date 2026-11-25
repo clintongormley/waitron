@@ -135,9 +135,6 @@ export class PeriodsList extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
       ${chipTints}
-      wt-data-table::part(default-mark) {
-        color: var(--wt-color-text-muted);
-      }
       .parent {
         color: var(--wt-color-primary-text);
       }
@@ -312,11 +309,8 @@ export class PeriodsList extends LitElement {
   private floorPlanCell(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
     const sets = this.plannedDepartments()?.get(row.departmentId)?.sets ?? [];
-    const chosen = sets.find(({ id, isDefault }) => !isDefault && id === row.floorPlanSetId);
-    if (chosen) return chosen.name;
-    const fallback = sets.find(({ isDefault }) => isDefault);
-    if (!fallback) return "—";
-    return html`<span part="default-mark">${fallback.name}</span>`;
+    if (row.floorPlanSetId === null) return sets.length === 0 ? "—" : nothing;
+    return sets.find(({ id }) => id === row.floorPlanSetId)?.name ?? "—";
   }
   private actions(row: PeriodRow) {
     if (row.kind !== "period") return nothing;

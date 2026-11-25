@@ -15,6 +15,7 @@ import {
   FormFeedback,
   submitOnEnter,
   visuallyHiddenStyles,
+  type ComboboxOption,
   type DataTableColumn,
   type DeleteDialogCopy,
   type WtModal,
@@ -266,6 +267,15 @@ function equipmentName(
   return name;
 }
 
+function inheritEquipment(valueLabel: string): ComboboxOption {
+  return {
+    value: "",
+    label: fill("inherit.value", { value: valueLabel }),
+    valueLabel,
+    inherited: true,
+  };
+}
+
 /** A battery report older than this is greyed and says when it was taken (add a device design
  * §6). */
 const BATTERY_STALE_MS = 10 * 60_000;
@@ -347,9 +357,6 @@ export class DevicesScreen extends LitElement {
         margin: var(--wt-space-3) 0 0;
         font-size: var(--wt-font-size-md);
         font-weight: var(--wt-font-weight-bold);
-      }
-      wt-data-table::part(inherited) {
-        color: var(--wt-color-text-muted);
       }
       .made-here {
         min-inline-size: 0;
@@ -596,7 +603,7 @@ export class DevicesScreen extends LitElement {
   @state() private readerHolders = new Map<string, ReaderHolderRow>();
   /** Each profile's card readers, read as the Edit dialog needs them. */
   @state() private profileReaders = new Map<string, ProfileReaderList>();
-  #storedReaderId: string | null = null;
+  #storedReader: { id: string | null; profileId: string | null } = { id: null, profileId: null };
   /** Set when the profile changes before the reader has loaded, so the late load keeps Use default. */
   #profileChangedWhileReaderLoads = false;
   #editEpoch = 0;
@@ -1129,7 +1136,7 @@ export class DevicesScreen extends LitElement {
     this.readers = [];
     this.readerReadError = null;
     this.chosenReaderId = "";
-    this.#storedReaderId = null;
+    this.#storedReader = { id: null, profileId: null };
     this.#profileChangedWhileReaderLoads = false;
     this.readerHolders = new Map();
     this.profileReaders = new Map();
@@ -1147,10 +1154,10 @@ export class DevicesScreen extends LitElement {
         profileId === null ? null : this.api.getProfileReaders(profileId),
       ]);
       if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
-      this.readers = readers.filter((reader) => reader.active);
+      this.readers = readers;
       this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
       if (profileId !== null && list !== null) this.profileReaders = new Map([[profileId, list]]);
-      this.#storedReaderId = readerId;
+      this.#storedReader = { id: readerId, profileId };
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
       this.#readerScope = draftScopeFor(this, {
@@ -1189,10 +1196,10 @@ export class DevicesScreen extends LitElement {
         this.api.getProfileReaders(profileId),
       ]);
       if (epoch !== this.#editEpoch || turn !== this.#saveTurn) return;
-      this.readers = readers.filter((reader) => reader.active);
+      this.readers = readers;
       this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
       this.profileReaders = new Map([...this.profileReaders, [profileId, list]]);
-      this.#storedReaderId = readerId;
+      this.#storedReader = { id: readerId, profileId };
       this.#readerScope?.commit(readerId ?? "");
       if (!this.#readerOptions().some((option) => option.value === this.chosenReaderId)) {
         this.chosenReaderId = readerId ?? "";
@@ -1342,17 +1349,12 @@ export class DevicesScreen extends LitElement {
       : `${printerLabel(printer)} (${fill("equipment.carried_by", { device: holder })})`;
   }
 
-  /**
-   * Use default first, naming what it resolves to; then the profile's switched-on printers, each
-   * another device carries marked. While the profile is unchanged the device keeps the printer it
-   * chose, so that one is offered even when switched off, and marked when the profile no longer
-   * lists it.
-   */
+  /** Keep a stored printer visible on its profile so a switched-off or unlisted choice can be seen. */
   #printerOptions(
     role: (typeof PRINTER_ROLES)[number],
     profile: DeviceProfile | undefined,
     held: string | null,
-  ): { value: string; label: string; fixed?: boolean; muted?: true }[] {
+  ): ComboboxOption[] {
     const ids = profile?.[role.list] ?? [];
     const drawer = role.field === "drawer" || role.field === "invoice";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
@@ -1368,12 +1370,12 @@ export class DevicesScreen extends LitElement {
       fallback === undefined || this.#printerHolder(fallback, drawer) !== null
         ? null
         : printerLabel(fallback);
+    const inheritance =
+      profile !== undefined || this.editForm.profileId === ""
+        ? [inheritEquipment(resolved ?? t("equipment.none"))]
+        : [];
     return [
-      {
-        value: "",
-        label: resolved ?? t("equipment.none"),
-        muted: true,
-      },
+      ...inheritance,
       ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
         ? []
@@ -1404,25 +1406,30 @@ export class DevicesScreen extends LitElement {
     return this.#readerLabel(reader);
   }
 
-  #readerOptions(): { value: string; label: string; muted?: true }[] {
+  #readerOptions(): ComboboxOption[] {
     const list = this.profileReaders.get(this.editForm.profileId);
-    const listed = (list?.readerIds ?? []).flatMap((id) => {
-      const reader = this.readers.find((r) => r.id === id);
+    if (this.readerState !== "ready" || list === undefined) return [];
+    const listed = list.readerIds.flatMap((id) => {
+      const reader = this.readers.find((r) => r.id === id && r.active);
       return reader === undefined ? [] : [reader];
     });
-    const fallback = this.readers.find((r) => r.id === list?.defaultReaderId);
+    const kept =
+      this.editForm.profileId === this.editing?.deviceProfileId &&
+      this.editForm.profileId === this.#storedReader.profileId
+        ? this.readers.find((r) => r.id === this.#storedReader.id && !r.active)
+        : undefined;
+    const fallback = this.readers.find((r) => r.id === list.defaultReaderId && r.active);
     const holder = fallback && this.readerHolders.get(fallback.id)?.holder;
     const resolved =
       fallback === undefined || (holder && holder.deviceId !== this.editing?.id)
         ? null
         : this.#readerLabel(fallback);
     return [
-      {
-        value: "",
-        label: resolved ?? t("equipment.none"),
-        muted: true,
-      },
+      inheritEquipment(resolved ?? t("equipment.none")),
       ...listed.map((reader) => ({ value: reader.id, label: this.#readerChoiceLabel(reader) })),
+      ...(kept === undefined
+        ? []
+        : [{ value: kept.id, label: this.#readerChoiceLabel(kept), fixed: true }]),
     ];
   }
 
@@ -1493,12 +1500,12 @@ export class DevicesScreen extends LitElement {
           : [deviceProfileId, ...approvedProfileIds],
     };
     const readerId = submittedReader === "" ? null : submittedReader;
-    if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
+    if (this.readerState === "ready" && readerId !== this.#storedReader.id) {
       // Saved separately: the reader belongs to the payments module.
       try {
         await this.api.setDeviceReader(device.id, readerId);
         if (epoch !== this.#editEpoch) return;
-        this.#storedReaderId = readerId;
+        this.#storedReader = { id: readerId, profileId: deviceProfileId };
         readerScope?.commit(submittedReader);
       } catch (error) {
         if (epoch !== this.#editEpoch) return;
@@ -1645,13 +1652,11 @@ export class DevicesScreen extends LitElement {
           const inherited =
             d.equipment.find((entry) => entry.role === column.role)?.selection !== "item";
           const name = equipmentName(d, column.role, this.pagePrinters);
-          return html`<span
-              part=${inherited ? "inherited" : nothing}
-              data-test=${`device-${column.key}-${d.id}`}
-              >${name}</span
+          return html`<span data-test=${`device-${column.key}-${d.id}`}
+              >${inherited ? nothing : name}</span
             >${
               inherited && name !== ""
-                ? html`<span part="visually-hidden"> ${t("devices.from_profile")}</span>`
+                ? html`<span part="visually-hidden">${name} ${t("devices.from_profile")}</span>`
                 : nothing
             }`;
         },
@@ -2097,9 +2102,10 @@ export class DevicesScreen extends LitElement {
                     search="auto"
                     searchPlaceholder=${t("categories.combobox_search")}
                     noResultsLabel=${t("categories.combobox_no_results")}
+                    inherited-suffix=${t("inherit.suffix")}
                     .placeholder=${
                       !loading
-                        ? options[0]!.label
+                        ? ""
                         : this.#queries.failing("listPrinters") ||
                             this.#queries.failing("listPagePrinters")
                           ? t("printers.refresh_failed")
@@ -2228,7 +2234,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-combobox
       data-test="edit-reader"
       name="defaultReaderId"
-      .placeholder=${this.#readerOptions()[0]!.label}
+      inherited-suffix=${t("inherit.suffix")}
       label=${t("devices.default_reader")}
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}

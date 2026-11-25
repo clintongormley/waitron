@@ -57,12 +57,12 @@ name and settings. Assign its devices and device profiles again.
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.
 
 In **Devices**, choose **Edit** from the device's row menu.
-Grey equipment names inherit the profile's default. Choose a named item to set it on this
-device; choose the grey entry again to inherit. The Devices table uses the same style.
+Choose **Inherit** to follow the profile's equipment, or choose a named item to set it on this
+device. Where a device uses that kind of equipment, a blank cell in **Devices** follows the profile.
 
 Waitron alerts you when a device's battery is low; if its battery reading in **Devices** is grey or says **Not reported**, check its charge on the device itself.
 
-In **Devices**, check **Invoice printer** to see where a device prints invoices. **· A4** after
+In **Devices**, check **Invoice printer** to see the choice set on a device. **· A4** after
 the printer's name identifies an A4 printer.
 
 If a Bluetooth printer still appears in Waitron but lost its pairing, put it in pairing mode.

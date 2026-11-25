@@ -35,7 +35,7 @@ import { t } from "./strings.js";
 
 type Draft = Omit<MenuPeriodInput, "floorPlanSetId"> & {
   colour: CalendarColour;
-  /** Empty for the department's default set. */
+  /** Empty inherits the department's current default. */
   floorPlanSetId: string;
   /** Empty unless the dialog asks for the department. */
   departmentId: string;
@@ -195,7 +195,7 @@ export class PeriodDialog extends LitElement {
           a.name === b.name &&
           a.colour === b.colour &&
           a.menuId === b.menuId &&
-          this.shownPlan(a.floorPlanSetId) === this.shownPlan(b.floorPlanSetId) &&
+          a.floorPlanSetId === b.floorPlanSetId &&
           a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
@@ -221,17 +221,12 @@ export class PeriodDialog extends LitElement {
   private readonly colourChoices = rememberedColourChoices((colour) => t(`hours.colour.${colour}`));
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
-  /** The sets offered, the default first; undefined when the field is not drawn. */
   private get floorPlanSets() {
     const departmentId = this.choosesDepartment ? this.draft.departmentId : this.departmentId;
     const sets = this.floorPlans?.find(({ id }) => id === departmentId)?.sets ?? [];
     const fallback = sets.find(({ isDefault }) => isDefault);
     if (!fallback) return undefined;
-    return { fallback, others: sets.filter((set) => set !== fallback) };
-  }
-  /** The field's value: a set that is the department's default now reads as the empty choice. */
-  private shownPlan(setId: string): string {
-    return setId === this.floorPlanSets?.fallback.id ? "" : setId;
+    return { fallback, sets };
   }
   private get choosesDepartment() {
     return !this.period && this.departments !== undefined;
@@ -316,13 +311,7 @@ export class PeriodDialog extends LitElement {
           periodId: this.period?.id ?? null,
           input: {
             ...input,
-            ...(this.floorPlanSets &&
-            !(
-              this.shownPlan(floorPlanSetId) === "" &&
-              this.period?.floorPlanSetId === this.floorPlanSets.fallback.id
-            )
-              ? { floorPlanSetId: this.shownPlan(floorPlanSetId) || null }
-              : {}),
+            ...(this.floorPlanSets ? { floorPlanSetId: floorPlanSetId || null } : {}),
           },
           ...(this.choosesDepartment ? { departmentId } : {}),
         },
@@ -417,16 +406,17 @@ export class PeriodDialog extends LitElement {
     return html`<wt-combobox
       name="floorPlanSetId"
       label=${t("period.floor_plan")}
-      show-empty-option
       search="never"
-      .value=${this.shownPlan(this.draft.floorPlanSetId)}
+      inherited-suffix=${t("routing.inherited")}
+      .value=${this.draft.floorPlanSetId}
       .options=${[
         {
           value: "",
-          label: format("period.floor_plan_default", { set: sets.fallback.name }),
-          muted: true as const,
+          label: format("inherit.value", { value: sets.fallback.name }),
+          valueLabel: sets.fallback.name,
+          inherited: true as const,
         },
-        ...sets.others.map(({ id, name }) => ({ value: id, label: name })),
+        ...sets.sets.map(({ id, name }) => ({ value: id, label: name })),
       ]}
       .error=${this.error("floorPlanSetId")}
       ?disabled=${this.busy}

@@ -149,7 +149,7 @@ it.each([
     let combo = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       `[name=${field}]`,
     )!;
-    expect(combo.options[0]!.label).toBe(`Same as department (${changedLabel})`);
+    expect(combo.options[0]!.label).toBe(`Inherit: ${changedLabel}`);
     expect(combo.value).toBe("");
     expect(departmentSave(zones).disabled).toBe(true);
     await pick(fields, field, override);
@@ -199,7 +199,7 @@ it.each([
       },
     });
     expect(combo.value).toBe("");
-    expect(combo.options[0]!.label).toBe(`Same as department (${changedLabel})`);
+    expect(combo.options[0]!.label).toBe(`Inherit: ${changedLabel}`);
     expect(app.leave.coordinator.isDirty()).toBe(false);
     expect(writes).toHaveLength(3);
   },

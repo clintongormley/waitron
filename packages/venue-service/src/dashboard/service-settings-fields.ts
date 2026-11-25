@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import type { Dining, DiningPolicy } from "@waitron/shared";
+import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
 export interface ServiceSettingsValue {
@@ -62,7 +63,7 @@ export class ServiceSettingsFields extends LitElement {
     hint = "",
   ) {
     const following = this.follows !== undefined;
-    const placeholder = following
+    const valueLabel = following
       ? (options.find((option) => option.value === this.follows![field])?.label ?? "")
       : "";
     return html`<wt-combobox
@@ -71,9 +72,9 @@ export class ServiceSettingsFields extends LitElement {
       search="never"
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${following ? [{ value: "", label: t("venue.same_as_department").replace("{value}", placeholder) }, ...options] : options}
+      .options=${following ? [{ value: "", label: format("inherit.value", { value: valueLabel }), valueLabel, inherited: true }, ...options] : options}
       .value=${this.value[field] ?? ""}
-      .placeholder=${placeholder}
+      inherited-suffix=${following ? t("routing.inherited") : ""}
       .hint=${hint}
       .error=${this.errors[field] ?? ""}
       ?required=${!following}

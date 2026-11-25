@@ -1310,5 +1310,5 @@ it("✎ opens the period dialog with the department's Floor plan field", async (
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       "[name=floorPlanSetId]",
     )!;
-  expect(plan.options.map((option) => option.label)).toEqual(["House (default)", "Late"]);
+  expect(plan.options.map((option) => option.label)).toEqual(["Inherit: House", "House", "Late"]);
 });

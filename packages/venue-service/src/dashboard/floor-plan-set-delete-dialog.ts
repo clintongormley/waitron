@@ -103,17 +103,19 @@ export class FloorPlanSetDeleteDialog extends LitElement {
   }
   private picker(impact: FloorPlanSetDeleteImpact) {
     if (!impact.periods.length) return nothing;
+    const valueLabel = this.defaultSet?.name ?? "";
     return html`<wt-combobox
       name="replaceWith"
-      show-empty-option
       search="never"
       label=${t("period.replace_with")}
+      inherited-suffix=${t("routing.inherited")}
       .value=${this.replacement}
       .options=${[
         {
           value: "",
-          label: format("floor_plans.replace_default", { set: this.defaultSet?.name ?? "" }),
-          muted: true as const,
+          label: format("inherit.value", { value: valueLabel }),
+          valueLabel,
+          inherited: true as const,
         },
         ...this.replacements.map((entry) => ({ value: entry.id, label: entry.name })),
       ]}

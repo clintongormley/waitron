@@ -135,7 +135,7 @@ it.each(["numbered", "none"] as const)(
   },
 );
 describe.each([
-  ["en", ["Table service", "Paid before preparation", "Print"], "Same as department"],
+  ["en", ["Table service", "Paid before preparation", "Print"], "Inherit: {value}"],
   [
     "es",
     [
@@ -143,10 +143,10 @@ describe.each([
       VENUE_SERVICE_STRINGS.es["venue.paid_before_preparation"],
       VENUE_SERVICE_STRINGS.es["venue.print"],
     ],
-    "Igual que el departamento",
+    VENUE_SERVICE_STRINGS.es["inherit.value"],
   ],
-] as const)("zone inheritance in %s", (locale, placeholders, clearLabel) => {
-  it("paints only the localized department value as each empty trigger's placeholder", async () => {
+] as const)("zone inheritance in %s", (locale, values, inheritLabel) => {
+  it("offers the localized department value in an inheritance row and as a fixed choice", async () => {
     setLocale(locale);
     const el = await mount(inherited, department);
     for (const [index, field] of fields.entries()) {
@@ -154,15 +154,20 @@ describe.each([
       expect(control.value).toBe("");
       expect(control.required).toBe(false);
       expect(control.hint).toBe("");
-      expect(control.shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
-        placeholders[index],
+      expect(control.placeholder).toBe("");
+      expect(control.inheritedSuffix).toBe(
+        locale === "en" ? "inherited" : VENUE_SERVICE_STRINGS.es["routing.inherited"],
       );
-      expect(control.options.find((option) => option.value === "")!.label).toBe(
-        `${clearLabel} (${placeholders[index]})`,
-      );
+      expect(control.options[0]).toEqual({
+        value: "",
+        label: inheritLabel.replace("{value}", values[index]!),
+        valueLabel: values[index],
+        inherited: true,
+      });
+      expect(control.options).toContainEqual({ value: department[field], label: values[index] });
     }
   });
-  it("uses the other inherited choices as placeholders too", async () => {
+  it("names the other department values in the inheritance row", async () => {
     setLocale(locale);
     const el = await mount(inherited, {
       orderStart: "counter",
@@ -178,35 +183,27 @@ describe.each([
             VENUE_SERVICE_STRINGS.es["venue.dont_print"],
           ];
     fields.forEach((field, index) =>
-      expect(box(el, field).shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
-        want[index],
-      ),
+      expect(box(el, field).options[0]).toMatchObject({ inherited: true, valueLabel: want[index] }),
     );
   });
 });
-it.each(fields)(
-  "clearing zone %s sends null and returns to the inherited placeholder",
-  async (field) => {
-    const el = await mount(department, department);
-    await emitted(el, () => choose(el, field, ""), { ...department, [field]: null });
-    expect(box(el, field).shadowRoot!.querySelector(".value.placeholder")).not.toBeNull();
-  },
-);
-it.each(["light", "dark"] as const)(
-  "inherited values stay muted while an explicit choice uses the text colour in %s",
-  async (theme) => {
-    const el = await mount(inherited, department);
-    el.setAttribute("data-theme", theme);
-    const value = (field: keyof ServiceSettingsValue) =>
-      box(el, field).shadowRoot!.querySelector<HTMLElement>(".value")!;
-    const muted = getComputedStyle(value("collectionNumber")).color;
-    expect(getComputedStyle(value("orderStart")).color).toBe(muted);
-    expect(getComputedStyle(value("paidWhen")).color).toBe(muted);
-    await choose(el, "paidWhen", "ticket_then_pay");
-    expect(getComputedStyle(value("paidWhen")).color).not.toBe(muted);
-    expect(getComputedStyle(value("orderStart")).color).toBe(muted);
-  },
-);
+it.each(fields)("clearing zone %s sends null and returns to inheritance", async (field) => {
+  const el = await mount(department, department);
+  await emitted(el, () => choose(el, field, ""), { ...department, [field]: null });
+  expect(box(el, field).value).toBe("");
+  expect(box(el, field).options[0]).toMatchObject({ value: "", inherited: true });
+});
+it("can fix a zone choice to the same value as its department", async () => {
+  const el = await mount(inherited, department);
+  await emitted(el, () => choose(el, "orderStart", "table"), { ...inherited, orderStart: "table" });
+  const field = box(el, "orderStart");
+  expect(field.value).toBe("table");
+  expect(field.options.find(({ value }) => value === "table")).toEqual({
+    value: "table",
+    label: "Table service",
+  });
+  expect(field.options[0]).toMatchObject({ value: "", inherited: true });
+});
 it.each([
   ["numbered", "Print"],
   ["none", "Don't print"],

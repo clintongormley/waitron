@@ -49,6 +49,20 @@ it.each([1280, 390])("Save's right edge lines up with the last field's at %i px"
     await page.viewport(old[0]!, old[1]!);
   }
 });
+it("leaves room above and below the Zone editor on a tall desktop", async () => {
+  const oldWidth = window.innerWidth;
+  const oldHeight = window.innerHeight;
+  try {
+    await page.viewport(1280, 900);
+    const { modal } = await mountZoneEditor();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    const body = modal.shadowRoot!.querySelector('[part="body"]')!;
+    expect(dialog.getBoundingClientRect().height).toBeLessThan(600);
+    expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+  } finally {
+    await page.viewport(oldWidth, oldHeight);
+  }
+});
 it("opens the selected zone with name and three service overrides, offering each department value explicitly", async () => {
   const { el, modal, writes } = await mountZoneEditor();
   expect(modal.heading).toBe("Edit zone: Terrace");
@@ -60,9 +74,14 @@ it("opens the selected zone with name and three service overrides, offering each
   expect(choices.map((f) => f.name)).toEqual(["orderStart", "paidWhen", "collectionNumber"]);
   expect(choices.map((f) => f.value)).toEqual(["counter", "", ""]);
   expect(choices.map((f) => f.options[0])).toEqual([
-    { value: "", label: "Same as department (Table service)" },
-    { value: "", label: "Same as department (Paid before preparation)" },
-    { value: "", label: "Same as department (Don't print)" },
+    { value: "", label: "Inherit: Table service", valueLabel: "Table service", inherited: true },
+    {
+      value: "",
+      label: "Inherit: Paid before preparation",
+      valueLabel: "Paid before preparation",
+      inherited: true,
+    },
+    { value: "", label: "Inherit: Don't print", valueLabel: "Don't print", inherited: true },
   ]);
   expect(zoneSave(el).disabled).toBe(true);
   expect(zoneSave(el).variant).toBe("secondary");

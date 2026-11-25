@@ -61,14 +61,13 @@ Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perf
 
 Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
 
-En **Dispositivos**, elige **Editar** en el menú de la fila del dispositivo. Los nombres de
-equipos en gris heredan el valor del perfil. Elige un equipo para fijarlo en este
-dispositivo; vuelve a elegir la opción en gris para heredarlo. La tabla de Dispositivos usa el
-mismo estilo.
+En **Dispositivos**, elige **Editar** en el menú de la fila del dispositivo. Elige **Heredar** para
+seguir la configuración del perfil o elige un elemento para fijarlo en este dispositivo. En las
+columnas de equipamiento que usa el dispositivo, una celda vacía indica que sigue el perfil.
 
 Waitron te avisa cuando la batería de un dispositivo está baja; si su lectura de batería en **Dispositivos** está en gris o indica **Sin datos**, comprueba su carga en el propio dispositivo.
 
-En **Dispositivos**, consulta **Impresora de facturas** para ver dónde imprime las facturas cada
+En **Dispositivos**, consulta **Impresora de facturas** para ver la elección fijada en cada
 dispositivo. **· A4** tras el nombre identifica una impresora A4.
 
 Si una impresora Bluetooth sigue en Waitron pero ha perdido el emparejamiento, ponla en modo de
