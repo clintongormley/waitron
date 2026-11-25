@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
-import type { AdjustmentStage } from "@waitron/adjustments";
+import type { AdjustmentStage, Approval } from "@waitron/adjustments";
 import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToThousandths,
   divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
@@ -14,8 +15,9 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { AdjustmentAsk } from "./adjustments-apply.js";
-import { invalid } from "./bill-allocation.js";
+import { invalid, money } from "./bill-allocation.js";
 import { firedQuantity, type TicketState } from "./kitchen-ticket-state.js";
+import { extraQuantityFor, keptExtrasOf } from "./order-line-quantities.js";
 import { readWholePortionLines } from "./order-portions.js";
 import { readLockedLines, type StoredOrderLine } from "./stored-order-lines.js";
 import { isReleased } from "./working-order-serving.js";
@@ -285,4 +287,54 @@ export async function standInRow(
     lines,
     membersOf,
   };
+}
+
+/**
+ * The quantity, in thousandths, each row of a dish's family (the dish first, then its extras) holds
+ * when the dish holds `dishQuantity`: an extra follows its dish, as {@link removeFromLine} and
+ * {@link splitLinesWithinOrder} store it.
+ */
+export function familyAt(family: readonly Row[], dishQuantity: number): Map<string, number> {
+  const [dish, ...children] = family;
+  const quantity = thousandthsToDecimal(dishQuantity);
+  const kept = keptExtrasOf(
+    children.map((row) => ({
+      id: row.id,
+      quantity: row.quantity,
+      priceQuantity: row.priceQuantity,
+      unitPriceGross: row.unit,
+    })),
+    dish!.quantity,
+  );
+  return new Map([
+    [dish!.id, dishQuantity],
+    ...kept.map(
+      ({ child, perDish }) =>
+        [
+          child.id,
+          decimalToThousandths(extraQuantityFor(perDish, quantity, child.priceQuantity)),
+        ] as const,
+    ),
+  ]);
+}
+
+/** {@link Approval} on the wire: the limit as money is written. */
+export type WireApproval =
+  | {
+      by: "limit";
+      permission: "adjustment.approve";
+      limit: { kind: "reason" | "bill"; amount: string | null; percentBp: number | null };
+    }
+  | { by: "refund"; permission: "sale.refund" };
+
+export function wireApproval(approval: Approval): WireApproval {
+  return approval.by === "limit"
+    ? {
+        ...approval,
+        limit: {
+          ...approval.limit,
+          amount: approval.limit.amount === null ? null : money(approval.limit.amount),
+        },
+      }
+    : approval;
 }

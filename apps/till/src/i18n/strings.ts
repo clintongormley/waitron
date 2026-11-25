@@ -1487,6 +1487,8 @@ export const en = {
   "adjust.no_reasons":
     "No reason allows this yet. One can be added in the dashboard, under Voids and comps.",
   "adjust.takes_off": "Takes {amount} off the bill",
+  "adjust.bill_goes": "The bill goes from {before} to {after}",
+  "adjust.bill_stays": "The bill stays at {total}",
   "adjust.nearest": "The prices allow {amount} off, not the {asked} asked for.",
   "adjust.quantity_shown": "How many: 1 of {n}",
   "adjust.reason_shown": "Reason: {reason}",
@@ -3912,6 +3914,8 @@ export const es: Record<StringKey, string> = {
   "adjust.no_reasons":
     "Todavía no hay ningún motivo que lo permita. Se puede añadir uno en el panel, en Cancelaciones y descuentos.",
   "adjust.takes_off": "Quita {amount} de la cuenta",
+  "adjust.bill_goes": "La cuenta pasa de {before} a {after}",
+  "adjust.bill_stays": "La cuenta sigue en {total}",
   "adjust.nearest": "Los precios permiten quitar {amount}, no los {asked} pedidos.",
   "adjust.quantity_shown": "Cuántos: 1 de {n}",
   "adjust.reason_shown": "Motivo: {reason}",

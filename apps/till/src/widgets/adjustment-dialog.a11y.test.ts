@@ -127,6 +127,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
+      billTotal: { before: "50.00", after: "0.00" },
       needsApproval: {
         by: "limit",
         permission: "adjustment.approve",
@@ -149,6 +150,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "15.00",
       nominalValue: "50.00",
+      billTotal: { before: "15.00", after: "0.00" },
       needsApproval: {
         by: "limit",
         permission: "adjustment.approve",
@@ -172,6 +174,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
+      billTotal: { before: "50.00", after: "0.00" },
       needsApproval: { by: "refund", permission: "sale.refund" },
       lines: [],
     });
@@ -192,6 +195,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "3.28",
       nominalValue: "50.00",
+      billTotal: { before: "3.28", after: "0.00" },
       needsApproval: null,
       lines: [],
     });

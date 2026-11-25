@@ -210,6 +210,7 @@ const offers: ZoneOffers = {
 const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   reduction: "30.00",
   nominalValue: "30.00",
+  billTotal: { before: over.reduction ?? "30.00", after: "0.00" },
   needsApproval: null,
   lines: [],
   ...over,

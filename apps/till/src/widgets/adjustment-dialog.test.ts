@@ -464,6 +464,7 @@ describe("till-adjustment-dialog: what a request out holds still", () => {
     el.preview = {
       reduction: "25.00",
       nominalValue: "25.00",
+      billTotal: { before: "25.00", after: "0.00" },
       needsApproval: null,
       lines: [],
     };
@@ -483,6 +484,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     reduction: "12.00",
     nominalValue: "12.00",
     needsApproval: null,
+    billTotal: { before: over.reduction ?? "12.00", after: "0.00" },
     lines: [],
     ...over,
   });
@@ -714,6 +716,33 @@ describe("till-adjustment-dialog: before confirming", () => {
     expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.do_discount"));
   });
 
+  it("says what the bill goes to when its change is not what the discount takes off", async () => {
+    const shown = async (billTotal: AdjustmentPreview["billTotal"]) => {
+      const { el } = await atConfirm({ preview: preview({ reduction: "1.60", billTotal }) }, (el) =>
+        chooseReason(el, "Complaint"),
+      );
+      return text(root(el).querySelector("[data-takes-off]")!);
+    };
+
+    expect(await shown({ before: "14.00", after: "20.40" })).toBe(
+      `The bill goes from ${money("14.00")} to ${money("20.40")}`,
+    );
+    expect(await shown({ before: "28.00", after: "26.40" })).toBe(
+      t("adjust.takes_off").replace("{amount}", money("1.60")),
+    );
+    expect(await shown({ before: "14.00", after: "14.00" })).toBe(
+      `The bill stays at ${money("14.00")}`,
+    );
+
+    setLocale("es-ES");
+    expect(await shown({ before: "14.00", after: "20.40" })).toBe(
+      "La cuenta pasa de 14,00\u00a0€ a 20,40\u00a0€",
+    );
+    expect(await shown({ before: "14.00", after: "14.00" })).toBe(
+      "La cuenta sigue en 14,00\u00a0€",
+    );
+  });
+
   it("names no reason once the reasons no longer hold the one chosen", async () => {
     const { el } = await atConfirm({}, (el) => chooseReason(el, "Complaint"));
     el.reasons = [staffMeal];
@@ -851,6 +880,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     el.preview = {
       reduction: "12.00",
       nominalValue: "12.00",
+      billTotal: { before: "12.00", after: "0.00" },
       needsApproval: null,
       lines: [],
     };

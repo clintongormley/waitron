@@ -15,7 +15,7 @@ import { readOrderRevision } from "./working-order-context.js";
 import { atReleasedPrices } from "./set-menu-dish-release.js";
 import type { TradingContext } from "./trading-context.js";
 import { approverPin, REASONS } from "./testing/adjustment-venue.js";
-import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
+import { cancelLine, cancelReasonId, ensureOperator } from "./testing/cancel-line.js";
 import {
   cashContribution,
   inTx,
@@ -60,17 +60,21 @@ useVenueDb({
 });
 
 type Bill = { partyId: string; tabId: string };
-type Ordered = SpecDish | { dish: SpecDish; extras: SpecExtra[] };
+type Ordered = SpecDish | { dish: SpecDish; extras?: SpecExtra[]; quantity?: string };
 
 async function send(bill: Bill, dishes: readonly Ordered[], release: "hold" | "fire" = "hold") {
   const draft = await saveSetMenuDraft(
     venue,
     bill,
     ...dishes.map((ordered) => {
-      const { dish, extras } = typeof ordered === "string" ? { dish: ordered } : ordered;
+      const {
+        dish,
+        extras,
+        quantity = "1",
+      } = typeof ordered === "string" ? { dish: ordered } : ordered;
       return {
         menuItemId: ordinary[dish],
-        quantity: "1",
+        quantity,
         ...(extras === undefined ? {} : { extras }),
       };
     }),
@@ -186,7 +190,7 @@ async function adjust(billId: string, lineId: string | null, action: Action, how
   );
 }
 
-async function preview(billId: string, lineId: string, action: Action, how: How = {}) {
+async function preview(billId: string, lineId: string | null, action: Action, how: How = {}) {
   const ask = await askFor(billId, lineId, action, how);
   return inTx(venue, (tx) => previewAdjustment(tx, ask, venue.cfg.locale));
 }
@@ -633,4 +637,125 @@ it("still records a cancelled set-menu dish as the bill's whole drop (D24)", asy
     { what: "Daily menu", price: 1400, list: null, in: null },
   ]);
   expect(await recorded(tabId)).toEqual([{ before: 800, after: 0, reduction: 800 }]);
+});
+
+const money = (cents: number) => (cents / 100).toFixed(2);
+
+/** The preview answers the bill's total now and as applying the action leaves it, writing nothing. */
+async function expectPreviewAsApplied(
+  billId: string,
+  lineId: string | null,
+  action: Action | { action: "cancel" },
+  how: How = {},
+) {
+  const before = await total(billId);
+  const rowsBefore = await rows(billId);
+  const ask = await askFor(billId, lineId, action as Action, how);
+  if (action.action === "cancel") ask.reasonId = await inTx(venue, cancelReasonId);
+  const { billTotal } = await inTx(venue, (tx) =>
+    previewAdjustment(
+      tx,
+      action.action === "cancel" ? { ...ask, action: "cancel" } : ask,
+      venue.cfg.locale,
+    ),
+  );
+  expect(await rows(billId)).toEqual(rowsBefore);
+  if (action.action === "cancel") {
+    await inTx(venue, async (tx) =>
+      cancelLine(tx, venue.cfg, billId, rowsBefore.find(({ id }) => id === lineId)!.lineNo),
+    );
+  } else {
+    await adjust(billId, lineId, action, how);
+  }
+  expect(billTotal).toEqual({ before: money(before), after: money(await total(billId)) });
+  return { before, after: await total(billId) };
+}
+
+const theLast = (dish: SpecDish) => async (billId: string) => (await idsOf(billId, dish)).at(-1)!;
+const theLoose = (dish: SpecDish) => async (billId: string) =>
+  (await linesOf(billId, dish)).find(({ setMenuRole }) => setMenuRole === null)!.id;
+const thePlaced = (dish: SpecDish) => async (billId: string) =>
+  (await linesOf(billId, dish)).find(({ setMenuRole }) => setMenuRole === "dish")!.id;
+
+it.each<
+  [string, Ordered[], (billId: string) => Promise<string | null>, Action, How, number, number]
+>([
+  [
+    "a comped Hake of two Dailies",
+    ["Soup", "Soup", "Hake", "Hake"],
+    theLast("Hake"),
+    FREE,
+    {},
+    2800,
+    2000,
+  ],
+  ["10% off a Daily's Hake", ["Soup", "Hake"], theLast("Hake"), percent(1000), {}, 1400, 2040],
+  [
+    "4.00 off a Daily's Sirloin",
+    ["Soup", "Sirloin"],
+    theLast("Sirloin"),
+    off("4.00"),
+    {},
+    1900,
+    2600,
+  ],
+  [
+    "half off the a la carte Soup",
+    ["Soup", "Soup", "Hake"],
+    theLoose("Soup"),
+    percent(5000),
+    {},
+    2000,
+    1700,
+  ],
+  [
+    "half off the Daily's Soup",
+    ["Soup", "Soup", "Hake"],
+    thePlaced("Soup"),
+    percent(5000),
+    {},
+    2000,
+    1700,
+  ],
+  ["a comped Soup of a Daily", ["Soup", "Hake"], theLast("Soup"), FREE, {}, 1400, 1400],
+  [
+    "10% off one of two Hakes sent as one line beside a Soup",
+    ["Soup", { dish: "Hake", quantity: "2" }],
+    theLast("Hake"),
+    percent(1000),
+    { quantity: "1" },
+    2800,
+    2840,
+  ],
+  ["half off a lone Soup", ["Soup"], theLast("Soup"), percent(5000), {}, 600, 300],
+  ["10% off the whole bill", ["Soup", "Hake"], async () => null, percent(1000), {}, 1400, 1260],
+])(
+  "previews the bill's total as applying it leaves it, writing nothing: %s",
+  async (_, dishes, target, action, how, before, after) => {
+    const { tabId } = await billOf(dishes);
+    expect(await expectPreviewAsApplied(tabId, await target(tabId), action, how)).toEqual({
+      before,
+      after,
+    });
+  },
+);
+
+it("previews the bill's total for a comped Soup with Bread, a row of two Hakes and a cancel", async () => {
+  const withBread = await billOf([{ dish: "Soup", extras: [spec.bread] }, "Hake"]);
+  expect(
+    await expectPreviewAsApplied(withBread.tabId, (await idsOf(withBread.tabId, "Soup"))[0]!, FREE),
+  ).toEqual({ before: 1550, after: 1400 });
+
+  const row = await billOf(["Soup", "Soup", "Hake", "Hake"]);
+  const hakes = await idsOf(row.tabId, "Hake");
+  expect(
+    await expectPreviewAsApplied(row.tabId, hakes[0]!, FREE, { lineIds: hakes, quantity: "1" }),
+  ).toEqual({ before: 2800, after: 2000 });
+
+  const cancelled = await billOf(["Soup", "Soup", "Hake", "Hake"]);
+  expect(
+    await expectPreviewAsApplied(cancelled.tabId, (await idsOf(cancelled.tabId, "Hake")).at(-1)!, {
+      action: "cancel",
+    }),
+  ).toEqual({ before: 2800, after: 2000 });
 });

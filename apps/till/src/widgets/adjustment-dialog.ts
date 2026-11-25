@@ -7,7 +7,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
+import {
+  compareDecimal,
+  decimal,
+  formatMoney,
+  multiplyDecimal,
+  subtractDecimal,
+} from "@waitron/shared";
 import { choiceRowStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { formatDecimalInput, parseDecimalInput } from "@waitron/ui";
@@ -356,6 +362,20 @@ export class TillAdjustmentDialog extends LitElement {
 
   #money(amount: string): string {
     return formatMoney(amount, currentLocale());
+  }
+
+  /** What the bill loses, or, when its set menus make its change differ, what it goes to. */
+  #billChange({ reduction, billTotal: { before, after } }: AdjustmentPreview): string {
+    const change = subtractDecimal(decimal(before), decimal(after));
+    if (compareDecimal(change, decimal(reduction)) === 0) {
+      return t("adjust.takes_off").replace("{amount}", () => this.#money(reduction));
+    }
+    if (compareDecimal(change, decimal("0")) === 0) {
+      return t("adjust.bill_stays").replace("{total}", () => this.#money(before));
+    }
+    return t("adjust.bill_goes")
+      .replace("{before}", () => this.#money(before))
+      .replace("{after}", () => this.#money(after));
   }
 
   /** Whose PIN the adjustment needs; a reason no longer listed gets the general sentence. */
@@ -998,9 +1018,7 @@ export class TillAdjustmentDialog extends LitElement {
               ${t("adjust.note_shown").replace("{note}", () => choice.note!)}
             </p>`
       }
-      <p class="takes-off" data-takes-off>
-        ${t("adjust.takes_off").replace("{amount}", () => this.#money(preview.reduction))}
-      </p>
+      <p class="takes-off" data-takes-off>${this.#billChange(preview)}</p>
       ${asked}
       ${
         preview.needsApproval === null

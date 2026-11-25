@@ -669,6 +669,7 @@ export function adjustmentStubs(
       reduction: "1.00",
       nominalValue: "1.00",
       needsApproval: null,
+      billTotal: { before: "10.00", after: "9.00" },
       lines: [],
     }),
     applyAdjustment: vi.fn().mockResolvedValue({

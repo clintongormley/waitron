@@ -57,13 +57,16 @@ import {
 } from "@waitron/shared";
 import {
   canonical,
+  familyAt,
   gross,
   listValue,
   readRows,
   stageOf,
   standInRow,
+  wireApproval,
   type Row,
   type StandIn,
+  type WireApproval,
 } from "./adjustment-rows.js";
 import { invalid, money } from "./bill-allocation.js";
 import { runServiceCommand } from "./parties.js";
@@ -80,9 +83,9 @@ import {
   type VoidTarget,
 } from "./working-order-removal.js";
 import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
+import { billTotalOf } from "./adjustment-bill-total.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import { assertTabOpen, readLockedLines, totalBeforeEdit } from "./stored-order-lines.js";
-import { extraQuantityFor, keptExtrasOf } from "./order-line-quantities.js";
 import {
   captureOrderEdit,
   type OrderAttendance,
@@ -138,6 +141,8 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** Whose PIN it needs, or null when the operator may apply it alone. */
   needsApproval: WireApproval | null;
+  /** The bill's total now and once the action is applied, its set menus worked out again. */
+  billTotal: { before: string; after: string };
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
     lineId: string;
@@ -146,15 +151,6 @@ export interface AdjustmentPreview {
     rows: { quantity: string; unitGross: string }[];
   }[];
 }
-
-/** {@link Approval} on the wire: the limit as money is written. */
-export type WireApproval =
-  | {
-      by: "limit";
-      permission: "adjustment.approve";
-      limit: { kind: "reason" | "bill"; amount: string | null; percentBp: number | null };
-    }
-  | { by: "refund"; permission: "sale.refund" };
 
 /** New prices for one row, or for the part of it split off with the part of its dish covered when
  * `carved`; a second row in `rows` is split off that one in turn. */
@@ -172,7 +168,7 @@ interface Carve {
   quantity: number;
 }
 
-interface Plan {
+export interface Plan {
   reason: AdjustmentReason;
   reasonName: string;
   maxBillComp: Decimal | null;
@@ -205,35 +201,6 @@ interface Plan {
 }
 
 const ZERO = decimal("0");
-
-/**
- * The quantity, in thousandths, each row of a dish's family (the dish first, then its extras) holds
- * when the dish holds `dishQuantity`: an extra follows its dish, as {@link removeFromLine} and
- * {@link splitLinesWithinOrder} store it.
- */
-function familyAt(family: readonly Row[], dishQuantity: number): Map<string, number> {
-  const [dish, ...children] = family;
-  const quantity = thousandthsToDecimal(dishQuantity);
-  const kept = keptExtrasOf(
-    children.map((row) => ({
-      id: row.id,
-      quantity: row.quantity,
-      priceQuantity: row.priceQuantity,
-      unitPriceGross: row.unit,
-    })),
-    dish!.quantity,
-  );
-  return new Map([
-    [dish!.id, dishQuantity],
-    ...kept.map(
-      ({ child, perDish }) =>
-        [
-          child.id,
-          decimalToThousandths(extraQuantityFor(perDish, quantity, child.priceQuantity)),
-        ] as const,
-    ),
-  ]);
-}
 
 /** The line as `removeFromLine` takes it, from the row the plan read. */
 function voidTargetOf(line: Row): VoidTarget {
@@ -951,24 +918,14 @@ export async function previewAdjustment(
             unitGross: money(row.unitGross),
           })),
         }));
+  const reduction = addDecimal(plan.reduction, centsToDecimal(regrouped));
   return {
-    reduction: money(addDecimal(plan.reduction, centsToDecimal(regrouped))),
+    reduction: money(reduction),
     nominalValue: money(plan.nominal),
+    billTotal: await billTotalOf(tx, ask.orderId, plan, ask.action === "cancel" ? reduction : null),
     needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
   };
-}
-
-function wireApproval(approval: Approval): WireApproval {
-  return approval.by === "limit"
-    ? {
-        ...approval,
-        limit: {
-          ...approval.limit,
-          amount: approval.limit.amount === null ? null : money(approval.limit.amount),
-        },
-      }
-    : approval;
 }
 
 /** The approver, verified by PIN, when the plan needs one (plan D6). */

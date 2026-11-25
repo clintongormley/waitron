@@ -118,6 +118,7 @@ describe.each(["en", "es"] as const)("Comp window %s", (locale) => {
         el.preview = {
           reduction: "0.60",
           nominalValue: "0.60",
+          billTotal: { before: "0.60", after: "0.00" },
           needsApproval: {
             by: "limit",
             permission: "adjustment.approve",
