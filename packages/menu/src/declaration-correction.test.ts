@@ -16,6 +16,7 @@ import {
   correctMenuDeclarations,
   declarationChanges,
   findDeclarationDrift,
+  replacedLiveDeclarations,
   waitingDeclarationMenus,
 } from "./declaration-correction.js";
 import { documentSetMenuOffers } from "./menu-document.js";
@@ -24,6 +25,7 @@ import { patchLiveMenu, previewMenu, publishMenu, readLiveDocuments } from "./me
 import { readMenuStructure } from "./menu-structure.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, updateProduct } from "./operations.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 import { readProductDeclarationValues } from "./product-declarations.js";
 import { addMember } from "./sections.js";
 import { addSetMenuDishes } from "./set-menus.js";
@@ -340,7 +342,12 @@ describe("correctMenuDeclarations", () => {
         { menuId: f.lunch, name: "Lunch Menu" },
         { menuId: setLunch, name: "Set lunch" },
       ],
-      productIds: [f.extraLemon],
+      // Dinner's only change is to a scheduled version, which no kitchen reads yet.
+      liveChanges: [
+        { menuId: bar, productIds: [f.extraLemon] },
+        { menuId: f.lunch, productIds: [f.extraLemon] },
+        { menuId: setLunch, productIds: [f.extraLemon] },
+      ],
     });
 
     for (const [menuId, old] of [
@@ -398,7 +405,7 @@ describe("correctMenuDeclarations", () => {
     await declare(f.burger, { sesame: {} });
     expect(await corrections(f.burger, [queued])).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      productIds: [f.burger],
+      liveChanges: [],
     });
     expect((await liveOf(f.lunch))!.versionId).toBe(v1);
     const [requeued, requeuedUnnamed] = await queuedOf(f.lunch);
@@ -423,7 +430,7 @@ describe("correctMenuDeclarations", () => {
     const live = (await liveOf(f.lunch))!.versionId;
     expect(await corrections(f.soup, [queued, requeued!.versionId])).toEqual({
       menus: [],
-      productIds: [f.soup],
+      liveChanges: [],
     });
     expect((await liveOf(f.lunch))!.versionId).toBe(live);
     expect((await queuedOf(f.lunch))[0]!.versionId).toBe(requeued!.versionId);
@@ -467,7 +474,7 @@ describe("correctMenuDeclarations", () => {
     const { jug, scheduled } = await lemonadeWithJugScheduled();
     expect(await corrections(f.lemonade, [scheduled])).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      productIds: [f.lemonade, f.large, jug],
+      liveChanges: [{ menuId: f.lunch, productIds: [f.lemonade, f.large] }],
     });
     expect(await drift([f.lemonade, f.large, jug], new Map())).toEqual([]);
   });
@@ -476,7 +483,7 @@ describe("correctMenuDeclarations", () => {
     const { jug, hash } = await lemonadeWithJugScheduled();
     expect(await corrections(f.lemonade)).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      productIds: [f.lemonade, f.large],
+      liveChanges: [{ menuId: f.lunch, productIds: [f.lemonade, f.large] }],
     });
     const [requeued] = await queuedOf(f.lunch);
     expect((await documentOf(requeued!.versionId)).contentHash).toBe(hash);
@@ -493,7 +500,7 @@ describe("correctMenuDeclarations", () => {
     await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
     const scheduled = await queue(f.lunch, hoursFromNow(24));
     await declare(f.burger, { sesame: {} });
-    expect(await corrections(f.burger)).toEqual({ menus: [], productIds: [f.burger] });
+    expect(await corrections(f.burger)).toEqual({ menus: [], liveChanges: [] });
     expect((await liveOf(f.lunch))!.versionId).toBe(v1);
     expect((await queuedOf(f.lunch)).map(({ versionId }) => versionId)).toEqual([scheduled]);
   });
@@ -515,5 +522,36 @@ describe("correctMenuDeclarations", () => {
     }
     expect((await liveOf(bar))!.versionId).toBe(barLive);
     expect((await liveOf(f.lunch))!.versionId).toBe(lunchLive);
+  });
+});
+
+describe("which live versions and products a correction names", () => {
+  it("refuses an id that names no product", async () => {
+    await expect(
+      app((tx) => correctMenuDeclarations(tx, "no-such-product", PERSON)),
+    ).rejects.toMatchObject({
+      code: "product.not_found",
+      params: { productId: "no-such-product" },
+    });
+  });
+
+  it("names an extra offered on two dishes of the replaced live version once", async () => {
+    await app((tx) => writeProductModifiers(tx, f.soup, [{ kind: "extras", id: f.extrasList }]));
+    await publish(f.lunch);
+    await declare(f.extraLemon, { celery: {} });
+    expect(
+      (await app((tx) => correctMenuDeclarations(tx, f.extraLemon, PERSON))).liveChanges,
+    ).toEqual([{ menuId: f.lunch, productIds: [f.extraLemon] }]);
+  });
+
+  it("names nothing for a live version left as it was, or replaced with the same declarations", async () => {
+    const v1 = await publish(f.lunch);
+    expect(await app((tx) => replacedLiveDeclarations(tx, f.lunch, v1, v1))).toEqual([]);
+    const target = await offer(f.lunch, f.lemonade);
+    const { versionId } = await app((tx) =>
+      patchLiveMenu(tx, f.lunch, v1, [{ target, field: "price", value: "4.50" }], PERSON),
+    );
+    expect(versionId).not.toBe(v1);
+    expect(await app((tx) => replacedLiveDeclarations(tx, f.lunch, v1, versionId))).toEqual([]);
   });
 });

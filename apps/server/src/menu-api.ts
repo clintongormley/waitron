@@ -134,6 +134,7 @@ import {
   type ProductEditorValue,
   type ProductRouting,
   correctMenuDeclarations,
+  replacedLiveDeclarations,
 } from "@waitron/menu";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -142,10 +143,7 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { setProductCourse } from "./kitchen.js";
-import {
-  refreshCorrectedKitchenLines,
-  refreshPatchedKitchenLines,
-} from "./declaration-correction-kitchen.js";
+import { refreshCorrectedKitchenLines } from "./declaration-correction-kitchen.js";
 import type { TradingContext } from "./trading-context.js";
 
 import type { Logger } from "./logger.js";
@@ -1438,7 +1436,12 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
             queued,
           });
-          if (cfg !== undefined) await refreshPatchedKitchenLines(tx, cfg, baseVersionId, changes);
+          if (cfg !== undefined)
+            await refreshCorrectedKitchenLines(
+              tx,
+              cfg,
+              await replacedLiveDeclarations(tx, menuId, baseVersionId, result.versionId),
+            );
           return result;
         }),
       );
@@ -1455,11 +1458,11 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const cfg = requireVenueCfg(deps);
       return c.json(
         await gated(c, sessionId, async (tx, personId) => {
-          const { menus, productIds } = await correctMenuDeclarations(tx, productId, personId, {
+          const { menus, liveChanges } = await correctMenuDeclarations(tx, productId, personId, {
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
             queued,
           });
-          await refreshCorrectedKitchenLines(tx, cfg, productIds);
+          await refreshCorrectedKitchenLines(tx, cfg, liveChanges);
           return { menus };
         }),
       );

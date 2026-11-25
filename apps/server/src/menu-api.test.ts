@@ -31,6 +31,7 @@ import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import type { TradingContext } from "./trading-context.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/menu/test/library-images.js";
 import { mountMenuApi } from "./menu-api.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
@@ -2399,10 +2400,10 @@ describe("mountMenuApi — products", () => {
     };
   }
 
-  // A variant is a `products` row. Its own page (the editor routes) reads and writes it; every other
-  // management route that reads or writes a product by id answers exactly what it answers for an id
-  // that names nothing.
-  it("refuses a variant's id on every product-by-id route but its own page, and accepts its parent's", async () => {
+  // A variant is a `products` row. Its own page (the editor routes) reads and writes it, and its
+  // page's save asks to correct the live menus showing it; every other management route that reads
+  // or writes a product by id answers exactly what it answers for an id that names nothing.
+  it("refuses a variant's id on every product-by-id route but its own page and the live menus' correction, and accepts its parent's", async () => {
     const app = mountApp("es-ES");
     const variant = {
       name: "Wine glass",
@@ -2456,6 +2457,29 @@ describe("mountMenuApi — products", () => {
       body: await editorBody(app, { name: "Wine", variants: [variant] }),
     });
     expect(saveParent.status).toBe(200);
+
+    // No menu offers Wine, so the correction reaches no kitchen and never reads the context.
+    const correcting = new Hono();
+    mountMenuApi(
+      correcting,
+      { db: suite.db, venueLocale: "es-ES", venueCfg: {} as TradingContext },
+      noopLog,
+    );
+    const correct = (productId: string) =>
+      send(correcting, "POST", `/management-api/products/${productId}/live-declarations`, {
+        body: { queued: [] },
+      });
+    for (const productId of [variantId, parent.id]) {
+      const corrected = await correct(productId);
+      expect(corrected.status).toBe(200);
+      expect(await corrected.json()).toEqual({ menus: [] });
+    }
+    const missing = crypto.randomUUID();
+    const unknown = await correct(missing);
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "product.not_found", params: { productId: missing } },
+    });
   });
 
   /** A parent product with one variant, each with three different names of its own. */

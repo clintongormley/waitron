@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import {
   kitchenCourses,
   kitchenStations,
+  menuVersions,
   persons,
   printJobs,
   products,
@@ -23,6 +24,8 @@ import {
   createMenu,
   createProduct,
   menuItems,
+  previewMenu,
+  queueMenuPublication,
   requireMenuRoot,
   setMenuVariants,
   setProductVariants,
@@ -33,8 +36,9 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import { mountMenuApi } from "./menu-api.js";
-import { readBillEditState } from "./bill-editing.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { submitGroups } from "./order-group-submission.js";
+import { joinTables } from "./table-actions.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -45,6 +49,8 @@ import {
   OPERATOR,
   commandFor,
   inTx,
+  pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   type PartyVenue,
@@ -108,7 +114,8 @@ async function sent(
   kind: "ticked" | "unticked" | "none" = "ticked",
   line: SentLine = { menuItemId: v.item("Burger"), quantity: "3" },
 ) {
-  const p = await seat(v, await v.table(`Correction ${randomUUID().slice(0, 8)}`));
+  const tableId = await v.table(`Correction ${randomUUID().slice(0, 8)}`);
+  const p = await seat(v, tableId);
   const allergy: AllergyPatch =
     kind === "none"
       ? { party: { answer: "none", guests: [] }, ticks: [] }
@@ -131,7 +138,7 @@ async function sent(
       allergy,
     }),
   );
-  return p;
+  return { ...p, tableId };
 }
 
 async function declareMilk(productId = v.productId("Burger")) {
@@ -146,33 +153,33 @@ function request(app: Hono, path: string, body: unknown) {
   });
 }
 
-async function liveVersion() {
-  const response = await mountApp().request(`/management-api/menus/${v.tables.menuId}/live`, {
+async function liveVersion(menuId = v.tables.menuId) {
+  const response = await mountApp().request(`/management-api/menus/${menuId}/live`, {
     headers: { cookie },
   });
   return (await response.json()) as PatchDraftAnswer;
 }
 
-async function patchBurgerDeclarations(app: Hono) {
-  const live = await liveVersion();
-  return request(app, `/management-api/menus/${v.tables.menuId}/patch`, {
+async function patchBurgerDeclarations(
+  app: Hono,
+  menuId = v.tables.menuId,
+  menuItemId = v.item("Burger"),
+  queued?: string[],
+) {
+  const live = await liveVersion(menuId);
+  return request(app, `/management-api/menus/${menuId}/patch`, {
     baseVersionId: live.versionId,
-    changes: [
-      {
-        target: { kind: "offer", menuItemId: v.item("Burger") },
-        field: "declarations",
-        value: "product",
-      },
-    ],
+    changes: [{ target: { kind: "offer", menuItemId }, field: "declarations", value: "product" }],
     reviewed: live.revision,
+    ...(queued === undefined ? {} : { queued }),
   });
 }
 
-async function correct(productId = v.productId("Burger")) {
+async function correct(productId = v.productId("Burger"), queued: string[] = []) {
   const response = await request(
     mountApp(),
     `/management-api/products/${productId}/live-declarations`,
-    { queued: [] },
+    { queued },
   );
   const answer = (await response.json()) as { menus: { menuId: string; name: string }[] };
   expect(response.status, JSON.stringify(answer)).toBe(200);
@@ -492,5 +499,227 @@ describe("which product the correction names", () => {
     const before = await jobs();
     expect((await correct()).menus).toHaveLength(1);
     await expectOneSlip(before, "1.000");
+  });
+});
+
+/** A second published menu offering Burger, and its Burger item. */
+async function secondBurgerMenu() {
+  return inTx(v, async (tx) => {
+    const menu = await createMenu(tx, { name: "Second Burger Menu" });
+    await addMember(tx, await requireMenuRoot(tx, menu.id), {
+      kind: "product",
+      productId: v.productId("Burger"),
+    });
+    await publishWorkingMenu(tx, menu.id);
+    const [item] = await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(and(eq(menuItems.menuId, menu.id), eq(menuItems.productId, v.productId("Burger"))));
+    return { menuId: menu.id, itemId: item!.id };
+  });
+}
+
+/** Burger's milk published the ordinary way, which prints no slip, then a version scheduled for
+ * tomorrow still showing no milk while the product holds milk again. */
+async function liveAfterOrdinaryPublishAndStaleSchedule() {
+  const menuId = v.tables.menuId;
+  await inTx(v, (tx) => publishWorkingMenu(tx, menuId));
+  return inTx(v, async (tx) => {
+    await updateProduct(tx, v.productId("Burger"), { allergens: {} });
+    const { hash } = await previewMenu(tx, menuId);
+    const scheduled = await queueMenuPublication(
+      tx,
+      menuId,
+      hash,
+      new Date(Date.now() + 86_400_000),
+      OPERATOR,
+    );
+    await updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } });
+    return scheduled.versionId;
+  });
+}
+
+// Each case leaves the dish's kitchen block behind its menu by an ordinary publish first, which
+// prints nothing; a request that does not change the live version the dish reads must not print
+// that difference either.
+describe("only a dish whose live menu the request changed is refreshed", () => {
+  it("Update now after an ordinary publish already put the change live prints no slip", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    await inTx(v, (tx) => publishWorkingMenu(tx, v.tables.menuId));
+    await expectNoSlip(before);
+    expect((await correct()).menus).toEqual([]);
+    await expectNoSlip(before);
+  });
+
+  it("Update now correcting only another menu leaves a dish ordered from this one alone", async () => {
+    const second = await secondBurgerMenu();
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    await inTx(v, (tx) => publishWorkingMenu(tx, v.tables.menuId));
+    expect((await correct()).menus).toEqual([
+      { menuId: second.menuId, name: "Second Burger Menu" },
+    ]);
+    await expectNoSlip(before);
+  });
+
+  it("Update now correcting only a scheduled version leaves the kitchen alone", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    const scheduled = await liveAfterOrdinaryPublishAndStaleSchedule();
+    const live = await liveVersion();
+    expect((await correct(v.productId("Burger"), [scheduled])).menus).toEqual([
+      { menuId: v.tables.menuId, name: expect.any(String) },
+    ]);
+    expect((await liveVersion()).versionId).toBe(live.versionId);
+    await expectNoSlip(before);
+  });
+
+  it("Patch live menu correcting only a scheduled version leaves the kitchen alone", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    const scheduled = await liveAfterOrdinaryPublishAndStaleSchedule();
+    const live = await liveVersion();
+    const response = await patchBurgerDeclarations(mountApp(), v.tables.menuId, v.item("Burger"), [
+      scheduled,
+    ]);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const result = (await response.json()) as { versionId: string; requeued: unknown[] };
+    expect(result.versionId).toBe(live.versionId);
+    expect(result.requeued).toHaveLength(1);
+    await expectNoSlip(before);
+  });
+
+  it("Patch live menu on another menu leaves a dish ordered from this one alone", async () => {
+    const second = await secondBurgerMenu();
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    await inTx(v, (tx) => publishWorkingMenu(tx, v.tables.menuId));
+    const response = await patchBurgerDeclarations(mountApp(), second.menuId, second.itemId);
+    expect(response.status, await response.clone().text()).toBe(200);
+    await expectNoSlip(before);
+  });
+
+  it("Update now correcting both menus prints the slip for the dish's own menu once", async () => {
+    await secondBurgerMenu();
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    expect((await correct()).menus).toHaveLength(2);
+    await expectOneSlip(before);
+  });
+});
+
+describe("a table combined into another", () => {
+  it("a paid bill's unserved dish on the table that was combined in still gets its slip", async () => {
+    const absorbed = await sent();
+    await pay(v, absorbed.tabId, "500.00");
+    const survivor = await seat(v, await v.table(`Survivor ${randomUUID().slice(0, 8)}`));
+    const joining = {
+      ...(await commandFor(v, survivor.partyId)),
+      otherPartyId: absorbed.partyId,
+      expectedOtherPartyRevision: await revisionOf(v, absorbed.partyId),
+    };
+    await inTx(v, async (tx) => {
+      const expectedEdits = [];
+      for (const id of await readPartyBillIds(tx, [absorbed.partyId, survivor.partyId]))
+        expectedEdits.push(await readBillEditState(tx, id));
+      return joinTables(tx, v.cfg, survivor.partyId, absorbed.tableId, {
+        ...joining,
+        expectedEdits,
+      });
+    });
+    const [paid] = await v.db
+      .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, absorbed.tabId));
+    expect(paid).toEqual({ status: "settled", partyId: survivor.partyId });
+    await declareMilk();
+    const before = await jobs();
+    await correct();
+    await expectOneSlip(before);
+  });
+});
+
+describe("refusals", () => {
+  const path = (productId: string) => `/management-api/products/${productId}/live-declarations`;
+  const versions = () => v.db.select({ id: menuVersions.id }).from(menuVersions);
+
+  it("refuses a session without menu management, writing no menu version and no slip", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    const versionsBefore = await versions();
+    const session = await inTx(v, (tx) =>
+      startManagementSession(tx, { method: "password", personId: OPERATOR }),
+    );
+    const response = await mountApp().request(path(v.productId("Burger")), {
+      method: "POST",
+      headers: {
+        cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ queued: [] }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await versions()).toEqual(versionsBefore);
+    await expectNoSlip(before);
+  });
+
+  it("refuses a malformed queued list, naming the field", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    const versionsBefore = await versions();
+    const invalid = { code: "management.request_invalid", params: { field: "queued" } };
+    const badId = {
+      code: "shared.invalid_id",
+      params: { kind: "MenuVersionId", value: "not-a-uuid" },
+    };
+    for (const [queued, error] of [
+      [null, invalid],
+      ["x", invalid],
+      [[7], invalid],
+      [["not-a-uuid"], badId],
+    ] as const) {
+      const response = await request(mountApp(), path(v.productId("Burger")), { queued });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error });
+    }
+    expect(await versions()).toEqual(versionsBefore);
+    await expectNoSlip(before);
+  });
+
+  it("refuses an id that names no product as not found, and accepts a variant's", async () => {
+    const missing = randomUUID();
+    const response = await request(mountApp(), path(missing), { queued: [] });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "product.not_found", params: { productId: missing } },
+    });
+    const [double] = await inTx(v, (tx) =>
+      setProductVariants(
+        tx,
+        v.productId("Burger"),
+        [
+          {
+            name: "Double",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "14.00",
+            available: true,
+          },
+        ],
+        v.cfg.locale,
+      ),
+    );
+    expect((await correct(double!.id)).menus).toEqual([]);
   });
 });

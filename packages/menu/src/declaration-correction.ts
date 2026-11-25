@@ -1,14 +1,20 @@
 import { and, asc, eq, gt } from "drizzle-orm";
 import { menuReleases, menus, menuVersions, now, type Transaction } from "@waitron/db";
-import type { MenuDocument } from "@waitron/shared";
+import { AppError, type MenuDocument } from "@waitron/shared";
 import type { DeclarationValues } from "./declaration-values.js";
 import { canonicalJson } from "./menu-document.js";
-import { declarationProductIds, declarationsFor } from "./menu-patch.js";
+import { declarationsFor } from "./menu-patch.js";
 import { declarationCopies, type DeclarationCopy } from "./menu-patch-declarations.js";
 import type { MenuPatchChange } from "./menu-patch-types.js";
-import { correctQueuedVersions, liveVersions, patchLiveMenu } from "./menu-publication.js";
+import {
+  correctQueuedVersions,
+  liveVersions,
+  patchLiveMenu,
+  readRecordedDocuments,
+} from "./menu-publication.js";
 import { readProductDeclarationValues } from "./product-declarations.js";
 import { listProductVariants } from "./variants.js";
+import "./errors.js";
 
 export interface DeclarationDrift {
   menuId: string;
@@ -104,7 +110,6 @@ export async function findDeclarationDrift(
 
 /** A drift with the documents its changes apply to. */
 interface DocumentedDrift extends DeclarationDrift {
-  liveDocument: MenuDocument | null;
   queued: (QueuedDeclarationCorrection & { document: MenuDocument })[];
 }
 
@@ -157,7 +162,6 @@ async function driftFrom(
         menuId: id,
         name,
         liveVersionId: version?.versionId ?? null,
-        liveDocument: version?.document ?? null,
         live: changes,
         queued: waiting,
       },
@@ -190,42 +194,89 @@ export async function waitingDeclarationMenus(
   );
 }
 
+/** A menu whose live version a request replaced, and the products whose copies in it now hold
+ * other declarations. */
+export interface LiveDeclarationChange {
+  menuId: string;
+  productIds: string[];
+}
+
+/** Each place's copies' declarations, by the target a patch names it with. */
+function valuesByPlace(document: MenuDocument): Map<string, { productId: string; values: string }> {
+  const byPlace = new Map<string, { productId: string; values: string }>();
+  for (const copy of declarationCopies(document)) {
+    const place = canonicalJson(copy.target);
+    const values = canonicalJson(copy.values);
+    const seen = byPlace.get(place);
+    byPlace.set(place, {
+      productId: copy.productId,
+      values: seen === undefined ? values : `${seen.values}\n${values}`,
+    });
+  }
+  return byPlace;
+}
+
+/** The products with a copy in `after` whose place held other declarations in `before`, or none. */
+function changedDeclarationProducts(before: MenuDocument, after: MenuDocument): string[] {
+  const old = valuesByPlace(before);
+  const changed = new Set<string>();
+  for (const [place, { productId, values }] of valuesByPlace(after))
+    if (old.get(place)?.values !== values) changed.add(productId);
+  return [...changed];
+}
+
+/** `[]` when `versionId` is `baseVersionId` or no copy's declarations changed between them. */
+export async function replacedLiveDeclarations(
+  tx: Transaction,
+  menuId: string,
+  baseVersionId: string,
+  versionId: string,
+): Promise<LiveDeclarationChange[]> {
+  if (versionId === baseVersionId) return [];
+  const documents = await readRecordedDocuments(tx, [baseVersionId, versionId]);
+  const productIds = changedDeclarationProducts(
+    documents.get(baseVersionId)!,
+    documents.get(versionId)!,
+  );
+  return productIds.length === 0 ? [] : [{ menuId, productIds }];
+}
+
 /**
  * Puts the product's and its variants' current declarations on every drifting live version, and on
  * each queued version named in `queued`, in the caller's transaction. A named queued version takes
  * the changes its own document needs, including at copies the live version lacks. Versions already
  * agreeing, and queued ones not named, keep their documents. `menus` lists only the menus it
- * changed; `productIds` is the product and every product whose copies were corrected.
+ * changed; `liveChanges` only the live versions it replaced, since a queued version is not what a
+ * kitchen reads until it starts. Refuses an id that is neither a product nor a variant.
  */
 export async function correctMenuDeclarations(
   tx: Transaction,
   productId: string,
   personId: string,
   options: { at?: Date; fallbackLanguage?: string; queued?: readonly string[] } = {},
-): Promise<{ menus: { menuId: string; name: string }[]; productIds: string[] }> {
+): Promise<{ menus: { menuId: string; name: string }[]; liveChanges: LiveDeclarationChange[] }> {
   const at = options.at ?? now();
   const family = [productId, ...(await listProductVariants(tx, productId)).map(({ id }) => id)];
   const current = await readProductDeclarationValues(tx, family);
+  if (!current.has(productId)) throw new AppError("product.not_found", { productId });
   const drift = await driftFrom(tx, family, new Map(), current, at);
   const named = new Set(options.queued);
-  const corrected = new Set([productId]);
   const menus: { menuId: string; name: string }[] = [];
+  const liveChanges: LiveDeclarationChange[] = [];
   const write = { at, fallbackLanguage: options.fallbackLanguage };
-  for (const { menuId, name, liveVersionId, liveDocument, live, queued } of drift) {
+  for (const { menuId, name, liveVersionId, live, queued } of drift) {
     const own = queued.filter(({ versionId }) => named.has(versionId));
     if (live.length === 0 && own.length === 0) continue;
     const queuedOwn = new Map(own.map(({ versionId, changes }) => [versionId, changes]));
-    if (live.length > 0)
-      await patchLiveMenu(tx, menuId, liveVersionId!, live, personId, {
+    if (live.length > 0) {
+      const { versionId } = await patchLiveMenu(tx, menuId, liveVersionId!, live, personId, {
         ...write,
         queued: [...queuedOwn.keys()],
         queuedOwn,
       });
-    else await correctQueuedVersions(tx, menuId, queuedOwn, personId, write);
-    for (const { document, changes } of [{ document: liveDocument!, changes: live }, ...own])
-      if (changes.length > 0)
-        for (const id of declarationProductIds(document, changes)) corrected.add(id);
+      liveChanges.push(...(await replacedLiveDeclarations(tx, menuId, liveVersionId!, versionId)));
+    } else await correctQueuedVersions(tx, menuId, queuedOwn, personId, write);
     menus.push({ menuId, name });
   }
-  return { menus, productIds: [...corrected] };
+  return { menus, liveChanges };
 }
