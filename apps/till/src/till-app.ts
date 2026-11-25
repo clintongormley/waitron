@@ -3384,6 +3384,7 @@ export class TillApp extends LitElement {
   /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
   #counterSetMenuBill?: Pick<HeldOrder, "id" | "setMenus" | "setMenuCopies">;
+  #counterCopiesRequest = 0;
   @state() private counterSetMenuSaving = false;
 
   get #currentCounterSetMenuBill() {
@@ -7056,23 +7057,68 @@ export class TillApp extends LitElement {
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     if (loaded && zoneOffers.context !== undefined)
       this.#store.setDiningStart(zoneOffers.context.dining ?? null);
-    if (loaded) {
-      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
-      const keep = new Set(
-        this.#store.lines.flatMap((line) => {
-          const id = line.workingOrderLineId;
-          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
-            ? []
-            : [id];
-        }),
-      );
-      this.#store.refreshDeclarations(
-        this.#counterOffers.products(),
-        this.#counterSetMenuLookup(),
-        keep,
-      );
-    }
+    if (loaded) this.#refreshCounterDeclarations();
     this.#showCounterOffers();
+  }
+
+  #refreshCounterDeclarations(): void {
+    const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+    const keep = new Set(
+      this.#store.lines.flatMap((line) => {
+        const id = line.workingOrderLineId;
+        return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+          ? []
+          : [id];
+      }),
+    );
+    this.#store.refreshDeclarations(
+      this.#counterOffers.products(),
+      this.#counterSetMenuLookup(),
+      keep,
+    );
+  }
+
+  /** The recorded copies the open order came with hold the allergens published when it was read.
+   * A copy the answer holds at another version, or not at all, keeps its own. */
+  async #rereadCounterSetMenuCopies(): Promise<void> {
+    const id = this.#currentCounterSetMenuBill?.id;
+    if (id === undefined || this.stage === "collect") return;
+    const request = ++this.#counterCopiesRequest;
+    const visit = this.#store.loadGeneration;
+    const session = this.#operatorSession;
+    const api = this.api;
+    const current = () =>
+      request === this.#counterCopiesRequest &&
+      visit === this.#store.loadGeneration &&
+      session === this.#operatorSession &&
+      api === this.api &&
+      this.stage !== "collect";
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const read = await api.retrieveWorkingOrder(id, { signal: limit.signal });
+      const bill = this.#currentCounterSetMenuBill;
+      if (bill === undefined || !current()) return;
+      const versions = new Map(bill.setMenus?.copies.map((copy) => [copy.id, copy.versionId]));
+      const same = new Set(
+        read.setMenus?.copies.flatMap((copy) =>
+          versions.get(copy.id) === copy.versionId ? [copy.id] : [],
+        ),
+      );
+      const fresh = new Map(read.setMenuCopies?.map((copy) => [copy.key, copy]));
+      this.#counterSetMenuBill = {
+        ...bill,
+        setMenuCopies: bill.setMenuCopies?.map((copy) =>
+          same.has(copy.key) ? (fresh.get(copy.key) ?? copy) : copy,
+        ),
+      };
+      this.#refreshCounterDeclarations();
+      this.requestUpdate();
+    } catch (error) {
+      // The next poll finds the offers moved, and asks again.
+      if (current() && !isOrderGone(error)) this.#counterOffers.liveFields = undefined;
+    } finally {
+      limit.done();
+    }
   }
 
   #showCounterOffers(): void {
@@ -7576,6 +7622,7 @@ export class TillApp extends LitElement {
         }
         this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
+        void this.#rereadCounterSetMenuCopies();
       } catch {
         return "failed";
       }
@@ -10456,10 +10503,16 @@ export class TillApp extends LitElement {
     const copies = this.#counterOffers.ordering(this.#currentCounterSetMenuBill);
     const apply = (revision: number, setMenus: NonNullable<HeldOrder["setMenus"]>) => {
       const keys = new Set(setMenus.copies.map(({ id }) => id));
+      // The recorded copies may have been read again since this change was sent.
+      const held = new Map(
+        this.#currentCounterSetMenuBill?.setMenuCopies?.map((copy) => [copy.key, copy]),
+      );
       this.#counterSetMenuBill = {
         id,
         setMenus,
-        setMenuCopies: copies.map(({ copy }) => copy).filter(({ key }) => keys.has(key)),
+        setMenuCopies: copies
+          .map(({ copy }) => held.get(copy.key) ?? copy)
+          .filter(({ key }) => keys.has(key)),
       };
       store.markSaved(revision);
     };

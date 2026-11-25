@@ -13,7 +13,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -3704,6 +3704,335 @@ it("shows a drafted set-menu dish's correction when its bill's recorded copy is 
   expect(dialog(el)).toBeNull();
   await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 30));
   expect(api.saveDraft!.mock.calls.length).toBe(saves);
+});
+
+/** An open counter order holding one saved Hake from Daily, its recorded copy being `copy`. */
+const heldDaily = (copy: ReturnType<typeof dailyCopy>) => ({
+  id: "held-order",
+  zoneId: null,
+  revision: 7,
+  label: "Lunch",
+  expectedEdit: null,
+  dining: "takeaway",
+  diningChoice: "locked",
+  kitchenNote: {
+    scope: { workingOrderId: "held-order" },
+    note: null,
+    revision: 0,
+    ownerRevision: 0,
+  },
+  ...recordedDaily(copy),
+  lines: [
+    {
+      product: setMenuProduct({ offer: copy.offers[0]!, setMenuId: "daily", versionId: "v1" }),
+      productId: "Hake",
+      menuItemId: "menu-hake",
+      menuVersionId: "v1",
+      setMenuId: "daily",
+      workingOrderLineId: "held-line",
+      quantity: "1.000",
+    },
+  ],
+});
+
+async function openHeldDaily(sentAt: string | null, overrides: Record<string, unknown> = {}) {
+  const opened = await openSelling("counter", V1, menuState("v1"), {
+    retrieveWorkingOrder: vi.fn().mockResolvedValue(heldDaily(dailyCopy(hakeDish({ fish: {} })))),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 7,
+      lines: [{ ...tabLemonade, id: "held-line", productId: "Hake", sentAt }],
+    }),
+    getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    ...overrides,
+  });
+  const retrieve = async () => {
+    emit(counter(opened.el), "retrieve-order", { id: "held-order" });
+    await flush(opened.el);
+  };
+  return { ...opened, retrieve };
+}
+
+it.each([
+  ["unsent", "answers", null, { fish: {}, eggs: {} }],
+  ["sent", "answers", "2026-11-15T10:00:00Z", { fish: {} }],
+  ["unsent", "fails at first", null, { fish: {}, eggs: {} }],
+] as const)(
+  "reads an open counter order's recorded set-menu copies again at a new version: a saved %s dish, the read %s",
+  async (_state, read, sentAt, allergens) => {
+    const { el, store, serve, retrieve } = await openHeldDaily(sentAt);
+    await retrieve();
+    const line = store.lines[0]!;
+    expect(line.workingOrderLineId).toBe("held-line");
+    addHake(store, hakeDish({ fish: {} }));
+    const added = store.lines[1]!;
+
+    api.retrieveWorkingOrder!.mockResolvedValue(
+      heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+    );
+    if (read === "fails at first")
+      api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "same" });
+    if (read === "fails at first") {
+      expect(line.product.allergens).toEqual({ fish: {} });
+      await poll(el);
+    }
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    await poll(el);
+
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads);
+    expect(store.lines).toEqual([line, added]);
+    expect(line.product.allergens).toEqual(allergens);
+    expect(added.product.allergens).toEqual({ fish: {}, eggs: {} });
+    expect(store.revision).toBe(7);
+  },
+);
+
+it("drops a late answer about the copies of an order opened again since", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  const late = deferred<ReturnType<typeof heldDaily>>();
+  api.retrieveWorkingOrder!.mockReturnValueOnce(late.promise);
+  await serve(menu("v2", V1.offers), menuState("v2"));
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, sesame: {} }))),
+  );
+  await retrieve();
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+
+  late.resolve(heldDaily(dailyCopy(hakeDish({ fish: {} }))));
+  await flush(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+});
+
+/** A held Daily order opened, and a re-read of its copies still out after Lunch was published. */
+async function rereadOut(
+  overrides: Record<string, unknown> = {},
+  setMenus: ReturnType<typeof onSale>[] = [],
+) {
+  const opened = await openHeldDaily(null, overrides);
+  await opened.retrieve();
+  const asked = deferred<ReturnType<typeof heldDaily>>();
+  api.retrieveWorkingOrder!.mockReturnValueOnce(asked.promise);
+  await opened.serve(
+    { ...menu("v2", V1.offers), setMenus },
+    { ...menuState("v2"), liveFields: "v2" },
+  );
+  const answer = async (copy: ReturnType<typeof dailyCopy>) => {
+    asked.resolve(heldDaily(copy));
+    await flush(opened.el);
+  };
+  return { ...opened, answer };
+}
+
+const recordedOf = (el: TillApp) => counter(el).setMenuCopies.map(({ copy }) => copy);
+
+it("changes only the allergens shown when an open counter order's copies are read again", async () => {
+  const { el, store, answer } = await rereadOut();
+  addHake(store, hakeDish({ fish: {} }));
+  store.setLineQuantity(1, "3");
+  store.setLineExtras(1, { note: "no lemon" });
+  const before = structuredClone(store.lines);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} }, "9.00")));
+
+  expect(store.lines).toEqual(
+    before.map((line) => ({
+      ...line,
+      product: { ...line.product, allergens: { fish: {}, eggs: {} } },
+    })),
+  );
+  expect(store.revision).toBe(7);
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("takes nothing from a copy of another menu's version that shares a recorded copy's key", async () => {
+  const { el, store, answer } = await rereadOut();
+  const other = heldDaily(dailyCopy(hakeDish({ milk: {} })));
+  other.setMenus.copies[0]!.versionId = "d1";
+  other.setMenus.recorded.daily = "d1";
+  api.retrieveWorkingOrder!.mockResolvedValue(other);
+  await answer(dailyCopy(hakeDish({ fish: {} })));
+  api.menuState!.mockResolvedValue({ ...menuState("v2"), liveFields: "v3" });
+  await poll(el);
+  await poll(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {} });
+});
+
+it("keeps a newer re-read of the copies when an earlier one answers after it", async () => {
+  const { el, store, serve, answer } = await rereadOut();
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, sesame: {} }))),
+  );
+  await serve(menu("v3", V1.offers), { ...menuState("v3"), liveFields: "v3" });
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+
+  await answer(dailyCopy(hakeDish({ fish: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {}, sesame: {} });
+});
+
+it.each(["paid and cleared", "left for another operator"])(
+  "drops a late answer about the copies of an order %s",
+  async (end) => {
+    const { el, store, answer } = await rereadOut();
+    if (end === "paid and cleared") store.clear();
+    else {
+      emit(counter(el), "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
+    }
+    const lines = structuredClone(counter(el).store.lines);
+    const reads = api.listZoneOffers.mock.calls.length;
+
+    await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+    expect(counter(el).store.lines).toEqual(lines);
+    expect(
+      recordedOf(el).flatMap(({ offers }) => offers.map((dish) => dish.allergens)),
+    ).not.toContainEqual({
+      fish: {},
+      eggs: {},
+    });
+    await poll(el);
+    expect(api.listZoneOffers.mock.calls.length).toBe(reads);
+  },
+);
+
+it("keeps the correction, and the copy recorded meanwhile, when a set-menu change was out as the copies were read", async () => {
+  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
+  const saved = deferred<unknown>();
+  const { el, store, answer } = await rereadOut(
+    {
+      setSetMenuCount: vi.fn().mockReturnValue(saved.promise),
+    },
+    [onSale(special, "v2")],
+  );
+  const held = heldDaily(dailyCopy(hakeDish({ fish: {} })));
+  const changed = counter(el).saveSetMenuCount!("special", 1);
+  await flush(el);
+  expect(api.setSetMenuCount).toHaveBeenCalledOnce();
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+  saved.resolve({
+    setMenus: {
+      ...held.setMenus,
+      copies: [...held.setMenus.copies, setMenuCopyOf(special, "v2")],
+      recorded: { daily: "v1", special: "v2" },
+    },
+    partyRevision: 8,
+  });
+  await changed;
+  await flush(el);
+
+  expect(store.revision).toBe(8);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
+    ["daily-copy", { fish: {}, eggs: {} }],
+    ["special-copy", { milk: {} }],
+  ]);
+});
+
+it("keeps a copy the order recorded after its copies were asked for again", async () => {
+  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
+  const { el, answer } = await rereadOut(
+    {
+      setSetMenuCount: vi.fn().mockImplementation(async () => {
+        const { setMenus } = heldDaily(dailyCopy(hakeDish({ fish: {} })));
+        return {
+          setMenus: {
+            ...setMenus,
+            copies: [...setMenus.copies, setMenuCopyOf(special, "v2")],
+            recorded: { daily: "v1", special: "v2" },
+          },
+          partyRevision: 8,
+        };
+      }),
+    },
+    [onSale(special, "v2")],
+  );
+  await counter(el).saveSetMenuCount!("special", 1);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
+    ["daily-copy", { fish: {}, eggs: {} }],
+    ["special-copy", { milk: {} }],
+  ]);
+});
+
+it("drops an answer about the copies of an order placed since they were asked for", async () => {
+  const { el, store, answer } = await rereadOut({
+    placeOrder: vi.fn().mockResolvedValue({}),
+    updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
+  });
+  emit(counter(el), "place-order");
+  await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
+  const line = store.lines[0]!;
+  expect(line.product.allergens).toEqual({ fish: {} });
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+});
+
+it.each([
+  ["cannot be reached", new Error("offline"), true],
+  ["is gone", { code: "working_order.not_found", status: 404 }, false],
+])(
+  "asks again about an order's copies at the next poll when it %s: %s",
+  async (_end, error, asks) => {
+    const { el, serve, retrieve } = await openHeldDaily(null);
+    await retrieve();
+    api.retrieveWorkingOrder!.mockRejectedValue(error);
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    await poll(el);
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads + (asks ? 1 : 0));
+  },
+);
+
+it("gives up a read of an order's copies that hangs, and asks again at the next poll", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  const timers = vi.spyOn(window, "setTimeout");
+  api.retrieveWorkingOrder!.mockImplementationOnce(
+    (_id: string, options: { signal?: AbortSignal } = {}) =>
+      new Promise((_resolve, reject) =>
+        options.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      ),
+  );
+  await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+
+  for (const [handler, delay] of timers.mock.calls)
+    if (delay === TABLE_REQUEST_LIMIT_MS && typeof handler === "function") handler();
+  timers.mockRestore();
+  await flush(el);
+  await poll(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("does not read an order sent unpaid as an open one when the menu changes", async () => {
+  const { el, store, serve } = await openHeldDaily("2026-11-15T10:00:00Z", {
+    retrievePlacedOrder: vi.fn().mockResolvedValue(heldDaily(dailyCopy(hakeDish({ fish: {} })))),
+  });
+  emit(counter(el), "pay-waiting-order", { id: "held-order" });
+  await flush(el);
+  expect(counter(el).stage).toBe("collect");
+  expect(store.lines).toHaveLength(1);
+
+  await serve(menu("v2", V1.offers), menuState("v2"));
+
+  expect(api.retrieveWorkingOrder).not.toHaveBeenCalled();
 });
 
 it.each(["recorded", "live"] as const)(
