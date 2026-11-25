@@ -397,6 +397,46 @@ it.each(["tap", "keyboard"])(
   },
 );
 
+it.each(["servedProducts", "unfilteredServedProducts"] as const)(
+  "refreshes an open choice from %s once another menu is the one shown",
+  async (served) => {
+    const declared = (allergens: TillProduct["allergens"]): TillProduct => ({
+      ...dish,
+      allergens,
+      variants: [
+        {
+          ...sellingValuesOf(dish),
+          id: "small",
+          name: "Small",
+          unitPrice: "2.00",
+          unitPriceDifference: "-1.00",
+          available: true,
+          allergens,
+        },
+      ],
+    });
+    const { el, button, store } = await mount(declared({}));
+    await userEvent.click(button);
+    await el.updateComplete;
+    const picker = el.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    el.menu = { ...menu, id: "dinner", structure: { members: [] } };
+    el.products = [];
+    el[served] = [
+      { ...declared({ celery: {} }), menuItemId: "dinner-offer" },
+      declared({ fish: {} }),
+    ];
+    await el.updateComplete;
+    await picker.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="product-variant"]')!.click();
+    await picker.updateComplete;
+    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  },
+);
+
 it("refreshes an open choice without replacing its staged selection or prices", async () => {
   const { el, button, store } = await mount({
     ...dish,

@@ -332,8 +332,9 @@ describe("A669 candidate sets", () => {
     const wheat = { gluten: { kinds: ["wheat" as const] } };
 
     /** A menu of its own beside the zone's, selling a pie with a variant and an extra, and a cake;
-     * and a draft of the two sold from its first version, with the pie again from no version. */
-    async function draftFromOwnMenu() {
+     * and a draft of the two sold from its first version, with the pie again from no version. The
+     * pie offers its extra in two lists, at two portions; `both` takes it from each. */
+    async function draftFromOwnMenu(both = false) {
       const p = await party();
       const tag = randomUUID().slice(0, 8);
       const menu = await inTx(v, async (tx) => {
@@ -371,28 +372,28 @@ describe("A669 candidate sets", () => {
           "es-ES",
         );
         await updateProduct(tx, large!.id, { allergens: wheat });
-        const list = await createExtraList(
+        const hamList = (name: string, portion: string) =>
+          createExtraList(
+            tx,
+            {
+              name: `${name} ${tag}`,
+              customerName: null,
+              kitchenName: null,
+              minPicks: 0,
+              maxPicks: null,
+              active: true,
+              items: [
+                { productId: ham.id, portion, maxQuantity: 1, preselected: false, price: "1.00" },
+              ],
+            },
+            "es-ES",
+          );
+        const lists = [await hamList("Ham", "0.500"), await hamList("Side ham", "0.250")];
+        await writeProductModifiers(
           tx,
-          {
-            name: `Ham ${tag}`,
-            customerName: null,
-            kitchenName: null,
-            minPicks: 0,
-            maxPicks: null,
-            active: true,
-            items: [
-              {
-                productId: ham.id,
-                portion: "0.500",
-                maxQuantity: 1,
-                preselected: false,
-                price: "1.00",
-              },
-            ],
-          },
-          "es-ES",
+          pie.id,
+          lists.map(({ id }) => ({ kind: "extras", id })),
         );
-        await writeProductModifiers(tx, pie.id, [{ kind: "extras", id: list.id }]);
         const pieItem = await addProductToMenu(tx, { menuId: id, productId: pie.id });
         const cakeItem = await addProductToMenu(tx, { menuId: id, productId: cake.id });
         await offerMenuThroughZone(tx, v.tables.zoneId, id, { displayOrder: 9 });
@@ -400,7 +401,9 @@ describe("A669 candidate sets", () => {
           id,
           ids: { pie: pie.id, cake: cake.id, large: large!.id, ham: ham.id },
           items: { pie: pieItem.id, cake: cakeItem.id },
-          extras: [{ listId: list.id, picks: [{ productId: ham.id, quantity: 1 }] }],
+          extras: lists
+            .slice(0, both ? 2 : 1)
+            .map(({ id }) => ({ listId: id, picks: [{ productId: ham.id, quantity: 1 }] })),
           versionId: await publishWorkingMenu(tx, id),
         };
       });
@@ -484,6 +487,14 @@ describe("A669 candidate sets", () => {
       // The pie sold from no version has only the zone's offer, which is gone.
       const unknown = ["", null, ["", "1.000", null]];
       expect(await f.dishes()).toEqual([...corrected, unknown]);
+    });
+
+    it("take each extra's portion from the list it was picked from", async () => {
+      const f = await draftFromOwnMenu(true);
+      const ham = ["Ham", "0.500", { sulphites: {} }];
+      const sideHam = ["Ham", "0.250", { sulphites: {} }];
+      const pie = ["Pie (Large)", wheat, ham, sideHam];
+      expect(await f.dishes()).toEqual([pie, ["Cake", { eggs: {} }], pie]);
     });
 
     it("are not reviewed when no menu version is known by the id they name", async () => {

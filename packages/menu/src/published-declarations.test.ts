@@ -512,7 +512,7 @@ it("reads a long history in a few statements, each line from the newest version 
     await line(f.lunch, versions[0]!, f.lager),
     await line(f.lunch, versions[0]!, f.lemonade),
   ];
-  for (let number = 2; number <= 41; number += 1) {
+  for (let number = 2; number <= 49; number += 1) {
     if (number === 3) await removeFrom(f.lunchRoot, f.soup);
     if (number === 2) await declare(f.soup, "celery");
     if (number === 20) await removeFrom(f.beer, f.lager);
@@ -529,6 +529,7 @@ it("reads a long history in a few statements, each line from the newest version 
   ]);
   expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
   const documentReads = vi.mocked(readRecordedDocuments).mock.calls.map(([, ids]) => ids);
-  expect(new Set(documentReads[0])).toEqual(new Set([versions[40]]));
-  expect(documentReads.length).toBeLessThanOrEqual(6);
+  expect(new Set(documentReads[0])).toEqual(new Set([versions[48]]));
+  // Soup is in the two oldest versions alone, so its walk reaches every one of them.
+  expect(documentReads.map((ids) => new Set(ids).size)).toEqual([1, 2, 4, 8, 16, 16, 2]);
 });
