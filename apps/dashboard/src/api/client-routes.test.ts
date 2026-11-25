@@ -966,13 +966,15 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(held))
-      .mockResolvedValueOnce(jsonResponse({ outcome: "kept" }))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "put_on_bill" }))
       .mockResolvedValueOnce(jsonResponse({ outcome: "refunded_at_provider" }));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.listHeldPayments()).resolves.toEqual(held);
-    await expect(api.recordHeldOutcome("h-1", { outcome: "kept", pin: "1234" })).resolves.toEqual({
-      outcome: "kept",
+    await expect(
+      api.recordHeldOutcome("h-1", { outcome: "put_on_bill", pin: "1234" }),
+    ).resolves.toEqual({
+      outcome: "put_on_bill",
     });
     await expect(
       api.recordHeldOutcome("h/2", {
@@ -984,7 +986,11 @@ describe("DashboardApi routes", () => {
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/payments/held", "GET", undefined],
-      ["/management-api/payments/held/h-1/outcome", "POST", { outcome: "kept", pin: "1234" }],
+      [
+        "/management-api/payments/held/h-1/outcome",
+        "POST",
+        { outcome: "put_on_bill", pin: "1234" },
+      ],
       [
         "/management-api/payments/held/h%2F2/outcome",
         "POST",

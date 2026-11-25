@@ -22,7 +22,7 @@ import type {
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
-import { reconcilerAsDuty } from "./reconcile-duty.js";
+import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -109,53 +109,28 @@ async function handleOpenAlert(at: Date): Promise<void> {
 }
 
 describe("held card payments on the real scheduler", () => {
-  it("two held payments on two days are both named, every morning", async () => {
+  it("brings back every unresolved payment when a pass has no Stripe credential", async () => {
     const records = [await heldPayment("p1", JUL_1_NOON), await heldPayment("p2", JUL_2_NOON)];
-    const { tick } = scheduler(records);
+    const { reconciler, tick } = scheduler(records);
+    await tick(new Date("2026-07-02T06:00:00Z"));
+    await tick(new Date("2026-07-03T06:00:00Z"));
+    expect(await openAlertNames()).toEqual(["p1", "p2"]);
+    await handleOpenAlert(new Date("2026-07-03T08:00:00Z"));
 
-    const mornings = [
-      { at: new Date("2026-07-02T04:00:00Z"), named: ["p1"] },
-      { at: new Date("2026-07-03T04:00:00Z"), named: ["p1", "p2"] },
-      { at: new Date("2026-07-04T04:00:00Z"), named: ["p1", "p2"] },
-      { at: new Date("2026-07-05T04:00:00Z"), named: ["p1", "p2"] },
-    ];
-    for (const morning of mornings) {
-      await tick(morning.at);
-      expect(await openAlertNames(), morning.at.toISOString()).toEqual(morning.named);
-      await handleOpenAlert(new Date(morning.at.getTime() + 60 * 60 * 1000));
-    }
-  });
-
-  it("a handled alert comes back the next morning, not the same day unless a new payment is held", async () => {
-    const JUL_3_NOON = new Date("2026-07-03T12:00:00Z");
-    const records = [await heldPayment("p1", JUL_1_NOON), await heldPayment("p2", JUL_3_NOON)];
-    const { tick, control } = scheduler(records);
-    // Each later day's first check fails, so its retry is a second check the same morning.
-    const tried = new Set<number>([Date.parse("2026-07-01T00:00:00Z")]);
-    control.failing = (window) => {
-      if (tried.has(window.from.getTime())) return false;
-      tried.add(window.from.getTime());
-      return true;
-    };
-    const outcomes = async (at: string) =>
-      (await tick(new Date(at))).ran.map((run) => run.outcome).sort();
-
-    expect(await outcomes("2026-07-02T04:00:00Z")).toEqual(["succeeded"]);
-    expect(await openAlertNames()).toEqual(["p1"]);
-    await handleOpenAlert(new Date("2026-07-02T05:00:00Z"));
-
-    expect(await outcomes("2026-07-03T04:00:00Z")).toEqual(["failed", "succeeded"]);
-    expect(await openAlertNames()).toEqual(["p1"]);
-    await handleOpenAlert(new Date("2026-07-03T04:30:00Z"));
-    // 2 July's retry checks again the same day and finds nothing new.
-    expect(await outcomes("2026-07-03T05:00:00Z")).toEqual(["succeeded"]);
-    expect(await openAlertNames()).toBeNull();
-
-    expect(await outcomes("2026-07-04T04:00:00Z")).toEqual(["failed", "succeeded"]);
-    expect(await openAlertNames()).toEqual(["p1"]);
-    await handleOpenAlert(new Date("2026-07-04T04:30:00Z"));
-    // 3 July's retry holds p2, which the handled alert did not name: it comes back the same day.
-    expect(await outcomes("2026-07-04T05:00:00Z")).toEqual(["succeeded"]);
+    const pass = reconcilePassFor({
+      paymentsInstalled: true,
+      duties: [{ duty: reconcilerAsDuty(reconciler), credentialPurpose: "payments.stripe" }],
+      refreshHeld: (now: Date) =>
+        withTransaction(suite.db, (tx) => refreshHeldAlert(tx, heldAlerts, { now, by: null })),
+      onHeldRefreshFailure: (error: unknown) => {
+        throw error;
+      },
+      credentialProvisioned: async () => false,
+      runDue: async () => {
+        throw new Error("No provider duty has a credential");
+      },
+    });
+    expect((await pass(new Date("2026-07-04T06:00:00Z"))).ran).toEqual([]);
     expect(await openAlertNames()).toEqual(["p1", "p2"]);
   });
 
@@ -178,7 +153,7 @@ describe("held card payments on the real scheduler", () => {
           .values(withFoldedPersonKeys({ id: personId, displayName: "Manager " + personId }));
         await recordHoldOutcome(tx, {
           paymentId: hold.paymentId,
-          outcome: "kept",
+          outcome: "put_on_bill",
           note: null,
           personId,
           at: recordedAt,

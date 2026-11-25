@@ -150,6 +150,7 @@ import {
   type CollectionOwners,
   type PaymentProvider,
   type ReaderStatus,
+  refreshHeldAlert,
   runDue,
 } from "@waitron/payments";
 import { recordIncidentOnce, markIncidentHandled, currentIncidentsOf } from "@waitron/core";
@@ -4737,6 +4738,20 @@ async function bootServer(
       reconcile: reconcilePassFor({
         paymentsInstalled: migrationModules.some((module) => module.name === "payments"),
         duties: auditDuties,
+        refreshHeld: (at) =>
+          withTransaction(db, (tx) =>
+            refreshHeldAlert(
+              tx,
+              {
+                raise: recordIncidentOnce,
+                current: currentIncidentsOf,
+                handle: markIncidentHandled,
+              },
+              { now: at, by: null },
+            ),
+          ),
+        onHeldRefreshFailure: (error) =>
+          log("warn", "payments.held_alert_refresh_failed", { errorCode: codeOf(error) }),
         credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
         runDue: (at, duties) =>
           runDue(

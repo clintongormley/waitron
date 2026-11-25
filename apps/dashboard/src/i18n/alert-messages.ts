@@ -459,6 +459,11 @@ export const ALERT_MESSAGES: Readonly<
     es: `Una comprobación encontró {count} pagos con tarjeta con un importe distinto en los registros del proveedor y aquí.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_held": {
+    one: {
+      param: "count",
+      en: "1 card payment for a closed order has a different amount in the card provider's records than recorded here. Waitron will not refund it. Record what was done on Check card payments in Reporting.",
+      es: "1 pago con tarjeta de un pedido cerrado tiene un importe distinto en los registros del proveedor y aquí. Waitron no lo devolverá. Registra qué se hizo en Comprobar pagos con tarjeta, en Informes.",
+    },
     en: "{count} card payments for closed orders have a different amount in the card provider's records than recorded here. Waitron will not refund them. Record what was done with each on Check card payments in Reporting.",
     es: "{count} pagos con tarjeta de pedidos cerrados tienen un importe distinto en los registros del proveedor y aquí. Waitron no los devolverá. Registra qué se hizo con cada uno en Comprobar pagos con tarjeta, en Informes.",
   },

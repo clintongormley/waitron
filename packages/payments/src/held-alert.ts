@@ -1,5 +1,5 @@
-import type { Transaction } from "@waitron/db";
-import { AppError, jobOrigin } from "@waitron/shared";
+import { readVenueClock, type Transaction } from "@waitron/db";
+import { AppError, businessDayAt, jobOrigin } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import "./errors.js";
 import { listOpenHolds } from "./holds.js";
@@ -31,9 +31,7 @@ export interface HeldAlertSink {
 
 /**
  * Keeps one open `payment.reconcile_held` alert naming every held payment. An open alert's params
- * never change, so a changed set replaces it. A handled alert comes back at the first call of the
- * next UTC day after it was handled, or at once when a payment it did not name is held. Returns
- * whether a new alert was raised.
+ * never change, so a changed set replaces it.
  */
 export async function refreshHeldAlert(
   tx: Transaction,
@@ -53,12 +51,13 @@ export async function refreshHeldAlert(
     await handle(tx, sink, open, input);
     return raise(tx, sink, held, input.now);
   }
-  if (
-    lastHandled === null ||
-    // Non-null: `current` answers a handled incident as `lastHandled`.
-    lastHandled.acknowledgedAt! < utcDayStart(input.now) ||
-    [...heldRefs].some((ref) => !namedRefs(lastHandled).has(ref))
-  ) {
+  if (lastHandled === null) return raise(tx, sink, held, input.now);
+  const handledRefs = namedRefs(lastHandled);
+  if ([...heldRefs].some((ref) => !handledRefs.has(ref))) return raise(tx, sink, held, input.now);
+
+  const clock = await readVenueClock(tx);
+  // `current` answers a handled incident as `lastHandled`.
+  if (businessDayAt(clock, lastHandled.acknowledgedAt!) < businessDayAt(clock, input.now)) {
     return raise(tx, sink, held, input.now);
   }
   return false;
@@ -102,8 +101,4 @@ function namedRefs(incident: HeldAlertIncident): Set<string> {
 
 function sameSet(a: Set<string>, b: Set<string>): boolean {
   return a.size === b.size && [...a].every((ref) => b.has(ref));
-}
-
-function utcDayStart(at: Date): Date {
-  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
 }

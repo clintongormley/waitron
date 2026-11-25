@@ -75,3 +75,18 @@ Un pago cobrado en el lector fuera de Waitron queda para que lo revises.
 
 **Devolución confirmada** significa que SumUp indica que se ha devuelto todo el importe. Si no está confirmada, usa su fecha de cobro, referencia e importe para comprobarlo en SumUp antes de devolverlo allí para no devolver el dinero dos veces.
 Revisa esta lista aunque siga abierta una advertencia anterior en Alertas.
+
+## Resolver un pago con tarjeta retenido {#resolve-held-payment}
+
+En Informes, abre **Comprobar pagos con tarjeta** y busca el pago en **Retenidos: liquidados por otro importe**.
+Comprueba cuánto se cobró al cliente y qué importe conservas en el panel de tu proveedor de tarjetas.
+
+- **Devuelto.** Devuelve el importe retenido desde el panel del proveedor y confirma allí la devolución.
+- **Añadido a una cuenta.** Vuelve a registrar los platos en una cuenta nueva. Registra el cobro
+  existente con **Otro datáfono**. Elige **Cobrado fuera de Waitron** si aparece esa opción.
+  Aplica el importe que el proveedor confirma que conservas, hasta cubrir lo que se debe.
+  Deja pendiente cualquier saldo restante o cóbralo por separado. Consulta al proveedor sobre
+  cualquier exceso antes de registrar el resultado. No vuelvas a cobrar la tarjeta.
+
+En el pago retenido, elige **Registrar resultado** y selecciona lo que hiciste. Añade una nota
+si te resulta útil, introduce tu PIN de responsable y pulsa **Registrar**.

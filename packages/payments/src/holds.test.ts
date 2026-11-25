@@ -175,7 +175,7 @@ describe("listOpenHolds", () => {
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
         paymentId: open[0]!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: MANAGER,
         at: new Date("2026-10-19T10:00:00.000Z"),
@@ -229,7 +229,7 @@ describe("recordHoldOutcome", () => {
       withTransaction(suite.db, (tx) =>
         recordHoldOutcome(tx, {
           paymentId: NO_HOLD,
-          outcome: "kept",
+          outcome: "put_on_bill",
           note: null,
           personId: MANAGER,
           at: new Date("2026-10-19T10:00:00.000Z"),
@@ -245,7 +245,7 @@ describe("recordHoldOutcome", () => {
     const paymentId = await aHold();
     const first = {
       paymentId,
-      outcome: "kept" as const,
+      outcome: "put_on_bill" as const,
       note: null,
       personId: MANAGER,
       at: new Date("2026-10-19T10:00:00.000Z"),
@@ -265,7 +265,7 @@ describe("recordHoldOutcome", () => {
     const { rows } = await suite.db.execute(
       sql`select hold_outcome as outcome, hold_note as note from payments where id = ${paymentId}`,
     );
-    expect(rows).toEqual([{ outcome: "kept", note: null }]);
+    expect(rows).toEqual([{ outcome: "put_on_bill", note: null }]);
   });
 });
 
@@ -275,7 +275,7 @@ it("refuses an outcome for a payment that was never held", async () => {
     withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
         paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: MANAGER,
         at: SETTLED,

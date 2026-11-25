@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal, deviceOrigin, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -1000,8 +1000,7 @@ describe("orphan remediation", () => {
       },
     ]);
 
-    // A later day's sweep finds the hold already written, and still leaves the payment out.
-    await suite.db.execute(sql`delete from incidents`);
+    await suite.db.execute(sql`delete from incidents where code <> 'payment.reconcile_held'`);
     await reconcilePayments(deps(report), PERIOD, new Date("2026-07-26T12:00:00Z"));
     expect(await openIncidentCodes()).toEqual([
       "payment.reconcile_held",
@@ -1018,7 +1017,7 @@ describe("orphan remediation", () => {
     ]);
   });
 
-  it("reads the held alert once when its writes record no new hold", async () => {
+  it("leaves the held alert alone when its writes record no new hold", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await setOrderStatus(seeded, "abandoned");
@@ -1035,37 +1034,8 @@ describe("orphan remediation", () => {
       },
     };
     await reconcilePayments(counted, PERIOD, new Date("2026-07-26T12:00:00Z"));
-    expect(reads).toBe(1);
+    expect(reads).toBe(0);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_held"]);
-  });
-
-  it("raises the morning alert even when the settlement report cannot be fetched", async () => {
-    const seeded = await seedWorkingOrder(suite.db, freshNif());
-    await capture(seeded, "p1", "ext-1");
-    await setOrderStatus(seeded, "abandoned");
-    await reconcilePayments(
-      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })])),
-      PERIOD,
-      NOW,
-    );
-    await withTransaction(suite.db, async (tx) => {
-      const { open } = await currentIncidentsOf(tx, {
-        origin: jobOrigin("payment_check"),
-        code: "payment.reconcile_held",
-      });
-      await markIncidentHandled(tx, { id: open!.id, personId: null, handledAt: NOW });
-    });
-
-    const failing = {
-      fetch: () => Promise.reject(new Error("report unavailable")),
-    } as unknown as FakeSettlementReport;
-    await expect(
-      reconcilePayments(deps(failing), PERIOD, new Date("2026-07-26T06:00:00Z")),
-    ).rejects.toThrow("report unavailable");
-    const { rows } = await suite.db.execute<{ code: string }>(
-      sql`select code from incidents where acknowledged_at is null`,
-    );
-    expect(rows.map((r) => r.code)).toEqual(["payment.reconcile_held"]);
   });
 
   it("records no hold for an orphan that is claimed for a refund", async () => {
@@ -1177,7 +1147,7 @@ describe("orphan remediation", () => {
     await withTransaction(suite.db, (tx) =>
       recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
         at: NOW,

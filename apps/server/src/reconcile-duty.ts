@@ -88,6 +88,8 @@ export const NOTHING_TO_RECONCILE: TickResult = {
 
 export interface ReconcilePassDeps {
   paymentsInstalled: boolean;
+  refreshHeld: (now: Date) => Promise<unknown>;
+  onHeldRefreshFailure: (error: unknown) => void;
   /** Asked per pass, so a credential provisioned while the host runs is served on the next pass. */
   duties: readonly { duty: PeriodDuty; credentialPurpose: Purpose }[];
   credentialProvisioned: (purpose: Purpose) => Promise<boolean>;
@@ -98,6 +100,11 @@ export interface ReconcilePassDeps {
 export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promise<TickResult> {
   return async (now) => {
     if (!deps.paymentsInstalled) return NOTHING_TO_RECONCILE;
+    try {
+      await deps.refreshHeld(now);
+    } catch (error) {
+      deps.onHeldRefreshFailure(error);
+    }
     const duties: PeriodDuty[] = [];
     for (const entry of deps.duties) {
       if (await deps.credentialProvisioned(entry.credentialPurpose)) duties.push(entry.duty);

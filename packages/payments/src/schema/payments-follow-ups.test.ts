@@ -23,7 +23,12 @@ const resolution = {
   resolved_at: AT,
 };
 const hold = { hold_provider_amount: 1210, held_at: AT };
-const outcome = { ...hold, hold_outcome: "kept", hold_decided_by: PERSON, hold_decided_at: AT };
+const outcome = {
+  ...hold,
+  hold_outcome: "put_on_bill",
+  hold_decided_by: PERSON,
+  hold_decided_at: AT,
+};
 type Fields = Record<string, string | number | null>;
 let order: string;
 

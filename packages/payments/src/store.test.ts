@@ -1118,7 +1118,7 @@ describe("listReconcilable", () => {
     await suite.db.transaction((tx) =>
       recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
         at: new Date("2026-07-23T09:00:00Z"),
@@ -1152,7 +1152,7 @@ describe("listReconcilable", () => {
     await suite.db.transaction((tx) =>
       recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: "22222222-2222-4222-8222-222222222222",
         at: new Date("2026-07-23T09:00:00Z"),

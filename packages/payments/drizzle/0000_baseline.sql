@@ -80,7 +80,7 @@ CREATE TABLE `payments` (
 	CONSTRAINT "payments_resolution_fields_ck" CHECK(("payments"."resolution_outcome" is null) = ("payments"."resolved_at" is null) and ("payments"."resolution_outcome" is null) = ("payments"."resolution_cancelled_at_provider" is null) and ("payments"."resolution_outcome" is not null or ("payments"."resolution_provider_status" is null and "payments"."resolved_by" is null))),
 	CONSTRAINT "payments_hold_amount_ck" CHECK("payments"."hold_provider_amount" is null or "payments"."hold_provider_amount" > 0),
 	CONSTRAINT "payments_hold_fields_ck" CHECK(("payments"."hold_provider_amount" is null) = ("payments"."held_at" is null)),
-	CONSTRAINT "payments_hold_outcome_ck" CHECK("payments"."hold_outcome" in ('refunded_at_provider', 'kept')),
+	CONSTRAINT "payments_hold_outcome_ck" CHECK("payments"."hold_outcome" in ('refunded_at_provider', 'put_on_bill')),
 	CONSTRAINT "payments_hold_note_ck" CHECK("payments"."hold_note" is null or length(trim("payments"."hold_note")) > 0),
 	CONSTRAINT "payments_hold_outcome_fields_ck" CHECK(("payments"."hold_outcome" is null) = ("payments"."hold_decided_by" is null) and ("payments"."hold_outcome" is null) = ("payments"."hold_decided_at" is null) and ("payments"."hold_outcome" is null or "payments"."held_at" is not null) and ("payments"."hold_outcome" is not null or "payments"."hold_note" is null)),
 	CONSTRAINT "payments_hold_or_remediation_ck" CHECK("payments"."held_at" is null or "payments"."reconcile_remediated_at" is null),

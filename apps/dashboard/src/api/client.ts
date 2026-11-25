@@ -2778,7 +2778,7 @@ export interface HeldPaymentRow {
   providerAmount: string;
 }
 
-export type HeldOutcome = "refunded_at_provider" | "kept";
+export type HeldOutcome = "refunded_at_provider" | "put_on_bill";
 
 export interface StuckBillRefundRow {
   refundId: string;

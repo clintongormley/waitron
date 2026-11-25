@@ -16,42 +16,6 @@ Stripe reader before using Stripe, and cover the on-device amount path if that a
 The approved implementation is in
 [the A1389 cut-back plan](../superpowers/plans/2026-11-08-a1389-actual-card-amounts.md).
 
-## A846. A held card payment is Refunded or Put on a bill
-
-Queued as HELD-KEPT (lane F). The owner, 2026-11-24, on "Kept: the money was owed": "this is no longer
-true, the receipt would be made regardless, it doesn't depend on the bill being paid, no?", and then
-"yes" to removing it. The outcomes become "Refunded" and "Put on a bill": the dishes are rung up again
-and the money recorded as taken on another card machine.
-
-The same item takes:
-
-- **"Next morning" is midnight UTC** (01:00 or 02:00 in Spain), so a venue still open then sees the
-  held-payments alert come back during service. It becomes the venue's business day: the owner's
-  answer of 2026-10-18 is an ordinary alert that "comes back the next morning".
-- **The alert's wording for a single payment**: "1 card payments … refund them … with each".
-- **The section's introduction**, which says a manager records only the outcome the provider confirms,
-  with a note, and does not fit the held list.
-
-Until it is built, kept money on a cancelled order has no invoice: the payment stays captured on an
-abandoned order with no sale, and Waitron files nothing for it.
-
-Known limits, kept by the watcher 2026-11-24, not asked:
-
-- **The morning return needs the payments check to get past its Stripe account.** While the
-  Stripe credential cannot be used, the check starts and throws in `resolveAccount()`
-  (`packages/payments-stripe/src/reconciler.ts`) before reading anything, so a handled
-  held-payments alert does not come back; what shows instead is the check's own failure
-  (`reconcile.run_failed` and `reconcile.run_parked` log lines, and `/health`'s `parked` count
-  and a `duty.degraded` log line for the pass that parks it). The alternative is refreshing the
-  held alert before the check resolves its Stripe account.
-- **A payment refunded by staff between the check's two transactions could still be held**: the
-  check decides on its first read, as the existing refund-claim path does. Believed rare; not fixed.
-- **A held payment whose order stops being abandoned** would be named by both the difference and
-  held alerts (`markOrderPlaced`, `apps/server/src/working-order-counter.ts`, updates by id with no status
-  check): reported twice, never hidden. Callers not traced.
-
-A846's other points for the owner were on looks and words; kept by the watcher 2026-11-24, not asked.
-
 ## The SumUp Solo experiments
 
 The [sandbox checks and owner settlement script](../research/2026-11-15-a949-sandbox-and-settlement-check.md)
@@ -274,6 +238,8 @@ Remaining Stripe qualification and maintenance.
   and their only reader, `createCheckoutSession`, has no production caller (read, not run). A1308's
   env4 left them as they are (owner, 2026-11-09: "Leave this for when we test Stripe"): decide then
   whether to move them to the payments settings document or stop collecting them.
+- A refund recorded while the Stripe report is being fetched can be missed by that check's
+  earlier read, so it can still try to hold the payment (A846 point 17).
 
 ## Bundle: Tap to pay restore
 
@@ -402,7 +368,10 @@ Remaining Stripe qualification and maintenance.
   (recorded in [the A846 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-19-a846-held-card-payments.md)):
   the reminder is an ordinary alert that can be marked handled and comes back the next morning
   while any held payment has no outcome, not one that cannot be dismissed; and a manager closes a
-  held payment by recording an outcome in the Payments screen's held list.
+  held payment by recording an outcome in Reporting's held list.
+  On 25 November 2026, HELD-KEPT made the reminder follow the venue's business-day cutover
+  and return through the primary's reconciliation pass even without usable provider credentials.
+  The recorded outcomes are Refunded and Put on a bill.
 
 - **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
   Check them automatically after collection ends; keep what the order charges locked until the outcome is known.

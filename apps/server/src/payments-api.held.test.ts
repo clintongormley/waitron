@@ -307,7 +307,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     ]);
   });
 
-  it("records a kept payment with no note as null and closes the alert when it was the last", async () => {
+  it("records Put on a bill without a note, a sale or a refund and closes the last alert", async () => {
     const v = await setup();
     const held = await aHeldPayment(v, {
       amount: "9.00",
@@ -319,12 +319,14 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       refreshHeldAlert(tx, sink, { now: new Date("2026-10-17T03:00:00.000Z"), by: null }),
     );
 
-    const res = await post(v, outcomePath(held.paymentId), { outcome: "kept", pin: "1234" });
+    const res = await post(v, outcomePath(held.paymentId), { outcome: "put_on_bill", pin: "1234" });
 
     expect(res.status).toBe(200);
     expect(outcomeRows()).toEqual([
-      { payment_id: held.paymentId, outcome: "kept", note: null, person_id: v.managerId },
+      { payment_id: held.paymentId, outcome: "put_on_bill", note: null, person_id: v.managerId },
     ]);
+    expect(suite.db.all(sql`select id from sales`)).toEqual([]);
+    expect(suite.db.all(sql`select id from payment_refunds`)).toEqual([]);
     expect(await (await list(v)).json()).toEqual([]);
     expect(heldAlerts()).toEqual([
       { id: expect.any(String), refs: [held.paymentRef], handledBy: v.managerId },
@@ -336,7 +338,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     const { earlier } = await twoHeld(v);
 
     const res = await post(v, outcomePath(earlier.paymentId), {
-      outcome: "kept",
+      outcome: "put_on_bill",
       note: "   ",
       pin: "1234",
     });
@@ -366,7 +368,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
 
     it("a staff session with that person's own PIN", async () => {
       const { res } = await refused(() => ({
-        body: { outcome: "kept", pin: "5678" },
+        body: { outcome: "put_on_bill", pin: "5678" },
         cookie: "staff",
       }));
       expect(res.status).toBe(403);
@@ -374,7 +376,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     });
 
     it("a wrong PIN", async () => {
-      const { res } = await refused(() => ({ body: { outcome: "kept", pin: "9999" } }));
+      const { res } = await refused(() => ({ body: { outcome: "put_on_bill", pin: "9999" } }));
       expect(res.status).toBe(401);
       expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });
     });
@@ -385,13 +387,16 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const alertsBefore = heldAlerts();
       for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
         const wrong = await post(v, outcomePath(earlier.paymentId), {
-          outcome: "kept",
+          outcome: "put_on_bill",
           pin: "9999",
         });
         expect(wrong.status).toBe(401);
       }
 
-      const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: "1234" });
+      const res = await post(v, outcomePath(earlier.paymentId), {
+        outcome: "put_on_bill",
+        pin: "1234",
+      });
 
       expect(res.status).toBe(429);
       expect((await errorOf(res)).code).toBe("pin.throttled");
@@ -399,8 +404,8 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       expect(heldAlerts()).toEqual(alertsBefore);
     });
 
-    it("an unknown outcome", async () => {
-      const { res } = await refused(() => ({ body: { outcome: "lost", pin: "1234" } }));
+    it.each(["lost", "kept"])("an unsupported outcome (%s)", async (outcome) => {
+      const { res } = await refused(() => ({ body: { outcome, pin: "1234" } }));
       expect(res.status).toBe(400);
       expect(await errorOf(res)).toEqual({
         code: "management.request_invalid",
@@ -409,7 +414,9 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     });
 
     it("a note that is not text", async () => {
-      const { res } = await refused(() => ({ body: { outcome: "kept", note: 7, pin: "1234" } }));
+      const { res } = await refused(() => ({
+        body: { outcome: "put_on_bill", note: 7, pin: "1234" },
+      }));
       expect(res.status).toBe(400);
       expect(await errorOf(res)).toEqual({
         code: "management.request_invalid",
@@ -418,7 +425,9 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     });
 
     it("a note sent as null", async () => {
-      const { res } = await refused(() => ({ body: { outcome: "kept", note: null, pin: "1234" } }));
+      const { res } = await refused(() => ({
+        body: { outcome: "put_on_bill", note: null, pin: "1234" },
+      }));
       expect(res.status).toBe(400);
       expect(await errorOf(res)).toEqual({
         code: "management.request_invalid",
@@ -430,7 +439,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const unknown = randomUUID();
       const { res } = await refused(() => ({
         path: outcomePath(unknown),
-        body: { outcome: "kept", pin: "1234" },
+        body: { outcome: "put_on_bill", pin: "1234" },
       }));
       expect(res.status).toBe(404);
       expect(await errorOf(res)).toEqual({
@@ -442,7 +451,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     it("an id that is not a UUID", async () => {
       const { res } = await refused(() => ({
         path: outcomePath("not-a-uuid"),
-        body: { outcome: "kept", pin: "1234" },
+        body: { outcome: "put_on_bill", pin: "1234" },
       }));
       expect(res.status).toBe(400);
       expect((await errorOf(res)).code).toBe("shared.invalid_id");
@@ -452,7 +461,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       const v = await setup();
       const { earlier } = await twoHeld(v);
       const first = await post(v, outcomePath(earlier.paymentId), {
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: "first",
         pin: "1234",
       });
@@ -488,12 +497,15 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     const { earlier } = await twoHeld(v);
     watchDerivationsAndLock(suite.db, "1234", anotherWriter, anotherWriter, anotherWriter);
 
-    const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: "1234" });
+    const res = await post(v, outcomePath(earlier.paymentId), {
+      outcome: "put_on_bill",
+      pin: "1234",
+    });
 
     expect(res.status).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
     expect(outcomeRows()).toEqual([
-      { payment_id: earlier.paymentId, outcome: "kept", note: null, person_id: v.managerId },
+      { payment_id: earlier.paymentId, outcome: "put_on_bill", note: null, person_id: v.managerId },
     ]);
   });
 
@@ -505,7 +517,7 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     const res = await post(
       v,
       outcomePath(earlier.paymentId),
-      { outcome: "kept", pin: "5678" },
+      { outcome: "put_on_bill", pin: "5678" },
       v.staffCookie,
     );
 
@@ -518,7 +530,10 @@ describe("the held payment outcome checks the manager's PIN before the write loc
     const { earlier } = await twoHeld(v);
     watchDerivationsAndLock(suite.db, "1234", anotherWriter);
 
-    const res = await post(v, outcomePath(earlier.paymentId), { outcome: "kept", pin: 1234 });
+    const res = await post(v, outcomePath(earlier.paymentId), {
+      outcome: "put_on_bill",
+      pin: 1234,
+    });
 
     expect(res.status).toBe(401);
     expect(await errorOf(res)).toEqual({ code: "pin.invalid", params: {} });

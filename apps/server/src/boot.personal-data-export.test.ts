@@ -69,7 +69,7 @@ describe("the personal-data downloads in a real start", () => {
       state: "captured",
       heldAt: "2026-05-01T09:45:00.000Z",
       holdProviderAmount: 1700,
-      holdOutcome: "kept",
+      holdOutcome: "put_on_bill",
       holdDecidedAt: decidedAt,
       holdDecidedBy: venue.personId,
     });
@@ -150,7 +150,7 @@ describe("the personal-data downloads in a real start", () => {
       ).toEqual([{ reason: "manual", at: "2026-05-01T09:30:00.000Z", yourPart: ["opened"] }]);
 
       expect(JSON.parse(strFromU8(files["payment-holds.json"]!))).toEqual({
-        entries: [{ order: 41, decision: "kept", at: decidedAt }],
+        entries: [{ order: 41, decision: "put_on_bill", at: decidedAt }],
       });
       expect(strFromU8(files["README.txt"]!)).toContain("- payment-holds.json: ");
 

@@ -325,7 +325,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
         .values(withFoldedPersonKeys({ id: personId, displayName: "Manager" }));
       await recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId,
         at: NOW,
