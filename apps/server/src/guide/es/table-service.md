@@ -613,7 +613,8 @@ desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
 
 Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
 libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del
-resumen. Un menú no se puede anular: anula o mueve sus platos.
+resumen. Un plato al que invitas o haces un descuento sale de su menú y se cobra a la carta, menos
+lo que le descuentas. Un menú no se puede anular: anula o mueve sus platos.
 
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
 mueven con él.
