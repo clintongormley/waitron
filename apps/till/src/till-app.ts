@@ -3901,6 +3901,9 @@ export class TillApp extends LitElement {
   readonly #tenderRefundAttempts = new TenderRefundAttempts();
   #tenderRefundScope?: TenderRefundScope;
   #tenderRefundSession?: TenderRefundSession;
+  /** One per sign-in and server, as Refund a payment's: a window opened again before a press's
+   * answer came shares the session that sent it, which remembers the answer. */
+  #giveBackSession?: GiveBackSession;
   #tenderRefundRead = 0;
   @state() private refundableTenders: RefundableTender[] = [];
   @state() private invoiceCorrecting: {
@@ -5296,12 +5299,14 @@ export class TillApp extends LitElement {
       this.#closeTenderRefund();
       this.invoiceCorrecting = null;
       this.givingBack = null;
-      if (this.#tenderRefundScope !== undefined)
+      if (this.#tenderRefundScope !== undefined) {
         this.#tenderRefundSession = new TenderRefundSession(
           this.#tenderRefundScope,
           this.api,
           this.#tenderRefundAttempts,
         );
+        this.#giveBackSession = new GiveBackSession(this.#tenderRefundScope, this.api);
+      }
     }
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
@@ -6433,6 +6438,7 @@ export class TillApp extends LitElement {
         this.api,
         this.#tenderRefundAttempts,
       );
+      this.#giveBackSession = new GiveBackSession(this.#tenderRefundScope, this.api);
     }
     this.#stopDepartmentTransfers();
     this.#stopClocking();
@@ -9581,6 +9587,7 @@ export class TillApp extends LitElement {
     }
     this.#tenderRefundScope = undefined;
     this.#tenderRefundSession = undefined;
+    this.#giveBackSession = undefined;
     this.#tenderRefundRead++;
     this.refundableTenders = [];
     this.#closeTenderRefund();
@@ -9824,6 +9831,7 @@ export class TillApp extends LitElement {
     const receipt = this.historicalReceipt;
     const scope = this.#tenderRefundScope;
     const refunds = this.#tenderRefundSession;
+    const session = this.#giveBackSession;
     if (
       !this.isConnected ||
       this.drill?.kind !== "ticket" ||
@@ -9831,12 +9839,13 @@ export class TillApp extends LitElement {
       this.givingBack ||
       scope === undefined ||
       refunds === undefined ||
+      session === undefined ||
       (!underWay && !this.#offersGiveBack())
     )
       return;
     this.givingBack = {
       saleId: receipt.saleId,
-      session: new GiveBackSession(scope, this.api),
+      session,
       corrections: new InvoiceCorrectionSession(scope, this.api),
       refunds,
       fill:

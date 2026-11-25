@@ -314,6 +314,43 @@ it("forgets a rest whose card refund the card company did not make", async () =>
   expect(api.previewGiveBack).not.toHaveBeenCalled();
 });
 
+it("answers a Send again of a press answered meanwhile as that answer did, sending nothing", async () => {
+  const api = fakeApi();
+  let answer!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const session = new GiveBackSession(scope, api);
+  const first = session.submit("sale-1", ask);
+  await expect(session.resend("sale-1")).rejects.toMatchObject({ kind: "busy" });
+  answer(pendingWithRest);
+  await first;
+  expect(session.read("sale-1")?.sent).toBeNull();
+  expect(await session.resend("sale-1")).toEqual(pendingWithRest);
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it("answers a Send again of a press refused meanwhile with a refusal proving nothing went back with that refusal, sending nothing", async () => {
+  const api = fakeApi();
+  const changed = { code: "give_back.changed", status: 409 };
+  api.giveBack.mockRejectedValueOnce(changed);
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toBe(changed);
+  expect(session.read("sale-1")).toBeNull();
+  await expect(session.resend("sale-1")).rejects.toBe(changed);
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it("answers no Send again from an earlier press once a new press was made", async () => {
+  const api = fakeApi();
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({ code: "pin.invalid" });
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).toBeNull();
+  await expect(session.resend("sale-1")).rejects.toMatchObject({ kind: "missing" });
+  expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
 it("refuses to send again, check or send a rest when nothing is saved", async () => {
   const session = new GiveBackSession(scope, fakeApi());
   await expect(session.resend("sale-1")).rejects.toMatchObject({ kind: "missing" });

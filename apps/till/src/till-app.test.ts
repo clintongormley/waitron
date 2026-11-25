@@ -27949,6 +27949,37 @@ describe("A737 post-invoice refund integration", () => {
       }
     });
 
+    it("shows the outcome of a press answered after its receipt was left and opened again on Send again, sending nothing more", async () => {
+      let resolve!: (value: unknown) => void;
+      const giveBackCall = vi.fn(
+        (_saleId: string, _body: GiveBackWrite) =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      const { el, view } = await open(giving({ giveBack: giveBackCall }));
+      await pressGoodwill(el);
+      expect(giveBackCall).toHaveBeenCalledOnce();
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      await discardMoveDraftIfAsked(el);
+      expect(ticket(el)).toBeNull();
+      emit(view, "find-transaction-open", { row: transactionRow() });
+      await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+      await flush(el);
+      await openGiveBack(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-send-again]")).not.toBeNull());
+
+      resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+      await flush(el);
+      await vi.waitFor(() => expect(refundKeys()).toEqual([]));
+      inWindow(el, "[data-send-again]")!.click();
+
+      await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+      expect(inWindow(el, "[data-lost]")).toBeNull();
+      expect(giveBackCall).toHaveBeenCalledOnce();
+    });
+
     it.each(["session.required", "session.not_open"])(
       "locks the till when a press is refused with %s, closing the window and clearing this person's saved press",
       async (code) => {

@@ -112,6 +112,9 @@ const waitingKinds = new Set(["refund", "extra"]);
  */
 export class GiveBackSession {
   #busy = false;
+  /** How the last press of each sale ended once it is no longer saved, so a window opened on its
+   * Send again before the answer came shows that answer instead of sending again. */
+  readonly #settled = new Map<string, { answer: GiveBackOutcome } | { error: unknown }>();
   constructor(
     private readonly scope: TenderRefundScope,
     private readonly api: GiveBackApi,
@@ -171,9 +174,10 @@ export class GiveBackSession {
       });
     } catch (error) {
       const refusal = refusalOf(error);
-      if (refusal !== null && PROVES_NOTHING.has(refusal.code))
+      if (refusal !== null && PROVES_NOTHING.has(refusal.code)) {
         this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
-      else if (refusal !== null) {
+        this.#settled.set(saleId, { error });
+      } else if (refusal !== null) {
         const proves = firstSend && FIRST_SEND_REFUSALS.has(refusal.code);
         this.#write({ ...saved, sent: { ...sent, firstSendRefused: proves, refusal } }, saleId);
       } else if (sent.firstSendRefused || sent.refusal !== null)
@@ -183,6 +187,7 @@ export class GiveBackSession {
         );
       throw error;
     }
+    this.#settled.set(saleId, { answer });
     try {
       this.#keep(saleId, sent, answer);
     } catch (error) {
@@ -244,15 +249,21 @@ export class GiveBackSession {
         rest: saved?.rest ?? null,
       };
       this.#write(next, saleId);
+      this.#settled.delete(saleId);
       return this.#send(saleId, next, override, true);
     });
   }
 
-  /** Sends the press whose answer was lost again, under its ids. */
+  /** Sends the press whose answer was lost again, under its ids; once its answer has come and it is
+   * no longer saved, answers as that answer did, sending nothing. */
   resend(saleId: string, override?: GiveBackWrite["override"]): Promise<GiveBackOutcome> {
-    return this.#run(() => {
+    return this.#run(async () => {
       const saved = this.read(saleId);
-      if (!saved?.sent) return fail("missing");
+      if (!saved?.sent) {
+        const settled = this.#settled.get(saleId) ?? fail("missing");
+        if ("error" in settled) throw settled.error;
+        return settled.answer;
+      }
       return this.#send(saleId, saved, override, false);
     });
   }
