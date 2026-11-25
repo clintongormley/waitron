@@ -23,7 +23,7 @@ and cleared this revision of the Claude-reviewed plan.
    check limits how long they can use one snapshot, without imposing a shared admission limit.
 3. In `scripts/ci-hosted-route.test.mjs`, run the first-batch route with 12 busy plus 1 waiting on
    the server and 20 busy plus 39 waiting on GitHub. Expect 31 of 45 movable jobs on the server, in
-   family order, and 16 if 25 unassigned server jobs are already visible. Include the quiet case,
+   family order, and 16 if 12 running and 25 unassigned server jobs are already visible. Include the quiet case,
    non-current snapshots, the existing stalled and unreadable paths, a server preparing admitted
    jobs and two planners reading one publication as both queues grow. Run the focused routing,
    server health and workflow guard files before review.

@@ -547,7 +547,7 @@ historical wait cause remains unknown; these observations do not measure a
 
   **2026-11-20 13:16, owner:** “No, keep today's split”. The owner declined the two-job overflow trial and said “the problem would be if several complete ci runs go straight to one side instead of being spread out, resulting in queues of 30+ minutes on one side with nothing queued on the other”. Report any such imbalance with the run IDs.
 
-  **2026-11-25 10:00, owner, recorded by the watcher:** “why just 12 extra jobs? we have a fair amount of capacity, let's just keep the queues even (ratios of 6:6:12, no?)”. The watcher clarified that the two six-slot server pools share the work with 20 GitHub slots and cleared queue balancing per slot for the first batch. At 11:02 the watcher cleared comparing the larger published or visible total for each pool. [Plan](../superpowers/plans/2026-11-25-ci-place-by-wait.md)
+  **2026-11-25 10:00, owner, recorded by the watcher:** “why just 12 extra jobs? we have a fair amount of capacity, let's just keep the queues even (ratios of 6:6:12, no?)”. The watcher clarified that the two six-slot server pools share the work with 20 GitHub slots and cleared queue balancing per slot for the first batch, replacing the 20 November choice. At 11:02 the watcher cleared comparing the larger published or visible total for each pool. [Plan](../superpowers/plans/2026-11-25-ci-place-by-wait.md)
 
   **2026-11-25 00:15, watcher:** keep the first-attempt split when a job has stalled and a current capacity snapshot and complete inventory remain available. The published waiting count uses those slots. Give a job list that changes its count again one delayed full read per route decision. Preserve hosted fallback when the list remains unreadable.
 

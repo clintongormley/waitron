@@ -294,8 +294,12 @@ beyond free slots alongside the actual job labels. Even a fresh read contains th
 observation. Earlier placements can affect later planners once their jobs appear in the inventory.
 Simultaneous planners can select from the same counts. Compare actual placement and pickup times
 in an ordinary run with jobs placed beyond free slots. Record how long `server-queue-watchdog`
-occupies a GitHub slot and whether the controller moves an untouched run back to GitHub. A share
-rounded up to the server can cross the controller’s waiting-jobs-per-slot threshold.
+occupies a GitHub slot and whether the controller moves an untouched run back to GitHub. Once a
+first attempt has waited a minute, the controller can move it if the server pool is full, fewer
+than 20 hosted jobs are running, `serverWaiting / slots > hostedWaiting / 20` and no job in the
+run blocks recovery. The controller ignores a successful `changes` job and the watchdog when
+checking for work already started. Rounding the planner’s share up can cross the queue threshold.
+[Controller overflow check](https://github.com/waitron-io/waitron-cloud/blob/b938005f99ce868486d5920203ca4b60c4ae582e/scripts/disposable-tests/ci-canary.mjs#L171-L262)
 
 Under the former whole-run rule, [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 

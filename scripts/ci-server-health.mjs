@@ -179,7 +179,6 @@ async function readInventory(read, unavailable) {
 
 export async function serverHealth(options, unavailable, staleQueuedCount, plannerShortfall) {
   const { request, repository, repositoryId, now = Date.now(), prefix = "dt" } = options;
-  const labelPrefix = options.plannersOnly ? prefix || "dt" : prefix;
   assert.match(repository, /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
@@ -218,7 +217,17 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
     }
     let jobs;
     try {
-      jobs = await readInventory(() => runJobs(options, run), unavailable);
+      jobs = await readInventory(async () => {
+        const inventory = await runJobs(options, run);
+        if (options.plannersOnly) return inventory;
+        const server = inventory.filter((job) =>
+          serverLabel(job, repositoryId, prefix, run.id, run.run_attempt),
+        );
+        hosted += inventory.filter(
+          (job) => hostedJob(job) && (job.status === "in_progress" || waitingForRunner(job)),
+        ).length;
+        return server;
+      }, unavailable);
     } catch (error) {
       if (!options.plannerSkipReason) throw error;
       options.report?.(
@@ -253,14 +262,10 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
         if (reason) plannerSkip(options, run, [job], reason);
       }
       if (options.plannerSkipReason) continue;
+      jobs = jobs.filter((job) =>
+        serverLabel(job, repositoryId, prefix || "dt", run.id, run.run_attempt),
+      );
     }
-    if (options.countHosted)
-      hosted += jobs.filter(
-        (job) => hostedJob(job) && (job.status === "in_progress" || waitingForRunner(job)),
-      ).length;
-    jobs = jobs.filter((job) =>
-      serverLabel(job, repositoryId, labelPrefix, run.id, run.run_attempt),
-    );
     running += jobs.filter(assigned).length;
     queued += jobs.filter((job) => waitingForRunner(job) && !assigned(job)).length;
     progressing ||= jobs.some(
@@ -313,7 +318,6 @@ export async function serverRoute(options) {
   let retriedJobCountDrift = false;
   const recent = {
     ...options,
-    countHosted: Boolean(firstBatch),
     retryJobCountDrift: async (message) => {
       if (!firstBatch || retriedJobCountDrift) return false;
       retriedJobCountDrift = true;

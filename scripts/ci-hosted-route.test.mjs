@@ -198,10 +198,11 @@ describe("queue-pressure routing", () => {
   });
 
   it("keeps two successive batches balanced as both queues grow between snapshots", async () => {
-    const { options, run, jobs } = fixture(32, 45);
+    const { options, run, jobs } = fixture(32, 49);
     showInHealthInventory(options, run);
     labelServerJobs(jobs.slice(0, 12));
-    const firstBatch = jobs.splice(32);
+    const firstBatch = jobs.splice(36);
+    for (const job of jobs.slice(32)) job.status = "completed";
     labelServerJobs(firstBatch.slice(0, 17));
     options.now = 2;
     options.capacity = {
