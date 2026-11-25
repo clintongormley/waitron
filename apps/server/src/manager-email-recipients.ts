@@ -11,7 +11,7 @@ export interface ManagerEmailRecipient {
 export async function readStaffEmailRecipients(
   tx: Transaction,
   venueLanguage: "en" | "es",
-  permission: Permission,
+  permission: Permission | (string & {}),
   personId?: string,
 ): Promise<(ManagerEmailRecipient & { displayName: string })[]> {
   const admitted = new Map(

@@ -233,6 +233,10 @@ Open **Hours** in the dashboard. Use **Previous** and **Next** beside the month 
 months. Check the closing date, then review the selected month's unresolved hours. For an overnight
 shift, look in the month when the shift started.
 
+If your venue sends mail through its own email server, you receive a reminder the day before close
+when the month has missing times to check or requests waiting for your review. Open **Hours** from
+the email and choose the month it names.
+
 If you manage system settings, change **Working days before close** and choose **Save**. The default
 gives you three working days to check the hours. Weekends and public holidays on the venue's calendar
 do not use up that time. Set it to zero to close when the venue’s day changes on the first of the next month.

@@ -13,6 +13,7 @@ export const MAIL_LIFETIME_MS: Readonly<
   email_changed: 86400000,
   security_change: 86400000,
   daily_report: 86400000,
+  monthly_hours_reminder: 259200000,
 };
 export interface MailRequest {
   kind: OutgoingMailKind;

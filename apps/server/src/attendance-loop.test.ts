@@ -1,5 +1,6 @@
 import { StatementSync } from "node:sqlite";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { registerModulePermissions } from "@waitron/identity";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, getTableColumns, sql } from "drizzle-orm";
 import {
@@ -7,6 +8,7 @@ import {
   CORE_CHANGE_SOURCES,
   dayCutoverChanges,
   installChangeFeed,
+  outgoingMail,
   withTransaction,
 } from "@waitron/db";
 import { seedNode, seedVenue, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -16,12 +18,14 @@ import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_CHANGE_SOURCES,
+  WORKFORCE_PERMISSIONS,
   WorkforceBackend,
   attendanceDays,
   attendanceQuestions,
   payPeriodClosures,
   readChain,
   rosterVersions,
+  setPayPeriodCloseGraceDays,
   shifts,
   timeEntries,
   verifyChain,
@@ -538,6 +542,59 @@ describe("attendance job lifecycle", () => {
 });
 
 describe("attendance runner job", () => {
+  it.each([3, 0])("queues one monthly hours reminder with %i days of grace", async (grace) => {
+    registerModulePermissions(WORKFORCE_PERMISSIONS);
+    const [manager] = await seedPersons(suite.db, {
+      displayName: "Manager",
+      email: "manager@example.test",
+      role: "admin",
+      status: "active",
+    });
+    await withTransaction(suite.db, async (tx) => {
+      await setPayPeriodCloseGraceDays(tx, grace);
+      await backend.clockIn(tx, {
+        nodeId,
+        personId,
+        at: grace === 0 ? "2026-01-31T10:00:00Z" : "2026-01-05T10:00:00Z",
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+      });
+    });
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const reminder = grace === 0 ? "2026-01-31" : "2026-02-04";
+    const close = grace === 0 ? "2026-02-01" : "2026-02-05";
+    let at = new Date(`${reminder}T03:59:59Z`);
+    const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+    const pass = () => job.pass({ now: at, signal: new AbortController().signal });
+    const mail = async () =>
+      (await suite.db.select().from(outgoingMail)).filter((row) =>
+        row.dedupeKey.startsWith("monthly-hours-reminder:"),
+      );
+    if (grace > 0) {
+      expect(await pass()).toEqual({ nextDueAt: new Date(`${reminder}T04:00:00Z`) });
+      expect(await mail()).toEqual([]);
+    }
+
+    at = new Date(`${reminder}T12:00:00Z`);
+    await pass();
+    await pass();
+    expect(await mail()).toMatchObject(
+      grace === 0 ? [] : [{ personId: manager!.id, notAfter: `${close}T04:00:00.000Z` }],
+    );
+
+    if (grace > 0) {
+      await withTransaction(suite.db, (tx) => setPayPeriodCloseGraceDays(tx, 4));
+      await pass();
+      expect(await mail()).toHaveLength(1);
+      at = new Date("2026-02-05T04:00:00Z");
+      await pass();
+      expect((await mail()).map(({ notAfter }) => notAfter).sort()).toEqual([
+        "2026-02-05T04:00:00.000Z",
+        "2026-02-06T04:00:00.000Z",
+      ]);
+    }
+  });
+
   it("runs due attendance while a monthly freeze waits for confirmed time", async () => {
     await seed();
     const { attendanceJob } = await import("./attendance-loop.js");

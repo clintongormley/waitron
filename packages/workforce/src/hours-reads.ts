@@ -92,18 +92,7 @@ function openShiftsFor(entries: TimeEntryRecord[]): HoursOpenShift[] {
   }
   return open === undefined ? [] : [open];
 }
-async function personInWindow(
-  tx: Transaction,
-  input: HoursInput & { personId: string },
-  window: { period: Period; businessDay: string },
-  policy: PaidBreakPolicy | null,
-  saved: readonly PayPeriodClosure[],
-  manager = false,
-): Promise<PersonHours> {
-  const { personId } = input;
-  if (typeof personId !== "string" || !personId) throw invalid();
-  const { period, businessDay } = window;
-  const monthly = manager && period.start.endsWith("-01") && period.end.endsWith("-01");
+async function hoursInbox(tx: Transaction, personId: string, monthly: boolean) {
   const inputs = await readAttendanceInboxInputs(tx, personId, "possible-prompts");
   const questionIds = new Set(inputs.questions.map((q) => q.id));
   const questionEntryIds = inputs.questions
@@ -119,8 +108,46 @@ async function personInWindow(
     questionEntryIds,
     includeShiftContext: monthly,
   });
+  return { inputs, entries, inbox: projectAttendanceInboxWork(personId, entries, inputs) };
+}
+
+export async function countMonthlyHoursIssues(tx: Transaction, period: Period): Promise<number> {
+  const people = await tx.select({ id: persons.id }).from(persons);
+  let count = 0;
+  for (const { id } of people) {
+    const { inputs, entries, inbox } = await hoursInbox(tx, id, true);
+    const pending = {
+      prompts: inbox.prompts.filter((prompt) => prompt.kind === "missing-times"),
+      items: inbox.items.filter((item) => item.status === "waiting-manager"),
+      automaticEntryIds: [],
+    };
+    monthlyIssues(
+      period,
+      effectiveClockEntries(entries).sort(compareEvents),
+      new Map(entries.map((entry) => [entry.entryId, entry])),
+      inputs,
+      pending,
+      [],
+    );
+    count += pending.prompts.length + pending.items.length;
+  }
+  return count;
+}
+
+async function personInWindow(
+  tx: Transaction,
+  input: HoursInput & { personId: string },
+  window: { period: Period; businessDay: string },
+  policy: PaidBreakPolicy | null,
+  saved: readonly PayPeriodClosure[],
+  manager = false,
+): Promise<PersonHours> {
+  const { personId } = input;
+  if (typeof personId !== "string" || !personId) throw invalid();
+  const { period, businessDay } = window;
+  const monthly = manager && period.start.endsWith("-01") && period.end.endsWith("-01");
+  const { inputs, entries, inbox } = await hoursInbox(tx, personId, monthly);
   const record = await readTimeRecord(tx, { personId, period }, policy, saved);
-  const inbox = projectAttendanceInboxWork(personId, entries, inputs);
   const fullRecord = projectTimeRecord(entries);
   const effective = effectiveClockEntries(entries).sort(compareEvents);
   let openShifts = openShiftsFor(effective);

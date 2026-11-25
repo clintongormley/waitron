@@ -85,6 +85,7 @@ describe("the public surface", () => {
         "readAttendanceManagerQueue",
         "readPersonHours",
         "readManagerHours",
+        "countMonthlyHoursIssues",
         "reconcileAttendanceResponses",
         "projectTimeRecord",
         "readLatestLiveEntry",

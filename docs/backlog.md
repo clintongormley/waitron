@@ -934,8 +934,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **MONTH-CLOSE. Remind managers before closing a month with unresolved hours.**
-  [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
+- **Pay-period cadence changes need a rule after closure.**
+  [Detail](backlog/workforce.md#pay-period-changes-after-closure).
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.

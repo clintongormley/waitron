@@ -411,6 +411,8 @@ it("puts an overnight automatic finish, its question and a finish correction in 
   expect((await managerMonth("2026-01-31")).pending.automaticEntryIds).toEqual([end]);
   expect((await managerMonth("2026-02-01")).pending.automaticEntryIds).toEqual([]);
   const correction = await request(end, "2026-02-01T05:00:00Z");
+  expect(await api.countMonthlyHoursIssues(f.suite.db, january.period)).toBe(1);
+  expect(await api.countMonthlyHoursIssues(f.suite.db, february.period)).toBe(0);
   expect((await managerMonth("2026-01-31")).pending.items.map((item) => item.id)).toEqual(
     correction.entryIds,
   );
