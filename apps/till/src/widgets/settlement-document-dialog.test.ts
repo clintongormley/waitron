@@ -687,7 +687,8 @@ describe("an original emailed or sent on A4 that may have arrived", () => {
     medium,
     designation: "original" as const,
     status,
-    failureCode: null,
+    failureCode: medium === "a4" ? "restart" : null,
+    printerName: medium === "a4" ? "Office" : undefined,
     requestedAt: "2026-11-11T12:00:00.000Z",
     at: null,
     personId: "p1",
@@ -706,6 +707,30 @@ describe("an original emailed or sent on A4 that may have arrived", () => {
       current: history[0]!,
       history,
     },
+  });
+
+  it("keeps the receipt handover heading when only an emailed copy is uncertain", async () => {
+    const copy = {
+      ...attempt("email-copy", "email", "unknown"),
+      designation: "duplicate" as const,
+    };
+    const props = withAttempts("prints", "F1", []);
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        ...props,
+        originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+        deliveries: {
+          ...props.deliveries,
+          originalCompleted: true,
+          current: copy,
+          history: [copy],
+        },
+      },
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery] strong")?.textContent).toBe(
+      "Full invoice not delivered",
+    );
   });
 
   for (const invoiceType of ["F2", "F1"] as const)

@@ -554,6 +554,7 @@ async function lapsedClaim(v: Venue) {
     .update(printJobs)
     .set({ claimedAt: new Date(Date.now() - 61_000).toISOString() })
     .where(eq(printJobs.id, job.jobId));
+  return job;
 }
 
 /** A receipt original for the sale on the venue's receipt printer, set to `set`. */
@@ -962,6 +963,31 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
       status: "sent",
     });
     expect((await readStatus(v, orderId)).body!.actions).not.toHaveProperty("retryA4");
+  });
+
+  it("withdraws the off-list A4 offer when an earlier original reports that it printed", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    await suite.db
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` });
+    const sender = await till(v);
+    expect((await printInvoice(v, orderId, randomUUID(), sender)).status).toBe(200);
+    const first = await lapsedClaim(v);
+    expect((await printInvoice(v, orderId)).status).toBe(200);
+    await withTransaction(suite.db, (tx) =>
+      reportInvoicePagePrint(tx, first.claim, { status: "sent" }),
+    );
+    await lapsedClaim(v);
+    const status = (await readStatus(v, orderId)).body!;
+    expect(status).toMatchObject({
+      current: { status: "unknown" },
+      history: [{ lateSuccess: false }, { lateSuccess: true }],
+    });
+    expect(status.actions).not.toHaveProperty("retryA4");
+    expect(await printInvoice(v, orderId)).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
   });
 
   it("gives one attempt to two tills racing", async () => {

@@ -26,10 +26,8 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     return this.result.invoiceType === "F1";
   }
 
-  protected override get savedA4Retry() {
-    return this.printDocument === "invoice" && !this.useDeviceInvoicePrinter
-      ? this.deliveries?.actions.retryA4
-      : undefined;
+  protected override get prefersInvoiceDeliveryPrinter(): boolean {
+    return this.printDocument === "invoice" && !this.useDeviceInvoicePrinter;
   }
 
   @property({ attribute: false }) paymentSlip?: PaymentSlipAction;

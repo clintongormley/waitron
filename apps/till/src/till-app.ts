@@ -4,6 +4,7 @@ import type { UnreadDiningChoice } from "./widgets/dining-choice.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
 import {
   DELIVERY_REREAD_MS,
+  invoiceDeliveryRefusalOf,
   invoicePrintDestination,
   readTicketInvoiceDelivery,
   readTicketReceiptPrint,
@@ -10910,7 +10911,7 @@ export class TillApp extends LitElement {
           (offered === undefined || offered.id === this.invoiceEquipment?.resolved?.id);
         this.invoicePrinterBlocked = !confirmed;
         if (confirmed && this.#invoicePrinterChoice?.role === "invoice")
-          this.useDeviceInvoicePrinter = true;
+          this.useDeviceInvoicePrinter = this.invoiceEquipment?.resolved != null;
         this.invoicePrinterError = confirmed ? "" : t("invoice.delivery_read_failed");
       }
     } catch {
@@ -11022,6 +11023,7 @@ export class TillApp extends LitElement {
     const needsAnotherRead =
       autoRefresh &&
       (status === "unknown" ||
+        (this.#live?.up !== true && this.invoiceDeliveries?.originalCompleted !== true) ||
         this.invoiceDeliveriesReadFailed ||
         this.originalReceiptReadFailed ||
         (this.invoicePrinterBlocked && this.#invoicePrinterSaved));
@@ -11123,10 +11125,7 @@ export class TillApp extends LitElement {
       if (this.#ticketIsCurrent(target, session, visit)) on.sent?.();
     } catch (error) {
       if (this.#ticketIsCurrent(target, session, visit)) {
-        const { code, field } = (error ?? {}) as { code?: unknown; field?: unknown };
-        (on.refused ?? this.#refusedInSection)(
-          typeof code !== "string" ? {} : typeof field === "string" ? { code, field } : { code },
-        );
+        (on.refused ?? this.#refusedInSection)(invoiceDeliveryRefusalOf(error));
       }
     }
     try {

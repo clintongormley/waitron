@@ -11,6 +11,11 @@ import { officePrinterHoldText } from "../i18n/staff-notices.js";
 
 export const DELIVERY_REREAD_MS = 5_000;
 
+export function invoiceDeliveryRefusalOf(error: unknown) {
+  const { code, field } = (error ?? {}) as { code?: unknown; field?: unknown };
+  return typeof code !== "string" ? {} : typeof field === "string" ? { code, field } : { code };
+}
+
 export type TicketDeliveryTarget = { id: string; transaction: boolean };
 
 export function ticketDeliveryTarget(

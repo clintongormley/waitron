@@ -730,6 +730,7 @@ export async function readUndeliveredInvoices(
   });
 }
 
+/** The alert names the invoice number and its Orders destination without including customer details. */
 export function invoiceDeliveryAlertSource(deps: {
   testPages: Pick<PageTestPages, "holdOn">;
 }): AlertSource {

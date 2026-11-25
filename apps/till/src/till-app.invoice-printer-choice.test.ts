@@ -86,7 +86,7 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
 });
 
-async function sold(overrides: Record<string, unknown> = {}) {
+async function sold(overrides: Record<string, unknown> = {}, live = true) {
   const stream = liveReadFixture();
   const api = stubApi({
     readLiveEvents: stream.read,
@@ -106,7 +106,7 @@ async function sold(overrides: Record<string, unknown> = {}) {
   await flush(el);
   emit(lock(el), "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
   await flush(el);
-  stream.event("ready");
+  if (live) stream.event("ready");
   await flush(el);
   const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
   expect(counter).not.toBeNull();
@@ -194,9 +194,21 @@ function uncertainA4(selected: EquipmentItem | null): InvoiceDeliveryStatus {
 }
 
 it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (selected) => {
+  const before = uncertainA4(selected);
+  const reads = vi.fn().mockResolvedValue(before);
   const { el, api, id } = await sold({
     getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", selected, [bar])] }),
-    getInvoiceDeliveries: vi.fn().mockResolvedValue(uncertainA4(selected)),
+    getInvoiceDeliveries: reads,
+    requestPrintDelivery: vi.fn(async () => {
+      const current = { ...endedA4, id: "retry", status: "queued", failureCode: null };
+      reads.mockResolvedValue({
+        ...before,
+        current,
+        history: [current, endedA4],
+        actions: { ...before.actions, print: null, retryOriginal: null, retryA4: undefined },
+      });
+      return {};
+    }),
   });
   expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
   expect(part(el, "original-delivery")!.textContent).toContain(
@@ -214,29 +226,41 @@ it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (s
     "office",
     expect.any(String),
   );
+  await vi.waitFor(() =>
+    expect(part(el, "delivery-status")?.textContent).toBe("Waiting for the office printer."),
+  );
+  expect(part(el, "print-invoice")).toBeNull();
+  expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
 });
 
-it("automatically recovers a failed first read and follows A4 and email delivery", async () => {
-  const a4 = uncertainA4(null);
-  const late = { ...endedA4, lateSuccess: true };
-  const email: InvoiceDeliveryAttempt = {
-    ...endedA4,
-    medium: "email",
-    status: "sending",
-    failureCode: null,
-  };
+function fastDeliveryRereads() {
   const setTimeout = globalThis.setTimeout;
-  const timers = vi
+  return vi
     .spyOn(globalThis, "setTimeout")
     .mockImplementation((run, delay, ...args) =>
       setTimeout(run, delay === 5_000 ? 100 : delay, ...args),
     );
+}
+
+it("automatically recovers a failed first read and follows A4 and email delivery", async () => {
+  const a4 = uncertainA4(null);
+  const printed = { ...endedA4, status: "sent" as const, failureCode: null };
+  const email: InvoiceDeliveryAttempt = {
+    ...endedA4,
+    id: "email-copy",
+    designation: "duplicate",
+    medium: "email",
+    printerName: undefined,
+    status: "sending",
+    failureCode: null,
+  };
+  const timers = fastDeliveryRereads();
   try {
     const getInvoiceDeliveries = vi
       .fn()
       .mockRejectedValueOnce(new Error("read failed"))
       .mockResolvedValue(a4);
-    const { el } = await sold({
+    const { el, deliveryChanged } = await sold({
       getInvoiceDeliveries,
       getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", null, [bar])] }),
     });
@@ -244,15 +268,20 @@ it("automatically recovers a failed first read and follows A4 and email delivery
       expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering"),
     );
     expect(part(el, "delivery-read-failed")).toBeNull();
-    getInvoiceDeliveries.mockResolvedValue({ ...a4, current: late, history: [late] });
-    await vi.waitFor(() => expect(part(el, "delivery-late-success")).not.toBeNull());
-    const sending = {
+    const completed = {
       ...a4,
-      current: email,
-      history: [email, late],
-      actions: { ...a4.actions, retryA4: undefined },
+      current: printed,
+      history: [printed],
+      originalCompleted: true,
+      actions: { ...a4.actions, retryOriginal: null, retryA4: undefined },
     };
+    getInvoiceDeliveries.mockResolvedValue(completed);
+    await vi.waitFor(() => expect(part(el, "delivery-status")?.textContent).toBe("Printed on A4."));
+    expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+    expect(part(el, "print-invoice")).toBeNull();
+    const sending = { ...completed, current: email, history: [email, printed] };
     getInvoiceDeliveries.mockResolvedValue(sending);
+    deliveryChanged();
     await vi.waitFor(() =>
       expect(part(el, "delivery-status")?.textContent ?? "").toContain("Sending the invoice"),
     );
@@ -265,6 +294,68 @@ it("automatically recovers a failed first read and follows A4 and email delivery
       expect(part(el, "delivery-status")?.textContent ?? "").toContain("Sent by email"),
     );
     expect(part(el, "refresh-receipt")).toBeNull();
+  } finally {
+    timers.mockRestore();
+  }
+});
+
+it("follows a later delivery after failure without a live connection", async () => {
+  const state = uncertainA4(null);
+  const first = { ...endedA4, status: "failed", failureCode: "printer_unreachable" };
+  const getInvoiceDeliveries = vi
+    .fn()
+    .mockResolvedValue({ ...state, current: first, history: [first] });
+  const timers = fastDeliveryRereads();
+  try {
+    const { el } = await sold(
+      {
+        getInvoiceDeliveries,
+        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", null, [bar])] }),
+      },
+      false,
+    );
+    expect(part(el, "delivery-status")?.textContent).toBe("Not delivered.");
+    getInvoiceDeliveries.mockResolvedValue({
+      ...state,
+      current: { ...endedA4, id: "new-attempt" },
+    });
+    await vi.waitFor(() =>
+      expect(part(el, "delivery-status")?.textContent).toContain("Office stopped answering"),
+    );
+  } finally {
+    timers.mockRestore();
+  }
+});
+
+it("retries a failed original print read beside a completed email", async () => {
+  const original = {
+    ...endedA4,
+    id: "emailed",
+    medium: "email",
+    status: "sent",
+    failureCode: null,
+  };
+  const getReceiptPrintStatus = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("read failed"))
+    .mockResolvedValue({ status: "not_queued" });
+  const timers = fastDeliveryRereads();
+  try {
+    const { el } = await sold({
+      getReceiptPrintStatus,
+      getInvoiceDeliveries: vi
+        .fn()
+        .mockResolvedValue({
+          ...delivery(office),
+          current: original,
+          history: [original],
+          originalCompleted: true,
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(part(el, "original-delivery")?.textContent).toContain("Full invoice delivered"),
+    );
+    expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
   } finally {
     timers.mockRestore();
   }
@@ -311,6 +402,24 @@ it("saves a printer selection, waits for its fresh offer, and prints once to tha
     expect.any(String),
   ]);
   expect(api.recordSale).toHaveBeenCalledOnce();
+});
+
+it("returns to the invoice's printer when the till choice resolves to None", async () => {
+  let selected: EquipmentItem | null = office;
+  const forDevice = () => ({ roles: [roleOf("invoice", selected, [office, bar])] });
+  const { el } = await sold({
+    getDeviceEquipment: vi.fn(async () => forDevice()),
+    getInvoiceDeliveries: vi.fn(async () => uncertainA4(selected)),
+    setDeviceEquipment: vi.fn(async (change) => {
+      selected = change.selection === "default" ? null : bar;
+      return forDevice();
+    }),
+  });
+  await choose(el, bar.id);
+  expect(part(el, "print-invoice")!.textContent?.trim()).toBe("Print on Bar");
+  await choose(el, "");
+  expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+  expect(part(el, "print-invoice")!.textContent?.trim()).toBe("Print it again");
 });
 
 it("retries a refused preference without printing and then enables the saved destination", async () => {

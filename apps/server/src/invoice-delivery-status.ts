@@ -410,6 +410,7 @@ function deliveryStatus(
   const retryA4: OfferedPrinter | undefined =
     offerA4Retry &&
     canRetryOriginal &&
+    !history.some((attempt) => attempt.designation === "original" && attempt.lateSuccess) &&
     latest?.medium === "a4" &&
     latest.designation === "original" &&
     latest.failureCode !== "switched" &&

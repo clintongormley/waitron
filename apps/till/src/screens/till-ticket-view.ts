@@ -554,8 +554,12 @@ export class TillTicketView extends LitElement {
     return false;
   }
 
+  protected get prefersInvoiceDeliveryPrinter(): boolean {
+    return false;
+  }
+
   protected get savedA4Retry() {
-    return undefined as InvoiceDeliveryStatus["actions"]["retryA4"];
+    return this.prefersInvoiceDeliveryPrinter ? this.deliveries?.actions.retryA4 : undefined;
   }
 
   protected renderInvoicePrint() {
@@ -611,7 +615,14 @@ export class TillTicketView extends LitElement {
       value: item.id,
       label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
     });
-    const saved = receipt ? undefined : this.savedA4Retry;
+    const attempt = this.deliveries?.current;
+    const usedA4 =
+      this.prefersInvoiceDeliveryPrinter &&
+      attempt?.medium === "a4" &&
+      attempt.printerName !== undefined
+        ? { name: attempt.printerName, kind: "a4" as const }
+        : undefined;
+    const saved = this.savedA4Retry ?? usedA4;
     const printer =
       saved ??
       role?.choices.find((item) => item.id === role.resolved?.id) ??
@@ -957,7 +968,10 @@ export class TillTicketView extends LitElement {
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
     const uncertain =
-      this.#mayHaveArrived || (this.autoRefreshDelivery && attempt?.status === "unknown");
+      this.#mayHaveArrived ||
+      (this.autoRefreshDelivery &&
+        attempt?.designation === "original" &&
+        attempt.status === "unknown");
     const closingPrints =
       notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
     if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();
