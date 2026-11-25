@@ -141,12 +141,11 @@ Los locales nuevos en España empiezan con **Pica pica**, **Entradas**, **Platos
 **Postres**. Los nombres siguen el idioma
 del contenido inicial. Asigna estos órdenes de plato a tus productos o adapta la lista a tu servicio.
 
-Usa el campo **Orden de plato**, en **Estación de preparación** dentro de **Detalles**, para fijar
-cuándo sale cada producto. El orden se guarda con el producto. En una mesa, organiza los platos en
+Usa el campo **Orden de plato**, en **Estación de preparación** dentro de **Detalles**, para
+elegir el de los platos nuevos. Se guarda con el producto. En una mesa, organiza los platos en
 **Nuevo pedido**. Pueden ir en **Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está
-en espera. Puedes cambiar el orden de plato de un plato antes de enviarlo. Usa los grupos para
-elegir qué platos marchas juntos sin tratar cada orden de plato como una sección fija para toda la
-mesa.
+en espera. Antes de enviar un plato, puedes cambiar su orden de plato. Usa los grupos para elegir
+qué platos marchas juntos sin tratar cada orden de plato como una sección fija para toda la mesa.
 
 En la pestaña **Mesas** del departamento, elige **Marchar ya** para colocar los platos nuevos directamente en ese grupo de
 la mesa. Elige **Dejar para después** para agrupar el primer pedido por orden de plato. En pedidos

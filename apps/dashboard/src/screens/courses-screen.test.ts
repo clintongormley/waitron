@@ -100,13 +100,11 @@ describe("dashboard-courses-screen", () => {
     },
   );
 
-  it.each([
-    ["en-GB", en],
-    ["es-ES", es],
-  ] as const)(
-    "shows the heading, Add button, help and shared list in %s",
-    async (locale, strings) => {
+  it.each(["en-GB", "es-ES"])(
+    "shows localized labels and the shared list in %s",
+    async (locale) => {
       setLocale(locale);
+      const strings = locale === "es-ES" ? es : en;
       const { el, api } = await mount();
       await vi.waitFor(() =>
         expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),

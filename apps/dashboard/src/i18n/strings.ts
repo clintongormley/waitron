@@ -4821,7 +4821,7 @@ export const es: Record<StringKey, string> = {
   "permission.menu.manage.help":
     "Edita productos, cartas, modificadores e imágenes de productos. Publica cartas.",
   "permission.venue.view.help":
-    "Consulta la configuración del local, pases, apariencia, puestos y calendarios de personal. Para cambiarlos necesitas el permiso de edición correspondiente.",
+    "Consulta la configuración del local, órdenes de plato, apariencia, puestos y calendarios de personal. Para cambiarlos necesitas el permiso de edición correspondiente.",
   "permission.venue.configure.help":
     "Cambia la configuración del local, secciones, periodos de servicio, planos, perfiles de dispositivo y apariencia. Autoriza mantener el servicio abierto o enviar platos tras terminar su periodo.",
   "permission.hardware.manage.help":

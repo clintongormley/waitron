@@ -17,9 +17,9 @@ la misma manera.
 ## Elige tu idioma de trabajo {#working-language}
 
 Durante la configuración, elige **Idioma de trabajo** en **Tu tienda**. Elige **Inglés** o **Español**
-para los nombres del menú inicial, los pases y los demás elementos iniciales, y para los nombres
-del personal y la estación en la demostración. El idioma de la pantalla, el del recibo y los idiomas
-para el cliente tienen sus propias opciones.
+para los nombres del menú inicial, los órdenes de plato y los demás elementos iniciales. En la
+demostración, también se usa para los nombres del personal y las estaciones. El idioma de la
+pantalla, el del recibo y los idiomas para el cliente tienen sus propias opciones.
 
 Puedes cambiar esos nombres después. Para cambiar un nombre de una configuración importada,
 edita ese elemento después de la configuración.

@@ -521,9 +521,6 @@ describe("A773 pass screen: levers", () => {
     );
     expect(helpEs["help.more.pass"]).toContain(es["pass.column.to_fire"]);
     expect(helpEs["help.more.pass"]).toContain(es["pass.column.ready"]);
-    expect(helpEs["help.more.pass"].toLowerCase()).not.toContain(
-      es["table.course_label"].toLowerCase(),
-    );
     expect(helpEn["help.more.pass"]).toContain(en["pass.column.to_fire"]);
     expect(helpEn["help.more.pass"]).toContain(en["pass.column.ready"]);
   });

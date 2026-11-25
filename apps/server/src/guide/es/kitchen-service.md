@@ -284,7 +284,7 @@ curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos
 platos atenuados y cuenta los demás como el de la pantalla de estación, con los que están en espera o
 esperan al pase tras el **+**.
 
-La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
+La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente orden de plato** o
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
 grupo. Nombra la mesa por su [nombre corto](table-service.md#short-names), como **M4**, o **M4+M5**
 para mesas unidas. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo**
@@ -416,8 +416,8 @@ la mesa en **Nuevo pedido** antes de enviarlos. En el mostrador, el envío march
 El paso **¿Postre?** te recuerda visitar la mesa; puedes marchar los postres ya pedidos
 sin marcar ese paso como hecho.
 
-Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
-y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
+Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran
+los órdenes de plato y los grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
 atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está bajo
 **En espera** al final de **Por marchar**, o en **En espera** si el pase muestra esa columna. En la
 pantalla del pedido de la mesa, un plato dice **en el pase** mientras él, o uno de sus extras,

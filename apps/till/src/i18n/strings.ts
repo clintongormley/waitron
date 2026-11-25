@@ -3287,7 +3287,7 @@ export const es: Record<StringKey, string> = {
   "pass.column.ready": "Listo",
   "pass.columns_held_to_fire": "En espera + Por marchar",
   "pass.kind.new_order": "Nuevo pedido",
-  "pass.kind.next_course": "Siguiente pase",
+  "pass.kind.next_course": "Siguiente orden de plato",
   "pass.kind.added": "Añadido",
   "pass.fire": "Marchar",
   "pass.waiting_for_pass": "Esperando al pase",
