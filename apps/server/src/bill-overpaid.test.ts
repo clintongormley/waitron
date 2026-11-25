@@ -389,6 +389,21 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await paymentOf(newer!)).toEqual({ applied: "0.00", tip: "1.00" });
     expect(await paymentOf(newest!)).toEqual({ applied: "2.00", tip: "0.00" });
     expect(await invoicesOf(billId)).toEqual(["10.00"]);
+    const [entry] = await inTx(venue, (tx) =>
+      tx
+        .select({ data: activityLog.data })
+        .from(activityLog)
+        .where(
+          and(eq(activityLog.kind, "bill.overpaid_kept_as_tip"), eq(activityLog.subjectId, billId)),
+        ),
+    );
+    expect(entry!.data).toEqual({
+      amount: "3.00",
+      payments: [
+        { billPaymentId: newer, amount: "1.00" },
+        { billPaymentId: middle, amount: "2.00" },
+      ],
+    });
   });
 
   it("giving back the excess in cash issues the bill", async () => {

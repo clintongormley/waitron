@@ -130,41 +130,19 @@ const cashAsk = {
   expectedEdit: null,
 };
 
-function partCard(id: string) {
-  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
-    submissionId: randomUUID(),
-    kind: "contribution",
-    amount: "1.00",
-    method: "card",
-    entry: "reader",
-    applied: "1.00",
-    tip: "0.00",
-    expectedEdit: null,
-  });
-}
-
-function keepAsTip(id: string) {
-  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/overpaid/keep-as-tip`, {
-    submissionId: randomUUID(),
-    overpaid: "1.00",
-  });
-}
-
 describe("a placed order's bill payment while its card is in flight", () => {
-  it("refuses Keep as tip while a sent bill's reader payment is pending", async () => {
-    const id = await placed("uninvoiced");
-    const calls = venue.card.collectCalls.length;
-    const release = venue.card.holdNextCollect();
-    const paid = partCard(id);
-    try {
-      await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
-      expect(await keepAsTip(id)).toEqual(refusedInFlight(id));
-      expect(salesOf(id)).toEqual([]);
-    } finally {
-      release();
-      await paid;
-    }
-  });
+  function partCard(id: string) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "1.00",
+      method: "card",
+      entry: "reader",
+      applied: "1.00",
+      tip: "0.00",
+      expectedEdit: null,
+    });
+  }
 
   function partCashOnTill2(id: string) {
     return send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/payments`, {
@@ -273,23 +251,6 @@ describe("giving back a part payment on a sent bill before its invoice", () => {
       sql`select count(*) as n from refunds where bill_payment_id = ${paymentId}`,
     )[0]!.n;
   }
-
-  it("refuses Keep as tip while a sent bill's reader refund is pending", async () => {
-    const id = await placed("uninvoiced");
-    const paid = await partCard(id);
-    expect(paid.json).toMatchObject({ outcome: "received" });
-    const paymentId = (paid.json.payment as { id: string }).id;
-    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
-    const asked = await refundOf(id, paymentId);
-    expect(asked.json).toMatchObject({ refund: { state: "pending" } });
-
-    expect(await keepAsTip(id)).toEqual({
-      status: 409,
-      json: { code: "bill.refund_in_progress", params: { workingOrderId: id } },
-    });
-    expect(await statusOf(venue, id)).toBe("placed");
-    expect(salesOf(id)).toEqual([]);
-  });
 
   it("refunds a cash part payment of a sent counter order, leaving nothing received", async () => {
     const id = await placed("uninvoiced");

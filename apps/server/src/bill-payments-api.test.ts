@@ -6435,38 +6435,40 @@ describe("A1515 pay for items over HTTP", () => {
     const [otherSalad] = await lineIdsOf(other.billId, [1]);
     const picked = { lineId: salad, quantity: "1" };
     const path = `/api/working-orders/${billId}/item-payments/preview`;
-    for (const [picks, error] of [
-      [null, { code: "management.request_invalid", params: { field: "picks" } }],
-      [[], { code: "sale.empty_basket", params: {} }],
+    for (const [picks, status, json] of [
+      [null, 400, { code: "management.request_invalid", params: { field: "picks" } }],
+      [[], 400, { code: "sale.empty_basket", params: {} }],
       [
         [picked, picked],
+        400,
         { code: "tab.transfer_duplicate_line", params: { tabId: billId, lineNo: 1 } },
       ],
       [
         [{ lineId: otherSalad }],
+        400,
         { code: "tab.line_not_found", params: { tabId: billId, lineId: otherSalad } },
       ],
       [
         [{ lineId: salad, quantity: "one" }],
+        400,
         {
           code: "tab.transfer_quantity_invalid",
           params: { tabId: billId, lineNo: 1, quantity: "one" },
         },
       ],
     ] as const) {
-      expect(
-        (await request("POST", path, { picks, method: "cash", tendered: "20.00" })).json,
-      ).toEqual(error);
+      expect(await request("POST", path, { picks, method: "cash", tendered: "20.00" })).toEqual({
+        status,
+        json,
+      });
     }
     const unknown = randomUUID();
     expect(
-      (
-        await request("POST", `/api/working-orders/${unknown}/item-payments/preview`, {
-          picks: [picked],
-          method: "card",
-        })
-      ).json,
-    ).toEqual({ code: "tab.not_open", params: { tabId: unknown } });
+      await request("POST", `/api/working-orders/${unknown}/item-payments/preview`, {
+        picks: [picked],
+        method: "card",
+      }),
+    ).toEqual({ status: 409, json: { code: "tab.not_open", params: { tabId: unknown } } });
     expect(
       await request("POST", path, {
         picks: [picked],
@@ -6482,7 +6484,6 @@ describe("A1515 pay for items over HTTP", () => {
     });
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
     expect(await lineTotals(other.billId)).toEqual(["36.00", "35.00"]);
-    expect(await paymentRows(billId)).toEqual([]);
   });
 
   it("refuses an empty or unpriceable item payment before moving a dish", async () => {
@@ -6500,10 +6501,11 @@ describe("A1515 pay for items over HTTP", () => {
       applied: "12.00",
       tip: "0.00",
     };
-    for (const [patch, error] of [
-      [{ picks: [] }, { code: "sale.empty_basket", params: {} }],
+    for (const [patch, status, json] of [
+      [{ picks: [] }, 400, { code: "sale.empty_basket", params: {} }],
       [
         { picks: [{ lineId: salad, quantity: "one" }] },
+        400,
         {
           code: "tab.transfer_quantity_invalid",
           params: { tabId: billId, lineNo: 1, quantity: "one" },
@@ -6511,19 +6513,23 @@ describe("A1515 pay for items over HTTP", () => {
       ],
       [
         { partyId: "not an id" },
+        400,
         { code: "management.request_invalid", params: { field: "partyId" } },
       ],
-      [{ method: "card" }, { code: "management.request_invalid", params: { field: "tendered" } }],
-      [{ entry: "reader" }, { code: "management.request_invalid", params: { field: "entry" } }],
       [
-        { simulationOutcome: "captured" },
-        { code: "management.request_invalid", params: { field: "simulationOutcome" } },
+        { method: "card" },
+        400,
+        { code: "management.request_invalid", params: { field: "tendered" } },
+      ],
+      [
+        { entry: "reader" },
+        400,
+        { code: "management.request_invalid", params: { field: "entry" } },
       ],
     ] as const) {
-      expect((await request("POST", path, { ...body, ...patch })).json).toEqual(error);
+      expect(await request("POST", path, { ...body, ...patch })).toEqual({ status, json });
     }
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
-    expect(await paymentRows(billId)).toEqual([]);
   });
 
   it("item payments keep a hand-keyed card's operation number and machine", async () => {

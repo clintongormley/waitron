@@ -516,9 +516,12 @@ describe("A1515 pay for items on the card reader", () => {
 
     const again = await sendItemsPayment(sourceId, body, gated);
 
-    expect(again.json).toEqual({
-      code: "sale.charged_not_recorded",
-      params: { workingOrderId: newBill, reason: "clock_unconfirmed" },
+    expect(again).toEqual({
+      status: 507,
+      json: {
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: newBill, reason: "clock_unconfirmed" },
+      },
     });
     expect(await invoiceCount(newBill)).toBe(0);
     expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "pending" }]);
@@ -541,9 +544,12 @@ describe("A1515 pay for items on the card reader", () => {
     const paid = await payTartaByReader(sourceId).finally(() => reader.mockRestore());
     const newBill = await billNaming(sourceId);
 
-    expect(paid.json).toEqual({
-      code: "sale.charged_not_recorded",
-      params: { workingOrderId: newBill, reason: "partial_refund" },
+    expect(paid).toEqual({
+      status: 507,
+      json: {
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: newBill, reason: "partial_refund" },
+      },
     });
     expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "pending" }]);
     expect(await invoiceCount(newBill)).toBe(0);

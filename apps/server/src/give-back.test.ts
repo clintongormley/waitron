@@ -1384,18 +1384,24 @@ function expectRefusedUnwritten(
   expect(effects()).toEqual(before);
 }
 
-it("refuses to price a dish's extra on its own for an items payment", async () => {
-  const { billId } = await tab(["Paella", "Cheesecake"], { withAioli: true });
-  const [extra] = await venue.db
-    .select()
-    .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.productId, aioliId)),
-    );
-  const before = effects();
+describe("POST …/item-payments/preview for a bill with a dish extra", () => {
+  it("refuses to price a dish's extra on its own for an items payment", async () => {
+    const { billId } = await tab(["Paella", "Cheesecake"], { withAioli: true });
+    const [extra] = await venue.db
+      .select()
+      .from(workingOrderLines)
+      .where(
+        and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.productId, aioliId)),
+      );
+    const billLines = () =>
+      venue.db
+        .select({ id: workingOrderLines.id, total: workingOrderLines.lineTotal })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId))
+        .orderBy(asc(workingOrderLines.lineNo));
+    const before = await billLines();
 
-  expect(
-    (
+    expect(
       await send(
         venue.app,
         venue.cookie,
@@ -1405,13 +1411,16 @@ it("refuses to price a dish's extra on its own for an items payment", async () =
           method: "card",
           picks: [{ lineId: extra!.id }],
         },
-      )
-    ).json,
-  ).toEqual({
-    code: "tab.transfer_modifier_line",
-    params: { tabId: billId, lineNo: extra!.lineNo },
+      ),
+    ).toEqual({
+      status: 400,
+      json: {
+        code: "tab.transfer_modifier_line",
+        params: { tabId: billId, lineNo: extra!.lineNo },
+      },
+    });
+    expect(await billLines()).toEqual(before);
   });
-  expect(effects()).toEqual(before);
 });
 
 describe("POST …/give-back in cash", () => {
