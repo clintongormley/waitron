@@ -374,6 +374,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await choosePrintedItems(el, [4]);
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
+    expect(text(inDialog(el, "[data-pay-own-bill]"))).toBe(t("bill_pay.items_own_bill_printed"));
     await press(el, "[data-pay-confirm]");
 
     expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {

@@ -2272,7 +2272,17 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${this.#ownBill() ? html`<p data-pay-own-bill>${t("bill_pay.items_own_bill")}</p>` : nothing}
+      ${
+        this.#ownBill()
+          ? html`<p data-pay-own-bill>
+              ${t(
+                this.balance?.status === "placed"
+                  ? "bill_pay.items_own_bill_printed"
+                  : "bill_pay.items_own_bill",
+              )}
+            </p>`
+          : nothing
+      }
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

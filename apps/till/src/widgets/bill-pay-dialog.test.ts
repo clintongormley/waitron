@@ -3922,6 +3922,21 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     }
   });
 
+  it("on a printed bill says its receipt is credited and the rest goes onto a new open bill", async () => {
+    for (const [status, sentence] of [
+      ["placed", "bill_pay.items_own_bill_printed"],
+      ["open", "bill_pay.items_own_bill"],
+    ] as const) {
+      const el = await mount({
+        balance: balanceOf({ status, outstanding: "120.00" }),
+        asked: itemsAsked,
+        preview: ownBill("35.00"),
+      });
+      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(t(sentence));
+      cleanupWidgets();
+    }
+  });
+
   it("shows the preview's total for the chosen items", async () => {
     const el = await mount();
     await pick(el, "line", "1");

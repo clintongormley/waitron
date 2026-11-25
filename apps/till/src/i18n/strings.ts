@@ -2146,6 +2146,8 @@ export const en = {
     "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill.",
   "bill_pay.items_own_bill":
     "These items move to a bill of their own, paid now. The rest stays on this bill.",
+  "bill_pay.items_own_bill_printed":
+    "These items move to a bill of their own, paid now. This bill's receipt is credited with a corrective invoice, and the rest goes onto a new open bill.",
   "bill_pay.reader": "Card reader",
   "bill_pay.card_declined":
     "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.",
@@ -4604,6 +4606,8 @@ export const es: Record<StringKey, string> = {
     "{dishName} forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.",
   "bill_pay.items_own_bill":
     "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
+  "bill_pay.items_own_bill_printed":
+    "Estos artículos pasan a una cuenta propia, que se paga ahora. El ticket de esta cuenta se abona con una factura rectificativa y el resto pasa a una cuenta nueva abierta.",
   "bill_pay.reader": "Lector de tarjetas",
   "bill_pay.card_declined":
     "La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo con la tarjeta, o vuelve atrás y elige otra forma de pago.",
