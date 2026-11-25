@@ -586,14 +586,14 @@ describe("the opening-hours period API", () => {
         pricingUnit: "each",
         vatClass: "general",
       });
-      await addProductToMenu(tx, { menuId: r.lunchMenu, productId });
+      await addProductToMenu(tx, { menuId: r.coffeeMenu, productId });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId }, zoneId: r.barZone },
         { kind: "no_preparation" },
       );
     });
-    const route = `/menu-periods/last-order-choices?departmentId=${r.restaurant}&menuId=${r.lunchMenu}&periodId=${r.morningPeriod}`;
+    const route = `/menu-periods/last-order-choices?departmentId=${r.restaurant}&menuId=${r.lunchMenu}&periodId=${r.morningPeriod}&staffMenuId=${r.coffeeMenu}`;
     const response = await r.send("GET", route, r.supervisor);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([{ kind: "no_preparation", name: null }]);

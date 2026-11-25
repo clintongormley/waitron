@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, products, readVenueClock, type Transaction } from "@waitron/db";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
-import { readSpecialDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
+import { readStoredSpecialDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
 import { LAST_ORDER_MINUTES } from "./menu-timetable-rules.js";
 import type { LastOrderChoice, LastOrderDraftMenus } from "./menu-timetable-types.js";
 import { serviceRuns } from "./menu-timetable.js";
@@ -11,7 +11,6 @@ import { selectRoutingCell, targetKey } from "./routing.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
 import { serviceDayWallContext } from "./service-day-context.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
-import { listSpecialDays } from "./special-days.js";
 import { readServiceZones } from "./zone-closed-times.js";
 
 type PeriodMenus = Omit<LastOrderDraftMenus, "periodId"> & { id: string };
@@ -77,7 +76,9 @@ export async function readLastOrderRouting(
 }
 
 export function lastOrderRuns(ranges: readonly ServiceRange[], cutover: string) {
-  return serviceRuns(ranges).map((run) => ({ periodId: run.periodId, ...rangeSpan(run, cutover) }));
+  return serviceRuns(ranges)
+    .map((run) => ({ periodId: run.periodId, ...rangeSpan(run, cutover) }))
+    .filter(({ start, end }) => end > start);
 }
 
 export function* afterPeriod(runs: ReturnType<typeof lastOrderRuns>, start: number, end: number) {
@@ -112,6 +113,8 @@ export async function readLastOrderChoices(
       for (const run of runs) {
         if (run.periodId !== periodId || run.start >= endMinute) continue;
         painted = true;
+        // A station can take over before the last period ends, even when the day cannot extend.
+        if (run.end >= endMinute) running.add(null);
         for (const later of afterPeriod(
           runs,
           run.end,
@@ -123,15 +126,12 @@ export async function readLastOrderChoices(
     const weeks = await readDepartmentSeasonWeeks(tx, [departmentId], clock.dayCutover);
     for (const week of weeks.get(departmentId)?.values() ?? [])
       for (const ranges of week) addSuccessors(ranges, clock.dayCutover, 1440);
-    for (const special of await listSpecialDays(tx)) {
-      const day = await readSpecialDayPlan(tx, special.id);
-      if (!day) continue;
-      const dates = day.dates.map(({ storedDate }) => storedDate);
-      const resolved = await resolveDepartmentsDays(tx, [departmentId], dates, clock, day.plan);
-      for (const [date, { ranges }] of resolved.get(departmentId) ?? []) {
-        const context = serviceDayWallContext(clock, date);
-        addSuccessors(ranges, context.dayCutover, context.endMinute);
-      }
+    const plan = await readStoredSpecialDayPlan(tx);
+    const dates = [...plan.special.keys()];
+    const resolved = await resolveDepartmentsDays(tx, [departmentId], dates, clock, plan);
+    for (const [date, { ranges }] of resolved.get(departmentId) ?? []) {
+      const context = serviceDayWallContext(clock, date);
+      addSuccessors(ranges, context.dayCutover, context.endMinute);
     }
     if (!painted) running.add(null);
   }

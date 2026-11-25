@@ -155,7 +155,7 @@ async function edit(el: PeriodsList, existing?: string) {
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {
   dialog
-    .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+    .shadowRoot!.querySelector<HTMLElement>(`[name="${name}"]`)!
     .dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
     );
@@ -214,6 +214,94 @@ it("creates the changed draft, returns to the list and shows its refreshed data"
     },
   ]);
   await expect.poll(() => periodRow(el, "p2")?.name).toBe("Dinner");
+});
+
+it("returns to the list after adding a period whose changed station choices are still loading", async () => {
+  const writes: unknown[] = [];
+  const choices = [{ kind: "station", stationId: "bar", name: "Bar" }];
+  const data = model();
+  const el = await mount((async (path, method, body) => {
+    if (path.includes("/last-order-choices?")) {
+      if (new URL(path, location.origin).searchParams.get("menuId") === "desserts")
+        return new Promise<never>(() => {});
+      return choices;
+    }
+    if (method === "GET") return structuredClone(data);
+    writes.push(body);
+    data.departments[0]!.periods = [
+      ...data.departments[0]!.periods,
+      { ...lunch(), id: "p2", name: "Dinner", menuId: "desserts", staffMenuIds: [] },
+    ];
+    return { id: "p2" };
+  }) as DashboardRequest);
+  const dialog = await edit(el);
+  await change(dialog, "name", "Dinner");
+  await change(dialog, "menuId", "lunch");
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[name="lastOrders.bar"]'))
+    .not.toBeNull();
+  await change(dialog, "lastOrders.bar", "60");
+  await change(dialog, "menuId", "desserts");
+  submit(dialog);
+  await expect.poll(() => periodRow(el, "p2")?.name).toBe("Dinner");
+  await expect.poll(() => dialogOf(el)).toBeNull();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).not.toHaveProperty("lastOrders");
+});
+
+it("keeps an unsaved offset through a failed refresh without sending an empty second patch", async () => {
+  let refused = false;
+  const reads: { params: URLSearchParams; passive?: boolean }[] = [];
+  const writes: unknown[] = [];
+  const el = await mount((async (path, method, body, options) => {
+    if (path.includes("/last-order-choices?")) {
+      reads.push({
+        params: new URL(path, location.origin).searchParams,
+        passive: options?.passive,
+      });
+      if (refused) throw new Error("could not refresh choices");
+      return [{ kind: "station", stationId: "bar", name: "Bar" }];
+    }
+    if (method === "GET") return model();
+    writes.push(body);
+  }) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[name="lastOrders.bar"]'))
+    .not.toBeNull();
+  expect(reads[0]!.passive).toBe(true);
+  expect(reads[0]!.params.getAll("staffMenuId")).toEqual(["staff"]);
+  await change(dialog, "lastOrders.bar", "60");
+  await change(dialog, "name", "Late Lunch");
+  refused = true;
+  el.api!.rereadWatches();
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .toContain("Could not load Last orders");
+  submit(dialog);
+  await expect.poll(() => writes).toHaveLength(1);
+  await expect.poll(() => dialog.busy).toBe(false);
+  await dialog.updateComplete;
+  expect(writes[0]).not.toHaveProperty("lastOrders");
+  expect(dialogOf(el)).toBe(dialog);
+  expect(saveButton(dialog).disabled).toBe(true);
+  refused = false;
+  el.api!.rereadWatches();
+  await expect
+    .poll(
+      () =>
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          '[name="lastOrders.bar"]',
+        )?.value,
+    )
+    .toBe("60");
+  expect(saveButton(dialog).disabled).toBe(false);
+  submit(dialog);
+  await expect.poll(() => dialogOf(el)).toBeNull();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toMatchObject({
+    lastOrders: [{ kind: "station", stationId: "bar", minutes: 60 }],
+  });
 });
 
 it("updates the existing period and preserves every other submitted value", async () => {

@@ -124,6 +124,7 @@ export class PeriodDialog extends LitElement {
       }
       .last-orders h3 {
         font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-normal);
       }
       .last-orders a {
         color: var(--wt-color-primary-text);
@@ -260,15 +261,7 @@ export class PeriodDialog extends LitElement {
         parent: this.draftParent,
         current: () => this.input,
         snapshot: copy,
-        equal: (a, b) =>
-          a.name === b.name &&
-          a.colour === b.colour &&
-          a.menuId === b.menuId &&
-          a.floorPlanSetId === b.floorPlanSetId &&
-          a.departmentId === b.departmentId &&
-          sameLastOrders(a.lastOrders, b.lastOrders) &&
-          a.staffMenuIds.length === b.staffMenuIds.length &&
-          a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
+        equal: (a, b) => this.samePeriodFields(a, b) && sameLastOrders(a.lastOrders, b.lastOrders),
         restore: (value) => {
           this.draft = copy(value);
         },
@@ -314,6 +307,30 @@ export class PeriodDialog extends LitElement {
         this.lastOrderReadFailed = true;
       },
     );
+  }
+  private samePeriodFields(a: Draft, b: Draft): boolean {
+    return (
+      a.name === b.name &&
+      a.colour === b.colour &&
+      a.menuId === b.menuId &&
+      a.floorPlanSetId === b.floorPlanSetId &&
+      a.departmentId === b.departmentId &&
+      a.staffMenuIds.length === b.staffMenuIds.length &&
+      a.staffMenuIds.every((id) => b.staffMenuIds.includes(id))
+    );
+  }
+  private get onlyWaitingLastOrders(): boolean {
+    const saved = this.baseline;
+    const draft = this.input;
+    return (
+      saved !== undefined &&
+      this.lastOrderChoices === undefined &&
+      this.samePeriodFields(saved, draft) &&
+      !sameLastOrders(saved.lastOrders, draft.lastOrders)
+    );
+  }
+  private get saveState() {
+    return saveActionState(this.onlyWaitingLastOrders ? undefined : this.scope);
   }
   private get input(): Draft {
     return { ...this.draft, name: this.draft.name.trim() };
@@ -403,8 +420,7 @@ export class PeriodDialog extends LitElement {
     this.scope?.changed();
   }
   private save() {
-    if (!this.open || !this.isConnected || this.busy || saveActionState(this.scope).unchanged)
-      return;
+    if (!this.open || !this.isConnected || this.busy || this.saveState.unchanged) return;
     this.feedback.press();
     this.refusal = undefined;
     if (Object.keys(this.ownErrors).length) {
@@ -414,12 +430,17 @@ export class PeriodDialog extends LitElement {
     this.submittedGeneration = this.generation;
     this.submitted = copy(this.input);
     const { departmentId, floorPlanSetId, lastOrders, ...input } = this.submitted;
-    const selected =
-      this.lastOrderChoices && !sameLastOrders(lastOrders, this.baseline!.lastOrders)
-        ? lastOrders.filter((entry) =>
-            this.lastOrderChoices!.some((choice) => targetKey(choice) === targetKey(entry)),
-          )
-        : undefined;
+    const savedLastOrders = this.baseline!.lastOrders;
+    const shown =
+      !sameLastOrders(lastOrders, savedLastOrders) &&
+      this.lastOrderChoices &&
+      new Set(this.lastOrderChoices.map(targetKey));
+    const selected = shown
+      ? [
+          ...lastOrders.filter((entry) => shown.has(targetKey(entry))),
+          ...savedLastOrders.filter((entry) => !shown.has(targetKey(entry))),
+        ]
+      : undefined;
     this.dispatchEvent(
       new CustomEvent("period-save", {
         detail: {
@@ -594,7 +615,7 @@ export class PeriodDialog extends LitElement {
   }
   override render(): unknown {
     if (!this.open) return nothing;
-    const s = saveActionState(this.scope);
+    const s = this.saveState;
     const marked = fields.some((field) => this.error(field));
     const bottom =
       this.refusal && this.refusalField() === undefined
@@ -691,7 +712,15 @@ export class PeriodDialog extends LitElement {
       </div>
       <wt-form-actions
         slot=${this.page ? nothing : "footer"}
-        .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "", this.lastOrderReadFailed ? t("period.last_orders_read_failed") : "")}
+        .error=${bottomMessage(
+          bottom,
+          marked ? t("menu.fix_fields") : "",
+          this.lastOrderReadFailed
+            ? t("period.last_orders_read_failed")
+            : this.onlyWaitingLastOrders
+              ? t("period.last_orders_loading")
+              : "",
+        )}
       >
         <wt-button
           slot="cancel"

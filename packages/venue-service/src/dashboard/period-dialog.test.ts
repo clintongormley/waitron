@@ -1235,46 +1235,50 @@ function lastOrderDraft(el: PeriodDialog) {
   const bar = { kind: "station", stationId: "bar" } as const;
   el.departmentId = "restaurant";
   el.period = { ...period, lastOrders: [{ ...bar, minutes: 60 }] };
+  el.watchLastOrderChoices = (_draft, apply) => {
+    apply([
+      { ...bar, name: "Bar" },
+      { kind: "no_preparation", name: null },
+    ]);
+    return () => {};
+  };
 }
 
-type LastOrderRead = Parameters<NonNullable<PeriodDialog["watchLastOrderChoices"]>>;
+function submittedInput(el: PeriodDialog) {
+  const wrote = vi.fn();
+  el.addEventListener("period-save", wrote, { once: true });
+  save(el).click();
+  expect(wrote).toHaveBeenCalledTimes(1);
+  return (wrote.mock.calls[0]![0] as CustomEvent).detail.input;
+}
+
 it("shows saved choices, saves a changed offset and keeps Save quiet until the draft changes", async () => {
-  let apply!: LastOrderRead[1];
-  const el = await mount(true, (dialog) => {
-    lastOrderDraft(dialog);
-    dialog.watchLastOrderChoices = (_draft, receive) => {
-      apply = receive;
-      return () => {};
-    };
-  });
-  await vi.waitFor(() => expect(apply).toBeTypeOf("function"));
-  apply([
-    { kind: "station", stationId: "bar", name: "Bar" },
-    { kind: "no_preparation", name: null },
-  ]);
-  await el.updateComplete;
+  const el = await mount(true, lastOrderDraft);
   expect(field(el, "lastOrders.bar").value).toBe("60");
   expect(field(el, "lastOrders.noPreparation").value).toBe("0");
   expect(save(el).disabled).toBe(true);
   await change(el, "lastOrders.bar", { value: "30" });
-  const written = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("period-save", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  save(el).click();
-  expect((await written).detail.input.lastOrders).toEqual([
+  expect(submittedInput(el).lastOrders).toEqual([
     { kind: "station", stationId: "bar", minutes: 30 },
   ]);
 });
 
-it("lists last-order times from earliest to latest", async () => {
+it("preserves the saved time of a station hidden by the current menu and routing", async () => {
+  const hidden = { kind: "station", stationId: "hidden", minutes: -15 } as const;
   const el = await mount(true, (dialog) => {
     lastOrderDraft(dialog);
-    dialog.watchLastOrderChoices = (_draft, apply) => {
-      apply([{ kind: "station", stationId: "bar", name: "Bar" }]);
-      return () => {};
-    };
+    dialog.period = { ...dialog.period!, lastOrders: [...dialog.period!.lastOrders!, hidden] };
   });
   await el.updateComplete;
+  await change(el, "lastOrders.bar", { value: "30" });
+  expect(submittedInput(el).lastOrders).toEqual([
+    { kind: "station", stationId: "bar", minutes: 30 },
+    hidden,
+  ]);
+});
+
+it("lists last-order times from earliest to latest", async () => {
+  const el = await mount(true, lastOrderDraft);
   const fieldControl = field(el, "lastOrders.bar");
   const trigger = fieldControl.shadowRoot!.querySelector<HTMLElement>("[role=combobox]")!;
   await userEvent.click(trigger);
@@ -1297,6 +1301,7 @@ it("lists last-order times from earliest to latest", async () => {
   ]);
 });
 
+type LastOrderRead = Parameters<NonNullable<PeriodDialog["watchLastOrderChoices"]>>;
 it.each(["pending", "refused", "outdated"] as const)(
   "omits Last orders while the choices are %s",
   async (readState) => {
@@ -1328,10 +1333,6 @@ it.each(["pending", "refused", "outdated"] as const)(
       expect(el.shadowRoot!.querySelector('[name="lastOrders.bar"]')).toBeNull();
     }
     await change(el, "name", { value: "Early lunch" });
-    const written = new Promise<CustomEvent>((resolve) =>
-      el.addEventListener("period-save", (event) => resolve(event as CustomEvent), { once: true }),
-    );
-    save(el).click();
-    expect((await written).detail.input).not.toHaveProperty("lastOrders");
+    expect(submittedInput(el)).not.toHaveProperty("lastOrders");
   },
 );

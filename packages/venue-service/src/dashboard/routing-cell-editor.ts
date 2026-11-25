@@ -72,6 +72,11 @@ export class RoutingCellEditor extends LitElement {
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
       }
+      @media (max-width: 480px) {
+        .line > wt-button {
+          --wt-button-padding-inline: var(--wt-space-2);
+        }
+      }
       .line {
         display: grid;
         grid-column: 1 / -1;

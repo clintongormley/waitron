@@ -267,6 +267,28 @@ export async function specialDayOccurrences(
   return { name: first.name, occurrences: dates.map(occurrence) };
 }
 
+/** Each stored date's own paint, independent of which repeating day would stand there. */
+export async function storedSpecialDayOccurrences(
+  tx: Transaction,
+): Promise<SpecialDayOccurrence[]> {
+  const dates = await tx
+    .select({
+      specialDayId: specialDayDates.specialDayId,
+      name: specialDays.name,
+      dateId: specialDayDates.id,
+      date: specialDayDates.date,
+      closedAllDay: specialDayDates.closedAllDay,
+    })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId));
+  if (dates.length === 0) return [];
+  const occurrence = await occurrencesOf(
+    tx,
+    dates.map(({ dateId }) => dateId),
+  );
+  return dates.map(occurrence);
+}
+
 export interface SpecialDayClash {
   date: LocalDate;
   /** The special day that applies on `date`. */

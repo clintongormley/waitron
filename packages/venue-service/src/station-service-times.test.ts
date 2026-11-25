@@ -231,6 +231,32 @@ it.each([false, true])(
     }),
 );
 
+it("offers the takeover station when a period ends at the changeover", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const bar = { kind: "station", stationId: f.defaultStation } as const;
+    await setRoutingCell(
+      db,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      bar,
+      [{ periodId: f.lunch, target: { kind: "station", stationId: f.station } }],
+    );
+    await replaceMenuWeek(
+      db,
+      f.department,
+      week("slots", [{ periodId: f.lunch, startsAt: "20:00", endsAt: "06:00" }]),
+      at,
+      1,
+    );
+    const choices = await readLastOrderChoices(db, {
+      departmentId: f.department,
+      periodId: f.lunch,
+      menuId: f.menu,
+      staffMenuIds: [],
+    });
+    expect(choices.map(({ name }) => name)).toEqual(["Bar", "Cocktails"]);
+  }));
+
 it("offers the fallback in a gap and a station reached only in a special day's later period", async () =>
   tx(async (db) => {
     const f = await fixture(db);
@@ -260,18 +286,40 @@ it("offers the fallback in a gap and a station reached only in a special day's l
         },
       ],
     });
-    expect(
-      await readLastOrderChoices(db, {
+    const read = () =>
+      readLastOrderChoices(db, {
         departmentId: f.department,
         periodId: f.lunch,
         menuId: f.menu,
         staffMenuIds: [],
-      }),
-    ).toEqual([
-      { ...bar, name: "Bar" },
-      { kind: "station", stationId: f.station, name: "Cocktails" },
-      { kind: "no_preparation", name: null },
-    ]);
+      });
+    const selects = vi.spyOn(db, "select");
+    try {
+      const choices = await read();
+      expect(choices).toEqual([
+        { ...bar, name: "Bar" },
+        { kind: "station", stationId: f.station, name: "Cocktails" },
+        { kind: "no_preparation", name: null },
+      ]);
+      const count = selects.mock.calls.length;
+      await specialDay(db, {
+        name: "Another special day",
+        repeatsYearly: false,
+        dates: [{ date: "2026-10-13", closedAllDay: false }],
+        paint: [
+          {
+            departmentId: f.department,
+            date: "2026-10-13",
+            ranges: [{ periodId: f.afternoon, startsAt: "16:00", endsAt: "17:00" }],
+          },
+        ],
+      });
+      selects.mockClear();
+      expect(await read()).toEqual(choices);
+      expect(selects).toHaveBeenCalledTimes(count);
+    } finally {
+      selects.mockRestore();
+    }
   }));
 
 it("clips a special day's late service at a zone closure and at the business-day end", async () =>
@@ -713,6 +761,31 @@ it("clamps a station forecast to the following dated start", async () =>
         { date: "2026-10-13", departments: [] },
       ],
     });
+  }));
+
+it("keeps hours and extensions out when a recorded changeover cuts through the painted range", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const bar = { kind: "station", stationId: f.defaultStation } as const;
+    await updateMenuPeriod(db, f.lunch, { lastOrders: [{ ...bar, minutes: 60 }] });
+    await setRoutingCell(
+      db,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      bar,
+    );
+    await replaceMenuWeek(
+      db,
+      f.department,
+      week("slots", [{ periodId: f.lunch, startsAt: "06:00", endsAt: "10:00" }]),
+      at,
+      1,
+    );
+    await db
+      .insert(dayCutoverChanges)
+      .values({ effectiveBusinessDay: day, dayCutover: "09:00:00" });
+    expect((await stationServiceTimes(db, f.defaultStation, day, day)).days).toEqual([
+      { date: day, departments: [] },
+    ]);
   }));
 
 it("sends nothing from a range that starts after the following dated start", async () =>
