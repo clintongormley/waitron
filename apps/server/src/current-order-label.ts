@@ -43,14 +43,11 @@ export async function withPaymentOrderLabels<
     tx,
     rows.map((row) => row.workingOrderId),
   );
-  return rows.map(({ recordedDeliveryLabel, ...row }) => {
-    const place = places.get(row.workingOrderId);
-    return {
-      ...row,
-      label:
-        recordedDeliveryLabel === null
-          ? currentOrderLabel(place, row.label)
-          : recordedOrderLabel(recordedDeliveryLabel, place),
-    };
-  });
+  return rows.map(({ recordedDeliveryLabel, ...row }) => ({
+    ...row,
+    label:
+      recordedDeliveryLabel === null
+        ? currentOrderLabel(places.get(row.workingOrderId), row.label)
+        : recordedOrderLabel(recordedDeliveryLabel, places.get(row.workingOrderId)),
+  }));
 }

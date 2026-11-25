@@ -1919,12 +1919,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return withPaymentOrderLabels(tx, rows);
       });
       return c.json(
-        rows.map(({ workingOrderId: _workingOrderId, label, ...row }) => ({
-          ...row,
-          ...(label === null ? {} : { label }),
-          amount: centsToDecimal(row.amount),
-          providerAmount: centsToDecimal(row.providerAmount!),
-        })),
+        rows.map(({ workingOrderId, label, ...row }) => {
+          void workingOrderId;
+          return {
+            ...row,
+            ...(label === null ? {} : { label }),
+            amount: centsToDecimal(row.amount),
+            providerAmount: centsToDecimal(row.providerAmount!),
+          };
+        }),
       );
     }),
   );
