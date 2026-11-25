@@ -383,11 +383,8 @@ function requireCellChange(body: Record<string, unknown>): Omit<RoutingChange, "
 
 function requireProductItemsChange(body: Record<string, unknown>): ProductItemsChange {
   const invalid = (field: string) => new AppError("management.request_invalid", { field });
-  if (body.kind !== "move" && body.kind !== "delete") throw invalid("kind");
-  onlyKeys(
-    body,
-    body.kind === "move" ? ["kind", "selection", "to"] : ["kind", "selection", "contents"],
-  );
+  if (body.kind !== "move") throw invalid("kind");
+  onlyKeys(body, ["kind", "selection", "to"]);
   if (!isRecord(body.selection) || !hasExactly(body.selection, ["productIds", "categoryIds"]))
     throw invalid("selection");
   const ids = (field: string): string[] => {
@@ -398,10 +395,7 @@ function requireProductItemsChange(body: Record<string, unknown>): ProductItemsC
     return result;
   };
   const selection = { productIds: ids("productIds"), categoryIds: ids("categoryIds") };
-  if (body.kind === "move")
-    return { kind: "move", selection, to: requireNullableBodyUuid(body.to, "to") };
-  if (body.contents !== "move_up" && body.contents !== "delete") throw invalid("contents");
-  return { kind: "delete", selection, contents: body.contents };
+  return { kind: "move", selection, to: requireNullableBodyUuid(body.to, "to") };
 }
 
 function requirePreviewChange(body: Record<string, unknown>): RoutingChange {

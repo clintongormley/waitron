@@ -166,55 +166,23 @@ async function validateMove(
   );
 }
 
-export type ProductItemsChange =
-  | { kind: "move"; selection: ProductSelection; to: string | null }
-  | { kind: "delete"; selection: ProductSelection; contents: FolderContents };
+export type ProductItemsChange = { kind: "move"; selection: ProductSelection; to: string | null };
 
-export async function projectProductItems(tx: Transaction, change: ProductItemsChange) {
-  const { selection } = change;
+export async function projectProductItems(tx: Transaction, { selection, to }: ProductItemsChange) {
   const tree = await readTree(tx, selection);
-  if (change.kind === "move") await validateMove(tx, tree, selection, change.to);
-  else if (change.contents === "move_up")
-    await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
-  const removed = new Set(
-    change.kind === "delete"
-      ? selection.categoryIds.flatMap((id) =>
-          change.contents === "delete" ? tree.subtree(id) : [id],
-        )
-      : [],
-  );
+  await validateMove(tx, tree, selection, to);
   const moved = new Set(selection.categoryIds);
   const direct = new Set(selection.productIds);
-  const categoryOf = new Map<string, string | null>();
-  // Top-level ids exclude whole families when routing resolves variants through their parent.
-  const deletedProductIds = new Set(change.kind === "delete" ? selection.productIds : []);
-  for (const row of await tx
+  const rows = await tx
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)
-    .where(isTopLevelProduct)) {
-    let category = row.categoryId;
-    if (change.kind === "move") {
-      if (direct.has(row.id)) category = change.to;
-    } else if (category !== null && removed.has(category)) {
-      if (change.contents === "delete") deletedProductIds.add(row.id);
-      else category = tree.survivingParent(category, removed);
-    }
-    categoryOf.set(row.id, category);
-  }
+    .where(isTopLevelProduct);
   return {
-    categories: tree.folders
-      .filter(({ id }) => !removed.has(id))
-      .map((folder) => ({
-        ...folder,
-        parentId:
-          change.kind === "move"
-            ? moved.has(folder.id)
-              ? change.to
-              : folder.parentId
-            : tree.survivingParent(folder.id, removed),
-      })),
-    categoryOf,
-    deletedProductIds,
+    categories: tree.folders.map((folder) => ({
+      ...folder,
+      parentId: moved.has(folder.id) ? to : folder.parentId,
+    })),
+    categoryOf: new Map(rows.map(({ id, categoryId }) => [id, direct.has(id) ? to : categoryId])),
   };
 }
 

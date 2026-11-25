@@ -109,8 +109,11 @@ Para soltar elementos en una subcategoría, abre las categorías superiores ante
 Al soltar productos o categorías, se abre la ventana de **Mover a…** con el destino seleccionado.
 Revisa los cambios de estación de preparación, si los hay, y elige **Mover a…** para guardar.
 También puedes soltar los elementos en **Todos los productos** para sacarlos de su categoría.
-Revisa también los cambios de estación al abrir la ventana con **Mover a…** o al eliminar
-una categoría.
+Revisa también los cambios de estación al abrir **Mover a…** desde la barra de herramientas.
+
+Al eliminar una categoría, elige si quieres conservar su contenido o eliminarlo también.
+Comprueba adónde se moverá el contenido si lo conservas. Los productos que hayas marcado se
+eliminan con cualquiera de las dos opciones.
 
 Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
 color, o el que hereda de la categoría superior más cercana que tenga color y, después, el

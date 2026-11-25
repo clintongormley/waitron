@@ -103,8 +103,12 @@ to, as described below.
 To drop into a subcategory, open its parent categories before you start dragging.
 When you drop products or categories, the Move window opens with the destination selected. Review
 any preparation station changes and choose **Move to…** to save. You can also drop onto
-**All products** to move items out of their category. Check the station changes too when you open
-the window with **Move to…** or delete a category.
+**All products** to move items out of their category. Check the station changes when you open
+**Move to…** from the toolbar too.
+
+When you delete a category, choose whether to keep its contents or delete them too. Check where
+the contents will move if you keep them. Products you ticked yourself are deleted with either
+choice.
 
 While you add or rename a category, the square beside its name shows its own colour, or the colour
 it inherits from the nearest coloured category above it, then the venue's default. A dashed border

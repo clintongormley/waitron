@@ -6172,9 +6172,10 @@ While Delete or Unpair is at the provider, another Unpair, Delete or adoption is
 `reader.removed_while_adding`. Removing a reader's row menu sends focus to the Payments heading, since
 Refresh may still be disabled while status reads finish.
 
-Products and variants offer **Delete** in their row menus. The Products toolbar offers **Delete**
-for any selection of products and categories. You choose whether to delete a category's contents
-or move them up to its parent. The action deletes directly selected products in either case.
+Products and variants offer **Delete** in their row menus. In the Products toolbar you can delete
+any selection of products and categories. The window names one selected item and shows counts for
+multiple items. Choose whether to move the remaining contents to the surviving parent categories
+or delete them too. Directly selected products go with either choice.
 
 Print agents offer **Delete** in the row menu and keep only active agents in the main list, with
 no lifecycle status column/filter. The shared Delete confirmation explains that printers reached only

@@ -432,57 +432,34 @@ Deleting a product deletes its variants, removes draft placements and extras mem
 clears variant prices in the same transaction. A Device Home shortcut becomes a missing tile at
 its saved position. Configuration export leaves deleted rows and their dependent rows behind.
 
-Before deleting a category that holds active products or subcategories, the compact dialog asks
-"What happens to what is inside?". Each answer names what it does, counting only active products
-and leaving out anything that is zero. The place named is the shared parent's path, **No
-category** for the top level, or "each category's parent" when the outermost selected categories
-sit under different parents.
+The Delete title names a single category or product. For a larger selection it counts each kind. The list gives the paths when more than one category is
+selected, or when the path adds to a single category's name. It adds “(2 of 3)” where categories
+share a path. When there are contents beyond the selected items,
+the window counts them once, excluding deleted products.
 
-- "1 category and 3 products move to Drinks" keeps the products active and moves the category's
-  direct products and subcategories to its parent. The counts include what sits inside those
-  subcategories, which moves with them. Its subcategories that are not selected keep
-  their routing rules.
-- "Also: deletes 1 category, 2 kitchen routing rules and 3 products." removes the subtree and
-  deletes its products. A routing rule here is a cell on a category's row in the routing grid.
-  The count covers subcategories outside the selection. Retained product rows move to the
-  parent of the outermost selected category that held them.
-
-When there are any, a paragraph below the question counts the routing rules on a selected
-category's own row, which go whichever answer is chosen.
+- **Keep its 1 category and 3 products, move to Drinks** moves the contents up. Unselected
+  subcategories move together with their products and routing rules. When the destinations
+  differ, the window pairs the selected categories' paths with their surviving parent paths.
+- **Delete its 1 category and 3 products too** deletes the additional categories and active
+  products. Retained product rows move to the surviving parent of the outermost selected category
+  that held them.
 
 A category is deleted without confirmation only when it holds no products (deleted ones
-included), no subcategories and no routing rules. When no selected category holds active products
-or subcategories, the confirmation asks nothing about contents, because any deleted products
-inside move up whichever answer is chosen; it says nothing about those products, and says how many
-routing rules go with the categories, if any. A category's row-menu Delete uses the same path.
-If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
-to approve unknown contents. The dialog lists each category being deleted by its full path, adding
-"(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
-again; if the numbers of subcategories, active products or routing rules (in the subtree, or
-on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. A change in deleted products alone never stops that check, whether or not the dialog
-asked about contents: the dialog neither counts those products nor asks about them. The delete
-request carries the counts
-the dashboard read before deleting, the number of all products, deleted ones included, among them,
-and the server compares them again inside the delete itself: if
-they no longer match, nothing is deleted and the dialog reads the counts again. When a count it
-shows (subcategories, active products or routing rules) has changed, it shows the new counts with
-the refusal's own message; when none has (only deleted products changed, or the change was undone
-before the dialog read again), it says the contents changed, that what it shows is up to date, and
-asks you to choose **Delete** again. If a category with nothing in it at all, which is deleted
-without confirmation, has gained anything by then, the server refuses and the dialog opens,
-choosing its message the same way: when it now holds subcategories, active products or routing
-rules, it shows their counts with the refusal's message; when all it gained is deleted products,
-or the gain was undone before the dialog read again, it opens with that second message instead,
-shows no counts of contents, asks nothing about contents, and its **Delete** moves any deleted
-products up.
-A refused action
-keeps its dialog open with a message at the bottom.
-Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
-cascades. The dialog counts the routing rules each answer removes. Before you confirm a move
-or a category deletion, the routing preview
-lists the surviving products whose station changes, with their old and new destinations, zones and
-periods. Change your choice to refresh it. Choose **Retry preview** if it fails to load.
+included), no subcategories and no routing rules. When only the selected items are affected, the
+confirmation skips the contents question. A category's
+row-menu Delete uses the same path. If the summary cannot be read, deletion waits for a successful
+new attempt.
+Pressing **Delete** reads the selected categories' summaries again. If the subcategory, active
+product or routing counts changed, the window asks for another confirmation. The request sends the
+fresh summaries, including deleted products, so the server can check again before changing
+anything. If the server refuses because a summary changed, the dialog refreshes. When the displayed
+contents changed, the manager can check the new counts. When only routing or deleted products
+changed, the manager can choose Delete again with the current selection. If a category gained
+contents after passing the empty-category shortcut, the same refusal opens the dialog. A refused
+action keeps its dialog open and puts its message below the choices.
+Deleting a category removes every routing cell on its row through `routing_cells_category_fk`.
+Move shows a table of products changing station, with old and new destinations, zones and periods.
+Choose **Retry preview** if it fails to load. The preview request accepts a Move selection.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API
@@ -537,11 +514,9 @@ is `category.parent_cycle` (409). A category name that would match a sibling's i
 (409, `{ categoryId }`, the first such category), and deletes nothing. Malformed arrays or
 repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
 (400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
-Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
-routing cells on the category's own row. The browser counts the outermost selected categories when
-ancestors and descendants are selected together, except that the routing-rule paragraph sums
-`ownRoutes` over every selected category. The rules the "Also: …" answer lists are the outermost
-categories' `routes` less that sum.
+Category-summary counts cover each complete subtree. The `ownRoutes` count covers just the
+category's own row. For display the browser sums disjoint outermost subtrees and subtracts
+directly selected categories and active products from the contents counts. The delete request sends each selected category's freshly read counts.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which

@@ -2359,12 +2359,11 @@ it("deletes only completely summarised empty folders without asking", async () =
   expect(count(el)).toBe("0 selected");
 });
 it.each([
-  ["en-GB", 2, "2 station routing rules name these categories and are removed."],
-  ["en-GB", 1, "1 station routing rule names these categories and is removed."],
-  ["es", 2, "2 reglas de envío a la estación nombran estas categorías y se eliminan."],
+  ["en-GB", 1, "Delete Food?", "This can't be undone."],
+  ["es", 2, "¿Eliminar Food?", "No se puede deshacer."],
 ] as const)(
-  "asks before deleting a category whose only contents are routing rules, saying how many go with it and asking nothing about contents (%s, %i rules)",
-  async (locale, rules, sentence) => {
+  "asks before deleting a category whose only contents are routing rules (%s, %i rules)",
+  async (locale, rules, heading, warning) => {
     setLocale(locale);
     const el = await mountBrowser();
     const summary = {
@@ -2378,7 +2377,8 @@ it.each([
     vi.mocked(el.api.summariseFolders).mockResolvedValue([summary]);
     await selectKeys(el, ["folder:f"]);
     await press(el, "delete");
-    await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
+    await vi.waitFor(() => expect(dialog(el)?.heading).toBe(heading));
+    expect(dialog(el)!.querySelector("form p")?.textContent?.trim()).toBe(warning);
     expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
@@ -2404,14 +2404,11 @@ it("still asks what happens to the contents when a category holding only routing
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("fieldset legend")?.textContent).toContain(
-      "What happens to what is inside?",
+      "What happens to their contents?",
     ),
   );
   expect(el.shadowRoot!.querySelector("input[value=move_up]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull();
-  expect(el.shadowRoot!.textContent).toContain(
-    "2 station routing rules name these categories and are removed.",
-  );
 });
 it.each(["network", "missing", "partial"])(
   "keeps deletion disabled and quiet on %s summary",
@@ -2435,12 +2432,11 @@ it.each(["network", "missing", "partial"])(
     expect(el.api.deleteProductItems).not.toHaveBeenCalled();
   },
 );
-it("shows folder contents and routes, defaults to moving up, and sends delete choice", async () => {
+it("shows folder contents, defaults to moving up, and sends the delete choice", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
-  expect(el.shadowRoot!.textContent).toContain("1 station routing rule names");
   const radio = el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!;
   expect(el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.checked).toBe(
     true,
@@ -2456,10 +2452,9 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
     ),
   );
 });
-/** The two answers to "What happens to what is inside?", as their whole labels read. */
 function contentsLabels(el: ProductBrowser): [string, string] {
   const label = (value: string) =>
-    el.shadowRoot!.querySelector(`input[value=${value}]`)!.parentElement!.textContent!.trim();
+    el.shadowRoot!.querySelector(`input[value=${value}] + span`)!.textContent!.trim();
   return [label("move_up"), label("delete")];
 }
 const contents = (folders: number, active: number, routes = 0, ownRoutes = 0, disabled = 0) => ({
@@ -2474,67 +2469,107 @@ it.each([
   [
     "en-GB",
     { b: contents(1, 3) },
-    "1 category and 3 products move to Drinks",
-    "Also: deletes 1 category and 3 products.",
+    "Keep its 1 category and 3 products, move to Drinks",
+    "Delete its 1 category and 3 products too",
   ],
-  ["en-GB", { b: contents(1, 0) }, "1 category moves to Drinks", "Also: deletes 1 category."],
-  ["en-GB", { b: contents(2, 0) }, "2 categories move to Drinks", "Also: deletes 2 categories."],
-  ["en-GB", { d: contents(0, 1) }, "1 product moves to No category", "Also: deletes 1 product."],
-  ["en-GB", { b: contents(0, 2) }, "2 products move to Drinks", "Also: deletes 2 products."],
+  [
+    "en-GB",
+    { b: contents(1, 0) },
+    "Keep its 1 category, move to Drinks",
+    "Delete its 1 category too",
+  ],
+  [
+    "en-GB",
+    { b: contents(2, 0) },
+    "Keep its 2 categories, move to Drinks",
+    "Delete its 2 categories too",
+  ],
+  [
+    "en-GB",
+    { d: contents(0, 1) },
+    "Keep its 1 product, with no category",
+    "Delete its 1 product too",
+  ],
+  [
+    "en-GB",
+    { b: contents(0, 2) },
+    "Keep its 2 products, move to Drinks",
+    "Delete its 2 products too",
+  ],
   [
     "en-GB",
     { b: contents(2, 3, 0, 0, 2) },
-    "2 categories and 3 products move to Drinks",
-    "Also: deletes 2 categories and 3 products.",
+    "Keep its 2 categories and 3 products, move to Drinks",
+    "Delete its 2 categories and 3 products too",
   ],
   [
     "en-GB",
     { b: contents(1, 3, 3, 1) },
-    "1 category and 3 products move to Drinks",
-    "Also: deletes 1 category, 2 station routing rules and 3 products.",
+    "Keep its 1 category and 3 products, move to Drinks",
+    "Delete its 1 category and 3 products too",
   ],
   [
     "en-GB",
     { b: contents(1, 0, 2, 1) },
-    "1 category moves to Drinks",
-    "Also: deletes 1 category and 1 station routing rule.",
+    "Keep its 1 category, move to Drinks",
+    "Delete its 1 category too",
   ],
   [
     "en-GB",
     { b: contents(1, 1), f: contents(0, 1) },
-    "1 category and 2 products move to each category's parent",
-    "Also: deletes 1 category and 2 products.",
+    "Keep their 1 category and 2 products, in their parent categories",
+    "Delete their 1 category and 2 products too",
   ],
-  ["en-GB", { r: contents(0, 1) }, "1 product moves to Drinks › Wine", "Also: deletes 1 product."],
+  [
+    "en-GB",
+    { r: contents(0, 1) },
+    "Keep its 1 product, move to Drinks › Wine",
+    "Delete its 1 product too",
+  ],
   [
     "es",
     { b: contents(1, 3) },
-    "1 categoría y 3 productos pasan a Drinks",
-    "También: elimina 1 categoría y 3 productos.",
+    "Conservar su categoría y sus 3 productos, mover a Drinks",
+    "Eliminar también su categoría y sus 3 productos",
   ],
-  ["es", { b: contents(1, 0) }, "1 categoría pasa a Drinks", "También: elimina 1 categoría."],
-  ["es", { b: contents(2, 0) }, "2 categorías pasan a Drinks", "También: elimina 2 categorías."],
-  ["es", { d: contents(0, 1) }, "1 producto pasa a Sin categoría", "También: elimina 1 producto."],
+  [
+    "es",
+    { b: contents(1, 0) },
+    "Conservar su categoría, mover a Drinks",
+    "Eliminar también su categoría",
+  ],
+  [
+    "es",
+    { b: contents(2, 0) },
+    "Conservar sus 2 categorías, mover a Drinks",
+    "Eliminar también sus 2 categorías",
+  ],
+  [
+    "es",
+    { d: contents(0, 1) },
+    "Conservar su producto, sin categoría",
+    "Eliminar también su producto",
+  ],
   [
     "es",
     { b: contents(1, 3, 4, 1) },
-    "1 categoría y 3 productos pasan a Drinks",
-    "También: elimina 1 categoría, 3 reglas de envío a la estación y 3 productos.",
+    "Conservar su categoría y sus 3 productos, mover a Drinks",
+    "Eliminar también su categoría y sus 3 productos",
   ],
   [
     "es",
     { b: contents(1, 0, 2, 1) },
-    "1 categoría pasa a Drinks",
-    "También: elimina 1 categoría y 1 regla de envío a la estación.",
+    "Conservar su categoría, mover a Drinks",
+    "Eliminar también su categoría",
   ],
   [
     "es",
     { b: contents(1, 1), f: contents(0, 1) },
-    "1 categoría y 2 productos pasan a la categoría superior de cada una",
-    "También: elimina 1 categoría y 2 productos.",
+    "Conservar su categoría y sus 2 productos, en sus categorías superiores",
+    "Eliminar también su categoría y sus 2 productos",
   ],
 ] as const)(
-  "words both answers about the contents from the active products, the subcategories and the rules inside, leaving out what is zero (%s, case %#)",
+  "words both answers about the contents from the active products and subcategories, leaving out what is zero (%s, case %#)",
   async (locale, summaries, keep, deleteToo) => {
     setLocale(locale);
     const el = await mountBrowser({ categories: WINE });
@@ -2552,25 +2587,13 @@ it.each([
     expect(contentsLabels(el)).toEqual([keep, deleteToo]);
   },
 );
-it.each([
-  ["en-GB", "Categories to delete:"],
-  ["es", "Categorías a eliminar:"],
-] as const)(
-  "heads the categories a delete removes without a future tense (%s)",
-  async (locale, heading) => {
-    setLocale(locale);
-    const el = await mountBrowser();
-    await selectKeys(el, ["folder:d"]);
-    await press(el, "delete");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector('[data-test="deleting"]')).not.toBeNull(),
-    );
-    const paragraphs = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")].map(
-      (paragraph) => paragraph.textContent!.trim(),
-    );
-    expect(paragraphs).toContain(heading);
-  },
-);
+it("leaves out a single category's path when the title already names it", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)?.heading).toBe("Delete Drinks?"));
+  expect(dialog(el)!.querySelector('[data-test="deleting"]')).toBeNull();
+});
 it("shows the delete dialog at the compact size", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
@@ -2579,17 +2602,12 @@ it("shows the delete dialog at the compact size", async () => {
   expect(dialog(el)!.getAttribute("size")).toBe("compact");
 });
 it.each([
-  ["en-GB", contents(0, 0, 0, 0, 2), "", /disabl/i],
-  [
-    "en-GB",
-    contents(0, 0, 1, 1, 1),
-    "1 station routing rule names these categories and is removed.",
-    /disabl/i,
-  ],
-  ["es", contents(0, 0, 0, 0, 1), "", /deshabilit/i],
+  ["en-GB", contents(0, 0, 0, 0, 2), /disabl/i, "This can't be undone."],
+  ["en-GB", contents(0, 0, 1, 1, 1), /disabl/i, "This can't be undone."],
+  ["es", contents(0, 0, 0, 0, 1), /deshabilit/i, "No se puede deshacer."],
 ] as const)(
   "asks nothing about the contents of a category holding only disabled products, says nothing about them, and moves them up (%s, case %#)",
-  async (locale, counts, rules, disabledWord) => {
+  async (locale, counts, disabledWord, warning) => {
     setLocale(locale);
     const el = await mountBrowser();
     const summary = { id: "f", ...counts };
@@ -2597,16 +2615,15 @@ it.each([
     await selectKeys(el, ["folder:f"]);
     await press(el, "delete");
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector('[data-test="deleting"]')).not.toBeNull(),
+      expect(dialog(el)?.heading).toBe(locale === "es" ? "¿Eliminar Food?" : "Delete Food?"),
     );
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
-    const text = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")]
-      .filter((paragraph) => !paragraph.closest('[data-test="folder-routing-preview"]'))
-      .map((paragraph) => paragraph.textContent!.trim())
-      .filter((paragraph) => paragraph !== (locale === "es" ? es : en)["folders.deleting"]);
-    expect(text).toEqual(rules ? [rules] : []);
+    const text = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")].map((paragraph) =>
+      paragraph.textContent!.trim(),
+    );
+    expect(text).toEqual([warning]);
     expect(dialog(el)!.textContent).not.toMatch(disabledWord);
     expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     await press(el, "confirm");
@@ -2619,78 +2636,19 @@ it.each([
     );
   },
 );
-it.each([
-  [
-    "en-GB",
-    "1 station routing rule names these categories and is removed.",
-    "Also: deletes 1 category, 2 station routing rules and 2 products.",
-  ],
-  [
-    "es",
-    "1 regla de envío a la estación nombra estas categorías y se elimina.",
-    "También: elimina 1 categoría, 2 reglas de envío a la estación y 2 productos.",
-  ],
-] as const)(
-  "names the selected categories' own routing rules under either answer, and lists the rules inside among what deleting the contents removes (%s)",
-  async (locale, moveUp, deleteToo) => {
-    setLocale(locale);
-    const el = await mountBrowser();
-    vi.mocked(el.api.summariseFolders).mockResolvedValue([
-      { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 3, ownRoutes: 1 },
-    ]);
-    await selectKeys(el, ["folder:d"]);
-    await press(el, "delete");
-    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-    expect(el.shadowRoot!.textContent).toContain(moveUp);
-    expect(contentsLabels(el)[1]).toBe(deleteToo);
-    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(moveUp);
-    expect(el.shadowRoot!.textContent).not.toMatch(/3 (station routing rules|reglas)/);
-    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(moveUp);
-  },
-);
-it("warns of no routing rules under either answer when the selected category names none, and lists the ones inside in the delete answer", async () => {
+it("counts only additional contents when a parent and its child are selected", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 2, ownRoutes: 0 },
-  ]);
-  await selectKeys(el, ["folder:d"]);
-  await press(el, "delete");
-  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.querySelector("form")!.textContent).not.toContain("name these categories");
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("form")!.textContent).not.toContain("name these categories");
-  expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category, 2 station routing rules and 2 products.",
-  );
-});
-it("counts the own rules of every selected category under either answer, a subcategory selected with its parent included", async () => {
-  const el = await mountBrowser();
-  vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 4, ownRoutes: 1 },
-    { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 },
+    { id: "d", ...contents(1, 2, 4, 1) },
+    { id: "b", ...contents(0, 1, 2, 2) },
   ]);
   await toggleCategory(el, "d");
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.textContent).toContain(
-    "3 station routing rules name these categories and are removed.",
-  );
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.textContent).toContain(
-    "3 station routing rules name these categories and are removed.",
-  );
-  expect(contentsLabels(el)[1]).toBe(
-    "Also: deletes 1 category, 1 station routing rule and 2 products.",
-  );
+  expect(contentsLabels(el)[1]).toBe("Delete their 2 products too");
 });
-it("shows the new counts instead of deleting when only the category's own routing rules changed", async () => {
+it("asks for confirmation again when only the category's own routing rules changed", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders)
     .mockResolvedValueOnce([
@@ -2704,7 +2662,9 @@ it("shows the new counts instead of deleting when only the category's own routin
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await press(el, "confirm");
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.textContent).toContain("1 station routing rule names"),
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      en["folders.summary_changed"],
+    ),
   );
   expect(el.api.deleteProductItems).not.toHaveBeenCalled();
 });
@@ -2751,17 +2711,20 @@ it("numbers categories sharing a path in the order the list draws them, each und
     products: [],
   });
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "x", folders: 0, products: 1, activeProducts: 1, routes: 0, ownRoutes: 0 },
+    { id: "x", ...contents(0, 1) },
+    { id: "y", ...contents(0, 1) },
   ]);
   await toggleCategory(el, "f1");
   await toggleCategory(el, "f2");
   expect(await rowKeys(el)).toEqual(["folder:f1", "folder:y", "folder:f2", "folder:x"]);
-  await selectKeys(el, ["folder:x"]);
+  await selectKeys(el, ["folder:x", "folder:y"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.querySelector('[data-test="deleting"] li')!.textContent!.trim()).toBe(
-    "Food › Mains (2 of 2)",
-  );
+  expect(
+    [...dialog(el)!.querySelectorAll('[data-test="category-delete-destinations"] li')].map((item) =>
+      item.textContent!.replace(/\s+/g, " ").trim(),
+    ),
+  ).toEqual(["Food › Mains (2 of 2) → Food (2 of 2)", "Food › Mains (1 of 2) → Food (1 of 2)"]);
 });
 it("shows a shared category name literally beside its number, even when it reads like a placeholder", async () => {
   const name = "Mains $& {position} {total}";
@@ -2796,14 +2759,14 @@ it.each([
   [
     "en-GB",
     { folders: 1, products: 3, activeProducts: 2 },
-    "Also: deletes 1 category and 2 products.",
+    "Delete its 1 category and 2 products too",
   ],
-  ["en-GB", { folders: 0, products: 4, activeProducts: 2 }, "Also: deletes 2 products."],
+  ["en-GB", { folders: 0, products: 4, activeProducts: 2 }, "Delete its 2 products too"],
   ["en-GB", { folders: 0, products: 2, activeProducts: 0 }, null],
   [
     "es",
     { folders: 1, products: 3, activeProducts: 1 },
-    "También: elimina 1 categoría y 1 producto.",
+    "Eliminar también su categoría y su producto",
   ],
   ["es", { folders: 0, products: 1, activeProducts: 0 }, null],
   ["es", { folders: 0, products: 2, activeProducts: 0 }, null],
@@ -2834,7 +2797,7 @@ it("words the whole English delete choice when every product to delete is active
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(
     el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
-  ).toBe("Also: deletes 1 category and 2 products.");
+  ).toBe("Delete its 1 category and 2 products too");
 });
 it("words the whole Spanish delete choice when one of the products to delete is disabled", async () => {
   setLocale("es");
@@ -2847,7 +2810,7 @@ it("words the whole Spanish delete choice when one of the products to delete is 
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(
     el.shadowRoot!.querySelector("input[value=delete]")!.parentElement!.textContent!.trim(),
-  ).toBe("También: elimina 2 productos.");
+  ).toBe("Eliminar también sus 2 productos");
 });
 it("sums every selected category's active products, leaving out the disabled ones, when only one of them holds disabled products", async () => {
   const el = await mountBrowser();
@@ -2859,8 +2822,8 @@ it("sums every selected category's active products, leaving out the disabled one
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(contentsLabels(el)).toEqual([
-    "1 category and 3 products move to No category",
-    "Also: deletes 1 category and 3 products.",
+    "Keep their 1 category and 3 products, at the top level",
+    "Delete their 1 category and 3 products too",
   ]);
 });
 it("reads the contents again at Delete and, when they changed, shows the new counts instead of deleting", async () => {
@@ -2878,7 +2841,7 @@ it("reads the contents again at Delete and, when they changed, shows the new cou
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
-      "What these categories hold has changed since this opened. Check the new counts and confirm again.",
+      "These categories changed while this window was open. Review the selection and choose Delete again.",
     ),
   );
   expect(el.shadowRoot!.textContent).toContain("2 categories and 3 products");
@@ -2989,7 +2952,7 @@ it.each([
   },
 );
 it.each(["the read at Delete", "the server's refusal"])(
-  'after the "Also: …" answer was chosen, a category found by %s to hold only routing rules is deleted moving nothing up',
+  'after the "Delete its contents" answer was chosen, a category found by %s to hold only routing rules is deleted moving nothing up',
   async (path) => {
     const el = await mountBrowser();
     const full = { id: "f", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 };
@@ -3012,9 +2975,6 @@ it.each(["the read at Delete", "the server's refusal"])(
     await press(el, "confirm");
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
-    expect(dialog(el)?.textContent).toContain(
-      "2 station routing rules name these categories and are removed.",
-    );
     vi.mocked(el.api.deleteProductItems).mockClear();
     await press(el, "confirm");
     await vi.waitFor(() =>
@@ -3221,8 +3181,8 @@ it("when the server refuses an empty category's delete because it is no longer e
   );
   expect(dialog(el)).not.toBeNull();
   expect(contentsLabels(el)).toEqual([
-    "1 product moves to No category",
-    "Also: deletes 1 product.",
+    "Keep its 1 product, with no category",
+    "Delete its 1 product too",
   ]);
   expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["f"] },
@@ -3271,6 +3231,7 @@ it("when the server refuses an empty category's delete because a disabled produc
 it.each([
   ["en-GB", "a disabled product joined", { products: 4 }],
   ["en-GB", "a disabled product left", { products: 2 }],
+  ["en-GB", "the category routing rules changed", { ownRoutes: 0, routes: 2 }],
   ["es", "a disabled product joined", { products: 4 }],
   ["en-GB", "the contents changed and changed back", {}],
 ] as const)(
@@ -3390,7 +3351,7 @@ it.each([1, 2])(
       "Delete",
     );
     await press(el, "delete");
-    expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");
+    expect(dialog(el)!.heading).toBe(number === 1 ? "Delete Bread?" : "Delete 2 products?");
     expect(el.shadowRoot!.textContent).toContain("past sales");
     expect(el.shadowRoot!.textContent).toContain(
       "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.",
@@ -3527,7 +3488,7 @@ it("counts menus reached by active products in a category and its nested subfold
   expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["cola", "stout"]);
   expect(dialog(el)!.textContent).toContain(unknown);
   expect(dialog(el)!.textContent).toContain("This can't be undone.");
-  expect(dialog(el)!.textContent).toContain("they come off the extras lists that offer them");
+  expect(dialog(el)!.textContent).not.toContain("they come off the extras lists that offer them");
   answer(1);
   await vi.waitFor(() => expect(dialog(el)!.textContent).toContain(counted));
 
@@ -3593,7 +3554,7 @@ it("shows one count below Delete contents when the folder holds only empty subfo
   expect(choice.nextElementSibling?.textContent?.trim()).toBe(
     "Deleted products come off the 2 menus they are on.",
   );
-  expect(deleteBody(el)).toBe(DELETE_PRODUCTS);
+  expect(deleteBody(el)).toBe("This can't be undone.");
 });
 it("says products picked beside a category come off every menu when their count cannot be read", async () => {
   const el = await mountBrowser();
@@ -3605,7 +3566,7 @@ it("says products picked beside a category come off every menu when their count 
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(deleteBody(el)).toBe(`${DELETE_PRODUCTS} It comes off every menu it is on.`);
+  expect(deleteBody(el)).toBe("This can't be undone. It comes off every menu it is on.");
 });
 it("says Delete for products alone and with categories in Spanish", async () => {
   setLocale("es");
@@ -3678,8 +3639,9 @@ it("counts overlapping selected folders once in the delete consent", async () =>
   ]);
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
-  expect(el.shadowRoot!.textContent).toContain("1 station routing rule names");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("Keep their 2 products, with no category"),
+  );
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.api.deleteProductItems).toHaveBeenCalledWith(
@@ -5068,12 +5030,15 @@ it("A462 Products root closure reports the top category once and survives a live
 });
 
 it.each([
-  ["en-GB", ["folder:d"], "Delete 1 item?"],
-  ["en-GB", ["folder:d", "folder:f"], "Delete 2 items?"],
-  ["es", ["folder:d"], "¿Eliminar 1 elemento?"],
-  ["es", ["folder:d", "folder:f"], "¿Eliminar 2 elementos?"],
+  ["en-GB", ["folder:d"], "Delete Drinks?"],
+  ["en-GB", ["folder:d", "folder:f"], "Delete 2 categories?"],
+  ["es", ["folder:d"], "¿Eliminar Drinks?"],
+  ["es", ["folder:d", "folder:f"], "¿Eliminar 2 categorías?"],
+  ["en-GB", ["bread"], "Delete Bread?"],
+  ["en-GB", ["folder:d", "bread"], "Delete 1 category and 1 product?"],
+  ["es", ["folder:d", "folder:f", "bread"], "¿Eliminar 2 categorías y 1 producto?"],
 ] as const)(
-  "words the visible delete heading for its selected categories (%s, %o)",
+  "words the visible delete heading for the selection (%s, %o)",
   async (locale, keys, heading) => {
     setLocale(locale);
     onTestFinished(() => setLocale("en-GB"));
@@ -5196,47 +5161,99 @@ it("previews the current folder move, ignores replaced reads and waits before co
   );
 });
 
-it("refreshes the folder delete preview for its choice and changed summary before saving", async () => {
-  const el = await mountBrowser();
-  await selectKeys(el, ["folder:d"]);
+it("counts mixed selections and omits a contents choice when everything inside is selected", async () => {
+  const el = await mountBrowser({
+    products: [product("cola", "Cola", "b")],
+  });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", ...contents(1, 1) },
+    { id: "b", ...contents(0, 1) },
+  ]);
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "b");
+  await selectKeys(el, ["folder:d", "folder:b", "cola"]);
   await press(el, "delete");
   await vi.waitFor(() =>
-    expect(el.api.previewProductItemsRouting).toHaveBeenCalledWith({
-      kind: "delete",
-      selection: { productIds: [], categoryIds: ["d"] },
-      contents: "move_up",
-    }),
+    expect(dialog(el)?.shadowRoot?.querySelector("h2")?.textContent).toBe(
+      "Delete 2 categories and 1 product?",
+    ),
   );
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('input[value="delete"]')!);
-  await vi.waitFor(() =>
-    expect(el.api.previewProductItemsRouting).toHaveBeenLastCalledWith({
-      kind: "delete",
-      selection: { productIds: [], categoryIds: ["d"] },
-      contents: "delete",
-    }),
-  );
-  const count = vi.mocked(el.api.previewProductItemsRouting).mock.calls.length;
-  vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "d", folders: 1, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 },
-  ]);
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!,
-  );
-  await vi.waitFor(() =>
-    expect(vi.mocked(el.api.previewProductItemsRouting).mock.calls.length).toBeGreaterThan(count),
-  );
-  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!,
-  );
+  expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
+  expect(dialog(el)!.textContent).not.toContain("station routing rule");
+  await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.api.deleteProductItems).toHaveBeenCalledWith(
-      { productIds: [], categoryIds: ["d"] },
-      "delete",
-      [{ id: "d", folders: 1, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
+      { categoryIds: ["d", "b"], productIds: ["cola"] },
+      "move_up",
+      [
+        { id: "d", ...contents(1, 1) },
+        { id: "b", ...contents(0, 1) },
+      ],
     ),
   );
 });
+
+it("confirms category Delete using fresh counts without waiting for a station preview", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.previewProductItemsRouting).mockReturnValue(new Promise(() => {}));
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('input[value="delete"]')).not.toBeNull(),
+  );
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('input[value="delete"]')!);
+  const confirm =
+    dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!;
+  expect(confirm.disabled).toBe(false);
+  expect(el.api.previewProductItemsRouting).not.toHaveBeenCalled();
+  const summary = { id: "d", ...contents(1, 3, 1, 1) };
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([summary]);
+  await press(el, "confirm");
+  await vi.waitFor(() => expect(dialog(el)!.textContent).toContain("1 category and 3 products"));
+  expect(el.api.deleteProductItems).not.toHaveBeenCalled();
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteProductItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      "delete",
+      [summary],
+    ),
+  );
+});
+
+it.each([
+  [
+    "en-GB",
+    "What happens to its contents? *",
+    "Keep its 5 products, move to Drinks",
+    "This can't be undone.",
+  ],
+  [
+    "es",
+    "¿Qué pasa con su contenido? *",
+    "Conservar sus 5 productos, mover a Drinks",
+    "No se puede deshacer.",
+  ],
+] as const)(
+  "uses short category Delete copy and omits station details in %s",
+  async (locale, question, keep, warning) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    vi.mocked(el.api.summariseFolders).mockResolvedValue([{ id: "b", ...contents(0, 5, 2, 2) }]);
+    await toggleCategory(el, "d");
+    await selectKeys(el, ["folder:b"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)?.querySelector("legend")?.textContent).toBe(question));
+    expect(contentsLabels(el)[0]).toBe(keep);
+    expect(dialog(el)!.querySelector("wt-disclosure")).toBeNull();
+    expect(dialog(el)!.textContent).not.toMatch(/station routing rule|reglas de envío/);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('input[value="delete"]')!);
+    await el.updateComplete;
+    expect(
+      Array.from(dialog(el)!.querySelectorAll("form p"), (p) => p.textContent.trim()),
+    ).toContain(warning);
+  },
+);
 
 it("retries a failed folder preview without saving and lets a refused destination change", async () => {
   const el = await mountBrowser();

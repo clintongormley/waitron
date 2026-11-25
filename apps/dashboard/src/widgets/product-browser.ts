@@ -29,11 +29,10 @@ import type {
   Product,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
-import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
+import { categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { conjunctionList } from "../i18n/list.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -52,6 +51,13 @@ import type { ProductAvailabilityChange } from "./product-tree-availability.js";
 import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 import { countOf } from "./count-text.js";
+import {
+  deleteSelectionHeading,
+  categoryDeleteChoices,
+  categoryDeletePaths,
+  categoryDeleteImpact,
+  productCategoryDeleteStyles,
+} from "./product-category-delete.js";
 
 interface OperationDraft {
   destination: string;
@@ -69,6 +75,7 @@ export class ProductBrowser extends LitElement {
     routingPreviewStyles,
     formMessageStyles,
     productAvailabilityFeedbackStyles,
+    productCategoryDeleteStyles,
     css`
       :host {
         display: block;
@@ -82,23 +89,6 @@ export class ProductBrowser extends LitElement {
         gap: var(--wt-space-2);
         padding: var(--wt-space-3) 0;
       }
-      fieldset {
-        margin: var(--wt-space-4) 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      .radio {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-      }
-      input[type="radio"] {
-        flex-shrink: 0;
-        margin: 0;
-        accent-color: var(--wt-color-primary);
-      }
       .delete-extra-lists {
         overflow-wrap: anywhere;
       }
@@ -110,9 +100,6 @@ export class ProductBrowser extends LitElement {
       }
       .operation-footer {
         width: 100%;
-      }
-      .deleting {
-        overflow-wrap: anywhere;
       }
       wt-input {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
@@ -256,14 +243,10 @@ export class ProductBrowser extends LitElement {
       [
         "operation",
         "destination",
-        "contents",
-        "summaries",
         "operationSelection",
         "categories",
         "products",
         "routing",
-        "summaryLoading",
-        "summaryFailed",
         "operationBusy",
       ].some((key) => changed.has(key)) &&
       !this.operationBusy
@@ -389,17 +372,12 @@ export class ProductBrowser extends LitElement {
     };
   }
   #routingChange(): ProductItemsChange | null {
-    if (!this.operation || this.summaryLoading || this.summaryFailed) return null;
-    if (this.operation === "move")
-      return this.destination
-        ? {
-            kind: "move",
-            selection: this.operationSelection,
-            to: this.destination === "top" ? null : this.destination,
-          }
-        : null;
-    return this.operationSelection.categoryIds.length
-      ? { kind: "delete", selection: this.operationSelection, contents: this.#contentsChoice() }
+    return this.operation === "move" && this.destination
+      ? {
+          kind: "move",
+          selection: this.operationSelection,
+          to: this.destination === "top" ? null : this.destination,
+        }
       : null;
   }
   get #routingReady(): boolean {
@@ -573,7 +551,7 @@ export class ProductBrowser extends LitElement {
           this.operation = operation;
           const fresh = await this.#readAgain();
           if (fresh) {
-            this.operationError = this.#showsSame(fresh)
+            this.operationError = this.#summaryMatches(fresh, "contents")
               ? t("folders.changed_unshown")
               : codeMessage("category.contents_changed");
             this.summaries = fresh;
@@ -615,84 +593,50 @@ export class ProductBrowser extends LitElement {
     }
     return fresh as FolderSummary[];
   }
-  /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead. The delete sends this read's counts, disabled products included,
-   * for the server to check against. */
+  /** Require another confirmation if contents or routing changed. Pass the entire fresh summary
+   * to the delete request so the server can also check changes after this read. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
-    const same = this.#showsSame(fresh);
+    const same = this.#summaryMatches(fresh, "contents-and-routing");
     this.summaries = fresh;
     if (same) return true;
     this.operationError = t("folders.summary_changed");
     return false;
   }
-  /** A change in disabled products alone is not compared: the dialog neither counts them nor asks
-   * about them. */
-  #showsSame(fresh: readonly FolderSummary[]): boolean {
+  #summaryMatches(
+    fresh: readonly FolderSummary[],
+    scope: "contents" | "contents-and-routing",
+  ): boolean {
     return fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
         summary.folders === shown.folders &&
         summary.activeProducts === shown.activeProducts &&
-        summary.routes === shown.routes &&
-        summary.ownRoutes === shown.ownRoutes
+        (scope === "contents" ||
+          (summary.routes === shown.routes && summary.ownRoutes === shown.ownRoutes))
       );
     });
   }
-  /** Disabled products move up whichever answer is chosen, so they alone ask nothing. */
-  #asksContents(): boolean {
-    return this.summaries.some((summary) => summary.folders > 0 || summary.activeProducts > 0);
+  #contentsImpact() {
+    return categoryDeleteImpact(
+      this.operationSelection,
+      this.summaries,
+      this.categories,
+      this.products,
+    );
   }
   #contentsChoice(): FolderContents {
-    return this.#asksContents() ? this.contents : "move_up";
+    if (this.contents === "move_up") return "move_up";
+    const { folders, active } = this.#contentsImpact();
+    return folders || active ? "delete" : "move_up";
   }
-  /** Where the contents of the outermost selected categories go: their parent when they share one. */
-  #contentsParent(roots: readonly FolderSummary[]): string {
-    const byId = new Map(this.categories.map((category) => [category.id, category]));
-    const parents = new Set(
-      roots.map(({ id }) => {
-        const parentId = byId.get(id)?.parentId ?? null;
-        return parentId !== null && byId.has(parentId) ? parentId : null;
-      }),
-    );
-    if (parents.size > 1) return t("folders.each_parent");
-    const [parentId] = parents;
-    return parentId ? categoryPath(byId.get(parentId)!, this.categories) : t("categories.none");
-  }
-  /** Each category's path, numbered where others share it in the order the list draws them: depth
-   * first, with siblings in `categories` order, which is how the table breaks a tie in its sort. */
-  #namedPaths(ids: readonly string[]): string[] {
-    const known = new Set(this.categories.map(({ id }) => id));
-    const children = new Map<string | null, CategorySummary[]>();
-    for (const category of this.categories) {
-      const parent =
-        category.parentId !== null && known.has(category.parentId) ? category.parentId : null;
-      (children.get(parent) ?? children.set(parent, []).get(parent)!).push(category);
-    }
-    const sharing = new Map<string, string[]>();
-    const pathOf = new Map<string, string>();
-    const walk = (parentId: string | null): void => {
-      for (const category of children.get(parentId) ?? []) {
-        if (pathOf.has(category.id)) continue;
-        const path = categoryPath(category, this.categories);
-        pathOf.set(category.id, path);
-        (sharing.get(path) ?? sharing.set(path, []).get(path)!).push(category.id);
-        walk(category.id);
-      }
-    };
-    walk(null);
-    return ids.map((id) => {
-      const path = pathOf.get(id) ?? "";
-      const same = sharing.get(path) ?? [];
-      if (same.length < 2) return path;
-      return fill("folders.path_ordinal", {
-        path,
-        position: String(same.indexOf(id) + 1),
-        total: String(same.length),
-      });
-    });
+  #chooseContents(event: Event): void {
+    const radio = event.currentTarget as HTMLInputElement;
+    if (!radio.isConnected || this.operationBusy || this.operation !== "delete") return;
+    this.contents = radio.value === "delete" ? "delete" : "move_up";
+    this.#operationScope?.changed();
   }
   #operationDialog() {
     if (!this.operation) return nothing;
@@ -705,50 +649,14 @@ export class ProductBrowser extends LitElement {
       { value: "top", label: t("categories.none") },
       ...categoryTree(this.categories).filter(({ value }) => !excluded.has(value)),
     ];
-    const rootSummaries = this.summaries.filter(
-      (summary) =>
-        !selection.categoryIds.some(
-          (id) => id !== summary.id && categoryWithDescendants(id, this.categories).has(summary.id),
-        ),
-    );
-    const totals = rootSummaries.reduce(
-      (sum, summary) => ({
-        folders: sum.folders + summary.folders,
-        active: sum.active + summary.activeProducts,
-        routes: sum.routes + summary.routes,
-      }),
-      { folders: 0, active: 0, routes: 0 },
-    );
-    const ownRoutes = this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0);
-    const innerRoutes = Math.max(0, totals.routes - ownRoutes);
-    const parent = this.#contentsParent(rootSummaries);
-    const folderCount = countOf("folders.count", totals.folders);
-    const productCount = countOf("folders.product_count", totals.active);
-    const moving = [
-      ...(totals.folders ? [folderCount] : []),
-      ...(totals.active ? [productCount] : []),
-    ];
-    const keepLabel = fill(
-      totals.folders + totals.active === 1 ? "folders.contents_keep_one" : "folders.contents_keep",
-      { items: conjunctionList(moving), parent },
-    );
-    const deleted = [
-      ...(totals.folders ? [folderCount] : []),
-      ...(innerRoutes ? [countOf("folders.route_count", innerRoutes)] : []),
-      ...(totals.active ? [productCount] : []),
-    ];
-    const deleteLabel = fill("folders.contents_also", {
-      actions: fill("folders.also_deletes", { items: conjunctionList(deleted) }),
-    });
-    const heading = countOf(
+    const categoryDelete = this.operation === "delete" && selection.categoryIds.length > 0;
+    const impact = categoryDelete ? this.#contentsImpact() : null;
+    const heading =
       this.operation === "move"
-        ? "folders.move_heading"
-        : selection.categoryIds.length
-          ? "folders.delete_heading"
-          : "folders.delete_products_heading",
-      count,
-    );
-    const deletesContents = this.#contentsChoice() === "delete";
+        ? countOf("folders.move_heading", count)
+        : deleteSelectionHeading(selection, this.categories, this.products);
+    const deletesContents =
+      impact !== null && (impact.folders > 0 || impact.active > 0) && this.contents === "delete";
     const deletingCount = this.#productsToDelete.length;
     const offMenus = deletingCount
       ? offMenusSentence(
@@ -771,8 +679,8 @@ export class ProductBrowser extends LitElement {
       "",
     );
     return html`<wt-modal
-      size=${this.routingPreview?.moves.length ? "wide" : "compact"}
-      .height=${this.routingPreview?.moves.length ? "medium" : undefined}
+      size=${this.operation === "move" && this.routingPreview?.moves.length ? "wide" : "compact"}
+      .height=${this.operation === "move" && this.routingPreview?.moves.length ? "medium" : undefined}
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}
@@ -822,73 +730,29 @@ export class ProductBrowser extends LitElement {
                 ${
                   selection.productIds.length
                     ? html`<p>
-                        ${t("folders.delete_products_body")} ${deletesContents ? nothing : offMenus}
+                        ${t(categoryDelete ? "folders.delete_contents_warning" : "folders.delete_products_body")}
+                        ${deletesContents ? nothing : offMenus}
                       </p>`
                     : nothing
                 }
-                ${
-                  selection.categoryIds.length
-                    ? html`<p>${t("folders.deleting")}</p>
-                        <ul class="deleting" data-test="deleting">
-                          ${this.#namedPaths(selection.categoryIds).map((name) => html`<li>${name}</li>`)}
-                        </ul>`
-                    : nothing
-                }
+                ${categoryDelete ? categoryDeletePaths(selection, this.categories) : nothing}
                 ${this.summaryLoading ? html`<wt-spinner></wt-spinner>` : nothing}
                 ${
-                  selection.categoryIds.length && !this.summaryLoading && !this.summaryFailed
-                    ? html`${
-                        this.#asksContents()
-                          ? html`<fieldset .disabled=${this.operationBusy}>
-                                <legend>${t("folders.contents_question")} *</legend>
-                                <label class="radio"
-                                  ><input
-                                    type="radio"
-                                    name="contents"
-                                    required
-                                    value="move_up"
-                                    .checked=${this.contents === "move_up"}
-                                    @change=${(event: Event) => {
-                                      if (
-                                        !(event.currentTarget as HTMLElement).isConnected ||
-                                        this.operationBusy ||
-                                        !this.operation
-                                      )
-                                        return;
-                                      this.contents = "move_up";
-                                      this.#operationScope?.changed();
-                                    }}
-                                  />${keepLabel}</label
-                                >
-                                <label class="radio"
-                                  ><input
-                                    type="radio"
-                                    name="contents"
-                                    required
-                                    value="delete"
-                                    .checked=${this.contents === "delete"}
-                                    @change=${(event: Event) => {
-                                      if (
-                                        !(event.currentTarget as HTMLElement).isConnected ||
-                                        this.operationBusy ||
-                                        !this.operation
-                                      )
-                                        return;
-                                      this.contents = "delete";
-                                      this.#operationScope?.changed();
-                                    }}
-                                  />${deleteLabel}</label
-                                >
-                              </fieldset>
-                              ${
-                                deletesContents && deletingCount
-                                  ? html`${!selection.productIds.length ? html`<p>${t("folders.delete_products_body")}</p>` : nothing}
-                                    ${offMenus ? html`<p>${offMenus}</p>` : nothing}`
-                                  : nothing
-                              }`
-                          : nothing
-                      }
-                      ${ownRoutes ? html`<p>${countOf("folders.routes_warning", ownRoutes)}</p>` : nothing}`
+                  impact && !this.summaryLoading && !this.summaryFailed
+                    ? categoryDeleteChoices(
+                        selection,
+                        this.categories,
+                        impact,
+                        this.contents,
+                        this.operationBusy,
+                        (event) => this.#chooseContents(event),
+                      )
+                    : nothing
+                }
+                ${
+                  deletesContents
+                    ? html`${!selection.productIds.length ? html`<p>${t("folders.delete_contents_warning")}</p>` : nothing}
+                      ${offMenus ? html`<p>${offMenus}</p>` : nothing}`
                     : nothing
                 }
               `
@@ -898,11 +762,15 @@ export class ProductBrowser extends LitElement {
             ? deleteExtraListWarning(this.products, this.#productsToDelete, this.extraLists)
             : nothing
         }
-        <div data-test="folder-routing-preview">
-          ${this.previewBusy ? html`<p role="status">${t("folders.preview_loading")}</p>` : nothing}
-          ${this.routingPreview ? routingPreviewTable(this.routingPreview) : nothing}
-          ${this.previewRetry ? html`<wt-button data-test="retry-routing-preview" variant="secondary" @click=${() => void this.#readRoutingPreview()}>${t("folders.preview_retry")}</wt-button>` : nothing}
-        </div>
+        ${
+          this.operation === "move"
+            ? html`<div data-test="folder-routing-preview">
+                ${this.previewBusy ? html`<p role="status">${t("folders.preview_loading")}</p>` : nothing}
+                ${this.routingPreview ? routingPreviewTable(this.routingPreview) : nothing}
+                ${this.previewRetry ? html`<wt-button data-test="retry-routing-preview" variant="secondary" @click=${() => void this.#readRoutingPreview()}>${t("folders.preview_retry")}</wt-button>` : nothing}
+              </div>`
+            : nothing
+        }
       </form>
       <div slot="footer" class="operation-footer">
         ${formMessage(bottom)}

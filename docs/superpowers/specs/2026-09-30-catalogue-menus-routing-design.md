@@ -515,6 +515,8 @@ Approved R6 leaves folder move/delete routing previews as a backlog gap: deletio
 removed, but neither action lists products whose station changes._
 
 _2026-11-17: folder Move to/delete previews are implemented by the [folder preview plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-17-d-folder-routing-preview.md); dragging remains outside that change._
+_2026-11-25: the [Products redesign](2026-11-24-products-list-redesign-design.md) removes the
+Delete routing preview. Move still previews routing changes._
 
 _2026-11-21. The [follow-up plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-d-product-folder-routing-preview.md)
 covers product-only Move to… and drops that include a category._

@@ -460,7 +460,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The Products list: dishes first, a List and a Tree (owner, 2026-11-24).** The redesign still
   needs the Available filter, category sorting and filtered opening, the List and view switch,
-  Add product and phone layout, the editor’s Category field and Back, and bulk availability.
+  Add product and phone layout, the editor's Category field and Add category, browser Back,
+  and bulk availability.
   [Design](superpowers/specs/2026-11-24-products-list-redesign-design.md)
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
