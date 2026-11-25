@@ -177,7 +177,7 @@ export class SalesScreen extends LitElement {
         font-weight: var(--wt-font-weight-normal);
       }
       tr.direct th {
-        font-style: italic;
+        color: var(--wt-color-text-muted);
       }
       .path {
         color: var(--wt-color-text-muted);

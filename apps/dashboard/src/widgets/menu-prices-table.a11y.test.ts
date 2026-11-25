@@ -143,7 +143,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("draws a set price bold and upright and an inherited one as a muted italic placeholder", async () => {
+  it("draws a set price bold and an inherited one as a muted placeholder", async () => {
     const { el, host } = await mount(theme, {});
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -156,8 +156,9 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     expect(Number(getComputedStyle(set).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(inherited).fontWeight),
     );
-    expect(getComputedStyle(inherited, "::placeholder").fontStyle).toBe("italic");
-    expect(getComputedStyle(set).fontStyle).toBe("normal");
+    el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(inherited, "::placeholder").color).toBe("rgb(7, 8, 9)");
+    el.style.removeProperty("--wt-color-text-muted");
     await expectNoA11yViolations(host);
   });
 

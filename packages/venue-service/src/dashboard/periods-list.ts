@@ -137,7 +137,6 @@ export class PeriodsList extends LitElement {
       ${chipTints}
       wt-data-table::part(default-mark) {
         color: var(--wt-color-text-muted);
-        font-style: italic;
       }
       .parent {
         color: var(--wt-color-primary-text);

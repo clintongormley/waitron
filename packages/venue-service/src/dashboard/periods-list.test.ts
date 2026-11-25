@@ -680,7 +680,6 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   expect(fallback.textContent!.replace(/\s+/g, " ").trim()).toBe("House");
   const mark = fallback.querySelector<HTMLElement>("[part~=default-mark]")!;
   expect(mark.textContent!.trim()).toBe("House");
-  expect(getComputedStyle(mark).fontStyle).toBe("italic");
   const probe = document.createElement("span");
   probe.style.color = "var(--wt-color-text-muted)";
   el.shadowRoot!.append(probe);

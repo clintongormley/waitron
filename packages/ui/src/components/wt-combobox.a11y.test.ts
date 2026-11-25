@@ -104,6 +104,29 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  test("inherits a readable value with a named row in the open list", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Course" inherited-suffix="inherited"></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = [
+      { value: "mains", label: "Mains" },
+      { value: "", label: "Inherit: Mains", valueLabel: "Mains", inherited: true },
+    ];
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    const field = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+    const value = getComputedStyle(root.querySelector(".value")!).color;
+    expect(contrastRatio(value, field)).toBeGreaterThanOrEqual(4.5);
+    await expectNoA11yViolations(host);
+    await userEvent.click(root.querySelector(".trigger")!);
+    const row = root.querySelector('[role="option"]')!;
+    expect(row.querySelector(".option-label")!.textContent).toBe("Inherit: Mains");
+    const panel = getComputedStyle(root.querySelector("[popover]")!).backgroundColor;
+    expect(contrastRatio(getComputedStyle(row).color, panel)).toBeGreaterThanOrEqual(4.5);
+    await expectNoA11yViolations(host);
+  });
+
   test("closed, empty", async () => {
     await mountThemed('<wt-combobox label="Dietary tags"></wt-combobox>', theme);
     await expectNoA11yViolations(host);

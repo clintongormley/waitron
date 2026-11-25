@@ -229,7 +229,7 @@ test("a textarea with no hint or error is described by nothing", async () => {
   expect(parts(el).textarea.hasAttribute("aria-describedby")).toBe(false);
 });
 
-test("the hint is the placeholder, italic and muted, and stays the textarea's hidden description", async () => {
+test("the hint is the muted placeholder and stays the textarea's hidden description", async () => {
   const el = await mount('<wt-textarea label="Note" hint="For the kitchen"></wt-textarea>');
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   const { textarea } = parts(el);
@@ -238,7 +238,6 @@ test("the hint is the placeholder, italic and muted, and stays the textarea's hi
   expect(textarea.getAttribute("aria-describedby")).toBe(hint.id);
   expect(hint.textContent).toBe("For the kitchen");
   expect(getComputedStyle(hint).position).toBe("absolute");
-  expect(getComputedStyle(textarea, "::placeholder").fontStyle).toBe("italic");
   expect(getComputedStyle(textarea, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });
 
@@ -466,4 +465,61 @@ test("typed text has a scalable minimum and respects larger inherited text", asy
     if (rootStyle === null) document.documentElement.removeAttribute("style");
     else document.documentElement.setAttribute("style", rootStyle);
   }
+});
+
+test("shows the inherited note in the native placeholder with its arrow and description", async () => {
+  const el = (await mount(
+    '<wt-textarea label="Note" error="Check the note"></wt-textarea>',
+  )) as HTMLElementTagNameMap["wt-textarea"];
+  el.inherited = { value: "Kitchen note", suffix: "inherited" };
+  await el.updateComplete;
+  const { textarea, field } = parts(el);
+  const arrow = () => el.shadowRoot!.querySelector('wt-icon[name="inherit"]');
+  const description = () =>
+    textarea
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => el.shadowRoot!.getElementById(id)!.textContent!.trim());
+  expect(field.dataset.label).toBe("float");
+  el.placeholder = "Example";
+  await el.updateComplete;
+  expect(textarea.placeholder).toBe("Kitchen note");
+  expect(arrow()?.checkVisibility()).toBe(true);
+  expect(description()).toEqual(["Kitchen note inherited", "Check the note"]);
+
+  el.value = "Kitchen note";
+  await el.updateComplete;
+  expect(textarea.value).toBe("Kitchen note");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Check the note"]);
+
+  el.value = "";
+  el.inherited = { value: "Kitchen note", inTable: true };
+  await el.updateComplete;
+  expect(textarea.placeholder).toBe("Kitchen note");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Kitchen note", "Check the note"]);
+
+  el.inherited = { value: "" };
+  await el.updateComplete;
+  expect(textarea.placeholder).toBe("Example");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["Check the note"]);
+});
+
+test("the inherited arrow sits beside the first line with a hidden label", async () => {
+  const el = (await mount(
+    '<wt-textarea label="Note" hide-label rows="5"></wt-textarea>',
+  )) as HTMLElementTagNameMap["wt-textarea"];
+  el.inherited = { value: "Kitchen note" };
+  await el.updateComplete;
+  const { textarea } = parts(el);
+  const arrow = el.shadowRoot!.querySelector('wt-icon[name="inherit"]')!;
+  const box = arrow.getBoundingClientRect();
+  const style = getComputedStyle(textarea);
+  const firstLineTop = textarea.getBoundingClientRect().top + parseFloat(style.paddingTop);
+  expect(box.height).toBeGreaterThan(0);
+  const centre = box.top + box.height / 2;
+  expect(centre).toBeGreaterThanOrEqual(firstLineTop);
+  expect(centre).toBeLessThan(firstLineTop + parseFloat(style.fontSize));
 });

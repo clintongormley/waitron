@@ -927,13 +927,13 @@ Details' closed line shows only what is set: one row per group with something se
 two lines with a hanging indent, which can hide a later value in that row, so opening the section
 is what shows every value. Allergens always has a row: its list, "None" once reviewed with none, or
 "Not yet reviewed" in the warning colour. On a variant's page, the course, description, allergens
-and diet labels the variant inherits show the parent's value there in italic, and the course and
+and diet labels the variant inherits show the parent's value there, and the course and
 description show it as their field's placeholder too. The diet labels implied by a chosen one
-follow the chosen labels, not in italic.
+follow the chosen labels.
 
 In Allergens and diet you choose “Contains none of the 14” to record a reviewed empty allergen set.
 A variant's “Same as {parent}” keeps its allergens inherited and shows its parent's choices as
-read-only italic chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
+muted, read-only chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
 Selecting a diet label starts the variant's own diet, replacing the inherited preview. Labels
 implied by another own choice are shown as quiet, read-only ticked chips without adding them to
 your saved declarations. A label already stored explicitly stays there when you remove its

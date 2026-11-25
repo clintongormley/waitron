@@ -343,7 +343,7 @@ be found is solid teal from the start.
   focus ring.
 - **Error:** a red bottom line and the error under the field; one short message above the form's
   buttons.
-- **Placeholder and hints:** muted ink, italic.
+- **Placeholder and hints:** muted ink, upright.
 
 ### Navigation
 

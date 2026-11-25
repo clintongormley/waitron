@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { currencySymbol } from "@waitron/shared";
 import { WtInput, type InputFieldDecoration } from "@waitron/ui-core/components/wt-input";
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
+import { inheritArrow } from "@waitron/ui-core/field-styles";
 import { disabledStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -39,6 +40,7 @@ export class WtPriceInput extends WtInput {
       /* Beside a unit button the label sits in the amount box, so a long one stops at the button
          rather than under it; beside a fixed unit it sits in the field box and spans past it. */
       .amount-box {
+        --amount-end-inset: var(--wt-space-3);
         position: relative;
         display: flex;
         flex: 1;
@@ -56,15 +58,19 @@ export class WtPriceInput extends WtInput {
 
       .field-control {
         flex: 1;
-        width: var(--wt-price-field-width);
+        --amount-width: var(--wt-price-field-width);
+        width: var(--amount-width);
         min-width: var(--wt-tap-min);
+        padding-inline-end: var(--amount-end-inset);
       }
 
       /* Text padding and field-width growth use separate measurements so width growth can
          wait for the next frame while the field's width rule still applies. */
       .before .field-control,
       .after .field-control {
-        width: calc(var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1));
+        --amount-width: calc(
+          var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1)
+        );
       }
 
       .before .field-control {
@@ -75,9 +81,36 @@ export class WtPriceInput extends WtInput {
 
       .after .field-control {
         padding-inline-end: calc(
-          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
+          var(--amount-end-inset) + var(--currency-width, 0px) + var(--wt-space-1)
         );
         text-align: end;
+      }
+
+      .before .inherit-cue {
+        inset-inline-start: calc(
+          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
+        );
+      }
+
+      .before .field-control:placeholder-shown:has(+ .inherit-cue) {
+        padding-inline-start: calc(
+          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1) +
+            var(--wt-font-size-sm) + var(--wt-space-1)
+        );
+      }
+
+      .after .inherit-cue {
+        inset-inline: var(--wt-space-3)
+          calc(var(--amount-end-inset) + var(--currency-width, 0px) + var(--wt-space-1));
+        justify-content: flex-end;
+        font-size: var(--wt-text-control-font-size);
+        overflow: hidden;
+      }
+
+      .inherit-width {
+        visibility: hidden;
+        text-wrap: nowrap;
+        overflow: hidden;
       }
 
       /* The sign and a fixed unit take the amount's block padding, so they sit on its text line. */
@@ -112,18 +145,32 @@ export class WtPriceInput extends WtInput {
       }
 
       .after .currency {
-        inset-inline-end: var(--wt-space-3);
+        inset-inline-end: var(--amount-end-inset);
       }
 
       span.unit {
         flex: none;
         align-self: stretch;
         padding-inline: var(--wt-space-2);
-        color: var(--wt-color-text);
+        color: var(--wt-color-text-muted);
       }
 
-      .field[data-disabled] span.unit {
-        color: var(--wt-color-text-muted);
+      /* Compact cells keep the same amount width across rows, including when the unit wraps. */
+      @supports (field-sizing: content) {
+        .fixed[data-label="float"]:not([data-compact]) .amount-box {
+          --amount-end-inset: 0px;
+        }
+
+        .fixed[data-label="float"]:not([data-compact]) .field-control {
+          field-sizing: content;
+          width: auto;
+          min-width: 0;
+          max-width: var(--amount-width);
+        }
+
+        .fixed[data-label="float"]:not([data-compact]) span.unit {
+          padding-inline-start: var(--wt-space-1);
+        }
       }
 
       /* A unit too long for the field gives up width before the amount does; its text is cut with
@@ -181,7 +228,6 @@ export class WtPriceInput extends WtInput {
 
       :host([overriding]) .field-control {
         font-weight: var(--wt-font-weight-bold);
-        font-style: normal;
       }
 
       :host([overriding]) .field:not([data-disabled])::before {
@@ -315,7 +361,11 @@ export class WtPriceInput extends WtInput {
       fieldClass: this.showsFixedUnit ? "fixed" : undefined,
       inputPart: "amount",
       autocomplete: "off",
-      placeholder: formatDecimalInput(this.placeholder || this.hint, this.inputLocale) || nothing,
+      placeholder:
+        formatDecimalInput(
+          this.inherited?.value || this.placeholder || this.hint,
+          this.inputLocale,
+        ) || nothing,
       extraDescriptionIds: [
         ...(this.locale ? [this.currencyId] : []),
         ...(this.showsFixedUnit ? [this.unitId] : []),
@@ -323,6 +373,15 @@ export class WtPriceInput extends WtInput {
       endClass: "price-end",
       end: this.renderUnit(),
     };
+  }
+
+  protected override renderInheritedCue(): TemplateResult {
+    const after = this.locale && currencySymbol(this.locale).side === "after";
+    const widthText =
+      after && this.inherited
+        ? formatDecimalInput(this.inherited.value, this.inputLocale)
+        : undefined;
+    return inheritArrow(widthText);
   }
 
   protected override renderFieldContents(

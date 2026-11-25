@@ -1288,7 +1288,7 @@ describe("venue-routing-grid", () => {
       await named(bread).toHaveAccessibleName(
         spoken("Bread, Terrace: No preparation, set here. Staff lunch: Bar"),
       );
-      // Inherited in the Every zone column: muted, not italic, with the deciding cell's lines.
+      // Inherited in the Every zone column: muted, with the deciding cell's lines.
       await openAll(el);
       await el.updateComplete;
       const cola = combo(el, "p:cola", "every")!;
@@ -1526,23 +1526,21 @@ describe("venue-routing-grid", () => {
       await mounted.el.updateComplete;
       return mounted;
     };
-    const lineStyles = (el: RoutingGrid, row: string, zone: string) =>
-      [...combo(el, row, zone)!.querySelectorAll(".line")].map((line) => {
-        const style = getComputedStyle(line);
-        return { italic: style.fontStyle === "italic", color: style.color };
-      });
+    const lineColors = (el: RoutingGrid, row: string, zone: string) =>
+      [...combo(el, row, zone)!.querySelectorAll(".line")].map(
+        (line) => getComputedStyle(line).color,
+      );
 
-    it("draws inherited lines muted, as the inherited station above them, and italic where a zone cell differs", async () => {
+    it("draws inherited lines muted, including where a zone cell differs", async () => {
       const { el } = await expanded(withCola());
       const mojito = combo(el, "p:mojito", "every")!.querySelector(".station")!;
       const muted = getComputedStyle(mojito).color;
       expect(lines(el, "p:mojito", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: false, color: muted }]);
-      const own = lineStyles(el, "p:cola", "every");
+      expect(lineColors(el, "p:mojito", "every")).toEqual([muted]);
+      const own = lineColors(el, "p:cola", "every");
       expect(own).toHaveLength(1);
-      expect(own[0]!.italic).toBe(false);
-      expect(own[0]!.color).not.toBe(muted);
-      // Drinks × Terrace differs from Drinks × Every zone, so Cola × Terrace draws it, italic.
+      expect(own[0]).not.toBe(muted);
+      // Drinks × Terrace differs from Drinks × Every zone, so Cola × Terrace draws it in muted ink.
       el.model = {
         ...timed(),
         cells: [
@@ -1559,8 +1557,8 @@ describe("venue-routing-grid", () => {
       const differs = combo(el, "p:cola", "terrace")!;
       expect(styleOf(differs)).toBe("differs");
       expect(lines(el, "p:cola", "terrace")).toEqual(["Lunch: Bar"]);
-      expect(lineStyles(el, "p:cola", "terrace")).toEqual([{ italic: true, color: muted }]);
-      expect(getComputedStyle(differs.querySelector(".station")!).fontStyle).toBe("italic");
+      expect(lineColors(el, "p:cola", "terrace")).toEqual([muted]);
+      expect(getComputedStyle(differs.querySelector(".station")!).color).toBe(muted);
     });
 
     it("draws a waiting choice's own lines with its station, not the saved lines", async () => {
@@ -1591,7 +1589,9 @@ describe("venue-routing-grid", () => {
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(false);
+      expect(lineColors(el, "p:cola", "every")).toEqual([
+        getComputedStyle(cola.querySelector(".station")!).color,
+      ]);
       await named(cola).toHaveAccessibleName(
         spoken("Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen"),
       );

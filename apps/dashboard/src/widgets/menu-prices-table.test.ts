@@ -1623,7 +1623,7 @@ describe("variants", () => {
       expect(input.placeholder).toBe(shown);
       const style = getComputedStyle(input);
       const context = document.createElement("canvas").getContext("2d")!;
-      // The placeholder's own font, which is italic and wider than the amount's.
+      // Measure the text in the placeholder's own font.
       context.font = getComputedStyle(input, "::placeholder").font;
       const room =
         input.getBoundingClientRect().width -

@@ -1843,7 +1843,7 @@ test("a focused invalid trigger keeps the danger line and label", async () => {
   expect(getComputedStyle(label!).color).toBe("rgb(13, 14, 15)");
 });
 
-test("the chosen label paints from the field-value token, and the placeholder muted and italic", async () => {
+test("the chosen label paints from the field-value token, and the placeholder muted", async () => {
   const chosen = await mountWith('<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>');
   host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
   expect(getComputedStyle(fieldParts(chosen).value).color).toBe("rgb(31, 32, 33)");
@@ -1854,7 +1854,6 @@ test("the chosen label paints from the field-value token, and the placeholder mu
   );
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   expect(getComputedStyle(fieldParts(empty).value).color).toBe("rgb(7, 8, 9)");
-  expect(getComputedStyle(fieldParts(empty).value).fontStyle).toBe("italic");
 });
 
 test("each row is the dropdown row height tall, and a hovered row paints the page background", async () => {
@@ -4339,3 +4338,120 @@ test("search text keeps a 16px minimum and follows doubled browser text", async 
     else document.documentElement.setAttribute("style", rootStyle);
   }
 });
+
+const inheritNone: ComboboxOption = {
+  value: "",
+  label: "Heredar: Ninguno",
+  valueLabel: "Ninguno",
+  inherited: true,
+};
+const explicitNone = { value: "none", label: "Ninguno" };
+
+test.each(["field", "link"] as const)(
+  "the %s shows a distinct inherited choice even with a hidden label",
+  async (appearance) => {
+    const { el, trigger } = await mountCombobox(
+      `<wt-combobox label="Course" hide-label appearance="${appearance}" placeholder="Choose"></wt-combobox>`,
+    );
+    el.options = [explicitNone, inheritNone];
+    el.inheritedSuffix = "heredado";
+    await el.updateComplete;
+    const arrow = () => trigger.querySelector('wt-icon[name="inherit"]');
+    const description = () =>
+      trigger
+        .getAttribute("aria-describedby")
+        ?.split(" ")
+        .map((id) => el.shadowRoot!.getElementById(id)?.textContent?.trim());
+    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+    expect(arrow()?.checkVisibility()).toBe(true);
+    expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(arrow()!).color).toBe(mutedTokenColour());
+    expect(getComputedStyle(trigger.querySelector(".value")!).color).toBe(mutedTokenColour());
+    expect(description()).toEqual(["heredado"]);
+
+    el.inTable = true;
+    await el.updateComplete;
+    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+    expect(arrow()?.checkVisibility() ?? false).toBe(false);
+    expect(description()).toEqual(["heredado"]);
+    await userEvent.click(trigger);
+    const inheritRow = optionRows(el)[0]!;
+    const rowArrow = inheritRow.querySelector('wt-icon[name="inherit"]')!;
+    expect(rowArrow.checkVisibility()).toBe(true);
+    expect(getComputedStyle(rowArrow).color).toBe(mutedTokenColour());
+    expect(getComputedStyle(inheritRow).color).toBe(mutedTokenColour());
+    await userEvent.keyboard("{Escape}");
+    el.inTable = false;
+    el.value = "none";
+    await el.updateComplete;
+    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+    expect(arrow()?.checkVisibility() ?? false).toBe(false);
+    expect(description()).toBeUndefined();
+  },
+);
+
+test("keeps the inherit row first during search and Enter picks a matching ordinary choice", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.options = [explicitNone, inheritNone, { value: "mains", label: "Mains" }];
+  await el.updateComplete;
+  trigger.focus();
+  await userEvent.keyboard("ning");
+  expect(optionRows(el).map((row) => row.querySelector(".option-label")!.textContent)).toEqual([
+    "Heredar: Ninguno",
+    "Ninguno",
+  ]);
+  expect(optionRows(el)[0]!.querySelector('wt-icon[name="inherit"]')).not.toBeNull();
+  await userEvent.keyboard("{Enter}");
+  expect(el.value).toBe("none");
+});
+
+test("an unmatched search leaves Enter idle until the inherit row is chosen", async () => {
+  const { el, trigger, popup } = await mountCombobox();
+  el.options = [explicitNone, inheritNone];
+  el.value = "none";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  await userEvent.type(searchBox(el), "zzz");
+  expect(optionRows(el)).toHaveLength(1);
+  expect(optionRows(el)[0]!.querySelector(".option-label")!.textContent).toBe("Heredar: Ninguno");
+  expect(popup.querySelector(".empty")?.textContent).toBe("No results");
+  expect(searchBox(el).getAttribute("aria-activedescendant")).toBeNull();
+  await userEvent.keyboard("{Enter}");
+  expect(el.value).toBe("none");
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  expect(el.value).toBe("");
+});
+
+test("keeps the add action active after an unmatched search with an inherit row", async () => {
+  const { el, trigger } = await mountCombobox();
+  const add = vi.fn();
+  el.addEventListener("wt-combobox-add", add);
+  el.options = [explicitNone, inheritNone];
+  el.allowAdd = true;
+  await el.updateComplete;
+  trigger.focus();
+  await userEvent.keyboard("z");
+  await userEvent.keyboard("{Enter}");
+  expect(add).toHaveBeenCalledOnce();
+  expect(add.mock.calls[0]![0].detail).toEqual({ text: "z" });
+});
+
+test.each([false, true])(
+  "a search refresh chooses the first match if present (%s)",
+  async (hasMatch) => {
+    const { el, trigger, popup } = await mountCombobox();
+    el.options = [inheritNone, { value: "mains", label: "Mains" }];
+    await el.updateComplete;
+    trigger.focus();
+    await userEvent.keyboard("mai");
+    el.options = [
+      inheritNone,
+      hasMatch ? { value: "main-courses", label: "Main courses" } : explicitNone,
+    ];
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    expect(el.value).toBe(hasMatch ? "main-courses" : "");
+    expect(popup.matches(":popover-open")).toBe(!hasMatch);
+  },
+);

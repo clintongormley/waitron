@@ -1,4 +1,5 @@
 import { expect, test, afterEach, onTestFinished } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { stringToCents } from "@waitron/shared";
 import { WtInput } from "@waitron/ui-core/components/wt-input";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
@@ -286,14 +287,12 @@ test("a fixed unit is read out with the field, after any error", async () => {
   expect(input.getAttribute("aria-describedby")).toBe(`${error.id} ${unit.id}`);
 });
 
-test("a fixed unit paints its text from tokens, with no border, and stands as tall as the field", async () => {
+test("a fixed unit has no border and stands as tall as the field", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
-  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
   const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
   const input = el.shadowRoot!.querySelector("input")!;
   const styles = getComputedStyle(unit);
   expect(styles.borderTopStyle).toBe("none");
-  expect(styles.color).toBe("rgb(4, 5, 6)");
   expect(styles.cursor).not.toBe("pointer");
   expect(unit.getBoundingClientRect().height).toBe(input.getBoundingClientRect().height);
 });
@@ -383,7 +382,7 @@ const settled = () =>
   );
 
 async function mountPrice(html: string) {
-  const el = await mount(html);
+  const el = (await mount(html)) as WtPriceInput;
   await settled();
   const input = el.shadowRoot!.querySelector("input")!;
   const currency = el.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]');
@@ -404,17 +403,68 @@ function contentBox(input: HTMLInputElement) {
 }
 
 /** The typed value's box: the text's measured width, placed where the input aligns it. */
-function typedTextBox(input: HTMLInputElement) {
+function typedTextBox(input: HTMLInputElement, text = input.value) {
   const s = getComputedStyle(input);
   const ctx = document.createElement("canvas").getContext("2d")!;
   ctx.font = s.font;
-  const width = ctx.measureText(input.value).width;
+  const width = ctx.measureText(text).width;
   const content = contentBox(input);
   const alignedEnd = s.textAlign === "end" || s.textAlign === "right";
   return alignedEnd
     ? { left: content.right - width, right: content.right }
     : { left: content.left, right: content.left + width };
 }
+
+test.each(["en-GB", "es-ES"])(
+  "a fixed unit follows the displayed price in %s after typing or clearing the amount",
+  async (locale) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input label="Price" locale="${locale}" unit="kg" fixed-unit></wt-price-input>`,
+    );
+    el.inherited = { value: "12.50", suffix: "inherited" };
+    const unit = el.shadowRoot!.querySelector("span.unit")!;
+    for (const value of ["", "5", "1234.50", ""]) {
+      el.value = value;
+      await el.updateComplete;
+      await settled();
+      const price = typedTextBox(input, input.value || input.placeholder);
+      const content = contentBox(input);
+      expect(price.left).toBeGreaterThanOrEqual(content.left - 1);
+      expect(price.right).toBeLessThanOrEqual(content.right + 1);
+      const sign = currency!.getBoundingClientRect();
+      const unitText = document.createRange();
+      unitText.selectNodeContents(unit);
+      const gap = unitText.getBoundingClientRect().left - Math.max(price.right, sign.right);
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThanOrEqual(7);
+    }
+  },
+);
+
+test.each(["5", "10"])(
+  "a fixed percent sign sits next to %s and clicking it focuses the amount",
+  async (value) => {
+    const { el, input } = await mountPrice(
+      `<wt-price-input label="Maximum discount" value="${value}" unit="%" fixed-unit></wt-price-input>`,
+    );
+    const unit = el.shadowRoot!.querySelector("span.unit")!;
+    const drawn = document.createRange();
+    drawn.selectNodeContents(unit);
+    const gap = drawn.getBoundingClientRect().left - typedTextBox(input).right;
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThanOrEqual(8);
+    await userEvent.click(page.elementLocator(unit));
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  },
+);
+
+test("a long price with a fixed unit stays within the configured amount width", async () => {
+  const { input } = await mountPrice(
+    '<wt-price-input label="Price" value="123456789012.50" unit="kg" fixed-unit></wt-price-input>',
+  );
+  host.style.setProperty("--wt-price-field-width", "91px");
+  expect(input.getBoundingClientRect().width).toBe(91);
+});
 
 function expectInsideField(currency: HTMLElement, input: HTMLInputElement) {
   const sign = currency.getBoundingClientRect();
@@ -814,23 +864,13 @@ test("an overriding field draws its value bold and upright, with a primary bar a
   expect(parseFloat(bar.height)).toBeCloseTo(box.getBoundingClientRect().height, 1);
 });
 
-test("an overriding field keeps its value upright inside italic text, where an ordinary field's value turns italic", async () => {
-  const el = await mount(
-    '<wt-price-input label="Set" value="2.50" overriding></wt-price-input><wt-price-input label="Plain" value="3.00"></wt-price-input>',
-  );
-  host.style.fontStyle = "italic";
-  const plain = host.querySelector<WtPriceInput>('wt-price-input[label="Plain"]')!;
-  await plain.updateComplete;
-  expect(getComputedStyle(field(plain).input).fontStyle).toBe("italic");
-  expect(getComputedStyle(field(el).input).fontStyle).toBe("normal");
-});
-
-test("a field that is not overriding draws no bar and its placeholder muted and italic, its value at the inherited weight", async () => {
+test("a field that is not overriding draws no bar and its placeholder muted, its value at the inherited weight", async () => {
   const el = await mount('<wt-price-input label="Price" placeholder="3.00"></wt-price-input>');
   const { field: box, input } = field(el);
   expect(el.hasAttribute("overriding")).toBe(false);
   expect(getComputedStyle(box, "::before").content).toBe("none");
-  expect(getComputedStyle(input, "::placeholder").fontStyle).toBe("italic");
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
   // The control takes `font: inherit` (packages/ui-core/src/field-styles.ts:73).
   expect(getComputedStyle(input).fontWeight).toBe(getComputedStyle(el).fontWeight);
 });
@@ -1035,13 +1075,19 @@ test.each([
   },
 );
 
-test("a fixed unit is drawn as text with no box of its own", async () => {
+test("a fixed unit uses muted ink and the unit button keeps its link colour", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
   host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(10, 11, 12)");
   const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
-  expect(unit.color).toBe("rgb(7, 8, 9)");
+  expect(unit.color).toBe("rgb(10, 11, 12)");
   expect(unit.borderTopStyle).toBe("none");
   expect(unit.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  const selectable = await mount('<wt-price-input unit="kg"></wt-price-input>');
+  host.style.setProperty("--wt-color-primary-text", "rgb(13, 14, 15)");
+  expect(getComputedStyle(selectable.shadowRoot!.querySelector("button.unit")!).color).toBe(
+    "rgb(13, 14, 15)",
+  );
 });
 
 test.each(["", "hide-label"])(
@@ -1466,5 +1512,55 @@ test.each([false, true])(
     context.font = getComputedStyle(input).font;
     const content = contentBox(input);
     expect(context.measureText(shown).width).toBeLessThanOrEqual(content.right - content.left);
+  },
+);
+
+test.each([
+  ["en-GB", "12.50", false],
+  ["es-ES", "12,50", true],
+] as const)(
+  "puts the inherited %s amount and arrow between its currency and unit",
+  async (locale, shown, fixed) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input label="Price" placeholder="Example" unit="kg" locale="${locale}" ${fixed ? "fixed-unit" : ""}></wt-price-input>`,
+    );
+    el.inherited = { value: "12.50", suffix: "inherited" };
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    const arrow = root.querySelector('wt-icon[name="inherit"]');
+    const unit = root.querySelector("slot[name=end] .unit")!;
+    expect(input.placeholder).toBe(shown);
+    expect(input.value).toBe("");
+    expect(arrow?.checkVisibility()).toBe(true);
+    const cue = arrow!.getBoundingClientRect();
+    const widthCopy = root.querySelector(".inherit-width");
+    if (fixed) expect(getComputedStyle(widthCopy!).visibility).toBe("hidden");
+    else expect(widthCopy).toBeNull();
+    const amount = typedTextBox(input, shown);
+    const sign = currency!.getBoundingClientRect();
+    expect(cue.right).toBeLessThanOrEqual(amount.left);
+    expect(cue.left).toBeGreaterThanOrEqual(input.getBoundingClientRect().left);
+    if (fixed) expect(amount.right).toBeLessThanOrEqual(sign.left);
+    else expect(sign.right).toBeLessThanOrEqual(cue.left);
+    expect(Math.max(amount.right, sign.right)).toBeLessThanOrEqual(
+      unit.getBoundingClientRect().left,
+    );
+    const description = input
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => root.getElementById(id)!.textContent!.trim());
+    expect(description).toEqual(
+      fixed ? [`${shown} inherited`, "€", "kg"] : [`${shown} inherited`, "€"],
+    );
+
+    el.inherited = { value: "12.50", inTable: true };
+    await el.updateComplete;
+    expect(input.placeholder).toBe(shown);
+    expect(root.querySelector('wt-icon[name="inherit"]')?.checkVisibility() ?? false).toBe(false);
+
+    el.inherited = { value: "" };
+    await el.updateComplete;
+    expect(input.placeholder).toBe("Example");
+    expect(root.querySelector('wt-icon[name="inherit"]')?.checkVisibility() ?? false).toBe(false);
   },
 );

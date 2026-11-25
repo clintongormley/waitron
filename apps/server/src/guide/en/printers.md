@@ -57,7 +57,7 @@ name and settings. Assign its devices and device profiles again.
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.
 
 In **Devices**, choose **Edit** from the device's row menu.
-Grey italic equipment names inherit the profile's default. Choose a named item to set it on this
+Grey equipment names inherit the profile's default. Choose a named item to set it on this
 device; choose the grey entry again to inherit. The Devices table uses the same style.
 
 Waitron alerts you when a device's battery is low; if its battery reading in **Devices** is grey or says **Not reported**, check its charge on the device itself.

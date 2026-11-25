@@ -2,7 +2,7 @@
 
 ## Consulta el horario de un día {#day-hours}
 
-Abre una fecha para ver cuándo abre cada departamento y zona. Mes y la ventana del día unen los periodos contiguos: **09:00–00:00** indica una apertura continua. Las horas en gris y cursiva siguen el horario del departamento.
+Abre una fecha para ver cuándo abre cada departamento y zona. Mes y la ventana del día unen los periodos contiguos: **09:00–00:00** indica una apertura continua. Las horas en gris siguen el horario del departamento.
 
 Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana del día. En Semana, pulsa el encabezado de un día o cualquiera de sus barras para abrir su horario. Un hueco en las barras de una zona indica que está cerrada durante ese tramo.
 

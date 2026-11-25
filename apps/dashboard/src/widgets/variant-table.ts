@@ -189,9 +189,6 @@ export class VariantTable extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
-      .inherited {
-        font-style: italic;
-      }
       .notice {
         margin: var(--wt-space-2) 0 0;
         color: var(--wt-color-text-muted);

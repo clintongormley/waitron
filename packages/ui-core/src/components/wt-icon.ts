@@ -4,7 +4,9 @@ import { baseStyles } from "../base-styles.js";
 
 export type WtIconSize = "sm" | "md" | "lg";
 
-const registry = new Map<string, string>();
+const registry = new Map<string, string>([
+  ["inherit", "M3 2h1.5v7.25h6.94L8.22 6.03l1.06-1.06 5.03 5.03-5.03 5.03-1.06-1.06 3.22-3.22H3Z"],
+]);
 
 /** Registers icon path data by name. Values are the `d` attribute of a 16x16 SVG path. */
 export function registerIcons(icons: Record<string, string>): void {

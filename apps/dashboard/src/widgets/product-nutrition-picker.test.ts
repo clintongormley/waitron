@@ -144,7 +144,8 @@ it("previews inherited kinds read-only and replaces the parent's entire set on a
   expect(chip(el, "same-as").textContent).toContain("Bread $& <large>");
   expect(chip(el, "same-as").getAttribute("aria-pressed")).toBe("true");
   expect(chip(el, "allergen-gluten").disabled).toBe(true);
-  expect(getComputedStyle(chip(el, "allergen-gluten")).fontStyle).toBe("italic");
+  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(chip(el, "allergen-gluten")).color).toBe("rgb(7, 8, 9)");
   expect(chip(el, "kind-gluten-barley").getAttribute("aria-pressed")).toBe("true");
   expect(chip(el, "kind-gluten-barley").disabled).toBe(true);
   chip(el, "allergen-gluten").dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -204,7 +205,8 @@ it("retains an explicit vegetarian declaration when Vegan is removed", async () 
 
 it("authors an own diet independently and restores dietary inheritance when its last choice is removed", async () => {
   const { el } = await mount({ allergens: null, dietaryDeclarations: null }, { inherited });
-  expect(getComputedStyle(chip(el, "diet-vegan")).fontStyle).toBe("italic");
+  el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(chip(el, "diet-vegan")).color).toBe("rgb(7, 8, 9)");
   await click(el, "diet-halal");
   expect(el.value).toEqual({ allergens: null, dietaryDeclarations: ["halal"] });
   await click(el, "diet-halal");

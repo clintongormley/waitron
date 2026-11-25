@@ -21,6 +21,23 @@ function contrastRatio(a: string, b: string): number {
 }
 
 describe.each(["light", "dark"] as const)("wt-textarea a11y (%s theme)", (theme) => {
+  test("inherited value is readable", async () => {
+    const el = (await mountThemed(
+      '<wt-textarea label="Name"></wt-textarea>',
+      theme,
+    )) as HTMLElementTagNameMap["wt-textarea"];
+    el.inherited = { value: "Kitchen note", suffix: "inherited" };
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    const text = getComputedStyle(root.querySelector("textarea")!, "::placeholder").color;
+    const arrow = getComputedStyle(root.querySelector('wt-icon[name="inherit"]')!).color;
+    const fill = getComputedStyle(root.querySelector(".field")!).backgroundColor;
+    expect(contrastRatio(text, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(arrow).toBe(text);
+    expect(contrastRatio(arrow, fill)).toBeGreaterThanOrEqual(3);
+    await expectNoA11yViolations(host);
+  });
+
   test("resting label in an empty textarea", async () => {
     await mountThemed('<wt-textarea label="Kitchen note"></wt-textarea>', theme);
     await expectNoA11yViolations(host);

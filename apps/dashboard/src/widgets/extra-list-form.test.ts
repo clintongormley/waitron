@@ -1051,7 +1051,7 @@ function namesShown(el: ExtraListForm) {
   };
 }
 
-it("shows the staff name, in italic, for every language on the closed line while each customer-facing name is blank", async () => {
+it("shows the staff name for every language on the closed line while each customer-facing name is blank", async () => {
   const { el, host } = await mount({ value: { ...addons, customerName: null } });
   const submitted = record(host);
 
@@ -1066,10 +1066,6 @@ it("shows the staff name, in italic, for every language on the closed line while
   await section.updateComplete;
   const placeholders = [...section.shadowRoot!.querySelectorAll(".summary-placeholder")];
   expect(placeholders.map((part) => part.textContent)).toEqual(["Add-ons", "Add-ons"]);
-  expect(placeholders.map((part) => getComputedStyle(part).fontStyle)).toEqual([
-    "italic",
-    "italic",
-  ]);
 
   await type(el, "name", "Toppings");
   expect(namesShown(el)).toEqual({

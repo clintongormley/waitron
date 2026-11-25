@@ -3538,7 +3538,7 @@ describe("a product's variants in the list", () => {
     soldOutThin.variants = soldOutThin.variants.map((variant) =>
       variant.id === "thin" ? { ...variant, available: false } : variant,
     );
-    const { table, root } = await mountDeli({
+    const { el, table, root } = await mountDeli({
       products: [soldOutThin],
     });
     await openVariants(root, table, "cecina");
@@ -3557,7 +3557,8 @@ describe("a product's variants in the list", () => {
       t("product.allergens"),
     ).querySelector<HTMLElement>('[data-test="allergen-state"]')!;
     expect(allergens.textContent!.trim()).toBe("Not reviewed");
-    expect(getComputedStyle(allergens).fontStyle).toBe("italic");
+    el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(allergens).color).toBe("rgb(7, 8, 9)");
     expect(
       cellUnder(root, "cecina:thin", t("product.price")).querySelector('[data-test="price"]')!
         .textContent,
@@ -6378,11 +6379,11 @@ it.each(
 
 describe("A668 effective allergen cells", () => {
   it.each([null, {}, { milk: {} }] as Product["allergens"][])(
-    "shows inherited allergen badges in italic for %j",
+    "uses muted ink for inherited allergen badges for %j",
     async (allergens) => {
       showColumns("allergens");
       setLocale("en");
-      const { table, root } = await mountTree({
+      const { el, table, root } = await mountTree({
         categories: [],
         products: [
           product({
@@ -6414,7 +6415,6 @@ describe("A668 effective allergen cells", () => {
       const name = cellUnder(root, "dish", "Name").querySelector<HTMLElement>(
         '[part~="product-cell"]',
       )!;
-      expect(getComputedStyle(name).fontStyle).toBe("normal");
       expect(getComputedStyle(name).display).toBe("block");
       const badge = (key: string) =>
         cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
@@ -6424,13 +6424,15 @@ describe("A668 effective allergen cells", () => {
       expect(badge("dish:small")!.textContent!.trim()).toBe(
         allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
       );
-      expect(getComputedStyle(badge("dish:small")!).fontStyle).toBe("italic");
+      el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+      expect(getComputedStyle(name).color).not.toBe("rgb(7, 8, 9)");
+      expect(getComputedStyle(badge("dish:small")!).color).toBe("rgb(7, 8, 9)");
       expect(badge("dish:own")!.textContent!.trim()).toBe("None");
-      expect(getComputedStyle(badge("dish:own")!).fontStyle).toBe("normal");
+      expect(getComputedStyle(badge("dish:own")!).color).not.toBe("rgb(7, 8, 9)");
       expect(badge("dish")!.textContent!.trim()).toBe(
         allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
       );
-      expect(getComputedStyle(badge("dish")!).fontStyle).toBe("normal");
+      expect(getComputedStyle(badge("dish")!).color).not.toBe("rgb(7, 8, 9)");
     },
   );
   it("filters variants by effective allergen state and retains the pending filter key", async () => {

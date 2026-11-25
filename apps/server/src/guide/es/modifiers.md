@@ -61,7 +61,7 @@ En una lista de opciones y en la ventana de cada opción ves **Nombre**, despué
 y después el encabezado **Nombres para el cliente**, con todos los campos de idioma ya visibles.
 Puedes comparar y editar los nombres sin abrir una sección. Una lista de extras conserva sus
 nombres para el cliente en una sección plegada: abre **Nombres para el cliente** para editarlos.
-Su línea cerrada muestra el nombre de cada idioma, o el nombre al que recurre en cursiva; la sección
+Su línea cerrada muestra el nombre de cada idioma, o el nombre que usa cuando ese campo está vacío; la sección
 se abre cuando hay que corregir un nombre. Consulta [idiomas de
 contenido](content-and-images.md).
 

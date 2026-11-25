@@ -373,6 +373,9 @@ describe("dashboard-sales-screen — category report", () => {
     // A Directly-in row names its category by the whole path, so it needs no path of its own.
     expect(cells[5]!.textContent!.trim()).toBe("Directamente en House kitchen › House starters");
     expect(cells[5]!.querySelector("[data-test=category-path]")).toBeNull();
+    el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+    expect(getComputedStyle(cells[5]!).color).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(cells[6]!).color).not.toBe("rgb(7, 8, 9)");
   });
 
   it("tells two categories with one name apart by their paths, each mode naming its own parents", async () => {
