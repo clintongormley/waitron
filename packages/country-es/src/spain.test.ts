@@ -331,6 +331,7 @@ describe("receipt labels", () => {
       date: "Date",
       vat: "VAT",
       cash: "Cash",
+      cashTendered: "Tendered",
       change: "Change",
       tip: "Tip",
       charged: "Charged",
@@ -358,6 +359,15 @@ describe("receipt labels", () => {
     expect(SPAIN.invoiceLocales).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
     expect(receiptLanguageRules(SPAIN, "28").choices).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES"]);
     expect(receiptLanguageRules(SPAIN, "08").fixed?.locale).toBe("ca-ES");
+  });
+
+  it.each([
+    ["es-ES", "Entregado", "Cambio"],
+    ["ca-ES", "Lliurat", "Canvi"],
+    ["gl-ES", "Entregado", "Cambio"],
+    ["eu-ES", "Emandakoa", "Itzulia"],
+  ])("names the cash handed over and the change in %s", (locale, cashTendered, change) => {
+    expect(SPAIN.receiptLabels?.[locale]).toMatchObject({ cashTendered, change });
   });
 
   it("labels the pack's receipt languages and English", () => {

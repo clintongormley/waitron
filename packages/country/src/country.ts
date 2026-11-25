@@ -80,6 +80,7 @@ export const RECEIPT_LABEL_KEYS = [
   "vat",
   "total",
   "cash",
+  "cashTendered",
   "change",
   "card",
   "deferredPayment",

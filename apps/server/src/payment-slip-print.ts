@@ -10,23 +10,19 @@ import {
   settings,
   taxpayer,
   sales,
-  withTransaction,
-  type Database,
   type Transaction,
 } from "@waitron/db";
-import { cardReaders, payments, type PaymentResult } from "@waitron/payments";
+import { cardReaders, payments } from "@waitron/payments";
 import {
   AppError,
   centsToDecimal,
-  decimalToCents,
-  decimal,
   diskFullIn,
   subtractDecimal,
   timeZoneOffsetMinutes,
-  type Decimal,
 } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import { readReceiptLanguage } from "@waitron/menu";
+import { cashChange } from "./bill-allocation.js";
 import { cardDetailsOf } from "./card-details.js";
 import { optionalDocument, reportOptionalDocumentFailure } from "./optional-document.js";
 import { formatPaymentSlip } from "./payment-slip.js";
@@ -56,17 +52,6 @@ export async function readerSlipWanted(
     if (reader?.printsOwnSlipAutomatically === true) return false;
   }
   return true;
-}
-
-export async function freezeCardSlip(
-  tx: Transaction,
-  cfg: OriginConfig,
-  workingOrderId: string,
-  requested: boolean | undefined,
-  readerId: string | undefined,
-): Promise<CardSlipRequest> {
-  const wanted = await readerSlipWanted(tx, cfg, requested, readerId);
-  return freezeWantedSlip(tx, cfg, workingOrderId, wanted);
 }
 
 export async function freezeWantedSlip(
@@ -167,6 +152,7 @@ async function printSettledPaymentSlip(
         [
           {
             charged: row.applied + row.tip,
+            tendered: null,
             paidAt: settledAt,
             tip: row.tip,
             scheme: provided?.cardScheme ?? null,
@@ -221,6 +207,8 @@ export async function enqueueRequestedPaymentSlip(
     method: "cash" | "card";
     charged: number;
     tip: number;
+    /** The cash handed over, in cents; null for a card. */
+    tendered: number | null;
     paidAt: string;
     reference: string | null;
     machine: string | null;
@@ -249,73 +237,6 @@ export async function enqueueRequestedPaymentSlip(
     },
   );
   return queued === true ? {} : { slipPrintFailed: true };
-}
-
-export async function printCapturedCardSlip(
-  db: Database,
-  cfg: OriginConfig,
-  workingOrderId: string,
-  result: PaymentResult,
-  requested: CardSlipRequest,
-  wholeTip?: Decimal,
-  log?: Logger,
-): Promise<{ slipPrintFailed?: true }> {
-  if (requested === undefined) return {};
-  if (requested === null) return { slipPrintFailed: true };
-  let reason = "enqueue_failed";
-  try {
-    // Money has committed; a printer refusal must not roll back or retry the charge.
-    await withTransaction(db, async (tx) => {
-      const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
-      if (printer?.id !== requested.printerId) {
-        reason = "printer_changed";
-        throw new Error("Payment slip printer changed");
-      }
-      const [payment] = await tx
-        .select()
-        .from(payments)
-        .where(
-          and(eq(payments.provider, result.provider), eq(payments.paymentRef, result.paymentRef)),
-        );
-      if (payment === undefined) {
-        reason = "capture_missing";
-        throw new Error("Captured payment missing");
-      }
-      // A slip prints the payment's time; a capture that records none prints no slip.
-      if (payment.settledAt === null) {
-        reason = "settlement_missing";
-        throw new Error("Captured payment has no settlement instant");
-      }
-      const [bill] =
-        payment.billPaymentId === null
-          ? []
-          : await tx
-              .select({ tip: billPayments.tip })
-              .from(billPayments)
-              .where(eq(billPayments.id, payment.billPaymentId));
-      await enqueueSlips(
-        tx,
-        printer,
-        workingOrderId,
-        [
-          {
-            charged: payment.amount,
-            paidAt: payment.settledAt,
-            tip: bill?.tip ?? decimalToCents(wholeTip ?? decimal("0.00")),
-            scheme: payment.cardScheme,
-            last4: payment.cardLast4,
-            entryMode: payment.cardEntryMode,
-            authCode: payment.cardAuthCode,
-          },
-        ],
-        requested.locale,
-      );
-    });
-    return {};
-  } catch {
-    log?.("warn", "payment.slip_print_failed", { workingOrderId, reason });
-    return { slipPrintFailed: true };
-  }
 }
 
 export async function printReceivedPaymentSlip(
@@ -362,6 +283,7 @@ export async function printReceivedPaymentSlip(
         ...(readerPayment ? {} : { method: payment.method }),
         charged: payment.applied + payment.tip,
         tip: payment.tip,
+        tendered: payment.tendered,
         paidAt: readerPayment ? (provided.settledAt ?? payment.receivedAt) : payment.receivedAt,
         reference: readerPayment ? null : provided?.externalRef,
         machine: readerPayment ? null : provided?.externalMachine,
@@ -386,6 +308,8 @@ async function enqueueSlips(
     reference?: string | null;
     machine?: string | null;
     charged: number;
+    /** The cash handed over, in cents; null for a card. */
+    tendered: number | null;
     paidAt: string;
     tip: number;
     scheme: string | null;
@@ -422,6 +346,13 @@ async function enqueueSlips(
       amount: subtractDecimal(charged, tip),
       charged,
       tip,
+      cash:
+        payment.tendered === null
+          ? null
+          : {
+              tendered: centsToDecimal(payment.tendered),
+              change: cashChange(payment.tendered, payment.charged - payment.tip, payment.tip),
+            },
       ...(payment.method === undefined ? {} : { method: payment.method }),
       reference: payment.reference ?? null,
       machine: payment.machine ?? null,
