@@ -27,7 +27,6 @@ import {
   type FiledInvoice,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "./bill-editing.js";
-import { readFindBill } from "./find-bill-bills.js";
 import type { BillPaymentRequest } from "./bill-payments.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { endMeal } from "./meal-end.js";
@@ -442,40 +441,6 @@ describe("the rest's invoice takes the advances off", () => {
     expect(
       await inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
     ).toEqual([]);
-  });
-
-  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: refused, and Find bills' paid figure does not move", async () => {
-    const bill = await seated("Tasting menu");
-    const advanceId = await advance(bill.billId, "30.00");
-    await printTheBill(bill);
-    const found = () => inTx(venue, (tx) => readFindBill(tx, bill.billId));
-    const before = await found();
-    const [tender] = await inTx(venue, (tx) =>
-      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
-    );
-
-    const given = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${advanceId}/refunds`,
-      {
-        submissionId: randomUUID(),
-        tenderId: tender!.id,
-        appliedAmount: "20.00",
-        tipAmount: "0.00",
-        reason: "Paid too much",
-        override: { personId: venue.adminId, pin: "1234" },
-      },
-    );
-
-    expect(given.status, JSON.stringify(given.json)).toBe(409);
-    expect(given.json).toMatchObject({
-      code: "advance.taken_off_final_invoice",
-      params: { reopenBill: true },
-    });
-    expect(before).toMatchObject({ paid: "30.00" });
-    expect(await found()).toMatchObject({ paid: before.paid, stillOwed: before.stillOwed });
   });
 
   it("example 1 by Print the bill, €50 paid on it: Refund a payment of the advance is refused, telling staff to reopen the bill, and once it is fully paid, refused as on any paid receipt", async () => {

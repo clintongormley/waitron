@@ -7,7 +7,6 @@ import {
   saleSettlements,
   saleSubstitutions,
   saleVoids,
-  unpaidDepartures,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -22,6 +21,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { paidOnIssuedBill } from "./bill-payments.js";
+import { billReopenRefusal } from "./bill-reopen-state.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { readInvoiceNumber, readInvoiceNumbers } from "./stored-order-lines.js";
 
@@ -119,9 +119,10 @@ export async function refundableAdvanceNumbersTakenOffBy(
 /**
  * What Correct invoice on the invoice `finalSaleId` can give back, tips aside: once it is paid, the
  * money its payments still hold, as `invoice_correction.money_short` reads it; while its bill is
- * still being paid, the money paid on it so far. A table's bill still being paid is reopened first
- * (`reopenBill`), even with nothing paid on it, so the advance's money goes back with a corrective
- * on the reopened bill; any other is given back only once it is fully paid (`finalNotFullyPaid`).
+ * still being paid, the money paid on it so far. A bill still being paid whose own state Reopen
+ * bill admits ({@link billReopenRefusal}) is reopened first (`reopenBill`), even with nothing paid
+ * on it, so the advance's money goes back with a corrective on the reopened bill; any other is
+ * given back only once it is fully paid (`finalNotFullyPaid`).
  */
 async function moneyLeftOn(
   tx: Transaction,
@@ -133,19 +134,21 @@ async function moneyLeftOn(
       settled: saleSettlements.id,
       voided: saleVoids.id,
       partyId: workingOrders.partyId,
-      leftUnpaid: unpaidDepartures.workingOrderId,
     })
     .from(sales)
     .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
     .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
     .leftJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId))
-    .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, sales.workingOrderId))
     .where(eq(sales.id, finalSaleId));
   if (sale?.settled === null && sale.voided === null && sale.workingOrderId !== null) {
     const paid = await paidOnIssuedBill(tx, sale.workingOrderId);
-    // Reopen bill's own refusals of a bill away from a table or left unpaid (`refuseSplitBill`).
-    if (sale.partyId !== null && sale.leftUnpaid === null)
-      return { finalMoneyLeft: paid, reopenBill: true };
+    const refusal = await billReopenRefusal(
+      tx,
+      sale.workingOrderId,
+      sale.partyId,
+      brandSaleId(finalSaleId),
+    );
+    if (refusal === undefined) return { finalMoneyLeft: paid, reopenBill: true };
     return compareDecimal(paid, ZERO) > 0
       ? { finalMoneyLeft: paid, finalNotFullyPaid: true }
       : { finalMoneyLeft: ZERO };

@@ -33,7 +33,9 @@ import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.
 import { listAccountantExport } from "./accountant-export.js";
 import { advancesTakenOff } from "./advance-taken-off.js";
 import { readBillAdvances } from "./bill-advances.js";
+import { readBillEditState } from "./bill-editing.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { readFindBill } from "./find-bill-bills.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
 import {
@@ -933,11 +935,16 @@ describe("Giving back an advance on a bill printed, or reopened, after it was ta
     const advanceId = await advance(x, "20.00");
     await print(x);
     await leftUnpaid(x);
+    const found = () => inTx(venue(), (tx) => readFindBill(tx, x));
+    const before = await found();
 
     const given = await plainRefund(advanceId, "20.00");
 
     expect(given.status, JSON.stringify(given.json)).toBe(200);
     expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 2000 }]);
+    // The bill still counts the advance given back: Find bills' paid figure does not move.
+    expect(before).toMatchObject({ paid: "20.00" });
+    expect(await found()).toMatchObject({ paid: before.paid, stillOwed: before.stillOwed });
   });
 
   it("a part-paid printed bill its party left unpaid: Refund a payment on the advance waits until the receipt is fully paid, as before", async () => {
@@ -971,6 +978,45 @@ describe("Giving back an advance on a bill printed, or reopened, after it was ta
     venue().db.run(
       sql`update working_orders set party_id = null, bill_number = null where id = ${x}`,
     );
+
+    const given = await plainRefund(advanceId, "20.00");
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 2000 }]);
+  });
+
+  it("a printed bill whose receipt is a full invoice naming a customer cannot be reopened, so Refund a payment still gives the advance back plainly", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const [bill] = await inTx(venue(), (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, x)),
+    );
+    const chosen = await send(
+      venue().app,
+      venue().cookie,
+      "PUT",
+      `/api/working-orders/${x}/invoice-choice`,
+      {
+        revision: bill!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Harbour Foods",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+        expectedEdit: await inTx(venue(), (tx) => readBillEditState(tx, x)),
+      },
+    );
+    expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
+    await print(x);
+    expect((await fixture.invoiceOf(venue(), x)).counterpartyTaxId).toBe("B12345674");
+    const reopened = await fixture.split(venue(), x, venue().cookie);
+    expect(reopened.status, JSON.stringify(reopened.json)).toBe(409);
+    expect(reopened.json).toMatchObject({ code: "sale.correction_unsupported" });
 
     const given = await plainRefund(advanceId, "20.00");
 
