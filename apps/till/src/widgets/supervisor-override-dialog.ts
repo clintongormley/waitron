@@ -75,6 +75,8 @@ export class TillSupervisorOverrideDialog extends LitElement {
       }
 
       .pad-wrap {
+        inline-size: var(--wt-till-form-column-width);
+        max-inline-size: calc(100% + 2 * (var(--wt-space-5) - var(--wt-modal-inline-padding)));
         margin-inline: calc(var(--wt-modal-inline-padding) - var(--wt-space-5));
       }
 

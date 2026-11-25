@@ -87,40 +87,46 @@ describe("till-supervisor-override-dialog", () => {
     expect(pad(el)!.shadowRoot!.querySelector('[data-key="."]')).toBeNull();
   });
 
-  it("fits Borrar todo on one line and keeps all keypad columns in the phone dialog", async () => {
-    await pageAt(363, 735, 130);
-    const font = await loadPhoneFont();
-    try {
-      const { el, host } = await mount();
-      setLocale("es-ES");
-      host.style.setProperty("--wt-font-family", PHONE_FONT);
-      await pick(el, "sup-1");
-      const keypad = root(el).querySelector("till-numeric-pad")!;
-      await keypad.updateComplete;
-      const dialog = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
-      const clear = keypad.shadowRoot!.querySelector('[data-key="clear"]')!;
-      const clearBox = clear.getBoundingClientRect();
-      const label = "Borrar todo";
-      expect(clear.textContent?.trim()).toBe(label);
-      const text = [...clear.childNodes].find((node) => node.textContent?.includes(label))!;
-      const start = text.textContent!.indexOf(label);
-      const letters = document.createRange();
-      letters.setStart(text, start);
-      letters.setEnd(text, start + label.length);
-      expect(letters.getClientRects()).toHaveLength(1);
-      expect(letters.getBoundingClientRect().left).toBeGreaterThanOrEqual(clearBox.left);
-      expect(letters.getBoundingClientRect().right).toBeLessThanOrEqual(clearBox.right);
-      const bounds = dialog.getBoundingClientRect();
-      for (const key of keypad.shadowRoot!.querySelectorAll("wt-button")) {
-        const box = key.getBoundingClientRect();
-        expect(box.left).toBeGreaterThanOrEqual(bounds.left);
-        expect(box.right).toBeLessThanOrEqual(bounds.right);
+  it.each([
+    { locale: "en-GB", scale: 100, label: "Clear" },
+    { locale: "es-ES", scale: 130, label: es["pad.clear"] },
+  ])(
+    "keeps approval keys wide and their labels on one line at $locale $scale%",
+    async ({ locale, scale, label }) => {
+      await pageAt(363, 735, scale);
+      const font = await loadPhoneFont();
+      try {
+        const { el, host } = await mount();
+        setLocale(locale);
+        host.style.setProperty("--wt-font-family", PHONE_FONT);
+        await pick(el, "sup-1");
+        const keypad = root(el).querySelector("till-numeric-pad")!;
+        await keypad.updateComplete;
+        const dialog = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+        const clear = keypad.shadowRoot!.querySelector('[data-key="clear"]')!;
+        const clearBox = clear.getBoundingClientRect();
+        expect(clear.textContent?.trim()).toBe(label);
+        const text = [...clear.childNodes].find((node) => node.textContent?.includes(label))!;
+        const start = text.textContent!.indexOf(label);
+        const letters = document.createRange();
+        letters.setStart(text, start);
+        letters.setEnd(text, start + label.length);
+        expect(letters.getClientRects()).toHaveLength(1);
+        expect(letters.getBoundingClientRect().left).toBeGreaterThanOrEqual(clearBox.left);
+        expect(letters.getBoundingClientRect().right).toBeLessThanOrEqual(clearBox.right);
+        const bounds = dialog.getBoundingClientRect();
+        for (const key of keypad.shadowRoot!.querySelectorAll("wt-button")) {
+          const box = key.getBoundingClientRect();
+          expect(box.width).toBeGreaterThanOrEqual(90);
+          expect(box.left).toBeGreaterThanOrEqual(bounds.left);
+          expect(box.right).toBeLessThanOrEqual(bounds.right);
+        }
+      } finally {
+        document.fonts.delete(font);
+        await resetPage();
       }
-    } finally {
-      document.fonts.delete(font);
-      await resetPage();
-    }
-  });
+    },
+  );
 
   it("emits override-confirm carrying the picked personId + entered PIN, then wipes the PIN", async () => {
     const { el } = await mount();

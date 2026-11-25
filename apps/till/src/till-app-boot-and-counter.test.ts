@@ -1589,6 +1589,8 @@ describe("till-app session activity", () => {
           fetchImpl: () => new Promise<Response>(() => {}),
         });
       }
+      const hadPageTokens = document.documentElement.hasAttribute("data-wt-theme-root");
+      applyTokens(document.documentElement);
       await pageAt(363, 735, scale);
       const font = await loadPhoneFont();
       try {
@@ -1614,9 +1616,7 @@ describe("till-app session activity", () => {
         await screen.updateComplete;
         const pad = root.querySelector("till-numeric-pad")!;
         await pad.updateComplete;
-        const key = pad
-          .shadowRoot!.querySelector('[data-key="1"]')!
-          .shadowRoot!.querySelector("button")!;
+        const key = pad.shadowRoot!.querySelector('[data-key="1"]')!;
         const submit = root.querySelector<HTMLElement>(".submit")!;
         const status = root.querySelector(".pin-status")!;
         const top = () => key.getBoundingClientRect().top;
@@ -1677,6 +1677,7 @@ describe("till-app session activity", () => {
       } finally {
         document.fonts.delete(font);
         await resetPage();
+        if (!hadPageTokens) document.documentElement.removeAttribute("data-wt-theme-root");
         if (logo) {
           localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
           startVenueTheme(document.documentElement, {

@@ -794,14 +794,18 @@ describe("till-lock-screen", () => {
     expect(query(el, ".error")!.textContent).toContain(t("login.error"));
   });
 
-  it("does not call login when Log in is force-clicked with an empty PIN", async () => {
+  it("does not call login when Log in is force-clicked with fewer than four PIN digits", async () => {
     const login = vi.fn().mockResolvedValue({ personId: "p1" });
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    click(el, ".submit"); // disabled visually; host.click() bypasses that, the guard must not call
+    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
+    click(el, ".submit");
+    await type(el, "123");
+    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
+    click(el, ".submit");
     await flush(el);
     expect(login).not.toHaveBeenCalled();
   });
@@ -1483,28 +1487,15 @@ describe("typing on the sign-in PIN pad with a keyboard", () => {
     expect(login).toHaveBeenCalledExactlyOnceWith("p1", "0123");
   });
 
-  it("requires four digits for Log in by keyboard or button", async () => {
+  it("Enter requires four digits to send a PIN", async () => {
     const api = stubApi();
     const el = await pinFor(api);
-    const submit = query(el, "wt-button.submit") as HTMLElement;
-    expect(submit.hasAttribute("disabled")).toBe(true);
-    await userEvent.keyboard("012");
-    await el.updateComplete;
-    expect(submit.hasAttribute("disabled")).toBe(true);
-    submit.click();
-    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Enter}012{Enter}");
+    await flush(el);
     expect(api.login).not.toHaveBeenCalled();
     await userEvent.keyboard("3{Enter}");
     await flush(el);
     expect(api.login).toHaveBeenCalledExactlyOnceWith("p1", "0123");
-  });
-
-  it("Enter with no PIN logs nobody in", async () => {
-    const api = stubApi();
-    const el = await pinFor(api);
-    await userEvent.keyboard("{Enter}");
-    await flush(el);
-    expect(api.login).not.toHaveBeenCalled();
   });
 
   it("Escape goes back to the list of people", async () => {
