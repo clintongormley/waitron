@@ -6730,7 +6730,8 @@ accepting path run together in `apps/server/src/fiscal-remedy.staff-refund.test.
 sale that has a `sale_voids` row is also refused (`fiscal.remedy_invalid`) while the server's remedy
 policy does not enable `release-held-cancellation`, or while its cancellation is not on this box;
 turning releasing on lifts only the first refusal
-(`packages/fiscal-verifactu/src/record-remedy.test.ts`). Those cases cover this action's admission boundary, not every future queue dependency.
+(`packages/fiscal-verifactu/src/record-remedy.test.ts`). Those cases cover this action's admission
+boundary, not every future queue dependency.
 
 ## Root receipts moved on 2026-11-02
 

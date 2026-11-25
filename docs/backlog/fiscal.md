@@ -397,9 +397,8 @@ cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancel
 (`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
 held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:185-187`), a remedy
 refused for a voided sale while `release-held-cancellation` is off or while its cancellation is not
-on this box (`record-remedy.ts:188-190`). The
-ordinary cancellation it handles is written only by core's `recordVoid`
-(`packages/core/src/record-void.ts`), which no till screen or server route calls
+on this box (`record-remedy.ts:188-190`). The ordinary cancellation it handles is written only by
+core's `recordVoid` (`packages/core/src/record-void.ts`), which no till screen or server route calls
 (`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
 2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the fiscal
 backends' `recordVoid` methods, which core's calls, and the payments package's `recordVoid` are
