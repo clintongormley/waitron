@@ -645,9 +645,16 @@ describe("Pay for items on a printed bill with an advance", () => {
     );
   });
 
-  it("a part payment on the printed bill leaves the reopened bill overpaid, 130.00 of 120.00, and Keep as tip takes none from the advance", async () => {
-    const { party, advancePayment } = await advancedAndPrinted();
+  it("a part payment and then an advance, the bill printed: the reopened bill is overpaid, 130.00 of 120.00, and Keep as tip takes none from the advance, the newest payment", async () => {
+    const party = await seated("tasting", "salad");
     const partPayment = await payInCash(party.tabId, "100.00");
+    const advancePayment = await payInCash(party.tabId, "30.00", true);
+    await printed(party);
+    expect((await fixture.invoiceOf(venue, party.tabId)).total).toBe(11000);
+    // Keep as tip takes from the newest received payment first: the advance's has to be it.
+    const [part, advanced] = await paymentRows(venue, party.tabId);
+    expect([part!.id, advanced!.id]).toEqual([partPayment, advancePayment]);
+    expect(advanced!.receivedAt! > part!.receivedAt!).toBe(true);
 
     const paid = await payItems(
       party.tabId,
@@ -679,8 +686,8 @@ describe("Pay for items on a printed bill with an advance", () => {
       centsToDecimal(row.tip),
     ]);
     expect(money).toEqual([
-      [advancePayment, "30.00", "0.00"],
       [partPayment, "90.00", "10.00"],
+      [advancePayment, "30.00", "0.00"],
     ]);
     expect(await ticketsOf(reopened!)).toEqual([9000]);
   });
