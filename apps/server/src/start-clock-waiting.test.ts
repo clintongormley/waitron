@@ -104,6 +104,7 @@ describe("the restore's waiting app: pages", () => {
       expect(res.headers.get("retry-after")).toBe("60");
       expect(res.headers.get("cache-control")).toBe("no-store");
       expect(res.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(res.headers.get("x-waitron-waiting")).toBe("1");
       const body = await res.text();
       expect(body).toContain(`<html lang="en-GB">`);
       expect(body).toContain(
@@ -146,6 +147,7 @@ describe("the restore's waiting app: pages", () => {
     const res = await app.request(path, { method, headers });
     expect(res.status).toBe(503);
     expect(res.headers.get("retry-after")).toBe("60");
+    expect(res.headers.get("x-waitron-waiting")).toBeNull();
     expect(await res.json()).toEqual({
       error: { code: "server.waiting_for_clock", params: { confirmed: false } },
     });

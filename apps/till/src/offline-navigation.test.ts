@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { commands } from "vitest/browser";
+import type { WaitPage } from "../test/offline-navigation.js";
 import { es } from "./i18n/strings.js";
 import { buildOfflineWorker, buildRetiredOfflineWorker } from "./offline-worker.js";
 
@@ -12,7 +13,7 @@ declare module "vitest/browser" {
       worker: string,
       retired: string,
       path: string,
-      scenario: "reconnect" | "retire",
+      scenario: "reconnect" | "retire" | WaitPage,
       locale?: string,
     ): Promise<unknown>;
   }
@@ -42,7 +43,7 @@ it.each([
     ],
   },
 ])(
-  "reopens $path with fresh content after a connection loss and upgrade",
+  "reopens $path after a connection loss, recovery and upgrade",
   async ({ path, locale, heading, paragraphs }) => {
     expect(
       await commands.probeOfflineNavigation(worker, retired, path, "reconnect", locale),
@@ -60,7 +61,7 @@ it.each([
       redirect: "/primary",
     });
   },
-  120_000,
+  140_000,
 );
 
 it("retires the worker without reloading the open till", async () => {
@@ -70,3 +71,13 @@ it("retires the worker without reloading the open till", async () => {
     registrations: 0,
   });
 }, 60_000);
+
+it.each(["clock confirmation", "standing down"] as const)(
+  "opens the box's %s page from the reconnect page",
+  async (scenario) => {
+    expect(await commands.probeOfflineNavigation(worker, retired, "/till/", scenario)).toEqual({
+      sameUrl: true,
+    });
+  },
+  60_000,
+);

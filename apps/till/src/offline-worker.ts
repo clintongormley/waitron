@@ -12,7 +12,10 @@ async function retry() {
       redirect: "manual",
       signal: AbortSignal.timeout(4000)
     });
-    if (reply.type === "opaqueredirect" || reply.status < 500) {
+    const boxWaitPage = reply.status === 503 &&
+      (reply.headers.get("X-Waitron-Waiting") === "1" ||
+        reply.headers.get("X-Waitron-Standing-Down") === "1");
+    if (reply.type === "opaqueredirect" || reply.ok || boxWaitPage) {
       location.reload();
       return;
     }

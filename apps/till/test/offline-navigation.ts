@@ -4,7 +4,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 
-type Scenario = "reconnect" | "retire";
+const waitPageHeaders = {
+  "clock confirmation": "X-Waitron-Waiting",
+  "standing down": "X-Waitron-Standing-Down",
+} as const;
+export type WaitPage = keyof typeof waitPageHeaders;
+type Scenario = "reconnect" | "retire" | WaitPage;
 
 export const probeOfflineNavigation: BrowserCommand<
   [worker: string, retired: string, path: string, scenario: Scenario, locale?: string]
@@ -27,7 +32,18 @@ export const probeOfflineNavigation: BrowserCommand<
       response.writeHead(302, { Location: "/primary" }).end();
       return;
     }
-    response.writeHead(state === "upgrade" ? 503 : 200, { "Content-Type": "text/html" });
+    if (state === "recovery") {
+      response.writeHead(404, { "Content-Type": "text/plain" }).end("404 Not Found");
+      return;
+    }
+    if (state === "clock confirmation" || state === "standing down") {
+      response.setHeader(waitPageHeaders[state], "1");
+    }
+    const status =
+      state === "upgrade" || state === "clock confirmation" || state === "standing down"
+        ? 503
+        : 200;
+    response.writeHead(status, { "Content-Type": "text/html" });
     response.end(
       `<h1>${state === "upgrade" ? "Upgrading" : url.pathname === "/primary" ? "Primary" : state}</h1>`,
     );
@@ -88,6 +104,11 @@ export const probeOfflineNavigation: BrowserCommand<
       if (!String(error).includes("net::ERR_")) throw error;
       return { heading: null };
     }
+    if (scenario !== "reconnect") {
+      state = scenario;
+      await subject.getByRole("heading", { name: scenario }).waitFor();
+      return { sameUrl: subject.url() === entry };
+    }
     const heading = await subject.locator("h1").textContent();
     const paragraphs = await subject.locator("main > p").allTextContents();
     const link = await subject.getByRole("link").evaluate((element) => {
@@ -96,10 +117,14 @@ export const probeOfflineNavigation: BrowserCommand<
     });
     const caches = await subject.evaluate(() => window.caches.keys());
 
+    const waitForReply = (status: number) =>
+      subject.waitForResponse(
+        (response) => response.url() === entry.split("#")[0] && response.status() === status,
+      );
+    state = "recovery";
+    await waitForReply(404);
     state = "upgrade";
-    await subject.waitForResponse(
-      (response) => response.url() === entry.split("#")[0] && response.status() === 503,
-    );
+    await waitForReply(503);
     const duringUpgrade = await subject.locator("h1").textContent();
     state = "updated";
     await subject.getByRole("heading", { name: "updated" }).waitFor();

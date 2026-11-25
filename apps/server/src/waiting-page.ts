@@ -29,7 +29,7 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
     : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
 }
 
-const WAITING_HEADER = "X-Waitron-Waiting";
+export const WAITING_HEADER = "X-Waitron-Waiting";
 
 export function pageReturnPath(value: unknown): string {
   if (
