@@ -11,6 +11,8 @@
 > the former `WAITRON_RECOVERY_PUBLIC_DIR` and `WAITRON_RECOVERY_INCIDENT_DIR` names are retired.
 > Historical protocol tests pass evidence paths as options.
 
+> **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key.
+
 # Retain an emergency allocation outside the box
 
 When you cannot establish the current short-name register, an emergency allocation uses a fresh

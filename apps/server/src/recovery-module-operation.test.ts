@@ -91,7 +91,7 @@ it("collects for the real node key before opening the host transaction", async (
   expect(readOperationAuthority(captured.authority, binding)).toBeUndefined();
 });
 
-it("does not consult outside evidence for a wrong recovery key", async () => {
+it("does not consult outside evidence for a wrong master key", async () => {
   await mintMasterKey(suite.db);
   let consulted = false;
   const owner = module(async (operation, run) => {

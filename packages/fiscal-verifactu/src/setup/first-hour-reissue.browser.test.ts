@@ -158,7 +158,7 @@ async function loseKey(el: LitElement) {
   expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=false]")).not.toBeNull();
 }
 /** The pack is drawn for real, which can take seconds on a loaded machine. */
-const PACK_DRAWN = { timeout: 15_000 };
+const PACK_DRAWN = { timeout: 10_000 };
 async function keep(el: LitElement) {
   await userEvent.click(control(el, "kept"));
   await expect.poll(() => control(el, "kept").disabled).toBe(true);

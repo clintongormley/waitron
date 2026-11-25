@@ -37,6 +37,8 @@ const keyPart = (hour: LitElement, name: string) =>
   hour
     .shadowRoot!.querySelector("wt-master-key-box")
     ?.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`) ?? null;
+/** The pack is drawn for real, which can take seconds on a loaded machine. */
+const PACK_DRAWN = { timeout: 10_000 };
 async function screen(app: SetupApp, name: string) {
   await expect.poll(() => control(app, `screen-${name}`)).not.toBeNull();
   const el = control<LitElement>(app, `screen-${name}`);
@@ -202,9 +204,9 @@ it("cancelling the password prompt leaves Show the master key in place and shows
     venue.admin.password,
   );
   await userEvent.click(control(shell, "reconfirm"));
-  await expect.poll(() => keyPart(hour, "master-key")).not.toBeNull();
+  await expect.poll(() => keyPart(hour, "master-key"), PACK_DRAWN).not.toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/node-key-reissue"))).toEqual([]);
-});
+}, 60_000);
 
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
@@ -235,7 +237,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             path: `__screenshots__/a679-reissue/${locale}-${theme}-${width}-password.png`,
           });
           await password();
-          await expect.poll(() => keyPart(hour, "download")).not.toBeNull();
+          await expect.poll(() => keyPart(hour, "download"), PACK_DRAWN).not.toBeNull();
           expect(control(hour, "replace-key")).toBeNull();
           expect(control(hour, "kept")).toBeNull();
           await userEvent.click(keyPart(hour, "download")!);
@@ -275,9 +277,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
             venue.admin.password,
           );
           expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(
-            "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
           );
         } finally {
           await page.viewport(previous[0]!, previous[1]!);
         }
-      });
+      }, 60_000);

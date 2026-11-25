@@ -1121,12 +1121,12 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
     "2026-11-23 · QZJV",
   ]);
   expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
-    "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
   );
   expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
-    "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
   );
-  expect(JSON.stringify(deliveries)).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(JSON.stringify(deliveries)).not.toContain("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
   expect(deliveries).toEqual([
     {
       stageId: "stage",
@@ -1150,7 +1150,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   await vi.waitFor(() => expect(kept).toHaveLength(1));
   expect(kept[0]).toEqual({ ...(deliveries[0] as object), statement: undefined });
   expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
-  expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(el.shadowRoot!.textContent).not.toContain("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
 });
 it.each([
   ["en", "Recovery pack", "Show the master key", "Download", "Recovery pack confirmed."],

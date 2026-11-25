@@ -950,8 +950,8 @@ restructuring wider than a review fix:
   callers (`writeStagedNodeCopy`, `openStagedCopy` and `assertStagedNodeCopy`). Let
   `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
 - Matching lock nests use `withVenueAndNodeTransaction`; the remaining sites do work before or
-  between venue transactions. Keep their separate commit/check stages when consolidating them:
-  credential rotation, spare join and return records.
+  between venue transactions. Keep their separate commit/check stages when consolidating them,
+  such as credential rotation, spare join and return records.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 

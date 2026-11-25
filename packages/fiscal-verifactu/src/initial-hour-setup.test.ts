@@ -195,7 +195,6 @@ it("the command document seat refuses a foreign staged node and changed hour inp
     key: {
       nodeId: "foreign",
       name: made.masterKeyName,
-      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
     },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     masterKey: made,

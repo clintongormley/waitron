@@ -4558,7 +4558,7 @@ preproduction box changes producer on the same chain; the host's cases run again
 
 ## A restore names a fresh minute; the working-time chain continues
 
-Authenticate with the recovery key matching the selected backup and confirm that the former
+Authenticate with the master key that was current when the selected backup was made and confirm that the former
 seller is stopped and no parallel recovery is underway. No installation code is typed
 (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no installation-code
 field"). The module names the new series from the box's clock, five symbols for the UTC minute,
