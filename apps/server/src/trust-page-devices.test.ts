@@ -33,6 +33,16 @@ describe("DEVICE_HELP", () => {
     expect(DEVICE_HELP[id].install.length).toBeGreaterThan(1);
   });
 
+  it("names the settings a Pixel and an OPPO phone use on Android", () => {
+    const { install, removal } = DEVICE_HELP.android;
+    expect(install[0]).toContain("“Install a certificate” or “Install certificates from storage”");
+    expect(install[0]).toContain("Do not open the downloaded file itself.");
+    expect(install[1]).toContain("“Install anyway”");
+    expect(removal.join(" ")).toContain("Trusted credentials, then User");
+    expect(removal.join(" ")).toContain("Credential storage, then Trusted certificates, then User");
+    expect(removal.join(" ")).not.toContain("User credentials");
+  });
+
   it("says server, never box, in operator-visible text", () => {
     const all = DEVICE_ORDER.flatMap((id) => {
       const d = DEVICE_HELP[id];

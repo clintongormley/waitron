@@ -98,12 +98,12 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
     heading: "Install it on this Android phone or tablet",
     summary: "Android — Chrome, Edge, Firefox and Samsung Internet",
     install: [
-      "Open Android Settings and search for “Install a certificate”. On a Pixel, look under Security &amp; privacy, then More security settings, then Encryption &amp; credentials.",
-      "Choose CA certificate, approve the warning Android shows, unlock the device if asked, and select the downloaded file.",
+      "Do not open the downloaded file itself. Open Android Settings, search for “certificate”, and choose “Install a certificate” or “Install certificates from storage”. On a Pixel, look under Security &amp; privacy, then More security settings, then Encryption &amp; credentials.",
+      "Choose CA certificate, then “Install anyway” when Android warns that your data won't be private. Confirm it's you if asked, and select the downloaded file.",
       "Close your browser completely by swiping it away in the app switcher, then reopen this page.",
     ],
     removal: [
-      "Return to Encryption &amp; credentials and look under User credentials, or under Trusted credentials, then User. Remove only the old Waitron certificate.",
+      "On a Pixel, open Encryption &amp; credentials, then Trusted credentials, then User. On some other phones, such as OPPO, open Credential storage, then Trusted certificates, then User. Remove only the old Waitron certificate.",
     ],
     notes: [
       "Installing a certificate authority grants trust across the whole device. Use a venue-owned device if you would rather not grant that on a personal phone.",
