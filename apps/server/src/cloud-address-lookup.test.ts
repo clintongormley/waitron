@@ -39,7 +39,7 @@ async function addressFixture() {
   const session = randomBytes(32).toString("base64url");
   const workflowId = randomUUID();
   const calls: unknown[][] = [];
-  let refusal = 0;
+  let refusal: { status: number; error: string } | undefined;
   const renewalRequested = gate();
   const releaseRenewal = gate();
   let holdRenewal = false;
@@ -111,8 +111,8 @@ async function addressFixture() {
     }
     const body = JSON.parse(String(values[7]));
     if (refusal) {
-      res.writeHead(refusal);
-      res.end('{"error":"rate_limited"}');
+      res.writeHead(refusal.status);
+      res.end(JSON.stringify({ error: refusal.error }));
       return;
     }
     res.end(
@@ -189,8 +189,11 @@ async function addressFixture() {
     file,
     save,
     workflowId,
-    refuse: (status: number) => {
-      refusal = status;
+    refuse: (status: number, error = "rate_limited") => {
+      refusal = { status, error };
+    },
+    recover: () => {
+      refusal = undefined;
     },
     holdRenewal() {
       holdRenewal = true;
@@ -465,3 +468,74 @@ it("ends the Cloud exchange when the caller aborts", async () => {
     await f.close();
   }
 }, 6000);
+
+it.each([
+  {
+    status: 401,
+    error: "invalid_proof",
+    next: 200,
+    calls: ["renew", "address-lookup", "renew", "address-lookup"],
+  },
+  { status: 403, error: "revoked", next: 409, calls: ["renew", "address-lookup"] },
+])(
+  "handles a provisional address lease refused as $error",
+  async ({ status, error, next, calls }) => {
+    const f = await addressFixture();
+    try {
+      const search = { ...registeredSearch(), workflowId: f.workflowId };
+      f.refuse(status, error);
+      const refused = await f.post(search);
+      expect(refused.status).toBe(503);
+      expect(await refused.json()).toEqual({ error: { code: "cloud.unavailable", params: {} } });
+
+      f.recover();
+      const nextSearch = await f.post(search);
+      expect(nextSearch.status).toBe(next);
+      expect(await nextSearch.json()).toEqual(
+        error === "revoked"
+          ? { error: { code: "cloud.not_configured", params: {} } }
+          : { candidates: [{ text: address }] },
+      );
+      expect(f.calls.map((call) => call[2])).toEqual(calls);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("accepts only the matching, complete Cloud validation reply", async () => {
+  const workflowId = randomUUID();
+  const valid = { provider: "google", workflowId, fields };
+  let reply: unknown = valid;
+  const f = await installationFixture(undefined, {
+    addressLookup: async (_values, _saved, _req, res) => {
+      res.end(JSON.stringify(reply));
+    },
+  });
+  try {
+    const validate = () =>
+      f.client.addressLookup(
+        { kind: "validate", workflowId, selectedText: address },
+        async () => {},
+        new AbortController().signal,
+      );
+    await expect(validate()).resolves.toEqual({ fields });
+    for (const invalid of [
+      { ...valid, workflowId: randomUUID() },
+      { ...valid, provider: "other" },
+      { ...valid, fields: { ...fields, countryCode: "PT" } },
+      { ...valid, fields: { ...fields, postalCode: 28013 } },
+      { ...valid, fields: { ...fields, addressLine1: null } },
+      { ...valid, fields: { ...fields, addressLine2: 4 } },
+      { ...valid, fields: { ...fields, city: null } },
+      { ...valid, fields: { ...fields, province: null } },
+    ]) {
+      reply = invalid;
+      await expect(validate()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    }
+    reply = valid;
+    await expect(validate()).resolves.toEqual({ fields });
+  } finally {
+    await f.close();
+  }
+});

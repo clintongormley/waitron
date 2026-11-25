@@ -106,6 +106,7 @@ async function installedSignInFixture(setup = false, provisional = false) {
   let challenge = "";
   let registered = false;
   let loseComplete = false;
+  let loseRedeem = false;
   let expiredRequest: unknown;
   let wrongLogin = false;
   const validProfile: Extract<
@@ -154,6 +155,10 @@ async function installedSignInFixture(setup = false, provisional = false) {
       expect(submitted).toBe(code);
       expect(createHash("sha256").update(verifier!).digest("base64url")).toBe(challenge);
       attemptState = "account_bound";
+      if (loseRedeem) {
+        res.destroy();
+        return;
+      }
     } else if (action === "complete") {
       registered = true;
       attemptState = "complete";
@@ -204,6 +209,9 @@ async function installedSignInFixture(setup = false, provisional = false) {
     },
     authorize: async () => {},
     code,
+    loseRedeem: () => {
+      loseRedeem = true;
+    },
     loseComplete: () => {
       loseComplete = true;
     },
@@ -271,6 +279,56 @@ it.each([false, true])(
       ]);
       expect(await f.options.readVenueId()).toBe(f.venueId);
       expect(await restarted.emailRelayEnabled()).toBe(provisional);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it.each(["restart sign-in", "retry callback"])(
+  "recovers a lost setup redemption reply on %s",
+  async (retry) => {
+    const f = await installedSignInFixture(true, true);
+    try {
+      const binding = { ...f.binding, kind: "setup" as const };
+      const { authorizationUrl } = await f.client().startSignIn(binding, f.authorize);
+      const query = new URL(authorizationUrl!).searchParams;
+      const proof = {
+        requestId: query.get("request_id")!,
+        state: query.get("state")!,
+        code: f.code,
+      };
+      f.loseRedeem();
+      await expect(f.client().returnSignIn(binding, proof, f.authorize)).rejects.toMatchObject({
+        code: "cloud.unavailable",
+      });
+
+      const restarted = f.client();
+      const recover = (authorize: () => Promise<void>, from = binding) =>
+        retry === "restart sign-in"
+          ? restarted.startSignIn(from, authorize)
+          : restarted.returnSignIn(from, proof, authorize);
+      await expect(recover(f.authorize, { ...binding, tab: randomUUID() })).rejects.toMatchObject({
+        code: "cloud.binding_conflict",
+      });
+      await expect(
+        recover(async () => {
+          if (f.requests.at(-1)?.[2] === "status") throw new AppError("setup.owner_required", {});
+        }),
+      ).rejects.toMatchObject({ code: "setup.owner_required" });
+      await expect(recover(f.authorize)).resolves.toEqual(
+        retry === "restart sign-in" ? {} : undefined,
+      );
+      expect(f.requests.map((request) => request[2])).toEqual([
+        "start",
+        "redeem",
+        "status",
+        "status",
+      ]);
+      await expect(
+        restarted.setupAddressLookup(binding, undefined, f.authorize, new AbortController().signal),
+      ).resolves.toEqual({ available: true });
+      await expect(f.options.readVenueId()).resolves.toBeNull();
     } finally {
       await f.close();
     }
