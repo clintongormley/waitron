@@ -597,8 +597,13 @@ export class MenuPatchDialog extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(focus)?.focus();
   }
 
+  /** Whether what was reviewed is out of date, so only Reload leads on. */
+  #reviewOutdated(): boolean {
+    return this.refusal?.code === "menu_patch.declarations_changed";
+  }
+
   async #putLive(): Promise<void> {
-    if (this.busy || saveActionState(this.#scope).unchanged) return;
+    if (this.busy || this.#reviewOutdated() || saveActionState(this.#scope).unchanged) return;
     const session = this.#session;
     const sent = this.changes;
     const submitted = this.#current();
@@ -865,6 +870,7 @@ export class MenuPatchDialog extends LitElement {
     const toCorrect = this.#itemsToCorrect();
     const errors = toCorrect.length > 0;
     const refusals = this.#refusals();
+    const outdated = this.#reviewOutdated();
     const bottom = [
       ...refusals.map(refusalWords),
       ...(this.reloadFailure === null ? [] : [codeMessage(this.reloadFailure)]),
@@ -880,7 +886,7 @@ export class MenuPatchDialog extends LitElement {
     )
       ? html`<wt-button
           slot="secondary"
-          variant="secondary"
+          variant=${outdated && this.step === "review" ? "primary" : "secondary"}
           data-test="reload"
           ?disabled=${this.busy}
           @click=${() => void this.#reload()}
@@ -915,10 +921,10 @@ export class MenuPatchDialog extends LitElement {
                 @click=${() => void this.#toStep("edit", '[data-test="review"]')}
                 >${t("menu_patch.keep_editing")}</wt-button
               >${reload}<wt-button
-                variant=${action.variant}
+                variant=${outdated ? "secondary" : action.variant}
                 data-test="put-live"
                 .loading=${this.busy}
-                ?disabled=${action.unchanged}
+                ?disabled=${outdated || action.unchanged}
                 @click=${() => void this.#putLive()}
                 >${t("menu_patch.put_live")}</wt-button
               >`

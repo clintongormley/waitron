@@ -3741,6 +3741,48 @@ it("goes back to review the new values when the send is refused because they cha
   expect(api.patchLiveMenu.mock.calls[1]![1]).toMatchObject({ reviewed: withEggs().revision });
 });
 
+it("makes Reload, not Put live now, the review's action once the values changed, until Reload", async () => {
+  const { el, api, deliver } = await reviewingSoup({
+    patchLiveMenu: vi
+      .fn()
+      .mockRejectedValueOnce(refusal("menu_patch.declarations_changed", { menuId: "menu-lunch" }))
+      .mockResolvedValue(patched),
+  });
+  const buttons = () =>
+    ["put-live", "reload"].map((name) => {
+      const button = footerButton(el, name);
+      return button === null ? null : [button.variant, button.disabled];
+    });
+  expect(buttons()).toEqual([["primary", false], null]);
+  await press(el, "put-live");
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  const refused = [
+    ["secondary", true],
+    ["primary", false],
+  ];
+  expect(buttons()).toEqual(refused);
+  await press(el, "put-live");
+  await press(el, "keep-editing");
+  expect(footerButton(el, "reload")!.variant).toBe("secondary");
+  await press(el, "review");
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  expect(buttons()).toEqual(refused);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledTimes(1);
+  await press(el, "reload");
+  await press(el, "review");
+  expect(buttons()).toEqual([["primary", false], null]);
+  // A refusal raised by the values changing under the review, not by a send, is the same.
+  await deliver(withEggs());
+  expect(buttons()).toEqual(refused);
+  await press(el, "reload");
+  await press(el, "review");
+  expect(buttons()).toEqual([["primary", false], null]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledTimes(2);
+  expect(api.patchLiveMenu.mock.calls[1]![1]).toMatchObject({ reviewed: withEggs().revision });
+});
+
 it.each([
   ["nothing", "menu_patch.unchanged", {}, declarationsChanged],
   ["a newer version", "menu_patch.base_changed", { liveNumber: 4 }, newerNotice(4)],
@@ -3767,10 +3809,13 @@ it.each([
 it("a Reload answered during a send that is then refused brings the new values to review", async () => {
   let refuse!: (error: Error) => void;
   let reread!: (answer: PatchDraftAnswer) => void;
-  const { el, deliver, api } = await reviewingSoup({
-    patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+  const { el, api } = await reviewingSoup({
+    patchLiveMenu: vi
+      .fn(() => new Promise((_resolve, reject) => (refuse = reject)))
+      .mockRejectedValueOnce(refusal("menu_patch.invalid", { change: 0, field: "target" })),
   });
-  await deliver(withEggs());
+  await press(el, "put-live");
+  expect(footerButton(el, "reload")).not.toBeNull();
   api.getLiveMenu.mockReturnValueOnce(new Promise((resolve) => (reread = resolve)));
   await press(el, "reload");
   await press(el, "put-live");

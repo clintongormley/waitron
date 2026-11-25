@@ -5967,7 +5967,8 @@ version arriving while changes are staged or a field needs correcting, adds a se
 either step's footer, with the refusal's sentence above the buttons. While a ticked checkbox is under
 review, a change to the allergens or diets of any product the live or scheduled versions hold, or to
 which scheduled versions differ or when they go live, leaves the review as it is and says so the same
-way, with "Reload".
+way, with "Reload". While that sentence shows on the review step, "Put live now" is secondary and
+disabled, and "Reload" is primary (owner, 2026-11-25).
 
 Each **Choose a price** link in Preview opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later
