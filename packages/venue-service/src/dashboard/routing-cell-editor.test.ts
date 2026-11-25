@@ -148,23 +148,26 @@ it.each([390, 1280])(
   },
 );
 
-it.each(["en", "es"] as const)(
-  "shows the full fallback label in %s at phone width",
-  async (locale) => {
-    await page.viewport(390, 800);
-    try {
-      setLocale(locale);
-      const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
-      const fallback = one<Combobox>(el, "[name=target]")!;
-      await fallback.updateComplete;
-      await document.fonts.ready;
-      const text = fallback.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
-      expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
-    } finally {
-      await page.viewport(1280, 800);
+it.each(
+  ["en", "es"].flatMap((locale) => ["", 'Verdana, "DejaVu Sans"'].map((font) => [locale, font])),
+)("shows the full fallback label in %s at phone width (font %j)", async (locale, font) => {
+  await page.viewport(390, 800);
+  try {
+    setLocale(locale);
+    const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
+    if (font) {
+      const family = getComputedStyle(el).getPropertyValue("--wt-font-family");
+      el.style.setProperty("--wt-font-family", `${font}, ${family}`);
     }
-  },
-);
+    const fallback = one<Combobox>(el, "[name=target]")!;
+    await fallback.updateComplete;
+    await document.fonts.ready;
+    const text = fallback.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  } finally {
+    await page.viewport(1280, 800);
+  }
+});
 
 it("offers Every zone every active department's periods that meet the row, grouped by department", async () => {
   const el = await mount();
