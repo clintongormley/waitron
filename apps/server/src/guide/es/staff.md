@@ -256,5 +256,5 @@ pulsa **Guardar**. Por defecto tienes tres días laborables para revisar las hor
 de semana y los festivos del calendario del local no consumen ese plazo. Elige cero para
 cerrar a la hora de cambio de día del local el primer día del mes siguiente.
 
-Después del cierre, usa el total cerrado del mes. Si hay una corrección posterior, consulta
-**Horas** para ver el cambio junto al total cerrado.
+Después del cierre, usa el **Total al cierre** del mes. Si corriges horas más adelante, **Cambio
+posterior al cierre** te muestra el total al cierre, el total actual y la diferencia.

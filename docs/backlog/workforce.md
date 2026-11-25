@@ -93,6 +93,11 @@ the labour advisor to confirm: a collective agreement can change each of them.
 
 ## MONTH-CLOSE. Reminder and adjustments after a month closes
 
+When a contract starts, ends or changes during the month, calculate overtime separately for the
+part covered by each contract and add the results. Days without a contract contribute to worked
+hours only (owner choice recorded by the watcher on 25 November 2026 at 10:02). Plan two worked
+examples, one for a change from 40 to 20 hours on the 15th and one for a contract starting on the 20th.
+
 List unresolved hours for the selected month by the shift's work date. Send one reminder the day
 before closure if issues remain. At each close, save earlier months' changes that have yet to be
 included and show them in the next working-time export. First agree which period owns an adjustment,
@@ -129,7 +134,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. List the month’s issues, send a reminder and include later adjustments in the next export.**
+- **MONTH-CLOSE. Calculate overtime by contract, list the month’s issues, send a reminder and include later adjustments in the next export.**
   [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it

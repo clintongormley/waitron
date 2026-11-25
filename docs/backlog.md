@@ -930,8 +930,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **MONTH-CLOSE. Remind managers before close and carry later corrections into the next export.**
-  The month’s issues list, reminder and saved adjustments remain in this bundle with the cadence rule.
+- **MONTH-CLOSE. Work out overtime when contracts change, remind managers before close and carry later corrections into the next export.**
+  The month’s overtime by contract, issues list, reminder and saved adjustments remain in this bundle with the cadence rule.
   [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse

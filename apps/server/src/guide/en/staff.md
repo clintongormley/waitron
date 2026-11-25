@@ -236,5 +236,5 @@ If you manage system settings, change **Working days before close** and choose *
 gives you three working days to check the hours. Weekends and public holidays on the venue's calendar
 do not use up that time. Set it to zero to close when the venue’s day changes on the first of the next month.
 
-After close, use the frozen total for the month. Follow up on any later correction in **Hours**
-to see the change beside the frozen total.
+After close, use **Closed total** for the month. If you correct hours later, **Change after closure**
+shows you the closed total, the current total and the difference.
