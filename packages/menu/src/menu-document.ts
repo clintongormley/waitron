@@ -782,7 +782,7 @@ export async function readLiveState(
 }
 
 /**
- * The documents' offers, per menu and in menu order, with the live fields put back from the current
+ * The documents' offers, per menu and in menu order, with the live fields taken from the current
  * rows: availability, declarations, course and reporting category.
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.

@@ -16,7 +16,7 @@ import type { IncludeFolderOverrides } from "./section-types.js";
  * type definitions only. The guard is `scripts/dashboard-browser-purity.test.ts`.
  */
 
-/** Supplied from current products when the document is served. */
+/** Frozen, and replaced from current products when the document is served. */
 export type DeclarationField = "allergens" | "diet" | "dietOverride" | "dietaryDeclarations";
 export type OverlayOfferField = "available" | "courseId" | "category" | DeclarationField;
 /** Read from current rows when served, never frozen. */

@@ -239,6 +239,11 @@ starting migration and snapshot, the Madrid snapshot and fingerprints, both Madr
 - [ ] **Step 4: Backlog.** `docs/backlog.md:469-470`: the entry stays until PR 4, with "PR 1
   landed" appended. Commit `-s`.
 
+As built (2026-11-25): neither Madrid capture has a generator; they are pinned by checksum in
+`madrid-before-move.manifest.json` and stay unchanged, and the baseline test gains a format 4 to 5
+step instead. The held read's product `diet`/`dietOverride` types stay: they are filled from the
+menu, not from the dropped columns.
+
 ---
 
 ## PR 2 — Till and kitchen read the published declarations
