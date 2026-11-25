@@ -3,6 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 Status: approved by the watcher 2026-11-25 06:05 with the CHANGE points of the Codex plan read; revised for them. Lane A, 2026-11-25. Read on `origin/main` `54a675dae2`.
+Revised 2026-11-25 10:30 for the owner's scheduled-menus answer (10:02; "Scheduled menus" under Decisions): PRs 3a, 3b and 4 grow by about 60, 40 and 40 production lines.
 Reviews: the fresh-context plan review (findings 1–11, all taken) is
 lane A's folder (`allergens-published-reviews/plan-review-1-20261125-0550.md`); the Codex plan read
 whose CHANGE points this revision takes is `plan-review-2-codex-20261125-0601.md` beside it.
@@ -19,8 +20,8 @@ them through one resolver in `@waitron/menu` that looks each line up in its menu
 falling back to the version the line was ordered from. The correction is a new "declarations"
 patch field whose value is always copied from the product on the server, applied by a new
 route to every live version that disagrees, in one transaction that also refreshes the kitchen's
-allergy clashes. Queued versions are named to staff, with their dates, but not rewritten until the
-owner answers the A1151 question (watcher 06:05 point 2).
+allergy clashes. Queued versions that differ are listed with their dates and corrected only where
+staff leave them ticked (owner, 2026-11-25 10:02; see "Scheduled menus" below).
 
 **Tech Stack:** TypeScript, Drizzle on `node:sqlite`, Hono routes, Lit dashboard and till, Vitest
 (`useVenueDb` for database tests, browser mode for dashboard and till).
@@ -59,9 +60,8 @@ From the watcher, 2026-11-25 04:33 (lane A questions.md), not the owner's; the o
    did not change declarations; a menu waiting on other unpublished changes is still patched.
    Default 3: drop `working_order_lines.allergens`, `diet`, `diet_override` in PR 1, after checking
    for readers outside SQL text.
-2. WITHDRAWN by the watcher at 06:05 until the owner answers the A1151 question: Yes corrects every
-   live version holding the product; queued versions (and a menu whose only version is a scheduled
-   first one) are NAMED in the question with their dates, and not rewritten.
+2. Yes corrects every live version holding the product, and each queued version (also of a menu
+   whose only version is a scheduled first one) that staff leave ticked: "Scheduled menus" below.
 3. "Live menus" means every menu's live version, also one not sold at this hour or in this zone.
 4. PRs 1 to 3 land the same day if possible.
 5. The guide says, in two sentences, where a sent till line and the kitchen may differ after a
@@ -70,13 +70,24 @@ From the watcher, 2026-11-25 04:33 (lane A questions.md), not the owner's; the o
    behaviour.
 
 Lane's own calls, for the watcher to confirm:
-- **Queued versions keep A1151 for now (watcher 06:05 point 2; the question is with the owner since
-  06:01).** `docs/backlog/menu.md:332-337` records the owner's 2026-10-27 rule: Patch live menu
-  corrects only the live version, never a queued one. Until the owner answers, nothing here
-  rewrites a queued version: no `rewriteQueuedVersions`, no requeue rewrite in `patchLiveMenu`, no
-  queued half of `correctMenuDeclarations`. The question to staff still names each menu whose queued
-  version disagrees, with the date it starts, and says how to change it (cancel and queue it again,
-  A1151's own route). If the owner says yes, the rewrite is a follow-up PR.
+- **Scheduled menus (owner, 2026-11-25 10:02: "Ask, menu by menu (Recommended)").** The option
+  reads: "The correction window lists each scheduled menu that differs, ticked only when it still
+  has the old value; untick to leave it". Allergens and diets only; names, prices and photos keep
+  A1151 (`docs/backlog/menu.md:332-337`). It applies to the question after a save and to Patch live
+  menu, with the menus' dates. How the lane reads it, for the watcher:
+  - A queued version is listed when one of its copies of the product (dish, variant, extra, set-menu
+    copy) differs from the product's current declarations.
+  - "Still has the old value" compares each differing copy with the value being corrected: after a
+    save, the product's declarations before that save; in Patch live menu, that copy's declarations
+    on the live version the patch is built on. Ticked when every differing copy equals it; a copy
+    holding anything else (someone already changed that version on purpose), or one the live version
+    lacks, leaves the menu unticked.
+  - A ticked queued version is cancelled and queued again under a new number with the corrected
+    document, at its own time, by `requeueAfter`, which already does that with the document
+    unchanged. An unticked one is requeued as today. A menu with only a scheduled version goes
+    through the same function with no live patch.
+  - An id that is no longer queued when the request arrives is ignored: it started (then it is live,
+    and corrected as live) or was cancelled.
 - **No import or bulk path asks or reports.** The spec's "an import, or a change to many products
   at once ... names the menus waiting" has no surface today: the only bulk product routes are
   availability and menu membership (`menu-api.ts:1630,1648`), and the configuration import is
@@ -495,14 +506,26 @@ tests about +300.
   copy `extraDeclarationValues`'s two fields; a missing entry throws `menu_patch.invalid` with
   `field: "declarations"`.
 - `patchLiveMenu` reads `readProductDeclarationValues(tx, declarationProductIds(...))` before
-  applying. Queued versions requeue unchanged for every patch, `declarations` included (A1151;
-  watcher 06:05 point 2, until the owner answers).
+  applying.
+- `patchLiveMenu`'s options gain `queued?: readonly string[]` (version ids), and `requeueAfter`
+  gains `corrections?: ReadonlyMap<string, MenuDocument>`: a queued version named in it is queued
+  again with that document (and its own hash and photos); every other one as today. `patchLiveMenu`
+  builds the corrections by applying only its `declarations` changes, for the copies the queued
+  version holds, to each named queued document. Any other field of a patch never reaches a queued
+  version (A1151).
+- `GET` of the patch draft answers, for a `declarations` target, the queued versions that differ:
+  `{ versionId, activatesAt, stillOld }[]` (the route the dialog already loads from; a pure
+  `queuedDeclarationDrift(queued, live, current)` in `menu-patch.ts`, also used by PR 3b).
 
 - [ ] **Step 1: Failing tests.** `menu-patch.test.ts`: `declarations copies the product's values to
   the dish, its set-menu copies, a variant and an extra`; `refuses a declarations value other than
   "product"`; `patchFieldValue reads the frozen declarations`. `menu-patch.live.test.ts`:
-  `patchLiveMenu puts the product's current allergens live`; `a declarations patch requeues a
-  queued version holding the dish unchanged` (A1151 kept until the owner answers).
+  `patchLiveMenu puts the product's current allergens live`; `a queued version named in the
+  request is queued again at its own time with the corrected allergens, and one not named keeps its
+  document`; `a price in the same patch does not reach the named queued version` (A1151); `an id
+  that is not queued is ignored`. `menu-patch.test.ts`: `stillOld is true only when every differing
+  copy holds the live version's value` (a third value, and a copy the live version lacks, give
+  false).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/menu exec vitest run src/menu-patch.test.ts src/menu-patch.live.test.ts`; FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run**; PASS. Commit `-s`.
@@ -515,7 +538,13 @@ tests about +300.
 - Test: `menu-patch-draft.test.ts`, `menu-patch-dialog.test.ts`, `menu-patch-review.test.ts`,
   `menu-patch-dialog.a11y.test.ts`
 
-- [ ] **Step 1: Failing tests.** For a dish, a variant and an extra target, the dialog draws one
+The dialog also lists each scheduled version that differs, with its date: a checkbox ticked when
+`stillOld`, sent as `queued` (owner, 2026-11-25 10:02). Nothing is listed until the declarations
+checkbox is ticked.
+
+- [ ] **Step 1: Failing tests.** The scheduled list: ticked and unticked rows, the date in the
+  screen's language, only ticked ids are sent, nothing listed with the box unticked or no queued
+  version. For a dish, a variant and an extra target, the dialog draws one
   checkbox "Use the product's current allergens and diets"; ticking it adds exactly
   `{ target, field: "declarations", value: "product" }`; the review lists "Allergens and diets:
   from the product". No free-typed allergen field exists (default 2). The Products guide, EN and
@@ -555,9 +584,15 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
     liveVersionId: string | null;
     /** The changes the live version needs; empty when it agrees or there is none. */
     live: MenuPatchChange[];
-    /** When each disagreeing queued version starts (ISO), earliest first; named to staff, not
-     * rewritten (A1151, until the owner answers). */
-    queuedFrom: string[];
+    /** Each disagreeing queued version, earliest first (owner, 2026-11-25 10:02). */
+    queued: QueuedDeclarationDrift[];
+  }
+  export interface QueuedDeclarationDrift {
+    versionId: string;
+    activatesAt: string; // ISO
+    changes: MenuPatchChange[];
+    /** Every differing copy still holds the value before the save. */
+    stillOld: boolean;
   }
   /** Every declarations change `document` needs so each copy of `productIds` matches `current`. */
   export function declarationChanges(
@@ -569,6 +604,7 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
   export async function findDeclarationDrift(
     tx: Transaction,
     productIds: readonly string[],
+    before: ReadonlyMap<string, DeclarationValues>,
     at?: Date,
   ): Promise<DeclarationDrift[]>;
   export interface DeclarationMenu {
@@ -576,7 +612,7 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
     name: string;
     /** The live version disagrees, so Update now corrects it. */
     live: boolean;
-    queuedFrom: string[];
+    queued: { versionId: string; activatesAt: string; stillOld: boolean }[];
   }
   /** [] when the products' declarations equal `before`; else every drifting menu. */
   export async function waitingDeclarationMenus(
@@ -594,8 +630,9 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
   - `names a live menu holding the dish, its variant, or it as an extra`
   - `names a set-menu's holding menu`
   - `names a menu whose live version lacks the dish but a queued version holds it, and a menu with
-    only a scheduled first version, with live: false and the dates they start` (watcher point 2,
-    as amended at 06:05)
+    only a scheduled first version, with live: false and the dates they start`
+  - `stillOld is true while a queued copy holds the value before the save, and false once it holds a
+    third value`
   - `names a live menu not sold at this hour` (point 3)
   - `a variant inheriting the parent's allergens drifts when the parent is saved` (Review Focus 2)
   - `names nothing once the menus agree` and, for `waitingDeclarationMenus`, `answers [] when the
@@ -613,20 +650,22 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
 - Consumes: `findDeclarationDrift`, `declarationChanges` (3.2); `patchLiveMenu` (3a.1).
 - Produces:
   ```ts
-  /** Puts the product's and its variants' current declarations on every drifting LIVE version, in
-   * the caller's transaction, through `patchLiveMenu`; menus already agreeing and queued versions
-   * are left alone (A1151, until the owner answers). `menus` lists only the menus it patched. */
+  /** Puts the product's and its variants' current declarations on every drifting LIVE version, and
+   * on each queued version named in `queued`, in the caller's transaction, through `patchLiveMenu`
+   * and, for a menu with no drifting live version, `requeueAfter`. Versions already agreeing, and
+   * queued ones not named, keep their documents. `menus` lists only the menus it changed. */
   export async function correctMenuDeclarations(
     tx: Transaction,
     productId: string,
     personId: string,
-    options?: { at?: Date; fallbackLanguage?: string },
+    options?: { at?: Date; fallbackLanguage?: string; queued?: readonly string[] },
   ): Promise<{ menus: { menuId: string; name: string }[]; productIds: string[] }>;
   ```
 
 - [ ] **Step 1: Failing tests** (which copies drift is 3.2's; here only): `corrects every drifting
-  live version in one call, and leaves a queued version unchanged` (one menu with a dish, another
-  holding the product as an extra in a set menu, a third with a queued version);
+  live version and each named queued version in one call, and leaves an unnamed queued version
+  unchanged` (one menu with a dish, another holding the product as an extra in a set menu, a third
+  with two queued versions, a fourth with only a scheduled first version);
   `a second call corrects nothing and answers menus: []` (Review Focus 4);
   `a throw on the second menu leaves the first unpatched` (Review Focus 5: run it inside one
   `withTransaction` that the test lets throw, then read both menus' live versions; force the throw
@@ -658,8 +697,8 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
     productIds: readonly string[],
   ): Promise<void>;
   ```
-- Route: `POST /management-api/products/:id/live-declarations`, `menu.manage`, body `{}`, answers
-  `{ menus }`. `MenuApiDeps.venueCfg` stays optional for the other routes' harnesses, but this
+- Route: `POST /management-api/products/:id/live-declarations`, `menu.manage`, body
+  `{ queued: string[] }` (version ids), answers `{ menus }`. `MenuApiDeps.venueCfg` stays optional for the other routes' harnesses, but this
   route throws a configuration error when it is absent (the `requireVenueCfg` pattern,
   `management-api.ts:338-349`), so slips are never skipped silently. Inside `gated`:
   `correctMenuDeclarations`, then `refreshCorrectedKitchenLines`. One transaction: any throw rolls
@@ -713,20 +752,22 @@ Preview warning about 40, strings); tests about +350.
 - Modify: `apps/dashboard/src/screens/products-screen.ts:435-470` (`#save`: after
   `updateProductEditor` resolves with a non-empty `declarationMenus`, open the dialog),
   `apps/dashboard/src/api/client.ts:4000` (`updateProductEditor`'s answer type gains
-  `declarationMenus`; new `correctLiveDeclarations(productId): Promise<{ menus: {menuId: string; name: string}[] }>`),
+  `declarationMenus`; new `correctLiveDeclarations(productId, queued: string[]): Promise<{ menus: {menuId: string; name: string}[] }>`),
   `apps/dashboard/src/i18n/strings.ts` (EN, ES)
 
 Draft words (for the watcher): title "Update the live menus now?"; body "These live menus still
 show the old allergens and diets: {live menus}." Buttons "Update now" (primary) and "Not now".
-When a queued version disagrees, one more line (watcher 06:05 point 2): "Scheduled versions keep
-their allergens and diets: {menu} from {date}, … To change one, cancel it and queue it again." With
-no live menu to correct (only scheduled ones), the dialog shows that line and a single "Close".
+When queued versions differ, a list under it (owner, 2026-11-25 10:02): "These scheduled menus
+differ too:", one checkbox per version, "{menu}, from {date}", ticked when `stillOld`. With no live
+menu to correct, the title is "Update the scheduled menus now?" and only that list shows; "Update
+now" waits, disabled and quiet, while nothing is ticked.
 Failure, on its own line above the buttons: "The product is saved, but these menus were not
 updated: {menus}. Try again, or publish them." Buttons "Try again" and "Close".
 
 - [ ] **Step 1: Failing tests.** Dialog: lists every live menu name, and each scheduled one with
-  its date in the screen's language; with only scheduled ones, no "Update now"; "Update now" calls
-  `correctLiveDeclarations` once and closes on success; a refused call shows the failure line naming
+  its date in the screen's language, ticked or not by `stillOld`; with only scheduled ones and none
+  ticked, "Update now" is disabled; "Update now" calls `correctLiveDeclarations` once with the
+  ticked version ids and closes on success; a refused call shows the failure line naming
   every menu, keeps the dialog open, and "Try again" calls once more; "Not now" calls nothing.
   Screen: a save answering `declarationMenus: []` opens nothing; a save answering two menus opens
   the dialog with both. a11y: each state, both themes.

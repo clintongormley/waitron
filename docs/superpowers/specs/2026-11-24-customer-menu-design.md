@@ -272,6 +272,11 @@ and reaches the till and the kitchen, the owner chose **published everywhere, wi
   An import, or a change to many products at once, does not ask; its result names the menus waiting
   (**my call**).
 - A menu with such a change waiting says so plainly among Preview's warnings (**my call**).
+- **Scheduled menus (owner, 2026-11-25 10:02, "Ask, menu by menu (Recommended)").** The option reads: "The
+  correction window lists each scheduled menu that differs, ticked only when it still has the old value;
+  untick to leave it". It applies to the question after a save and to Patch live menu, with each menu's
+  date, and only to allergens and diets: names, prices and photos keep A1151 (Patch live menu changes only
+  the live version).
 - The lane writes a short design of its own first, from
   [A1150's table of readers](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md),
   saying for each what it reads now and after. Full review path: someone can be harmed by a wrong answer.
