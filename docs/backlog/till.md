@@ -854,6 +854,25 @@ here is asked or built before that. They were separate entries, many of them que
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
 
+## A1574. A till that cannot reach the box says so
+
+Owner, 2026-11-25: "Build it" and "Split it". Seen on an Oppo Find X10 (Chrome 158.0.8127.42,
+installed till app):
+
+- **Opening the app with no way to the box.** The till ships no service worker, so Chrome's own
+  screens showed: "You're offline", "Can't connect to the site", or "This site can't be reached. Check
+  if there is a typo in waitron.local". Some went by themselves when the WiFi came back and some
+  stayed until Reload; what decides it is not known. Store one small page of ours when the till is
+  first opened: "Can't reach the box. Check that this phone is on the venue's WiFi.", which keeps
+  trying and opens the till by itself. No selling offline: only that page. It needs its own plan: a
+  stored page must never serve an old till after an update, must not upset
+  `apps/till/src/trust-check.ts` (which relies on a registration being refused) or following the
+  main box, and must be removable.
+- **Losing the WiFi with the till open.** The PIN page said "No box is taking sales right now. The
+  till carries on as soon as one does." while the box was fine. When no box answers: "Can't reach the
+  box. Check that this device is on the venue's WiFi." When a box answers and is not selling, today's
+  words stay. Show the notice on every till screen: "Check your times" showed nothing.
+
 ## Decisions and deliberate limits
 
 - **A1031 pickup counter (watcher, 2026-11-25).** A detached table bill still waiting for handover lists at the first active counter in the sale's department after payment, including when staff moved it by hand at a later counter. With no active counter it uses the recorded zone. Whether a later counter can keep that pickup is an owner's choice.

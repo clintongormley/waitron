@@ -143,33 +143,39 @@ returned; its status alone cannot establish what remains collected.
 
 ## Check NFC pick-up on the box's address
 
-On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipment, press
-Allow NFC for that address's first permission grant. Close the dialog and tap a registered reader
-and portable printer from Counter, Floor, a table's order, payment, Station, Pass and My Schedule.
-Check the pick-up notice and Equipment's assignments. Try a printer with no pick-up roles;
-its notice must say that no printer role is selected. Try a printer the profile allows for payment
-slips only; its notice must name payment slips and the chosen receipt printer must not change. Try a
-foreign label and a reader with a payment already running; neither should change the assignment.
-Sign out, tap a registered sticker, and sign in normally: the selection must wait for sign-in. Open
-a row's QR camera, return to the list and close the dialog; NFC must resume without a second
-selection from the same tap. Lock the phone or leave the app and return, then tap again. Browser
-tests use simulated readers; these box-address checks remain unverified.
+On 25 November 2026, on an Oppo Find X10 at `https://waitron.local`, these worked: a sticker tap
+from the floor, after a phone lock, and while signed out (it waited for sign-in); the printed QR in
+Equipment, with a sticker tap after it; a bank card and a printer with no pick-up roles, which
+changed nothing and said why; and printer and reader stickers while a card payment was running.
+
+Still to check: taps from payment, Station, Pass and My Schedule; another device's reader with a
+payment running, which must not be taken; and, once on the box, the fixes made that day. Those are a
+printer the profile allows for payment slips only (the notice names payment slips and the chosen
+receipt printer does not change), the "Picked up" message and the blocked-NFC message inside
+Equipment, and the new words for a sticker that was not recognised.
 
 ## Check NFC sticker writing and locking on the box's address
 
-On the OnePlus 13 at `https://waitron.local`, open a reader or portable printer's Equipment label
-in the dashboard. Write a spare unlocked sticker and check its text with the till. Write again
-after moving the sticker away to check the retry message. Lock only a disposable sticker after
-reading the permanent warning, then try rewriting it. Browser tests use simulated writers; these
-box-address write/read/lock checks remain unverified.
+On 25 November 2026, on the Oppo: writing a sticker, the retry message, the lock warning, and
+writing to a locked sticker were seen. Still to check, once on the box: whether Android's own "New
+tag collected" screen stays away after a write now that the page keeps listening, whether a retry
+after a failed write needs the sticker lifted first, Chrome's permission prompt from the NFC sticker
+menu item, and the new locked-sticker message.
 
 ## Check equipment labels on a physical venue printer
 
-On the OnePlus 13 at `https://waitron.local`, open a portable printer's Equipment label, press
-Print on a printer, choose that printer and print. Check its job preview, read the paper's QR in
-the till dialog, and check the name and code are legible. Repeat for a reader label on a second
-active printer. Confirm neither print opens the drawer. Application payload checks do not
-establish a physical print; these checks remain unverified.
+On 25 November 2026 a portable printer's label printed legibly on a network printer whose cash
+drawer is switched on, its QR was read in the till, and the print queue held a document and no drawer
+job for it. Still to check: a reader's label, on a second printer.
+
+## A1576. Adding a card reader or a printer asks which device profiles can use it
+
+Owner, 2026-11-25: "the card reader was automatically enabled in my device profile without asking me.
+perhaps after adding we should ask in which device profiles to include it?", then "Ask for both". A
+new reader joins every live profile that takes reader payments (`joinReaderTakingProfiles`,
+`apps/server/src/payments-api.ts`); the two printers added that day joined none by themselves. After adding either, ask
+"Which device profiles can use it?" with a tick for each profile: for a reader, the profiles it joins
+today start ticked; for a printer, none. Draw it for the owner first.
 
 ## A guest paying from their own phone
 

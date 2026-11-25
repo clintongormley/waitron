@@ -132,21 +132,18 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
 
 ## Android/iOS on-device install and trust rows
 
-Real phones on the shop WiFi, the owner's to
-run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
-Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
-call before go-live.
+Run on 25 November 2026 on an Oppo Find X10 (ColorOS 17, Chrome 158.0.8127.42): the till's
+"not trusted" page appeared after clicking past `NET::ERR_CERT_AUTHORITY_INVALID`; after the
+certificate was installed `https://waitron.local/till` opened without a warning, the device kept its
+registration, and the till installed as an app. Still to run: an iPhone or iPad, and another Android
+phone.
 
-## The till's "This device hasn't trusted the till yet" page has never been seen on a real device
-
-`isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
-registering the non-existent `/sw-probe.js` as "certificate not trusted"; that signal is still a
-belief, never checked on a device that clicked past the browser's warning. It runs only on pages
-served over HTTPS. Two gaps remain: the signal is trustworthy only while the server answers the
-probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
-browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
-above, click past the certificate warning on one device and confirm the page appears in the
-browser's preferred supported language, falling back to English when none is supported.
+With a throwaway authority made by the box's own code, the same phone opened the right name and the
+right address, refused a wrong name (`NET::ERR_CERT_COMMON_NAME_INVALID`), and opened a name OUTSIDE
+the authority's permitted names with no warning, as one Android phone did on 2026-09-08. With the
+limit on a second certificate under an installed one, it refused the outside name; the same name
+under an unlimited second certificate opened. That is A1573. The preboot recovery leaf (B3 design
+§7.5) does not exist yet, so the check used a stand-in.
 
 ## Loose ends left by A496 (moving to a new tax ID).
 
@@ -340,6 +337,36 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.
 Ask the owner then which fire immediately and which wait. Left open by A1458.
+
+## A1573. A box certificate that cannot vouch for other websites on Android
+
+Owner, 2026-11-25: "yes" to queueing this for building. A phone that installs the box's certificate
+trusts the box's signing key. The key's certificate is limited to `waitron.local`, `localhost` and
+private addresses, and Android does not apply that limit to the certificate a person installs
+([the run](#androidios-on-device-install-and-trust-rows)), so whoever stole the key could pass as
+another website to that phone. On an Oppo Find X10 (Chrome 158.0.8127.42), the same limit on a second
+certificate, signed by the installed one, was applied.
+
+To plan: the installed certificate signs one limited second certificate and its key is then
+destroyed; the box keeps only the second key, signs its own certificate with it, and serves both.
+Trace every place that reads, checks, repairs, copies or restores `tls/ca.key` and `tls/ca.crt`
+(`self-signed-cert.ts`, `box-secrets.ts`, `box-tls-repair.ts`, `box-tls-install.ts`,
+`backup-verification-secrets.ts`, `packages/store/src/state-layout.ts`,
+`packages/handover/src/manifest.ts`), and every box-to-box check that trusts the venue's authority,
+including client certificates. Repeat the phone check on a second Android phone and an iPhone before
+it lands. Before go-live: afterwards every device would have to install a new certificate. Whether
+staff may use their own Android phones was waiting on this
+(B3 design §7.5 holds the same question for the preboot recovery name).
+
+## A1575. The box's certificate page in Spanish
+
+Owner, 2026-11-25: build it. `http://waitron.local` (`apps/server/src/trust-page.ts`) is in English
+apart from a few lines, and the till's own untrusted page, which is in both languages, sends people
+to it. Choose the language from the browser's `Accept-Language`, as the dashboard's login does. The
+certificate-repair page already has Spanish steps for each device
+(`apps/server/src/connection-bootstrap-strings.ts`); share the words rather than keeping two copies.
+Open the page in both languages and themes at phone width. It follows the `fix/certificate-instructions`
+branch, which changes the same steps.
 
 ## Decisions and deliberate limits
 

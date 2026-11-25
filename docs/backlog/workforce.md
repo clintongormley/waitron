@@ -141,6 +141,17 @@ exists unused. Shown in A585's picker and warnings. After A586.
   in the backlog until then.
   [Receipt and next step](workforce.md#pay-period-changes-after-closure).
 
+## A1577. The till's Check your times screen in plain words
+
+Owner, 2026-11-25: "Build it that way", of a picture (`mock-check-times.png` in `.impeccable/shots/`
+on the owner's Mac, not in the repository). Dates as "Monday 23 November" and times as "19:10"; a line
+reads "Clocked in 19:10" or "Clocked out 19:35 · added automatically"; the person's own answer reads
+"You answered 19:35"; a day with none reads "No times recorded."; one button, "Add missing times",
+replaces the sentence printed twice. The recorded entries do not change, only how they read
+(`apps/till/src/screens/till-attendance-questions.ts`, `apps/till/src/widgets/attendance-history.ts`).
+Any kind of line the picture does not show (a manager's proposal, a correction, a time recorded under
+another offset) goes back to the owner as a picture. Check the shared helper's other screens.
+
 ## Decisions and deliberate limits
 
 - Monthly hours close after three working days by default. The grace period is adjustable (owner,

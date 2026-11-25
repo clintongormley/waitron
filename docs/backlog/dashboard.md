@@ -33,17 +33,14 @@ The browser and account address for the owner’s empty-field observation in the
   no `autocomplete`, one click put the saved email into the Modules search and filled the key
   field; with `off`, and with `new-password`, nothing was filled, and pressing the down
   arrow and Enter afterwards filled nothing either. Not checked: the PIN prompts themselves, other
-  browsers, a password-manager extension, and the window the owner saw.
-
-## A new passkey is listed under the person's email, with their name as its display name (C99, #939) — still open:
-
-The result has not yet been seen in a password manager, including whether it shows new names after a Profile change.
+  browsers, a password-manager extension, and the window the owner saw. On 25 November 2026 the
+  owner's Chrome on an Oppo filled the saved password correctly in the confirmation window; the PIN
+  prompts were not opened.
 
 ## The passkey list says when each passkey was last used and which password manager holds it (C100, #945) — known limits:
 
-Neither the "Last used" behaviour after a passkey is deleted in the
-  password manager nor the password-manager naming was tried with a real browser (the tests stand in
-  for the WebAuthn library). A browser following the older WebAuthn Level 2 rules zeroes the
+On 25 November 2026 the list named Google Password Manager and 1Password on an Oppo Find X10 (Chrome
+  158.0.8127.42), and "Last used" moved with each use. A browser following the older WebAuthn Level 2 rules zeroes the
   authenticator identifier under `@simplewebauthn/server`'s default "none" attestation preference,
   which Waitron does not override, and the passkey then shows no password manager. The names are a
   snapshot of the community list at github.com/passkeydeveloper/passkey-authenticator-aaguids
@@ -53,9 +50,11 @@ Neither the "Last used" behaviour after a passkey is deleted in the
 
 ## The browser's password manager is told which passkeys Waitron still accepts (C101, #948) — still open:
 
-Not observed in a real password manager — the tests replace the browser's methods,
-  and Chrome's feature entry says it acts "Initially ... only for Google Password Manager (GPM)
-  credentials", which a test browser does not hold. The browser's own methods are called directly
+Observed on 25 November 2026 on the box at `https://waitron.local`. On a Mac, a passkey removed in
+  Waitron went from Chrome. On an Oppo Find X10 (ColorOS 17, Chrome 158.0.8127.42) Google Password
+  Manager kept offering it, Waitron refused it and asked the browser to forget it, and it was still
+  offered the next time; 1Password kept the entry and stopped offering it. The sign-in prompt and both
+  managers' entries show the email and no name, before and after a rename in Profile. The browser's own methods are called directly
   rather than through `@simplewebauthn/browser`'s `sendSignal()`, which adds only renamed errors and
   throws where a method is missing. Left open from the review, both predating C101: a suspended or
   pending person's passkey is refused before the signature check and an active person's bad
@@ -77,21 +76,12 @@ Not observed in a real password manager — the tests replace the browser's meth
 
 Left open by the completed A331 batches:
 
-### Password managers
-
-- a password manager filling the profile's current-password field: the owner tried Chrome's
-    password manager on 2026-10-08 and reported that it works well; other password managers are
-    untried.
-
 ### Hardware forms
 
-The demo venue has no card provider connected
-  (connecting one takes an API key), and no device asking to pair was made on the shared venue, so
-  "Add a card reader" (four readers), Rename reader and the pairing dialog were looked at mounted
-  with test data instead; "Add a card reader" now shows a blue Add on every row, as the printers'
-  discovered rows do. Not looked at, left to their tests: the Bluetooth Pair dialog (the laptop's
-  print agent has no `bluetoothctl`) and the bill attestation (the demo venue showed no payment to
-  attest).
+No device asking to pair was made on the shared venue, so the device pairing dialog was looked at
+  mounted with test data instead. Not looked at, left to its tests: the bill attestation (the demo
+  venue showed no payment to attest). On 25 November 2026 the owner added a SumUp Solo, and a
+  Bluetooth printer through the spare box, on the real boxes.
 
 ### Retained preparation screens
 
@@ -104,43 +94,23 @@ The historical menu-only warning was not reproduced.
 
 ## Bundle: One session with real phones and password managers
 
-13 entries, size M. Real-device checks remain open.
+Most of it was run on 25 November 2026 with the owner's Oppo Find X10 and a Pixel Tablet against the
+box at `https://waitron.local`. What is left needs an iPhone, a security key or a second account.
 
-- **Android certificate trust needs real-device checks.** A September receipt records one phone
-  accepting a matching-name, outside-CA-subtree leaf, without captured device versions. It did not
-  measure the recovery leaf's hostname boundary. Actual Android controls, an iOS device and the
-  service-worker/PWA/WebAuthn trust cases remain unmeasured. [Detail](box.md#box-image-constraints-b3)
-- **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
-  run. [Detail](setup.md#androidios-on-device-install-and-trust-rows)
-- **Loose ends left by #334.**
-  [Detail](setup.md#loose-ends-left-by-334)
-- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
-  device.**
-  [Detail](setup.md#the-tills-this-device-hasnt-trusted-the-till-yet-page-has-never-been-seen-on-a-real-device)
-- **Check paying at the table on the OnePlus 13 at the box's address** (left open by A796). A
-  reader card, a QR scan and an NFC tap from the pay sheet, and the NFC button's permission ask;
-  the browser tests use fakes for all four.
-- **Loose ends left by W102 (NFC and equipment labels).**
-  [Detail](payments.md#loose-ends-left-by-w102-nfc-and-equipment-labels)
-- **The dashboard shell restyle (#333) has not been checked on hardware.** It was only ever checked
-  in screenshots on a desktop browser; nobody has walked it on the real box or a phone, so the
-  narrow-viewport banner and drawer are unverified. That walk belongs with the display walkthrough
-  in [ui-review.md](../ui-review.md).
+- **An iPhone or iPad:** install and trust the certificate, the installed till, a passkey, and field
+  focus zoom. [Detail](../developers/design-system.md#structure)
+- **A physical security key, and a passkey on an account with no password.**
+  [Detail](dashboard.md#still-open-from-298305317-device-checks-before-deployment)
+- **What the Oppo session did not reach with stickers and the reader.**
+  [Detail](payments.md#check-nfc-pick-up-on-the-boxs-address)
+- **The Android certificate check, repeated on another phone and with the real recovery leaf.**
+  [Detail](setup.md#androidios-on-device-install-and-trust-rows)
+- **The certificate export help.** [Detail](setup.md#loose-ends-left-by-334)
 - **Password-manager autofill in the confirmation window (C98, #934) — still open:**
   [Detail](dashboard.md#password-manager-autofill-in-the-confirmation-window-c98-934--still-open)
-- **A new passkey is listed under the person's email, with their name as its display name (C99,
-  #939) — still open:** the result has not yet been seen in a password manager.
-  [Detail](dashboard.md#a-new-passkey-is-listed-under-the-persons-email-with-their-name-as-its-display-name-c99-939--still-open)
-- **The passkey list says when each passkey was last used and which password manager holds it (C100,
-  #945) — known limits:**
-  [Detail](dashboard.md#the-passkey-list-says-when-each-passkey-was-last-used-and-which-password-manager-holds-it-c100-945--known-limits)
-- **The browser's password manager is told which passkeys Waitron still accepts (C101, #948) — still
-  open:** not observed in a real password manager — the tests replace the browser's methods.
+- **The passkey list's known limits (C100, #945), and a removed passkey that Android keeps offering
+  (C101, #948).**
   [Detail](dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
-- Still open from #298/#305/#317, device checks before deployment
-  [Detail](dashboard.md#still-open-from-298305317-device-checks-before-deployment)
-- **Check field focus on a real iPhone.**
-  [Detail](../developers/design-system.md#structure)
 
 ## Bundle: Wt dialog lifecycle
 
@@ -160,7 +130,7 @@ Retiring the summary once its last consumer moves away remains open.
 
 ## Bundle: Other browser check
 
-5 entries, size S.
+4 entries, size S.
 
 - **The closed-station alert on the dashboard's alerts page has not been looked at** in the running app
   (A773-2 B4b's look did not reach it).
@@ -173,9 +143,6 @@ Retiring the summary once its last consumer moves away remains open.
   open by A190 (a field the browser fills in keeps the field's own look, #1047).
 - **The "Continue with Google" button was checked in Chromium only** (the vitest browser suites and
   screenshots); Firefox and Safari not looked at. Left open by A228 (#1078).
-- **A password manager filling the profile's current-password field** — the owner tried Chrome's
-  password manager on 2026-10-08 and reported that it works well; other password managers are
-  untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
 
@@ -613,8 +580,8 @@ forms receive field messages from their parent screen.
 ## Still open from #298/#305/#317, device checks before deployment
 
 - Still open from #298/#305/#317, device checks before deployment: passkey reauthentication for a
-  passwordless account; an operator screen for Google provider credentials (now part of A646);
-  native passkey prompts on
-  real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
+  passwordless account (an account with a password confirmed by passkey on the Oppo on 25 November
+  2026); an operator screen for Google provider credentials (now part of A646); a physical
+  authenticator ceremony; live SMTP through `startServer`; whether an
   intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
   from code only; nobody has shown a real pointer can get there.

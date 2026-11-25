@@ -380,6 +380,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
+- **A1573. A box certificate that cannot vouch for other websites on Android** (owner, 2026-11-25; go-live, size M). Android ignores the limit on the certificate a device installs, and obeys it on a second certificate underneath. Changing it later means installing a new certificate on every device. [Detail](backlog/setup.md#a1573-a-box-certificate-that-cannot-vouch-for-other-websites-on-android)
+- **A1575. The box's certificate page in Spanish** (owner, 2026-11-25; important, size S). [Detail](backlog/setup.md#a1575-the-boxs-certificate-page-in-spanish)
+
 - **Stream the remaining recovery archive uploads.**
   The unused archive-preparation route and emergency handover buffer uploads within 256 MiB.
   [Detail](backlog/setup.md#stream-the-remaining-recovery-archive-uploads).
@@ -570,6 +573,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#changing-sent-lines-and-the-kitchen-screen-task-7c-710-and-the-kitchen-fixes-after-it)
 
 ### The till, devices and table service
+
+- **A1574. A till that cannot reach the box says so** (owner, 2026-11-25; important, size M, needs its own plan). A stored page when the app opens, and true words when it is already open. [Detail](backlog/till.md#a1574-a-till-that-cannot-reach-the-box-says-so)
 
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;
@@ -779,6 +784,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
+- **A1576. Adding a card reader or a printer asks which device profiles can use it** (owner, 2026-11-25; important, size S, drawn first). [Detail](backlog/payments.md#a1576-adding-a-card-reader-or-a-printer-asks-which-device-profiles-can-use-it)
+
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07) for how a default reader reaches a till.
 
@@ -868,7 +875,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Wt dialog lifecycle** (covered-dialog reinsertion and the department and zone wrappers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
-- **One session with real phones and password managers** (bundle of 13, 3 go-live, 7 important, size M, needs the real hardware; includes profile-name updates in password managers and field-focus verification). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
+- **One session with real phones and password managers** (mostly run 2026-11-25; left: an iPhone, a security key, an account with no password, and what the Oppo session did not reach; size S, needs the real hardware). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 
 - **What C38 left as it was (a generated display name is the first given name and first surname,
   #827, owner decision 2026-09-28).**
@@ -905,6 +912,8 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
 ### Working time and staff
+
+- **A1577. The till's Check your times screen in plain words** (owner, 2026-11-25; important, size S). [Detail](backlog/workforce.md#a1577-the-tills-check-your-times-screen-in-plain-words)
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
