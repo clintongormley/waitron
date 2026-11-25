@@ -114,6 +114,28 @@ it("warns that a download may need confirming before it reaches the disk", () =>
   expect(renderTrustPage(base)).toMatch(/Keep/);
 });
 
+it("names the button Android shows as well as the desktop one", () => {
+  const words = renderTrustPage(base).replace(/\s+/g, " ");
+  expect(words).toContain(
+    "choose <strong>Keep</strong> or <strong>Download</strong>, or the file never reaches the disk.",
+  );
+});
+
+it("says what to do when the download does not start", () => {
+  const words = renderTrustPage(base).replace(/\s+/g, " ");
+  expect(words).toContain(
+    "If the download does not start, delete the old <code>waitron-ca.crt</code> from your downloads and try again.",
+  );
+});
+
+it("speaks of this device, not this computer", () => {
+  for (const device of ["unknown", ...DEVICE_ORDER] as const) {
+    const html = renderTrustPage({ ...base, device });
+    expect(html).toContain("If you have installed a Waitron certificate on this device before");
+    expect(html).not.toContain("this computer");
+  }
+});
+
 it("judges the page the link opens, not the one the operator is reading", () => {
   const html = renderTrustPage({ ...base, device: "windows" });
   // `deploy/waitron.sh` prints an HTTP entry point, and installing a certificate authority does not

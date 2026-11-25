@@ -10,6 +10,10 @@
  * (`detect-device.test.ts`, the iPadOS-limit suite). Assumed, from whatismybrowser.com's Safari
  * guide read 2026-09-13 and not from a device: that a physical iPad in its default mode sends
  * exactly that string.
+ *
+ * KNOWN LIMIT: an Android tablet asking for the desktop site sends no "Android" in its user-agent
+ * (a Pixel Tablet's Chrome 158, 2026-11-25), so it answers `linux`. `trust-page.ts` corrects that in
+ * the browser; the connection page does not.
  */
 
 export type TrustDevice =
