@@ -249,6 +249,14 @@ export type {
 } from "./menu-patch-types.js";
 export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 export {
+  correctMenuDeclarations,
+  linesReadingChange,
+  replacedLiveDeclarations,
+  waitingDeclarationMenus,
+  type DeclarationMenu,
+  type LiveDeclarationChange,
+} from "./declaration-correction.js";
+export {
   activateDueMenuPublications,
   cancelMenuPublication,
   listMenuPublications,
@@ -339,6 +347,7 @@ export {
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
 
 export { productDeclarationValues, extraDeclarationValues } from "./declaration-values.js";
+export { readProductDeclarationValues } from "./product-declarations.js";
 export { readPublishedDeclarations, type PublishedLine } from "./published-declarations.js";
 
 export { MENU_PERSONAL_DATA } from "./personal-data.js";

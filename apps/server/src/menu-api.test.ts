@@ -31,6 +31,7 @@ import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import type { TradingContext } from "./trading-context.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/menu/test/library-images.js";
 import { mountMenuApi } from "./menu-api.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
@@ -2278,6 +2279,97 @@ describe("mountMenuApi — products", () => {
     });
   });
 
+  describe("the menus a save leaves holding the old allergens", () => {
+    async function publishedDish(app: Hono) {
+      const body = await editorBody(app, { allergens: {} });
+      const created = await send(app, "POST", "/management-api/products/editor", { body });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const menuName = `Declared ${crypto.randomUUID()}`;
+      const menuId = await createMenuVia(app, menuName);
+      await offerVia(app, menuId, id);
+      const preview = await send(app, "GET", `/management-api/menus/${menuId}/preview`);
+      const { hash } = (await preview.json()) as MenuPreview;
+      const published = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
+        body: { expectedHash: hash },
+      });
+      expect(published.status).toBe(200);
+      return { id, body, menuId, menuName };
+    }
+
+    it("the editor save answers declarationMenus", async () => {
+      const app = mountApp();
+      const { id, body, menuId, menuName } = await publishedDish(app);
+      const updated = await send(app, "PUT", `/management-api/products/${id}/editor`, {
+        body: { ...body, allergens: { milk: {} } },
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({
+        id,
+        allergens: { milk: {} },
+        declarationMenus: [{ menuId, name: menuName, live: true, queued: [] }],
+      });
+    });
+
+    it("answers [] for a save of the price alone", async () => {
+      const app = mountApp();
+      const { id, body } = await publishedDish(app);
+      const updated = await send(app, "PUT", `/management-api/products/${id}/editor`, {
+        body: { ...body, unitPrice: "2.50" },
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({ id, unitPrice: "2.50", declarationMenus: [] });
+    });
+
+    it("compares the product's variants too: a scheduled variant copy holding a third value is not stillOld", async () => {
+      const app = mountApp();
+      const variant = {
+        name: "Declared glass",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
+        available: true,
+        active: true,
+      };
+      const created = await send(app, "POST", "/management-api/products/editor", {
+        body: await editorBody(app, { allergens: {}, variants: [variant] }),
+      });
+      expect(created.status).toBe(201);
+      const saved = (await created.json()) as { id: string; variants: { id: string }[] };
+      const variantId = saved.variants[0]!.id;
+      const saveWith = async (productId: string, allergens: Record<string, object>) => {
+        const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
+        const body = saveBodyOf((await read.json()) as Record<string, unknown>);
+        const put = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+          body: { ...body, allergens },
+        });
+        expect(put.status).toBe(200);
+        return (await put.json()) as { declarationMenus: unknown };
+      };
+      await saveWith(variantId, { fish: {} });
+      const menuId = await createMenuVia(app, `Declared ${crypto.randomUUID()}`);
+      await offerVia(app, menuId, saved.id);
+      const preview = await send(app, "GET", `/management-api/menus/${menuId}/preview`);
+      const { hash } = (await preview.json()) as MenuPreview;
+      const scheduled = await send(app, "POST", `/management-api/menus/${menuId}/publications`, {
+        body: { expectedHash: hash, activatesAt: { date: "2099-01-01", time: "12:00" } },
+      });
+      expect(scheduled.status).toBe(201);
+      const { versionId } = (await scheduled.json()) as { versionId: string };
+      await saveWith(variantId, { eggs: {} });
+
+      const answer = await saveWith(saved.id, { milk: {} });
+      expect(answer.declarationMenus).toEqual([
+        expect.objectContaining({
+          menuId,
+          live: false,
+          queued: [expect.objectContaining({ versionId, stillOld: false })],
+        }),
+      ]);
+    });
+  });
+
   /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
   async function editorBody(
     app: Hono,
@@ -2308,10 +2400,11 @@ describe("mountMenuApi — products", () => {
     };
   }
 
-  // A variant is a `products` row. Its own page (the editor routes) reads and writes it; every other
-  // management route that reads or writes a product by id answers exactly what it answers for an id
-  // that names nothing.
-  it("refuses a variant's id on every product-by-id route but its own page, and accepts its parent's", async () => {
+  // A variant is a `products` row. Its own page (the editor routes) reads and writes it, and the
+  // live menus' correction takes its id, since its save lists the menus whose live or scheduled
+  // versions still differ; every other management route that reads or writes a product by id
+  // answers exactly what it answers for an id that names nothing.
+  it("refuses a variant's id on every product-by-id route but its own page and the live menus' correction, and accepts its parent's", async () => {
     const app = mountApp("es-ES");
     const variant = {
       name: "Wine glass",
@@ -2365,6 +2458,29 @@ describe("mountMenuApi — products", () => {
       body: await editorBody(app, { name: "Wine", variants: [variant] }),
     });
     expect(saveParent.status).toBe(200);
+
+    // No menu offers Wine, so the correction reaches no kitchen and never reads the context.
+    const correcting = new Hono();
+    mountMenuApi(
+      correcting,
+      { db: suite.db, venueLocale: "es-ES", venueCfg: {} as TradingContext },
+      noopLog,
+    );
+    const correct = (productId: string) =>
+      send(correcting, "POST", `/management-api/products/${productId}/live-declarations`, {
+        body: { queued: [] },
+      });
+    for (const productId of [variantId, parent.id]) {
+      const corrected = await correct(productId);
+      expect(corrected.status).toBe(200);
+      expect(await corrected.json()).toEqual({ menus: [] });
+    }
+    const missing = crypto.randomUUID();
+    const unknown = await correct(missing);
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "product.not_found", params: { productId: missing } },
+    });
   });
 
   /** A parent product with one variant, each with three different names of its own. */
@@ -2521,7 +2637,7 @@ describe("mountMenuApi — products", () => {
       body: { ...value, unitPrice: null, courseId: null },
     });
     expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ...read, unitPrice: null });
+    expect(await cleared.json()).toEqual({ ...read, unitPrice: null, declarationMenus: [] });
     expect(await stored()).toEqual(blank);
   });
 
