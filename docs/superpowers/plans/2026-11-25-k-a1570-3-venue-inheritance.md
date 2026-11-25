@@ -10,18 +10,21 @@ Use “Inherit: {value}” and “inherited” in English and Spanish in Dashboa
 Venue Service's `routing.inherited` wording. This slice is confined
 to the dashboard. The product and menu screens, till, remaining hints and wording guard have their
 own slices. Routes keeps its editor and station selection rules. Use existing request and data shapes.
+The watcher cleared this plan at 02:48 on 25 November. The branch's base is the rebased PR 1 head
+`3955de990710c34ddec438e86f8f6fe497c67f03`.
 
 1. **Devices.** In `apps/dashboard/src/screens/devices-screen.ts` and `src/i18n/strings.ts`, mark the
    profile choice as the first inherit row. Use the existing resolution for named equipment or
-   “None” when another device holds it. Use the inherit row only after the relevant lists load.
-   Keep the existing printer prompts and reader error feedback. Give a stored, inactive reader
-   its own label when the reader read still returns it, without offering it as a new choice.
+   “None” when another device holds it. Remove the ready placeholders sourced from `options[0]`
+   for printers and readers. Keep the printer loading and failure prompts. A reader box has no
+   placeholder before or after a failed read. Offer its inherit row only when `readerState` is
+   ready and the profile's list is present. Keep an inactive reader as a `fixed` row only while it
+   is the stored choice and the profile is unchanged. Keep inactive readers out of ordinary options.
    Keep choice annotations and access rules. Leave inherited cells visually blank, keep the
    resolved name and “from the profile” hidden for screen readers where the role applies, and
    sort by the resolved name. Remove the old inherited-cell styling. In `devices-screen.test.ts`,
-   first require an inherited and
-   an explicit choice with the same name to display differently, order by the resolved printer,
-   and check a held default, a fixed inactive reader, and reader loads and failures. Keep the
+   first require inherited and explicit equipment with the same name to display differently. Check
+   sorting, a held default, a fixed inactive reader, and a profile change whose reader read fails. Keep the
    existing save-by-ID and `null` assertions.
 2. **Zones.** In `packages/venue-service/src/dashboard/service-settings-fields.ts` and `strings.ts`,
    use the same inherit row for fields with a department value. Keep the named value available as
@@ -49,9 +52,17 @@ own slices. Routes keeps its editor and station selection rules. Use existing re
    English and Spanish `printers.md` guides and the remaining A1570 scope in `docs/backlog.md`.
    Preserve guide heading IDs. PR 1 already updated the opening-hours guide.
 
+Where an inherit row replaces an empty option, remove `show-empty-option`, `muted` and the old
+placeholder. Screen tests own the option fields and suffix, table cells and saved values. The
+shared combobox suites own the arrow, ink, search and spoken suffix. Change only failing
+expectations in the two zone edit suites, venue department policy, Floor plans and both painters.
+In the PR, list the changed test checks and show that a held device default now leaves a blank
+instead of “None”, a blank period's plan is named nowhere in that table, and a period already
+storing the default ID stays fixed after “Make default”.
+
 Run each changed browser suite red for the new expectation, then green with the smallest change.
 Run the Calendar, Routes and guide guards. Check the changed controls and tables with keyboard and
 at desktop and phone widths in both themes, including a held default in Devices and the blank and
 fixed plan cells in Periods. Attach screenshots for the owner's approval before landing. Budget
-about 110 production lines, 230 test lines and a short guide update. Report additions and removals
+about 110 production lines, 230 test lines and four documents. Report additions and removals
 separately.
