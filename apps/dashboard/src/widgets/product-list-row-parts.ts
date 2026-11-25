@@ -14,6 +14,9 @@ export const productRowStyles = css`
     align-items: center;
     justify-content: center;
   }
+  wt-data-table[wrap-to-fit]::part(tree-toggle) {
+    flex-shrink: 0;
+  }
   wt-data-table::part(variant-cell) {
     padding-inline-start: var(--wt-space-4);
   }
@@ -30,7 +33,6 @@ export const productRowStyles = css`
     flex-wrap: wrap;
     column-gap: var(--wt-space-2);
     align-items: baseline;
-    align-self: flex-start;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }

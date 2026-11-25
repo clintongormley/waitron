@@ -149,8 +149,8 @@ saves each change as you make it. When you close it, the last course you added b
 course; if you removed the product's course instead, the product is left with none. Your other
 unsaved product fields stay as they were.
 
-In the Products list, open **Customise** to show the **Course** column. Use **Course** in
-**Filters** to find one or more courses, or choose **No course**.
+In the Products list, open **Customise** to show the **Course** column. If your venue has courses,
+use **Course** in **Filters** to choose one or more of them or find products with **No course**.
 
 At a table in the Spanish demo, send a first order with drinks and mains. The drinks go
 straight to the bar, and the mains wait for **Fire**. Desserts sent with that first order

@@ -3496,6 +3496,24 @@ describe("a product's variants in the list", () => {
 
   const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
 
+  it.each(["en-GB", "es-ES"])("fits the starting columns at 1180 px in %s", async (locale) => {
+    setLocale(locale);
+    await page.viewport(1180, 844);
+    const dish = cecina();
+    dish.name =
+      locale === "en-GB"
+        ? "Mushroom croquettes with roasted garlic and aged sheep cheese"
+        : "Croquetas de setas con ajo asado y queso de oveja curado";
+    dish.modifiers = [{ kind: "extras", id: "extras" }];
+    dish.ordering = "not_sold_separately";
+    dish.variants[0]!.available = false;
+    const { table, root } = await mountDeli({ products: [dish] });
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
+    await page.viewport(390, 844);
+    await vi.waitFor(() => expect(table.wrapToFit).toBe(false));
+  });
+
   it("draws a small, muted arrow on a product with variants, at its arrow box's end", async () => {
     const { root } = await mountDeli();
     const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
@@ -4509,6 +4527,7 @@ describe("a refresh during a drag", () => {
     const { el } = await mountTree();
     await openRow(el, "folder:d");
     const root = await tableRoot(el);
+    await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(width === 390));
     const gapBefore = (at: ShadowRoot) =>
       [
         ...at.querySelectorAll<HTMLElement>('tr[data-row-key]:has(> td[part~="drop-gap-before"])'),
@@ -4521,7 +4540,9 @@ describe("a refresh during a drag", () => {
     press(nameOf(root, "folder:f"), "pointermove");
     press(nameOf(root, "folder:d"), "pointermove");
     expect(gapBefore(root)).toEqual(["cola"]);
-    expect(Math.abs(row.getBoundingClientRect().height - height * 2)).toBeLessThanOrEqual(3);
+    expect(Math.abs(row.getBoundingClientRect().height - height * 2)).toBeLessThanOrEqual(
+      width === 390 ? 3 : 0.5,
+    );
     const after = await refreshed(el, {
       products: [
         ...treeProducts(),

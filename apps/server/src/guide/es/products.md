@@ -158,8 +158,8 @@ cada cambio al hacerlo. Al cerrarla, el último orden de plato que añadiste se 
 Si eliminaste el que tenía, el producto se queda sin ninguno. Los demás campos del producto sin
 guardar siguen como estaban.
 
-En la lista de Productos, abre **Personalizar** para mostrar la columna **Orden de plato**.
-Usa **Orden de plato** en **Filtros** para buscar uno o varios órdenes de plato, o elige
+En la lista de Productos, abre **Personalizar** para mostrar la columna **Orden de plato**. Si el
+local tiene órdenes de plato, usa **Orden de plato** en **Filtros** para elegir uno o varios, o
 **Sin orden de plato**.
 
 En una mesa de la demostración española, envía un primer pedido con bebidas y platos

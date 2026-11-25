@@ -566,6 +566,7 @@ describe("menu-screen", () => {
   });
 
   it("keeps a saved availability through an older reply and a failed refresh", async () => {
+    onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
     const original = [
       { ...products[0]!, primaryCategoryId: null },
       { ...products[0]!, id: "p2", name: "Toast", primaryCategoryId: null },

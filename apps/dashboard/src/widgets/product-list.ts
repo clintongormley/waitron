@@ -432,8 +432,10 @@ export class ProductList extends LitElement {
   });
   @state() private ghost: DragGhost | null = null;
 
-  readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
-  /** `narrow` moves the names without resizing the table or updating it. */
+  readonly #tableResize = new ResizeObserver(([entry]) => {
+    this.#table()!.wrapToFit = entry!.contentRect.width >= 800;
+    this.#scheduleFit();
+  });
   readonly #tableNarrow = new MutationObserver(() => this.#scheduleFit());
   #fitFrame = 0;
 
