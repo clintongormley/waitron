@@ -158,8 +158,10 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 The owner chose the Suggested panel in `.impeccable/shots/mock-check-times.png` on 25 November
 2026 (“Build it that way”), as recorded at `b5425d2ba9`. The card shows the work date in words,
-short recorded times, and one **Add missing times** button for a day with missing times. The owner
-asked to see pictures of entries outside that design before deciding how they should read.
+short recorded times, and one **Add missing times** button for a day with missing times. After
+seeing the other examples, the owner chose plain wording for breaks, corrections, manager entries
+and proposals, with a date in words for an overnight finish and offsets for repeated clock times
+(watcher, 25 November 2026 at 20:39 CET).
 
 ### A1268 corrections after a backward clock step
 

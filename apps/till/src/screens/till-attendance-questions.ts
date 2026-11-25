@@ -2,8 +2,12 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { AttendanceInbox, AttendancePrompt } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
-import { attendanceHistory, questionAttendanceHistory } from "../widgets/attendance-history.js";
+import { t } from "../i18n/t.js";
+import {
+  attendanceDateInWords,
+  questionAttendanceHistory,
+  questionAttendanceProposal,
+} from "../widgets/attendance-history.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 @customElement("till-attendance-questions")
@@ -101,35 +105,22 @@ export class TillAttendanceQuestions extends LitElement {
     const pending = item?.direction === "manager_proposal" && item.status === "waiting-worker";
     const day = prompt.businessDay;
     const hasHistory = prompt.history.length > 0;
-    const shortTimes =
-      !proposal &&
-      day &&
-      prompt.history.every((entry) => entry.offsetMinutes === prompt.history[0]?.offsetMinutes);
-    const dateLabel =
-      day &&
-      new Intl.DateTimeFormat(currentLocale(), {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        timeZone: "UTC",
-      }).format(new Date(day));
+    const lines =
+      proposal && item
+        ? questionAttendanceProposal(item, prompt.timeZone)
+        : questionAttendanceHistory(prompt);
     return html`<article data-prompt=${prompt.id}>
-      ${dateLabel ? html`<h2>${dateLabel}</h2>` : nothing}
+      ${day ? html`<h2>${attendanceDateInWords(day)}</h2>` : nothing}
       ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}
-      ${proposal ? html`<p>${t("attendance.proposal")}</p>` : nothing}
+      ${proposal && !item ? html`<p>${t("attendance.proposal")}</p>` : nothing}
       ${prompt.kind === "missing-times" ? html`<p class="muted">${t(hasHistory ? "attendance.some_times_missing" : "attendance.no_times_recorded")}</p>` : nothing}
       ${
-        hasHistory
+        lines.length
           ? html`<ul role="list">
-              ${prompt.history.map((entry) =>
-                shortTimes
-                  ? questionAttendanceHistory(entry, day, prompt.timeZone)
-                  : attendanceHistory(entry),
-              )}
+              ${lines}
             </ul>`
           : nothing
       }
-      ${proposal && item?.reason ? html`<p>${item.reason}</p>` : nothing}
       ${proposal && !pending ? html`<p>${t("attendance.overtaken")}</p>` : nothing}
       ${proposal && pending && !item.readyToApply ? html`<p>${t("attendance.sequence_blocked")}</p>` : nothing}
       <div class="actions">

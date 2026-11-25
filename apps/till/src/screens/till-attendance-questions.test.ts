@@ -20,6 +20,7 @@ const mount = (props: Partial<TillAttendanceQuestions> = {}) =>
   });
 const button = (el: TillAttendanceQuestions, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+const words = (node: Node) => node.textContent!.replace(/\s+/g, " ").trim();
 
 function watch(el: HTMLElement, type: string): CustomEvent[] {
   const seen: CustomEvent[] = [];
@@ -28,12 +29,14 @@ function watch(el: HTMLElement, type: string): CustomEvent[] {
 }
 
 describe("attendance questions before work", () => {
-  it("shows the stored calendar time and offset, not the business day or the venue's current zone", async () => {
+  it("shows the stored calendar date and time instead of recalculating them in the venue's zone", async () => {
     const { el } = await mount();
     const time = el.shadowRoot!.querySelector("time")!;
     expect(time).not.toBeNull();
     expect(time.getAttribute("datetime")).toBe("2026-10-13T23:30:00.000Z");
-    expect(time.textContent).toBe("2026-10-14 01:30 +02:00");
+    expect(words(time.closest("li")!)).toBe(
+      "Clocked out 01:30, Wednesday 14 October · added automatically",
+    );
     expect(el.shadowRoot!.textContent).toContain(
       "This automatic finish already counts towards your hours.",
     );
@@ -94,10 +97,7 @@ describe("attendance questions before work", () => {
     try {
       const { el } = await mount({ inbox: attendanceInbox(attendanceMissingTimesPrompts()) });
       const [monday, tuesday] = el.shadowRoot!.querySelectorAll("article");
-      const lines = (card: Element) =>
-        Array.from(card.querySelectorAll("li"), (row) =>
-          row.textContent!.replace(/\s+/g, " ").trim(),
-        );
+      const lines = (card: Element) => Array.from(card.querySelectorAll("li"), words);
       expect(monday!.querySelector("h2")!.textContent).toBe("Monday 23 November");
       expect(monday!.querySelector("p")!.textContent).toBe("Some times are missing.");
       expect(lines(monday!)).toEqual([
@@ -133,17 +133,16 @@ describe("attendance questions before work", () => {
   });
 
   it.each([
-    ["after midnight", "2026-11-24T00:30:00.000Z", 60, "2026-11-24 01:30 +01:00"],
-    ["at a different offset", "2026-11-23T18:35:00.000Z", 120, "2026-11-23 20:35 +02:00"],
-  ] as const)(
-    "retains the recorded date and offset %s",
-    async (_label, eventAt, offsetMinutes, shown) => {
-      const [prompt] = attendanceMissingTimesPrompts();
-      prompt.history = [attendanceEntry({ eventAt, offsetMinutes })];
-      const { el } = await mount({ inbox: attendanceInbox([prompt]) });
-      expect(el.shadowRoot!.querySelector("time")!.textContent).toBe(shown);
-    },
-  );
+    ["after midnight", "2026-11-24T00:30:00.000Z", 60, "01:30, Tuesday 24 November"],
+    ["at a different offset", "2026-11-23T18:35:00.000Z", 120, "20:35"],
+  ] as const)("uses the recorded time %s", async (_label, eventAt, offsetMinutes, shown) => {
+    const [prompt] = attendanceMissingTimesPrompts();
+    prompt.history = [attendanceEntry({ eventAt, offsetMinutes })];
+    const { el } = await mount({ inbox: attendanceInbox([prompt]) });
+    expect(words(el.shadowRoot!.querySelector("li")!)).toBe(
+      `Clocked out ${shown} · added automatically`,
+    );
+  });
 
   it("keeps both recorded offsets on a work day that crosses a clock change", async () => {
     const [prompt] = attendanceMissingTimesPrompts();
@@ -158,49 +157,52 @@ describe("attendance questions before work", () => {
       attendanceEntry({ eventAt: "2026-10-25T01:35:00.000Z", offsetMinutes: 60 }),
     ];
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
-    expect(Array.from(el.shadowRoot!.querySelectorAll("time"), (time) => time.textContent)).toEqual(
-      ["2026-10-25 02:10 +02:00", "2026-10-25 02:35 +01:00"],
-    );
+    expect(Array.from(el.shadowRoot!.querySelectorAll("time"), words)).toEqual([
+      "02:10 +02:00",
+      "02:35 +01:00",
+    ]);
   });
 
-  it("keeps details for breaks, corrections and manager entries beside a worker clock-in", async () => {
+  it("shows the break range, worker correction and manager entry in plain words", async () => {
     const [prompt] = attendanceMissingTimesPrompts();
     const [clockIn, clockOut, answer] = prompt.history;
     prompt.history = [
       { ...clockIn!, extension: undefined },
       {
-        ...clockOut!,
-        entryId: "break",
+        ...clockIn!,
+        entryId: "break-start",
         entryKind: "break_start",
-        recordedByPersonId: "worker",
-        extension: clockIn!.extension,
+        eventAt: "2026-11-23T18:15:00.000Z",
+      },
+      {
+        ...clockIn!,
+        entryId: "break-end",
+        entryKind: "break_end",
+        eventAt: "2026-11-23T18:30:00.000Z",
+      },
+      {
+        ...clockOut!,
+        recordedByPersonId: "manager",
+        extension: { ...clockIn!.extension!, authorKind: "manager" },
       },
       {
         ...answer!,
         entryKind: "correction",
+        eventAt: "2026-11-23T18:45:00.000Z",
         correctsEntryId: clockOut!.entryId,
-        correctionStatus: "approved",
-        correctionReason: "Corrected the closing time",
+        correctionStatus: "requested",
+        correctionReason: "Finished the stock count",
         correctionActorId: "worker",
-        extension: {
-          ...answer!.extension!,
-          direction: "manager_proposal",
-          respondsToEntryId: "request",
-        },
-      },
-      {
-        ...clockOut!,
-        entryId: "manager-out",
-        recordedByPersonId: "manager",
-        extension: { ...clockIn!.extension!, authorKind: "manager" },
+        extension: { ...clockIn!.extension!, direction: "worker_request" },
       },
     ];
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
-    expect(Array.from(el.shadowRoot!.querySelectorAll("time"), (time) => time.textContent)).toEqual(
-      ["19:10", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00"],
-    );
-    expect(el.shadowRoot!.textContent).toContain("Corrected the closing time");
-    expect(el.shadowRoot!.querySelectorAll("li")[3]!.textContent).toContain("· Manager");
+    expect(Array.from(el.shadowRoot!.querySelectorAll("li"), words)).toEqual([
+      "Clocked in 19:10",
+      "Break 19:15 to 19:30",
+      "Clocked out 19:35 · added by a manager",
+      "You changed it to 19:45: Finished the stock count",
+    ]);
   });
 
   it("proposals show the distinct original and proposed times, reason and both worker decisions", async () => {
@@ -210,17 +212,16 @@ describe("attendance questions before work", () => {
       questionId: null,
       itemId: item.id,
       kind: "proposal",
+      businessDay: null,
+      day: null,
+      timeZone: "Europe/Madrid",
       automaticEntryId: null,
       history: item.history,
     });
     const { el } = await mount({ inbox: attendanceInbox([prompt], [item]) });
-    expect([...el.shadowRoot!.querySelectorAll("time")].map((t) => t.textContent)).toEqual([
-      "2026-10-13 17:00 +02:00",
-      "2026-10-13 18:00 +02:00",
-    ]);
-    expect(el.shadowRoot!.textContent).toContain("Original time");
-    expect(el.shadowRoot!.textContent).toContain("Proposed time");
-    expect(el.shadowRoot!.textContent).toContain("Finished the stock count");
+    expect(words(el.shadowRoot!.querySelector("article")!)).toBe(
+      "Tuesday 13 October. A manager proposed 18:00 instead of 17:00: Finished the stock count Accept Disagree",
+    );
     const decisions = watch(el, "attendance-decide");
     await userEvent.click(button(el, "[data-accept]"));
     await userEvent.click(button(el, "[data-disagree]"));
