@@ -263,21 +263,23 @@ occupied slots and waiting jobs, plus hosted counts. Preparation and manual work
 quarantined slots and retained runners are excluded, and admitted jobs are counted once.
 A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity.
 
-After licence and sign-off pass, the first attempt selects up to `slots - serverRunning - serverWaiting`
-eligible jobs for the server, with zero as the minimum. The ordered family list puts typecheck, root
-guards and lint first, followed by ascending server shards, the stream job, and the other enabled
-families in their listed order. Other legs use GitHub. The existing repository, head and hosted-mode
-checks still apply. A failed planner leaves lint and root guards on GitHub.
+After licence and sign-off pass, the first attempt fills free server slots, then places enough of
+the initial batch on the server to balance the total running and waiting jobs per slot on both
+sides, including the new jobs. GitHub counts as 20 slots and the server share rounds up. The
+planner uses the larger of the published total and the total visible in its existing CI health
+read for each pool. Adding those observations could count an admitted job twice while its runner
+is being prepared. Manual work and newly visible CI jobs can also occupy different slots, so the
+larger total can miss their combined load. The ordered family list puts typecheck, root guards and
+lint first, followed by ascending server shards, the stream job, and the other enabled families
+in their listed order. The existing repository, head
+and hosted-mode checks still apply. A failed planner leaves lint and root guards on GitHub.
 
-The first batch uses the capacity snapshot and the server-health inventory. With a readable
-inventory and a capacity snapshot less than five minutes old and dated no later than now, a stuck
-queue leaves the remaining slots available after the published waiting jobs are counted. The
-planner reports the stall while the health read sees no running or recently progressing server
-jobs. If a required server input is unreadable, or a stall coincides with an
-snapshot that is outdated or dated in the future, the batch uses GitHub. The planner skips the separate GitHub queue count on
-the first attempt. Dependent merges and the mutation aggregate use GitHub, since the planner's
-available slots describe the initial batch. A PR's `changes` planner still uses GitHub when its
-run-creation snapshot shows any server jobs waiting.
+Queue balancing requires a readable inventory, positive server capacity, both hosted counts and
+a snapshot less than five minutes old and dated no later than now. A reported stall, missing
+hosted counts or a snapshot outside the age window sends placement back to the published free-slot
+calculation. Unreadable server inputs send the batch to GitHub, as does a stall paired with a
+snapshot outside the age window. Dependent merges and the mutation aggregate use GitHub on the first attempt. A PR's
+`changes` planner still uses GitHub when its run-creation snapshot shows server jobs waiting.
 
 A rerun that runs the planner again keeps the whole-route decision. Idle positive server capacity
 wins without a hosted count. Otherwise CI reads this repository's queued and running workflows,
@@ -287,11 +289,17 @@ using the stipulated 20 hosted slots. Ties select the server and zero server slo
 A partial rerun reusing an earlier planner's outputs uses GitHub. The initial `changes` placement
 still uses the run-creation snapshot. The watcher cleared these choices on 18 November at 10:36 CET.
 
-Read the planner's `CI server job candidates`, capacity source and snapshot age alongside the actual
-job labels. Even a fresh read contains the publisher's last observation. The run's own planner can
-count as occupied, and simultaneous planners can select the same available slots, including
-while a job is stalled. New waiting jobs reduce the available slots in the next published snapshot.
-Confirm placements and completed checks in an ordinary mixed run before calling the split qualified.
+Read the planner's `CI server job candidates`, capacity source, snapshot age and number of jobs
+beyond free slots alongside the actual job labels. Even a fresh read contains the publisher's last
+observation. Earlier placements can affect later planners once their jobs appear in the inventory.
+Simultaneous planners can select from the same counts. Compare actual placement and pickup times
+in an ordinary run with jobs placed beyond free slots. Record how long `server-queue-watchdog`
+occupies a GitHub slot and whether the controller moves an untouched run back to GitHub. Once a
+first attempt has waited a minute, the controller can move it if the server pool is full, fewer
+than 20 hosted jobs are running, `serverWaiting / slots > hostedWaiting / 20` and no job in the
+run blocks recovery. The controller ignores a successful `changes` job and the watchdog when
+checking for work already started. Rounding the planner’s share up can cross the queue threshold.
+[Controller overflow check](https://github.com/waitron-io/waitron-cloud/blob/b938005f99ce868486d5920203ca4b60c4ae582e/scripts/disposable-tests/ci-canary.mjs#L171-L262)
 
 Under the former whole-run rule, [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 
