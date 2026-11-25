@@ -38,7 +38,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
 import "@waitron/ui/src/components/wt-price-input.js";
-import { pressIfEnabled } from "../state/pad-keys.js";
+import { padInputFor, pressIfEnabled } from "../state/pad-keys.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -985,6 +985,17 @@ export class TillTenderPay extends LitElement {
     }
   }
 
+  #onQuantityKey(event: KeyboardEvent): void {
+    if (event.defaultPrevented || event.repeat) return;
+    if (padInputFor(event, "decimal")?.kind === "escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      pressIfEnabled(this.#button(".cancel"));
+    } else {
+      submitOnEnter(event, this.#button(".add"));
+    }
+  }
+
   #quantityEntry(): string {
     return this.entry.replace(/^(\d+)\.$/, "$1");
   }
@@ -1649,6 +1660,7 @@ export class TillTenderPay extends LitElement {
     const quantity = this.#quantityEntry();
     const invalid = !this.#quantityFitsUnit(product, quantity);
     const blocked = this.#quantityBlocked();
+    const canAdd = !invalid && !blocked;
     const showError = invalid && quantity !== "" && quantity !== "0";
     return html`
       <wt-price-input
@@ -1662,7 +1674,7 @@ export class TillTenderPay extends LitElement {
         .error=${showError ? t("line.quantity_invalid") : ""}
         ?disabled=${blocked}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
-        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.#button(".add"))}
+        @keydown=${this.#onQuantityKey}
       ></wt-price-input>
       <till-numeric-pad
         .value=${this.entry}
@@ -1674,9 +1686,9 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button
           class="add"
-          variant="primary"
+          variant=${canAdd ? "primary" : "secondary"}
           size="lg"
-          ?disabled=${invalid || blocked}
+          ?disabled=${!canAdd}
           @click=${() => this.#addWeight(product)}
         >
           ${t("action.add")}

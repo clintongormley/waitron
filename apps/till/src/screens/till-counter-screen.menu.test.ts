@@ -296,6 +296,7 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     tile.click();
     await panel.updateComplete;
     expect(add()?.disabled).toBe(true);
+    expect(add()?.variant).toBe("secondary");
     expect(amount()?.label).toBe(product.name);
     await amount().updateComplete;
     expect(input().value).toBe("");
@@ -304,6 +305,7 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     expect(root.querySelector(".prompt")).toBeNull();
     await userEvent.fill(input(), "999999999");
     expect(add()?.disabled).toBe(false);
+    expect(add()?.variant).toBe("primary");
     await userEvent.fill(input(), "1000000000");
     expect(add()?.disabled).toBe(true);
     await userEvent.fill(input(), "0,");

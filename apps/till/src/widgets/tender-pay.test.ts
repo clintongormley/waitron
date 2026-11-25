@@ -3041,6 +3041,16 @@ describe("typing cash and weights with a keyboard", () => {
     expect(store.lines).toEqual([]);
   });
 
+  it("Escape from the focused weight field cancels amount entry", async () => {
+    const { el, store } = await weighing();
+    const field = el.shadowRoot!.querySelector("wt-price-input")!;
+    await field.updateComplete;
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "0.3");
+    await userEvent.keyboard("{Escape}");
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(store.lines).toEqual([]);
+  });
+
   it("draws one editable amount for weight and keeps the cash pad field-free", async () => {
     const cash = await paying();
     expect(query(cash.el, "till-numeric-pad")).not.toBeNull();
