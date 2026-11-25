@@ -19,6 +19,7 @@ import {
 import type { ExtraSelection } from "@waitron/shared";
 import {
   createServiceZone,
+  readBusinessDayScheduleRevision,
   replaceMenuWeek,
   saveMenuPeriod,
   setRoutingCell,
@@ -183,6 +184,7 @@ async function mealVenue(weekdays: readonly number[] = [1], lunchEndsAt = "14:00
         restaurant,
         diningZone,
         lunch,
+        dinner,
         menus,
         toastId,
         toast,
@@ -327,14 +329,26 @@ it.each([
   expect(sent).toEqual([{ stationId: v.stations[destination], price: 400 }]);
 });
 
-it("asks at Bar's cutoff for a Lunch dish it took over", async () => {
-  at("16:00");
-  const v = await venueWithLastOrders();
-  await expect(open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }])).rejects.toMatchObject({
-    code: "menu_period.ended",
-    params: { menuItemIds: [v.toast.setLunch] },
-  });
-});
+it.each(["19:30", "22:50"])(
+  "checks Dinner's route for a dish it also sells at %s",
+  async (time) => {
+    at(time);
+    const v = await venueWithLastOrders();
+    if (time === "22:50")
+      await withTransaction(suite.db, async (tx) => {
+        await updateMenuPeriod(tx, v.lunch, { lastOrders: [] });
+        await updateMenuPeriod(tx, v.dinner, {
+          lastOrders: [{ kind: "station", stationId: v.stations.bar, minutes: -15 }],
+        });
+      });
+    const send = open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }]);
+    if (time === "19:30") {
+      await expect(send).resolves.toMatchObject({ gross: { total: "4.00" } });
+    } else {
+      await expect(send).rejects.toMatchObject({ code: "menu_period.ended" });
+    }
+  },
+);
 
 it("asks before placing a parked main once Kitchen stops", async () => {
   at("14:44");
@@ -354,6 +368,27 @@ it("uses Lunch's cutoff after a parked dish moves to another department", async 
   await withTransaction(suite.db, async (tx) => {
     const dept = await createBareDepartment(tx, "Terrace", new Date());
     const { id: zone } = await createServiceZone(tx, { name: "Terrace", departmentId: dept });
+    const { id: terrace } = await saveMenuPeriod(tx, dept, {
+      name: "All day",
+      menuId: v.menus.setLunch,
+      staffMenuIds: [],
+    });
+    await replaceMenuWeek(
+      tx,
+      dept,
+      Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: [{ periodId: terrace, startsAt: "05:00", endsAt: "05:00" }],
+      })),
+      new Date(),
+      await readBusinessDayScheduleRevision(tx),
+    );
+    await setRoutingCell(
+      tx,
+      { row: { kind: "product", productId: v.saladId }, zoneId: zone },
+      { kind: "station", stationId: v.stations.bar },
+      [{ periodId: terrace, target: { kind: "station", stationId: v.stations.kitchen } }],
+    );
     await VENUE_SERVICE.retargetOrderContext(tx, id, zone);
   });
   at("14:45");
@@ -374,6 +409,7 @@ it("uses Lunch's cutoff after a parked dish moves to another department", async 
 it.each([
   ["14:45", "salad", false],
   ["15:20", "toast", true],
+  ["19:30", "toast", false],
 ] as const)(
   "checks whether the original dish can be increased at %s",
   async (time, dish, allowed) => {
@@ -788,19 +824,26 @@ describe("extras added later to a stored dish", () => {
       .sort((a, b) => Number(a.parentLineId !== null) - Number(b.parentLineId !== null))
       .map(({ latePeriodName, lateConfirmedBy }) => ({ latePeriodName, lateConfirmedBy }));
 
-  it("judges an extra by the Bar that took the sent dish", async () => {
-    at("14:44");
-    const v = await venueWithLastOrders();
-    const id = await sendAtTable(v, [
-      { menuItemId: v.salad, quantity: "1", makeAt: v.stations.bar },
-    ]);
-    at("14:45");
-    await addAvocado(v, id);
-    expect(await marksOf(id)).toEqual([
-      { latePeriodName: null, lateConfirmedBy: null },
-      { latePeriodName: null, lateConfirmedBy: null },
-    ]);
-  });
+  it.each(["bar", "kitchen"] as const)(
+    "judges an extra by the %s that took its dish",
+    async (station) => {
+      at("14:44");
+      const v = await venueWithLastOrders();
+      const id = await sendAtTable(v, [
+        { menuItemId: v.salad, quantity: "1", makeAt: v.stations[station] },
+      ]);
+      at("14:45");
+      if (station === "kitchen")
+        await expect(addAvocado(v, id)).rejects.toMatchObject({ code: "menu_period.ended" });
+      else await addAvocado(v, id);
+      expect(await marksOf(id)).toEqual(
+        Array.from({ length: station === "bar" ? 2 : 1 }, () => ({
+          latePeriodName: null,
+          lateConfirmedBy: null,
+        })),
+      );
+    },
+  );
 
   it("are refused menu_period.ended after the period of an on-time dish, and write nothing", async () => {
     at("13:50");

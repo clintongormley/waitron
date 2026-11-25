@@ -39,15 +39,17 @@ async function mealtimes(tx: Transaction) {
     .insert(kitchenStations)
     .values([{ name: "Kitchen" }, { name: "Bar", isDefault: true }])
     .returning({ id: kitchenStations.id });
-  await setRoutingCell(
-    tx,
-    { row: { kind: "product", productId: venue.sirloin }, zoneId: venue.zoneId },
-    { kind: "station", stationId: bar!.id },
-    [{ periodId: lunch, target: { kind: "station", stationId: kitchen!.id } }],
-  );
+  const address = {
+    row: { kind: "product" as const, productId: venue.sirloin },
+    zoneId: venue.zoneId,
+  };
+  await setRoutingCell(tx, address, { kind: "station", stationId: bar!.id }, [
+    { periodId: lunch, target: { kind: "station", stationId: kitchen!.id } },
+  ]);
   return {
     ...venue,
     departmentId,
+    address,
     lunch,
     dinner,
     kitchen: kitchen!.id,
@@ -84,10 +86,12 @@ it("hands a dish to the contiguous period that offers it only in its set menu", 
       { periodId: v.lunch, startsAt: "12:00", endsAt: "15:00" },
       { periodId: v.dinner, startsAt: "15:00", endsAt: "18:00" },
     ]);
-    expect(await v.decide(new Date("2026-10-05T14:50:00+02:00"))).toMatchObject({
-      stopped: false,
-      route: { kind: "station", stationId: v.bar },
-    });
+    for (const time of ["14:50", "15:00"]) {
+      expect(await v.decide(new Date(`2026-10-05T${time}:00+02:00`)), time).toMatchObject({
+        stopped: false,
+        route: { kind: "station", stationId: v.bar },
+      });
+    }
   }));
 
 it("checks another ended period that sold the same dish", async () =>
@@ -156,4 +160,14 @@ it("uses last orders at a period ending at changeover even while the zone is kep
       stopped: true,
       route: { kind: "station", stationId: v.kitchen },
     });
+  }));
+
+it("No preparation stops at its own cutoff", () =>
+  withTransaction(suite.db, async (tx) => {
+    const v = await mealtimes(tx);
+    const route = { kind: "no_preparation" } as const;
+    await setRoutingCell(tx, v.address, route, []);
+    await updateMenuPeriod(tx, v.lunch, { lastOrders: [{ ...route, minutes: -15 }] });
+    const at = new Date("2026-10-05T14:45:00+02:00");
+    expect(await v.decide(at)).toMatchObject({ stopped: true, route });
   }));

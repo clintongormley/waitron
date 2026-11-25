@@ -43,7 +43,7 @@ export async function confirmLateDishes(
  * How a send treats a stored dish past last orders: `ask` refuses it unless
  * the request confirms it, `"mark"` marks it with no confirmer.
  */
-export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
+export type LateUnsentMode = { ask: LateSendConfirmation | undefined; periodOnly?: true } | "mark";
 /**
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
  * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by
@@ -74,7 +74,13 @@ export async function lateUnsentDishesOf(
 ): Promise<void> {
   const byDepartment = new Map<string, LateUnsentDish[]>();
   for (const { orderId, lines } of bills) {
-    const judged = await judgeLateUnsent(tx, orderId, lines, routing);
+    const judged = await judgeLateUnsent(
+      tx,
+      orderId,
+      lines,
+      routing,
+      mode === "mark" || !mode.periodOnly,
+    );
     if (judged === null) continue;
     byDepartment.set(judged.departmentId, [
       ...(byDepartment.get(judged.departmentId) ?? []),
@@ -117,6 +123,7 @@ async function judgeLateUnsent(
   orderId: string,
   lines: readonly Pick<FireableLine, "id" | "parentLineId">[],
   routing: ReturnType<typeof routingOnce>,
+  checkCutoffs: boolean,
 ): Promise<{ departmentId: string; late: LateUnsentDish[] } | null> {
   if (lines.length === 0) return null;
   const order = await VENUE_SERVICE.findOrderContext(tx, orderId);
@@ -155,8 +162,8 @@ async function judgeLateUnsent(
   const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
   const contexts = await VENUE_SERVICE.listLineContexts(tx, orderId);
   const contextOf = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
-  const settings = new Map([[service.departmentId, service.lastOrders]]);
-  for (const { lineId } of pending) {
+  const settings = new Map([[service.departmentId, checkCutoffs ? service.lastOrders : undefined]]);
+  for (const { lineId } of checkCutoffs ? pending : []) {
     const departmentId = contextOf.get(lineId)?.departmentId;
     if (departmentId !== undefined && !settings.has(departmentId))
       settings.set(departmentId, await (await routing()).lastOrdersFor(departmentId));

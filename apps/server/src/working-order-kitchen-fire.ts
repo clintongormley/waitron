@@ -94,7 +94,6 @@ export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
 export const lastOrderLineColumns = {
   menuId: workingOrderLines.menuId,
   offerDepartmentId: workingOrderLines.offerDepartmentId,
-  setMenuId: workingOrderLines.setMenuId,
 };
 
 export async function makersByLine(
@@ -106,19 +105,17 @@ export async function makersByLine(
     latePeriodId: string | null;
     menuId: string | null;
     offerDepartmentId: string | null;
-    setMenuId: string | null;
   }[],
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
   const outcomes = new Map<string, MakerOutcome>();
   if (zoneId !== null) {
     const byDepartment = new Map<string, { key: string; menuId: string; productId: string }[]>();
-    for (const { id, productId, latePeriodId, menuId, offerDepartmentId, setMenuId } of lines) {
+    for (const { id, productId, latePeriodId, menuId, offerDepartmentId } of lines) {
       if (
         productId === null ||
         latePeriodId !== null ||
         menuId === null ||
-        offerDepartmentId === null ||
-        setMenuId !== null
+        offerDepartmentId === null
       )
         continue;
       const group = byDepartment.get(offerDepartmentId) ?? [];

@@ -481,6 +481,7 @@ export interface LastOrderRun {
 }
 
 export interface LastOrderService {
+  departmentId: string;
   minute: number;
   runs: readonly LastOrderRun[];
 }
@@ -532,11 +533,11 @@ export interface MakerResolver {
   /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
    *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
    *  Keys preserve the first caller spelling of each product id. An agreed period applies only
-   *  in its own department. `false` selects the route for Any other time. */
+   *  in its own department. `otherTimeIn` selects that department’s Any other time route. */
   makers(
     zoneId: string | null,
     productIds: readonly string[],
-    periodId?: string | null | false,
+    periodId?: string | null | { otherTimeIn: string },
   ): Promise<ReadonlyMap<string, MakerOutcome>>;
   /** Answers by pick key. `dishStationId` is the dish's final station, null for no preparation.
    *  Unknown zones and products are refused as in `makers`. An empty list reads nothing. */

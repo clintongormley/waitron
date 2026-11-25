@@ -26,24 +26,27 @@ function cutoff(run: LastOrderRun, maker: PreparationRoute): number {
 export async function lastOrderDishes<Key>(
   service: LastOrderService | undefined,
   zoneId: string,
-  dishes: readonly { key: Key; menuId: string; productId: string; stationId?: string | null }[],
+  dishes: readonly {
+    key: Key;
+    menuId: string;
+    productId: string;
+    stationId?: string | null;
+    sourceOnly?: true;
+  }[],
   routing: () => Promise<Pick<MakerResolver, "makers" | "productsSoldIn">>,
 ): Promise<ReadonlyMap<Key, LastOrdersDecision>> {
   const decisions = new Map<Key, LastOrdersDecision>();
   if (service === undefined) return decisions;
   const { minute, runs } = service;
-  const active = runs.find(({ start, end }) => start <= minute && minute < end);
-  const candidates = [...runs]
-    .reverse()
-    .filter(
-      (run) =>
-        run.start <= minute &&
-        run.offsets.some(({ minutes }) => run.end + minutes <= minute || run.end <= minute),
-    );
-  const relevant = dishes.filter(
-    ({ menuId }) =>
-      !(active?.menuIds.includes(menuId) === true && !candidates.includes(active)) &&
-      candidates.some((run) => run.menuIds.includes(menuId)),
+  const started = [...runs].reverse().filter((run) => run.start <= minute);
+  if (
+    !started.some((run) =>
+      run.offsets.some(({ minutes }) => run.end <= minute || run.end + minutes <= minute),
+    )
+  )
+    return decisions;
+  const relevant = dishes.filter(({ menuId }) =>
+    started.some((run) => run.menuIds.includes(menuId)),
   );
   if (relevant.length === 0) return decisions;
 
@@ -52,7 +55,14 @@ export async function lastOrderDishes<Key>(
   const routes = new Map<string | false | null, Awaited<ReturnType<MakerResolver["makers"]>>>();
   const routeFor = async (periodId: string | false | null) => {
     if (!routes.has(periodId))
-      routes.set(periodId, await resolver.makers(zoneId, productIds, periodId));
+      routes.set(
+        periodId,
+        await resolver.makers(
+          zoneId,
+          productIds,
+          periodId === false ? { otherTimeIn: service.departmentId } : periodId,
+        ),
+      );
     return routes.get(periodId)!;
   };
   const sold = new Map<string, ReadonlySet<string>>();
@@ -60,22 +70,22 @@ export async function lastOrderDishes<Key>(
     if (!sold.has(run.periodId)) sold.set(run.periodId, await resolver.productsSoldIn(run.menuIds));
     return sold.get(run.periodId)!;
   };
-  for (const run of candidates) {
+  for (const run of started) {
+    if (run.end <= minute && run.offsets.length === 0) continue;
     const own = await routeFor(run.periodId);
     const next = minute < run.end ? runs.find(({ start }) => start === run.end) : undefined;
     const alternative = await routeFor(minute >= run.end ? null : (next?.periodId ?? false));
     const soldNext = next === undefined ? undefined : await soldIn(next);
-    const soldEarlier =
-      minute >= run.end &&
-      relevant.some(
-        ({ menuId, stationId }) => stationId === undefined && !run.menuIds.includes(menuId),
-      )
-        ? await soldIn(run)
-        : undefined;
-    for (const { key, menuId, productId, stationId } of relevant) {
+    const soldHere = relevant.some(
+      ({ menuId, stationId, sourceOnly }) =>
+        stationId === undefined && sourceOnly !== true && !run.menuIds.includes(menuId),
+    )
+      ? await soldIn(run)
+      : undefined;
+    for (const { key, menuId, productId, stationId, sourceOnly } of relevant) {
       if (
         !run.menuIds.includes(menuId) &&
-        (stationId !== undefined || soldEarlier?.has(productId) !== true)
+        (sourceOnly === true || stationId !== undefined || !soldHere?.has(productId))
       )
         continue;
       const known = decisions.get(key);

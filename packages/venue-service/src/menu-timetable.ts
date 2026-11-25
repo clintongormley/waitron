@@ -319,6 +319,7 @@ export async function resolveDepartmentService(
   }
   const lastOrders = periods.some(({ lastOrders }) => lastOrders.length > 0)
     ? {
+        departmentId,
         minute: moment.minute,
         runs: runs.map((run) => {
           const period = periods.find(({ id }) => id === run.periodId)!;

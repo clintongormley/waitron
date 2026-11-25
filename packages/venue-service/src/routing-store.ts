@@ -884,10 +884,13 @@ export async function routingAt(
         (await readPeriods(tx)).map(({ id, departmentId }) => [id, departmentId]),
       );
   };
-  const momentFor = (zoneId: string | null, periodId: string | null | false | undefined) => {
+  const momentFor = (zoneId: string | null, periodId: Parameters<MakerResolver["makers"]>[2]) => {
     if (routedMoment === null || zoneId === null || periodId == null) return routedMoment;
     const departmentId = zoneDepartment.get(zoneId);
-    if (periodId === false) return { ...routedMoment, periods: new Map() };
+    if (typeof periodId === "object")
+      return periodId.otherTimeIn === departmentId
+        ? { ...routedMoment, periods: new Map() }
+        : routedMoment;
     if (departmentId === undefined || agreementDepartments?.get(periodId) !== departmentId)
       return routedMoment;
     return { ...routedMoment, periods: new Map([[departmentId, periodId]]) };

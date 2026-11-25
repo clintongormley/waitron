@@ -395,6 +395,7 @@ export async function priceOrderLines(
           menuId: offer.menuId,
           productId: line.variantId ?? offer.productId,
           stationId: line[ON_SENT_DISH]?.stationId,
+          sourceOnly: line[STORED_RISE],
         });
         candidates.set(departmentId, group);
       }

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
-import { billSetMenuCopies, products, workingOrderLines } from "@waitron/db";
+import { billSetMenuCopies, products, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin, persons } from "@waitron/identity";
 import {
@@ -14,11 +14,14 @@ import {
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  clearRoutingCell,
   replaceMenuWeek,
   resolveZoneContext,
   saveMenuPeriod,
+  setRoutingCell,
   updateMenuPeriod,
 } from "@waitron/venue-service";
+import { createStation } from "./kitchen.js";
 import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
@@ -51,6 +54,7 @@ let confirmer: string;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 let evening: typeof daily;
 let lunchPeriodId: string;
+let dinnerPeriodId: string;
 const serviceDate = new Date("2026-11-19T10:00:00+01:00");
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -103,6 +107,7 @@ useVenueDb({
         menuId: dinner.id,
         staffMenuIds: [],
       });
+      dinnerPeriodId = dinnerPeriod.id;
       await replaceMenuWeek(
         tx,
         departmentId,
@@ -186,6 +191,61 @@ it("fires a held dessert ordered from the recorded copy after lunch without a qu
       }),
     ),
   ).resolves.toMatchObject({ revision: command.expectedPartyRevision + 1 });
+});
+
+it.each(["handoff", "held"])("applies the set-menu rule before Lunch ends (%s)", async (kind) => {
+  const address = {
+    row: { kind: "product" as const, productId: daily.productId },
+    zoneId: venue.tables.zoneId,
+  };
+  try {
+    const bar = await inTx(venue, async (tx) => {
+      const kitchen = await createStation(tx, { name: `Kitchen ${kind}` });
+      const bar = await createStation(tx, { name: `Bar ${kind}` });
+      const target = { kind: "station" as const, stationId: kitchen.id };
+      await setRoutingCell(tx, address, { kind: "station", stationId: bar.id }, [
+        { periodId: lunchPeriodId, target },
+      ]);
+      await updateMenuPeriod(tx, lunchPeriodId, {
+        lastOrders: [
+          { ...target, minutes: -15 },
+          { kind: "station", stationId: bar.id, minutes: kind === "handoff" ? 60 : -15 },
+        ],
+      });
+      const empty = await createMenu(tx, { name: `Empty dinner ${kind}` });
+      await updateMenuPeriod(tx, dinnerPeriodId, { menuId: empty.id });
+      return bar.id;
+    });
+    const draft = await draftMenuDish(kind === "held", "14:50");
+    const {
+      groups: [group],
+    } = await send(draft, kind === "held" ? "hold" : "fire");
+    if (kind === "handoff") {
+      const ticket = await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, group!.lineIds[0]!))
+        .get();
+      expect(ticket?.stationId).toBe(bar);
+    } else {
+      at("14:55");
+      const command = await commandFor(venue, draft.partyId);
+      await expect(
+        inTx(venue, (tx) =>
+          fireGroup(tx, venue.cfg, draft.partyId, group!.id, {
+            ...command,
+            submissionId: crypto.randomUUID(),
+          }),
+        ),
+      ).resolves.toMatchObject({ revision: command.expectedPartyRevision + 1 });
+    }
+  } finally {
+    await inTx(venue, async (tx) => {
+      await clearRoutingCell(tx, address);
+      await updateMenuPeriod(tx, lunchPeriodId, { lastOrders: [] });
+      await updateMenuPeriod(tx, dinnerPeriodId, { menuId: evening.fullMenuId });
+    });
+  }
 });
 
 it("asks before sending from an ended unrecorded copy and records the confirmed dish", async () => {
