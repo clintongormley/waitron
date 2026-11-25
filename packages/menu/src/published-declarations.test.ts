@@ -4,15 +4,18 @@ import { products, sectionMembers, withTransaction, type Transaction } from "@wa
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
+import { deleteMenu } from "./delete.js";
 import { updateExtraList } from "./extras.js";
 import {
   menusOfVersions,
+  onceLiveVersionsAfter,
   patchLiveMenu,
   previewMenu,
   publishMenu,
   readLiveDocuments,
   readRecordedDocuments,
 } from "./menu-publication.js";
+import { queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, deactivateMenu, updateProduct } from "./operations.js";
 import { productDeclarationValues } from "./product-declarations.js";
 import {
@@ -37,11 +40,29 @@ beforeEach(async () => {
   f = await menusFixture(fx.db);
 });
 
-const publish = (menuId: string) =>
+const HOUR = 3_600_000;
+const hoursFromNow = (hours: number) => new Date(Date.now() + hours * HOUR);
+
+const publish = (menuId: string, at?: Date) =>
   app(async (tx) => {
     const { hash } = await previewMenu(tx, menuId);
-    return (await publishMenu(tx, menuId, hash, PERSON)).versionId;
+    return (await publishMenu(tx, menuId, hash, PERSON, { at })).versionId;
   });
+const queue = (menuId: string, activatesAt: Date, at?: Date) =>
+  app(async (tx) => {
+    const { hash } = await previewMenu(tx, menuId);
+    return queueMenuPublication(tx, menuId, hash, activatesAt, PERSON, { at });
+  });
+const patchName = (menuId: string, baseVersionId: string, menuItemId: string, value: string) =>
+  app((tx) =>
+    patchLiveMenu(
+      tx,
+      menuId,
+      baseVersionId,
+      [{ target: { kind: "offer", menuItemId }, field: "name", value }],
+      PERSON,
+    ),
+  );
 const declare = (
   productId: string,
   ...allergens: ("milk" | "fish" | "eggs" | "celery" | "sesame")[]
@@ -69,6 +90,16 @@ const line = async (
 });
 const lemonLine = (versionId: string, menuId = f.lunch) =>
   line(menuId, versionId, f.lemonade, { productId: f.extraLemon, extraListId: f.extrasList });
+
+const extrasListOf = (...productIds: string[]) =>
+  app((tx) =>
+    updateExtraList(
+      tx,
+      f.extrasList,
+      { name: "Extras", items: productIds.map((productId) => ({ productId, price: "0.40" })) },
+      "en",
+    ),
+  );
 
 async function removeFrom(listId: string, productId: string): Promise<void> {
   const [member] = await fx.db
@@ -106,15 +137,7 @@ it("reads a dish from its menu's live version after a later publish and a patch"
   await declare(f.soup, "eggs");
   expect(await allergensOf(soup)).toEqual({ fish: {} });
 
-  await app((tx) =>
-    patchLiveMenu(
-      tx,
-      f.lunch,
-      v2,
-      [{ target: { kind: "offer", menuItemId: soup.menuItemId! }, field: "name", value: "Broth" }],
-      PERSON,
-    ),
-  );
+  await patchName(f.lunch, v2, soup.menuItemId!, "Broth");
   expect(await allergensOf(soup)).toEqual({ fish: {} });
 });
 
@@ -149,14 +172,7 @@ it("falls back to the line's own version when the live version dropped the extra
   await declare(f.lager, "sesame");
   const v1 = await publish(f.lunch);
   const lemon = await lemonLine(v1);
-  await app((tx) =>
-    updateExtraList(
-      tx,
-      f.extrasList,
-      { name: "Extras", items: [{ productId: f.lager, price: "0.40" }] },
-      "en",
-    ),
-  );
+  await extrasListOf(f.lager);
   await declare(f.extraLemon, "eggs");
   await publish(f.lunch);
   expect(await allergensOf(lemon)).toEqual({ celery: {} });
@@ -173,6 +189,138 @@ it("falls back for a set-menu dish when the live version dropped the set menu", 
   expect(await allergensOf(dish)).toEqual({ celery: {} });
 });
 
+it("keeps a published correction after the live version drops the dish", async () => {
+  await declare(f.soup, "milk");
+  const v1 = await publish(f.lunch);
+  const soup = await line(f.lunch, v1, f.soup);
+  const corrected = { milk: {}, nuts: { kinds: ["walnuts" as const] } };
+  await app((tx) => updateProduct(tx, f.soup, { allergens: corrected }));
+  await publish(f.lunch);
+  expect(await allergensOf(soup)).toEqual(corrected);
+  await removeFrom(f.lunchRoot, f.soup);
+  await declare(f.soup, "eggs");
+  await publish(f.lunch);
+  expect(await allergensOf(soup)).toEqual(corrected);
+});
+
+it("keeps a published correction after the live version drops the variant", async () => {
+  await declare(f.lemonade, "milk");
+  await declare(f.large, "celery");
+  const v1 = await publish(f.lunch);
+  const large = await line(f.lunch, v1, f.lemonade, { productId: f.large });
+  await declare(f.large, "celery", "fish");
+  await publish(f.lunch);
+  await removeFrom(f.drinks, f.lemonade);
+  await publish(f.lunch);
+  await app((tx) => setProductVariants(tx, f.lemonade, [], "en"));
+  await declare(f.lemonade, "eggs");
+  await app((tx) => addMember(tx, f.drinks, product(f.lemonade)));
+  await publish(f.lunch);
+  expect(await allergensOf(await line(f.lunch, v1, f.lemonade))).toEqual({ eggs: {} });
+  expect(await allergensOf(large)).toEqual({ celery: {}, fish: {} });
+});
+
+it("keeps a published correction after the live version drops the extras item", async () => {
+  await declare(f.lemonade, "milk");
+  await declare(f.extraLemon, "celery");
+  const v1 = await publish(f.lunch);
+  const lemon = await lemonLine(v1);
+  await declare(f.extraLemon, "celery", "eggs");
+  await publish(f.lunch);
+  await extrasListOf(f.lager);
+  await declare(f.extraLemon, "fish");
+  await publish(f.lunch);
+  expect(await allergensOf(lemon)).toEqual({ celery: {}, eggs: {} });
+});
+
+it("keeps a set-menu dish's correction when the product stays on the menu alone", async () => {
+  await declare(f.lemonade, "milk");
+  const { menuId: daily, memberId } = await placeSetMenu();
+  const v1 = await publish(f.lunch);
+  const picked = await line(daily, v1, f.lemonade);
+  const alone = await line(f.lunch, v1, f.lemonade);
+  await declare(f.lemonade, "milk", "fish");
+  await publish(f.lunch);
+  await app((tx) => removeMember(tx, f.lunchRoot, memberId));
+  await declare(f.lemonade, "eggs");
+  await publish(f.lunch);
+  expect(await allergensOf(alone)).toEqual({ eggs: {} });
+  expect(await allergensOf(picked)).toEqual({ milk: {}, fish: {} });
+});
+
+it("passes over a queued version a patch cancelled and queued again", async () => {
+  await declare(f.soup, "milk");
+  const v1 = await publish(f.lunch);
+  const soup = await line(f.lunch, v1, f.soup);
+  await removeFrom(f.lunchRoot, f.soup);
+  const v2 = await publish(f.lunch);
+  await app((tx) => addMember(tx, f.lunchRoot, product(f.soup)));
+  await declare(f.soup, "fish");
+  const queued = await queue(f.lunch, hoursFromNow(24));
+  const lemonade = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+  const { number, requeued } = await patchName(f.lunch, v2, lemonade, "Lemon soda");
+  expect(queued.number).toBeLessThan(number);
+  expect(requeued).toHaveLength(1);
+  expect(await allergensOf(soup)).toEqual({ milk: {} });
+});
+
+it("never reads a version still waiting for its time", async () => {
+  await removeFrom(f.lunchRoot, f.soup);
+  const v1 = await publish(f.lunch);
+  await app((tx) => addMember(tx, f.lunchRoot, product(f.soup)));
+  await declare(f.soup, "fish");
+  await queue(f.lunch, hoursFromNow(24));
+  expect(await allergensOf(await line(f.lunch, v1, f.soup))).toBeUndefined();
+});
+
+it("reads a scheduled version whose time passed before anything settled it", async () => {
+  await declare(f.soup, "milk");
+  const v1 = await publish(f.lunch, hoursFromNow(-5));
+  const soup = await line(f.lunch, v1, f.soup);
+  await declare(f.soup, "milk", "fish");
+  await queue(f.lunch, hoursFromNow(-2), hoursFromNow(-4));
+  await removeFrom(f.lunchRoot, f.soup);
+  await queue(f.lunch, hoursFromNow(-1), hoursFromNow(-3));
+  expect(await allergensOf(soup)).toEqual({ milk: {}, fish: {} });
+});
+
+it("starts from the newest version that was live when the menu has none now", async () => {
+  await declare(f.soup, "milk");
+  const v1 = await publish(f.lunch);
+  const soup = await line(f.lunch, v1, f.soup);
+  await declare(f.soup, "milk", "fish");
+  await publish(f.lunch);
+  await declare(f.soup, "eggs");
+  await queue(f.lunch, hoursFromNow(24));
+  await app((tx) => deleteMenu(tx, f.lunch, PERSON));
+  expect(await app((tx) => readLiveDocuments(tx, [f.lunch]))).toEqual(new Map());
+  expect(await allergensOf(soup)).toEqual({ milk: {}, fish: {} });
+});
+
+it("never reads a version older than the line's own", async () => {
+  await declare(f.soup, "milk");
+  await publish(f.lunch);
+  await removeFrom(f.lunchRoot, f.soup);
+  const v2 = await publish(f.lunch);
+  await declare(f.lager, "sesame");
+  await publish(f.lunch);
+  expect(await allergensOf(await line(f.lunch, v2, f.soup))).toBeUndefined();
+});
+
+it("reads a line's own version last, even one that was never live", async () => {
+  await declare(f.soup, "milk");
+  await publish(f.lunch);
+  await removeFrom(f.lunchRoot, f.soup);
+  await declare(f.lager, "sesame");
+  const v2 = await publish(f.lunch);
+  await app((tx) => addMember(tx, f.lunchRoot, product(f.soup)));
+  await declare(f.soup, "fish");
+  const { versionId } = await queue(f.lunch, hoursFromNow(24));
+  const lemonade = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+  await patchName(f.lunch, v2, lemonade, "Lemon soda");
+  expect(await allergensOf(await line(f.lunch, versionId, f.soup))).toEqual({ fish: {} });
+});
+
 it("reads a variant, an extra and a set-menu dish, with the frozen values whole", async () => {
   await app(async (tx) => {
     await updateProduct(tx, f.lemonade, {
@@ -187,7 +335,7 @@ it("reads a variant, an extra and a set-menu dish, with the frozen values whole"
     });
     await updateProduct(tx, f.extraLemon, {
       allergens: { eggs: {} },
-      dietaryDeclarations: ["halal"],
+      dietaryDeclarations: ["vegan"],
       dietOverride: { vegan: "yes" },
     });
   });
@@ -211,7 +359,7 @@ it("reads a variant, an extra and a set-menu dish, with the frozen values whole"
   const lemon = productDeclarationValues({
     allergens: { eggs: {} },
     dietOverride: null,
-    dietaryDeclarations: ["halal"],
+    dietaryDeclarations: ["vegan", "vegetarian", "no_meat", "no_fish"],
   });
   expect(await read(dish, variant, extra, picked, pickedExtra)).toEqual(
     new Map([
@@ -302,5 +450,39 @@ it("one read per table however many lines", async () => {
   expect((await read(...lines)).size).toBe(2001);
   expect(menusOfVersions).toHaveBeenCalledTimes(1);
   expect(readLiveDocuments).toHaveBeenCalledTimes(1);
+  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
   expect(readRecordedDocuments).toHaveBeenCalledTimes(1);
+
+  vi.clearAllMocks();
+  expect((await read(...kept)).size).toBe(3);
+  expect(menusOfVersions).toHaveBeenCalledTimes(1);
+  expect(readLiveDocuments).toHaveBeenCalledTimes(1);
+  expect(onceLiveVersionsAfter).not.toHaveBeenCalled();
+  expect(readRecordedDocuments).not.toHaveBeenCalled();
+});
+
+it("reads older versions one at a time, newest first, for the lines still missing", async () => {
+  await declare(f.soup, "milk");
+  await declare(f.lager, "milk");
+  const v1 = await publish(f.lunch);
+  const soup = await line(f.lunch, v1, f.soup);
+  const lager = await line(f.lunch, v1, f.lager);
+  const lemonade = await line(f.lunch, v1, f.lemonade);
+  const versions = [v1];
+  for (let number = 2; number <= 10; number += 1) {
+    if (number === 10) await removeFrom(f.beer, f.lager);
+    if (number === 3) await removeFrom(f.lunchRoot, f.soup);
+    await declare(f.lemonade, number % 2 === 0 ? "fish" : "eggs");
+    versions.push(await publish(f.lunch));
+  }
+  vi.clearAllMocks();
+  expect((await read(soup, lager, lemonade)).size).toBe(3);
+  expect(onceLiveVersionsAfter).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(readRecordedDocuments).mock.calls.map(([, ids]) => ids)).toEqual([
+    [versions[8], versions[8]],
+    ...versions
+      .slice(1, 8)
+      .reverse()
+      .map((version) => [version]),
+  ]);
 });

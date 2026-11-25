@@ -1,6 +1,6 @@
 import { assertMenuWritable } from "./delete.js";
 import { navigateMenuChanges } from "./menu-navigation.js";
-import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import {
   menuReleases,
   menuVersionImages,
@@ -377,6 +377,44 @@ export async function menusOfVersions(
       .where(inArray(menuVersions.id, batch)))
       menus.set(row.versionId, row.menuId);
   return menus;
+}
+
+/**
+ * For each named version, its menu's higher-numbered versions that are live at `at` or have been,
+ * highest first; a version with none is left out. A queued edition that is due counts: reads answer
+ * it as live before anything settles it.
+ */
+export async function onceLiveVersionsAfter(
+  tx: Transaction,
+  versionIds: readonly string[],
+  at: Date = now(),
+): Promise<Map<string, string[]>> {
+  const own = alias(menuVersions, "own");
+  const after = new Map<string, string[]>();
+  for (const batch of batches(versionIds))
+    for (const row of await tx
+      .select({ ownId: own.id, versionId: menuVersions.id })
+      .from(own)
+      .innerJoin(
+        menuVersions,
+        and(eq(menuVersions.menuId, own.menuId), gt(menuVersions.number, own.number)),
+      )
+      .innerJoin(menuReleases, eq(menuReleases.versionId, menuVersions.id))
+      .where(
+        and(
+          inArray(own.id, batch),
+          or(
+            inArray(menuReleases.state, ["live", "superseded"]),
+            and(eq(menuReleases.state, "queued"), lte(menuReleases.activatesAt, at)),
+          ),
+        ),
+      )
+      .orderBy(desc(menuVersions.number))) {
+      const versions = after.get(row.ownId);
+      if (versions === undefined) after.set(row.ownId, [row.versionId]);
+      else versions.push(row.versionId);
+    }
+  return after;
 }
 
 /** The key two menus' changes share when one shared edit made both. */

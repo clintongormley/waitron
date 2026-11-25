@@ -390,6 +390,11 @@ that an unpublished product edit does not show; it does not repeat the patched c
 - [ ] **Step 3: Implement** as the Interfaces block says; batches through the package's `batches`.
 - [ ] **Step 4: Run** again; PASS. Commit `-s`.
 
+Changed in review (2026-11-25): a line its menu's live version lacks reads the newest earlier
+version that was once live and holds it, and its own version last, so a published correction
+outlives a later drop. This replaces "else its own version" above, in Architecture and in Review
+Focus 1.
+
 ### Task 2.2: Kitchen tickets, the allergy check and the first-send capture use it
 
 **Files:**

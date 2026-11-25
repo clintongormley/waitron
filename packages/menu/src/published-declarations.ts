@@ -5,7 +5,12 @@ import type {
   MenuDocument,
   SetMenuFrozenOffer,
 } from "@waitron/shared";
-import { menusOfVersions, readLiveDocuments, readRecordedDocuments } from "./menu-publication.js";
+import {
+  menusOfVersions,
+  onceLiveVersionsAfter,
+  readLiveDocuments,
+  readRecordedDocuments,
+} from "./menu-publication.js";
 import { productDeclarationValues, type DeclarationValues } from "./product-declarations.js";
 
 export interface PublishedLine {
@@ -73,9 +78,11 @@ function extraIn(
 }
 
 /**
- * Each line's declarations from the live version of its version's menu, else (the menu has none, or
- * it does not hold the line's exact dish, variant or extra) from its own version; a line found in
- * neither is absent. A menu's live version is read whether or not the menu is sold now.
+ * Each line's declarations from its version's menu's live version. A line the live version does not
+ * hold exactly takes them from the newest earlier version that was once live and does, going no
+ * further back than its own version, which is read last even if it was never live; a menu with no
+ * live version starts at its newest once-live one. A line found in none is absent. Whether the menu
+ * is sold now makes no difference.
  */
 export async function readPublishedDeclarations(
   tx: Transaction,
@@ -97,14 +104,28 @@ export async function readPublishedDeclarations(
     return values === undefined;
   });
   if (missed.length === 0) return found;
-  const recorded = await readRecordedDocuments(
-    tx,
-    missed.map(({ versionId }) => versionId),
+  const after = await onceLiveVersionsAfter(tx, [
+    ...new Set(missed.map(({ versionId }) => versionId)),
+  ]);
+  const earlier = new Map(
+    missed.map(({ versionId }) => {
+      const later = after.get(versionId) ?? [];
+      const liveId = live.get(menuOf.get(versionId) ?? "")?.versionId;
+      return [versionId, [...later.slice(later.indexOf(liveId ?? "") + 1), versionId]] as const;
+    }),
   );
-  for (const { line, versionId } of missed) {
-    const document = recorded.get(versionId);
-    const values = document && declarationsInDocument(document, line);
-    if (values !== undefined) found.set(line.id, values);
+  let waiting = missed.map(({ line, versionId }) => ({ line, versions: earlier.get(versionId)! }));
+  for (let step = 0; waiting.length > 0; step += 1) {
+    const recorded = await readRecordedDocuments(
+      tx,
+      waiting.map(({ versions }) => versions[step]!),
+    );
+    waiting = waiting.filter(({ line, versions }) => {
+      const document = recorded.get(versions[step]!);
+      const values = document && declarationsInDocument(document, line);
+      if (values !== undefined) found.set(line.id, values);
+      return values === undefined && step + 1 < versions.length;
+    });
   }
   return found;
 }
