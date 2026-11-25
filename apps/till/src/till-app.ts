@@ -25225,6 +25225,7 @@ export class TillApp extends LitElement {
         this.settlementDocument !== null ||
         this.captureWarning !== null ||
         (this.cardOutcome !== undefined && this.cardOutcome !== this.dismissedCardOutcome),
+      this.screen === "lock" ? undefined : this.errorKey,
     );
   }
 

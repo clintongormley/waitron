@@ -12058,6 +12058,50 @@ describe("till-app", () => {
       expect(t("sale.disk_full_manual_card").endsWith(` ${cardAdvice}`)).toBe(true);
     });
 
+    it("keeps the Counter charged-card refusal visible when the disk stop arrives", async () => {
+      let refuse!: (reason: unknown) => void;
+      const pay = vi.fn(() => new Promise((_, reject) => (refuse = reject)));
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        const { el } = await mountApp({ pay, getDeviceEquipment });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "1");
+        await el.updateComplete;
+        emit(c, "collect-card", {});
+        await vi.waitFor(() => expect(pay).toHaveBeenCalled());
+        getDeviceEquipment.mockResolvedValue({
+          roles: [],
+          notices: [
+            {
+              owner: "box",
+              code: "storage.disk_full",
+              key: "storage.disk_full",
+              severity: "error",
+              params: {},
+            },
+          ],
+        });
+        vi.advanceTimersByTime(15_000);
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("till-notice-strip")?.notices).toHaveLength(1),
+        );
+        refuse({
+          code: "sale.charged_not_recorded",
+          workingOrderId: "wo-1",
+          reason: "disk_full",
+          status: 507,
+        });
+        await vi.waitFor(() => {
+          const window = el.shadowRoot!.querySelector("wt-stop-screen");
+          expect(window?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
+          expect(window?.textContent).toContain(t("sale.charged_disk_full"));
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("a card charged but not recorded for a full disk names the disk", async () => {
       const text = await payReader({
         code: "sale.charged_not_recorded",
