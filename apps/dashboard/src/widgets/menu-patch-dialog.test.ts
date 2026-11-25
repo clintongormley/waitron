@@ -4060,32 +4060,42 @@ it("puts a refused allergens change back under its checkbox, until it is unticke
   expect(bottomMessage(el)).toBe("");
 });
 
-it("shows the checkbox inside the form, and the scheduled rows inside the review, at 390 px in Spanish", async () => {
-  const before = { width: window.innerWidth, height: window.innerHeight };
-  await page.viewport(390, 844);
-  try {
-    setLocale("es");
-    const el = await mount(
-      scheduledApi([
-        differing("v-q0", "2026-11-03", [soup, true], [salad, true]),
-        differing("v-q1", "2026-11-10", [soup, false]),
-      ]),
-    );
-    const fits = (inside: Element, boxes: HTMLInputElement[]) => {
-      const right = inside.getBoundingClientRect().right + 0.5;
-      for (const label of boxes.map((box) => box.closest("label")!)) {
-        const box = label.getBoundingClientRect();
-        expect(box.right).toBeLessThanOrEqual(right);
-        expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
-        expect(box.height).toBeGreaterThanOrEqual(44);
-      }
-    };
-    await declare(el, "Soup", "Salad");
-    fits(form(el), [declarations(el)]);
-    await press(el, "review");
-    expect(scheduled(el)).toHaveLength(2);
-    fits(review(el), scheduled(el));
-  } finally {
-    await page.viewport(before.width, before.height);
-  }
-});
+it.each([
+  ["an ordinary name", "Soup"],
+  ["one long word", "Soup".repeat(20)],
+])(
+  "shows the checkbox inside the form, and the scheduled rows inside the review, at 390 px in Spanish with %s",
+  async (_what, name) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      setLocale("es");
+      const el = await mount(
+        scheduledApi([], {
+          getLiveMenu: vi.fn(async () =>
+            live(3, lunch(name), [
+              differing("v-q0", "2026-11-03", [soup, true], [salad, true]),
+              differing("v-q1", "2026-11-10", [soup, false]),
+            ]),
+          ),
+        }),
+      );
+      const fits = (inside: Element, boxes: HTMLInputElement[]) => {
+        const right = inside.getBoundingClientRect().right + 0.5;
+        for (const label of boxes.map((box) => box.closest("label")!)) {
+          const box = label.getBoundingClientRect();
+          expect(box.right).toBeLessThanOrEqual(right);
+          expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+      };
+      await declare(el, name, "Salad");
+      fits(form(el), [declarations(el)]);
+      await press(el, "review");
+      expect(scheduledLines(el).map((lines) => lines.length)).toEqual([0, 1]);
+      fits(review(el), scheduled(el));
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

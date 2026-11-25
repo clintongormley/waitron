@@ -118,10 +118,6 @@ export const menuPatchDialogStyles = [
       min-height: var(--wt-tap-min);
       cursor: pointer;
     }
-    .tick > span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
     .tick input {
       flex: none;
       margin: 0;
@@ -143,8 +139,13 @@ export const menuPatchDialogStyles = [
       color: var(--wt-color-text-muted);
       font-size: var(--wt-font-size-sm);
     }
+    fieldset .tick {
+      align-items: baseline;
+      padding-block: var(--wt-space-1);
+    }
     .scheduled-line {
       display: block;
+      margin-block-start: var(--wt-space-1);
       font-size: var(--wt-font-size-sm);
     }
     legend {
@@ -192,6 +193,7 @@ export const menuPatchDialogStyles = [
     .review {
       display: grid;
       gap: var(--wt-space-3);
+      overflow-wrap: anywhere;
     }
     .changes {
       display: grid;
