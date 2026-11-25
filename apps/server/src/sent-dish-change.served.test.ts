@@ -214,6 +214,12 @@ describe("the whole-basket save of a bill with a sent dish", () => {
         status: 409,
         json: { code: "ticket.already_started", params: { ticketItemId: ticket!.id } },
       });
+      if (menuChanged) {
+        expect(await saveBasket(billId, [edited[0]!, ...lines, kept!])).toMatchObject({
+          status: 409,
+          json: { code: "menu.version_changed" },
+        });
+      }
       if (scenario === "waiting first") {
         for (const quantity of ["1", "2"]) {
           expect(
@@ -229,7 +235,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       await inTx(venue, async (tx) => {
         for (const [id, policy] of stations) await setChangesAfterSending(tx, policy, [id]);
         if (menuChanged) {
-          await updateMenuItem(tx, menuId!, waiting!.menuItemId, { grossPrice: "25.00" });
+          await updateMenuItem(tx, menuId!, waiting!.menuItemId, { grossPrice: null });
           await publishWorkingMenu(tx, menuId!);
         }
       });

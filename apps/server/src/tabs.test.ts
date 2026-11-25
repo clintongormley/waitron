@@ -2929,7 +2929,7 @@ describe("editing a line the kitchen has and has not started", () => {
     });
 
     const stationPolicies = ["held-or-waiting", "never"] as const;
-    it.each(stationPolicies)("refuses a started second dish at a %s station", async (policy) => {
+    it.each(stationPolicies)("keeps both when the second has started (%s)", async (policy) => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
       await asApp((tx) => setChangesAfterSending(tx, policy, [tickets[0]!.stationId]));
       await asApp((tx) => advanceTicketItem(tx, tickets[1]!.id, "preparing"));

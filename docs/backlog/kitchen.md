@@ -144,14 +144,15 @@ fired" dropdown (A773) is not adopted.
 ### Changes after sending: every part of a dish decides, and removal is not gated (A756 PR 8, 2026-10-24)
 
 **2026-11-11:** [R3-owner](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-r3-owner-retire-recall.md)
-retires Recall and moves every sent-dish removal to Cancel item. The following dated ruling
-records the earlier order-edit removal path; the station setting still governs Change dish.
+retires Recall and moves every sent-dish removal to Cancel item. The station setting still governs
+Change dish.
 
 **2026-11-25 (A1080, owner's answer B of 2026-10-25).** If the save encounters "already fired",
 it keeps checking the other affected dishes for "already started". Paid, served and already-sent
 refusals still stop the save when encountered first. Checks such as paid work, served work and
 allowed options can refuse a dish before its started check. An unchanged dish or a quantity
-increase on its own leaves the started work alone.
+increase on its own leaves the started work alone. When the save keeps all sent quantities and
+extras, it checks a new dish's menu version before the in-place edits.
 
 For a change to one dish, the started check comes before the station's changes-after-sending
 policy. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as
@@ -159,10 +160,11 @@ started: the extra goes to the kitchen as a new line, and Changes after sending 
 allow the change. A dish with no kitchen record, on it or on any of its extras, can be recalled whatever the
 stations allow (A773-1 open
 point 4's answer A said so). A "Not allowed" station also refuses changes to a held dish, which the
-venue switch allowed through line edits. At a "Not allowed" station, removing a waiting dish or
-lowering its quantity through an order edit goes through, as a Void with its notice (with the venue
-switch off it was refused); the setting decides only Recall and changes (controller's ruling,
-2026-10-24).
+venue switch allowed through line edits.
+
+**Earlier removal rule (controller, 2026-10-24).** At a "Not allowed" station, removing a waiting
+dish or lowering its quantity through an order edit went through as a Void with its notice. The
+venue switch had refused it when off. The station setting decided only Recall and changes.
 
 ### A756 point 1. Courses have their own page under Products and menus (owner, 2026-10-16)
 
