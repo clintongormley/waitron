@@ -5,9 +5,8 @@ import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { correctionTargetFor, recordCorrection, settleSale } from "@waitron/core";
-import type { RecordSaleLine } from "@waitron/core";
+import type { RecordCorrectionInput, RecordSaleLine } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { AuthzInput } from "@waitron/identity";
 import {
   basisPointsToDecimal,
   centsToDecimal,
@@ -40,15 +39,15 @@ export async function readOrderInvoice(
  * Credit the whole of an issued invoice with a corrective invoice in the node's live corrective
  * series, filed under the request's device, its lines the invoice's with their signs reversed and its VAT
  * breakdown the invoice's own negated (`wholeInvoice`), then settle the invoice owing nothing.
- * `recordCorrection` checks `sale.rectify` against `authz` and counts nothing, so an override in
- * `authz` must already have been checked under a wrong-PIN limit. Answers the corrective's id.
+ * `recordCorrection` checks `authz` and counts nothing, so an override in `authz` must already have
+ * been checked under a wrong-PIN limit. Answers the corrective's id.
  */
 export async function creditWholeInvoice(
   tx: Transaction,
   deps: { backend: FiscalBackend; clock: TrustedClock; admission: TradingAdmission },
   cfg: DeviceRequestConfig,
   invoice: IssuedInvoice,
-  authz: AuthzInput,
+  authz: RecordCorrectionInput["authz"],
 ): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const clock = await prepareIssueClock(tx, cfg, deps.clock);

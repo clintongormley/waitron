@@ -379,12 +379,16 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect((await split(party.tabId)).status).toBe(200);
   });
 
-  it("needs sale.rectify, and names unserved dishes first", async () => {
+  it("needs no sale.rectify, and names unserved dishes first", async () => {
     const party = await printed("Tarta");
-    await expectRefused(party.tabId, () => split(party.tabId, venue.cookie), {
-      status: 403,
-      code: "authorization.not_permitted",
-    });
+    const original = await invoiceOf(party.tabId);
+    const answer = await split(party.tabId, venue.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const credits = await creditsOf(original.id);
+    expect(credits.map((credit) => [credit.total, credit.authorizedBy])).toEqual([
+      [-original.total, venue.operatorId],
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("abandoned");
 
     const unserved = await seat("Tarta");
     expect((await printBill(unserved, unserved.tabId, true)).status).toBe(200);
@@ -392,6 +396,37 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       status: 409,
       code: "bill.unserved_dishes",
     });
+  });
+
+  it("the new bill names the printed one", async () => {
+    const party = await printed("Tarta");
+    const answer = await split(party.tabId, venue.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [reopened] = await inTx(venue, (tx) =>
+      tx
+        .select({ status: workingOrders.status, reopenedFrom: workingOrders.reopenedFrom })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    );
+    expect(reopened).toEqual({ status: "open", reopenedFrom: party.tabId });
+  });
+
+  it("Cancel and credit still needs sale.rectify", async () => {
+    const party = await printed("Tarta");
+    const before = written();
+    const cancel = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/cancel`,
+      { reason: "Wrong" },
+    );
+    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect(written()).toEqual(before);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
   });
 
   it("refuses a part-paid bill before its unserved dishes", async () => {
@@ -565,7 +600,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
-  it("refuses an operator without sale.rectify before looking for a corrective series", async () => {
+  it("refuses on a box with no corrective series, copying nothing", async () => {
     const party = await printed("Tarta");
     const [live] = await inTx(venue, (tx) =>
       tx
@@ -584,9 +619,10 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     );
     try {
       await expectRefused(party.tabId, () => split(party.tabId, venue.cookie), {
-        status: 403,
-        code: "authorization.not_permitted",
+        status: 409,
+        code: "series.no_corrective_for_node",
       });
+      expect((await billsOf(party.partyId)).map((bill) => bill.status)).toEqual(["placed"]);
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [
