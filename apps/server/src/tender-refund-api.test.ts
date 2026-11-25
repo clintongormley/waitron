@@ -24,6 +24,10 @@ import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.j
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deviceProfileAdmissionRoles, persons, tillSessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
+import { SumUpCloudProvider } from "@waitron/payments-sumup";
+import type { SumUpClient, SumUpTransaction } from "@waitron/payments-sumup";
+import { decimal } from "@waitron/shared";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import {
   billlessSale,
@@ -524,6 +528,55 @@ it.each(["list", "status"] as const)(
     } finally {
       spy.mockRestore();
     }
+  },
+);
+
+it.each([
+  ["its event", "completed"],
+  ["no event", "pending"],
+  ["no answer", "pending"],
+] as const)(
+  "a retry of a SumUp refund whose answer was lost, SumUp then showing %s, leaves it %s and sends no second refund",
+  async (found, state) => {
+    // SumUp's own reading and lookup over a transaction whose refund events the case writes.
+    const events: NonNullable<SumUpTransaction["refundEvents"]> = [];
+    let reached = true;
+    const sumup = new SumUpCloudProvider({
+      captureAlerts,
+      db: venue.db,
+      incidents: () => Promise.resolve(true),
+      client: {
+        findTransaction: () =>
+          reached
+            ? Promise.resolve({
+                id: "t",
+                status: "SUCCESSFUL",
+                amount: decimal("10.00"),
+                refundEvents: [...events],
+              })
+            : Promise.reject(new TypeError("fetch failed")),
+      } as unknown as SumUpClient,
+    });
+    venue.card.existingRefundRefs = (ref) => sumup.existingRefundRefs(ref);
+    venue.card.refundResendWindowMs = sumup.refundResendWindowMs;
+    vi.spyOn(venue.card, "lookupRefund").mockImplementation((query) => sumup.lookupRefund(query));
+    const t = await pendingCard();
+    if (found === "its event")
+      events.push({
+        id: "sumup-refund-1",
+        status: "REFUNDED",
+        amount: decimal("2.00"),
+        timestamp: new Date().toISOString(),
+      });
+    reached = found !== "no answer";
+    for (let press = 0; press < 2; press++)
+      expect(await retry(t.refundId)).toMatchObject({
+        status: 200,
+        json: { id: t.refundId, state },
+      });
+    expect(venue.card.refundCalls).toHaveLength(1);
+    expect((await effects()).refunds).toHaveLength(1);
+    expect(await list(t.saleId)).toMatchObject({ json: [{ appliedRemaining: "8.00" }] });
   },
 );
 
