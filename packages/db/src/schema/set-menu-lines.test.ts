@@ -188,19 +188,28 @@ describe("set menu storage on a bill", () => {
     ).toEqual([{ set_menu_line_id: null, set_menu_place: 1, line_total: 250 }]);
   });
 
-  it("stores one copy per bill and set menu and deletes it with the bill", async () => {
+  it("stores one copy per bill, set menu and version, and deletes them with the bill", async () => {
     const db = suite.db;
-    const addCopy = () =>
+    const otherVersion = "other-full-menu-copy";
+    await db.execute(sql`insert into menu_versions
+      (id, menu_id, number, document, content_hash, created_at, created_by)
+      values (${otherVersion}, ${fullMenuId}, 3, '{}', 'other copy', 1, ${personId})`);
+    const addCopy = (version: string) =>
       db.execute(sql`insert into bill_set_menu_copies
-        (working_order_id, set_menu_id, menu_version_id) values (${billId}, ${MENU}, ${VERSION})`);
-    await addCopy();
-    const error = await captureError(addCopy);
+        (working_order_id, set_menu_id, menu_version_id) values (${billId}, ${MENU}, ${version})`);
+    await addCopy(VERSION);
+    const error = await captureError(() => addCopy(VERSION));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "bill_set_menu_copies",
-        columns: ["working_order_id", "set_menu_id"],
+        columns: ["working_order_id", "set_menu_id", "menu_version_id"],
       }),
     ).toBe(true);
+    await addCopy(otherVersion);
+    expect(
+      await db.all(sql`select menu_version_id from bill_set_menu_copies
+        where working_order_id = ${billId} order by menu_version_id`),
+    ).toEqual([VERSION, otherVersion].sort().map((menu_version_id) => ({ menu_version_id })));
     await db.delete(workingOrders).where(eq(workingOrders.id, billId));
     expect(await db.all(sql`select * from bill_set_menu_copies`)).toEqual([]);
   });
