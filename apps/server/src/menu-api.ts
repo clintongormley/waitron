@@ -12,6 +12,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
   FALLBACK_LOCALE,
+  normaliseUuid,
   type ContentLanguageRules,
   type MenuDeleteImpact,
 } from "@waitron/shared";
@@ -1318,7 +1319,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   app.get("/management-api/menus/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuId = normaliseUuid(c.req.param("id"), "MenuId");
       return c.json(await gated(c, sessionId, (tx) => readMenuStructure(tx, menuId)));
     }),
   );

@@ -217,7 +217,7 @@ export async function saveMenuStructure(
       });
     if (checkedSections.has(id))
       throw new AppError("menu_section.member_duplicate", { sectionId: id, field: field + ".id" });
-    const values = await atField(field, "names", () => sectionPatchValues(tx, draft, venueLocale));
+    const values = await atField(field, "names", () => sectionPatchValues(tx, draft));
     if (stored !== undefined)
       values.names = retainedNames(stored.names, values.names, languages) ?? {};
     checkedSections.set(id, { ...values, id, ownerMenuId: menuId });

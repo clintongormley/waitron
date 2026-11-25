@@ -211,11 +211,17 @@ it("recreates missing draft rows, keeps disabled-language names on retained rows
     rootMembers: [
       {
         ...member(section(f.drinks), before.include.id),
-        folder: { ...folder, overrides: { names: { fr: "Old folder translation" } } },
+        folder: {
+          ...folder,
+          overrides: { names: { en: "New folder title", fr: "Old folder translation" } },
+        },
       },
       ...rootMembers.slice(1),
     ],
-    sections: [{ ...sections[0]!, names: { fr: "Old section translation" } }, sections[1]!],
+    sections: [
+      { ...sections[0]!, names: { en: "New section title", fr: "Old section translation" } },
+      sections[1]!,
+    ],
     prices: [],
   });
   expect((await lemonade())?.variants).toMatchObject([{ variantId: f.large, price: null }]);
@@ -223,9 +229,12 @@ it("recreates missing draft rows, keeps disabled-language names on retained rows
   expect(lunchPrices.find((offer) => offer.productId === f.lager)?.override).toBeNull();
   const retained = (await app((tx) => readMenuStructure(tx, f.lunch))).nodes;
   expect(retained[0]).toMatchObject({
-    folder: { showAsFolder: true, overrides: { names: { fr: "Drinks translation" } } },
+    folder: {
+      showAsFolder: true,
+      overrides: { names: { en: "New folder title", fr: "Drinks translation" } },
+    },
   });
-  expect(retained[1]?.names).toEqual({ fr: "Kept translation" });
+  expect(retained[1]?.names).toEqual({ en: "New section title", fr: "Kept translation" });
   expect(await app((tx) => menuPrices(tx, f.drinksMenu))).toEqual(sourcePrices);
 });
 

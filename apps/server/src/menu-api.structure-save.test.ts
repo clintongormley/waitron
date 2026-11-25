@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedPhotoMetadata, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedPhotoMetadata, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import {
   addMember,
@@ -25,7 +25,6 @@ const empty = { rootMembers: [], sections: [], prices: [] };
 const route = (id: string) => "/management-api/menus/" + id + "/structure";
 
 async function fixture() {
-  await seedTaxpayer(suite.db);
   await seedVenue(suite.db, { name: "Main" });
   await seedLegacySellingUnits(suite.db);
   const rows = await withTransaction(suite.db, async (tx) => {
@@ -139,11 +138,14 @@ it("saves a complete draft through the HTTP request", async () => {
       { id: memberId(2), ref: included, folder },
       { id: memberId(1), ref: setRef },
     ],
-    sections: [{ id, ...presentation, members: [{ id: f.member.id, ref: f.member.ref }] }],
+    sections: [
+      { id: id.toUpperCase(), ...presentation, members: [{ id: f.member.id, ref: f.member.ref }] },
+    ],
     prices: [{ productId: f.soup.id, variantId: variant.id, price: "2.50" }],
   });
   expect(response.status).toBe(200);
-  const after = await f.send("GET", f.lunch.id);
+  const after = await f.send("GET", f.lunch.id.toUpperCase());
+  expect(after.status).toBe(200);
   expect(await after.json()).toMatchObject({
     nodes: [
       {
