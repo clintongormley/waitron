@@ -127,15 +127,8 @@ import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
 import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import {
-  displayQuantity,
-  offeredListsOf,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "./state/order-line.js";
-import { deriveExtraSelections } from "./state/held-extras.js";
-import { deriveOptionSelections } from "./state/held-options.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
+import { basketLinesOf } from "./state/held-order.js";
 import {
   DRAFT_REFUSALS,
   DraftSync,
@@ -516,7 +509,6 @@ import {
   isStale,
   refreshBasket,
   repriceRebuilt,
-  setMenuDish,
 } from "./state/menu-refresh.js";
 import { CounterCopiesRead, isOrderGone } from "./state/counter-copies-read.js";
 import {
@@ -8981,7 +8973,12 @@ export class TillApp extends LitElement {
       this.errorKey = "held.reread_failed";
       return false;
     }
-    const { lines, banner } = this.#basketLinesOf(order, listed, zone.offered);
+    const { lines, banner } = basketLinesOf(
+      order,
+      listed,
+      zone.offered ?? this.products,
+      this.#counterOffers.setMenuLookup(order),
+    );
     if (banner !== undefined) this.errorKey = banner;
     this.#store.adoptSaved(
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
@@ -10792,7 +10789,12 @@ export class TillApp extends LitElement {
       order.setMenus === undefined
         ? undefined
         : { id: order.id, setMenus: order.setMenus, setMenuCopies: order.setMenuCopies };
-    const { lines, banner } = this.#basketLinesOf(order, listed, offered);
+    const { lines, banner } = basketLinesOf(
+      order,
+      listed,
+      offered,
+      this.#counterOffers.setMenuLookup(order),
+    );
     if (banner !== undefined) this.errorKey = banner;
     this.#store.loadFrom(
       order.id,
@@ -10824,103 +10826,6 @@ export class TillApp extends LitElement {
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
     this.#setSavedCounterFlow(order.serviceMode);
-  }
-
-  /** `order`'s lines rebuilt against `offered`, and the one banner that says what the rebuild
-   * changed. */
-  #basketLinesOf(
-    order: HeldOrder,
-    listed: StoredLines | null,
-    offered: readonly TillProduct[] = this.products,
-  ): { lines: OrderLine[]; banner?: StringKey } {
-    const lines: OrderLine[] = [];
-    let droppedAProduct = false;
-    let extraNotOffered = false;
-    let mustChooseAgain = false;
-    let mustChooseOnWithdrawnDish = false;
-    const liveByMenuItem = new Map<string, TillProduct>();
-    for (const candidate of offered) {
-      if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
-        liveByMenuItem.set(candidate.menuItemId, candidate);
-    }
-    const sentLines = new Set(
-      (listed?.lines ?? [])
-        .filter((row) => row.sentAt !== null || row.firedAt !== null)
-        .map((row) => row.id),
-    );
-    const setMenuOffer = this.#counterOffers.setMenuLookup(order);
-    for (const line of order.lines) {
-      // Edits to a set-menu dish answer the recorded offer's lists, even after a republish.
-      const recorded =
-        line.setMenuId === undefined
-          ? undefined
-          : setMenuOffer({
-              setMenuId: line.setMenuId,
-              menuItemId: line.menuItemId ?? "",
-              menuVersionId: line.menuVersionId ?? null,
-              ...(line.product?.menuId === undefined ? {} : { menuId: line.product.menuId }),
-            });
-      const live =
-        line.setMenuId !== undefined
-          ? recorded && setMenuDish(recorded, line.menuVersionId ?? null)
-          : line.menuItemId === undefined
-            ? undefined
-            : liveByMenuItem.get(line.menuItemId);
-      const stored = line.product;
-      const product =
-        stored === undefined
-          ? live
-          : {
-              ...stored,
-              ...(recorded === undefined ? {} : { unit: recorded.offer.unit }),
-              ...(line.menuVersionId === undefined ? {} : { menuVersionId: line.menuVersionId }),
-              ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
-            };
-      if (product === undefined) {
-        droppedAProduct = true;
-        continue;
-      }
-      // Each pick goes back to the list it was taken from, if the live offer still has it there.
-      const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
-      if (picks.notOffered.length > 0) extraNotOffered = true;
-      const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
-      const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      if (answers.unanswered.length > 0 && !sent) {
-        mustChooseAgain = true;
-        if (live === undefined && line.setMenuId === undefined) mustChooseOnWithdrawnDish = true;
-      }
-      lines.push({
-        product,
-        ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
-        quantity: displayQuantity(product, line.quantity),
-        ...(line.workingOrderLineId === undefined
-          ? {}
-          : { workingOrderLineId: line.workingOrderLineId }),
-        ...(live === undefined ? { notOffered: true as const } : {}),
-        ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
-        ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
-        ...(answers.options.length === 0 ? {} : { options: answers.options }),
-        ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
-        ...(line.note === undefined ? {} : { note: line.note }),
-        ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
-      });
-    }
-    // One banner, so a DROPPED product is reported first: it has already changed what the basket
-    // will bill, where the others change nothing until the operator edits the order. Without the
-    // stored lines the till cannot tell a sent line from one not sent, and choosing again on a sent
-    // dish would recall it or be refused, so the operator is asked to read the order again first.
-    const banner: StringKey | undefined = droppedAProduct
-      ? "held.product_gone"
-      : mustChooseAgain && listed === null
-        ? "held.reread_failed"
-        : mustChooseOnWithdrawnDish
-          ? "held.options_changed"
-          : extraNotOffered
-            ? "held.extra_not_offered"
-            : mustChooseAgain
-              ? "held.options_changed"
-              : undefined;
-    return banner === undefined ? { lines } : { lines, banner };
   }
 
   #holdsMoney(orderId: string): boolean {
