@@ -468,6 +468,13 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   unit price its `a_la_carte_unit_price`, line total that times its quantity). The measure flag is
   still read live from `units`: the line records no copy of it (`count_as_portions` also folds in
   the unit's decimals)._
+
+  _2026-11-25, corrected again in 2b's run-it review: reading it live let a unit made a measure
+  after Hake was ordered take Hake out of its Daily when Water was cancelled, raising the bill to
+  22.00, and the cancel failed `adjustments_amounts_ck`. The flag is now the unit of the offer the
+  line was ordered from, in the menu version the line records (`menu_version_id`, `menu_item_id`;
+  `orderedByMeasure` in `apps/server/src/set-menu-regroup.ts`), so a unit setting changed later
+  moves no dish already on the bill._
 - **D14. FOR THE OWNER. A takeaway or delivery bill is grouped with no set menus until VAT piece B.** Grouping one
   would make it unpayable: payment refuses a takeaway bill holding a set-menu row
   (`refuseTakeawaySetMenuMoney`, `set-menu-bill.ts:66-90`, from `bill-payments.ts:1759`), and PR 1

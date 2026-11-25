@@ -4,12 +4,11 @@ import {
   newId,
   nowIso,
   products,
-  units,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { readInvoiceLocales } from "@waitron/menu";
+import { readInvoiceLocales, readRecordedDocuments } from "@waitron/menu";
 import {
   frozenLinesOf,
   planBillGrouping,
@@ -17,7 +16,7 @@ import {
   type GroupingLine,
   type GroupingPlan,
 } from "@waitron/orders-sales/set-menu-grouping-plan.js";
-import type { SetMenuGrouping, SetMenuGroupingInput } from "@waitron/shared";
+import type { MenuDocument, SetMenuGrouping, SetMenuGroupingInput } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import {
   hasBillSetMenuLines,
@@ -37,6 +36,24 @@ export async function readGroupingCopies(tx: Transaction, billId: string): Promi
   return served.map((copy, index) => ({ copy, versionId: requests[index]!.versionId }));
 }
 
+/**
+ * Whether the offer a line was ordered from sold it by measure, as its recorded menu version froze
+ * it: a unit changed since must not move a dish out of a set menu, or removing another dish could
+ * make the bill dearer.
+ */
+function orderedByMeasure(
+  document: MenuDocument,
+  menuItemId: string,
+  productId: string | null,
+): boolean {
+  const offer = Object.hasOwn(document.offers, menuItemId)
+    ? document.offers[menuItemId]
+    : Object.values(document.setMenus ?? {}).find((copy) => Object.hasOwn(copy.offers, menuItemId))
+        ?.offers[menuItemId];
+  const sold = offer?.variants.find(({ id }) => id === productId) ?? offer;
+  return sold?.unit.measure === true;
+}
+
 /** Every row of the bill, each dish as a set menu lists it (D12: the course is the line's own). */
 export async function readGroupingLines(tx: Transaction, billId: string): Promise<GroupingLine[]> {
   const rows = await tx
@@ -48,8 +65,8 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
       parentProductId: products.parentId,
       countsAsCourseId: workingOrderLines.countsAsCourseId,
       menuItemId: workingOrderLines.menuItemId,
+      menuVersionId: workingOrderLines.menuVersionId,
       quantity: workingOrderLines.quantity,
-      soldByMeasure: units.measure,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
@@ -64,12 +81,21 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(units, eq(units.id, workingOrderLines.unitId))
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
-  return rows.map(({ productId, parentProductId, soldByMeasure, ...line }) => ({
+  const documents = await readRecordedDocuments(
+    tx,
+    rows.flatMap(({ parentLineId, menuVersionId }) =>
+      parentLineId === null && menuVersionId !== null ? [menuVersionId] : [],
+    ),
+  );
+  return rows.map(({ productId, parentProductId, menuVersionId, ...line }) => ({
     ...line,
-    soldByMeasure: soldByMeasure === true,
+    soldByMeasure:
+      line.parentLineId === null &&
+      line.menuItemId !== null &&
+      menuVersionId !== null &&
+      orderedByMeasure(documents.get(menuVersionId)!, line.menuItemId, productId),
     listedProductId: parentProductId ?? productId,
     listedVariantId: parentProductId === null ? null : productId,
   }));

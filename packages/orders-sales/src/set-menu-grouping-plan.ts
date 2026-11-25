@@ -22,7 +22,8 @@ export interface GroupingLine {
   menuItemId: string | null;
   /** Whole thousandths. */
   quantity: number;
-  /** Its unit is a measure (g, ml…): never a set-menu dish (`set_menu.dish_sold_by_measure`). */
+  /** Its unit was a measure (g, ml…) when it was ordered: never a set-menu dish
+   *  (`set_menu.dish_sold_by_measure`). */
   soldByMeasure: boolean;
   /** Stamped by any comp or discount (D15). */
   listUnitPriceGross: number | null;
