@@ -221,6 +221,7 @@ export const fullRowProductsMediaStyles = css`
     inline-size: var(--wt-tap-min);
     min-block-size: var(--wt-tap-min);
   }
+  /* The slot reserves the inline space. The row supplies the target's block size. */
   wt-data-table::part(product-media),
   wt-data-table::part(swatch-button) {
     position: absolute;
@@ -241,7 +242,10 @@ export const fullRowProductsMediaStyles = css`
     margin-inline-end: var(--wt-space-1);
   }
   wt-data-table[narrow]::part(tree-heading) {
-    margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-1));
+    margin-inline-start: min(
+      calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-1)),
+      max(0px, calc(100% - var(--wt-tap-min) * 1.75))
+    );
   }
   wt-data-table[narrow]::part(thumb-frame),
   wt-data-table[narrow]::part(thumb-placeholder),

@@ -3509,6 +3509,25 @@ describe("a product's variants in the list", () => {
     await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
   });
 
+  it("keeps the availability switch clear of Actions in the filtered Spanish phone Tree", async () => {
+    await page.viewport(390, 844);
+    setLocale("es-ES");
+    const dish = cecina();
+    dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+    dish.available = false;
+    const { table, root } = await mountDeli({ products: [dish], selecting: true });
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+    const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="available"]')!;
+    await chooseOption(filter, "no");
+    await table.updateComplete;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const row = root.querySelector('tr[data-row-key="cecina"]')!;
+    const available = row.querySelector("wt-switch")!.getBoundingClientRect();
+    const actions = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
+    expect(available.right).toBeLessThanOrEqual(actions.left);
+    expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+  });
+
   it.each(["en-GB", "es-ES"])("shows the List defaults at 1180 px in %s", async (locale) => {
     setLocale(locale);
     await page.viewport(1180, 844);
@@ -4235,14 +4254,16 @@ describe("the Products tree's Name column", () => {
     });
 
     it.each([false, true])(
-      "puts the Name heading over the first name in the column (selecting: %s)",
+      "keeps the Name heading over its column at phone width (selecting: %s)",
       async (selecting) => {
         const { root } = await mountPhone({ selecting });
         const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
-        expect(heading.getBoundingClientRect().left).toBeCloseTo(
-          pieces(root, ROOT_KEY).name.left,
-          0,
-        );
+        const price = root.querySelector<HTMLElement>('thead th button[data-sort="price"]')!;
+        const nameLeft = pieces(root, ROOT_KEY).name.left;
+        const bounds = heading.getBoundingClientRect();
+        if (selecting) expect(bounds.left).toBeLessThanOrEqual(nameLeft);
+        else expect(bounds.left).toBeCloseTo(nameLeft, 0);
+        expect(bounds.right).toBeLessThanOrEqual(price.getBoundingClientRect().left);
       },
     );
   });

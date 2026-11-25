@@ -2103,8 +2103,8 @@ choices. It stays open when a choice in it hides every row (beside the no-matche
 Toolbar controls follow their markup order at every width: Filters, `toolbar-start`,
 Expand all, `toolbar-end`, search, then Customise. Put a screen-owned search field in
 `toolbar-search`. Products forwards that slot through its product list and puts **List | Tree**
-after Search. At 440px or less of the Products browser's width, the view switch sits above the table
-and an outlined Search field shows the short label. Search and Customise
+after the outlined Search field. At 440px or less of the Products browser's width, the view switch
+sits above the table and Search shows its short label. Search and Customise
 share the final line when the table is 640px wide (`STACKED_SEARCH_WIDTH`) or less, so Customise
 stays last in both the drawn order and the order Tab follows. Wider tables keep the group beside
 the preceding controls where it fits. The table measures its own width, including a search
@@ -2327,7 +2327,8 @@ In Products a colour square, photo or placeholder draws at 36 px, or 30 px when 
 Its button or link is at least `--wt-tap-min` wide and runs from the top of the row to the bottom,
 including on All products and a category being named. In the phone List, the category path and
 labels go below the name. In the phone Tree the counts stay visible under category names. Price
-ranges and units can wrap. The Structure tree uses `--wt-tap-min` squares and hides its section and
+ranges and units can wrap. When Select uses the leading column on a phone, the Name heading
+can move toward the leading edge to leave room for Price and the switch. The Structure tree uses `--wt-tap-min` squares and hides its section and
 product slots when narrow, except while naming a section.
 A variant's row draws no grip. Its photo and name sit one step further in than the product's.
 The square shows the variant's photo or the product's photo and opens the variant's editor at its

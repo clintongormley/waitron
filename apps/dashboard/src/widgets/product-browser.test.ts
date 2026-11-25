@@ -4426,20 +4426,23 @@ it("shows each filter's whole choice in the panel beside the rows, in Spanish", 
   }
 });
 
-it("uses a compact, outlined Search field on a phone", async () => {
-  const { page } = await import("vitest/browser");
+it.each([
+  { width: 390, label: "Search" },
+  { width: 1180, label: "Search products and categories" },
+])("uses a 44 px outlined Search field at $width px", async ({ width, label }) => {
   const { innerWidth, innerHeight } = window;
-  await page.viewport(390, 844);
+  await page.viewport(width, 844);
   try {
     const el = await mountBrowser();
     const search = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       'wt-input[name="menu-search"]',
     )!;
-    await vi.waitFor(() => expect(search.label).toBe("Search"));
-    expect(search.shadowRoot!.querySelector("input")!.placeholder).toBe("Search");
+    await vi.waitFor(() => expect(search.label).toBe(label));
     const field = search.shadowRoot!.querySelector('[part="field"]')!;
     expect(parseFloat(getComputedStyle(field).outlineWidth)).toBeGreaterThan(0);
     expect(field.getBoundingClientRect().height).toBeCloseTo(44, 0);
+    expect(search.shadowRoot!.querySelector("input")!.placeholder).toBe(label);
+    await expect.element(page.getByRole("searchbox", { name: label })).toBeVisible();
   } finally {
     await page.viewport(innerWidth, innerHeight);
   }
