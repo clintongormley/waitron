@@ -1102,7 +1102,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package, or a full run; ordinary main pushes skip shared mutation |
+| `shared` | seven `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package, or a full run; ordinary main pushes skip shared mutation |
 | `ui-core` | `mutation-ui-core` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | `mutation-ui` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of its shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
@@ -1172,7 +1172,7 @@ page, not Chromium, and it reads the getter directly rather than through `@vites
 per-command copy (`Object.assign` in `triggerCommand`), which is what reads it as each command
 starts.
 
-### Shared mutation work is split across four shards
+### Shared mutation shards
 
 A slow runner can use the whole ten-minute job budget while still making progress. On
 27 October 2026, run `40520210328` instrumented 2,090 mutants and passed its initial 827 tests
@@ -1189,9 +1189,13 @@ Stryker until cancellation. Its log request returned HTTP 404, so its internal w
 Its job timestamps span 900 seconds even though its configured limit was ten minutes.
 
 `mutation-shared` uses `scripts/mutation-shard.mjs` to partition the package's `mutate` list.
-The first two jobs each take one range of `set-menu-grouping.ts`. The other two pack the remaining
+The first three jobs each take one range of `set-menu-grouping.ts`. The other four pack the remaining
 source files whole using [Shared's recorded file weights](#dbs-mutation-shards-are-packed-by-estimated-cost).
-A mutation spanning the grouping boundary appears in neither report. In PR #4224,
+A mutation spanning a grouping boundary is absent from the shard reports. On 25 November the
+Stryker 10.1.1 instrumenter emitted 947 mutations for the whole grouping file, 944 across the old
+two ranges and 946 across the new three. The three ranges preserved all 944 and recovered two.
+The remaining omission replaces the entire body of `groupSetMenus` and spans both new boundaries.
+In PR #4224,
 run `45394392127` instrumented 1,929 mutants in the old first job and reached 1,237 before the job
 limit. Each job still has ten minutes. The package leaves `*.fixtures.ts` out of mutation because
 those files construct inputs for tests. Local `pnpm --filter @waitron/shared mutation` mutates the
@@ -1199,7 +1203,7 @@ whole grouping file under the package's 90% floor. CI disables incremental resul
 reports only its own selection.
 
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
-`mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
+`mutation-shared-aggregate` job requires seven report directories and enforces 90% on their combined
 score. Both jobs report to `ci`; the aggregate uses the same shared-package conditions
 as the shards and runs only when `changes` succeeded, but still runs after a failed shard to refuse
 incomplete reports. The final `ci`
@@ -1225,7 +1229,7 @@ computed names and other wrappers remain outside that text scan. A real-workspac
 selected `@waitron/shared` for each helper independently.
 
 The workflow case in `scripts/ci-workflow.test.mjs` reads text, not a hosted workflow. The real-tree
-case in `scripts/mutation-shard.test.mjs` requires four nonempty shards, with two contiguous
+case in `scripts/mutation-shard.test.mjs` requires seven nonempty shards, with three contiguous
 grouping ranges and every other source file once except the named fixtures. `scripts/mutation-break-thresholds.test.mjs` imports the CI configuration and
 checks that it preserves the local mutation list and floor while disabling incremental reuse.
 
@@ -1425,22 +1429,35 @@ writeFileSync("packages/ui-core/mutation-costs.json", JSON.stringify(
 finished mutation testing in 9m27s and uploaded its report before cancellation at 10m02s.
 The [next job](https://github.com/clintongormley/waitron/actions/runs/45502466146/job/138830289600)
 was cut off during mutation testing, and its retry also reached the deadline.
-`packages/shared/mutation-costs.json` uses jobs 3 and 4 of self-hosted
+The first version of `packages/shared/mutation-costs.json` used jobs 3 and 4 of self-hosted
 [run 45489322541](https://github.com/clintongormley/waitron/actions/runs/45489322541).
 Eight slow mutations marked `Timeout` accounted for about 520 of the two jobs' 969.5 recorded
 seconds before rounding and the 0.1 minimum. Forty cases covered all eight, including the two
 16-diner cases and a 21-diner case. One
-mutation took 65.6 seconds to reach Stryker's execution-count limit. Packing with the new table
-puts placement in job 3 and search in job 4, with 486.6 weight seconds each, compared with
+mutation took 65.6 seconds to reach Stryker's execution-count limit. That first table
+placed placement in job 3 and search in job 4, with 486.6 weight seconds each, compared with
 847.2 and 126.0 by bytes. The weights rank work. Job time includes setup and concurrent tests.
 
-To refresh `packages/shared/mutation-costs.json`, apply the ui-core recipe to completed Shared jobs
-3 and 4. The reports expire after one day. Prefer jobs with the `ubuntu-latest` runner label.
-Use `mutation-report-shared-shard-3` and
-`mutation-report-shared-shard-4`. Take each report's file list from `config.mutate`, so a file
-absent from `files` still gets a weight of 0.1.
-Sum `duration ?? 0` for `Killed`, `Survived` and `Timeout`, then round to tenths of a second with
-a minimum weight of 0.1. Remove or rename the corresponding key when a listed source file goes
+Later on 25 November, the [fourth shard on runner 1000401397](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139241719163)
+completed 2,101 of its 2,102 mutations before the deadline. Its initial 1,152 tests took 38 seconds.
+Earlier runs started with the same tests and took 21 and 24 seconds.
+[First run](https://github.com/clintongormley/waitron/actions/runs/45605912501),
+[second run](https://github.com/clintongormley/waitron/actions/runs/45618464015).
+
+Runner 1000401482 ran those initial tests in 22 seconds and completed the same shard.
+[Retry log](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139252242561).
+
+The refreshed table uses the per-file medians
+from the three sets of completed whole-file reports, using the retry's shard 4 report after the
+cancellation. Those weights placed 490 and 844 seconds in the previous two whole-file shards and
+358, 325, 325 and 325 in the new four, rounded to whole seconds. These sums describe the packing.
+
+To refresh `packages/shared/mutation-costs.json`, download `mutation-report-shared-shard-*` from
+completed runs. Use the whole-file jobs, currently 4 through 7, and prefer jobs with the `ubuntu-latest`
+runner label. The reports expire after one day. List files from `config.mutate`, leaving the separately
+sharded grouping file out. In each run, sum `duration ?? 0` for `Killed`, `Survived` and `Timeout`
+per file. Use the median across runs, round to tenths of a second and use a minimum weight of 0.1,
+including for a file absent from the reports. Remove or rename a key when its listed source file goes
 away or moves. `scripts/mutation-shard.test.mjs` checks the table's file names against the mutation
 selection. Use this recorded-duration recipe for Shared because the reports from Stryker 10.1.1
 include time spent on timeouts, including mutations stopped by the execution-count limit. Reserve
@@ -3423,7 +3440,7 @@ Current sharded mutation limits are unchanged by the shared workflow:
 The following measurements describe the October window above. Since 13 November, the three
 sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs; the old
 job names in this table remain historical. Since 1 November 2026,
-[shared has four mutation shards and a five-minute score job](#shared-mutation-work-is-split-across-four-shards);
+[Shared has seven mutation shards and a five-minute score job](#shared-mutation-shards);
 the `mutation-shared` row below records the earlier unsharded job.
 
 | file               | job                               | longest measured (min)         | limit |

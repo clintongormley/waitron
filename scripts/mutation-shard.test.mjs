@@ -297,7 +297,7 @@ describe("HEAVY_FILES", () => {
         "src/components/wt-icon.ts": 2,
       },
       "ui-core": {},
-      shared: { "src/set-menu-grouping.ts": 2 },
+      shared: { "src/set-menu-grouping.ts": 3 },
     });
   });
 
@@ -328,17 +328,19 @@ describe("shardFiles", () => {
   });
 
   it("gives each Shared grouping range its own job and packs the remaining source files whole", () => {
-    const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("shared", shard, 4, root));
+    const shards = [1, 2, 3, 4, 5, 6, 7].map((shard) => shardFilesOf("shared", shard, 7, root));
     const grouping = "src/set-menu-grouping.ts";
     const lines = readFileSync(join(packageDir("shared"), grouping), "utf8").split("\n").length;
-    const middle = Math.ceil(lines / 2);
+    const firstEnd = Math.ceil(lines / 3);
+    const secondEnd = lines - Math.floor(lines / 3);
     expect(shards.every((paths) => paths.length > 0)).toBe(true);
-    expect(shards.slice(0, 2)).toEqual([
-      [`${grouping}:1-${middle}`],
-      [`${grouping}:${middle + 1}-${lines}`],
+    expect(shards.slice(0, 3)).toEqual([
+      [`${grouping}:1-${firstEnd}`],
+      [`${grouping}:${firstEnd + 1}-${secondEnd}`],
+      [`${grouping}:${secondEnd + 1}-${lines}`],
     ]);
     const fixtures = ["src/set-menu-bill.fixtures.ts", "src/set-menu-fit.fixtures.ts"];
-    expect(shards.slice(2).flat().sort()).toEqual(
+    expect(shards.slice(3).flat().sort()).toEqual(
       eligibleFiles("shared").filter((file) => file !== grouping && !fixtures.includes(file)),
     );
   });

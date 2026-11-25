@@ -45,7 +45,7 @@ export const HEAVY_FILES = {
     "src/components/wt-icon.ts": 2,
   },
   "ui-core": {},
-  shared: { "src/set-menu-grouping.ts": 2 },
+  shared: { "src/set-menu-grouping.ts": 3 },
 };
 
 /**
