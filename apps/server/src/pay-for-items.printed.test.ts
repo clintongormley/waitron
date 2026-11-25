@@ -25,7 +25,7 @@ import "./errors.js";
 // dishes move to a bill of their own and the payment is taken there, in one step.
 let venue: OrderVenue;
 let offers: ZoneOffers;
-let ids: Record<"soup" | "hake" | "beer", string>;
+let ids: Record<"soup" | "hake" | "beer" | "tasting" | "salad", string>;
 
 useVenueDb({
   resetPerTest: false,
@@ -56,6 +56,8 @@ useVenueDb({
         soup: await product("Soup", "6.00"),
         hake: await product("Hake", "15.00"),
         beer: await product("Beer", "2.50"),
+        tasting: await product("Tasting menu", "120.00"),
+        salad: await product("Salad bowl", "20.00"),
       };
       offers = await offerProducts(tx, { zone: "tables" });
     });
@@ -580,6 +582,110 @@ describe("Pay for items on a printed bill", () => {
   });
 });
 
+describe("Pay for items on a printed bill with an advance", () => {
+  /** A 140.00 table, 30.00 of it paid as an advance on the payer's own receipt, its bill printed
+   * with a 110.00 receipt; the party, the advance's payment and that receipt. */
+  async function advancedAndPrinted() {
+    const party = await seated("tasting", "salad");
+    const advancePayment = await payInCash(party.tabId, "30.00", true);
+    await printed(party);
+    const receipt = await fixture.invoiceOf(venue, party.tabId);
+    expect(receipt.total).toBe(11000);
+    return { party, advancePayment, receipt };
+  }
+
+  it("pays for a dish: the reopened bill keeps the advance, 30.00 received of 120.00", async () => {
+    const { party, advancePayment, receipt } = await advancedAndPrinted();
+
+    const paid = await payItems(
+      party.tabId,
+      await itemsBody(party, [{ lineId: await lineOf(party.tabId, "salad") }], cashFor("20.00")),
+    );
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect((await fixture.creditsOf(venue, receipt.id)).map((credit) => credit.total)).toEqual([
+      -11000,
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("abandoned");
+    const itemsBill = paid.json.billId as string;
+    expect(await statusOf(venue, itemsBill)).toBe("settled");
+    expect(await ticketsOf(itemsBill)).toEqual([2000]);
+    const [reopened] = await reopenedFrom(party.tabId);
+    expect(await dishes(reopened!)).toEqual([["Tasting menu", "1.000", "120.00"]]);
+    expect((await paymentRows(venue, reopened!)).map((row) => row.id)).toEqual([advancePayment]);
+    expect((await balanceOf(reopened!)).json).toMatchObject({
+      status: "open",
+      total: "120.00",
+      received: "30.00",
+      outstanding: "90.00",
+    });
+    expect(paid.json.sourceBalance).toMatchObject({
+      workingOrderId: reopened,
+      outstanding: "90.00",
+    });
+  });
+
+  it("paying for dishes that would leave less than the advance is bill.below_advances, the bill still printed and nothing credited", async () => {
+    const { party, receipt } = await advancedAndPrinted();
+    const picks = [{ lineId: await lineOf(party.tabId, "tasting") }];
+
+    await fixture.expectRefused(
+      venue,
+      party.tabId,
+      async () => payItems(party.tabId, await itemsBody(party, picks, cashFor("120.00"))),
+      { status: 409, code: "bill.below_advances" },
+    );
+    expect(await fixture.creditsOf(venue, receipt.id)).toEqual([]);
+    expect(await reopenedFrom(party.tabId)).toEqual([]);
+    await fixture.expectRefused(
+      venue,
+      party.tabId,
+      () => preview(party.tabId, { picks, method: "card" }),
+      { status: 409, code: "bill.below_advances" },
+    );
+  });
+
+  it("a part payment on the printed bill leaves the reopened bill overpaid, 130.00 of 120.00, and Keep as tip takes none from the advance", async () => {
+    const { party, advancePayment } = await advancedAndPrinted();
+    const partPayment = await payInCash(party.tabId, "100.00");
+
+    const paid = await payItems(
+      party.tabId,
+      await itemsBody(party, [{ lineId: await lineOf(party.tabId, "salad") }], cashFor("20.00")),
+    );
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [reopened] = await reopenedFrom(party.tabId);
+    expect((await balanceOf(reopened!)).json).toMatchObject({
+      status: "open",
+      total: "120.00",
+      received: "130.00",
+      overpaid: "10.00",
+    });
+
+    const kept = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${reopened}/overpaid/keep-as-tip`,
+      { submissionId: randomUUID(), overpaid: "10.00" },
+    );
+
+    expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+    expect(await statusOf(venue, reopened!)).toBe("settled");
+    const money = (await paymentRows(venue, reopened!)).map((row) => [
+      row.id,
+      centsToDecimal(row.applied),
+      centsToDecimal(row.tip),
+    ]);
+    expect(money).toEqual([
+      [advancePayment, "30.00", "0.00"],
+      [partPayment, "90.00", "10.00"],
+    ]);
+    expect(await ticketsOf(reopened!)).toEqual([9000]);
+  });
+});
+
 describe("previewing Pay for items on a printed bill", () => {
   it("prices the printed bill's own dishes, writing nothing", async () => {
     const party = await printed(await seated("soup", "hake"));
@@ -597,29 +703,21 @@ describe("previewing Pay for items on a printed bill", () => {
     expect(await statusOf(venue, party.tabId)).toBe("placed");
   });
 
-  it("the preview says the reopen's refusal before any money", async () => {
-    const advanced = await seated("soup", "hake");
-    await payInCash(advanced.tabId, "10.00", true);
-    await printed(advanced);
+  it("the preview says Reopen bill's refusal before any money", async () => {
     const unserved = await seated("soup", "hake");
     const ticket = await fixture.printBill(venue, unserved, unserved.tabId, true);
     expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
 
-    for (const [party, code] of [
-      [advanced, "bill.below_advances"],
-      [unserved, "bill.unserved_dishes"],
-    ] as const) {
-      await fixture.expectRefused(
-        venue,
-        party.tabId,
-        async () =>
-          preview(party.tabId, {
-            picks: [{ lineId: await lineOf(party.tabId, "hake") }],
-            method: "card",
-          }),
-        { status: 409, code },
-      );
-    }
+    await fixture.expectRefused(
+      venue,
+      unserved.tabId,
+      async () =>
+        preview(unserved.tabId, {
+          picks: [{ lineId: await lineOf(unserved.tabId, "hake") }],
+          method: "card",
+        }),
+      { status: 409, code: "bill.unserved_dishes" },
+    );
   });
 });
 

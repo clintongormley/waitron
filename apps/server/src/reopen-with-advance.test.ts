@@ -1235,4 +1235,32 @@ describe("Reports and the accountant export of a reopened bill with an advance",
       "-52.00",
     ]);
   });
+
+  it("reopened twice, the export names the third bill's receipt as taking the advance off, and neither printed receipt takes anything off", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+    const y = await reopen(x);
+    const yReceipt = await print(y.billId);
+    const z = await reopen(y.billId);
+
+    const final = await payRestOf(z.billId, "52.00");
+
+    const byId = new Map(
+      (
+        await inTx(venue(), (tx) =>
+          listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+        )
+      ).invoices.map((invoice) => [invoice.id, invoice]),
+    );
+    const number = async (saleId: string) => (await advanceFacts(saleId)).invoiceNumber;
+    expect(byId.get(advanceId)).toMatchObject({
+      advance: { paidBy: "cash", takenOffBy: await number(final) },
+    });
+    expect(byId.get(final)).toMatchObject({ takesOff: [await number(advanceId)] });
+    for (const receipt of [xReceipt, yReceipt]) {
+      expect(byId.get(receipt)).toMatchObject({ total: expect.anything() });
+      expect(byId.get(receipt)).not.toHaveProperty("takesOff");
+    }
+  });
 });
