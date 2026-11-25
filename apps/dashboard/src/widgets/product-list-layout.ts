@@ -23,8 +23,6 @@ export const productListLayoutStyles = css`
     width: var(--wt-tap-min);
     margin-inline-end: var(--wt-space-3);
   }
-  /* As a block, the frame's baseline is that of the line its middle-aligned square sits on, as a
-     resting row's is, so a naming row lines up by the same baseline. */
   wt-data-table::part(naming-frame) {
     display: inline-block;
     align-self: baseline;
@@ -95,7 +93,6 @@ export const productListLayoutStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
-  /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
   wt-data-table::part(folder-name),
   wt-data-table::part(name-stack),
   wt-data-table::part(variant-name) {
@@ -115,8 +112,6 @@ export const productListLayoutStyles = css`
     font-size: var(--wt-font-size-sm);
     min-inline-size: 0;
   }
-  /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
-     keeps its baseline and its square stays put. */
   wt-data-table::part(tree-toggle) {
     font-family: inherit;
   }
@@ -152,7 +147,9 @@ export const productListLayoutStyles = css`
 export const fullRowProductsMediaStyles = css`
   wt-data-table::part(tree-row) {
     position: relative;
-    /* A switch can move its row under the active sort while the pointer stays in place. */
+  }
+  wt-data-table[data-availability-saving]::part(tree-row) {
+    /* The pending switch can move its row as the save finishes. */
     overflow-anchor: none;
   }
   wt-data-table::part(tree-indent) {

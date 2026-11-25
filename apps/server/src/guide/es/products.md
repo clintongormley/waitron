@@ -19,7 +19,8 @@ En **Lista**, busca por nombre de producto o variante. Para encontrar platos de 
 sus subcategorías, elige una **Categoría** en **Filtros**. En **Disponible**, elige **No** para encontrar platos o
 variantes que no están a la venta. Un plato con una variante no disponible puede aparecer bajo
 **Sí** y **No**. En un teléfono, busca la categoría debajo del nombre del producto. El interruptor
-junto al precio controla la disponibilidad.
+junto al precio controla la disponibilidad. En un teléfono, sal de **Seleccionar** para volver a
+ver el precio y el interruptor.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir

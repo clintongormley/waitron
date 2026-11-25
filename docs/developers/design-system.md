@@ -2327,15 +2327,17 @@ indent, one step in per level, rather than every square sharing one column (owne
 In Products a colour square, photo or placeholder draws at 36 px, or 30 px when the table is narrow.
 Its button or link is at least `--wt-tap-min` wide and runs from the top of the row to the bottom,
 including on All products and a category being named. In the phone List, labels go below
-the name. The category path joins them when its column is hidden in Customise. In the phone Tree the counts stay visible under category names. Price
-ranges and units can wrap. When Select uses the leading column on a phone, the Name heading
-can move toward the leading edge to leave room for Price and the switch. The Structure tree uses `--wt-tap-min` squares and hides its section and
+the name. The category path joins them when its column is hidden in Customise. In the phone Tree
+the counts stay visible under category names. Price ranges and units can wrap. Phone Select gives the
+name the space of the Price and Available columns while keeping the current filters.
+The Structure tree uses `--wt-tap-min` squares and hides its section and
 product slots when narrow, except while naming a section.
 A variant's row draws no grip. Its photo and name sit one step further in than the product's.
 The square shows the variant's photo or the product's photo and opens the variant's editor at its
 photo. Names wrap within their cells. On a phone, the category name field sits beside the swatch,
 with the counts above the field. It can use the category row's empty Price and Available cells
-as far as the pinned Actions column. In the narrow Tree, Select stacks each grip below its checkbox in the leading column.
+as far as the pinned Actions column. In the narrow Tree, Select stacks each grip below its checkbox
+in the leading column.
 The square shows the category's own colour, else the nearest coloured category above it or the
 venue's default. An inherited colour keeps its dashed border while the name is typed. The chooser
 starts on No colour when the category has no colour of its own. Tab moves on from the name field.

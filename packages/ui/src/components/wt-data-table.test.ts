@@ -5265,6 +5265,22 @@ test("a tree without selection hides a chosen column's header and cells", async 
   ).toEqual(["Eggs", "eggs", "eggs"]);
 });
 
+test("temporarily hidden columns keep the person's sort active", async () => {
+  const el = await table({
+    sortKey: "count",
+    sortDirection: "descending",
+    layoutHiddenColumns: ["count"],
+  });
+  expect(headers(el)).toEqual(["Name", "Actions"]);
+  expect(el.isColumnShown("count")).toBe(false);
+  expect(rowText(el)).toEqual(["AdaEdit", "BeaEdit"]);
+
+  el.layoutHiddenColumns = undefined;
+  await el.updateComplete;
+  expect(el.isColumnShown("count")).toBe(true);
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+});
+
 test("the fixed first column cannot be hidden while other choices remain available", async () => {
   const all: DataTableColumn<Row>[] = [
     { key: "name", label: "Name", cell: (row) => row.name, choosable: "shown" },

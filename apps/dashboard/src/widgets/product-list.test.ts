@@ -3557,13 +3557,51 @@ describe("a product's variants in the list", () => {
     await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "fits the starting List columns beside Filters in %s",
+    async (locale) => {
+      await page.viewport(1180, 844);
+      setLocale(locale);
+      const dish = cecina();
+      dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+      dish.variants[0]!.unitPrice = "138.00";
+      dish.variants[1]!.unitPrice = "144.00";
+      const { el, root, table } = await mountTree({
+        view: "list",
+        products: [dish],
+        categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+      });
+      el.parentElement!.style.width = "848px";
+      const scroll = root.querySelector<HTMLElement>(".scroll")!;
+      await vi.waitFor(() => expect(scroll.clientWidth).toBeGreaterThan(800));
+      root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+      await table.updateComplete;
+      await vi.waitFor(() => {
+        expect(scroll.clientWidth).toBeLessThan(600);
+        expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+      });
+      const price = root.querySelector('tr[data-row-key="cecina"] [data-test="price"]')!;
+      const amount = [...price.childNodes].find((node) => node.textContent?.includes("–"))!;
+      const dash = amount.textContent!.indexOf("–");
+      expect(dash).toBeGreaterThan(0);
+      const first = document.createRange();
+      first.setStart(amount, 0);
+      first.setEnd(amount, dash);
+      const second = document.createRange();
+      second.setStart(amount, dash + 1);
+      second.setEnd(amount, amount.textContent!.length);
+      expect(first.getClientRects()).toHaveLength(1);
+      expect(second.getClientRects()).toHaveLength(1);
+    },
+  );
+
   it("keeps the availability switch clear of Actions in the filtered Spanish phone Tree", async () => {
     await page.viewport(390, 844);
     setLocale("es-ES");
     const dish = cecina();
     dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
     dish.available = false;
-    const { table, root } = await mountDeli({ products: [dish], selecting: true });
+    const { table, root } = await mountDeli({ products: [dish] });
     await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
     const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="available"]')!;
     await chooseOption(filter, "no");
@@ -3575,6 +3613,52 @@ describe("a product's variants in the list", () => {
     expect(available.right).toBeLessThanOrEqual(actions.left);
     expect(scroll.scrollWidth).toBe(scroll.clientWidth);
   });
+
+  it.each(["list", "tree"] as const)(
+    "gives names the Price and Available space while selecting in the phone %s",
+    async (view) => {
+      await page.viewport(390, 844);
+      showColumns("price", "available");
+      const { el, table, root } = await mountTree({
+        view,
+        products: [
+          product({ id: "cola", name: "Cola" }),
+          product({ id: "ale", name: "Ale", available: false }),
+        ],
+      });
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+      await choose(el, "available", "no");
+      expect(rowKeys(root).filter((key) => !key.startsWith("folder:"))).toEqual(["ale"]);
+      const row = root.querySelector('tr[data-row-key="ale"]')!;
+      const price = () => row.querySelector('[data-test="price"]');
+      const available = () => row.querySelector("wt-switch");
+      expect(price()).not.toBeNull();
+      expect(available()).not.toBeNull();
+
+      el.selecting = true;
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(price()).toBeNull();
+      expect(available()).toBeNull();
+      expect(table.filterValues("available")).toEqual(["no"]);
+      expect(rowKeys(root).filter((key) => !key.startsWith("folder:"))).toEqual(["ale"]);
+      expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
+        price: true,
+        available: true,
+      });
+
+      await page.viewport(800, 844);
+      await vi.waitFor(() => expect(price()).not.toBeNull());
+      expect(available()).not.toBeNull();
+      await page.viewport(390, 844);
+      await vi.waitFor(() => expect(price()).toBeNull());
+      el.selecting = false;
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(price()).not.toBeNull();
+      expect(available()).not.toBeNull();
+    },
+  );
 
   it.each(["en-GB", "es-ES"])("shows the List defaults at 1180 px in %s", async (locale) => {
     setLocale(locale);
@@ -4342,12 +4426,14 @@ describe("the Products tree's Name column", () => {
       async (selecting) => {
         const { root } = await mountPhone({ selecting });
         const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
-        const price = root.querySelector<HTMLElement>('thead th button[data-sort="price"]')!;
+        const next = root.querySelector<HTMLElement>(
+          selecting ? 'thead th[data-pinned="end"]' : 'thead th button[data-sort="price"]',
+        )!;
         const nameLeft = pieces(root, ROOT_KEY).name.left;
         const bounds = heading.getBoundingClientRect();
         if (selecting) expect(bounds.left).toBeLessThanOrEqual(nameLeft);
         else expect(bounds.left).toBeCloseTo(nameLeft, 0);
-        expect(bounds.right).toBeLessThanOrEqual(price.getBoundingClientRect().left);
+        expect(bounds.right).toBeLessThanOrEqual(next.getBoundingClientRect().left);
       },
     );
   });
@@ -6887,7 +6973,7 @@ describe("A668 effective allergen cells", () => {
       const name = cellUnder(root, "dish", "Name").querySelector<HTMLElement>(
         '[part~="product-cell"]',
       )!;
-      expect(getComputedStyle(name).display).toBe("block");
+      expect(name.checkVisibility()).toBe(true);
       const badge = (key: string) =>
         cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
           '[data-test="allergen-state"]',

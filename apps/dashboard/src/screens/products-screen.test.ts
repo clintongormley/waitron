@@ -548,7 +548,7 @@ describe("menu-screen", () => {
   );
 
   it.each([
-    { width: 390, tableHeight: 480, fits: true },
+    { width: 390, tableHeight: 330, fits: true },
     { width: 390, tableHeight: 280, fits: false },
     { width: 1180, tableHeight: 280, fits: true },
   ])(

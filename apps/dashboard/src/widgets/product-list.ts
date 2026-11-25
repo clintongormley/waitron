@@ -74,6 +74,8 @@ const DRAFT_KEY = "draft:new";
 /** The Course filter's value for a row with no course. Never `""`: a multiple choice's `""` row is
  * its "any" row, and choosing it clears the choice. Course ids are UUIDs, so this is never one. */
 const NO_COURSE = "no-course";
+const PHONE_SELECTION_HIDDEN_COLUMNS = ["price", "available"] as const;
+const PRODUCTS_COMPACT_WIDTH = 800;
 
 export type CategoryNameDraft =
   { kind: "create"; parentId: string | null } | { kind: "rename"; categoryId: string };
@@ -599,7 +601,11 @@ export class ProductList extends LitElement {
       const width = table.clientWidth;
       if (width > 0) {
         this.phone = width <= PRODUCTS_PHONE_WIDTH;
-        table.toggleAttribute("data-compact-products", width < 800);
+        const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll");
+        table.toggleAttribute(
+          "data-compact-products",
+          (scroll?.clientWidth ?? width) < PRODUCTS_COMPACT_WIDTH,
+        );
       }
       this.#fitNameBox();
     });
@@ -1450,6 +1456,7 @@ export class ProductList extends LitElement {
         keep-toolbar-when-empty
         dense-rows
         wrap-to-fit
+        ?data-availability-saving=${this.availabilityPending.size > 0}
         ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
@@ -1511,7 +1518,13 @@ export class ProductList extends LitElement {
           row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
         .rows=${this.#rowList}
         .rowCellParts=${() => "products-cell"}
+        .rowSpansUnpinnedColumns=${
+          this.phone && this.view === "tree" ? (row: ListRow) => row.kind !== "product" : undefined
+        }
         .columns=${this.#columns()}
+        .layoutHiddenColumns=${
+          this.phone && this.selecting ? PHONE_SELECTION_HIDDEN_COLUMNS : undefined
+        }
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}
         @pointerdown=${this.#pointerDown}
