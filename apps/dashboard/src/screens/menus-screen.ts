@@ -1,3 +1,9 @@
+import type { ContentLanguages } from "@waitron/shared";
+import type { MenuSettingsAnswer } from "../api/client.js";
+import {
+  MenuStructureProductEditor,
+  type StructureProductEdit,
+} from "../widgets/menu-structure-product-editor.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -509,6 +515,9 @@ export class MenusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canEditProducts = false;
+  @state() private menuSettings: MenuSettingsAnswer | null = null;
+  @state() private contentLanguages: ContentLanguages | null = null;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
   @property({ attribute: false }) menuPeriodUsage?: MenuPeriodUsageProvider;
   @state() private periodUses?: ReadonlyMap<string, PeriodUses> | null;
@@ -544,7 +553,7 @@ export class MenusScreen extends LitElement {
   }
   @state() private products: Product[] = [];
   @state() private categories: CategorySummary[] = [];
-  @state() private defaultColor: string | null = null;
+
   @state() private loading = true;
   @state() private loadError = false;
 
@@ -653,6 +662,28 @@ export class MenusScreen extends LitElement {
   @state() private shortcutError = "";
   /** Any other refusal of an add, shown at the picker's end. */
   @state() private shortcutFormError = "";
+
+  readonly #productEditor = new MenuStructureProductEditor(this, {
+    api: () => this.api,
+    menu: () => this.menuId,
+    products: () => this.products,
+    categories: () => this.categories,
+    settings: () => this.menuSettings,
+    languages: () => this.contentLanguages,
+    showError: (message) => {
+      this.structureWriteError = message;
+    },
+    reportRefusal: (name, error) => this.#reportRefused(name, error),
+    refreshProducts: () => this.#watchLibraryProducts(),
+    returnFocusTo: (path, photo) => this.#returnFocusTo(path, false, photo),
+    windowClosed: () => this.#windowClosed(),
+  });
+
+  #watchLibraryProducts(): Promise<void> {
+    return this.#queries.watch("listLibraryProducts", [], (products) => {
+      this.products = products;
+    });
+  }
 
   readonly #queries = new DashboardQueries(
     this,
@@ -768,6 +799,21 @@ export class MenusScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     this.#followUsage();
+    if (
+      !this.canEditProducts ||
+      this.view !== "structure" ||
+      this.creatingSection ||
+      this.editingSection ||
+      this.deletingSection ||
+      this.includingMenu ||
+      this.editingInclude ||
+      this.addingProducts ||
+      this.movingSelected ||
+      this.removingSelected ||
+      this.deletingSelected ||
+      this.menuPresentation
+    )
+      this.#productEditor.close();
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
     // replaces the link a person may already have focused.
     if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
@@ -950,16 +996,15 @@ export class MenusScreen extends LitElement {
     try {
       await Promise.all([
         this.#watchMenus(),
-        this.#queries.watch("listLibraryProducts", [], (value) => {
-          this.products = value;
-        }),
+        this.#watchLibraryProducts(),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
         this.#queries.watch("getMenuSettings", [], (value) => {
-          this.defaultColor = value.defaultColor;
+          this.menuSettings = value;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
+          this.contentLanguages = value;
           setContentLanguages(value);
         }),
       ]);
@@ -1212,6 +1257,7 @@ export class MenusScreen extends LitElement {
 
   #select(menuId: string | null): void {
     if (menuId === this.menuId) return;
+    this.#productEditor.close();
     this.#menuOpenings++;
     this.#menuFormGeneration++;
     this.menuForm = null;
@@ -2654,11 +2700,12 @@ export class MenusScreen extends LitElement {
       }
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
+        .editProductsInPlace=${this.canEditProducts}
         .menus=${this.menus}
         .placeableSetMenus=${structure.placeableSetMenus ?? []}
         .products=${this.products}
         .categories=${this.categories}
-        .defaultColor=${this.defaultColor}
+        .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
         .busy=${this.busy}
@@ -2689,6 +2736,11 @@ export class MenusScreen extends LitElement {
         ) => {
           event.stopPropagation();
           this.#openAdd(event.detail.action, event.detail.path);
+        }}
+        @wt-edit-product=${(event: CustomEvent<StructureProductEdit>) => {
+          if (!this.canEditProducts || this.view !== "structure") return;
+          event.stopPropagation();
+          this.#productEditor.open(event.detail);
         }}
         @wt-member-remove=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
           event.stopPropagation();
@@ -3872,7 +3924,8 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
-      ${this.#renderShortcutPicker()}`;
+      ${this.#renderShortcutPicker()}
+      ${this.#productEditor.render(this.canEditProducts && this.view === "structure" && this.contentLanguages !== null && this.menuSettings !== null)}`;
   }
 
   override render() {

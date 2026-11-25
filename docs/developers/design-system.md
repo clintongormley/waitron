@@ -4150,6 +4150,10 @@ A form that shows everything an entity can carry becomes one long stack of field
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put the rest inside a `wt-disclosure`.
 
+In Menu Structure, **Edit product** opens the same editor used in Products. The photo opens it at
+the image control. Save updates the product immediately; closing the editor returns focus to the
+Structure row’s actions or photo.
+
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is three cards (see "Lay out a
 long form in a dialog as cards" below):
 

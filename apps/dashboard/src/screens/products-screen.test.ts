@@ -3361,7 +3361,7 @@ describe("menu-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
-    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
+    expect(editor(el).open).toBe(true);
   });
 
   it("ignores an unknown product id", async () => {
@@ -3369,7 +3369,7 @@ describe("menu-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
-    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
+    expect(editor(el).open).toBe(false);
   });
 
   it("keeps a new product's editor when the address comes back from another page naming no product", async () => {

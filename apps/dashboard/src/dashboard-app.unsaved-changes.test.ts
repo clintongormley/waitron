@@ -5,6 +5,7 @@ import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/
 import type { DashboardApi, MenuPriceRow, MenuPreview, Product } from "./api/client.js";
 import type { OwnProfile } from "./api/account-api.js";
 import { DashboardApp } from "./dashboard-app.js";
+import { menuProductApi } from "./testing/menu-product-fixture.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { MenuPricesTable } from "./widgets/menu-prices-table.js";
 import "./widgets/menu-prices-table.js";
@@ -12,6 +13,7 @@ import type { MenuStructureTable } from "./widgets/menu-structure-table.js";
 import "./widgets/menu-structure-table.js";
 import { MenuPublicationsPanel } from "./widgets/menu-publications.js";
 import { userEvent } from "vitest/browser";
+import type { ProductEditor } from "./widgets/product-editor.js";
 import { productMedia } from "./widgets/product-media.js";
 import {
   cleanupWidgets,
@@ -1333,6 +1335,71 @@ describe("a price override row's Edit product link under the app's link router",
 });
 
 describe("a Structure tab product row's Edit product link under the app's link router", () => {
+  it.each([true, false])(
+    "keeps the menu address and opens the editor only with Products access (%s)",
+    async (allowed) => {
+      const productApi = menuProductApi();
+      const { app } = await mount({
+        ...productApi,
+        getMe: async () => ({
+          personId: "p1",
+          email: "ada@example.com",
+          roleIds: ["manager"],
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          venueName: "Venue",
+          permissions: ["menu.manage", ...(allowed ? ["venue.view", "product.manage"] : [])],
+          modules: [],
+        }),
+      });
+      const address = "/menus/menu/menu-one/view/structure";
+      const guard = navigationGuardFor(window)!;
+      await guard.write("/menus");
+      await guard.write(address);
+      const menus = () => app.shadowRoot!.querySelector("dashboard-menus-screen");
+      const action = () =>
+        menus()
+          ?.shadowRoot?.querySelector("dashboard-menu-structure-table")
+          ?.shadowRoot?.querySelector("wt-data-table")
+          ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+            '[data-test="actions-m-burger"]',
+          );
+      await expect.poll(action).toBeTruthy();
+      action()!.show();
+      const link = action()!.querySelector<HTMLAnchorElement>(
+        '[data-test="edit-product-m-burger"]',
+      )!;
+      expect(location.pathname).toBe(address);
+      const push = vi.spyOn(history, "pushState");
+      const replace = vi.spyOn(history, "replaceState");
+      await userEvent.click(link);
+      if (allowed) {
+        expect(location.pathname).toBe(address);
+        expect(push).not.toHaveBeenCalled();
+        expect(replace).not.toHaveBeenCalled();
+        await expect
+          .poll(
+            () =>
+              menus()?.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor")?.open,
+          )
+          .toBe(true);
+        history.back();
+        await expect.poll(() => location.pathname).toBe("/menus");
+        await expect
+          .poll(() => menus()?.shadowRoot?.querySelector("dashboard-product-editor"))
+          .toBeNull();
+      } else {
+        expect(location.pathname).toBe("/menus");
+        expect(productApi.getProductEditor).not.toHaveBeenCalled();
+        expect(
+          menus()?.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor")?.open ??
+            false,
+        ).toBe(false);
+      }
+    },
+  );
+
   it("is routed in the app to that product's editor", async () => {
     const m = await mount({
       getMe: async () => ({

@@ -271,6 +271,7 @@ export class MenuStructureTable extends LitElement {
   })
   current: string[] = [];
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) editProductsInPlace = false;
   /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
   @property({ type: Boolean, reflect: true }) reordering = true;
@@ -931,9 +932,8 @@ export class MenuStructureTable extends LitElement {
     await this.updateComplete;
     const table = this.#table();
     await table?.updateComplete;
-    const swatch = table?.shadowRoot?.querySelector<HTMLButtonElement>(
-      `button[data-test="color-${CSS.escape(key)}"]`,
-    );
+    const selector = `[data-test="color-${CSS.escape(key)}"]`;
+    const swatch = table?.shadowRoot?.querySelector<HTMLElement>(`button${selector}, a${selector}`);
     if (swatch) swatch.focus();
     else this.focusRowMenu(key);
   }
@@ -1224,6 +1224,9 @@ export class MenuStructureTable extends LitElement {
               categoryColor(product.categoryId, this.#categoryById, this.defaultColor)),
         editable: !row.readOnly && product !== undefined,
         busy: this.busy,
+        open: this.editProductsInPlace
+          ? () => this.#send("wt-edit-product", { productId, path: row.path, field: "image" })
+          : undefined,
       });
     }
     if (node.ref.kind === "set_menu") return nothing;
@@ -1357,10 +1360,14 @@ export class MenuStructureTable extends LitElement {
         ? html`<a
             data-test=${`edit-product-${key}`}
             href=${`/products/product/${encodeURIComponent(productId)}`}
+            ?data-own-click=${this.editProductsInPlace}
             @click=${(event: MouseEvent) => {
               if (leftToBrowser(event)) return;
               event.preventDefault();
-              this.#send("wt-edit-product", { productId });
+              this.#send(
+                "wt-edit-product",
+                this.editProductsInPlace ? { productId, path: row.path } : { productId },
+              );
             }}
             ><wt-icon name="menu-edit" size="lg"></wt-icon>${t("product.edit")}</a
           >`
