@@ -86,6 +86,12 @@ printing automatically when the print-agent tablet is off; which printer connect
 themselves ([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
 [Epson Server Direct Print](../superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md)).
 
+**Owner decision, 25 November 2026, after the device test below:** "i've realised that handhelds are
+unlikely to have sim cards and contract, which cost money. so the better solution would be a router
+with a sim card". So a venue run from Cloud keeps selling through a router with its own SIM: every device stays on
+the venue's Wi-Fi, and the app needs Wi-Fi only. The app does not hold two networks; the test stays
+as the record that it could. Whether Waitron recommends or resells such a router stays open.
+
 **The device test ran on 25 November 2026: one Android device can do both.** On the owner's Oppo
 (CPH2913, Android 17), with its internet blocked in UniFi but the local network open, and a throwaway app
 asking for both networks (`ConnectivityManager.requestNetwork`, one request tied to each):
