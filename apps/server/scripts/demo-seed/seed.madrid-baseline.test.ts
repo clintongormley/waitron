@@ -1670,6 +1670,7 @@ for (const locale of ["en", "es"] as const) {
         "hardware_unit",
         "late_period_name",
         "late_period_id",
+        "late_station_id",
         "late_confirmed_by",
         "sent_nutrition",
         "offer_unit_name",
@@ -1704,6 +1705,7 @@ for (const locale of ["en", "es"] as const) {
           ["set_menu_id", "menus"],
           ["credited_to", "persons"],
           ["late_confirmed_by", "persons"],
+          ["late_station_id", "kitchen_stations"],
           ["menu_version_id", "menu_versions"],
           ["menu_item_id", "menu_items"],
         ].map(([from, table, onDelete], id) => ({
@@ -1716,7 +1718,7 @@ for (const locale of ["en", "es"] as const) {
           on_delete: onDelete ?? "NO ACTION",
           match: "NONE",
         })),
-        ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 7 })),
+        ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 8 })),
       ];
       const saleLines = expected[phase].tables.sale_lines!;
       for (const name of ["advance_role", "deducts_sale_id", "set_menu_role"]) {

@@ -136,6 +136,7 @@ async function finishRelease(
     noRoute.zoneId,
     noRoute.lines.map((line) => ({
       dishLineId: line.id,
+      productId: null,
       stationId: null,
       courseId: line.courseId,
       initiated: true,

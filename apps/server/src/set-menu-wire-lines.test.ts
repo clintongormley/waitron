@@ -47,7 +47,6 @@ describe("parseSetMenuWireLines", () => {
       [SET_MENU_DRAFT_LINE]: {
         setMenuId: MENU.toLowerCase(),
         position: 1,
-        held: false,
         reserved: { setMenuLineId: RESERVED.toLowerCase(), place: 2 },
       },
     });

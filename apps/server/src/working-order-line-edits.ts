@@ -1006,6 +1006,7 @@ export async function applyLineEdits(
     context?.zoneId ?? null,
     addedToExisting.map(({ parent }) => ({
       dishLineId: parent.id,
+      productId: parent.productId,
       stationId: parent.ticket?.stationId ?? null,
       courseId: parent.ticket?.courseId ?? parent.courseId,
       initiated:

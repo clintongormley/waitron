@@ -118,25 +118,22 @@ export function mountTillGroupRoutes(
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
       const body = asObject(await readRawJsonBody<unknown>(c));
-      const lateSend = parseLateSend(body.lateSend);
       const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
-      const fired = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        withTransaction(deps.db, async (tx) => {
-          const current = await recheckFireSession(tx, session);
-          await checkZones(tx, current, [{ partyId }]);
-          return fireGroup(
-            tx,
-            requestCfg(deps.cfg, current),
-            partyId,
-            groupId,
-            { ...command, lateSend: late },
-            undefined,
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-        }),
-      );
+      const fired = await withTransaction(deps.db, async (tx) => {
+        const current = await recheckFireSession(tx, session);
+        await checkZones(tx, current, [{ partyId }]);
+        return fireGroup(
+          tx,
+          requestCfg(deps.cfg, current),
+          partyId,
+          groupId,
+          command,
+          undefined,
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
       return c.json(fired);
     }),
   );
@@ -297,36 +294,33 @@ export function mountTillGroupRoutes(
       const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
-      const lateSend = parseLateSend(body.lateSend);
       const command = { ...groupCommand(session.personId, body), ...allergyCommand(body) };
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
       const members = body.lineIds === undefined ? {} : { lineIds: requireLineIds(body.lineIds) };
-      const answer = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        withTransaction(deps.db, async (tx) => {
-          await assertStillSignedIn(tx, session);
-          const device = await assertDeviceStillProven(tx, {
-            device: session.device,
-            tokenHash: null,
-          });
-          assertProfileAction(device, "take-orders");
-          if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
-            throw new AppError("device_profile.not_admitted", {});
-          const current = { ...session, device };
-          const cfg = requestCfg(deps.cfg, current);
-          await checkZones(tx, current, [{ partyId }]);
-          return fireHeldLine(
-            tx,
-            cfg,
-            partyId,
-            lineId,
-            { ...command, ...members, lateSend: late },
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-        }),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await assertStillSignedIn(tx, session);
+        const device = await assertDeviceStillProven(tx, {
+          device: session.device,
+          tokenHash: null,
+        });
+        assertProfileAction(device, "take-orders");
+        if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+          throw new AppError("device_profile.not_admitted", {});
+        const current = { ...session, device };
+        const cfg = requestCfg(deps.cfg, current);
+        await checkZones(tx, current, [{ partyId }]);
+        return fireHeldLine(
+          tx,
+          cfg,
+          partyId,
+          lineId,
+          { ...command, ...members },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock },
+        );
+      });
       return c.json(answer);
     }),
   );

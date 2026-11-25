@@ -559,9 +559,14 @@ export async function priceOrderLines(
     const line = requestedLines[index]!;
     const choice = endedMakers?.get(id);
     const sent = line[ON_SENT_DISH];
-    if (sent === undefined && choice?.kind === "made" && choice.route.kind === "no_preparation")
+    const { periodId, periodName } = ended.get(line)!;
+    if (
+      sent?.stationId === null ||
+      (sent === undefined && choice?.kind === "made" && choice.route.kind === "no_preparation")
+    ) {
+      marks.set(index, { periodId, periodName, confirmedBy: null });
       continue;
-    if (sent?.stationId === null) continue;
+    }
     const stationId =
       sent?.stationId ??
       (choice?.kind === "made" && choice.route.kind === "station"

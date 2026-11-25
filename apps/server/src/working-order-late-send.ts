@@ -78,20 +78,21 @@ export async function lateUnsentDishes(
   const judged = await judgeLateUnsent(tx, orderId, lines, routing);
   if (judged === null) return;
   const { departmentId, late } = judged;
+  const asking = late.filter(({ noPreparation }) => noPreparation !== true);
   const confirmedBy =
-    mode === "mark"
+    mode === "mark" || asking.length === 0
       ? null
-      : await confirmLateDishes(tx, departmentId, late, mode.ask, [
-          ...new Set(late.map(({ namedId }) => namedId)),
+      : await confirmLateDishes(tx, departmentId, asking, mode.ask, [
+          ...new Set(asking.map(({ namedId }) => namedId)),
         ]);
   await VENUE_SERVICE.recordLateSendMarks(
     tx,
-    late.map(({ lineId, periodId, periodName, stationId }) => ({
+    late.map(({ lineId, periodId, periodName, stationId, noPreparation }) => ({
       lineId,
-      periodId: confirmedBy === null ? null : periodId,
+      periodId: noPreparation === true || confirmedBy !== null ? periodId : null,
       stationId: confirmedBy === null ? undefined : stationId,
       periodName,
-      confirmedBy,
+      confirmedBy: noPreparation === true ? null : confirmedBy,
     })),
   );
 }
@@ -107,6 +108,7 @@ interface LateUnsentDish {
   periodId: string | null;
   periodName: string;
   stationId?: string;
+  noPreparation?: true;
 }
 type LineContext = Awaited<ReturnType<typeof VENUE_SERVICE.listLineContexts>>[number];
 
@@ -257,8 +259,12 @@ async function judgeLateUnsent(
   for (const dish of stopped) {
     const maker = legacyMakers?.get(dish.lineId);
     const route = maker?.kind === "made" ? maker.route : undefined;
-    if (route?.kind === "no_preparation") continue;
-    late.push({ ...dish, stationId: route?.stationId });
+    late.push({
+      ...dish,
+      ...(route?.kind === "no_preparation"
+        ? { noPreparation: true }
+        : { stationId: route?.stationId }),
+    });
   }
   if (late.length === 0) return null;
   // A late dish's extras are judged with it, as entry marks them with it.

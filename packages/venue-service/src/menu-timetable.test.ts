@@ -2135,6 +2135,13 @@ describe("department service periods", () => {
     });
   };
   type ServiceVenue = Awaited<ReturnType<typeof serviceVenue>>;
+  const endedLunch = ({ menus, lunch }: ServiceVenue) =>
+    [menus.Lunch, menus.Drinks].map((menuId) => ({
+      menuId,
+      periodId: lunch,
+      periodName: "Lunch",
+      sourceMenuIds: [menus.Lunch, menus.Drinks, menus.Coffee],
+    }));
   const read = (v: ServiceVenue, date: string, time: string) =>
     scoped((tx) => resolveDepartmentService(tx, v.restaurant, madrid(date, time)));
 
@@ -2611,18 +2618,7 @@ describe("department service periods", () => {
   it("names each ended menu's period, the one that ended last when two share a menu", async () => {
     const v = await serviceVenue();
     expect((await read(v, FRIDAY, "20:00")).endedMenus).toEqual([
-      {
-        menuId: v.menus.Lunch,
-        periodId: v.lunch,
-        periodName: "Lunch",
-        sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-      },
-      {
-        menuId: v.menus.Drinks,
-        periodId: v.lunch,
-        periodName: "Lunch",
-        sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-      },
+      ...endedLunch(v),
       {
         menuId: v.menus.Coffee,
         periodId: v.afternoon,
@@ -2664,20 +2660,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Coffee,
       orderableMenuIds: [v.menus.Coffee],
-      endedMenus: [
-        {
-          menuId: v.menus.Lunch,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
-        {
-          menuId: v.menus.Drinks,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
-      ],
+      endedMenus: [...endedLunch(v)],
     });
   });
 
@@ -2698,18 +2681,7 @@ describe("department service periods", () => {
       customerMenuId: v.menus.Dinner,
       orderableMenuIds: [v.menus.Dinner],
       endedMenus: [
-        {
-          menuId: v.menus.Lunch,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
-        {
-          menuId: v.menus.Drinks,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
+        ...endedLunch(v),
         {
           menuId: v.menus.Coffee,
           periodId: v.afternoon,
@@ -2733,18 +2705,7 @@ describe("department service periods", () => {
       customerMenuId: null,
       orderableMenuIds: [],
       endedMenus: [
-        {
-          menuId: v.menus.Lunch,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
-        {
-          menuId: v.menus.Drinks,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
+        ...endedLunch(v),
         {
           menuId: v.menus.Coffee,
           periodId: v.afternoon,
@@ -2789,18 +2750,7 @@ describe("department service periods", () => {
       customerMenuId: null,
       orderableMenuIds: [],
       endedMenus: [
-        {
-          menuId: v.menus.Lunch,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
-        {
-          menuId: v.menus.Drinks,
-          periodId: v.lunch,
-          periodName: "Lunch",
-          sourceMenuIds: [v.menus.Lunch, v.menus.Drinks, v.menus.Coffee],
-        },
+        ...endedLunch(v),
         {
           menuId: v.menus.Coffee,
           periodId: v.afternoon,

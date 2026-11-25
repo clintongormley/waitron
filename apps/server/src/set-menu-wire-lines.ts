@@ -57,7 +57,7 @@ export function parseSetMenuWireLines<
     return {
       ...dish,
       menuVersionId,
-      [SET_MENU_DRAFT_LINE]: { setMenuId: menuId, position, held: false, reserved },
+      [SET_MENU_DRAFT_LINE]: { setMenuId: menuId, position, reserved },
     };
   });
 }
