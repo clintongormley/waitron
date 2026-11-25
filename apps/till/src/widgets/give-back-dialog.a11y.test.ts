@@ -117,6 +117,17 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on a form whose reasons could not be read", async () => {
+    const api = fakeGiveBackApi();
+    api.listAdjustmentReasons.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el, host } = await mount(api);
+    await choose(el, "goodwill");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-reasons-retry]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the summary and the PIN line shown", async () => {
     const api = fakeGiveBackApi();
     api.previewGiveBack.mockResolvedValue({
