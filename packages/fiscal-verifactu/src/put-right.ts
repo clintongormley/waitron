@@ -7,6 +7,17 @@ export type PutRight =
   | { kind: "replacement-invoice" }
   | { kind: "none"; why: "full-invoice" | "not-yet" };
 
+/** The parts of a case `putRightFor` reads. */
+export interface PutRightCase {
+  cause: FilingCaseView["cause"];
+  evidence: Pick<FilingCaseView["evidence"], "codigo" | "mensaje">;
+  record: Pick<FilingCaseView["record"], "tipoRegistro" | "tipoFactura">;
+  submission: Pick<
+    NonNullable<FilingCaseView["submission"]>,
+    "estado" | "codigoError" | "mensajeError"
+  > | null;
+}
+
 const NOT_YET: PutRight = { kind: "none", why: "not-yet" };
 
 /**
@@ -22,7 +33,7 @@ export const FULL_INVOICE_REPLACEMENT_ON: boolean = false;
  * server still makes its own.
  */
 export function putRightFor(
-  view: FilingCaseView,
+  view: PutRightCase,
   {
     fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON,
   }: { fullInvoiceReplacement?: boolean } = {},

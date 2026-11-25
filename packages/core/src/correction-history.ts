@@ -110,6 +110,9 @@ async function admittedHistory(
   const admission: CorrectionAdmission = backend.correctionAdmissionFor
     ? await backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
     : { eligible: false, reason: "unsupported" };
+  if (admission.fullInvoice) {
+    throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
+  }
   if (!admission.eligible) {
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }

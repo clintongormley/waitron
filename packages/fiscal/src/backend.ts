@@ -41,12 +41,18 @@ export interface FiledReceipt {
   issuer?: { legalName: string; taxId: string };
 }
 
-/** Whether a regime's filing of an invoice allows a correction of it; read-only. */
+/**
+ * Whether a regime's filing of an invoice allows a correction of it; read-only. `fullInvoice`
+ * marks an answer about a full invoice (one naming its customer), whose corrective is itself a
+ * full invoice; a caller that cannot issue one refuses such an answer. `filing_refused` waits for
+ * the filing to be fixed; `refused_no_fix` is a refusal nothing on this box offers to fix.
+ */
 export type CorrectionAdmission =
   | {
       eligible: true;
       filing: "queued" | "sending" | "accepted" | "accepted_with_issues";
       original: { number: string; issuedAt: string };
+      fullInvoice?: true;
     }
   | {
       eligible: false;
@@ -57,7 +63,9 @@ export type CorrectionAdmission =
         | "voided"
         | "not_simplified"
         | "filing_refused"
+        | "refused_no_fix"
         | "filing_versions_unusable";
+      fullInvoice?: true;
     };
 
 /** The total and VAT split of one filed version of an invoice. */

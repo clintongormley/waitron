@@ -565,6 +565,20 @@ it.each([
   });
 });
 
+it.each([
+  { eligible: true, filing: "queued", original: { number: "A/1", issuedAt: "2026-07-20" } },
+  { eligible: false, reason: "filing_refused" },
+  { eligible: false, reason: "refused_no_fix" },
+] as const)("refuses a full invoice the regime answers for as not simplified", async (answer) => {
+  const { saleId } = await sellSteak();
+  backend.setCorrectionAdmission({ ...answer, fullInvoice: true });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "not_simplified" },
+  });
+});
+
 it("refuses a substituted invoice as replaced before asking the regime", async () => {
   const { saleId } = await sellSteak();
   const substitute = await sellSteak();
