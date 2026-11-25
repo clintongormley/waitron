@@ -17,12 +17,12 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import { type DashboardApi } from "../api/client.js";
 import {
   SMTP_TEST_CODES,
-  type DashboardApi,
   type EmailSettingsDraft,
   type EmailSettingsView,
-} from "../api/client.js";
+} from "../api/email-theme-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";

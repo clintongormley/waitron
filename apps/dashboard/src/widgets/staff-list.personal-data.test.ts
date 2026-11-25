@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { PersonSummary } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
 import { StaffList } from "./staff-list.js";
 
 afterEach(cleanupWidgets);

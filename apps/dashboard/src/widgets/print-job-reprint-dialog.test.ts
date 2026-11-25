@@ -4,7 +4,8 @@ import type { WtButton, WtCombobox } from "@waitron/ui";
 import { cleanupWidgets, dialogMessageOf, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, PrintJobRow, Printer } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PrintJobRow, Printer } from "../api/printing-api.js";
 import "./print-job-reprint-dialog.js";
 import type { PrintJobReprintDialog } from "./print-job-reprint-dialog.js";
 

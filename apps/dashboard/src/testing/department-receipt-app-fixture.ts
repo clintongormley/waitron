@@ -1,6 +1,8 @@
 import { expect, vi } from "vitest";
 import { createRequest } from "@waitron/dashboard-kit";
-import { DashboardApi, type SalesOverview, type VenueDefaults } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type VenueDefaults } from "../api/venue-api.js";
+import { type SalesOverview } from "../api/reporting-api.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import "../dashboard-app.js";
 import { mountWidget, type Theme } from "../widgets/test-helpers.js";

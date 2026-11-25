@@ -1,6 +1,7 @@
 import { setHelpMode } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Course, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { CoursesScreen } from "./courses-screen.js";
 import "./courses-screen.js";

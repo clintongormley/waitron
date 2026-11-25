@@ -18,7 +18,8 @@ import {
   topSellersStyles,
   type TopSellersLabels,
 } from "../widgets/top-sellers-table.js";
-import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OverdueOrder, SalesOverview } from "../api/reporting-api.js";
 
 /** Clock fallback for hosts that do not provide the shared observed-query cache. */
 const OVERDUE_REFRESH_MS = 30_000;

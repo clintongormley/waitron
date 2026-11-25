@@ -4,7 +4,8 @@ import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, DiagnosticsLine, DiagnosticsLog } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DiagnosticsLine, DiagnosticsLog } from "../api/servers-api.js";
 import { DiagnosticsScreen } from "./diagnostics-screen.js";
 
 afterEach(cleanupWidgets);

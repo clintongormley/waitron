@@ -10,7 +10,8 @@ import {
 } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
 import { createRequest, LiveData, type DashboardContribution } from "@waitron/dashboard-kit";
-import type { DashboardApi, VenueDefaults } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { VenueDefaults } from "./api/venue-api.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { setLocale, t } from "./i18n/t.js";

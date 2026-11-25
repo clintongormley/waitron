@@ -3,7 +3,8 @@ import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OverdueOrder, SalesOverview } from "../api/reporting-api.js";
 import { setLocale } from "../i18n/t.js";
 import { OverviewScreen } from "./dashboard-overview-screen.js";
 

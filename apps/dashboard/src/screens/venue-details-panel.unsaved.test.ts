@@ -7,7 +7,8 @@ import {
   type WtInput,
 } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi, VenueDetailWrite, VenueDetailsModel } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDetailWrite, VenueDetailsModel } from "../api/venue-api.js";
 import { venueDetailsFixture, venueClockPreviewFixture } from "../testing/venue-details-fixture.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";

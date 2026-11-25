@@ -7,13 +7,13 @@ import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-hel
 import { codeMessage } from "../i18n/codes.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BackupStatusView,
   BackupWriteAnswer,
-  DashboardApi,
   RecoveryPackStatus,
   StreamSettingsView,
-} from "../api/client.js";
+} from "../api/backup-api.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { BackupSettingsEvidenceDialog } from "../widgets/backup-settings-evidence.js";
 import { apiAnswering, deferred, evidence } from "../testing/backup-settings-evidence-fixture.js";

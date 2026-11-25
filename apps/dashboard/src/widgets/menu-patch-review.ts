@@ -22,7 +22,7 @@ import type {
   MenuPatchTarget,
   PatchDraftAnswer,
 } from "@waitron/menu/src/menu-patch-types.js";
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { allergenWords } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";

@@ -1,7 +1,8 @@
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ProductUsingUnit, Unit } from "../api/catalog-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { WtCombobox } from "@waitron/ui";

@@ -30,7 +30,8 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { enrolmentCode, enrolPasskey } from "../passkey-enrolment.js";
 import { classifyPasskeySignInError } from "../passkey-errors.js";
-import type { DashboardApi, PasskeyOptions } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PasskeyOptions } from "../api/account-api.js";
 import { signalUnknownPasskey } from "../passkey-signals.js";
 import { preparePermissionReturn } from "../permission-continuation.js";
 import {

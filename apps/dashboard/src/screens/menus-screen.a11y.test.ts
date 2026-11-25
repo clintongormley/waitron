@@ -18,9 +18,9 @@ import type {
   MenuHome,
   SectionDetails,
   MenuPreview,
-  MenuStructureNode,
   Product,
 } from "../api/client.js";
+import type { MenuStructureNode } from "../api/menu-api.js";
 import { t } from "../i18n/t.js";
 
 useLocale("es-ES");

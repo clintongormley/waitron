@@ -9,7 +9,7 @@ import type {
   ProductModifierRef,
   ProductVariantInput,
 } from "@waitron/shared";
-import type { ProductSaveBody } from "../api/client.js";
+import type { ProductSaveBody } from "../api/catalog-api.js";
 export type { DietaryLabel };
 
 /** A new variant omits `id`; an edited one carries it. */

@@ -59,7 +59,7 @@ describe("move-ts-declarations", () => {
       write("client.ts", client);
     });
 
-    async function moveClient(methods) {
+    async function moveClient(methods, otherKept = []) {
       write(
         "moves.json",
         JSON.stringify({
@@ -72,7 +72,7 @@ describe("move-ts-declarations", () => {
               classLift: {
                 name: "Api",
                 request: "Request",
-                keep: ["#request", "constructor"],
+                keep: ["#request", "constructor", ...otherKept],
                 groups: { TicketApi: methods },
               },
             },
@@ -103,6 +103,56 @@ describe("move-ts-declarations", () => {
           .getPreEmitDiagnostics(program)
           .map(({ messageText }) => ts.flattenDiagnosticMessageText(messageText, "\n")),
       ).toEqual([]);
+    });
+
+    it("preserves the original source of an aliased package type re-export", async () => {
+      write("request.ts", read("request.ts") + "export type TicketAmount = number;\n");
+      write(
+        "client.ts",
+        'import type { TicketAmount as Amount } from "./request.js";\n' +
+          "export type { Amount };\n" +
+          client.replace("amount: number;", "amount: Amount;"),
+      );
+
+      await moveClient(["readTicket"]);
+
+      expect(read("client.ts")).toContain(
+        'export type { TicketAmount as Amount } from "./request.js";',
+      );
+      expect(read("tickets.ts")).toContain("amount: Amount;");
+    });
+
+    it("removes an import used only by a package type re-export", async () => {
+      write("request.ts", read("request.ts") + "export type TicketAmount = number;\n");
+      write(
+        "client.ts",
+        'import type { TicketAmount } from "./request.js";\n' +
+          "export type { TicketAmount };\n" +
+          client,
+      );
+
+      await moveClient(["readTicket"]);
+
+      expect(read("client.ts")).toContain('export type { TicketAmount } from "./request.js";');
+      expect(read("client.ts")).not.toContain("import type { TicketAmount }");
+    });
+
+    it("uses a type-only import when the retained client uses a moved type", async () => {
+      write(
+        "tsconfig.json",
+        '{"compilerOptions":{"module":"NodeNext","verbatimModuleSyntax":true}}',
+      );
+      write(
+        "client.ts",
+        client.replace(
+          editedMethod,
+          editedMethod + "\n  emptyTicket(): Ticket {\n    return { amount: 0 };\n  }",
+        ),
+      );
+
+      await moveClient(["readTicket"], ["emptyTicket"]);
+
+      expect(read("client.ts")).toContain('import { TicketApi, type Ticket } from "./tickets.js";');
     });
 
     it("refuses a type import that closes a cycle through the client", async () => {

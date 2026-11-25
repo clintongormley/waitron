@@ -8,7 +8,8 @@ import {
 import { autofillUsername, autofillUsernameStyles, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import type { DashboardApi, FreshSignInBody, OwnProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { FreshSignInBody, OwnProfile } from "../api/account-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";

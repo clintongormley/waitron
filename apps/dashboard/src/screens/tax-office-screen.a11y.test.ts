@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, MonthDownloadDto, TaxOfficeInvoiceDto } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { MonthDownloadDto, TaxOfficeInvoiceDto } from "../api/reporting-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TaxOfficeScreen } from "./tax-office-screen.js";

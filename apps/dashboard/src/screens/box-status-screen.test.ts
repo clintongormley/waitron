@@ -2,13 +2,8 @@ import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
-import type {
-  AlertView,
-  AlertsResponse,
-  BoxHealth,
-  DashboardApi,
-  FreedSpaceView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView, AlertsResponse, BoxHealth, FreedSpaceView } from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";

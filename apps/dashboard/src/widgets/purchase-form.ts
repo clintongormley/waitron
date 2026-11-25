@@ -26,7 +26,7 @@ import type {
   PurchaseInvoicePatch,
   PurchaseRegime,
   PurchaseVatKind,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 
 const REGIMES: readonly PurchaseRegime[] = ["general", "equivalence_surcharge"];
 const VAT_KINDS: readonly PurchaseVatKind[] = ["ordinary", "capital"];

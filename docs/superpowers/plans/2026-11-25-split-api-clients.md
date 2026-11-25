@@ -37,11 +37,11 @@ with `addSectionMember`. Record measured lines and file names in the lane log be
 4. Arrange a quiet landing window for each app. Notify the watcher about 30 minutes before
    Dashboard is ready to land. Before opening each PR, replay the full map in
    installed disposable base and affected-branch trees. Set `split` to the split candidate commit
-   and `app` to `dashboard` or `till`. Use live PR #4335 for the full Dashboard replay. Set
-   `before=$(git merge-base origin/main "$split")` and omit the recipe's working-order `jq` line.
+   and `app` to `dashboard` or `till`. Use Lane A's active allergens branch for the full Dashboard replay.
+   Set `before=$(git merge-base origin/main "$split")` and omit the recipe's working-order `jq` line.
    Copy the new mover and map into both trees. Add new branch names to the branch map and drop
-   removed names such as `RecoveryPackKeyState` on #4335. Run the mover from each tree. Compare
-   the two moved trees, verify the branch edits, typecheck and run focused tests. Include the
+   removed names. The rebased map omits `RecoveryPackKeyState` after #4335. Run the mover from
+   each tree. Compare the moved trees, verify the branch edits, typecheck and run focused tests. Include the
    commands and affected open branches in the PR. Land after current-head CI and retire each
    map with the mover once lanes finish replaying. [Replay setup](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
 

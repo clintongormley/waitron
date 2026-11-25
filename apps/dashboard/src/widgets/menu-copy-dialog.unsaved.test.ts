@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import type { MenuSummary } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import "./menu-copy-dialog.js";

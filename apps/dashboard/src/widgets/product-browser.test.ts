@@ -8,7 +8,8 @@ import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./te
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
-import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
+import type { DashboardApi, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import type { ProductBrowser } from "./product-browser.js";
 import "./product-browser.js";

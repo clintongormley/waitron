@@ -19,13 +19,13 @@ import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { spareDetails, spareLine, spareNeedsAttention } from "./box-status-rows.js";
 import { formatRecentMinute } from "../date-utils.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BoxJoinRequestRow,
-  DashboardApi,
   ServerListing,
   ServerRow,
   SpareFollowView,
-} from "../api/client.js";
+} from "../api/servers-api.js";
 
 /** How often the list is read again while it shows a box asking to join, which sends no event. */
 const JOIN_POLL_MS = 5000;

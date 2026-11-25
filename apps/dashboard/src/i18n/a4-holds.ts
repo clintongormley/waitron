@@ -1,4 +1,4 @@
-import type { PageTestPage } from "../api/client.js";
+import type { PageTestPage } from "../api/printing-api.js";
 import type { StringKey } from "./strings.js";
 import { t } from "./t.js";
 

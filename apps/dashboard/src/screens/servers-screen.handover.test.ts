@@ -6,7 +6,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ServersScreen } from "./servers-screen.js";
-import { DashboardApi, type ServerListing } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type ServerListing } from "../api/servers-api.js";
 const listing: ServerListing = {
   term: 2,
   nodes: [

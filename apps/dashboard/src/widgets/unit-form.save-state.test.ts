@@ -4,7 +4,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { UnitForm } from "./unit-form.js";
 import "./unit-form.js";
-import type { Unit } from "../api/client.js";
+import type { Unit } from "../api/catalog-api.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);

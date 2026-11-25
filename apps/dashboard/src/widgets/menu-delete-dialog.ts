@@ -9,7 +9,8 @@ import {
   type LeaveReason,
   leaveCoordinatorFor,
 } from "@waitron/ui";
-import type { DashboardApi, MenuSummary } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-button.js";

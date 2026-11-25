@@ -1,4 +1,4 @@
-import type { PersonSummary } from "./api/client.js";
+import type { PersonSummary } from "./api/staff-api.js";
 
 export function personNameMap(staff: PersonSummary[]): Map<string, string> {
   return new Map(staff.map((p) => [p.personId, p.displayName]));

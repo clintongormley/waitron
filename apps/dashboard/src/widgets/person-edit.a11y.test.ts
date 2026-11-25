@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./person-edit.js";
 import type { PersonEdit } from "./person-edit.js";
-import { DashboardApi, type PersonSummary } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type PersonSummary } from "../api/staff-api.js";
 
 // Open the modal before running axe so its controls enter the accessibility tree.
 const person: PersonSummary = {

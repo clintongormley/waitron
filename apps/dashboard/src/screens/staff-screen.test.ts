@@ -9,7 +9,8 @@ import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import { DashboardApi, type PersonPage, type PersonSummary } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type PersonPage, type PersonSummary } from "../api/staff-api.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";

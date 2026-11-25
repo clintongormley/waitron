@@ -7,7 +7,8 @@ import {
   shortNameLength,
 } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
-import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
+import type { PlanPlacement } from "../api/client.js";
+import type { FloorPlan, FloorPlanSave } from "../api/venue-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 
 /** The most seats a table may hold. */

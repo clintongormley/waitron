@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, InvoiceCustomerSearchDto } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { InvoiceCustomerSearchDto } from "../api/orders-api.js";
 import type { InvoiceCustomerDialog } from "./invoice-customer-dialog.js";
 
 const modules = import.meta.glob<typeof import("./invoice-customer-dialog.js")>(

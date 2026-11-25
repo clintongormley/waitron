@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { regimeName } from "../i18n/domain.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 
 /**
  * DELETE IS A TWO-STEP CONFIRM. A supplier invoice is re-keyable (not an immutable fiscal record), so a

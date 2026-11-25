@@ -27,11 +27,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type {
-  DashboardApi,
-  BusinessDayClockModel,
-  BusinessDayStartPreview,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BusinessDayClockModel, BusinessDayStartPreview } from "../api/venue-api.js";
 import { t, fill } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
-import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeLogoPrint } from "../api/email-theme-api.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

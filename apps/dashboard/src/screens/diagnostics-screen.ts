@@ -6,7 +6,8 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DiagnosticsLevel, DiagnosticsLog, Verbosity } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DiagnosticsLevel, DiagnosticsLog, Verbosity } from "../api/servers-api.js";
 
 const POLL_MS = 1500;
 const LINE_LIMIT = 200;

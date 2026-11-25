@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FloorPlan } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 import {
   addJoinedTable,
   addTables,

@@ -1,7 +1,8 @@
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { DashboardApi, AlertView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import { AlertsScreen } from "../screens/alerts-screen.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { codeMessage } from "./codes.js";

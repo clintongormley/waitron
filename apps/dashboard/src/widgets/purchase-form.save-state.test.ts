@@ -4,7 +4,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { PurchaseForm } from "./purchase-form.js";
 import "./purchase-form.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 import { setLocale, t } from "../i18n/t.js";
 
 afterEach(() => {

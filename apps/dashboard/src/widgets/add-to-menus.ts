@@ -5,7 +5,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import type { MenuSummary, MenuStructure, MenuStructureNode } from "../api/client.js";
+import type { MenuSummary, MenuStructure, MenuStructureNode } from "../api/menu-api.js";
 import { fill, t } from "../i18n/t.js";
 
 export interface PlacementSection {

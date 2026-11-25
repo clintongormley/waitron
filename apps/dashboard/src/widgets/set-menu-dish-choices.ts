@@ -11,7 +11,8 @@ import {
 } from "@waitron/ui";
 import { MAX_SET_MENU_AMOUNT_CENTS, stringToCents } from "@waitron/shared";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
-import type { CategorySummary, DashboardApi, Product, SetMenuDetails } from "../api/client.js";
+import type { DashboardApi, Product, SetMenuDetails } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { SetMenuDishesSaved } from "./set-menu-dishes.js";

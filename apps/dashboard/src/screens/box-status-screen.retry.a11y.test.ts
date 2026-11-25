@@ -4,7 +4,8 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./box-status-screen.js";
 import type { BoxStatusScreen } from "./box-status-screen.js";
-import type { BoxHealth, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BoxHealth } from "../api/servers-api.js";
 
 const UNSENT = {
   key: "fiscal.records_unsent",

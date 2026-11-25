@@ -7,7 +7,7 @@ import "./floor-plan-table-panel.js";
 import type { FloorPlanTablePanel } from "./floor-plan-table-panel.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import type { FloorPlan } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 import { draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
 
 let originalLocale = currentLocale();

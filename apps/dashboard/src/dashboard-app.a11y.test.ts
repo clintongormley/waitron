@@ -11,7 +11,8 @@ import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { WtToast, WtVenueLogo } from "@waitron/ui";
 import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi, PersonSummary } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { PersonSummary } from "./api/staff-api.js";
 import type { WtInput } from "@waitron/ui";
 
 const never = () => new Promise<never>(() => {});

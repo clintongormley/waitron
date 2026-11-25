@@ -41,13 +41,8 @@ import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type {
-  DashboardApi,
-  DashboardTable,
-  FloorPlan,
-  FloorPlanSave,
-  PlanPlacement,
-} from "../api/client.js";
+import type { DashboardApi, PlanPlacement } from "../api/client.js";
+import type { DashboardTable, FloorPlan, FloorPlanSave } from "../api/venue-api.js";
 import {
   changePlacement,
   checkDraft,

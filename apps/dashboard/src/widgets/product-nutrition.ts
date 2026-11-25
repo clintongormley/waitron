@@ -1,4 +1,4 @@
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 import {
   validateAllergens,
   DIETARY_LABELS,

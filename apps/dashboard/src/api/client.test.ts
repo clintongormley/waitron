@@ -1,7 +1,8 @@
 import { createFreshSignInGate } from "./fresh-sign-in.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
-import { DashboardApi, type ClockSetView } from "./client.js";
+import { DashboardApi } from "./client.js";
+import { type ClockSetView } from "./servers-api.js";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {

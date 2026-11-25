@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PasskeySignals } from "./api/client.js";
+import type { PasskeySignals } from "./api/account-api.js";
 import {
   sendAcceptedPasskeys,
   signalAcceptedPasskeys,

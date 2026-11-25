@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { DashboardApi, DailyReportSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DailyReportSettingsView } from "../api/email-theme-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";

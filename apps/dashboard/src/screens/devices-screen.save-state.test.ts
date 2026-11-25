@@ -5,16 +5,11 @@ import { LeaveController } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
-import type {
-  DashboardApi,
-  DeviceProfile,
-  DeviceRow,
-  JoinRequestRow,
-  PagePrinterRow,
-  Printer,
-  ReaderRow,
-  Station,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ReaderRow } from "../api/payments-api.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
+import type { DeviceProfile, DeviceRow, JoinRequestRow } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
 

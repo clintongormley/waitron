@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import type { BackupSettingsEvidence, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BackupSettingsEvidence } from "../api/backup-api.js";
 import { evidence, failure } from "../testing/backup-settings-evidence-fixture.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";

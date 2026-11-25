@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./purchase-list.js";
 import type { PurchaseList } from "./purchase-list.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 
 /** The fixture carries BOTH regimes so axe sees both badge renders. */
 const invoices: PurchaseInvoice[] = [

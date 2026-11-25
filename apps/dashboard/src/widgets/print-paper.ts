@@ -1,10 +1,7 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import type {
-  BlockRange,
-  PrintJobPreview,
-  PrintPreviewBlock,
-  ThemeLogoPrint,
-} from "../api/client.js";
+import type { BlockRange } from "../api/venue-api.js";
+import type { PrintJobPreview, PrintPreviewBlock } from "../api/printing-api.js";
+import type { ThemeLogoPrint } from "../api/email-theme-api.js";
 import { t } from "../i18n/t.js";
 
 type ImageBlock = Extract<PrintPreviewBlock, { kind: "image" }>;

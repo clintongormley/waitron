@@ -18,16 +18,14 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import type { ExtraList, DashboardApi, Product } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
 import type {
-  ExtraList,
   CategorySummary,
   ProductSelection,
-  Course,
   FolderContents,
   FolderSummary,
-  DashboardApi,
-  Product,
-} from "../api/client.js";
+} from "../api/catalog-api.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
 import { categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";

@@ -17,14 +17,14 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { type DashboardApi } from "../api/client.js";
 import {
   ORDER_STATUS_FILTERS,
-  type DashboardApi,
   type OrderRowDto,
   type OrdersPageDto,
   type OrdersPageQuery,
   type OrderStatusFilter,
-} from "../api/client.js";
+} from "../api/orders-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";

@@ -8,7 +8,8 @@ import {
   type WtFloorPlanCanvas,
 } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 import { DashboardApp } from "../dashboard-app.js";
 import { setLocale } from "../i18n/t.js";
 import {

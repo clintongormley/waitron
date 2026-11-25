@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { SectionAddProducts } from "./section-add-products.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 
 afterEach(cleanupWidgets);
 

@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
-import type { DashboardApi, OwnProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OwnProfile } from "../api/account-api.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { FreshSignIn } from "./fresh-sign-in.js";
 import type { FreshSignInDialog } from "./fresh-sign-in-dialog.js";

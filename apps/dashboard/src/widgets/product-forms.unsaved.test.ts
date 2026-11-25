@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { Unit, UnitInput } from "../api/client.js";
+import type { Unit, UnitInput } from "../api/catalog-api.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,

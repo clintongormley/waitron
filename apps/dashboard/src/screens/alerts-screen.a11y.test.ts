@@ -1,7 +1,8 @@
 import { afterEach, describe, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import type { AlertView, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import "./alerts-screen.js";
 import type { AlertsScreen } from "./alerts-screen.js";
 

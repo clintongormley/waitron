@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget, timesAcrossLines } from "./test-helpers.js";
-import type { AlertView } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import "./alerts-bell.js";
 import type { AlertsBell } from "./alerts-bell.js";
 

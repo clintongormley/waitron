@@ -2,7 +2,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./purchases-screen.js";
 import type { PurchasesScreen } from "./purchases-screen.js";
-import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 
 // The form stays closed here; its dialog is scanned in `purchase-form.a11y.test.ts`.
 const invoices: PurchaseInvoice[] = [

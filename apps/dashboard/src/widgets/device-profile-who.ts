@@ -1,5 +1,5 @@
 import { type TemplateResult, html, nothing } from "lit";
-import type { JobRole } from "../api/client.js";
+import type { JobRole } from "../api/staff-api.js";
 import { t } from "../i18n/t.js";
 import { renderSwitchGroup } from "./device-profile-switch-group.js";
 

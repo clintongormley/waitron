@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
-import type { DashboardApi, MenuStatus, MenuStructureNode, Product } from "../api/client.js";
+import type { DashboardApi, MenuStatus, Product } from "../api/client.js";
+import type { MenuStructureNode } from "../api/menu-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());

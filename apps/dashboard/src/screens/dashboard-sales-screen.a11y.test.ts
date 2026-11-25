@@ -2,12 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./dashboard-sales-screen.js";
 import type { SalesScreen } from "./dashboard-sales-screen.js";
-import type {
-  CategorySalesDto,
-  DailyCloseDto,
-  DashboardApi,
-  SalesPeriodDto,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { CategorySalesDto, DailyCloseDto, SalesPeriodDto } from "../api/reporting-api.js";
 import { today } from "../date-utils.js";
 import { t } from "../i18n/t.js";
 

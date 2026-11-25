@@ -3,7 +3,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./diagnostics-screen.js";
 import type { DiagnosticsScreen } from "./diagnostics-screen.js";
-import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DiagnosticsLine } from "../api/servers-api.js";
 
 /**
  * Scanned in four shapes; the populated tail mixes levels so every level colour renders. The screen

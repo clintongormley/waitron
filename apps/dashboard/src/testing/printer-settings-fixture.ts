@@ -1,4 +1,4 @@
-import type { PagePrinterRow, Printer } from "../api/client.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
 import { deep, mountReceiptApp } from "./department-receipt-app-fixture.js";
 export const receiptPrinter: Printer = {
   id: "p1",

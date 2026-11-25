@@ -1,5 +1,6 @@
 import { afterEach, describe, it, vi } from "vitest";
-import type { DashboardApi, EmailInbox } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { EmailInbox } from "../api/email-theme-api.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./email-screen.js";
 import type { EmailScreen } from "./email-screen.js";

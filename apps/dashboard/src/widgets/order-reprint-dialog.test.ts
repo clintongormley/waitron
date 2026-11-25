@@ -5,13 +5,13 @@ import { cleanupWidgets, mountWidget, expectMessageAboveButtons } from "./test-h
 import { readDocumentPrinter, rememberDocumentPrinter } from "../document-printer-preference.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   OfferedPrinter,
   OrderDeliveryAttempt,
   OrderDetailDto,
   OrderRowDto,
-} from "../api/client.js";
+} from "../api/orders-api.js";
 import "./order-reprint-dialog.js";
 import type { OrderReprintDialog } from "./order-reprint-dialog.js";
 

@@ -3,7 +3,8 @@ import { LiveData } from "@waitron/dashboard-kit";
 import type { ContentLanguages } from "@waitron/shared";
 import { afterEach, expect, it, vi } from "vitest";
 import { LeaveController, type WtButton, type WtCombobox } from "@waitron/ui";
-import type { DashboardApi, VenueDefaults } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDefaults } from "../api/venue-api.js";
 import {
   cleanupWidgets,
   mountWidget,

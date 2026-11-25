@@ -1,5 +1,6 @@
 import { userEvent } from "vitest/browser";
-import type { DashboardApi, ProfileScopeChoices } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ProfileScopeChoices } from "../api/devices-api.js";
 import type { DeviceProfilesScreen } from "../screens/device-profiles-screen.js";
 
 export function profileListRoot(screen: DeviceProfilesScreen): ShadowRoot {

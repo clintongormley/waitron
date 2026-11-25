@@ -50,7 +50,9 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import { type CategorySummary, type Course, type Product } from "../api/client.js";
+import { type Product } from "../api/client.js";
+import { type Course } from "../api/kitchen-api.js";
+import { type CategorySummary } from "../api/catalog-api.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import {
   keepAvailabilityFocus,

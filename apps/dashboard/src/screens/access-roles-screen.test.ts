@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons, setHelpMode } from "@waitron/ui";
-import type { DashboardApi, AccessRole } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AccessRole } from "../api/staff-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";

@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, UrlStateController, registerIcons } from "@waitron/ui";
-import type { DashboardApi, Printer } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Printer } from "../api/printing-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { dashboardPath } from "../navigation.js";

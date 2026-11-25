@@ -43,7 +43,7 @@ function tillHoldWords(menu: Record<string, string>): string[] {
 const COPIES = [
   {
     name: "the dashboard's PageTestPage hold union",
-    codes: () => holdUnionCodes("apps/dashboard/src/api/client.ts", "PageTestPage"),
+    codes: () => holdUnionCodes("apps/dashboard/src/api/printing-api.ts", "PageTestPage"),
   },
   {
     name: "the dashboard alerts' printer_hold words",

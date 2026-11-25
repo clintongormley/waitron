@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { DashboardApi, type InvoiceCustomerSearchDto } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type InvoiceCustomerSearchDto } from "../api/orders-api.js";
 import type { InvoiceCustomerDialog } from "./invoice-customer-dialog.js";
 import "./invoice-customer-dialog.js";
 

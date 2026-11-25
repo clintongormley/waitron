@@ -4,7 +4,8 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
-import type { BackupStatusView, BackupWriteAnswer, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BackupStatusView, BackupWriteAnswer } from "../api/backup-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 

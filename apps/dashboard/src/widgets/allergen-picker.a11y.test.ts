@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./allergen-picker.js";
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 import type { AllergenPicker } from "./allergen-picker.js";
 
 afterEach(cleanupWidgets);

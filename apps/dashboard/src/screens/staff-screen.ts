@@ -16,13 +16,13 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
 import "../widgets/person-edit.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   AccessRole,
-  DashboardApi,
   PersonEditDetails,
   PersonSummary,
   PersonPageQuery,
-} from "../api/client.js";
+} from "../api/staff-api.js";
 
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {

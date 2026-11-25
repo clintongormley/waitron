@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
 import { searchBy } from "@waitron/shared";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 
 export interface AddableProduct {

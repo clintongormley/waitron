@@ -7,7 +7,9 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
-import type { DashboardApi, DiskStopResponse, PersonSummary } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { PersonSummary } from "./api/staff-api.js";
+import type { DiskStopResponse } from "./api/servers-api.js";
 import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
 

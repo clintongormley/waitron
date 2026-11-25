@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import { DashboardApi, type ThemeList, type ThemeView } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type ThemeList, type ThemeView } from "../api/email-theme-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./appearance-screen.js";

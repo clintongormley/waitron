@@ -20,18 +20,17 @@ import {
 } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ReaderRow } from "../api/payments-api.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
 import type {
-  DashboardApi,
   DeviceProfile,
   DeviceRow,
   JoinRequestRow,
-  PagePrinterRow,
-  Printer,
   ProfileReaderList,
-  ReaderRow,
   RoleEquipment,
-  Station,
-} from "../api/client.js";
+} from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import { DevicesScreen } from "./devices-screen.js";
 
 useLocale("es-ES");

@@ -28,7 +28,9 @@ import {
   type CardProviderPanel,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
-import type { DashboardApi, ModuleRow, PaymentProviderRow, ReaderRow } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PaymentProviderRow, ReaderRow } from "../api/payments-api.js";
+import type { ModuleRow } from "../api/servers-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

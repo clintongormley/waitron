@@ -1,7 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
-import type { DashboardApi, DrawerCloseHistoryDto } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DrawerCloseHistoryDto } from "../api/reporting-api.js";
 import type { SalesScreen } from "../screens/dashboard-sales-screen.js";
 import "../screens/dashboard-sales-screen.js";
 import { useLocale } from "../testing/locale-setup.js";

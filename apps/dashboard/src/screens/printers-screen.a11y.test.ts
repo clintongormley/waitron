@@ -14,10 +14,9 @@ import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import type { WtRowActions } from "@waitron/ui";
 import { SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   DiscoveredPrinter,
-  JoinRequestRow,
   OfficePrinterReport,
   PagePrinterRow,
   PageTestPage,
@@ -25,7 +24,8 @@ import type {
   PrintJobRow,
   Printer,
   PrinterProfileOffer,
-} from "../api/client.js";
+} from "../api/printing-api.js";
+import type { JoinRequestRow } from "../api/devices-api.js";
 
 useLocale("es-ES");
 

@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { accessRoleName, statusName } from "../i18n/domain.js";
-import type { AccessRole, PersonSummary } from "../api/client.js";
+import type { AccessRole, PersonSummary } from "../api/staff-api.js";
 
 const personKey = (person: PersonSummary): string => person.personId;
 

@@ -5,12 +5,8 @@ import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
-import {
-  DashboardApi,
-  type AccessRole,
-  type PersonEditDetails,
-  type PersonSummary,
-} from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type AccessRole, type PersonEditDetails, type PersonSummary } from "../api/staff-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import {

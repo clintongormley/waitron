@@ -1,7 +1,8 @@
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DashboardApi, type PersonSummary } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type PersonSummary } from "../api/staff-api.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";

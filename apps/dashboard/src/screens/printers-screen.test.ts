@@ -33,11 +33,10 @@ import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatRecentMinute } from "../date-utils.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BluetoothFailureReason,
-  DashboardApi,
   DiscoveredPrinter,
-  JoinRequestRow,
   OfficePrinterReport,
   PagePrinterRow,
   PageTestPage,
@@ -46,7 +45,8 @@ import type {
   Printer,
   PrinterProfileOffer,
   PrinterStationName,
-} from "../api/client.js";
+} from "../api/printing-api.js";
+import type { JoinRequestRow } from "../api/devices-api.js";
 import {
   AGENT_SCAN_LISTEN_MS,
   PrintersScreen,

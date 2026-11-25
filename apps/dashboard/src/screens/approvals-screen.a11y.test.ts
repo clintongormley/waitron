@@ -2,7 +2,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./approvals-screen.js";
 import type { ApprovalsScreen } from "./approvals-screen.js";
-import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PendingAbsence, PendingSwap, PersonSummary } from "../api/staff-api.js";
 
 const staff: PersonSummary[] = [
   {

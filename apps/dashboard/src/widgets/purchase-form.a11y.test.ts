@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./purchase-form.js";
 import type { PurchaseForm } from "./purchase-form.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 
 /**
  * A closed <dialog> renders nothing, so it is mounted with `open = true` and its wt-dialog's first

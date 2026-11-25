@@ -1,6 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
-import type { ReceiptPreview, PrintPaperWidth } from "./client.js";
+import type { ReceiptPreview } from "./venue-api.js";
+import type { PrintPaperWidth } from "./printing-api.js";
 
 export interface DepartmentReceiptModel extends DepartmentReceiptWrite {
   receiptLanguage: string;

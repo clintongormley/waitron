@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { DashboardApi, PaymentSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PaymentSettingsView } from "../api/payments-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { PaymentsSettingsPanel } from "./payments-settings-panel.js";

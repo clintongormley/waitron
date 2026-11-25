@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { BackupLoadFailure, BackupSettingsEvidence } from "../api/client.js";
+import type { BackupLoadFailure, BackupSettingsEvidence } from "../api/backup-api.js";
 
 export function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (reason: unknown) => void;

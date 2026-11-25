@@ -1,4 +1,8 @@
-import { ORDER_STATUS_FILTERS, type OrderStatusFilter, type OrdersQuery } from "../api/client.js";
+import {
+  ORDER_STATUS_FILTERS,
+  type OrderStatusFilter,
+  type OrdersQuery,
+} from "../api/orders-api.js";
 
 export type OrdersFilter = OrdersQuery;
 export const DEFAULT_ORDERS_FILTER: OrdersFilter = {

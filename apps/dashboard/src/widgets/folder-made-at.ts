@@ -6,7 +6,7 @@ import {
   type RoutingModel,
   type RoutingRules,
 } from "@waitron/venue-service/routing";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 
 export type FolderMaker =
   | { kind: "station"; stationName: string }

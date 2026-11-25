@@ -849,6 +849,13 @@ Restoring row replacement failed the identity checks; omitting the in-place refr
 retaining rows across a newer revision failed the replacement check. These cases cover this draft
 sync path, not every screen's snapshot updates.
 
+## Where to put a Dashboard API call
+
+Put the call and its local types in the matching area under `apps/dashboard/src/api/`.
+Import local types from their area files. Screens that need a client still use
+`DashboardApi` from `client.ts`, where request setup, background requests and fresh
+sign-in are wired. The area methods use that shared request.
+
 ## A background API client does not make POST requests passive
 
 The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an

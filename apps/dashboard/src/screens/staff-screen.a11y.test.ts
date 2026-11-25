@@ -6,7 +6,8 @@ import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./staff-screen.js";
 import type { StaffScreen } from "./staff-screen.js";
-import type { DashboardApi, PersonSummary } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
 
 const people: PersonSummary[] = [
   {

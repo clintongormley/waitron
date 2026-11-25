@@ -1,7 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import type { DashboardApi, StreamSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { StreamSettingsView } from "../api/backup-api.js";
 import { t } from "../i18n/t.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";

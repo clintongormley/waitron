@@ -2,13 +2,13 @@ import { NavigationGuard } from "@waitron/ui";
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   MonthDownloadDto,
   TaxOfficeInvoiceDto,
   TaxOfficePageDto,
   TaxOfficeQuery,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, fill, setLocale } from "../i18n/t.js";
 import { clockTime } from "../tax-office-download.js";

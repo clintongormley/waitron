@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
-import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/client.js";
+import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { createFreshSignInGate } from "../api/fresh-sign-in.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";

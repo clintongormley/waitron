@@ -28,14 +28,14 @@ import { classifySavedTimeZone, formatIban } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   VenueDetailsModel,
   VenueDetailValues,
   VenueDetailField,
   VenueClockPreview,
   VenueClockView,
-} from "../api/client.js";
+} from "../api/venue-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";

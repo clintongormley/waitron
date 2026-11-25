@@ -1,5 +1,5 @@
 import { classifySavedTimeZone } from "@waitron/shared";
-import type { VenueDetailsModel, VenueDetailValues, VenueClockPreview } from "../api/client.js";
+import type { VenueDetailsModel, VenueDetailValues, VenueClockPreview } from "../api/venue-api.js";
 
 export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): VenueDetailsModel {
   const timeZone = details.timeZone ?? "Europe/Madrid";

@@ -3,7 +3,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
-import type { DashboardApi, ServerListing } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ServerListing } from "../api/servers-api.js";
 
 const STANDBY = "22222222-2222-4222-8222-222222222222";
 

@@ -2,7 +2,8 @@ import {
   startRegistration,
   type PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/browser";
-import type { DashboardApi, ProfileCredentials } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { ProfileCredentials } from "./api/account-api.js";
 import { codeOf } from "./i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "./passkey-errors.js";
 

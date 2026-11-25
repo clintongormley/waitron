@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { centsToDecimal, formatMoney } from "@waitron/shared";
+import type { DashboardApi } from "../api/client.js";
 import type {
   CloudOwnerRecoveryRequest,
   CloudBilling,
@@ -14,8 +15,7 @@ import type {
   CloudEmergencyCode,
   CloudEmergencyPerson,
   CloudConnectionStatus,
-  DashboardApi,
-} from "../api/client.js";
+} from "../api/cloud-api.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

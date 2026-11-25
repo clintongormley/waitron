@@ -6,7 +6,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { PersonSummary } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
 import { StaffList } from "./staff-list.js";
 
 useLocale("es-ES");

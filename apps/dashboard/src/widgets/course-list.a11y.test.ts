@@ -2,7 +2,8 @@ import { afterEach, describe, it, vi, expect } from "vitest";
 import { page } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import type { Course, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
 import { CourseList } from "./course-list.js";
 
 afterEach(async () => {

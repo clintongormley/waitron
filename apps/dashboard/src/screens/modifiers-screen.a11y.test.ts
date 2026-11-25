@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
-import type { MenuSummary, DashboardApi, ExtraListRow, OptionListRow } from "../api/client.js";
+import type { DashboardApi, ExtraListRow, OptionListRow } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 
 afterEach(cleanupWidgets);
 

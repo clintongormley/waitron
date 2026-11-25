@@ -4,7 +4,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { PersonEdit } from "./person-edit.js";
 import "./person-edit.js";
-import type { PersonEditDetails, PersonSummary } from "../api/client.js";
+import type { PersonEditDetails, PersonSummary } from "../api/staff-api.js";
 import { setLocale } from "../i18n/t.js";
 
 afterEach(() => {

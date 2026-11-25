@@ -12,7 +12,9 @@ import {
   expectRowMenusOnScreen,
 } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName } from "../i18n/domain.js";
-import type { Course, Product, Unit } from "../api/client.js";
+import type { Product } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
+import type { Unit } from "../api/catalog-api.js";
 import type { ListedVariant, VatClass } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";

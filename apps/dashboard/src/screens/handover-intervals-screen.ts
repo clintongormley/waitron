@@ -13,12 +13,12 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { guideHref } from "../help-guide.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   HandoverInterval,
   ReturnedInvoiceRecord,
   ReturnedInvoicesQuery,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 
 @customElement("dashboard-handover-intervals-screen")
 export class HandoverIntervalsScreen extends LitElement {

@@ -18,13 +18,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "./invoice-email-dialog.js";
 import type { InvoiceEmailDialog } from "./invoice-email-dialog.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   OrderDeliveries,
   OrderDeliveryAttempt,
   OrderDetailDto,
   OrderRowDto,
-} from "../api/client.js";
+} from "../api/orders-api.js";
 import { allergenLabel } from "../i18n/domain.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

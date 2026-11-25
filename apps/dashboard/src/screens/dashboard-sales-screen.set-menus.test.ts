@@ -1,7 +1,8 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { CategorySalesDto, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { CategorySalesDto } from "../api/reporting-api.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { today } from "../date-utils.js";

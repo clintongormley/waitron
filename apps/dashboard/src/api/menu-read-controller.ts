@@ -1,6 +1,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { QueryController, type ResourceQuery } from "@waitron/dashboard-kit";
-import type { DashboardApi, MenuReadPart, MenuReadResult, MenuReadRevision } from "./client.js";
+import type { DashboardApi } from "./client.js";
+import type { MenuReadPart, MenuReadResult, MenuReadRevision } from "./menu-api.js";
 import { dashboardQuery } from "./live-queries.js";
 
 function covers(read: MenuReadResult, minimum: MenuReadRevision | undefined): boolean {

@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { BackupStatusView, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BackupStatusView } from "../api/backup-api.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
 

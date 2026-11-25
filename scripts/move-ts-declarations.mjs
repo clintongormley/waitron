@@ -146,6 +146,45 @@ function liftRoutes(source, { mount, groups }) {
   return parse(source.fileName, [replace(source.text, edits).trimEnd(), ...functions].join("\n\n"));
 }
 
+function retainTypeReexports(source) {
+  const imports = new Map();
+  for (const node of source.statements.filter(ts.isImportDeclaration)) {
+    const bindings = node.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const item of bindings.elements) {
+      imports.set(item.name.text, {
+        from: node.moduleSpecifier.getText(source),
+        name: (item.propertyName ?? item.name).getText(source),
+      });
+    }
+  }
+  const edits = [];
+  for (const node of source.statements.filter(ts.isExportDeclaration)) {
+    if (!node.isTypeOnly || node.moduleSpecifier || !ts.isNamedExports(node.exportClause)) continue;
+    const exported = new Map();
+    for (const item of node.exportClause.elements) {
+      const binding = imports.get((item.propertyName ?? item.name).text);
+      const name = item.name.getText(source);
+      const from = binding?.from ?? "";
+      const text = binding
+        ? binding.name === name
+          ? name
+          : `${binding.name} as ${name}`
+        : item.getText(source);
+      const names = exported.get(from) ?? [];
+      names.push(text);
+      exported.set(from, names);
+    }
+    if (exported.size === 0 || (exported.size === 1 && exported.has(""))) continue;
+    const lines = [...exported].map(
+      ([from, names]) => `export type { ${names.join(", ")} }${from ? ` from ${from}` : ""};`,
+    );
+    const start = node.getStart(source);
+    edits.push({ span: { start, length: node.end - start }, newText: lines.join("\n") });
+  }
+  return parse(source.fileName, replace(source.text, edits));
+}
+
 function liftClient(source, { name, request, keep, groups }) {
   const client = source.statements.find((node) => nameOf(node) === name);
   if (
@@ -255,6 +294,39 @@ function redirectInlineImports(project, source, targets) {
     }
     visit(file);
     if (edits.length) project.set(file.fileName, replace(file.text, edits));
+  }
+}
+
+function markTypeImports(project, modules) {
+  const program = project.service.getProgram();
+  const checker = program.getTypeChecker();
+  for (const file of project.changed.keys()) {
+    const source = program.getSourceFile(file);
+    const edits = [];
+    for (const node of source.statements.filter(ts.isImportDeclaration)) {
+      const { importClause: clause, moduleSpecifier } = node;
+      if (!clause || clause.isTypeOnly || !modules.has(localModule(file, moduleSpecifier)))
+        continue;
+      const bindings = clause.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      const typeNames = bindings.elements.filter((element) => {
+        const alias = checker.getSymbolAtLocation(element.name);
+        const target = alias && checker.getAliasedSymbol(alias);
+        return (
+          !element.isTypeOnly &&
+          target?.declarations?.length &&
+          !(target.flags & ts.SymbolFlags.Value)
+        );
+      });
+      if (typeNames.length === bindings.elements.length && !clause.name && typeNames.length) {
+        edits.push({ span: { start: clause.getStart(source), length: 0 }, newText: "type " });
+      } else {
+        for (const name of typeNames) {
+          edits.push({ span: { start: name.getStart(source), length: 0 }, newText: "type " });
+        }
+      }
+    }
+    if (edits.length) project.set(file, replace(source.text, edits));
   }
 }
 
@@ -575,7 +647,7 @@ export async function main([mapFile], root) {
         );
       }
       if (classLift) {
-        original = liftClient(original, classLift);
+        original = liftClient(retainTypeReexports(original), classLift);
         const destinations = Object.fromEntries(
           Object.entries(targets).map(([target, names]) => [resolve(root, target), names]),
         );
@@ -613,6 +685,15 @@ export async function main([mapFile], root) {
     for (const operation of operations) moveDeclarations(project, ...operation);
     for (const { file, destinations } of clients) {
       redirectInlineImports(project, file, destinations);
+      markTypeImports(project, new Set(Object.keys(destinations)));
+      const importChanges = project.service.organizeImports(
+        { type: "file", fileName: file, mode: ts.OrganizeImportsMode.RemoveUnused },
+        {},
+        {},
+      );
+      for (const { fileName, textChanges } of importChanges) {
+        project.set(fileName, replace(project.readFile(fileName), textChanges));
+      }
     }
     verifyMoves(expected, project.readFile);
     const formatted = new Map();

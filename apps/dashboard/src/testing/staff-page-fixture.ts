@@ -1,5 +1,6 @@
 import { vi } from "vitest";
-import type { DashboardApi, PersonPageQuery } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonPageQuery } from "../api/staff-api.js";
 
 /** Roster fixtures supply the server's already-selected rows; callers assert query wiring. */
 export function withStaffPages(api: DashboardApi): DashboardApi {

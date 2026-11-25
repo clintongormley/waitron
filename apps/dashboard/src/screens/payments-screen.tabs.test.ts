@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, PaymentProviderRow, ReaderRow } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PaymentProviderRow, ReaderRow } from "../api/payments-api.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { PaymentsScreen } from "./payments-screen.js";

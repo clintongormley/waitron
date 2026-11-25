@@ -11,7 +11,8 @@ import {
   detailsEditTest,
 } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
-import type { DashboardApi, DiscoveredPrinter, PrintAgentRow, Printer } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DiscoveredPrinter, PrintAgentRow, Printer } from "../api/printing-api.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 

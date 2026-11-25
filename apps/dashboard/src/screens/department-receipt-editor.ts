@@ -14,7 +14,8 @@ import {
   focusFirstInvalid,
   type DraftScope,
 } from "@waitron/ui";
-import type { ReceiptPreview, PrintPaperWidth } from "../api/client.js";
+import type { ReceiptPreview } from "../api/venue-api.js";
+import type { PrintPaperWidth } from "../api/printing-api.js";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { PrintPaper, paperStrut, paperStyles } from "../widgets/print-paper.js";

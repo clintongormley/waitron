@@ -3,7 +3,8 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, streamsOver } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PendingAbsence, PendingSwap, PersonSummary } from "../api/staff-api.js";
 import { ApprovalsScreen } from "./approvals-screen.js";
 
 useLocale("es-ES");

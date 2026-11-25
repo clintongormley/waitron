@@ -2,7 +2,8 @@ import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController, type WtButton, type WtCombobox } from "@waitron/ui";
-import type { DashboardApi, VenueDefaults } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDefaults } from "../api/venue-api.js";
 import { mountWidget, cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {

@@ -1,5 +1,5 @@
 import { type TemplateResult, html, nothing } from "lit";
-import type { ProfileScopeChoices } from "../api/client.js";
+import type { ProfileScopeChoices } from "../api/devices-api.js";
 import { fill, t } from "../i18n/t.js";
 import { renderGroupError, renderSwitchGroup } from "./device-profile-switch-group.js";
 

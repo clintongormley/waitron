@@ -5,7 +5,8 @@ import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/t
 import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
-import type { DashboardApi, ServerListing } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ServerListing } from "../api/servers-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";

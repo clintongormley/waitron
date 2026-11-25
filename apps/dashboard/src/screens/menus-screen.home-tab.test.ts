@@ -11,18 +11,20 @@ import {
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
-  MenuSummary,
   DashboardApi,
   MemberRef,
   MenuHome,
   MenuPreview,
-  MenuReadPart,
   MenuStatus,
-  MenuStructure,
-  MenuStructureNode,
   Product,
   SectionMember,
 } from "../api/client.js";
+import type {
+  MenuSummary,
+  MenuReadPart,
+  MenuStructure,
+  MenuStructureNode,
+} from "../api/menu-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 

@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
-import type { DashboardApi, OwnProfile } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { OwnProfile } from "./api/account-api.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";

@@ -4,11 +4,8 @@ import { baseStyles, draftScopeFor, saveActionState, type DraftScope } from "@wa
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
-import type {
-  DashboardApi,
-  DailyReportSettingsDraft,
-  DailyReportSettingsView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DailyReportSettingsDraft, DailyReportSettingsView } from "../api/email-theme-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";

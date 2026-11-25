@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, StreamBucketBody, StreamSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { StreamBucketBody, StreamSettingsView } from "../api/backup-api.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";
 

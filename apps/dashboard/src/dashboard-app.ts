@@ -146,14 +146,10 @@ import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
 import { goToLabel, markAlertHandled, wholeTimesText } from "./widgets/alert-format.js";
-import type {
-  AlertView,
-  AlertsResponse,
-  DashboardApi,
-  DiskStopResponse,
-  MonthDownloadDto,
-  TradingAdmissionView,
-} from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { TradingAdmissionView } from "./api/venue-api.js";
+import type { AlertView, AlertsResponse, DiskStopResponse } from "./api/servers-api.js";
+import type { MonthDownloadDto } from "./api/reporting-api.js";
 import {
   clockTime,
   monthName,

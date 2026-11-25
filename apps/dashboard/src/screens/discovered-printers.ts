@@ -1,4 +1,4 @@
-import type { DiscoveredPrinter, PagePrinterEntry, PrintAgentRow } from "../api/client.js";
+import type { DiscoveredPrinter, PagePrinterEntry, PrintAgentRow } from "../api/printing-api.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** What an office printer's discovery row offers, judged against the venue's page printers. */

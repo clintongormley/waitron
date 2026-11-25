@@ -3,12 +3,9 @@ import { cloudOwnerRecoveryRequest } from "../testing/cloud-owner-recovery-reque
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
-import {
-  DashboardApi,
-  type BackupApplyBody,
-  type ProductEditorInput,
-  type ThemeLogoPrint,
-} from "./client.js";
+import { DashboardApi, type ProductEditorInput } from "./client.js";
+import { type BackupApplyBody } from "./backup-api.js";
+import { type ThemeLogoPrint } from "./email-theme-api.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -124,7 +121,12 @@ describe("DashboardApi routes", () => {
   });
 
   it("offers no route that names tills", () => {
-    const methods = Object.getOwnPropertyNames(DashboardApi.prototype);
+    const methods: string[] = [];
+    let prototype: object = DashboardApi.prototype;
+    while (prototype !== Object.prototype) {
+      methods.push(...Object.getOwnPropertyNames(prototype));
+      prototype = Object.getPrototypeOf(prototype) as object;
+    }
     expect(methods.filter((name) => /tills/i.test(name))).toEqual([]);
   });
 

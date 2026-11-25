@@ -1,6 +1,7 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
 import type { TemplateResult } from "lit";
-import type { DashboardApi, PagePrinterRow, PageTestPage } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PagePrinterRow, PageTestPage } from "../api/printing-api.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";

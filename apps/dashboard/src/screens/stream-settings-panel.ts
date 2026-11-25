@@ -15,12 +15,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type {
-  DashboardApi,
-  StreamBucketBody,
-  StreamSettingsView,
-  StreamStatusView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { StreamBucketBody, StreamSettingsView, StreamStatusView } from "../api/backup-api.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";

@@ -37,13 +37,8 @@ import type { Decimal } from "@waitron/shared";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { clashesOf } from "@waitron/menu/src/menu-combine.js";
 import { stringToCents } from "@waitron/shared";
-import type {
-  CategorySummary,
-  SectionDetails,
-  MenuPriceRow,
-  MenuPriceVariant,
-  Product,
-} from "../api/client.js";
+import type { SectionDetails, MenuPriceRow, MenuPriceVariant, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 import { byLabel, categoryAncestors, categoryPath, PATH_SEPARATOR } from "./category-form.js";

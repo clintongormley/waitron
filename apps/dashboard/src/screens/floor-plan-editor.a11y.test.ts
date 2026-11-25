@@ -7,7 +7,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 
 const originalUrl = location.href;
 afterEach(() => {

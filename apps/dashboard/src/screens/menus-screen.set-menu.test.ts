@@ -8,13 +8,8 @@ import {
 } from "@waitron/ui";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type {
-  DashboardApi,
-  MenuPreview,
-  MenuStructure,
-  MenuSummary,
-  SetMenuDetails,
-} from "../api/client.js";
+import type { DashboardApi, MenuPreview, SetMenuDetails } from "../api/client.js";
+import type { MenuStructure, MenuSummary } from "../api/menu-api.js";
 import { useLocale } from "../testing/locale-setup.js";
 import {
   cleanupWidgets,

@@ -29,22 +29,24 @@ import {
 import { MenusScreen } from "./menus-screen.js";
 import { DashboardApi } from "../api/client.js";
 import type {
-  MenuSummary,
-  CategorySummary,
   IncludeFolder,
   IncludeFolderInput,
   MenuHome,
-  MenuReadPart,
   SectionDetails,
   MemberRef,
   MenuPreview,
   MenuPriceRow,
   MenuStatus,
-  MenuStructure,
-  MenuStructureNode,
   Product,
   SectionMember,
 } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type {
+  MenuSummary,
+  MenuReadPart,
+  MenuStructure,
+  MenuStructureNode,
+} from "../api/menu-api.js";
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";

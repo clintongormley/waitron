@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
-import type { PrintJobPreview } from "../api/client.js";
+import type { PrintJobPreview } from "../api/printing-api.js";
 import { PrintJobPreviewDialog } from "./print-job-preview.js";
 
 const preview: PrintJobPreview = {

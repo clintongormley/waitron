@@ -1,5 +1,4 @@
 {
-  "apps/dashboard/src/api/client.ts": 6000,
   "apps/dashboard/src/dashboard-app.ts": 4000,
   "apps/dashboard/src/screens/backup-screen.ts": 2250,
   "apps/dashboard/src/screens/box-status-screen.ts": 1500,

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { MenuSummary, MenuStructure } from "../api/client.js";
+import type { MenuSummary, MenuStructure } from "../api/menu-api.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus } from "./add-to-menus.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

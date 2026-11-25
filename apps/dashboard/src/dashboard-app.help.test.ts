@@ -7,7 +7,9 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/t
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DashboardApp } from "./dashboard-app.js";
-import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { PersonSummary } from "./api/staff-api.js";
+import type { AlertView } from "./api/servers-api.js";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 
