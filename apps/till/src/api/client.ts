@@ -2335,6 +2335,11 @@ export interface MoveBillRevisions
 export interface MoveBillResult {
   partyId: string | null;
   billId: string;
+  /** Present when seating a Counter order issued its invoice. */
+  invoice?: TillSaleResult;
+  /** Present when seating a Counter order changed its set menus and left it paid over its total: by
+   * how much. */
+  overpaid?: string;
 }
 
 /** Whole grid squares; `x` and `y` name the unrotated table's top-left corner. */

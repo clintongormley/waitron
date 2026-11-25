@@ -726,8 +726,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolver dinero en {receipt}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
   },
   "advance.correction_open": {
-    en: "The table's receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
-    es: "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
+    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
+    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
@@ -1233,6 +1233,16 @@ const DINING_FIXED: Record<string, { en: string; es: string }> = {
   },
 };
 
+/** A `bill.below_advances` met seating a Counter order, whose set menus lower its total. */
+const SEATED_BELOW_ADVANCES = {
+  en: "{advances} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give back {excess} on that receipt with Give money back, or keep the order at the Counter.",
+  es: "{advances} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes {excess} de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+};
+const SEATED_BELOW_ADVANCES_UNPRICED = {
+  en: "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give money back on that receipt with Give money back, or keep the order at the Counter.",
+  es: "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+};
+
 /** Every table above, for guards that read the till's wording. */
 export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   CODE_MESSAGES,
@@ -1245,6 +1255,8 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   MONEY_SHORT_NOTHING_LEFT,
   MONEY_SHORT_ADVANCES,
   DINING_FIXED,
+  SEATED_BELOW_ADVANCES,
+  SEATED_BELOW_ADVANCES_UNPRICED,
 };
 
 export function listDishNames(names: readonly string[], locale: string): string {
@@ -1267,6 +1279,7 @@ export function codeMessage(
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
     advances?: unknown;
+    excess?: unknown;
   },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
@@ -1309,6 +1322,14 @@ export function codeMessage(
       "{invoiceNumber}",
       typeof params?.invoiceNumber === "string" ? ` ${params.invoiceNumber}` : "",
     );
+  if (code === "bill.below_advances" && params?.reason === "seating") {
+    const { advances, excess } = params;
+    return typeof advances === "string" && typeof excess === "string"
+      ? pickLocale(SEATED_BELOW_ADVANCES, locale)
+          .replace("{advances}", () => formatMoney(advances, locale))
+          .replace("{excess}", () => formatMoney(excess, locale))
+      : pickLocale(SEATED_BELOW_ADVANCES_UNPRICED, locale);
+  }
   if (code === "bill.below_advances")
     return typeof params?.advances === "string"
       ? message.replace("{advances}", () => formatMoney(params.advances as string, locale))

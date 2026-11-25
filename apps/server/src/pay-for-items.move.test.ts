@@ -411,7 +411,7 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
     const picks = [{ lineId: await lineOf(billId, "salad") }];
     const refusal = {
       code: "bill.below_advances",
-      params: { workingOrderId: billId, advances: "15.00" },
+      params: { workingOrderId: billId, advances: "15.00", excess: "5.00" },
     };
 
     await expect(preview(billId, picks)).rejects.toMatchObject(refusal);

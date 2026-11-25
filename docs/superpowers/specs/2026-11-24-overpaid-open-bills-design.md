@@ -310,7 +310,9 @@ request yet and still being edited) or **L** (`feat/give-money-back-till`).
 - **Pending money:** each caller also refuses card money in flight (`refusePaymentInFlight` by
   `bumpRevision`, `working-order-edit-state.ts:230,266`; `set-menu-count.ts:123`;
   `adjustments-apply.ts:815`). Read, not run for each.
-- **Advances:** `refuseBelowAdvances` `pay-for-items.ts:207` moves to the callers above. "Filing
+- **Advances:** `refuseBelowAdvances` `pay-for-items.ts:207` moves to the callers above. _2026-11-25,
+  A1572: it is exported from `bill-advances.ts` and seating a Counter order that changes its set menus
+  calls it too._ "Filing
   needs no such step" `invoice-corrections.ts:591-598` is why the other order sticks;
   `advance.exceeds_bill` refuses printing. Refund of an advance: `bill.refund_of_advance`
   (`bill-refunds.ts:225`); lane L D18 opens its window on the ticket. Leave advances out of the

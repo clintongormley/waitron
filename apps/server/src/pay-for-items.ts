@@ -12,11 +12,9 @@ import { findPaymentByBillPayment, readPaymentsSettings } from "@waitron/payment
 import {
   AppError,
   centsToDecimal,
-  compareDecimal,
   decimal,
   decimalToCents,
   decimalToThousandths,
-  sumDecimals,
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -27,7 +25,7 @@ import {
   refuseClosedBill,
   type BillCommand,
 } from "./bill-actions.js";
-import { readBillAdvances } from "./bill-advances.js";
+import { refuseBelowAdvances } from "./bill-advances.js";
 import {
   invalid,
   money,
@@ -216,23 +214,6 @@ export async function priceItemPicks(
     centsToDecimal(await totalLeftBehind(tx, fromBillId, taken)),
   );
   return centsToDecimal(await totalOnOwnBill(tx, fromBillId, taken));
-}
-
-/** Refuse (D4) a bill whose `left` total is less than its advances credit; with none, `left` is not
- * worked out. */
-async function refuseBelowAdvances(
-  tx: Transaction,
-  billId: string,
-  left: () => Promise<Decimal>,
-): Promise<void> {
-  const credits = (await readBillAdvances(tx, [billId])).credits.get(billId);
-  if (credits === undefined) return;
-  const credited = sumDecimals(credits.map((credit) => credit.gross));
-  if (compareDecimal(await left(), credited) < 0)
-    throw new AppError("bill.below_advances", {
-      workingOrderId: billId,
-      advances: money(credited),
-    });
 }
 
 /**

@@ -13,6 +13,9 @@ import type { Transaction } from "@waitron/db";
 import type { AllergyMoveRead, AllergyPatch } from "@waitron/module";
 import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty } from "./bill-actions.js";
+import { refuseBelowAdvances } from "./bill-advances.js";
+import { money } from "./bill-allocation.js";
+import { readBillExcess } from "./bill-payments.js";
 import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
 import { readSentWork, type SentWork } from "./kitchen-ticket-paper.js";
 import { firedQuantity } from "./kitchen-ticket-state.js";
@@ -28,6 +31,8 @@ import {
   relocateBillEditor,
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
+import type { TillSaleResult } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { carryDoneWithBill } from "./service-step-done.js";
@@ -56,6 +61,7 @@ import {
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { clearGroups, refuseHeldLeavingParty } from "./working-order-transfer.js";
+import { refusePaymentInFlight } from "./working-order-edit-state.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
 import {
   assertSendable,
@@ -91,7 +97,15 @@ export interface MoveBillOptions extends OtherPartyRead {
 export interface MoveBillResult {
   partyId: string | null;
   billId: string;
+  /** Present when seating a counter order issued its invoice. */
+  invoice?: TillSaleResult;
+  /** Present when seating a counter order changed its set menus and left it paid over its total: by
+   * how much. */
+  overpaid?: string;
 }
+
+/** Issues a bill whose set menus the move regrouped, if that left it fully paid. */
+export type IssueMovedBill = (billId: string) => Promise<TillSaleResult | null>;
 
 /** Where the bill goes: the counter, a free table, or a table another party holds. */
 type Destination =
@@ -147,6 +161,7 @@ export async function moveBill(
   to: MoveTarget,
   options: MoveBillOptions,
   attendance?: OrderAttendance,
+  issue?: IssueMovedBill,
 ): Promise<MoveBillResult> {
   if ((options.submissionId === undefined) !== (options.allergy === undefined))
     throw new AppError("management.request_invalid", { field: "allergy" });
@@ -168,11 +183,11 @@ export async function moveBill(
       command.submissionId,
       "bill.move.allergy",
       { billId, to, ...command },
-      () => moveBillOnce(tx, cfg, billId, to, command, attendance),
+      () => moveBillOnce(tx, cfg, billId, to, command, attendance, issue),
       cfg.madeHereSink,
     );
   }
-  return moveBillOnce(tx, cfg, billId, to, options, attendance);
+  return moveBillOnce(tx, cfg, billId, to, options, attendance, issue);
 }
 
 async function moveBillOnce(
@@ -182,6 +197,7 @@ async function moveBillOnce(
   to: MoveTarget,
   options: MoveBillOptions,
   attendance?: OrderAttendance,
+  issue?: IssueMovedBill,
 ): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
   if (options.allergy !== undefined && path.partyId !== null)
@@ -322,16 +338,26 @@ async function moveBillOnce(
     result = { partyId, billId };
   }
 
+  let regrouped = false;
   if (source !== null) await ensureFamilyBill(tx, cfg, source.id);
   else if (linksOnSeating) {
     await linkSetMenusForHeldDishes(tx, billId);
-    await regroupBills(tx, [billId]);
+    regrouped = (await regroupBills(tx, [billId])).has(billId);
+    if (regrouped) {
+      await refusePaymentInFlight(tx, [billId]);
+      // The bill may be left holding more than it comes to, as Pay for items leaves its source.
+      await refuseBelowAdvances(tx, billId, () => storedOrderTotal(tx, billId));
+    }
   }
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
 
   await printHoldTickets(tx, cfg, held);
   await enqueueMovedSlips(tx, cfg, before, result.billId);
-  return result;
+  if (!regrouped) return result;
+  const invoice = await issue?.(billId);
+  if (invoice != null) return { ...result, invoice };
+  const { excess } = await readBillExcess(tx, billId);
+  return excess === undefined ? result : { ...result, overpaid: money(excess) };
 }
 
 /**
@@ -515,7 +541,8 @@ async function counterLabel(tx: Transaction, party: SourceParty): Promise<string
 
 /**
  * One more write on an open or presented bill, without `bumpRevision`'s refusal of money in flight:
- * a move changes no amount, and a card at the reader completes on the bill wherever it now is.
+ * a card at the reader completes on the bill wherever it now is. A seating that regroups the bill's
+ * set menus refuses that money itself (`moveBillOnce`).
  */
 const movedRevision = sql`${workingOrders.revision} + 1`;
 

@@ -297,7 +297,7 @@ export interface BillBalance {
   /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: Decimal;
   /** On an open or placed bill, received and reserved less the total when that is more than
-   * nothing (Pay for items can leave it so); zero otherwise. Such a bill issues nothing. */
+   * nothing; zero otherwise. Such a bill issues nothing. */
   overpaid: Decimal;
   /** The net tips of the received payments. */
   tips: Decimal;
@@ -562,8 +562,8 @@ export async function refusePaidLines(
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
  * plus the applied of its pending ones is at most its total. The line writers that take lines off
- * a bill or lower a quantity call it, or {@link assertLinesKeptExcess} where Pay for items may have
- * left the bill above it, before they commit. No trigger stands behind it, because the total is
+ * a bill or lower a quantity call it, or {@link assertLinesKeptExcess} where the bill may be
+ * above it already, before they commit. No trigger stands behind it, because the total is
  * computed, not stored, so a writer that forgets it is seen only by its own tests.
  */
 export async function assertBillInvariant(

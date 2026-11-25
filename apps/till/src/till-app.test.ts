@@ -39,7 +39,11 @@ import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
 import { TillApi as CollectApi } from "./api/client.js";
-import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
+import {
+  SUBMIT_RETRIES,
+  SUBMIT_RETRY_PAUSE_MS,
+  TABLE_REQUEST_LIMIT_MS,
+} from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
@@ -20411,6 +20415,405 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
     },
   );
+
+  it("offers the receipt of an order the move issued, and closing it keeps the basket", async () => {
+    const { el, c } = await counterWith({
+      moveBill: vi
+        .fn()
+        .mockResolvedValue({ partyId: "v-new", billId: "wo-12", invoice: saleResult }),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    c.store.addProduct(coffee, "1");
+    await el.updateComplete;
+    const id = c.store.id;
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+    await flush(el);
+    await answerCounterMoveIfAsked(el);
+
+    expect(ticket(el)!.localName).toBe("till-settlement-document-dialog");
+    expect(ticket(el)!.result).toEqual(saleResult);
+    expect(ticket(el)!.originalReceiptAvailable).toBe(true);
+    expect(currentApi.getReceiptPrintStatus).toHaveBeenCalledWith("wo-12");
+    expect(toast(el).open).toBe(true);
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+
+    closeTicket(el);
+    await flush(el);
+
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it("opens no ticket window for a move that issued nothing", async () => {
+    const { el, c } = await counterWith();
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+    await flush(el);
+    await answerCounterMoveIfAsked(el);
+
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+    expect(toast(el).open).toBe(true);
+    expect(ticket(el)).toBeNull();
+  });
+
+  it.each([
+    [true, ["payment.take"], "counter.moved_to_table_overpaid"],
+    [true, [], "counter.moved_to_table_overpaid_give_back"],
+    [false, ["payment.take"], "counter.moved_to_table_overpaid_give_back"],
+  ] as const)(
+    "says what an order left overpaid was paid over, taking tips %s, permitted %j",
+    async (tipsEnabled, permissions, words) => {
+      const { el, c } = await counterWith({
+        getTill: vi.fn().mockResolvedValue({ ...till, tipsEnabled }),
+        moveBill: vi
+          .fn()
+          .mockResolvedValue({ partyId: "v-new", billId: "wo-12", overpaid: "6.00" }),
+      });
+      (el as unknown as { permissions: readonly string[] }).permissions = permissions;
+      emit(c, "move-held-order-open", { orderId: "wo-12" });
+      await flush(el);
+
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+      await flush(el);
+      await answerCounterMoveIfAsked(el);
+
+      expect(toast(el).open).toBe(true);
+      expect(toast(el).message).toBe(
+        t(words)
+          .replace("{table}", "Table 9")
+          .replace("{amount}", formatMoney("6.00", currentLocale())),
+      );
+      expect(toast(el).message).not.toMatch(/[{}]/);
+      expect(ticket(el)).toBeNull();
+    },
+  );
+
+  it("words an order left overpaid in both languages", () => {
+    const locale = currentLocale();
+    try {
+      setLocale("en");
+      expect(t("counter.moved_to_table_overpaid")).toBe(
+        "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back, or keep it as a tip, on its bill there.",
+      );
+      expect(t("counter.moved_to_table_overpaid_give_back")).toBe(
+        "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back on its bill there.",
+      );
+      setLocale("es");
+      expect(t("counter.moved_to_table_overpaid")).toBe(
+        "Pasado a {table}. Se han pagado {amount} de más: devuelve lo que sobra, o déjalo de propina, en su cuenta.",
+      );
+      expect(t("counter.moved_to_table_overpaid_give_back")).toBe(
+        "Pasado a {table}. Se han pagado {amount} de más: devuelve lo que sobra en su cuenta.",
+      );
+    } finally {
+      setLocale(locale);
+    }
+  });
+
+  it("offers to send a move again once it has had no answer for the time limit", async () => {
+    const moveBill = vi.fn(
+      (...sent: unknown[]) =>
+        new Promise((_, reject) =>
+          (sent[4] as { signal: AbortSignal }).signal.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          ),
+        ),
+    );
+    const { el, c } = await counterWith({ moveBill });
+    const form = () => el.shadowRoot!.querySelector("till-party-allergy-dialog");
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t7", seated: luisParty });
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      expect(moveBill).toHaveBeenCalledOnce();
+      expect(form()).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+
+    expect(moveBill).toHaveBeenCalledOnce();
+    expect(form()!.retryOnly).toBe(true);
+  });
+
+  describe("an answer that comes after staff have moved on", () => {
+    async function lateAnswer(
+      result: object,
+      moveOn: (el: TillApp, c: TillCounterScreen) => unknown,
+    ) {
+      let answer!: (result: unknown) => void;
+      const mounted = await counterWith({
+        moveBill: vi.fn(
+          (...sent: unknown[]) =>
+            new Promise((resolve, reject) => {
+              answer = resolve;
+              (sent[4] as { signal: AbortSignal }).signal.addEventListener("abort", () =>
+                reject(new DOMException("Aborted", "AbortError")),
+              );
+            }),
+        ),
+      });
+      const { el, c } = mounted;
+      emit(c, "move-held-order-open", { orderId: "wo-12" });
+      await flush(el);
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t7", seated: luisParty });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-party-allergy-dialog")).toBeNull();
+      expect(currentApi.moveBill).toHaveBeenCalledOnce();
+      await moveOn(el, c);
+      el.requestUpdate();
+      await flush(el);
+      answer({ partyId: "v7", billId: "wo-12", ...result });
+      await flush(el);
+      return el;
+    }
+    const allergyDialog = (el: TillApp) =>
+      el.shadowRoot!.querySelector("till-party-allergy-dialog");
+    const ringUp = (_: TillApp, c: TillCounterScreen) => c.store.addProduct(coffee, "1");
+    const openTable7 = async (el: TillApp) => {
+      selectTab(el, "floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+      expect(tableOrder(el)).not.toBeNull();
+    };
+
+    it.each([
+      ["the basket has changed", ringUp],
+      ["the floor is on screen", (el: TillApp) => selectTab(el, "floor")],
+      ["a table with a party is open", openTable7],
+    ] as const)("prints the receipt it owes once %s", async (_, moveOn) => {
+      const el = await lateAnswer({ invoice: saleResult }, moveOn);
+
+      expect(currentApi.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-12", { ifOwed: true });
+      expect(ticket(el)).toBeNull();
+      expect(toast(el).open).toBe(false);
+    });
+
+    it.each([
+      ["the basket has changed", ringUp],
+      ["the floor is on screen", (el: TillApp) => selectTab(el, "floor")],
+      ["a table with a party is open", openTable7],
+    ] as const)("says what the order was paid over once %s", async (_, moveOn) => {
+      const el = await lateAnswer({ overpaid: "6.00" }, moveOn);
+
+      expect(toast(el).open).toBe(true);
+      expect(toast(el).message).toBe(
+        t("counter.moved_to_table_overpaid_give_back")
+          .replace("{table}", "Table 7")
+          .replace("{amount}", formatMoney("6.00", currentLocale())),
+      );
+      expect(currentApi.printReceipt).not.toHaveBeenCalled();
+    });
+
+    it("prints the receipt it owes once the till is off the page", async () => {
+      const el = await lateAnswer({ invoice: saleResult, overpaid: "6.00" }, (el) => el.remove());
+
+      expect(currentApi.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-12", { ifOwed: true });
+      expect(ticket(el)).toBeNull();
+    });
+
+    it("leaves a second move's allergy dialog up", async () => {
+      const el = await lateAnswer({}, async (el) => {
+        selectTab(el, "floor");
+        await flush(el);
+        selectTab(el, "counter");
+        await flush(el);
+        emit(counter(el)!, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+        await flush(el);
+        expect(allergyDialog(el)).not.toBeNull();
+      });
+
+      expect(allergyDialog(el)).not.toBeNull();
+      await answerCounterMoveIfAsked(el);
+      expect(currentApi.moveBill).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(currentApi.moveBill).mock.calls[1]![1]).toEqual({ tableId: "t9" });
+    });
+
+    describe("to a first send that was dropped", () => {
+      async function droppedSend(
+        moveOn: (el: TillApp, c: TillCounterScreen) => unknown,
+        again: ReturnType<typeof vi.fn>,
+      ) {
+        let drop!: (error: Error) => void;
+        again.mockImplementationOnce(() => new Promise((_, reject) => (drop = reject)));
+        const { el, c } = await counterWith({ moveBill: again });
+        emit(c, "move-held-order-open", { orderId: "wo-12" });
+        await flush(el);
+        emit(c, "move-held-order", { orderId: "wo-12", tableId: "t7", seated: luisParty });
+        await flush(el);
+        expect(again).toHaveBeenCalledOnce();
+        await moveOn(el, c);
+        el.requestUpdate();
+        await flush(el);
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          drop(new TypeError("Failed to fetch"));
+          await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS * (SUBMIT_RETRIES + 1));
+        } finally {
+          vi.useRealTimers();
+        }
+        await flush(el);
+        return el;
+      }
+
+      it("sends the move again and follows its answer", async () => {
+        const moveBill = vi.fn().mockResolvedValue({
+          partyId: "v7",
+          billId: "wo-12",
+          invoice: saleResult,
+          overpaid: "6.00",
+        });
+        const el = await droppedSend(ringUp, moveBill);
+
+        expect(moveBill).toHaveBeenCalledTimes(2);
+        expect(moveBill.mock.calls[1]!.slice(0, 4)).toEqual(moveBill.mock.calls[0]!.slice(0, 4));
+        expect(currentApi.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-12", { ifOwed: true });
+        expect(toast(el).open).toBe(true);
+      });
+
+      it("says nothing when no send is answered", async () => {
+        const moveBill = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+        const el = await droppedSend(ringUp, moveBill);
+
+        expect(moveBill).toHaveBeenCalledTimes(SUBMIT_RETRIES + 1);
+        expect(currentApi.printReceipt).not.toHaveBeenCalled();
+        expect(toast(el).open).toBe(false);
+        expect(alert(el)).toBeNull();
+        expect(allergyDialog(el)).toBeNull();
+      });
+
+      it.each([
+        [
+          "API",
+          (el: TillApp) => {
+            el.api = { ...currentApi } as unknown as TillApi;
+          },
+        ],
+        ["operator", (el: TillApp) => emit(shell(el)!, "logout")],
+      ] as const)("sends nothing more for another %s", async (_, moveOn) => {
+        const moveBill = vi.fn().mockResolvedValue({ partyId: "v7", billId: "wo-12" });
+        await droppedSend(moveOn, moveBill);
+
+        expect(moveBill).toHaveBeenCalledOnce();
+      });
+    });
+
+    it("says nothing of an order it neither issued nor overpaid", async () => {
+      const el = await lateAnswer({}, ringUp);
+
+      expect(currentApi.printReceipt).not.toHaveBeenCalled();
+      expect(toast(el).open).toBe(false);
+    });
+
+    it.each([
+      [
+        "API",
+        (el: TillApp) => {
+          el.api = { ...currentApi } as unknown as TillApi;
+        },
+      ],
+      ["operator", (el: TillApp) => emit(shell(el)!, "logout")],
+    ] as const)("does neither for another %s", async (_, moveOn) => {
+      const el = await lateAnswer({ invoice: saleResult, overpaid: "6.00" }, moveOn);
+
+      expect(currentApi.printReceipt).not.toHaveBeenCalled();
+      expect(toast(el)?.open ?? false).toBe(false);
+    });
+  });
+
+  it.each([
+    {
+      code: "bill.below_advances",
+      advances: "20.00",
+      excess: "6.00",
+      said: (locale: string) =>
+        codeMessage("bill.below_advances", locale, {
+          reason: "seating",
+          advances: "20.00",
+          excess: "6.00",
+        }),
+    },
+    {
+      code: "bill.below_advances",
+      said: (locale: string) => codeMessage("bill.below_advances", locale, { reason: "seating" }),
+    },
+    {
+      code: "venue.time_zone_not_ready",
+      reason: "restart_required",
+      said: (locale: string) =>
+        codeMessage("venue.time_zone_not_ready", locale, { reason: "restart_required" }),
+    },
+    {
+      code: "advance.correction_open",
+      invoiceNumber: "A/7",
+      said: (locale: string) =>
+        codeMessage("advance.correction_open", locale, { invoiceNumber: "A/7" }),
+    },
+    { code: "order.payment_in_flight" },
+    { code: "bill.refund_in_progress" },
+    { code: "clock.unconfirmed" },
+    { code: "clock.unusable", clockAt: "2020-01-01T00:00:00Z", offsetMinutes: 0 },
+    { code: "storage.disk_full" },
+    { code: "fiscal.fingerprint_mismatch" },
+    { code: "fiscal.chain_handed_over" },
+    { code: "fiscal.taxpayer_domicile_missing" },
+    { code: "invoice.recipient_invalid", field: "address" },
+    { code: "product.unavailable", productId: "soup" },
+    { code: "department.operation_description_required", departmentId: "d1" },
+    { code: "handover.stepping_down" },
+    ...["fiscal.record_invalid", "fiscal.foreign_recipient_unsupported", "sale.number_reused"].map(
+      (code) => ({ code, said: () => t("place.refused") }),
+    ),
+    {
+      code: "sale.total_exceeds_simplified_limit",
+      limit: "400.00",
+      said: (locale: string) =>
+        t("sale.over_simplified_limit").replace("{amount}", formatMoney("400.00", locale)),
+    },
+  ] as { code: string; said?: (locale: string) => string }[])(
+    "words $code refusing the move in both languages",
+    async ({ said, ...refusal }) => {
+      const { el, c } = await counterWith({ moveBill: vi.fn().mockRejectedValue(refusal) });
+      const sentence = said ?? ((locale: string) => codeMessage(refusal.code, locale));
+
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+      await flush(el);
+      await answerCounterMoveIfAsked(el);
+
+      expect(toast(el).open).toBe(false);
+      const locale = currentLocale();
+      try {
+        for (const each of ["es-ES", "en"]) {
+          setLocale(each);
+          el.requestUpdate();
+          await el.updateComplete;
+          expect(alert(el)!.textContent).toContain(sentence(each));
+          expect(sentence(each)).not.toBe(codeMessage("constructor", each));
+          expect(alert(el)!.textContent).not.toContain(t("table.error"));
+        }
+      } finally {
+        setLocale(locale);
+      }
+    },
+  );
+
+  it("words a move refused with nothing to read as any failed table command", async () => {
+    const { el, c } = await counterWith({
+      previewBillMoveAllergy: vi.fn().mockRejectedValue(undefined),
+    });
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null });
+    await flush(el);
+
+    expect(alert(el)!.textContent).toContain(t("table.error"));
+  });
 
   it("names a table absent from today's plan and reads the held orders again", async () => {
     const { el, c } = await counterWith({

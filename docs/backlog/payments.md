@@ -320,7 +320,8 @@ Remaining Stripe qualification and maintenance.
   part payment waits is the lane's reading, kept by the watcher 2026-11-24, not asked), comps, discounts and moving
   dishes between bills stay refused. So do a partial move or split of a held dish, which rewrite
   the rows carrying its price: that is the lane's reading, kept by the watcher 2026-11-24, not asked. Moving a whole bill
-  was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
+  was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)),
+  except, since A1572, seating a Counter order when that changes its set menus, which is refused.
   The writes allowed above count their write with `bumpRevisionKeepingPayment`
   (`apps/server/src/working-order-edit-state.ts`). Tests: the "card payment" and "refund" cases in
   `apps/server/src/bill-editing.station-move.test.ts`, `order-group-edits.test.ts`,

@@ -906,15 +906,16 @@ declare module "@waitron/shared" {
     "bill.line_paid": { workingOrderId: string; lineNo: number };
     /**
      * A write would leave the bill's total below the money it has received or reserved; on a bill
-     * Pay for items left below it already, an edit of its lines is refused only for taking the
-     * total further below. `excess` is by how much; refunding that first lets the write through.
+     * already below it, an edit of its lines is refused only for taking the total further below.
+     * `excess` is by how much; refunding that first lets the write through.
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
-     * Paying for chosen items would leave the bill owing less than the payments on account it
-     * took off with their own receipts; `advances` is what they credit.
+     * Paying for chosen items, or seating a counter order whose dishes then make a set menu, would
+     * leave the bill coming to less than the payments on account it took with their own receipts;
+     * `advances` is what they credit, and `excess` by how much more than the bill would come to.
      */
-    "bill.below_advances": { workingOrderId: string; advances: string };
+    "bill.below_advances": { workingOrderId: string; advances: string; excess: string };
     /** Paying for chosen items chose every dish on the bill: that is paying the whole bill. */
     "bill.all_items_chosen": { workingOrderId: string };
     /** Keep as tip on a bill that holds nothing paid over its total. */

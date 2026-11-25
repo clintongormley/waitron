@@ -499,6 +499,8 @@ checks are the ones below.
   may move while a card refund is pending, under the lane's application of R7-1. The route cases in
   `apps/server/src/table-actions.refund-pending.test.ts` check moves to a free table in the same
   zone, with the bill's charges unchanged and its refund still pending.)_
+  _(2026-11-25, A1572: seating a Counter order is refused while a card payment or refund is pending
+  when that changes its set menus, and issues it when that leaves it exactly paid.)_
 
 **Both orders of every race are tested as sequential calls** (the engine takes one write
 transaction at a time, plan Global Constraints): cash then a card's P1 on the same last €40.00 (the

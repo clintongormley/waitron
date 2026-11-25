@@ -161,7 +161,7 @@ export async function applyLineEdits(
   lateSend?: LateSendConfirmation,
 ): Promise<{ changed: boolean; chargesUnchanged: boolean; at?: string }> {
   const before = await totalBeforeEdit(tx, cfg, orderId);
-  // A bill Pay for items left overpaid takes dishes that use up its excess.
+  // An overpaid bill takes dishes that use up its excess.
   const excessBefore = await readBillExcess(tx, orderId);
   const routing = routingOnce(tx, new Date());
   const context = await VENUE_SERVICE.findOrderContext(tx, orderId);

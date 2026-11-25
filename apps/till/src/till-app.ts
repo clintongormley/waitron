@@ -520,6 +520,8 @@ import {
   type SetMenuChange,
   type SetMenuOfferLookup,
 } from "./state/set-menus.js";
+import { seatingRefusalOf } from "./state/seating-refusal.js";
+import { movedToTableNotice } from "./screens/bill-money-notice.js";
 import type { ShellAffordance } from "./widgets/till-shell.js";
 import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
@@ -562,6 +564,8 @@ type SettlementDocument = {
   slipPaymentId?: string;
   /** Set when the document is a bill of items paid from a table bill: the bill shown at close. */
   returnTo?: string;
+  /** Set when the document is not the basket's order, so closing it leaves the basket. */
+  keepsBasket?: true;
 };
 
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
@@ -780,9 +784,9 @@ type OpenedDraft = { sync: DraftSync | undefined; read: boolean } | undefined;
 /**
  * Sale refusals a retry can never clear: the same basket meets the same refusal. `settlingErrorOf`,
  * `#onConfirmPayment` and `#collectCard` show `sale.refused`, because money may already have been
- * taken; `#onPlaceOrder` takes no tender and shows `place.refused`; `mealEndError` shows
- * `meal_end.cannot_file`, except for `sale.number_reused`, a clash saving the sale here rather than
- * anything the tax agency refused, or `meal_end.unconfirmed` while the bill is uncertain.
+ * taken; `#onPlaceOrder` and `seatingError` take no tender and show `place.refused`; `mealEndError`
+ * shows `meal_end.cannot_file`, except for `sale.number_reused`, a clash saving the sale here rather
+ * than anything the tax agency refused, or `meal_end.unconfirmed` while the bill is uncertain.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
@@ -790,8 +794,8 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "sale.number_reused",
 ]);
 
-/** Print the bill's refusals shown in their code's own words, beside the table refusals
- * (`tableWriteError`). */
+/** Print the bill's refusals, and seating's, shown in their code's own words, beside the table
+ * refusals (`tableWriteError`). */
 const MEAL_END_REFUSALS: ReadonlySet<string> = new Set([
   "meal_end.already_issued",
   "meal_end.no_printer",
@@ -1113,6 +1117,15 @@ function tableWriteError(error: unknown): CounterError {
   return code === "table.needs_moving" && typeof refused!.tableId === "string"
     ? { code, tableId: refused!.tableId }
     : withDishes(code, error);
+}
+
+/** A refused seating of a Counter order, which can issue its invoice and so be refused as one. */
+function seatingError(error: unknown): CounterError {
+  if (isPermanentSaleRefusal(error)) return "place.refused";
+  const said = seatingRefusalOf(error) ?? overLimitOf(error);
+  if (said !== undefined) return said;
+  const code = (error as { code?: string } | undefined)?.code;
+  return code !== undefined && MEAL_END_REFUSALS.has(code) ? { code } : tableWriteError(error);
 }
 
 /** A `station.no_default` refusal keeps the dishes it names, and an `order.dining_fixed` one the
@@ -1937,8 +1950,14 @@ type CounterError =
       recoveryUrl?: string;
       manualCard?: true;
       dishes?: string;
-      /** The refusal's `reason`, for a code worded by it. */
+      /** The refusal's `reason`, or the till's own, for a code worded by it. */
       reason?: string;
+      /** A `bill.below_advances` refusal's: what the payments on account came to, and by how much
+       * the bill would come to less. */
+      advances?: string;
+      excess?: string;
+      /** The ticket an `advance.correction_open` refusal names. */
+      invoiceNumber?: string;
       /** The way an `order.dining_fixed` refusal names. */
       dining?: string;
       /** Followed by how to finish the counter's sale with a printed invoice instead. */
@@ -2272,7 +2291,7 @@ function reprintErrorKey(error: unknown): CounterError {
 }
 
 function isPermanentSaleRefusal(error: unknown): boolean {
-  const code = (error as { code?: string }).code;
+  const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && PERMANENT_SALE_REFUSALS.has(code);
 }
 
@@ -15284,12 +15303,16 @@ export class TillApp extends LitElement {
   }
 
   /** Every command on a party's tables or bills ends here when refused. */
-  async #onTableRefusal(error: unknown, live?: () => boolean): Promise<void> {
+  async #onTableRefusal(
+    error: unknown,
+    live?: () => boolean,
+    words: (error: unknown) => CounterError = tableWriteError,
+  ): Promise<void> {
     if (isPartyOutOfDate(error)) {
       await this.#onPartyOutOfDate(error, live);
       return;
     }
-    this.errorKey = tableWriteError(error);
+    this.errorKey = words(error);
   }
 
   async #recoverDraftTargets(sync: DraftSync, live: () => boolean): Promise<boolean> {
@@ -18569,7 +18592,7 @@ export class TillApp extends LitElement {
   async #moveCounterWithAllergy(
     asked: CounterRelocation,
     chooseAgain: (() => void) | undefined,
-  ): Promise<boolean> {
+  ): Promise<MoveBillResult | false> {
     if (this.#moveAllergyOpening || this.allergyDialog) return false;
     const opening = { asked, controller: new AbortController() };
     this.#moveAllergyOpening = opening;
@@ -18650,21 +18673,18 @@ export class TillApp extends LitElement {
         try {
           const packet = command;
           const observed = revisions();
-          await this.#allergyRequest(
-            (signal) =>
-              this.#resend(
-                (attempt) =>
-                  asked.api.moveBill(asked.orderId, { tableId: asked.tableId }, observed, packet, {
-                    signal: attempt,
-                  }),
-                signal,
-                current,
-              ),
-            opening.controller.signal,
-          );
-          if (!current()) return false;
-          this.#closeMoveAllergy(true);
-          return true;
+          const limit = limited(TABLE_REQUEST_LIMIT_MS);
+          // Not cut short once staff move on: the answer may name an invoice whose receipt is owed.
+          const moved = await this.#resend(
+            (attempt) =>
+              asked.api.moveBill(asked.orderId, { tableId: asked.tableId }, observed, packet, {
+                signal: attempt,
+              }),
+            limit.signal,
+            () => this.#sameSession(asked),
+          ).finally(() => limit.done());
+          if (current()) this.#closeMoveAllergy(true);
+          return moved;
         } catch (error) {
           if (!current()) return false;
           if (offerDraftConflict(error)) return false;
@@ -18716,10 +18736,13 @@ export class TillApp extends LitElement {
     }
   }
 
+  #sameSession(asked: CounterRelocation): boolean {
+    return this.api === asked.api && this.#operatorSession === asked.session;
+  }
+
   #counterRelocationCurrent(asked: CounterRelocation): boolean {
     return (
-      this.api === asked.api &&
-      this.#operatorSession === asked.session &&
+      this.#sameSession(asked) &&
       this.stage === "order" &&
       this.screen === asked.screen &&
       this.activeTabKey === asked.tab &&
@@ -18845,6 +18868,7 @@ export class TillApp extends LitElement {
     const live = () => this.#counterRelocationCurrent(asked);
     const moveTo = this.tables.find((table) => table.id === tableId);
     const label = moveTo === undefined ? "" : shownUnder(moveTo);
+    let moved: MoveBillResult | false;
     try {
       if (
         !(await this.#askStoredDeadEnds(
@@ -18856,8 +18880,14 @@ export class TillApp extends LitElement {
         return;
       if (!live()) return;
       const chooseAgain = held === undefined ? undefined : () => held.chooseMoveTableAgain(orderId);
-      if (!(await this.#moveCounterWithAllergy(asked, chooseAgain))) return;
-      if (!live()) return;
+      moved = await this.#moveCounterWithAllergy(asked, chooseAgain);
+      if (!moved) return;
+      if (!this.isConnected || !live()) {
+        if (!this.#sameSession(asked)) return;
+        if (moved.invoice !== undefined) void this.#printOwedReceipt(orderId);
+        if (moved.overpaid !== undefined) this.#sayMoved(label, moved.overpaid);
+        return;
+      }
     } catch (error) {
       if (!live()) return;
       const code = (error as { code?: string } | undefined)?.code;
@@ -18866,7 +18896,7 @@ export class TillApp extends LitElement {
         return;
       }
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
-      else await this.#onTableRefusal(error, live);
+      else await this.#onTableRefusal(error, live, seatingError);
       if (live()) await this.#refreshAfterWrite("held", "refresh.held");
       return;
     }
@@ -18874,9 +18904,18 @@ export class TillApp extends LitElement {
       this.#dismissStationChoices();
       this.#clearBasket();
     }
-    this.submittedNotice = t("counter.moved_to_table").replace("{table}", () => label);
-    this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
+    this.#sayMoved(label, moved.overpaid);
+    if (moved.invoice !== undefined) {
+      this.result = moved.invoice;
+      this.#showTicket(orderId, true, { surface: "counter", cashChange: null, keepsBasket: true });
+    }
     await this.#refreshAfterWrite("held", "refresh.held_after_move");
+  }
+
+  #sayMoved(table: string, overpaid?: string): void {
+    const keepsTips = this.tipsEnabled && this.permissions.includes("payment.take");
+    this.submittedNotice = movedToTableNotice(table, overpaid, keepsTips);
+    this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
   }
 
   async #onJoinTables(event: Event): Promise<void> {
@@ -25808,18 +25847,19 @@ export class TillApp extends LitElement {
                     void this.#chooseInvoicePrinter(this.#invoicePrinterChoice);
                 }}
                 @settlement-close=${() => {
+                  const keepsBasket = this.settlementDocument?.keepsBasket === true;
                   const close = () => {
                     void this.#askForOwedReceipt();
                     if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                     else {
                       this.settlementDocument = null;
-                      this.#onNewSale();
+                      if (!keepsBasket) this.#onNewSale();
                     }
                     this.#receiptPrintVisit++;
                     this.ticketWorkingOrderId = undefined;
                     this.invoiceEmailOpen = false;
                   };
-                  if (this.settlementDocument?.surface === "table") close();
+                  if (this.settlementDocument?.surface === "table" || keepsBasket) close();
                   else this.#replaceBasket(close);
                 }}
               ></till-settlement-document-dialog>`

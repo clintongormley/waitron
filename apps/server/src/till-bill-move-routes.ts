@@ -161,7 +161,6 @@ export function mountTillBillMoveRoutes(
     }),
   );
 
-  // A move changes no amount, so nothing is invoiced here.
   app.post("/api/bills/:id/move", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
@@ -172,29 +171,35 @@ export function mountTillBillMoveRoutes(
       const to = requireMoveTarget(body.to);
       const command = moveCommand(personId, body);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, async (tx) => {
-        const current =
-          command.allergy === undefined ? session : await recheckFireSession(tx, session);
-        await checkZones(tx, current, [
-          { orderId: billId },
-          ...named(
-            "tableId" in to && { tableId: to.tableId },
-            "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
-          ),
-        ]);
-        const moved = await moveBill(
-          tx,
-          sendCfg,
-          billId,
-          to,
-          command,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-        if ("tableId" in to) await refuseTakenOff(tx, [to.tableId]);
-        return moved;
-      });
+      const result = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          const current =
+            command.allergy === undefined ? session : await recheckFireSession(tx, session);
+          await checkZones(tx, current, [
+            { orderId: billId },
+            ...named(
+              "tableId" in to && { tableId: to.tableId },
+              "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
+            ),
+          ]);
+          const moved = await moveBill(
+            tx,
+            sendCfg,
+            billId,
+            to,
+            command,
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+            // Only a move that regroups the bill gets here, so no other needs the economic write this requires.
+            (id) => issueIfFullyPaid(tx, fiscal, sendCfg, id, personId),
+          );
+          if ("tableId" in to) await refuseTakenOff(tx, [to.tableId]);
+          return moved;
+        },
+        log,
+      );
       return c.json(result);
     }),
   );

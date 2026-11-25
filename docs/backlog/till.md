@@ -295,8 +295,8 @@ Open:
   `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
   the same column.
 - **Task 7 (#864, move a whole bill).** The move moves the bill's revision on, open or
-  presented, without `bumpRevision`'s refusal of money in flight, since a move changes no amount
-  (plan P19): a decision, recorded under Decisions and deliberate limits.
+  presented, without `bumpRevision`'s refusal of money in flight (plan P19): a decision, recorded
+  under Decisions and deliberate limits.
 - **Task 8 (#869, move guests, join and split tables) and C77/C86.** Open: a party with no table
   whose chain of merges never ends (an unknown id, or two parties recorded as merged into each
   other, which the database accepts) is named by the bill's own label; whether any till action
@@ -1826,7 +1826,8 @@ is in the [Part 2 plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d
 ### A pending card payment does not stop a bill moving (table actions plan P19)
 
 The move moves the bill's revision on, open or presented, without `bumpRevision`'s refusal of
-money in flight, since a move changes no amount (plan P19). Stated at its site in
+money in flight (plan P19). One move is refused while a card payment or refund is pending: seating a
+Counter order, when that changes its set menus (A1572). Stated at its site in
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
 
 ### Owner answers of 2026-10-17 (A774)
