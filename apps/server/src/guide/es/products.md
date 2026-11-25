@@ -22,6 +22,11 @@ variantes que no están a la venta. Un plato con una variante no disponible pued
 junto al precio controla la disponibilidad. En un teléfono, sal de **Seleccionar** para volver a
 ver el precio y el interruptor.
 
+Para cambiar varios productos a la vez, activa **Seleccionar**, marca los productos y elige
+**Marcar como disponible** o **Marcar como no disponible**. El recuento indica cuántos
+elementos marcados ocultan la búsqueda o los filtros. Desmarca las categorías para activar los
+botones de disponibilidad.
+
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir
 un producto directamente en una categoría, elige **Añadir producto** en su menú ⋮. El botón junto al
@@ -123,7 +128,7 @@ qué estación de preparación recibe un plato, como se explica más abajo.
 
 Para soltar elementos en una subcategoría, abre las categorías superiores antes de empezar a arrastrar.
 Al soltar productos o categorías, se abre la ventana de **Mover a…** con el destino seleccionado.
-Revisa los cambios de estación de preparación, si los hay, y elige **Mover a…** para guardar.
+Revisa los cambios de estación de preparación, si los hay, y elige **Mover** para guardar.
 También puedes soltar los elementos en **Todos los productos** para sacarlos de su categoría.
 Revisa también los cambios de estación al abrir **Mover a…** desde la barra de herramientas.
 

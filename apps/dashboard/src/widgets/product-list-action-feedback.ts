@@ -1,7 +1,9 @@
 import { css, html, nothing } from "lit";
+import "@waitron/ui/src/components/wt-toast.js";
 import { codeOf } from "../i18n/codes.js";
 import { refusalText } from "./delete-refusal.js";
 import { fill, t } from "../i18n/t.js";
+import type { ProductAvailabilityRefusal } from "./product-availability-actions.js";
 
 export function productListActionFeedback(message: string, announce: boolean) {
   return message
@@ -33,20 +35,60 @@ export const productAvailabilityFeedbackStyles = css`
     color: var(--wt-color-danger);
     overflow-wrap: anywhere;
   }
+  .batch-availability-refusal {
+    position: fixed;
+    z-index: 10;
+    inset: auto var(--wt-space-3) calc(var(--wt-space-3) + env(safe-area-inset-bottom));
+    max-inline-size: calc(var(--wt-tap-min) * 11);
+    inline-size: auto;
+    margin: 0 auto;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    overflow-wrap: anywhere;
+  }
+  .batch-availability-refusal:not([open]) {
+    display: none;
+  }
 `;
 
-export function productAvailabilityFeedback(refusal: { name: string; error: unknown } | null) {
-  return refusal
-    ? html`<p class="availability-error" role="alert">
-        ${fill("product.availability_refused", {
-          name: refusal.name,
-          reason: refusalText(
-            codeOf(refusal.error),
-            (refusal.error as { params?: unknown })?.params,
-          ),
-        })}
-      </p>`
-    : nothing;
+function availabilityRefusalText({ batch, name, error }: ProductAvailabilityRefusal): string {
+  const code = codeOf(error);
+  const reason = refusalText(code, (error as { params?: unknown })?.params);
+  const message =
+    name === undefined
+      ? reason
+      : batch && code === "product.deleted"
+        ? fill("product.batch_availability_deleted", { name })
+        : fill("product.availability_refused", { name, reason });
+  // A lost reply can follow a committed write.
+  return batch && !code.startsWith("connection.") && code !== "server.internal"
+    ? fill("product.batch_availability_refused", { reason: message })
+    : message;
+}
+
+export function productAvailabilityFeedback(refusal: ProductAvailabilityRefusal | null) {
+  return refusal === null
+    ? nothing
+    : html`<p class="availability-error" role="alert">${availabilityRefusalText(refusal)}</p>`;
+}
+
+export function productBatchAvailabilityNotice(
+  refusal: ProductAvailabilityRefusal | null,
+  dismiss: (event: Event) => void,
+) {
+  return html`<wt-toast
+    class="batch-availability-refusal"
+    data-test="batch-availability-refusal"
+    popover="manual"
+    tone="error"
+    .duration=${0}
+    .open=${refusal !== null}
+    .message=${refusal === null ? "" : availabilityRefusalText(refusal)}
+    close-label=${t("action.close")}
+    @wt-close=${dismiss}
+  ></wt-toast>`;
 }
 
 export function clearProductSearch(clear: () => void, slot?: string) {

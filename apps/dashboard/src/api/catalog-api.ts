@@ -189,8 +189,11 @@ export class CatalogApi extends MenuApi {
     );
   }
   setProductAvailability(id: string, available: boolean): Promise<void> {
+    return this.setProductsAvailability([id], available);
+  }
+  setProductsAvailability(productIds: string[], available: boolean): Promise<void> {
     return this.#request("/management-api/products/availability", "PUT", {
-      productIds: [id],
+      productIds,
       available,
     });
   }

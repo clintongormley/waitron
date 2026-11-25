@@ -52,7 +52,9 @@ import {
   productRoutingFeedback,
   productAvailabilityFeedback,
   productAvailabilityFeedbackStyles,
+  productBatchAvailabilityNotice,
 } from "./product-list-action-feedback.js";
+import { ProductAvailabilityActions } from "./product-availability-actions.js";
 import type { ProductAvailabilityChange } from "./product-tree-availability.js";
 import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
@@ -85,7 +87,13 @@ export class ProductBrowser extends LitElement {
     super();
     new LocaleChangeController(this);
     observeProductsWidth(this, (phone) => {
+      if (this.phone === phone) return;
+      const restoreDoneFocus = this.#doneButton?.matches(":focus-within");
       this.phone = phone;
+      if (restoreDoneFocus)
+        void this.updateComplete.then(() => {
+          if (!this.shadowRoot?.activeElement) this.#doneButton?.focus();
+        });
     });
   }
   static override styles = [
@@ -145,6 +153,9 @@ export class ProductBrowser extends LitElement {
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
+  @state() private hiddenSelected = 0;
+  #selectionVersion = 0;
+  #availabilitySelectionVersion?: number;
   @state() private operation: "move" | "delete" | null = null;
   @state() private operationSelection: ProductSelection = { productIds: [], categoryIds: [] };
   @state() private destination = "";
@@ -164,9 +175,11 @@ export class ProductBrowser extends LitElement {
   #previewRead = 0;
   readonly #operationFeedback = new FormFeedback(this);
 
-  @property({ attribute: false }) availabilitySaved?: (change: ProductAvailabilityChange) => void;
-  @state() private availabilityPending: ReadonlyMap<string, boolean> = new Map();
-  @state() private availabilityError: { name: string; error: unknown } | null = null;
+  @property({ attribute: false }) availabilitySaved?: (
+    ids: readonly string[],
+    available: boolean,
+  ) => void;
+  readonly #availability = new ProductAvailabilityActions(this);
   @state() private actionError = "";
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
@@ -256,6 +269,13 @@ export class ProductBrowser extends LitElement {
     if (changed.has("operationError")) this.#operationFeedback.newRefusal();
     if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
     if (
+      this.selecting &&
+      !changed.has("view") &&
+      this.shadowRoot?.activeElement?.matches('wt-button[data-test^="mark-"]') &&
+      !this.#availabilitySelection.length
+    )
+      this.#doneButton?.focus();
+    if (
       [
         "operation",
         "destination",
@@ -285,7 +305,20 @@ export class ProductBrowser extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    const notice = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-toast"]>(
+      '[data-test="batch-availability-refusal"]',
+    );
+    if (
+      notice?.isConnected &&
+      notice.showPopover &&
+      notice.open !== notice.matches(":popover-open")
+    ) {
+      if (notice.open) notice.showPopover();
+      else notice.hidePopover();
+    }
     if (this.tableHidden) return;
+    if (["selected", "search", "products", "categories"].some((key) => changed.has(key)))
+      void this.#refreshHiddenSelected();
     const saved = this.hiddenSave;
     if (saved && (changed.has("products") || changed.has("categories")))
       void this.#list()
@@ -320,7 +353,7 @@ export class ProductBrowser extends LitElement {
   #setView(view: ProductsView): void {
     this.#list()?.resetCategoryView();
     this.view = view;
-    this.selected = [];
+    this.#resetSelection();
     this.hiddenSave = null;
     this.#revealed = null;
   }
@@ -347,6 +380,12 @@ export class ProductBrowser extends LitElement {
 
   #list(): ProductList | null {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
+  }
+
+  async #refreshHiddenSelected(): Promise<void> {
+    const { selected, search } = this;
+    const hidden = selected.length ? await this.#list()?.hiddenSelectedCount() : 0;
+    if (selected === this.selected && search === this.search) this.hiddenSelected = hidden ?? 0;
   }
 
   async showSavedProduct(id: string | null, created: boolean): Promise<void> {
@@ -860,7 +899,7 @@ export class ProductBrowser extends LitElement {
               if (!(event.currentTarget as HTMLElement).isConnected) return;
               void this.#confirm(this.operation, true);
             }}
-            >${this.operation === "delete" ? t("action.delete") : t("folders.move")}</wt-button
+            >${this.operation === "delete" ? t("action.delete") : t("folders.confirm_move")}</wt-button
           >
         </wt-form-actions>
       </div>
@@ -936,30 +975,51 @@ export class ProductBrowser extends LitElement {
       ? t("folders.new_color_heading")
       : fill("folders.color_heading", { name });
   }
+  #resetSelection(): void {
+    this.#availability.dismissBatchRefusal();
+    this.selected = [];
+    this.hiddenSelected = 0;
+    this.#selectionVersion++;
+  }
+
   /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
   async #leaveSelection(): Promise<void> {
     this.actionError = "";
-    this.selected = [];
+    this.#resetSelection();
     this.selecting = false;
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
-  readonly #changeAvailability = async (event: CustomEvent<ProductAvailabilityChange>) => {
+  get #doneButton(): HTMLElement | null {
+    return this.renderRoot.querySelector('[data-test="cancel-selection"]');
+  }
+  readonly #dismissBatchRefusal = (event: Event): void => {
     event.stopPropagation();
-    const change = event.detail;
-    if (this.availabilityPending.has(change.id)) return;
-    this.availabilityPending = new Map(this.availabilityPending).set(change.id, change.available);
-    this.availabilityError = null;
-    try {
-      await this.api.setProductAvailability(change.id, change.available);
-      if (this.isConnected) this.availabilitySaved?.(change);
-    } catch (error) {
-      this.availabilityError = { name: change.name, error };
-    } finally {
-      const pending = new Map(this.availabilityPending);
-      pending.delete(change.id);
-      this.availabilityPending = pending;
-    }
+    if ((event.currentTarget as HTMLElement).matches(":focus-within")) this.#doneButton?.focus();
+    this.#availability.dismissBatchRefusal();
+  };
+
+  readonly #changeAvailability = (event: CustomEvent<ProductAvailabilityChange>): void => {
+    event.stopPropagation();
+    void this.#availability.changeOne(event.detail);
+  };
+
+  get #availabilitySelection(): string[] {
+    const { productIds, categoryIds } = this.#selection();
+    return categoryIds.length ? [] : productIds;
+  }
+
+  readonly #markAvailability = async (available: boolean): Promise<void> => {
+    const ids = this.#availabilitySelection;
+    if (!this.selecting || !ids.length || this.summaryLoading || this.operationBusy) return;
+
+    const selectionVersion = this.#selectionVersion;
+    if (this.#availability.batch === null) this.#availabilitySelectionVersion = selectionVersion;
+    const saved = await this.#availability.changeSelected(ids, available);
+    if (!saved || !this.isConnected || selectionVersion !== this.#selectionVersion) return;
+
+    const submitted = new Set(ids);
+    this.selected = this.selected.filter((id) => !submitted.has(id));
   };
 
   get #emptyProducts(): boolean {
@@ -974,9 +1034,21 @@ export class ProductBrowser extends LitElement {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     const emptyTree = !this.tableHidden && this.view === "tree" && this.#emptyProducts;
-    return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
+    const availability = this.#availabilitySelection;
+    const refusal = this.#availability.refusal;
+    const batchRefusal =
+      !this.tableHidden &&
+      this.selecting &&
+      this.#availabilitySelectionVersion === this.#selectionVersion &&
+      refusal?.batch
+        ? refusal
+        : null;
+    return html`${productAvailabilityFeedback(refusal?.batch ? null : refusal)}${productBatchAvailabilityNotice(
+        batchRefusal,
+        this.#dismissBatchRefusal,
+      )}<dashboard-product-list
         .view=${this.view}
-        .availabilityPending=${this.availabilityPending}
+        .availabilityPending=${this.#availability.pending}
         @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
@@ -993,6 +1065,7 @@ export class ProductBrowser extends LitElement {
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
           this.hiddenSave = null;
+          void this.#refreshHiddenSelected();
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
@@ -1066,7 +1139,7 @@ export class ProductBrowser extends LitElement {
           this.selecting,
           () => {
             this.actionError = "";
-            this.selected = [];
+            this.#resetSelection();
             this.selecting = !this.selecting;
           },
           this.view,
@@ -1079,7 +1152,14 @@ export class ProductBrowser extends LitElement {
           busy: this.summaryLoading || this.operationBusy,
           showSpinner: !this.operation,
           count: this.selected.length,
+          hidden: this.hiddenSelected,
+          phone: this.phone,
           deleteWaiting: this.#deleteWaiting,
+          availabilityCount: availability.length,
+          availabilityWaiting: availability.some((id) => this.#availability.pending.has(id)),
+          availabilityWriting: this.#availability.batch,
+          showAvailabilityProgress: this.#availabilitySelectionVersion === this.#selectionVersion,
+          markAvailability: (available) => void this.#markAvailability(available),
           move: () => this.#openMove(),
           remove: () => void this.#openDelete(),
           done: () => void this.#leaveSelection(),

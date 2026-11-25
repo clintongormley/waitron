@@ -2558,8 +2558,12 @@ Put the checklist icon button after Filters and before Search. Show its pressed 
 selecting. Pressing it again clears the selection and leaves the mode.
 
 While selecting, show a separate bar directly below Search, above the table body. Put the live
-selected count, Move to…, Disable or Delete as the selection allows, and Done in that bar. Let
-its controls wrap at phone width. Keep Customise after Search in the toolbar.
+selected count, Move to…, **Mark available**, **Mark unavailable**, Delete and Done in that bar.
+Enable the availability actions only when the selection contains products alone. Either action
+applies to all selected products in one request, including hidden ticks. The selected count says how
+many search or filters hide. At phone width, put the count and Done on the first line and the four
+action buttons below it. Keep Customise after Search in the toolbar. A batch availability refusal
+appears over the bottom of the screen and clears on Close, Done or another availability change.
 The All products row has a named chevron: closing it closes every category and product branch;
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays
 closed on reload; an explicit category or product reveal opens only its ancestor path.
@@ -2568,7 +2572,7 @@ After the first load, a failed table read shows its message and **Try again** ab
 
 Products leaves this mode with **Done**. A valid drop opens the Move dialog with its destination
 selected, including **No category** when you drop on **All products**. Review any changes to
-preparation stations and choose **Move to…** to save.
+preparation stations and choose **Move** to save.
 Done clears the selection, leaves the mode and puts focus back on Select, since Done
 itself disappears.
 

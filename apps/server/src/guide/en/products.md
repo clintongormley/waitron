@@ -20,6 +20,10 @@ A dish with an unavailable variant can appear under **Yes** and **No**. On a pho
 the product name for its category. The switch beside the price controls availability. On a phone,
 exit **Select** to see the price and switch again.
 
+To change several products together, turn on **Select**, tick the products and choose
+**Mark available** or **Mark unavailable**. The selected count also says how many ticks search
+or filters hide. Clear any category ticks to enable the availability buttons.
+
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
 you sort products, and matching categories open while you filter. To add directly in a category,
 choose **Add product** in that category's ⋮ menu. The button beside the page heading starts a product
@@ -115,7 +119,7 @@ to, as described below.
 
 To drop into a subcategory, open its parent categories before you start dragging.
 When you drop products or categories, the Move window opens with the destination selected. Review
-any preparation station changes and choose **Move to…** to save. You can also drop onto
+any preparation station changes and choose **Move** to save. You can also drop onto
 **All products** to move items out of their category. Check the station changes when you open
 **Move to…** from the toolbar too.
 

@@ -136,7 +136,7 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
     }
   });
 
-  it.each(["top", "open", "search", "naming", "selection", "move", "delete"])(
+  it.each(["top", "open", "search", "naming", "selection", "bulk", "move", "delete"])(
     "renders %s accessibly",
     async (state) => {
       const { el, host } = await mountWidget<ProductBrowser>(
@@ -216,7 +216,7 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
           .click();
         await table.updateComplete;
       }
-      if (["selection", "move", "delete"].includes(state)) {
+      if (["selection", "bulk", "move", "delete"].includes(state)) {
         el.shadowRoot!.querySelector('wt-icon-button[data-test="select"]')!
           .shadowRoot!.querySelector("button")!
           .click();
@@ -224,13 +224,16 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
         await list.updateComplete;
         const table = list.shadowRoot!.querySelector("wt-data-table")!;
         await table.updateComplete;
-        for (const key of ["folder:d", "bread"]) {
+        for (const key of state === "bulk" ? ["bread"] : ["folder:d", "bread"]) {
           table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!.click();
           await el.updateComplete;
           await list.updateComplete;
           await table.updateComplete;
         }
-        if (state !== "selection") {
+        if (state === "bulk") {
+          expect(el.shadowRoot!.querySelector("[data-test=mark-available]")).not.toBeNull();
+        }
+        if (state === "move" || state === "delete") {
           el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${state}"]`)!.click();
           await el.updateComplete;
           await vi.waitFor(() => {

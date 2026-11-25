@@ -807,8 +807,11 @@ describe("menu-screen", () => {
     expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p29", false);
     refusal.resolve();
     const message = () => list(el).shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
-    await vi.waitFor(() => expect(message()?.textContent).toContain("Dish 39"));
-    expect(message()!.textContent).toContain(codeMessage("authorization.not_permitted"));
+    await vi.waitFor(() =>
+      expect(message()?.textContent?.trim()).toBe(
+        `Could not change availability for Dish 39. ${codeMessage("authorization.not_permitted")}`,
+      ),
+    );
     setLocale("es");
     await vi.waitFor(() =>
       expect(message()?.textContent).toContain(codeMessage("authorization.not_permitted")),
@@ -3431,6 +3434,51 @@ describe("menu-screen", () => {
         ],
       },
     ];
+    it("keeps both saved product flags and the variant flag when the bulk refresh fails", async () => {
+      const viewport = [innerWidth, innerHeight] as const;
+      onTestFinished(() => page.viewport(...viewport));
+      await page.viewport(1180, 844);
+      const setProductsAvailability = vi.fn().mockResolvedValue(undefined);
+      const listProducts = vi
+        .fn()
+        .mockResolvedValueOnce([...withVariant, { ...products[0]!, id: "p2", name: "Toast" }])
+        .mockRejectedValue({ code: "connection.failed" });
+      const api = stubApi({ listProducts, setProductsAvailability });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const browser = list(el);
+      browser
+        .shadowRoot!.querySelector('[data-test="select"]')!
+        .shadowRoot!.querySelector("button")!
+        .click();
+      const table = await productTable(el);
+      table.setExpanded("folder:c1", true);
+      table.setExpanded("p1", true);
+      await table.updateComplete;
+      for (const id of ["p1", "p2"]) {
+        table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${id}"]`)!.click();
+        await flush(el);
+      }
+      const button = browser.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="mark-unavailable"]',
+      );
+      await userEvent.click(button!);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector('[data-test="products-retry"]')).not.toBeNull(),
+      );
+      expect(setProductsAvailability).toHaveBeenCalledExactlyOnceWith(["p1", "p2"], false);
+      expect(listProducts).toHaveBeenCalledTimes(2);
+      await productTable(el);
+      for (const [id, available] of [
+        ["p1", false],
+        ["p2", false],
+        ["p1:v1", true],
+      ] as const) {
+        const row = table.shadowRoot!.querySelector(`tr[data-row-key="${id}"]`);
+        expect(row?.querySelector("wt-switch")?.checked, id).toBe(available);
+      }
+    });
+
     it("changes a variant's switch while keeping its parent's switch on", async () => {
       const setProductAvailability = vi.fn().mockResolvedValue(undefined);
       const listProducts = vi
