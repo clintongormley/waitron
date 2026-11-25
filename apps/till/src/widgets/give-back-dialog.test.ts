@@ -1511,6 +1511,21 @@ describe("sending", () => {
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
 
+  it("sends a lost answer again once when Send again is pressed twice", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const el = await press(api);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-send-again]")).not.toBeNull());
+    const again = root(el).querySelector<HTMLElement>("[data-send-again]")!;
+    again.click();
+    again.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.giveBack).toHaveBeenCalledTimes(2);
+  });
+
   it("a press sent again and refused goes back to the choice with its sentence", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
@@ -1828,5 +1843,73 @@ describe("a give-back still under way", () => {
     const { el } = await mount();
     expect(choice(el, "goodwill")).not.toBeNull();
     expect(root(el).querySelector("[data-lost]")).toBeNull();
+  });
+});
+
+describe("pressing Give back", () => {
+  /** Goodwill of €5.00 in cash, its preview answered, not pressed yet. */
+  async function ready(api = fakeGiveBackApi()) {
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await reason(el, "complaint");
+    await type(el, "5");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    return { el, api };
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  it("gives back once when it is pressed twice before the window shows it busy", async () => {
+    const { el, api } = await ready();
+    submit(el).click();
+    submit(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-outcome]")).not.toBeNull());
+    await settle();
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("gives back on Enter in the amount, as the button does", async () => {
+    const { el, api } = await ready();
+    amountField(el)
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledOnce());
+  });
+});
+
+describe("layout and focus", () => {
+  function focused(): Element | null {
+    let found = document.activeElement;
+    while (found?.shadowRoot?.activeElement) found = found.shadowRoot.activeElement;
+    return found;
+  }
+
+  it("opens with focus on the first choice, and a dish's form on its first dish", async () => {
+    const { el } = await mount();
+    await vi.waitFor(() =>
+      expect(
+        choice(el, "dishes")!.contains(focused()) ||
+          choice(el, "dishes")!.shadowRoot!.contains(focused()),
+      ).toBe(true),
+    );
+    await choose(el, "dishes");
+    await vi.waitFor(() =>
+      expect(dish(el, "croquetas")!.shadowRoot!.contains(focused())).toBe(true),
+    );
+  });
+
+  it("puts each dish on a row of its own, however wide the window", async () => {
+    const previous = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mount();
+      await choose(el, "dishes");
+      const [first, second] = [dish(el, "croquetas"), dish(el, "paella")].map((node) =>
+        node!.getBoundingClientRect(),
+      );
+      expect(second!.top).toBeGreaterThanOrEqual(first!.bottom);
+      expect(second!.left).toBe(first!.left);
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
   });
 });

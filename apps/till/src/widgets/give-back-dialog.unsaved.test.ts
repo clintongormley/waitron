@@ -282,3 +282,69 @@ it("Escape cannot close the window while Money back under way gives cash back, a
   expect(await dialog.requestClose("escape")).toBe(true);
   await expect.poll(() => app.closes).toBe(1);
 });
+
+async function reason(form: TillGiveBackDialog, id: string) {
+  form
+    .shadowRoot!.querySelector("wt-combobox[name=reason]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: id }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
+}
+
+it("a reason chosen with nothing else typed asks first", async () => {
+  const { app, form } = await mount();
+  await choose(form, "goodwill");
+  await reason(form, "complaint");
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(app.closes).toBe(0);
+});
+
+it("the extra's filled-in amount typed again the same closes without asking", async () => {
+  const { app, form } = await mount();
+  await choose(form, "extra");
+  expect(amount(form).value).toBe("3.00");
+  await type(form, "3");
+  expect(unload()).toBe(false);
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("give-back-close", () => resolve(), { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect((await question(app)).open).toBe(false);
+});
+
+it("a give-back discarded while its preview is asked again gives nothing back", async () => {
+  const { app, form } = await mount();
+  await choose(form, "goodwill");
+  await reason(form, "complaint");
+  let release!: () => void;
+  app.api.previewGiveBack.mockImplementation(
+    (_saleId, request) =>
+      new Promise(
+        (resolve) =>
+          (release = () =>
+            resolve({
+              parts: [{ kind: "refund", amount: request.amount, way: request.way }],
+              leftUnderWay: "0.00",
+              needs: [],
+              manual: false,
+            })),
+      ),
+  );
+  await type(form, "5");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  await vi.waitFor(() => expect(app.api.previewGiveBack).toHaveBeenCalledTimes(2));
+  await userEvent.keyboard("{Escape}");
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("give-back-close", () => resolve(), { once: true }),
+  );
+  (await question(app)).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await closed;
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(app.closes).toBe(1);
+  expect(app.api.giveBack).not.toHaveBeenCalled();
+});
