@@ -808,10 +808,6 @@ const en = {
   "period.painted_in": "Painted in",
   "period.floor_plan": "Floor plan",
   "period.last_orders": "Last orders",
-  "period.last_orders_explained":
-    "After {period} ends, its dishes stay on sale only for tables that ordered during {period}.",
-  "period.last_orders_explained_unnamed":
-    "After the period ends, its dishes stay on sale only for tables that ordered during it.",
   "period.last_orders_at_end": "At the end",
   "period.last_orders_minutes": "{minutes} minutes",
   "period.last_orders_hour": "1 hour",
@@ -1779,10 +1775,6 @@ const es: Record<keyof typeof en, string> = {
   "period.painted_in": "Pintado en",
   "period.floor_plan": "Plano de sala",
   "period.last_orders": "Últimos pedidos",
-  "period.last_orders_explained":
-    "Cuando termina {period}, sus platos solo se pueden pedir en las mesas que hicieron algún pedido durante {period}.",
-  "period.last_orders_explained_unnamed":
-    "Al terminar el periodo, sus platos solo se pueden pedir en las mesas que hicieron algún pedido durante ese periodo.",
   "period.last_orders_at_end": "Al terminar",
   "period.last_orders_minutes": "{minutes} minutos",
   "period.last_orders_hour": "1 hora",

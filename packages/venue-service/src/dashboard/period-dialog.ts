@@ -118,20 +118,13 @@ export class PeriodDialog extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-2) var(--wt-space-3);
       }
-      .last-orders h3,
-      .last-orders p {
-        margin: 0;
-      }
       .last-orders h3 {
+        margin: 0;
         font-size: var(--wt-font-size-md);
         font-weight: var(--wt-font-weight-normal);
       }
       .last-orders a {
         color: var(--wt-color-primary-text);
-      }
-      .last-orders p {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
       .painted {
         display: grid;
@@ -583,13 +576,6 @@ export class PeriodDialog extends LitElement {
         <h3 id="last-orders-heading">${t("period.last_orders")}</h3>
         <a href="/prep-stations/view/routing">${t("nav.prep_stations")}</a>
       </div>
-      <p>
-        ${
-          this.draft.name.trim()
-            ? format("period.last_orders_explained", { period: this.draft.name.trim() })
-            : t("period.last_orders_explained_unnamed")
-        }
-      </p>
       ${repeat(this.lastOrderChoices, targetKey, (choice) => {
         const key = targetKey(choice);
         const field = choice.kind === "station" ? choice.stationId : "noPreparation";
