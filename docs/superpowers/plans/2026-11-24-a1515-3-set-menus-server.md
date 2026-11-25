@@ -562,7 +562,10 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   not keep both?" A set menu moved with its dishes (or a dish moved alone whose set menu the source
   records) brings the source's recorded copy even when the target records another version of the same
   set menu; the bill then records both, and the grouping treats them as two set menus, cheapest over
-  all the bill's dishes. A refusal is not wanted. Cost, counted 2026-11-25 against 2a's head
+  all the bill's dishes. A refusal is not wanted. _2026-11-25: since #4308 a set menu's published
+  dishes carry their allergens and diet, so an allergen correction alone gives a new copy, and a move
+  or merge after one leaves a bill holding two copies with the same terms; `set-menu-two-versions.test.ts`
+  checks that grouping, total, `exact` and the till's summary match a bill holding one._ Cost, counted 2026-11-25 against 2a's head
   `c7a0b651b0` (about 25–35 production lines, under the watcher's 60), built in 2b Task 2b.4:
   - `bill_set_menu_copies`' primary key gains `menu_version_id`
     (`packages/db/src/schema/set-menu-copies.ts:15-18`); core's starting migration is rebuilt, so

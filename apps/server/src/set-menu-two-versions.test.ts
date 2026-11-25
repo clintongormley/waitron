@@ -1,6 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { billSetMenuCopies, menuReleases, menuVersions, type Transaction } from "@waitron/db";
+import {
+  billSetMenuCopies,
+  menuReleases,
+  menuVersions,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addSetMenuDishes,
@@ -15,6 +21,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import { insertPartyBill } from "./parties.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { commandFor, inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -345,4 +352,133 @@ it("brings only the version listing it when a dish moves alone from a bill holdi
     expect.objectContaining({ setMenuVersionId: newer, unitPriceGross: 1500 }),
     expect.objectContaining({ setMenuVersionId: newer, unitPriceGross: 1500 }),
   ]);
+});
+
+/** A party's two Dailies moved onto its second bill, the second ordered after `change`. */
+async function mergedDailies(change: (older: SpecSetMenu) => Promise<SpecSetMenu>) {
+  const { venue } = spec;
+  const party = await partyWithTwoDailies(change);
+  const [moving] = await setMenuRows(party.first.tabId);
+  const command = await commandFor(venue, party.first.partyId);
+  await inTx(venue, (tx) =>
+    moveDishes(tx, venue.cfg, party.first.tabId, party.second.tabId, [moving!.id], command),
+  );
+  return party;
+}
+
+/** What the bill shows, with every id that differs between two bills of the same order left out. */
+async function whatTheBillShows(billId: string) {
+  const rows = await specRows(spec, billId);
+  const menuRows = rows.filter(({ setMenuRole }) => setMenuRole === "set_menu");
+  const menuIndex = new Map(menuRows.map(({ id }, index) => [id, index]));
+  const [{ exact }] = await spec.venue.db
+    .select({ exact: workingOrders.setMenusExact })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  const read = (await inTx(spec.venue, (tx) => readBillsSetMenus(tx, [billId]))).get(billId)!;
+  const { copies, recorded, setMenus, dishes } = read.setMenus;
+  const offer = (copyId: string) => {
+    const copy = copies.find(({ id }) => id === copyId)!;
+    const { setMenuId, name, priceCents, lines, terms } = copy;
+    return { setMenuId, name, priceCents, lines, terms, dishes: copy.dishes };
+  };
+  return {
+    exact,
+    total: rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0),
+    grouping: rows.map(({ name, setMenuRole, setMenuLineId, setMenuPlace, unitPriceGross }) => ({
+      name,
+      setMenuRole,
+      inSetMenu: setMenuLineId === null ? null : menuIndex.get(setMenuLineId),
+      setMenuPlace,
+      unitPriceGross,
+    })),
+    till: {
+      exact: read.setMenus.exact,
+      setMenus: setMenus.map(({ lineId, copyId }) => ({
+        row: menuIndex.get(lineId),
+        offer: offer(copyId),
+      })),
+      dishes: dishes.map(
+        ({
+          setMenuLineId,
+          place,
+          productId,
+          variantId,
+          priceCents,
+          countsAsCourseId,
+          movable,
+        }) => ({
+          setMenu: menuIndex.get(setMenuLineId),
+          place,
+          productId,
+          variantId,
+          priceCents,
+          countsAsCourseId,
+          movable,
+        }),
+      ),
+      recorded: Object.fromEntries(
+        Object.entries(recorded).map(([menuId, versionId]) => [
+          menuId,
+          offer(copies.find((copy) => copy.versionId === versionId)!.id),
+        ]),
+      ),
+    },
+  };
+}
+
+it("shows a bill holding two copies of Daily that differ only in a dish's allergens as one copy (D26)", async () => {
+  const { venue, daily, productIds } = spec;
+  const control = await mergedDailies((older) => Promise.resolve(older));
+  expect(await recordedDailies(control.second.tabId)).toEqual(new Set([control.older]));
+
+  const correctHakeAllergens = async (older: SpecSetMenu) => {
+    const versionId = await inTx(venue, async (tx) => {
+      await updateProduct(tx, productIds.Hake, { allergens: { fish: {} } });
+      return publishWorkingMenu(tx, venue.tables.menuId);
+    });
+    liveDaily = { ...older, versionId };
+    return liveDaily;
+  };
+  const corrected = await mergedDailies(correctHakeAllergens);
+  const [olderCopy, newerCopy] = [
+    await dailyCopy(corrected.older),
+    await dailyCopy(corrected.newer),
+  ];
+  expect(newerCopy.key).not.toBe(olderCopy.key);
+  expect(newerCopy.terms).toEqual(olderCopy.terms);
+  expect(await recordedDailies(corrected.second.tabId)).toEqual(
+    new Set([corrected.older, corrected.newer]),
+  );
+
+  const shown = await whatTheBillShows(corrected.second.tabId);
+  expect(shown).toEqual(await whatTheBillShows(control.second.tabId));
+  expect(shown.exact).toBe(true);
+  expect(shown.till.setMenus).toHaveLength(2);
+  const read = (await inTx(venue, (tx) => readBillsSetMenus(tx, [corrected.second.tabId]))).get(
+    corrected.second.tabId,
+  )!;
+  expect(
+    read.setMenuCopies
+      .filter(({ menuId }) => menuId === daily.menuId)
+      .map(({ key }) => key)
+      .sort(),
+  ).toEqual([olderCopy.key, newerCopy.key].sort());
+  for (const copy of read.setMenuCopies)
+    expect(copy.offers.find(({ productId }) => productId === productIds.Hake)).toMatchObject({
+      allergens: { fish: {} },
+    });
+
+  const attached = await setMenuRows(corrected.second.tabId);
+  expect(new Set(attached.map(({ setMenuVersionId }) => setMenuVersionId))).toEqual(
+    new Set([corrected.older, corrected.newer]),
+  );
+  for (let again = 1; again <= 2; again++) {
+    expect(await inTx(venue, (tx) => regroupBills(tx, [corrected.second.tabId]))).toEqual(
+      new Set(),
+    );
+    expect(await setMenuRows(corrected.second.tabId)).toEqual(attached);
+  }
+  expect(await whatTheBillShows(corrected.second.tabId)).toEqual(shown);
+  expect(read.setMenus.recorded[daily.menuId]).toBe(corrected.newer);
 });
