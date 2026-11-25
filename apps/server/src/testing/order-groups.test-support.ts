@@ -559,16 +559,20 @@ export async function billHead(v: Venue, s: Seated, billId: string): Promise<unk
     .select({ label: diningTables.label })
     .from(diningTables)
     .where(eq(diningTables.id, s.tableId));
+  return [
+    station!.name,
+    table!.label,
+    `Order ${await billNumber(billId)}`,
+    expect.stringMatching(/^\d\d:\d\d$/),
+  ];
+}
+
+export async function billNumber(billId: string): Promise<number> {
   const [bill] = await db
     .select({ orderNumber: workingOrders.orderNumber })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  return [
-    station!.name,
-    table!.label,
-    String(bill!.orderNumber),
-    expect.stringMatching(/^\d\d:\d\d$/),
-  ];
+  return bill!.orderNumber;
 }
 export async function billRevisionOf(orderId: string): Promise<number> {
   const [row] = await db

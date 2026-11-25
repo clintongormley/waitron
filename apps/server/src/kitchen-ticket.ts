@@ -477,11 +477,8 @@ export function formatKitchenTicket(
       : [...new Set(ticket.stations.map((station) => station.stationName))].join(" · "),
   );
   text(ticket.tableLabel);
-  if (ticket.party === undefined) text(ticket.orderNumber);
-  else {
-    const { order } = kitchenTicketWords(ticket.party.locale);
-    emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party.name, columns);
-  }
+  const { order } = kitchenTicketWords(ticket.party?.locale ?? ticket.locale);
+  emitOrderLine(b, `${order} ${ticket.orderNumber}`, ticket.party?.name, columns);
   b.line(hhmm(ticket.firedAt, timeZone));
   if (ticket.from !== undefined)
     text(`${kitchenTicketWords(ticket.from.locale).fromStation} ${ticket.from.stationName}`);
@@ -639,14 +636,8 @@ export function formatCorrectionSlip(
   if (slip.takeAway === true) text(`*** ${kitchenTicketWords(slip.locale).takeAway} ***`);
   text(slip.stationName);
   if (slip.tableLabel !== null) text(slip.tableLabel);
-  if (slip.party === undefined) text(slip.orderNumber);
-  else
-    emitOrderLine(
-      b,
-      `${kitchenTicketWords(slip.party.locale).order} ${slip.orderNumber}`,
-      slip.party.name,
-      columns,
-    );
+  const { order } = kitchenTicketWords(slip.party?.locale ?? slip.locale);
+  emitOrderLine(b, `${order} ${slip.orderNumber}`, slip.party?.name, columns);
   b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
@@ -702,16 +693,13 @@ export function formatKitchenNoteChangeSlip(
   text(slip.stations.map((station) => station.stationName).join(" · "));
   if (slip.tableLabel !== null) text(slip.tableLabel);
   const numbers = slip.orderNumbers ?? [slip.orderNumber];
-  if (slip.party === undefined && numbers.length === 1) text(slip.orderNumber);
-  else {
-    const words = kitchenTicketWords(slip.locale);
-    emitOrderLine(
-      b,
-      `${numbers.length === 1 ? words.order : words.orders} ${numbers.join(", ")}`,
-      slip.party?.name,
-      columns,
-    );
-  }
+  const words = kitchenTicketWords(slip.locale);
+  emitOrderLine(
+    b,
+    `${numbers.length === 1 ? words.order : words.orders} ${numbers.join(", ")}`,
+    slip.party?.name,
+    columns,
+  );
   b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNoteChange(b, slip.orderNoteChange, slip.locale, columns);
   if (onlyGroup !== undefined) emitGroup(b, onlyGroup, allItems, columns, slip.locale);

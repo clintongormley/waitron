@@ -22,6 +22,7 @@ import {
   type Venue,
   type Seated,
   billHead,
+  billNumber,
   printed,
   ticketLines,
   db,
@@ -343,8 +344,9 @@ describe("advance HOLD tickets (Task 6)", () => {
         MIA,
       );
 
-      const [station, table, tabNumber, at] = await head(v, s);
-      const checkNumber = (await billHead(v, s, checkId))[2];
+      const [station, table, , at] = await head(v, s);
+      const tabNumber = await billNumber(s.tabId);
+      const checkNumber = await billNumber(checkId);
       expect(await printedSince(v, 5)).toEqual([
         [
           `*** ${kitchenTicketWords("en").moved} ***`,

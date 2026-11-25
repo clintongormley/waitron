@@ -245,8 +245,9 @@ the change (plan PR 8 Decision 1).
 
 - **The party's name prints on every kitchen ticket, as on MOVED slips (A683, owner 2026-10-14).**
   A named party's tickets read `Order 5 · Ana` / `Pedido 5 · Ana`, so the cook meets the name on
-  the first ticket; a merged party's read the name of the party it ended up in, and an unnamed
-  party's or a counter order's print the bare number.
+  the first ticket. A merged party's tickets use the name of the party it joined. Tickets for
+  unnamed parties and counter orders also label the number, as `Order 5` or `Pedido 5` in the
+  kitchen's language (owner, 2026-11-25).
 
 - **A prep station's Times tab draws one track per department that sends it orders (A688, owner
   2026-10-14, mockup 2 of question A2 of A506-12).** A key above the grid names the rows in

@@ -156,7 +156,7 @@ const cancelledBurger = [
   "*** HOLD CANCELLED ***",
   "Grill",
   "Split extras",
-  "1",
+  "Order 1",
   LATER_CLOCK,
   "GROUP 1",
   "1 x BURG",
@@ -458,7 +458,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "*** HOLD CHANGED ***",
         "Grill",
         "Split extras",
-        "1",
+        "Order 1",
         LATER_CLOCK,
         "GROUP 1",
         "1 x BURG",
@@ -469,7 +469,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "*** HOLD CANCELLED ***",
         "Fryer",
         "Split extras",
-        "1",
+        "Order 1",
         LATER_CLOCK,
         "GROUP 1",
         "1 x CHIPS",
@@ -632,7 +632,7 @@ describe("A773 hold paper: extras off and moves", () => {
     "*** HOLD ***",
     station,
     "Split extras",
-    "1",
+    "Order 1",
     LATER_CLOCK,
     `From ${from}`,
     "GROUP 1",
@@ -750,7 +750,7 @@ describe("A773 hold paper: edits", () => {
         "*** HOLD CANCELLED ***",
         "Grill",
         "Split extras",
-        "1",
+        "Order 1",
         LATER_CLOCK,
         "GROUP 1",
         "1 x BURG",
@@ -841,7 +841,7 @@ describe("A773 hold paper: added work", () => {
     "*** HOLD CHANGED ***",
     station,
     "Split extras",
-    "1",
+    "Order 1",
     LATER_CLOCK,
     "GROUP 1",
     ...lines,
@@ -1345,7 +1345,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         "*** HOLD CANCELLED ***",
         "Fryer",
         "Split extras",
-        "1",
+        "Order 1",
         LATER_CLOCK,
         "GROUP 1",
         "1 x CHIPS",
@@ -1483,7 +1483,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         const after = await slips(tx, venue);
         const added = (name: string) => after[name]!.slice(before[name]!.length);
         const word = "*** VOID ***";
-        const head = ["Split extras", "1", LATER_CLOCK];
+        const head = ["Split extras", "Order 1", LATER_CLOCK];
         const grill = [word, "Grill", ...head, "1 x BURG", "  > with CHIPS from Fryer", ""];
         const fryer = [
           word,

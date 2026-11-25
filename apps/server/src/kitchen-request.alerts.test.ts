@@ -272,7 +272,14 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       vi.setSystemTime(new Date(LATER));
       await editLine(tx, venue, burger!.lineId, { portionLineNos: [], note: "No salt" });
       const after = await allSlips(tx, venue);
-      const head = ["*** HOLD CHANGED ***", "Grill", "Split extras", "1", LATER_CLOCK, "GROUP 1"];
+      const head = [
+        "*** HOLD CHANGED ***",
+        "Grill",
+        "Split extras",
+        "Order 1",
+        LATER_CLOCK,
+        "GROUP 1",
+      ];
       const pair = [
         [...head, "-1 x BURG", ""].join("\n"),
         [...head, "+1 x BURG", "  * No salt", ""].join("\n"),

@@ -849,7 +849,9 @@ describe("A773 pass release: paper", () => {
     const added = gained(before, await printed(venue));
     expect({ ...added, grill: [], pass: [] }).toEqual(nothing);
     for (const name of ["grill", "pass"] as const)
-      expect(added[name]).toEqual([`Grill\nSplit extras\n1\n${LATER_CLOCK}\nGROUP 1\n1 x BURG\n`]);
+      expect(added[name]).toEqual([
+        `Grill\nSplit extras\nOrder 1\n${LATER_CLOCK}\nGROUP 1\n1 x BURG\n`,
+      ]);
   });
 
   it("marks the release FIRE where the group's HOLD paper printed", async () => {
@@ -876,7 +878,7 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    const fired = `*** ${kitchenTicketWords("en").fire} ***\nGrill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
+    const fired = `*** ${kitchenTicketWords("en").fire} ***\nGrill\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
     expect(added).toEqual({ ...nothing, grill: [fired], pass: [fired] });
   });
 
@@ -916,9 +918,9 @@ describe("A773 pass release: paper", () => {
       "1 x CHIPS\n  > for BURG at Grill\n  Contains: Cereals containing gluten\n            (Wheat)\n";
     expect(added).toEqual({
       ...nothing,
-      grill: [`Grill\nSplit extras\n1\n${AT_CLOCK}\n${burger}`],
-      fryer: [`Fryer\nSplit extras\n1\n${AT_CLOCK}\n${chips}`],
-      pass: [`Fryer · Grill\nSplit extras\n1\n${AT_CLOCK}\nFryer\n${chips}Grill\n${burger}`],
+      grill: [`Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\n${burger}`],
+      fryer: [`Fryer\nSplit extras\nOrder 1\n${AT_CLOCK}\n${chips}`],
+      pass: [`Fryer · Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\nFryer\n${chips}Grill\n${burger}`],
     });
   });
   it("prints the frozen allergy block, then the correction, where the answer changed while the dish waited", async () => {
@@ -991,7 +993,7 @@ describe("A773 pass release: paper", () => {
     const added = (await printedAt(printerId)).slice(before);
     const words = KITCHEN_ALLERGY_WORDS.es;
     const guest = (who: string) => words.guestHeading.replace("{who}", who);
-    const head = `${station!.name}\nAllergy\n1\n${AT_CLOCK}\n`;
+    const head = `${station!.name}\nAllergy\n${kitchenTicketWords("es").order} 1\n${AT_CLOCK}\n`;
     const milk = ALLERGEN_NAMES.milk.es.toUpperCase();
     expect(added).toEqual([
       `${words.ticketHeading}\n${head}${kitchenTicketWords("es").group} 1\n1 x BURG\n` +
@@ -1056,7 +1058,7 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(moved));
     const added = gained(before, await printed(venue));
-    const atFryer = `Fryer\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
+    const atFryer = `Fryer\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
     expect(added).toEqual({ ...nothing, fryer: [atFryer], pass: [atFryer] });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
@@ -1083,7 +1085,7 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    const atGrill = `Grill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
+    const atGrill = `Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
     expect(added).toEqual({ ...nothing, grill: [atGrill], pass: [atGrill] });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
@@ -1125,7 +1127,7 @@ describe("A773 pass release: paper", () => {
     const added = gained(before, await printed(venue));
     expect(added).toEqual({
       ...nothing,
-      bar: [`Bar\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`],
+      bar: [`Bar\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`],
     });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
@@ -1191,7 +1193,7 @@ describe("A773 pass release: paper", () => {
     vi.setSystemTime(new Date(LATER));
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    const chips = `Fryer\nSplit extras\n1\n${LATER_CLOCK}\nGROUP 1\n1 x CHIPS\n  > for BURG at Grill\n  Contains: Cereals containing gluten\n            (Wheat)\n`;
+    const chips = `Fryer\nSplit extras\nOrder 1\n${LATER_CLOCK}\nGROUP 1\n1 x CHIPS\n  > for BURG at Grill\n  Contains: Cereals containing gluten\n            (Wheat)\n`;
     expect(added).toEqual({ ...nothing, fryer: [chips], pass: [chips] });
     expect((await rows([placed.chips]))[0]).toMatchObject({
       stationId: venue.stations.fryer,
@@ -1400,7 +1402,7 @@ describe("A773 pass release: paper", () => {
     expect({ ...added, grill: [], pass: [] }).toEqual(nothing);
     for (const name of ["grill", "pass"] as const)
       expect(added[name]).toEqual([
-        `Grill\nSplit extras\n${bill!.orderNumber}\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`,
+        `Grill\nSplit extras\nOrder ${bill!.orderNumber}\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`,
       ]);
   });
 
@@ -1454,7 +1456,7 @@ describe("A773 pass release: paper", () => {
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
     const ticket = (orderNumber: unknown, quantity: string) =>
-      `Grill\nSplit extras\n${orderNumber}\n${LATER_CLOCK}\nGROUP 1\n${quantity} x BURG\n`;
+      `Grill\nSplit extras\nOrder ${orderNumber}\n${LATER_CLOCK}\nGROUP 1\n${quantity} x BURG\n`;
     expect(added).toEqual({
       ...nothing,
       grill: [ticket(tabNumber, "2"), ticket(billNumber, "1")],
@@ -1485,7 +1487,7 @@ async function passWithProfile(venue: AnyVenue, name: string, stationIds: string
   };
 }
 
-const GRILL_FIRE = `Grill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
+const GRILL_FIRE = `Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
 
 const releasedRow = <T extends object>(row: T) => ({ ...row, firedAt: AT, queuedAt: AT });
 
@@ -1555,7 +1557,7 @@ describe("A773 pass release: races", () => {
         pass: [GRILL_FIRE],
       });
       expect(await printedAt(coldPrinter)).toEqual([
-        `Cold\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x CHED\n`,
+        `Cold\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x CHED\n`,
       ]);
     });
 
@@ -1611,8 +1613,8 @@ describe("A773 pass release: races", () => {
           order === "move" ? { ...row, ...atFryer } : { ...releasedRow(row), ...atFryer },
         ),
       );
-      const moved = `*** MOVED TO FRYER ***\nGrill\nSplit extras\n1\n${AT_CLOCK}\n1 x BURG\n`;
-      const fromGrill = `Fryer\nSplit extras\n1\n${AT_CLOCK}\nFrom Grill\nGROUP 1\n1 x BURG\n`;
+      const moved = `*** MOVED TO FRYER ***\nGrill\nSplit extras\nOrder 1\n${AT_CLOCK}\n1 x BURG\n`;
+      const fromGrill = `Fryer\nSplit extras\nOrder 1\n${AT_CLOCK}\nFrom Grill\nGROUP 1\n1 x BURG\n`;
       expect(gained(f.start, await printed(f.venue))).toEqual(
         order === "move"
           ? nothing
@@ -1686,7 +1688,8 @@ describe("A773 pass release: races", () => {
         ]);
       });
 
-  const burgers = (quantity: string) => `Grill\nSplit extras\n1\n${AT_CLOCK}\n${quantity} x BURG\n`;
+  const burgers = (quantity: string) =>
+    `Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\n${quantity} x BURG\n`;
 
   /** Two burgers in one round of the bill, waiting at Grill outside any group, and their card. */
   async function twoBurgersCard() {
