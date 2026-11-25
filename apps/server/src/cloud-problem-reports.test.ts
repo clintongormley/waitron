@@ -395,28 +395,17 @@ it("refuses a preview replaced by a newer one while its send was being checked",
   const reports = f.reports();
   const preview = await reports.preview("till", "staff");
   if (!preview.available) throw new Error("Preview unavailable");
-  let startChecking!: () => void;
-  const checking = new Promise<void>((resolve) => {
-    startChecking = resolve;
-  });
-  let resumeSend!: () => void;
-  const mayContinue = new Promise<void>((resolve) => {
-    resumeSend = resolve;
-  });
+  let replaced = false;
   f.readRegistration.mockImplementationOnce(async () => {
-    startChecking();
-    await mayContinue;
-    return "first";
-  });
-  const sending = reports.send("till", "staff", preview.id);
-  try {
-    await Promise.race([checking, sending]);
     const newer = await reports.preview("till", "staff");
     expect(newer.available).toBe(true);
-  } finally {
-    resumeSend();
-    await expect(sending).rejects.toMatchObject({ code: "cloud.request_invalid" });
-  }
+    replaced = true;
+    return "first";
+  });
+  await expect(reports.send("till", "staff", preview.id)).rejects.toMatchObject({
+    code: "cloud.request_invalid",
+  });
+  expect(replaced).toBe(true);
   expect(f.delivered).not.toHaveBeenCalled();
 });
 
