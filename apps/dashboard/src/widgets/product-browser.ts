@@ -1073,6 +1073,7 @@ export class ProductBrowser extends LitElement {
           },
           this.view,
           !this.#hasRowsToActOn,
+          this.phone,
         )}
         ${productViewSwitch(this.view, this.phone, this.#chooseView)}
         ${productSelectionBar({

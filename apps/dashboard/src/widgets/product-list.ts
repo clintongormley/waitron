@@ -1,6 +1,6 @@
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
@@ -8,7 +8,6 @@ import {
   baseStyles,
   belongsToComposition,
   currentContentLanguages,
-  visuallyHiddenStyles,
   type DataTableColumn,
   type WtDataTable,
 } from "@waitron/ui";
@@ -64,6 +63,8 @@ import {
   productCategoryColumn,
   productListCategoryStyles,
 } from "./product-list-category.js";
+
+import { fullRowProductsMediaStyles, productListLayoutStyles } from "./product-list-layout.js";
 
 export type ProductsView = "list" | "tree";
 
@@ -153,201 +154,11 @@ export class ProductList extends LitElement {
     baseStyles,
     treeDragStyles,
     swatchPartStyles,
-    css`
-      /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
-         crossing used for their presentation. */
-      /* Laid out as a product's cell is, so a wrapped name keeps its grip and swatch beside its
-         first line. */
-      wt-data-table::part(folder-cell) {
-        display: block;
-      }
-      /* The name box's room is a flex basis; the phone's grid rule below still wins. */
-      wt-data-table::part(naming) {
-        display: flex;
-        max-inline-size: var(--name-room);
-        align-items: center;
-      }
-      wt-data-table::part(folder-frame) {
-        display: inline-flex;
-        flex: none;
-        vertical-align: middle;
-        justify-content: center;
-        width: var(--wt-tap-min);
-        margin-inline-end: var(--wt-space-3);
-      }
-      /* As a block, the frame's baseline is that of the line its middle-aligned square sits on, as a
-         resting row's is, so a naming row lines up by the same baseline. */
-      wt-data-table::part(naming-frame) {
-        display: inline-block;
-        align-self: baseline;
-      }
-      wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
-      }
-      wt-data-table[narrow]::part(folder-frame),
-      wt-data-table[narrow]::part(thumb-frame),
-      wt-data-table[narrow]::part(thumb-placeholder) {
-        display: none;
-      }
-      /* Keep wrapped names on their first-line baseline beside the media slot. */
-      wt-data-table::part(product-cell),
-      wt-data-table::part(variant-cell) {
-        display: block;
-      }
-      wt-data-table[narrow]::part(tree-heading) {
-        margin-inline-start: var(--tree-arrow-width);
-      }
-      wt-data-table::part(drag-grip) {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        vertical-align: middle;
-        width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        border-radius: var(--wt-radius-md);
-        background: transparent;
-        color: var(--wt-color-text);
-        touch-action: none;
-        user-select: none;
-        cursor: var(--reorder-drag-cursor, grab);
-      }
-      wt-data-table::part(grip-space) {
-        display: inline-block;
-        flex: none;
-        vertical-align: middle;
-        width: var(--wt-tap-min);
-      }
-      wt-data-table::part(name-line) {
-        display: none;
-      }
-      wt-data-table[narrow]::part(name-line) {
-        display: inline-block;
-        width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-      }
-      wt-data-table::part(thumb-frame),
-      wt-data-table::part(thumb-placeholder) {
-        box-sizing: border-box;
-        display: inline-block;
-        vertical-align: middle;
-        margin-inline-end: var(--wt-space-3);
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        overflow: hidden;
-        background: var(--wt-color-surface);
-      }
-      wt-data-table::part(thumbnail) {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      wt-data-table::part(badge) {
-        display: inline-flex;
-        padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-text-muted);
-        border-radius: var(--wt-radius-sm);
-      }
-      wt-data-table::part(count),
-      wt-data-table::part(unrouted-folder) {
-        margin-inline-start: var(--wt-space-2);
-      }
-      wt-data-table::part(unrouted-folder) {
-        color: var(--wt-color-danger);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      wt-data-table::part(context) {
-        color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(count),
-      wt-data-table::part(variant-count) {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      wt-data-table[narrow]::part(count) {
-        ${visuallyHiddenStyles}
-        clip-path: inset(50%);
-      }
-      /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
-      wt-data-table::part(folder-name),
-      wt-data-table::part(name-stack),
-      wt-data-table::part(variant-name) {
-        display: inline-flex;
-        flex-direction: column;
-      }
-      wt-data-table::part(search-name-line) {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        column-gap: var(--wt-space-2);
-        max-inline-size: var(--name-room);
-        overflow-wrap: anywhere;
-      }
-      wt-data-table::part(search-path) {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        min-inline-size: 0;
-      }
-      /* A category's toggle, drawn while it is renamed, takes its resting arrow's font, so the row
-         keeps its baseline and its square stays put. */
-      wt-data-table::part(tree-toggle) {
-        font-family: inherit;
-      }
-      wt-data-table::part(variant-toggle) {
-        font-family: revert;
-        padding-inline-end: var(--wt-space-1);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        text-align: end;
-      }
-      wt-data-table::part(vat-note) {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        white-space: nowrap;
-      }
-      /* Each takes only the room #fitNames measures before the row's pinned cell, and wraps there. */
-      wt-data-table::part(folder-name),
-      wt-data-table::part(name-stack),
-      wt-data-table::part(variant-name) {
-        max-inline-size: var(--name-room);
-        overflow-wrap: anywhere;
-      }
-      wt-data-table::part(name-box) {
-        flex: 1 1 calc(var(--wt-tap-min) * 4);
-        min-width: 0;
-        max-inline-size: max(var(--wt-tap-min), var(--name-box-room));
-      }
-      wt-data-table::part(name-after) {
-        display: contents;
-      }
-      /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
-         room #fitNames measures, so the asterisk wraps there instead of running under the
-         pinned column. */
-      wt-data-table[narrow]::part(naming) {
-        display: grid;
-        grid-template-columns: auto auto minmax(0, auto) 1fr;
-        inline-size: max(var(--wt-tap-min), var(--name-box-room));
-      }
-      wt-data-table[narrow]::part(name-after) {
-        display: block;
-        overflow-wrap: anywhere;
-      }
-      wt-data-table[narrow]::part(naming-frame) {
-        display: inline-block;
-      }
-      wt-data-table[narrow]::part(name-box) {
-        grid-row: 2;
-        grid-column: 1 / -1;
-      }
-    `,
+    productListLayoutStyles,
     productMediaStyles,
     productRowStyles,
     productListCategoryStyles,
+    fullRowProductsMediaStyles,
   ];
 
   @property({ attribute: false }) view: ProductsView = "tree";
@@ -710,8 +521,7 @@ export class ProductList extends LitElement {
   }
 
   /** The open name box's colour square, in the row's leading slot. A press keeps the cursor in the
-   * input; it is no Tab stop, so Tab still leaves the box. On a phone the slot shows only while
-   * naming, as `naming-frame`. */
+   * input; it is no Tab stop, so Tab still leaves the box. */
   #nameFrame(parentId: string | null) {
     const inherited = this.#inheritedColor(parentId);
     const color = this.nameColor ?? inherited.color;
@@ -787,20 +597,12 @@ export class ProductList extends LitElement {
       this.#fitFrame = 0;
       const table = this.#table()!;
       const width = table.clientWidth;
-      if (width > 0) {
-        this.phone = width <= PRODUCTS_PHONE_WIDTH;
-        table.wrapToFit = width >= 800;
-      }
+      if (width > 0) this.phone = width <= PRODUCTS_PHONE_WIDTH;
       this.#fitNames();
     });
   }
 
-  /** The table is as wide as its widest row, which on a phone runs under the pinned column, so each
-   * name, and the name box, takes only the room before that column, measured as if unscrolled, and
-   * wraps inside it. Every room is measured before any is written, so writing one room does not
-   * force a fresh layout before the next is read. A name box whose start the table is scrolled past
-   * is scrolled back to, so a refusal that arrives after the person scrolled sideways is read from
-   * its first letter. */
+  /** Read widths before writing them so wrapped names do not trigger layout for each row. */
   #fitNames(): void {
     const root = this.#table()!.shadowRoot!;
     const scroll = root.querySelector<HTMLElement>(".scroll");
@@ -820,13 +622,12 @@ export class ProductList extends LitElement {
         .querySelector('td[data-pinned="end"]')!
         .getBoundingClientRect().left;
       const room =
-        end -
+        Math.min(cell.getBoundingClientRect().right + scrolled, end) -
         (element.getBoundingClientRect().left + scrolled) -
         parseFloat(getComputedStyle(cell).paddingInlineEnd);
       return `${Math.max(0, room)}px`;
     });
     fitted.forEach((element, index) => {
-      // The box's room is set on its `folder-cell` span, which a phone lays out to that width.
       const [target, property] =
         element === box ? [box.parentElement!, "--name-box-room"] : [element, "--name-room"];
       if (target.style.getPropertyValue(property) !== rooms[index])
@@ -1013,7 +814,7 @@ export class ProductList extends LitElement {
     return path === "" ? nothing : html`<span part="search-path">${path}</span>`;
   }
 
-  #productColumns(): DataTableColumn<ProductRow>[] {
+  #productColumns(inlineCategory?: DataTableColumn<ProductRow>): DataTableColumn<ProductRow>[] {
     return [
       {
         key: "name",
@@ -1030,7 +831,8 @@ export class ProductList extends LitElement {
         sortValue: (row) => row.variant?.name ?? row.product.name,
         searchValue: ({ product }) =>
           [product.name, ...product.variants.map(({ name }) => name)].join(" "),
-        cell: (row, { ancestorOnly, searchRoot }) => {
+        cell: (row, context) => {
+          const { ancestorOnly, searchRoot } = context;
           const { product, variant } = row;
           const { color, inheritedFrom } =
             product.color === null
@@ -1038,30 +840,36 @@ export class ProductList extends LitElement {
               : { color: product.color, inheritedFrom: undefined };
           return variant
             ? html`<span part="variant-cell"
-                >${productMedia({
-                  key: variant.id,
-                  name: variant.name,
-                  image: variant.image ?? product.image,
-                  color,
-                  inheritedFrom,
-                  busy: false,
-                  lazy: true,
-                  open: () => this.#send("edit-product", { productId: variant.id, field: "image" }),
-                })}<span part="variant-name"
+                ><span part="products-media-slot"
+                  >${productMedia({
+                    key: variant.id,
+                    name: variant.name,
+                    image: variant.image ?? product.image,
+                    color,
+                    inheritedFrom,
+                    busy: false,
+                    lazy: true,
+                    open: () =>
+                      this.#send("edit-product", { productId: variant.id, field: "image" }),
+                  })}</span
+                ><span part="variant-name"
                   ><span>${variant.name}${unavailableLabel(variant.available)}</span></span
                 ></span
               >`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                ${productMedia({
-                  key: product.id,
-                  name: product.name,
-                  image: product.image,
-                  color,
-                  inheritedFrom,
-                  busy: false,
-                  lazy: true,
-                  open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
-                })}<span part="name-stack"
+                <span part="products-media-slot"
+                  >${productMedia({
+                    key: product.id,
+                    name: product.name,
+                    image: product.image,
+                    color,
+                    inheritedFrom,
+                    busy: false,
+                    lazy: true,
+                    open: () =>
+                      this.#send("edit-product", { productId: product.id, field: "image" }),
+                  })}</span
+                ><span part="name-stack"
                   >${
                     searchRoot && this.view === "tree"
                       ? html`<span part="search-name-line"
@@ -1074,7 +882,7 @@ export class ProductList extends LitElement {
                           ><strong>${product.name}</strong
                           >${unavailableLabel(product.available)}</span
                         >`
-                  }${productRowLabels(product)}</span
+                  }${inlineCategory?.cell(row, context) ?? nothing}${productRowLabels(product)}</span
                 >
               </span>`;
         },
@@ -1188,6 +996,7 @@ export class ProductList extends LitElement {
         choosable: "shown",
         activatesRow: false,
         label: t("editor.available"),
+        hideHeadingLabel: this.phone,
         help: {
           text: t("help.products.availability"),
           label: fill("help.badge_label", { part: t("editor.available") }),
@@ -1316,10 +1125,6 @@ export class ProductList extends LitElement {
       : nothing;
   }
 
-  #nameLine() {
-    return this.reordering ? html`<span part="name-line" aria-hidden="true"></span>` : nothing;
-  }
-
   #rowControls(row: ListRow) {
     if (row.kind === "folder") return this.#grip(row.folder.name);
     if (row.kind === "product" && row.variant === null) return this.#grip(row.product.name);
@@ -1352,12 +1157,16 @@ export class ProductList extends LitElement {
   }
 
   #buildColumns(): DataTableColumn<ListRow>[] {
-    const columns = this.#productColumns();
-    if (this.view === "list")
-      columns.splice(1, 0, productCategoryColumn(this.categories, this.defaultColor, this.phone));
+    const category =
+      this.view === "list"
+        ? productCategoryColumn(this.categories, this.defaultColor, this.phone)
+        : undefined;
+    const columns = this.#productColumns(this.phone ? category : undefined);
+    if (category) columns.splice(1, 0, category);
     return columns.map((column) => ({
       key: column.key,
       label: column.label,
+      hideHeadingLabel: column.hideHeadingLabel,
       help: column.help,
       align: column.align,
       choosable: column.choosable,
@@ -1368,7 +1177,7 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#nameLine()}${this.#nameFrame(row.parentKey === ROOT_KEY ? null : row.parentKey.slice(7))}${this.#nameBox()}</span
+                >${this.#nameFrame(row.parentKey === ROOT_KEY ? null : row.parentKey.slice(7))}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
@@ -1417,8 +1226,7 @@ export class ProductList extends LitElement {
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
             >${
               this.#renaming(folder.id)
-                ? html`${this.#nameLine()}${this.#nameFrame(folder.parentId)}${this.#nameBox()}<span
-                      part="name-after"
+                ? html`${this.#nameFrame(folder.parentId)}${this.#nameBox()}<span part="name-after"
                       >${after}</span
                     >`
                 : html`${this.#swatchButton(
@@ -1646,6 +1454,7 @@ export class ProductList extends LitElement {
         flatTreeSearch
         keep-toolbar-when-empty
         dense-rows
+        wrap-to-fit
         ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
@@ -1706,7 +1515,7 @@ export class ProductList extends LitElement {
         .rowClickLabel=${(row: ListRow) =>
           row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
         .rows=${this.#rowList}
-        .rowCellParts=${this.view === "list" ? () => "list-cell" : undefined}
+        .rowCellParts=${() => "products-cell"}
         .columns=${this.#columns()}
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}

@@ -1151,6 +1151,7 @@ it("starts in List and remembers a view switch while leaving Category filters an
 });
 
 it("searches product names in List and category names in Tree", async () => {
+  await page.viewport(1280, 844);
   localStorage.setItem("waitron.products.view", "list");
   const el = await mountBrowser();
   await typeSearch(el, "Drinks");
@@ -1170,6 +1171,7 @@ it("searches product names in List and category names in Tree", async () => {
 });
 
 it("lets staff clear a Tree search after switching to an empty List", async () => {
+  await page.viewport(1280, 844);
   const el = await mountBrowser({ products: [] });
   await typeSearch(el, "Drinks");
   await chooseView(el, "List");
@@ -4421,6 +4423,25 @@ it("shows each filter's whole choice in the panel beside the rows, in Spanish", 
   } finally {
     await page.viewport(width, height);
     setLocale("en-GB");
+  }
+});
+
+it("uses a compact, outlined Search field on a phone", async () => {
+  const { page } = await import("vitest/browser");
+  const { innerWidth, innerHeight } = window;
+  await page.viewport(390, 844);
+  try {
+    const el = await mountBrowser();
+    const search = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="menu-search"]',
+    )!;
+    await vi.waitFor(() => expect(search.label).toBe("Search"));
+    expect(search.shadowRoot!.querySelector("input")!.placeholder).toBe("Search");
+    const field = search.shadowRoot!.querySelector('[part="field"]')!;
+    expect(parseFloat(getComputedStyle(field).outlineWidth)).toBeGreaterThan(0);
+    expect(field.getBoundingClientRect().height).toBeCloseTo(44, 0);
+  } finally {
+    await page.viewport(innerWidth, innerHeight);
   }
 });
 

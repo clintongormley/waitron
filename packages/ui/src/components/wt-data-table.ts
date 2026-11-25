@@ -27,6 +27,7 @@ import {
   rememberCellPress,
 } from "./wt-data-table-cell-controls.js";
 
+import { tableHeadingStyles } from "./wt-data-table-heading.js";
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
 import { mergeColumnOrder } from "./wt-data-table-column-order.js";
@@ -46,6 +47,8 @@ export interface DataTableColumn<Row> {
   key: string;
   label: string;
   group?: string;
+  /** Keep the heading label in the accessible name while taking it out of the visual layout. */
+  hideHeadingLabel?: boolean;
   cell: (
     row: Row,
     context: { ancestorOnly: boolean; searchRoot?: boolean; filterMatches?: readonly Row[] },
@@ -186,6 +189,7 @@ const KEEPS_ARROWS =
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
+    tableHeadingStyles,
     css`
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -237,27 +241,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .scroll {
         flex: 1 1 auto;
         min-block-size: 0;
-      }
-
-      thead {
-        position: sticky;
-        inset-block-start: 0;
-        z-index: 3;
-        background: var(--wt-color-surface);
-      }
-
-      thead th {
-        border-block-end: 0;
-        position: relative;
-        background: var(--wt-color-surface);
-      }
-
-      thead th::after {
-        content: "";
-        position: absolute;
-        inset-inline: 0;
-        inset-block-end: 0;
-        border-block-end: 1px solid var(--wt-color-border);
       }
 
       .scroll:focus-visible {
@@ -399,33 +382,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
         z-index: 1;
         cursor: default;
-      }
-
-      .sort {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        padding: 0;
-        border: 0;
-        color: inherit;
-        background: transparent;
-        font: inherit;
-        cursor: pointer;
-      }
-
-      .sort:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-
-      .head-label {
-        position: relative;
-        display: inline-block;
-      }
-
-      .indicator {
-        width: var(--wt-font-size-md);
-        text-align: center;
       }
 
       th.select,
@@ -2774,7 +2730,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       ? column.key === "actions" && column.pinned === "end"
                         ? html`<wt-icon name="kebab"></wt-icon
                             ><span class="visually-hidden">${column.label}</span>`
-                        : column.label
+                        : this.#headingLabel(column)
                       : html`<button
                           class="sort"
                           data-sort=${column.key}
@@ -2783,7 +2739,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                             this.#sort(column);
                           }}
                         >
-                          ${column.label}<span class="indicator" aria-hidden="true"
+                          ${this.#headingLabel(column)}<span class="indicator" aria-hidden="true"
                             >${
                               this.sortKey === column.key
                                 ? this.sortDirection === "ascending"
@@ -2801,6 +2757,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
         </tr>
       </thead>
     `;
+  }
+
+  #headingLabel(column: DataTableColumn<Row>) {
+    return column.hideHeadingLabel
+      ? html`<span class="visually-hidden">${column.label}</span>`
+      : column.label;
   }
 
   #withHelp(column: DataTableColumn<Row>, content: unknown) {
@@ -3405,6 +3367,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 return html`<tr
                   data-row-key=${key}
                   role="row"
+                  part="tree-row"
                   class=${classMap({ clickable: activate !== undefined, joined })}
                   aria-level=${depth + 1}
                   aria-expanded=${hasChildren ? String(expanded) : nothing}
@@ -3459,9 +3422,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               >
                                 ${
                                   !branch
-                                    ? html`<span class="tree-spacer"></span>`
+                                    ? html`<span class="tree-spacer" part="tree-indent"></span>`
                                     : toggles
-                                      ? html`<span class="tree-arrow" aria-hidden="true"
+                                      ? html`<span
+                                          class="tree-arrow"
+                                          part="tree-indent"
+                                          aria-hidden="true"
                                           >${expanded ? "▾" : "▸"}</span
                                         >`
                                       : html`<button

@@ -12,9 +12,6 @@ type ProductCategory = { product: Product; variant: Product["variants"][number] 
 export const PRODUCTS_PHONE_WIDTH = 440;
 
 export const productListCategoryStyles = css`
-  wt-data-table[wrap-to-fit]::part(list-cell) {
-    vertical-align: middle;
-  }
   wt-data-table[data-list][wrap-to-fit]::part(tree-cell) {
     align-items: center;
   }
@@ -64,7 +61,7 @@ export function productCategoryColumn(
       const category = path(row)?.at(-1);
       if (row.variant !== null || !category) return nothing;
       const { color } = categoryColorSource(category.id, byId, defaultColor);
-      return html`<span part="category-path-cell"
+      return html`<span part=${phone ? "category-path-cell phone-category" : "category-path-cell"}
         >${swatchChip(color)}<span part="category-path-name">${name(row)}</span></span
       >`;
     },
