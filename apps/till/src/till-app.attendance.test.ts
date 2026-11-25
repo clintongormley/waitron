@@ -976,7 +976,8 @@ it("keeps Retry read usable when the initial clock read fails before attendance 
   f.api.getClockState.mockRejectedValueOnce(new TypeError("clock offline"));
   await signIn(f.el);
   const retry = () => questions(f.el)?.shadowRoot!.querySelector("[data-retry]");
-  await vi.waitFor(() => expect(retry()?.hasAttribute("disabled")).toBe(false));
+  await vi.waitFor(() => expect(retry() ?? null).not.toBeNull());
+  expect(retry()!.hasAttribute("disabled")).toBe(false);
 
   await router.probeNow();
   f.api.getClockState.mockRejectedValueOnce({ code: "server.waiting_sales", status: 503 });
