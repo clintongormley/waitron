@@ -1247,7 +1247,7 @@ describe("accountant period selection", () => {
     ).toBe("6.30");
   });
 
-  it("lists a voided receipt again as a minus row, last, so the period's bases add up to the return's", async () => {
+  it("lists a receipt voided in the period of its sale again as a minus row, last, and that period's bases add up to the return's", async () => {
     const at = (day: string) => `2026-11-${day}T12:00:00.000Z`;
     const ticket = (invoiceNumber: number, total: string, base: string) =>
       seedSale(suite.db, venue, {
@@ -1287,7 +1287,9 @@ describe("accountant period selection", () => {
     });
     const words = ACCOUNTANT_EXPORT_WORDS.en;
     expect(invoiceLineCells(minus, words)[0]![3]).toBe("Voided");
-    expect(words.invoiceNotesColumn).toContain("; voids listed again as minus rows;");
+    expect(words.invoiceNotesColumn).toContain(
+      "; voids listed again as minus rows on the local day of the void;",
+    );
     const bases = rows
       .filter((row) => row.invoiceType !== "replacement")
       .flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.base)));

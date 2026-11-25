@@ -472,7 +472,7 @@ it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado
         reason: "Do not create a filing dependency cycle",
         facts: { description: "Corrected restaurant service" },
       },
-      ["record-correction"],
+      ["record-correction", "release-held-cancellation"],
     );
     expect(response).toMatchObject({ status: 400, json: { code: "fiscal.remedy_invalid" } });
     expect(await fiscalFacts()).toEqual(before);
@@ -491,7 +491,7 @@ it("allows the same correction decision after the filing queue has actually held
     reason: "Explicit correction of the rejected invoice",
     facts: { description: "Corrected restaurant service" },
   };
-  const refused = await remedy(request, ["record-correction"]);
+  const refused = await remedy(request, ["record-correction", "release-held-cancellation"]);
   expect(refused).toMatchObject({ status: 400, json: { code: "fiscal.remedy_invalid" } });
   const aeat = createFakeAeat({ serverNow: NOW });
   const deps = {

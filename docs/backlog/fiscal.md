@@ -394,7 +394,8 @@ No product path reaches the held-cancellation remedy today: the filing queue set
 cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancellations` in
 `packages/fiscal-verifactu/src/drain.ts`), `releaseHeldCancellation`
 (`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
-held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:181-183`). The
+held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:185-187`), a remedy
+refused for a voided sale while `release-held-cancellation` is off (`record-remedy.ts:188-189`). The
 ordinary cancellation it handles is written only by core's `recordVoid`
 (`packages/core/src/record-void.ts`), which no till screen or server route calls
 (`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,

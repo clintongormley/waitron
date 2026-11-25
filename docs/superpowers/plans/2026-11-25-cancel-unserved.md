@@ -85,7 +85,8 @@ the changed files. Commands run as `pnpm --filter @waitron/<package> exec vitest
   **range** branch, by the void's day in the sale's offset (`vat-movements.ts:185`), listed last: kind **Voided /
   «Anulada»**, amounts negated, the receipt's number, the receipt as its original. The id-list branch, the old-box
   workbook's, is untouched (13 of 13, run). The notes heading's "voids flagged, not netted" / «se indican, no se restan»
-  becomes "voids listed again as minus rows" / «las anulaciones figuran además como filas en negativo».
+  becomes "voids listed again as minus rows on the local day of the void" / «las anulaciones figuran además como filas en
+  negativo, en el día local de la anulación».
 
 Dropped (watcher): VOIDED on copies; refusing a resend, email or A4; ending a placed bill whose void returns from another
 box (it then takes no payment, where today €1.00 is taken; Finish and unpaid departure refuse it; run).
