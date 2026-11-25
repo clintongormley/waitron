@@ -433,6 +433,23 @@ it("Done hides the grips and checkboxes, a drag moves nothing again, and focus r
   expect(dialog(el)).toBeNull();
   expect(el.api.moveProductItems).not.toHaveBeenCalled();
 });
+it("keeps Done focused when Products shrinks to its phone layout", async () => {
+  const el = await mountBrowser();
+  el.style.inlineSize = "600px";
+  await vi.waitFor(() => expect(viewControl(el).slot).toBe("toolbar-search"));
+  await press(el, "select");
+  const done = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-selection"]');
+  done()!.focus();
+  expect(el.shadowRoot!.activeElement).toBe(done());
+
+  el.style.inlineSize = "390px";
+  await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
+  expect(el.shadowRoot!.activeElement).toBe(done());
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(done()).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(selectHost(el));
+});
 it.each([
   ["en-GB", "Done"],
   ["es", "Listo"],

@@ -87,7 +87,13 @@ export class ProductBrowser extends LitElement {
     super();
     new LocaleChangeController(this);
     observeProductsWidth(this, (phone) => {
+      if (this.phone === phone) return;
+      const restoreDoneFocus = this.#doneButton?.matches(":focus-within");
       this.phone = phone;
+      if (restoreDoneFocus)
+        void this.updateComplete.then(() => {
+          if (!this.shadowRoot?.activeElement) this.#doneButton?.focus();
+        });
     });
   }
   static override styles = [
@@ -268,7 +274,7 @@ export class ProductBrowser extends LitElement {
       this.shadowRoot?.activeElement?.matches('wt-button[data-test^="mark-"]') &&
       !this.#availabilitySelection.length
     )
-      this.renderRoot.querySelector<HTMLElement>('[data-test="cancel-selection"]')?.focus();
+      this.#doneButton?.focus();
     if (
       [
         "operation",
@@ -984,10 +990,12 @@ export class ProductBrowser extends LitElement {
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
+  get #doneButton(): HTMLElement | null {
+    return this.renderRoot.querySelector('[data-test="cancel-selection"]');
+  }
   readonly #dismissBatchRefusal = (event: Event): void => {
     event.stopPropagation();
-    if ((event.currentTarget as HTMLElement).matches(":focus-within"))
-      this.renderRoot.querySelector<HTMLElement>('[data-test="cancel-selection"]')?.focus();
+    if ((event.currentTarget as HTMLElement).matches(":focus-within")) this.#doneButton?.focus();
     this.#availability.dismissBatchRefusal();
   };
 
