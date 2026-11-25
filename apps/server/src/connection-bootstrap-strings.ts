@@ -165,10 +165,10 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este teléfono o tableta Android",
     summary: "Android: Chrome, Edge, Firefox y Samsung Internet",
     removal: [
-      "En Cifrado y credenciales, busca Credenciales de usuario o Credenciales de confianza, Usuario. Elimina solo el certificado antiguo de Waitron.",
+      "En un Pixel, abre Cifrado y credenciales, Credenciales de confianza, Usuario. En otros teléfonos, como OPPO, busca los certificados de confianza del usuario en el almacenamiento de credenciales. Elimina solo el certificado antiguo de Waitron.",
     ],
     install: [
-      "Busca Instalar un certificado en Ajustes de Android. En un Pixel, busca Seguridad y privacidad, Más ajustes de seguridad, Cifrado y credenciales.",
+      "No abras el archivo descargado. Busca «certificado» en Ajustes de Android y elige la opción de instalar un certificado o de instalar certificados desde el almacenamiento. En un Pixel, busca Seguridad y privacidad, Más ajustes de seguridad, Cifrado y credenciales.",
       "Elige Certificado de CA, confirma el aviso, desbloquea el dispositivo si se solicita y selecciona el archivo descargado.",
       "Cierra el navegador desde las aplicaciones recientes y vuelve a abrir esta página.",
     ],
