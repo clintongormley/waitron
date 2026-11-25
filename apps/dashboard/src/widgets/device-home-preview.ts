@@ -137,7 +137,9 @@ export class DeviceHomePreview extends LitElement {
         align-content: start;
         inline-size: 100%;
         max-inline-size: 792px;
-        padding: var(--wt-space-3) 0;
+        padding-block: var(--wt-space-3);
+        /* Three 100px tiles, two 12px gaps and the frame's two border pixels stay visible. */
+        padding-inline: clamp(0px, (100% - 326px) / 2, var(--wt-space-4));
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);

@@ -288,7 +288,12 @@ describe("dashboard-device-home-preview", () => {
   it("caps the preview at the counter menu width and keeps the tile order as it shrinks", async () => {
     const { el, host } = await mount();
     await widen(host, 1600);
-    expect(frame(el).getBoundingClientRect().width).toBe(792);
+    const frameBox = frame(el).getBoundingClientRect();
+    const gridBox = grids(el)[0]!.getBoundingClientRect();
+    const inset = parseFloat(getComputedStyle(frame(el)).getPropertyValue("--wt-space-4"));
+    expect(frameBox.width).toBe(792);
+    expect(gridBox.left - frameBox.left).toBe(1 + inset);
+    expect(frameBox.right - gridBox.right).toBe(1 + inset);
     expect(tracks(grids(el)[0]!)).toBe(6);
     const order = readingOrder(el, "structure");
     await widen(host, 150);
