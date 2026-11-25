@@ -10,10 +10,17 @@
  * (`detect-device.test.ts`, the iPadOS-limit suite). Assumed, from whatismybrowser.com's Safari
  * guide read 2026-09-13 and not from a device: that a physical iPad in its default mode sends
  * exactly that string.
+ *
+ * KNOWN LIMIT: a Pixel Tablet's Chrome 158 was answered `linux` (2026-11-25). Assumed, its headers not
+ * read: it asks for the desktop site and so names no Android. The certificate and connection pages
+ * guess again in the browser with `TOUCH_FIRST_CONDITION`, for a `linux` answer only.
  */
 
 export type TrustDevice =
   "macos" | "windows" | "linux" | "chromeos" | "android" | "ios" | "firefox-linux" | "unknown";
+
+/** Browser code. It asks about the touchscreen and main pointer, not the system. */
+export const TOUCH_FIRST_CONDITION = `navigator.maxTouchPoints>0&&matchMedia("(pointer: coarse)").matches`;
 
 /**
  * The `sec-ch-ua-platform` client hint, which Chromium sends quoted (`"macOS"`). "Unknown" is a value

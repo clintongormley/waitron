@@ -268,10 +268,9 @@ de pagos, pero no los lectores ni este ajuste.
 
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
-La página de la caja **Este dispositivo todavía no confía en la caja** usa el idioma compatible
-preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Abre la página de
-configuración para ver las instrucciones** para instalar el certificado del servidor en este
-dispositivo y vuelve a abrir la caja.
+La página de la caja **Conecta este dispositivo de forma segura** usa el idioma compatible
+preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Ver cómo hacerlo** para
+instalar el certificado del servidor en este dispositivo y vuelve a abrir la caja.
 
 En un dispositivo que nunca ha confiado en el servidor, el navegador puede avisar de la conexión
 antes de que la caja pueda abrirse. Abre en su lugar `http://` seguido de la dirección IP del

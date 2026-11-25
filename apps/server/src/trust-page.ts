@@ -1,6 +1,7 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
+import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
@@ -25,7 +26,7 @@ export interface TrustPageInput {
   caDownloadPath: string;
   qrSvg?: string;
   httpsUrl: string;
-  /** Which device's steps to open, guessed by `detectTrustDevice`. "unknown" opens none. */
+  /** The server's guess, from `detectTrustDevice`; the page may replace "linux" in the browser. "unknown" opens none. */
   device: DeviceId | "unknown";
   /** This box's own HTTPS origin, offered first because another box answers `httpsUrl`'s name. */
   ownAddress?: string;
@@ -51,7 +52,7 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-const REMOVAL_INTRO = `If you have installed a Waitron certificate on this computer before, then you
+const REMOVAL_INTRO = `If you have installed a Waitron certificate on this device before, then you
   will need to remove it before installing the new certificate. Remove only Waitron's own entry.
   If you cannot identify the old Waitron entry, stop and use another venue device.`;
 
@@ -95,6 +96,31 @@ function installSection(device: DeviceId | "unknown"): string {
       .join("")}</details>`;
 }
 
+const TOUCH_STEPS_SCRIPT = `if(${TOUCH_FIRST_CONDITION})document.getElementById("steps").replaceChildren(document.getElementById("touch-steps").content)`;
+
+function certificateSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
+  return `${removeSection(device)}
+       <section><h2>2. Get the certificate</h2>
+       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
+       <p class="note">Your browser may ask you to confirm the download — choose <strong>Keep</strong>
+       or <strong>Download</strong>, or the file never reaches the disk. If the download does not
+       start, delete the old <code>${CA_FILENAME}</code> from your downloads and try again.</p></section>
+       ${installSection(device)}`;
+}
+
+/**
+ * An Android tablet can be answered `linux` (`detect-device.ts`), so a touch-first device is shown
+ * Android's steps. That is a guess too: "Using a different device?" still lists Linux. Without the
+ * script, the Linux steps stay.
+ */
+function stepsOrTouchSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
+  const steps = certificateSteps(device, caDownloadPath);
+  if (device !== "linux") return steps;
+  return `<div id="steps">${steps}</div>
+    <template id="touch-steps">${certificateSteps("android", caDownloadPath)}</template>
+    <script>${TOUCH_STEPS_SCRIPT}</script>`;
+}
+
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
   if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
@@ -117,12 +143,7 @@ export function renderTrustPage(input: TrustPageInput): string {
       ? `<p class="warning-words">${escapeHtml(NOT_SET_UP_WORDS.en)}</p><p class="warning-words" lang="es">${escapeHtml(NOT_SET_UP_WORDS.es)}</p>\n`
       : "";
   const steps = caAvailable
-    ? `${warning}${removeSection(device)}
-       <section><h2>2. Get the certificate</h2>
-       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
-       <p class="note">Your browser may ask you to confirm the download — choose <strong>Keep</strong>,
-       or the file never reaches the disk.</p></section>
-       ${installSection(device)}`
+    ? `${warning}${stepsOrTouchSteps(device, caDownloadPath)}`
     : `<section><h2>1. Get the certificate</h2>
        <p>This box has no certificate to download. Check its known HTTPS address below and stop
        if it shows a certificate warning. This page cannot replace a separately installed certificate.

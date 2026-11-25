@@ -36,10 +36,9 @@ export const en = {
   "recovery.charged": "Card charged. Do not charge again.",
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
-  "trust.title": "This device hasn't trusted the till yet",
-  "trust.explanation":
-    "The till is served over HTTPS with the box's own certificate, which this device does not recognise yet. Install the box's certificate, then reopen the till.",
-  "trust.open_setup": "Open the setup page for instructions",
+  "trust.title": "Connect this device securely",
+  "trust.explanation": "Install the box's certificate, then open the till again.",
+  "trust.open_setup": "Show me how",
 
   "venue.time_zone_wait": "Trading is starting. Wait and try again.",
   "venue.time_zone_confirm":
@@ -2512,10 +2511,9 @@ export const es: Record<StringKey, string> = {
   "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
   "recovery.manual_card":
     "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",
-  "trust.title": "Este dispositivo todavía no confía en la caja",
-  "trust.explanation":
-    "La caja se sirve por HTTPS con el certificado del servidor del local, que este dispositivo todavía no reconoce. Instala el certificado del servidor y vuelve a abrir la caja.",
-  "trust.open_setup": "Abre la página de configuración para ver las instrucciones",
+  "trust.title": "Conecta este dispositivo de forma segura",
+  "trust.explanation": "Instala el certificado del servidor y vuelve a abrir la caja.",
+  "trust.open_setup": "Ver cómo hacerlo",
 
   "venue.time_zone_wait": "El servicio se está iniciando. Espera y vuelve a intentarlo.",
   "venue.time_zone_confirm":

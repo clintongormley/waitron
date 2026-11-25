@@ -252,9 +252,9 @@ or this setting.
 
 ## Trust the box before opening the till {#certificate-trust}
 
-The till's **This device hasn't trusted the till yet** page follows your browser's preferred
-supported language, with English as the fallback. Choose **Open the setup page for instructions**
-to install the box's certificate on this device, then reopen the till.
+The till's **Connect this device securely** page follows your browser's preferred supported
+language, with English as the fallback. Choose **Show me how** to install the box's certificate on
+this device, then open the till again.
 
 On a device that has never trusted the box, the browser may warn about the connection before the
 till can open. Open `http://` followed by the box's IP address and `/setup/trust` instead, for

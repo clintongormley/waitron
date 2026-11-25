@@ -92,6 +92,9 @@ Checked at `main` bf034bc29. ✓ = re-opened by the designer; "sweep" = read by 
   service worker. ✓ Its device cookie is host-only on `.local` (`device-session.ts:30-40`).
   So a renamed server is a new origin to every device: no cookie, no stored data, no installed app.
 
+  > **Pointer, 2026-11-25.** The till's untrusted page, here and in §7.3, is now headed "Connect this
+  > device securely".
+
   > **Pointer, 2026-11-15.** The box image now sets `WAITRON_VENUE_DOMAIN=waitron.local`, so a
   > device cookie set at `waitron.local` names that domain; one set at a name outside it, with that
   > setting left at its default, is host-only. A renamed server still gets no cookie from

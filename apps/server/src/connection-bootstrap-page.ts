@@ -1,7 +1,8 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
-import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
+import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
+import { DEVICE_HELP, DEVICE_ORDER, type DeviceId } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
@@ -62,6 +63,19 @@ li { margin-block: var(--wt-space-2); }
 [hidden] { display: none !important; }
 `;
 
+function helpOrder(device: DeviceId | "unknown"): DeviceId[] {
+  if (device === "unknown") return [...DEVICE_ORDER];
+  return [device, ...DEVICE_ORDER.filter((id) => id !== device)];
+}
+
+/** Puts the help in the order and open state rendered for Android. */
+const TOUCH_HELP_SCRIPT = `
+if (${TOUCH_FIRST_CONDITION}) for (const id of ${JSON.stringify(helpOrder("android"))}) {
+  const details = document.querySelector('[data-device="' + id + '"]');
+  details.open = id === "android";
+  document.getElementById("connection-help").append(details);
+}`;
+
 export function renderConnectionPage(
   input: TrustPageInput & { connection: NonNullable<TrustPageInput["connection"]> },
 ): string {
@@ -80,21 +94,17 @@ export function renderConnectionPage(
       : `<section data-storage-warning role="status"><h2>${words.spaceLow}</h2><p>${escape(RECOVERY_PAGE_WORDS[recoveryLocale].freeSpace(`${new Intl.NumberFormat(recoveryLocale, { maximumFractionDigits: 1 }).format(status.storageFreeBytes / 1_000_000)} MB`))}</p><p>${words.spaceAction.replace("{retry}", repairOffered ? words.spaceRetry : words.spaceCheckAgain)}</p></section>`;
   const hidden = (visible: boolean) => (visible ? "" : " hidden");
   const help = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
-  const devices =
-    input.device === "unknown"
-      ? [...DEVICE_ORDER]
-      : [input.device, ...DEVICE_ORDER.filter((id) => id !== input.device)];
-  const details = devices
+  const details = helpOrder(input.device)
     .map((id) => {
       const entry = help[id];
-      return `<details${id === input.device ? " open" : ""}><summary>${entry.summary}</summary>
+      return `<details data-device="${id}"${id === input.device ? " open" : ""}><summary>${entry.summary}</summary>
     <div data-removal${hidden(status.trust === "new-required")}><p>${words.remove}</p><ul>${entry.removal.map((line) => `<li>${line}</li>`).join("")}</ul></div>
     <ol>${entry.install.map((line) => `<li>${line}</li>`).join("")}</ol>
     ${(entry.notes ?? []).map((line) => `<p class="note">${line}</p>`).join("")}</details>`;
     })
     .join("");
   const safeWords = JSON.stringify(words).replaceAll("<", "\\u003c");
-  const script = `
+  const script = `${input.device === "linux" ? TOUCH_HELP_SCRIPT : ""}
 const words = ${safeWords};
 const button = document.getElementById("connection-repair") ?? document.getElementById("connection-reconnect");
 let healthy = ${ready};
