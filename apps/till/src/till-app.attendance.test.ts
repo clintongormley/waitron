@@ -115,6 +115,16 @@ describe("till attendance sign-in flow", () => {
     await vi.waitFor(() => expect(open.inbox?.prompts).toHaveLength(1));
     expect(open.shadowRoot!.textContent).not.toContain(words);
     expect(questions(f.el)).toBe(open);
+
+    online = false;
+    await router.probeNow();
+    f.api.sendAttendanceCommand.mockRejectedValueOnce(offline);
+    await questionButton(f.el, "[data-confirm]");
+    await vi.waitFor(() => expect(open.error).toBe(words));
+    online = true;
+    await router.probeNow();
+    await f.el.updateComplete;
+    expect(open.error).toBe("Your response could not be recorded. Try again.");
   });
 
   it("keeps the full-disk strip while attendance questions are open", async () => {

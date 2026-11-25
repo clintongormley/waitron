@@ -18083,8 +18083,7 @@ describe("till-app follows a server move", () => {
     await router.probeNow();
     await flush(el);
     const status = lock(el)!.shadowRoot!.querySelector("[data-server-status]")!;
-    const words =
-      "No se puede conectar con el servidor. Comprueba que este dispositivo esté conectado a la red WiFi del local.";
+    const words = t("server.none_answering", "es-ES");
     expect(status.textContent).toContain(words);
     expect(status.querySelector("[data-check-again]")).not.toBeNull();
 
