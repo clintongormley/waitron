@@ -766,9 +766,9 @@ anula el ticket y reabre la cuenta, lista para [**Mover platos…**](table-servi
 Lo ya pagado cuenta para ella. Una cuenta que ha tenido un pago con su propio ticket no se puede
 reabrir: cobra el resto con **Una cantidad** o **Dividir a partes iguales**.
 Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** para los que
-llegaron. **Parar estos platos y reabrir** para en cocina cada plato que siga en la lista y lo deja
-fuera de la cuenta reabierta, salvo uno que la cocina ya había empezado, que se queda en ella y se
-cobra.
+llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
+reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que
+la cocina había empezado o terminado, que se queda en ella y se cobra.
 
 Cuando un cliente ya ha pagado una parte de la cuenta con
 [un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta
