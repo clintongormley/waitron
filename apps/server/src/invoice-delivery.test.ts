@@ -2096,7 +2096,7 @@ describe("invoice mail pass", () => {
         return { status: "sent" };
       },
     });
-    expect(String(sent!.text).split("\n")[0]).toBe("Factura FF/1 — DUPLICADO");
+    expect(sent!.text).toBe("Adjuntamos la factura FF/1, de 19,69 €. La Buena\nDUPLICADO");
     const [attachment] = sent!.attachments as { content: Uint8Array }[];
     expect(await pdfText(attachment!.content)).toContain("DUPLICADO");
     expect((await rows())[1]).toMatchObject({
@@ -2717,7 +2717,7 @@ describe("an invoice email whose success is reported after it was given up", () 
         return { status: "sent" };
       },
     });
-    expect(String(sent!.text).split("\n")[0]).toBe("Factura FF/1 — DUPLICADO");
+    expect(sent!.text).toBe("Adjuntamos la factura FF/1, de 19,69 €. La Buena\nDUPLICADO");
     const [attachment] = sent!.attachments as { content: Uint8Array }[];
     expect(await pdfText(attachment!.content)).toContain("DUPLICADO");
     expect((await rows())[1]).toMatchObject({

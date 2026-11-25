@@ -209,18 +209,30 @@ describe("invoice SMTP transport", () => {
           },
         }),
       ).toEqual({ status: "sent" });
-      expect(textPart(rig.messages[0]!)).toBe("Simplified invoice S/1");
+      expect(textPart(rig.messages[0]!)).toBe(
+        "Attached is simplified invoice S/1 for €19.69. La Buena",
+      );
     } finally {
       await rig.close();
     }
   });
 
   it.each([
-    { locale: "en-GB", duplicate: false, total: "19.69" },
-    { locale: "es-ES", duplicate: true, total: "19,69" },
+    {
+      locale: "en-GB",
+      duplicate: false,
+      total: "19.69",
+      body: "Attached is simplified invoice S/1 for €19.69. La Buena",
+    },
+    {
+      locale: "es-ES",
+      duplicate: true,
+      total: "19,69",
+      body: "Adjuntamos la factura simplificada S/1, de 19,69 €. La Buena\nDUPLICADO",
+    },
   ])(
     "emails a simplified receipt in $locale with duplicate=$duplicate",
-    async ({ locale, duplicate, total }) => {
+    async ({ locale, duplicate, total, body }) => {
       const rig = await smtpRig("accepted");
       try {
         const document = structuredClone(fixture);
@@ -237,8 +249,8 @@ describe("invoice SMTP transport", () => {
         expect(rig.messages).toHaveLength(1);
         const message = rig.messages[0]!;
         expect(message).toContain(`Subject: ${caption}`);
-        expect(textPart(message)).toBe(duplicate ? `${caption} — ${labels.duplicate}` : caption);
-        expect(message).toContain("filename=receipt.pdf");
+        expect(textPart(message)).toBe(body);
+        expect(message).toContain("filename=S-1.pdf");
         const pdf = (await attachmentText(message)).replace(/\s+/g, " ");
         expect(pdf).toContain(
           `${caption}${duplicate ? ` ${labels.duplicate}` : ""} ${labels.date} ${receiptDateTime(document.result.issuedAt, locale, document.result.issuedOffsetMinutes)}`,
@@ -252,34 +264,38 @@ describe("invoice SMTP transport", () => {
     },
   );
 
-  it.each(["en-GB", "es-ES"])(
-    "captions an emailed corrective invoice as one in %s",
-    async (locale) => {
-      const rig = await smtpRig("accepted");
-      try {
-        const document = structuredClone(fixture);
-        document.invoiceLocale = locale;
-        document.result.invoiceType = "R5";
-        document.result.invoiceNumber = "R/7";
-        document.result.corrects = { invoiceNumber: "A/41", issuedAt: fixture.result.issuedAt };
-        delete document.result.recipient;
-        const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
-        expect(
-          await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
-        ).toEqual({ status: "sent" });
-        expect(rig.messages[0]).toContain(`Subject: ${caption}`);
-        expect(textPart(rig.messages[0]!)).toBe(caption);
-        const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
-        expect(pdf).toContain(caption);
-      } finally {
-        await rig.close();
-      }
-    },
-  );
+  it.each([
+    ["en-GB", "Attached is corrective invoice R/7 for -€2.00. La Buena"],
+    ["es-ES", "Adjuntamos la factura rectificativa R/7, de -2,00 €. La Buena"],
+  ])("emails a corrective receipt with its signed total in %s", async (locale, body) => {
+    const rig = await smtpRig("accepted");
+    try {
+      const document = structuredClone(fixture);
+      document.invoiceLocale = locale;
+      document.result.invoiceType = "R5";
+      document.result.invoiceNumber = "R/7";
+      document.result.total = "-2.00";
+      document.result.corrects = { invoiceNumber: "A/41", issuedAt: fixture.result.issuedAt };
+      delete document.result.recipient;
+      const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
+      expect(
+        await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
+      ).toEqual({ status: "sent" });
+      expect(rig.messages[0]).toContain(`Subject: ${caption}`);
+      expect(textPart(rig.messages[0]!)).toBe(body);
+      const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
+      expect(pdf).toContain(caption);
+    } finally {
+      await rig.close();
+    }
+  });
 
-  it.each(["en-GB", "es-ES"])(
-    "captions an emailed replacement of a full invoice as a corrective invoice in %s",
-    async (locale) => {
+  it.each([
+    ["en-GB", "Attached is corrective invoice R/8 for €19.69. La Buena"],
+    ["es-ES", "Adjuntamos la factura rectificativa R/8, de 19,69 €. La Buena"],
+  ])(
+    "emails a replacement of a full invoice as a corrective invoice in %s",
+    async (locale, body) => {
       const rig = await smtpRig("accepted");
       try {
         const document = structuredClone(fixture);
@@ -296,7 +312,7 @@ describe("invoice SMTP transport", () => {
           await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages[0]).toContain(`Subject: ${caption}`);
-        expect(textPart(rig.messages[0]!)).toBe(caption);
+        expect(textPart(rig.messages[0]!)).toBe(body);
         const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
         expect(pdf).toContain(caption);
       } finally {
@@ -305,7 +321,7 @@ describe("invoice SMTP transport", () => {
     },
   );
 
-  it("A965 labels sends English subject, body and PDF from the document language", async () => {
+  it("sends the English subject, message and PDF from the document language", async () => {
     const rig = await smtpRig("accepted");
     try {
       const send = sendInvoiceThrough(rig.config);
@@ -317,14 +333,47 @@ describe("invoice SMTP transport", () => {
       ).toEqual({ status: "sent" });
       expect(rig.messages).toHaveLength(1);
       expect(rig.messages[0]).toContain("Subject: Invoice FF/1");
-      expect(textPart(rig.messages[0]!)).toContain("Invoice FF/1");
-      expect(textPart(rig.messages[0]!)).toContain("DUPLICATE");
+      expect(textPart(rig.messages[0]!)).toBe(
+        "Attached is invoice FF/1 for €19.69. La Buena\nDUPLICATE",
+      );
+      expect(rig.messages[0]).toContain("filename=FF-1.pdf");
       const pdf = await attachmentText(rig.messages[0]!);
       expect(pdf).toMatch(/INVOICE\s+FF\/1/);
       expect(pdf).toContain("DUPLICATE");
       expect(pdf.replace(/\s+/g, " ")).toContain("TOTAL €19.69");
     } finally {
       await rig.close();
+    }
+  });
+
+  it.each([
+    ["es-ES", "F1", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €."],
+    ["en-GB", "F1", "Attached is invoice FF-0EBGA/4 for €2.00."],
+    ["ca-ES", "F1", "Us adjuntem la factura FF-0EBGA/4, per un import de 2,00 €."],
+    ["gl-ES", "F1", "Achegamos a factura FF-0EBGA/4, por importe de 2,00 €."],
+    ["eu-ES", "F1", "Erantsita bidaltzen dizugu FF-0EBGA/4 zenbakiko faktura (2,00 €)."],
+    ["fr-FR", "F1", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €."],
+    ["ca-ES", "F2", "Us adjuntem la factura simplificada FF-0EBGA/4, per un import de 2,00 €."],
+    ["gl-ES", "R5", "Achegamos a factura rectificativa FF-0EBGA/4, por importe de 2,00 €."],
+    ["eu-ES", "F2", "Erantsita bidaltzen dizugu FF-0EBGA/4 zenbakiko faktura erraztua (2,00 €)."],
+  ] as const)("composes the %s %s email sentence", async (invoiceLocale, invoiceType, body) => {
+    const message = await composeInvoiceEmail({
+      document: {
+        ...fixture,
+        invoiceLocale,
+        receiptHeader: { printTradingName: true, tradingName: "Juniper Test Cafe" },
+        result: { ...fixture.result, invoiceType, invoiceNumber: "FF-0EBGA/4", total: "2.00" },
+      },
+    });
+    expect(message.text).toBe(`${body} Juniper Test Cafe`);
+    expect(message.attachments?.[0]?.filename).toBe("FF-0EBGA-4.pdf");
+  });
+
+  it("uses the same file-safe name for the original and a copy", async () => {
+    const result = { ...fixture.result, invoiceNumber: "F/A/1" };
+    for (const duplicate of [false, true]) {
+      const message = await composeInvoiceEmail({ document: { ...fixture, duplicate, result } });
+      expect(message.attachments?.[0]?.filename).toBe("F_A-1.pdf");
     }
   });
 
@@ -364,7 +413,7 @@ describe("invoice SMTP transport", () => {
     }
   });
 
-  it("names a routed invoice without changing its subject, body or PDF bytes", async () => {
+  it("adds the sender name while keeping the subject, message and PDF bytes identical", async () => {
     await seedVenue(suite.db, { name: "Dining Room" });
     const rig = await smtpRig("accepted");
     try {
@@ -376,7 +425,7 @@ describe("invoice SMTP transport", () => {
       expect(named).toContain("From: Dining Room <venue@example.test>");
       expect(/^Subject: (.*)$/m.exec(named)?.[1]).toBe("Factura FF/1");
       expect(/^Subject: (.*)$/m.exec(named)?.[1]).toBe(/^Subject: (.*)$/m.exec(plain)?.[1]);
-      expect(textPart(named)).toBe("Factura FF/1");
+      expect(textPart(named)).toBe("Adjuntamos la factura FF/1, de 19,69 €. La Buena");
       expect(textPart(named)).toBe(textPart(plain));
       const pdfBytes = (raw: string) =>
         Buffer.from(
@@ -618,28 +667,31 @@ describe("invoice email privacy notice", () => {
     }
   };
 
+  const spanish = "Adjuntamos la factura FF/1, de 19,69 €. La Buena";
+  const english = "Attached is invoice FF/1 for €19.69. La Buena";
+  const basque = "Erantsita bidaltzen dizugu FF/1 zenbakiko faktura (19,69 €). La Buena";
+  const catalan = "Us adjuntem la factura FF/1, per un import de 19,69 €. La Buena";
   it.each([
-    ["es-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
-    ["es-ES", null, page, false, "Factura", notice("es", false, page)],
-    ["eu-ES", email, null, false, "Faktura", notice("es", false, email)],
-    ["ca-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
-    ["en-GB", email, page, false, "Invoice", notice("en", false, `${email}, ${page}`)],
-    ["en-GB", email, page, true, "Invoice", notice("en", true, `${email}, ${page}`)],
-    ["es-ES", null, null, true, "Factura", undefined],
+    ["es-ES", email, page, true, spanish, notice("es", true, `${email}, ${page}`)],
+    ["es-ES", null, page, false, spanish, notice("es", false, page)],
+    ["eu-ES", email, null, false, basque, notice("es", false, email)],
+    ["ca-ES", email, page, true, catalan, notice("es", true, `${email}, ${page}`)],
+    ["en-GB", email, page, false, english, notice("en", false, `${email}, ${page}`)],
+    ["en-GB", email, page, true, english, notice("en", true, `${email}, ${page}`)],
+    ["es-ES", null, null, true, spanish, undefined],
   ] as const)(
     "a %s invoice with email %s and page %s (tax record %s) carries its notice in the text",
-    async (invoiceLocale, privacyEmail, privacyNoticeUrl, taxRecord, label, expected) => {
+    async (invoiceLocale, privacyEmail, privacyNoticeUrl, taxRecord, opening, expected) => {
       const text = await sendText({
         document: { ...fixture, invoiceLocale },
         privacy: { privacyEmail, privacyNoticeUrl, taxRecord },
       });
-      const caption = `${label} FF/1`;
-      expect(text).toBe(expected === undefined ? caption : `${caption}\n\n${expected}`);
+      expect(text).toBe(expected === undefined ? opening : `${opening}\n\n${expected}`);
     },
   );
 
-  it("sends the caption alone when the message carries no privacy facts", async () => {
-    expect(await sendText({ document: fixture })).toBe("Factura FF/1");
+  it("sends just the invoice sentence when the message carries no privacy facts", async () => {
+    expect(await sendText({ document: fixture })).toBe(spanish);
   });
 
   it("prints a venue name holding a replacement pattern as typed", async () => {
@@ -649,22 +701,25 @@ describe("invoice email privacy notice", () => {
       await sendText({
         document: {
           ...fixture,
+          receiptHeader: { printTradingName: false, tradingName: "Hidden name" },
           result: { ...fixture.result, issuer: { ...fixture.result.issuer!, venueName: typed } },
         },
         privacy: { privacyEmail: email, privacyNoticeUrl: null, taxRecord: false },
       }),
     ).toBe(
-      `Factura FF/1\n\n${words.purpose.split("{venue}").join(typed)}\n${addressSearch.es}\n${words.contact.split("{contacts}").join(email)}`,
+      `Adjuntamos la factura FF/1, de 19,69 €. ${typed}\n\n${words.purpose.split("{venue}").join(typed)}\n${addressSearch.es}\n${words.contact.split("{contacts}").join(email)}`,
     );
   });
 
-  it("puts the notice after a duplicate's marked caption and a blank line", async () => {
+  it("puts the notice after the invoice sentence, duplicate mark and blank line", async () => {
     expect(
       await sendText({
         document: { ...fixture, duplicate: true },
         privacy: { privacyEmail: email, privacyNoticeUrl: page, taxRecord: true },
       }),
-    ).toBe(`Factura FF/1 — DUPLICADO\n\n${notice("es", true, `${email}, ${page}`)}`);
+    ).toBe(
+      `Adjuntamos la factura FF/1, de 19,69 €. La Buena\nDUPLICADO\n\n${notice("es", true, `${email}, ${page}`)}`,
+    );
   });
 
   it("textPart decodes an accented line longer than a mail line", async () => {
