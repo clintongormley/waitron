@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { TillApi } from "../api/client.js";
 import type {
   RefundableTender,
@@ -296,7 +296,7 @@ describe("ending it", () => {
     );
 
     expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
-      codeMessage("invoice_correction.chain_unsound"),
+      "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
     );
     expect(shown(el, "finish")).toBe(false);
     expect(shown(el, "stop")).toBe(false);
@@ -304,11 +304,15 @@ describe("ending it", () => {
     press(el, "check");
     await vi.waitFor(() => expect(shown(el, "finish")).toBe(true));
     const said = text(root(el).querySelector("[data-file-refusal]"));
-    expect(said).toBe(codeMessage("sale.correction_not_admitted", "en", { reason: "wrong_node" }));
+    expect(said).toBe(
+      "Another box issued this receipt, so this box cannot record the money given back on it. Press Finish to end this money back. The money already given back stays given back.",
+    );
     expect(said).not.toContain("Refund a payment");
+    expect(said).not.toMatch(/correct/i);
+    expect(hint(el, "finish")).toBe(t("give_back.uw_stop_hint").replace("{amount}", "€2.00"));
     press(el, "finish");
     await vi.waitFor(() =>
-      expect(outcome(el)).toBe(t("give_back.uw_finished").replace("{amount}", "€2.00")),
+      expect(outcome(el)).toBe(t("give_back.uw_closed").replace("{amount}", "€2.00")),
     );
     expect(api.closeInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {});
     expect(api.fileInvoiceCorrection).not.toHaveBeenCalled();
@@ -331,6 +335,51 @@ describe("ending it", () => {
     press(el, "check");
     await vi.waitFor(() => expect(bottom(el)).toBe(""));
     expect(root(el).querySelector("[data-recovery]")).toBeNull();
+  });
+
+  it("says why a receipt can never take the money back, in its own words and never as a correction", async () => {
+    const reasons = ["replaced", "voided", "wrong_node", "not_simplified"];
+    const english = [];
+    for (const reason of reasons) {
+      const fileNow = { refusal: "sale.correction_not_admitted", reason, closable: true };
+      const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
+      const said = text(root(el).querySelector("[data-file-refusal]"));
+      expect(said).toBe(
+        `${giveBackFilingMessage("sale.correction_not_admitted", "en", { reason })} ${t("give_back.uw_finish_unrecorded")}`,
+      );
+      expect(said).not.toMatch(/correct/i);
+      english.push(said);
+      const none = await mount({ ...OPEN, fileNow });
+      expect(text(root(none.el).querySelector("[data-file-refusal]"))).toBe(
+        giveBackFilingMessage("sale.correction_not_admitted", "en", { reason }),
+      );
+      expect(shown(none.el, "finish")).toBe(false);
+    }
+    expect(new Set(english).size).toBe(reasons.length);
+    expect(
+      giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
+    ).toBe(
+      "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
+    );
+
+    setLocale("es");
+    const fileNow = {
+      refusal: "sale.correction_not_admitted",
+      reason: "wrong_node",
+      closable: true,
+    };
+    const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
+    const said = text(root(el).querySelector("[data-file-refusal]"));
+    expect(said).toBe(
+      `${giveBackFilingMessage("sale.correction_not_admitted", "es", { reason: "wrong_node" })} ${es["give_back.uw_finish_unrecorded"]}`,
+    );
+    for (const code of ["sale.correction_not_admitted", "invoice_correction.chain_unsound"])
+      for (const reason of [...reasons, "filing_refused", "missing"]) {
+        const words = giveBackFilingMessage(code, "es", { reason });
+        expect(words).not.toMatch(/rectific/i);
+        expect(words).not.toContain("equipo");
+        expect(words).not.toBe(giveBackFilingMessage(code, "en", { reason }));
+      }
   });
 
   it("Cancel this money back is offered only with nothing back or waiting, and closes it", async () => {

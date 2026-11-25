@@ -12,7 +12,7 @@ import {
 import { giveBackStyles } from "./give-back-styles.js";
 import { NEEDS_APPROVER, recoveryLinkOf, recoveryText, terminalStep } from "./give-back-steps.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { GiveBackRight } from "../api/give-back-types.js";
@@ -417,20 +417,25 @@ export class TillGiveBackUnderWay extends LitElement {
     const stop = split !== null && positive(left);
     const end = (filed: CorrectionSplitLine[] | null) => () =>
       void this.#run(this.#end(filed), "give_back.uw_unknown_end");
+    const finishes = !nothingBack && (split !== null || closes);
     return html`${
       fileNow !== null && "refusal" in fileNow
-        ? html`<p data-file-refusal>${codeMessage(fileNow.refusal, currentLocale(), fileNow)}</p>`
+        ? html`<p data-file-refusal>
+            ${giveBackFilingMessage(fileNow.refusal, currentLocale(), fileNow)}${
+              finishes && closes ? ` ${t("give_back.uw_finish_unrecorded")}` : ""
+            }
+          </p>`
         : nothing
     }
     ${
-      !nothingBack && (split !== null || closes)
+      finishes
         ? this.#choice(
             stop ? "stop" : "finish",
             t(stop ? "give_back.uw_stop" : "give_back.uw_finish"),
-            t(stop ? "give_back.uw_stop_hint" : "give_back.uw_finish_hint").replace(
-              "{amount}",
-              () => back,
-            ),
+            // Finish without a split ends it unrecorded, keeping what is back, as Stop here does.
+            t(
+              stop || split === null ? "give_back.uw_stop_hint" : "give_back.uw_finish_hint",
+            ).replace("{amount}", () => back),
             end(split),
             "primary",
           )
@@ -446,7 +451,9 @@ export class TillGiveBackUnderWay extends LitElement {
     const said =
       correction.state === "discarded"
         ? t("give_back.uw_cancelled")
-        : t("give_back.uw_finished").replace("{amount}", () => this.#money(correction.moneyBack));
+        : t(
+            correction.state === "closed" ? "give_back.uw_closed" : "give_back.uw_finished",
+          ).replace("{amount}", () => this.#money(correction.moneyBack));
     const cash =
       this.cashGiven === null
         ? ""

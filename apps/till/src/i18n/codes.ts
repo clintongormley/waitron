@@ -1399,3 +1399,49 @@ export function giveBackReasonMessage(
     ? pickLocale(GIVE_BACK_FILING_REFUSED, locale)
     : codeMessage(code, locale, params);
 }
+
+/** Why Money back under way cannot record the money given back on the receipt, for the reasons
+ * that never change (`closable`: Finish then ends it without recording, keeping what is back). */
+const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
+  replaced: {
+    en: "This receipt was replaced by a full invoice, so the money given back cannot be recorded on it.",
+    es: "Este ticket se sustituyó por una factura completa, así que el dinero devuelto no se puede registrar en él.",
+  },
+  voided: {
+    en: "This receipt was cancelled, so the money given back cannot be recorded on it.",
+    es: "Este ticket se anuló, así que el dinero devuelto no se puede registrar en él.",
+  },
+  wrong_node: {
+    en: "Another box issued this receipt, so this box cannot record the money given back on it.",
+    es: "Otro servidor emitió este ticket, así que este servidor no puede registrar en él el dinero devuelto.",
+  },
+  not_simplified: {
+    en: "This is a full invoice, so the money given back cannot be recorded on it here.",
+    es: "Es una factura completa, así que aquí no se puede registrar en ella el dinero devuelto.",
+  },
+  filing_refused: {
+    en: "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
+    es: "La Agencia Tributaria rechazó este ticket, así que el dinero devuelto no se puede registrar en él hasta que se corrija en Remisión a la AEAT, en el panel. Después pulsa Comprobar de nuevo.",
+  },
+};
+
+/** Any other refusal of recording: Finish is not offered while it holds. */
+const GIVE_BACK_NOT_RECORDED_NOW = {
+  en: "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+  es: "El dinero devuelto no se puede registrar ahora en este ticket, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
+};
+
+/** Why Money back under way cannot record the money given back on the receipt (its `fileNow`
+ * refusal), never naming a correction. */
+export function giveBackFilingMessage(
+  code: string,
+  locale: string = currentLocale(),
+  params?: Record<string, unknown>,
+): string {
+  const reason = params?.reason;
+  return code === "sale.correction_not_admitted" &&
+    typeof reason === "string" &&
+    Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason)
+    ? pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale)
+    : pickLocale(GIVE_BACK_NOT_RECORDED_NOW, locale);
+}

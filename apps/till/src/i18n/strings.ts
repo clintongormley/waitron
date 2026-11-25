@@ -282,6 +282,9 @@ export const en = {
   "give_back.uw_cancel_hint": "Nothing has gone back yet.",
   "give_back.uw_finished": "The {amount} given back is recorded.",
   "give_back.uw_cancelled": "This money back is cancelled. Nothing went back.",
+  "give_back.uw_closed": "This money back is finished. The {amount} given back stays given back.",
+  "give_back.uw_finish_unrecorded":
+    "Press Finish to end this money back. The money already given back stays given back.",
   "give_back.uw_unknown":
     "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "give_back.uw_unknown_end":
@@ -2754,6 +2757,9 @@ export const es: Record<StringKey, string> = {
   "give_back.uw_cancel_hint": "Aún no se ha devuelto nada.",
   "give_back.uw_finished": "Los {amount} devueltos quedan registrados.",
   "give_back.uw_cancelled": "Esta devolución está anulada. No se devolvió nada.",
+  "give_back.uw_closed": "Esta devolución ha terminado. Los {amount} devueltos quedan devueltos.",
+  "give_back.uw_finish_unrecorded":
+    "Pulsa Terminar para acabar esta devolución. El dinero ya devuelto queda devuelto.",
   "give_back.uw_unknown":
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "give_back.uw_unknown_end":
