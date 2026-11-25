@@ -1,56 +1,51 @@
 # Split the Dashboard and Till API clients
 
-- **For approval.** Lane E queue, watcher 25 November 2026 at 13:35. The driver signs off the draft,
-  Claude reviews it, and the watcher clears the scope before work starts.
-- **Scope for clearance.** At `5e8d24f`, Dashboard and Till are 5,934 and 5,624 lines. Their classes
-  occupy lines 3001–5934 and 2684–5624. The TypeScript scan found class-private `#` names in 424 of 425
-  Dashboard methods and all 249 Till methods. Node 26.13.1 rejects `this.#request` in a class that
-  lacks the declaration. Keep both real classes in `client.ts`, including constructors, prototypes,
-  calls and request/session state. Move domain declarations and free helpers. Ask the watcher to
-  decide separately how to split the methods and bring each class within 1,000 lines.
+Move each area's calls and types together so you can find a request in a file under 1,000 lines.
+Keep `new DashboardApi(...)`, `new TillApi(...)` and `api.method(...)` at their current call sites.
+The watcher queued the work on 25 November at 13:35. The class arrangement, two constructor edits
+and Dashboard route-test change below need the watcher's clearance.
 
-## PR 1 · Dashboard
+## Two pull requests
 
-- Under `apps/dashboard/src/api/`, group menu reads in `menu-read-types.ts`. Group catalog, people
-  and roster, venue and floor, devices, printing, sales and tax reports, box and backup, payments,
-  orders, and theme. Move `layoutPath` with floor and `PageTestPage` into `printer-types.ts`.
-- Estimate 2,400 declaration lines moved. Repoint the Dashboard path in
-  `scripts/a4-hold-code-copies.test.ts`.
+- **Dashboard first.** Under `apps/dashboard/src/api/`, split menu and catalog, people and roster,
+  venue and floor, devices, printing, reports and purchase invoices, box and cloud, payments,
+  orders, email and theme. Keep the real class and request setup in `client.ts`, including
+  background reads, the fresh-sign-in request, locale caching and calls that use that private state.
+- **Till next.** Under `apps/till/src/api/`, split menu and catalog, orders and drafts, payments,
+  kitchen and pass, device and session calls, floor and parties, attendance and invoices. Keep the
+  real class, request and person-header handling, whole-bill request state and live events in
+  `client.ts`. Keep `#todayChange` with its callers. Reuse the existing request types where possible.
+- Each area class stores the same request callback in its own `#request` field, so the moved methods
+  retain their text. Chain the area classes and have the real client inherit the last one. Change
+  the constructor bodies only to pass the request callback and initialise instance state after
+  `super`. Keep the area constructors free of requests. Order the areas so methods can reach their
+  dependencies, and keep a group together if its methods call one another.
 
-## PR 2 · Till
+## Build and verify each move
 
-- After Dashboard lands, group menu, orders and drafts, payments, kitchen and pass, devices and
-  equipment, floor and parties, attendance, and invoice delivery under `apps/till/src/api/`. Move
-  `menuOfferToTillProduct` and its helpers into `menu-product.ts`. Move `a4HoldCodes` into
-  `invoice-delivery-types.ts`.
-- Estimate 2,000 declaration lines moved. Repoint the Till path in the A4 guard.
+- Extend `scripts/move-ts-declarations.mjs` using its route-lift pattern. Put names in
+  `scripts/dashboard-client-split.json` or `scripts/till-client-split.json`. Verify moved method and
+  function bodies byte for byte, and compare type declaration tokens after formatting. Allow only
+  the named constructor changes in retained methods. Rewrite named and inline type imports to the
+  definition. Remove forwarding exports and check for runtime import cycles. Stage new files and
+  run `scripts/product-file-size.test.ts`. Remove both `client.ts` caps when they fit the default.
+- Run each changed API suite and both app typechecks. Keep the A4 guard's checks and point them at
+  the relocated declarations. Keep Till's person-fetch guard and its source anchors. Walk the
+  prototype chain in Dashboard `client-routes.test.ts` so its forbidden-name assertion still sees
+  every method. First reproduce inherited-route omission and inline-import handling in focused
+  checks. Run `scripts/move-ts-declarations.test.mjs` for the mover's own test cases.
+- Agree a quiet hour with the watcher for each app. Before opening its PR, run the **full** map on
+  disposable copies of the base and a real open branch that edits the client. Compare the branch's
+  edits after the move and run focused tests and typecheck. Include the replay command in the PR so
+  lanes can run it before rebasing. Land the complete app move after current-head CI passes.
+  Update live backlog references in that PR. [Replay steps](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
+- **Size estimate.** Dashboard about 5,500 lines moved, Till about 5,000. Expect roughly 600–1,200
+  import lines per app. Aim for 200–350 new mover lines shared by both and 80–150 focused test
+  lines. A source scan counted 164 Dashboard and 524 Till member lines outside the simple moves,
+  before imports and grouping. Measure caps on the resulting files.
 
-## Run for each PR
-
-- Agree a quiet hour with the watcher before starting. Land the full app split in that hour with
-  green current-head CI. Rebook if checks run past the window.
-- Ship `scripts/dashboard-client-split.json` or `scripts/till-client-split.json` for
-  `node scripts/move-ts-declarations.mjs <map>`. Map declarations by name. Point consumers at the
-  definitions, including existing forwarded exports the mover skips. Check that forwarding exports
-  are gone from `client.ts` and the changed imports introduce zero runtime cycles. Repoint live
-  references. Record the remaining class work in the backlog if needed.
-- Use the mover’s signature and byte-for-byte body checks. Compare exact class text from before the
-  move to the formatted result. Lower each cap in `scripts/product-file-size-limits.json` from the
-  measured count. Keep every new file within 1,000 lines.
-- Run `pnpm --filter @waitron/<app> test src/api` and typecheck both apps. Run root
-  `product-file-size.test.ts` with the new files staged and `a4-hold-code-copies.test.ts`.
-  Preserve all assertions, including Dashboard’s passive GET check and Till’s tab-person suite.
-  Budget 250–400 map and verification lines and 600–1,200 revised import lines per PR.
-  Existing test edits are limited to import and source paths. If the mover needs a change, first
-  reproduce the gap in `scripts/move-ts-declarations.test.mjs`.
-- Before opening each PR, replay its full map on a disposable copy of a current affected open
-  branch. Update the branch map for extra or renamed declarations when the mover refuses. Verify
-  branch edits survive, including edits to the retained class. Typecheck and run focused tests.
-  Share the command for lanes to run before rebasing.
-  [Lane H’s replay recipe](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
-- **Rehearsal.** On detached PR #4334 at `a284cdbfaefe96a8d0077dcd0aba7ada485cd940`, a temporary
-  Dashboard map moved `ActivationTime` and six menu-read types into `menu-read-types.ts`. It rewrote
-  `widgets/menu-publications.ts` import and preserved its new slot. The class text and all
-  non-import statements in the widget matched the originals. The mover, Dashboard typecheck,
-  `git diff --check`, and 166 tests in `client-routes.test.ts` and `menu-read-controller.test.ts`
-  passed.
+A disposable copy of open PR #4334 carried its widget edit across a seven-type move. Dashboard
+typecheck and 166 API cases passed. A separate TypeScript and Node pilot moved `listMenus` and
+`listZoneOffers` with exact method text and verified their request arguments. The old route
+inventory missed a deliberately inherited `listTills`. Walking the prototypes caught it. The two
+probes cover a sample only. The full replay needs the reviewed mover and maps.
