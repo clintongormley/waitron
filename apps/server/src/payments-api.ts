@@ -5,6 +5,7 @@ import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
 import { readPairedReaderAudit, type PairedAuditRun } from "./paired-reader-audit.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
+import { withPaymentOrderLabels } from "./current-order-label.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
@@ -1741,7 +1742,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               ? await partialView(tx, providerPaymentId, providerAmount)
               : {}),
           });
-        return result;
+        return withPaymentOrderLabels(tx, result);
       });
       return c.json(
         rows
@@ -1898,12 +1899,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/held", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        const rows = await tx
           .select({
             paymentId: payments.id,
             paymentRef: payments.paymentRef,
             provider: payments.provider,
+            workingOrderId: payments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
             settledAt: payments.settledAt,
@@ -1913,10 +1915,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
           .where(and(isNotNull(payments.heldAt), isNull(payments.holdOutcome)))
-          .orderBy(payments.heldAt, payments.id),
-      );
+          .orderBy(payments.heldAt, payments.id);
+        return withPaymentOrderLabels(tx, rows);
+      });
       return c.json(
-        rows.map(({ label, ...row }) => ({
+        rows.map(({ workingOrderId: _workingOrderId, label, ...row }) => ({
           ...row,
           ...(label === null ? {} : { label }),
           amount: centsToDecimal(row.amount),
@@ -1958,8 +1961,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/bill-refunds", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        const rows = await tx
           .select({
             refundId: refundRows.id,
             billPaymentId: billPayments.id,
@@ -1983,8 +1986,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .leftJoin(devices, eq(devices.id, refundRows.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
           .where(eq(refundRows.state, "pending"))
-          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`),
-      );
+          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`);
+        return withPaymentOrderLabels(tx, rows);
+      });
       return c.json(
         rows
           .filter((row) => !tenderRefundIsLive(deps.db, row.refundId))

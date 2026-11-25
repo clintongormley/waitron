@@ -3,7 +3,7 @@ import { setMadeHere } from "./testing/made-here-fixture.js";
 import { holdPrinterForTest, seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
@@ -11,6 +11,7 @@ import {
   billPayments,
   deviceApprovedProfiles,
   devices,
+  diningTables,
   drawerOpens,
   installChangeFeed,
   joinRequests,
@@ -21,6 +22,7 @@ import {
   removeChangeFeed,
   subscribeToChanges,
   withTransaction,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -474,7 +476,24 @@ describe("the device delete impact", () => {
       const control = await openOrder(s.venue, "Table 2");
       await start(control, s.pass, s.cfg.nodeId);
       const unlabelled = await openOrder(s.venue, null);
-      const orderId = await openOrder(s.venue);
+      const orderId = await openOrder(s.venue, null);
+      const secondId = await openOrder(s.venue, null);
+      const [first, second] = await inTx(async (tx) => {
+        const { zoneId } = await offerProducts(tx);
+        const [table] = await tx
+          .insert(diningTables)
+          .values({ zoneId, label: "Terrace 7" })
+          .returning({ id: diningTables.id });
+        await tx
+          .update(workingOrders)
+          .set({ deliveryTableId: table!.id, label: "Former table" })
+          .where(inArray(workingOrders.id, [orderId, secondId]));
+        return tx
+          .select({ number: workingOrders.orderNumber })
+          .from(workingOrders)
+          .where(inArray(workingOrders.id, [orderId, secondId]))
+          .orderBy(workingOrders.orderNumber);
+      });
       const read = () => inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
       expect((await read()).refusals).toEqual([]);
 
@@ -483,17 +502,19 @@ describe("the device delete impact", () => {
         {
           code: "device.payment_in_progress",
           params: {},
-          targets: [{ id: orderId, name: "Table 1" }],
+          targets: [{ id: orderId, name: `#${first!.number} · Terrace 7` }],
         },
       ]);
 
       await start(unlabelled, s.barTill, s.cfg.nodeId);
+      await start(secondId, s.barTill, s.cfg.nodeId);
       const { rows } = await suite.db.execute<{ order_number: number }>(
         sql`select order_number from working_orders where id = ${unlabelled}`,
       );
       expect((await read()).refusals[0]!.targets).toEqual([
         { id: unlabelled, name: `#${rows[0]!.order_number}` },
-        { id: orderId, name: "Table 1" },
+        { id: orderId, name: `#${first!.number} · Terrace 7` },
+        { id: secondId, name: `#${second!.number} · Terrace 7` },
       ]);
 
       const before = await snapshot();
@@ -526,13 +547,17 @@ describe("the device delete impact", () => {
     const s = await seed();
     const orderId = await openOrder(s.venue);
     await refund(s.cfg.nodeId, orderId, s.barTill, "pending", s.pass);
+    const [order] = await suite.db
+      .select({ number: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, orderId));
     const refusals = async (id: string) =>
       (await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, id))).refusals;
     expect(await refusals(s.barTill)).toEqual([
       {
         code: "device.payment_in_progress",
         params: {},
-        targets: [{ id: orderId, name: "Table 1" }],
+        targets: [{ id: orderId, name: `#${order!.number} · Table 1` }],
       },
     ]);
     expect(await refusals(s.pass)).toEqual([]);

@@ -271,11 +271,12 @@ describe("floor hierarchy deletion", () => {
         ),
     );
     const before = await inTx(v, snapshot);
+    const blockers = await Promise.all([open, placed, food].map((id) => billRow(v, id)));
     expect((await impact([z])).refusals).toEqual(
-      [open, placed, food].map((id, i) => ({
+      blockers.map(({ id, orderNumber }) => ({
         code: "table.delivery_in_progress",
         params: { tableId: table, workingOrderId: id },
-        targets: [{ id, name: ["A open", "B placed", "Delivery table"][i] }],
+        targets: [{ id, name: `#${orderNumber} · Delivery table` }],
       })),
     );
     expect(await inTx(v, snapshot)).toEqual(before);
@@ -322,6 +323,7 @@ describe("floor hierarchy deletion", () => {
         .values({ partyId: party, tableId: table, leftAt: NOW.toISOString() });
     });
     const order = await delivery(table, "Order");
+    const { orderNumber } = await billRow(v, order);
     const booking = randomUUID();
     await inTx(v, async (tx) =>
       tx.insert(bookings).values({
@@ -344,7 +346,7 @@ describe("floor hierarchy deletion", () => {
       {
         code: "table.delivery_in_progress",
         params: { tableId: table, workingOrderId: order },
-        targets: [{ id: order, name: "Order" }],
+        targets: [{ id: order, name: `#${orderNumber} · Combined table` }],
       },
       {
         code: "table.booked",

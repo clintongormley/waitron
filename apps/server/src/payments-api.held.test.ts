@@ -241,7 +241,7 @@ describe("GET /management-api/payments/held", () => {
     ]);
   });
 
-  it("names the order's label beside its number", async () => {
+  it("names a counter order by its typed name beside its number", async () => {
     const v = await setup();
     const held = await aHeldPayment(v, {
       amount: "12.10",
@@ -251,7 +251,7 @@ describe("GET /management-api/payments/held", () => {
     });
     await suite.db
       .update(workingOrders)
-      .set({ label: "Terrace 4" })
+      .set({ label: "Former table", billName: "Riley" })
       .where(eq(workingOrders.orderNumber, held.orderNumber));
 
     const res = await list(v);
@@ -261,7 +261,7 @@ describe("GET /management-api/payments/held", () => {
       expect.objectContaining({
         paymentId: held.paymentId,
         orderNumber: held.orderNumber,
-        label: "Terrace 4",
+        label: "Riley",
       }),
     ]);
   });

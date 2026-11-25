@@ -14,9 +14,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   refunds,
   incidents,
+  diningTables,
+  partyTables,
   printJobs,
   withTransaction,
   withFoldedPersonChanges,
+  workingOrders,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
@@ -1713,6 +1716,17 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
 
   it("lists the pending refunds nothing is driving, with their payment, bill and send", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
+    await inTx(venue, async (tx) => {
+      const [seat] = await tx
+        .select({ tableId: partyTables.tableId })
+        .from(partyTables)
+        .innerJoin(workingOrders, eq(workingOrders.partyId, partyTables.partyId))
+        .where(eq(workingOrders.id, billId));
+      await tx
+        .update(diningTables)
+        .set({ label: "Terrace 8" })
+        .where(eq(diningTables.id, seat!.tableId));
+    });
 
     const listed = await send(
       managerApp(),
@@ -1727,6 +1741,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         refundId,
         billPaymentId: paymentId,
         workingOrderId: billId,
+        label: "Terrace 8",
         provider: "fake",
         appliedAmount: "5.00",
         tipAmount: "0.00",
