@@ -49,6 +49,19 @@ it.each([1280, 390])("Save's right edge lines up with the last field's at %i px"
     await page.viewport(old[0]!, old[1]!);
   }
 });
+it("leaves room above and below the Zone editor on a tall desktop", async () => {
+  const oldWidth = window.innerWidth;
+  const oldHeight = window.innerHeight;
+  try {
+    await page.viewport(1280, 900);
+    const { el, modal } = await mountZoneEditor();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+    expect(dialog.height).toBeLessThan(600);
+    expect(zoneSave(el).getBoundingClientRect().bottom).toBeLessThan(dialog.bottom);
+  } finally {
+    await page.viewport(oldWidth, oldHeight);
+  }
+});
 it("opens the selected zone with name and three service overrides, offering each department value explicitly", async () => {
   const { el, modal, writes } = await mountZoneEditor();
   expect(modal.heading).toBe("Edit zone: Terrace");

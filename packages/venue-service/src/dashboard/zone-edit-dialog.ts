@@ -275,6 +275,7 @@ export class ZoneEditDialog extends LitElement {
       html`<wt-modal
         .open=${this.isConnected && !this.dismissed}
         size="standard"
+        height="medium"
         heading=${`${t("venue.edit_zone")}: ${zone.name}`}
         .beforeClose=${this.beforeClose}
         @wt-close=${(event: Event) => {
