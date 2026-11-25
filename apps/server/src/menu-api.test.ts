@@ -2278,6 +2278,49 @@ describe("mountMenuApi — products", () => {
     });
   });
 
+  describe("the menus a save leaves holding the old allergens", () => {
+    async function publishedDish(app: Hono) {
+      const body = await editorBody(app, { allergens: {} });
+      const created = await send(app, "POST", "/management-api/products/editor", { body });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const menuName = `Declared ${crypto.randomUUID()}`;
+      const menuId = await createMenuVia(app, menuName);
+      await offerVia(app, menuId, id);
+      const preview = await send(app, "GET", `/management-api/menus/${menuId}/preview`);
+      const { hash } = (await preview.json()) as MenuPreview;
+      const published = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
+        body: { expectedHash: hash },
+      });
+      expect(published.status).toBe(200);
+      return { id, body, menuId, menuName };
+    }
+
+    it("the editor save answers declarationMenus", async () => {
+      const app = mountApp();
+      const { id, body, menuId, menuName } = await publishedDish(app);
+      const updated = await send(app, "PUT", `/management-api/products/${id}/editor`, {
+        body: { ...body, allergens: { milk: {} } },
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({
+        id,
+        allergens: { milk: {} },
+        declarationMenus: [{ menuId, name: menuName, live: true, queued: [] }],
+      });
+    });
+
+    it("answers [] for a save of the price alone", async () => {
+      const app = mountApp();
+      const { id, body } = await publishedDish(app);
+      const updated = await send(app, "PUT", `/management-api/products/${id}/editor`, {
+        body: { ...body, unitPrice: "2.50" },
+      });
+      expect(updated.status).toBe(200);
+      expect(await updated.json()).toMatchObject({ id, unitPrice: "2.50", declarationMenus: [] });
+    });
+  });
+
   /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
   async function editorBody(
     app: Hono,

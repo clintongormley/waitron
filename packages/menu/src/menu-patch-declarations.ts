@@ -26,7 +26,7 @@ const subjectOf = (target: MenuPatchTarget, productId: string): string =>
   `${target.kind}/${target.kind === "extra" ? target.listId : ""}/${productId}`;
 
 /** Every dish, variant and extra copy the document holds, ordinary dishes' before set menus'. */
-function declarationCopies(document: MenuDocument): DeclarationCopy[] {
+export function declarationCopies(document: MenuDocument): DeclarationCopy[] {
   return [...Object.values(document.offers), ...documentSetMenuOffers(document)].flatMap(
     (offer): DeclarationCopy[] => {
       const copy = (target: MenuPatchTarget, productId: string, holder: { name: string }) => ({

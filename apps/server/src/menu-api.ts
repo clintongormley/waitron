@@ -122,6 +122,9 @@ import {
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
+  readProductDeclarationValues,
+  listProductVariants,
+  waitingDeclarationMenus,
   isModifierListKind,
   readProductModifiers,
   writeProductModifiers,
@@ -1726,6 +1729,11 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const routing = screenRouting(body);
       return c.json(
         await gated(c, sessionId, async (tx, personId) => {
+          const family = [
+            productId,
+            ...(await listProductVariants(tx, productId)).map((v) => v.id),
+          ];
+          const before = await readProductDeclarationValues(tx, family);
           const product = await saveProductEditor(
             tx,
             productId,
@@ -1733,7 +1741,8 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
             deps.venueLocale ?? FALLBACK_LOCALE,
             personId,
           );
-          return product.active ? applyRouting(tx, product, routing) : product;
+          const routed = product.active ? await applyRouting(tx, product, routing) : product;
+          return { ...routed, declarationMenus: await waitingDeclarationMenus(tx, family, before) };
         }),
       );
     }),
