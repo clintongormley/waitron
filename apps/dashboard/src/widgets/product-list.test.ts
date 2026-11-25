@@ -1986,6 +1986,7 @@ describe("the product list at phone width", () => {
     "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the rename opens at 390 px ($locale)",
     ({ locale, scrolled }) =>
       onPhone(locale, 390, async () => {
+        showColumns("course", "modifiers", "ordering", "allergens", "dietary");
         const { el, root } = await mountTree();
         for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
         const scroll = root.querySelector<HTMLElement>(".scroll")!;
@@ -2042,21 +2043,19 @@ describe("the product list at phone width", () => {
     )!;
     const row = box.closest("tr")!;
     const error = box.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+    const input = box.shadowRoot!.querySelector("input")!;
+    const inputStyle = getComputedStyle(input);
     return {
       edges,
+      textWidth:
+        input.clientWidth -
+        parseFloat(inputStyle.paddingInlineStart) -
+        parseFloat(inputStyle.paddingInlineEnd),
       box: box.getBoundingClientRect(),
-      grip:
-        (root.host.hasAttribute("narrow")
-          ? row.querySelector('[part~="name-line"]')
-          : row.querySelector('.drag-grip, [part~="grip-space"]')
-        )?.getBoundingClientRect() ??
-        (root.host.hasAttribute("narrow")
-          ? {
-              left: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().left,
-              top: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
-              bottom: row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect().top,
-            }
-          : row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect()),
+      grip: (
+        row.querySelector('.drag-grip, [part~="grip-space"]') ??
+        row.querySelector('[part~="folder-frame"]')!
+      ).getBoundingClientRect(),
       icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
       error: error.textContent,
       errorOverflows: error.scrollWidth > error.clientWidth,
@@ -2076,10 +2075,9 @@ describe("the product list at phone width", () => {
   function expectOwnLine(line: Awaited<ReturnType<typeof nameBoxLine>>) {
     expect(line.error).toBe(codeMessage("category.name_taken"));
     expect(line.scrollLeft).toBe(0);
-    expect(line.box.width).toBeGreaterThanOrEqual(140);
-    expect(line.box.top).toBeGreaterThanOrEqual(line.grip.bottom);
-    expect(line.box.left).toBeLessThanOrEqual(line.grip.left + 1);
-    expect(line.box.left).toBeGreaterThanOrEqual(line.grip.left - 1);
+    expect(line.textWidth).toBeGreaterThanOrEqual(80);
+    expect(line.box.left).toBeGreaterThanOrEqual(line.icon.right);
+    expect(line.box.bottom).toBeGreaterThan(line.grip.top);
     expectInView(line.edges);
     expect(line.box.right).toBeLessThanOrEqual(line.edges.pinned);
     expect(line.errorOverflows).toBe(false);
@@ -2092,7 +2090,7 @@ describe("the product list at phone width", () => {
       ),
     ),
   )(
-    "puts a renamed category's name box and its refusal on their own line under the grip or its slot at 390 px ($locale, $categoryId, reordering: $reordering)",
+    "puts a renamed category's name box and its refusal beside the swatch at 390 px ($locale, $categoryId, reordering: $reordering)",
     ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountNarrowTree({
@@ -2118,7 +2116,7 @@ describe("the product list at phone width", () => {
       ),
     ),
   )(
-    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId, reordering: $reordering)",
+    "puts a new category's name box and its refusal beside the swatch at 390 px ($locale, $parentId, reordering: $reordering)",
     ({ locale, parentId, reordering }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountNarrowTree({ reordering });
@@ -2132,7 +2130,7 @@ describe("the product list at phone width", () => {
       [true, false].map((reordering) => ({ locale, reordering })),
     ),
   )(
-    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px ($locale, reordering: $reordering)",
+    "keeps the swatch clear of an open name box when the screen narrows from 1280 to 390 px ($locale, reordering: $reordering)",
     ({ locale, reordering }) =>
       onPhone(locale, 1280, async () => {
         const { el, table, root } = await mountTree({
@@ -2318,7 +2316,7 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "hides a long category's swatch and wraps its name before the pinned actions at 390 px (%s)",
+    "shows a long category's swatch and wraps its name before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
         const { root } = await mountLong();
@@ -2329,7 +2327,7 @@ describe("the product list at phone width", () => {
           .getBoundingClientRect();
         const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
         expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-        expect(swatch.width).toBe(0);
+        expect(swatch.width).toBeGreaterThanOrEqual(44);
         const name = (await nameTexts(root)).find(
           ({ key, text }) => key === "folder:long" && text === longCategory.name,
         )!;
@@ -2418,6 +2416,7 @@ describe("the product list at phone width", () => {
     "measures the names' room as if unscrolled when branches open with the table scrolled sideways at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
+        showColumns("course", "modifiers", "ordering", "allergens", "dietary");
         const { el, root } = await mountLong();
         const scroll = root.querySelector<HTMLElement>(".scroll")!;
         scroll.scrollLeft = 120;
@@ -2813,6 +2812,7 @@ describe("the product list as a tree", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          reordering: false,
           categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b", color: null }],
           products: [
             product({
@@ -2824,10 +2824,12 @@ describe("the product list as a tree", () => {
         });
         await el.revealCategory("k");
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]');
-        // The table learns its width from a ResizeObserver, which reports after the next layout,
-        // and sets `narrow` a frame later.
-        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+        await vi.waitFor(() => {
+          expect(table.hasAttribute("narrow")).toBe(true);
+          const scroll = table.shadowRoot!.querySelector(".scroll")!;
+          expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+          expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]', false);
+        });
         // The phone indent: half a step a level, measured where a 390 px screen puts the list.
         const indent = (key: string) =>
           getComputedStyle(
@@ -3501,6 +3503,83 @@ describe("a product's variants in the list", () => {
 
   const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
 
+  it.each([
+    { width: 390, view: "list", selecting: false },
+    { width: 390, view: "tree", selecting: true },
+    { width: 600, view: "tree", selecting: false },
+    { width: 1180, view: "list", selecting: true },
+    { width: 1440, view: "list", selecting: false },
+  ] as const)(
+    "aligns row contents with the first line in $view at $width px (Select: $selecting)",
+    async ({ width, view, selecting }) => {
+      await page.viewport(width, 844);
+      const dish = cecina();
+      dish.name =
+        "Mushroom croquettes with roasted garlic and aged sheep cheese, served with garden herbs and fresh bread";
+      dish.courseId = starters.id;
+      if (width === 1440) showColumns("course");
+      const { table, root } = await mountTree({
+        categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+        courses: [starters],
+        products: [dish],
+        view,
+        selecting,
+        reordering: selecting && view === "tree",
+      });
+      if (view === "tree") {
+        table.setExpanded("folder:deli", true);
+        await table.updateComplete;
+      }
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width === 390));
+      const row = root.querySelector('tr[data-row-key="cecina"]')!;
+      const midpoint = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
+      const textLines = (element: Element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return [...range.getClientRects()];
+      };
+      const [firstLine, nextLine] = textLines(row.querySelector("strong")!);
+      expect(nextLine?.top).toBeGreaterThan(firstLine!.top);
+      const nameCenter = midpoint(firstLine!);
+      const target = row.querySelector('[part~="product-media"]')!;
+      const photo = target.querySelector('[part~="media-frame"]')!;
+      const menu = row.querySelector("wt-row-actions")!;
+      await menu.updateComplete;
+      const controls = {
+        photo,
+        arrow: row.querySelector('[part~="variant-toggle"]')!,
+        menu: menu.shadowRoot!.querySelector("button")!,
+        ...(selecting && { checkbox: row.querySelector('input[type="checkbox"]')! }),
+        ...(width >= 440 || !selecting ? { available: row.querySelector("wt-switch")! } : {}),
+      };
+      const offsets = Object.fromEntries(
+        Object.entries(controls).map(([key, control]) => [
+          key,
+          Math.round(midpoint(control.getBoundingClientRect()) - nameCenter),
+        ]),
+      );
+      if (width >= 440 || !selecting) {
+        const [price] = textLines(row.querySelector('[data-test="price"]')!);
+        offsets.price = Math.round(midpoint(price!) - nameCenter);
+      }
+      if (view === "list" && width >= 440) {
+        const [category] = textLines(row.querySelector('[part~="category-path-name"]')!);
+        offsets.category = Math.round(midpoint(category!) - nameCenter);
+      }
+      if (width === 1440) {
+        const [course] = textLines(cellUnder(root, dish.id, t("product.course")));
+        offsets.course = Math.round(midpoint(course!) - nameCenter);
+      }
+      expect(
+        Object.fromEntries(Object.entries(offsets).filter(([, offset]) => Math.abs(offset) > 3)),
+      ).toEqual({});
+      expect(target.getBoundingClientRect().height).toBeCloseTo(
+        row.getBoundingClientRect().height,
+        0,
+      );
+    },
+  );
+
   it.each(["en-GB", "es-ES"])("fits the starting columns at 1180 px in %s", async (locale) => {
     setLocale(locale);
     await page.viewport(1180, 844);
@@ -3509,12 +3588,157 @@ describe("a product's variants in the list", () => {
     dish.modifiers = [{ kind: "extras", id: "extras" }];
     dish.ordering = "not_sold_separately";
     dish.variants[0]!.available = false;
-    const { table, root } = await mountDeli({ products: [dish] });
+    const { root } = await mountDeli({ products: [dish] });
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
     await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
     await page.viewport(390, 844);
-    await vi.waitFor(() => expect(table.wrapToFit).toBe(false));
+    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
   });
+
+  it("lays out a renamed List row the same as a fresh row with that name", async () => {
+    await page.viewport(768, 844);
+    const dish = cecina();
+    const other = product({ id: "bread", name: "Sourdough bread from the town bakery" });
+    const renamed = {
+      ...dish,
+      name: "Mushroom croquettes with roasted garlic and aged sheep cheese",
+    };
+    const categories = [{ ...food, id: "deli", name: "Cured meats from local producers" }];
+    const draw = (dish: Product) =>
+      mountTree({ view: "list", categories, products: [dish, other] });
+    const frames = async () => {
+      for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
+    };
+    const existing = await draw(dish);
+    await frames();
+    existing.el.products = [renamed, other];
+    await existing.el.updateComplete;
+    await existing.table.updateComplete;
+    const fresh = await draw(renamed);
+    await frames();
+    expect(nameCell(existing.root, dish.id).getBoundingClientRect().width).toBeCloseTo(
+      nameCell(fresh.root, dish.id).getBoundingClientRect().width,
+      0,
+    );
+  });
+
+  it.each(["en-GB", "es-ES"])("fits the starting List columns at 560 px in %s", async (locale) => {
+    await page.viewport(560, 844);
+    setLocale(locale);
+    const { root } = await mountTree({
+      view: "list",
+      products: [cecina(), product({ id: "bread", name: "Sourdough bread" })],
+      categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+    });
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the starting List columns beside Filters in %s",
+    async (locale) => {
+      await page.viewport(1180, 844);
+      setLocale(locale);
+      const dish = cecina();
+      dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+      dish.variants[0]!.unitPrice = "138.00";
+      dish.variants[1]!.unitPrice = "144.00";
+      const { el, root, table } = await mountTree({
+        view: "list",
+        products: [dish],
+        categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+      });
+      el.parentElement!.style.width = "848px";
+      const scroll = root.querySelector<HTMLElement>(".scroll")!;
+      await vi.waitFor(() => expect(scroll.clientWidth).toBeGreaterThan(800));
+      root.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+      await table.updateComplete;
+      await vi.waitFor(() => {
+        expect(scroll.clientWidth).toBeLessThan(600);
+        expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+      });
+      const price = root.querySelector('tr[data-row-key="cecina"] [data-test="price"]')!;
+      const amount = [...price.childNodes].find((node) => node.textContent?.includes("–"))!;
+      const dash = amount.textContent!.indexOf("–");
+      expect(dash).toBeGreaterThan(0);
+      const first = document.createRange();
+      first.setStart(amount, 0);
+      first.setEnd(amount, dash);
+      const second = document.createRange();
+      second.setStart(amount, dash + 1);
+      second.setEnd(amount, amount.textContent!.length);
+      expect(first.getClientRects()).toHaveLength(1);
+      expect(second.getClientRects()).toHaveLength(1);
+    },
+  );
+
+  it("keeps the availability switch clear of Actions in the filtered Spanish phone Tree", async () => {
+    await page.viewport(390, 844);
+    setLocale("es-ES");
+    const dish = cecina();
+    dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+    dish.available = false;
+    const { table, root } = await mountDeli({ products: [dish] });
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+    const filter = root.querySelector<WtCombobox>('wt-combobox[data-filter="available"]')!;
+    await chooseOption(filter, "no");
+    await table.updateComplete;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const row = root.querySelector('tr[data-row-key="cecina"]')!;
+    const available = row.querySelector("wt-switch")!.getBoundingClientRect();
+    const actions = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
+    expect(available.right).toBeLessThanOrEqual(actions.left);
+    expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+  });
+
+  it.each(["list", "tree"] as const)(
+    "gives names the Price and Available space while selecting in the phone %s",
+    async (view) => {
+      await page.viewport(390, 844);
+      showColumns("price", "available");
+      const { el, table, root } = await mountTree({
+        view,
+        products: [
+          product({ id: "cola", name: "Cola" }),
+          product({ id: "ale", name: "Ale", available: false }),
+        ],
+      });
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+      await choose(el, "available", "no");
+      expect(rowKeys(root).filter((key) => !key.startsWith("folder:"))).toEqual(["ale"]);
+      const row = root.querySelector('tr[data-row-key="ale"]')!;
+      const price = () => row.querySelector('[data-test="price"]');
+      const available = () => row.querySelector("wt-switch");
+      const headingHeight = () => root.querySelector("thead")!.getBoundingClientRect().height;
+      const normalHeadingHeight = headingHeight();
+      expect(price()).not.toBeNull();
+      expect(available()).not.toBeNull();
+
+      el.selecting = true;
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(price()).toBeNull();
+      expect(available()).toBeNull();
+      expect(headingHeight() - normalHeadingHeight).toBeLessThanOrEqual(8);
+      expect(table.filterValues("available")).toEqual(["no"]);
+      expect(rowKeys(root).filter((key) => !key.startsWith("folder:"))).toEqual(["ale"]);
+      expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
+        price: true,
+        available: true,
+      });
+
+      await page.viewport(800, 844);
+      await vi.waitFor(() => expect(price()).not.toBeNull());
+      expect(available()).not.toBeNull();
+      await page.viewport(390, 844);
+      await vi.waitFor(() => expect(price()).toBeNull());
+      el.selecting = false;
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(price()).not.toBeNull();
+      expect(available()).not.toBeNull();
+    },
+  );
 
   it.each(["en-GB", "es-ES"])("shows the List defaults at 1180 px in %s", async (locale) => {
     setLocale(locale);
@@ -3584,9 +3808,31 @@ describe("a product's variants in the list", () => {
     });
     await openVariants(root, table, "cecina");
     expect(cellUnder(root, "cecina:thin", t("product.category")).textContent?.trim()).toBe("");
-    el.parentElement!.style.width = "390px";
+    el.parentElement!.style.width = "356px";
     await vi.waitFor(() => expect(headings()).not.toContain(t("product.category")));
     expect(root.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+      const category = longName.querySelector('[part~="category-path-name"]')!;
+      expect(category.textContent).toBe(
+        "Food and drinks served during the evening › Cured meats from local producers",
+      );
+      expect(category.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        longName.querySelector("strong")!.getBoundingClientRect().bottom - 1,
+      );
+    });
+  });
+
+  it("shows Category once when a phone List has its Category column customised on", async () => {
+    await page.viewport(390, 844);
+    showColumns("category");
+    const { table, root } = await mountTree({ view: "list" });
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+    const row = root.querySelector('tr[data-row-key="lager"]')!;
+    expect(cellUnder(root, "lager", t("product.category")).textContent!.trim()).toBe(
+      "Drinks › Beer",
+    );
+    expect(row.textContent!.match(/Drinks › Beer/g)).toHaveLength(1);
   });
 
   it("filters products through category descendants in List", async () => {
@@ -4056,7 +4302,7 @@ describe("the Products tree's Name column", () => {
     const { root } = await mountDeep();
     for (const key of ROWS.slice(1)) {
       const { grip, media, name } = pieces(root, key);
-      expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(1);
+      expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(3);
       expect(Math.abs(name.middle - media!.middle), key).toBeLessThanOrEqual(3);
     }
   });
@@ -4067,6 +4313,31 @@ describe("the Products tree's Name column", () => {
       const { root } = await mountDeep({ selecting });
       const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
       expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(root, ROOT_KEY).name.left, 0);
+    },
+  );
+
+  it.each([560, 1180])(
+    "keeps the photo target beside every line of a wrapped Tree name at %i px",
+    async (width) => {
+      await page.viewport(width, 844);
+      const dish = product({
+        id: "croquettes",
+        name: "Homemade croquettes with roast garlic and aged sheep cheese, served with seasonal vegetables and bread",
+        image: "croquettes.png",
+        primaryCategoryId: "g",
+      });
+      const { root } = await mountDeep({ products: [...deepProducts(), dish], reordering: false });
+      const row = root.querySelector('tr[data-row-key="croquettes"]')!;
+      const name = document.createRange();
+      name.selectNodeContents(row.querySelector("strong")!);
+      const media = row.querySelector('[part~="product-media"]')!.getBoundingClientRect();
+      const lines = [...name.getClientRects()];
+      expect(lines.length).toBeGreaterThan(1);
+      for (const line of lines) {
+        expect(line.left).toBeGreaterThanOrEqual(media.right);
+        const hit = root.elementFromPoint(line.left + 1, line.top + line.height / 2);
+        expect(hit?.closest('[part~="product-media"]') ?? null).toBeNull();
+      }
     },
   );
 
@@ -4106,30 +4377,84 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo, placeholder or category slot, so names start after their arrows", async () => {
+    it("shows compact photos, swatches and category counts in the Tree", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
       ];
-      // Each product's slot, and the one of loin's opened variant.
       expect(photos.length).toBe(PRODUCTS.size + 1);
-      for (const photo of photos) expect(photo.getBoundingClientRect().width).toBe(0);
+      for (const photo of photos) expect(photo.getBoundingClientRect().width).toBeCloseTo(30);
       for (const key of PRODUCTS) {
         const grip = root.querySelector(`tr[data-row-key="${key}"] .drag-grip`)!;
         expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
         const cell = grip.closest("tr")!.querySelector(".tree-cell")!;
         const arrow = cell.querySelector(".tree-spacer, .tree-toggle, .tree-arrow")!;
-        expect(pieces(root, key).name.left, key).toBeCloseTo(
+        expect(pieces(root, key).name.left, key).toBeGreaterThan(
           arrow.getBoundingClientRect().right,
-          0,
         );
       }
-      for (const key of ["root", "folder:d", "folder:f", "folder:m", "folder:g"]) {
-        const row = key === "root" ? ROOT_KEY : key;
-        expect(pieces(root, row).media!, key).not.toBeNull();
-        const folder = root.querySelector(`tr[data-row-key="${row}"] [part~="folder-frame"]`)!;
-        expect(folder.getBoundingClientRect().width, key).toBe(0);
+      for (const key of [ROOT_KEY, "folder:d", "folder:f", "folder:m", "folder:g"]) {
+        const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+        expect(
+          row.querySelector('[part~="color-swatch"]')!.getBoundingClientRect().width,
+        ).toBeCloseTo(30);
+        const count = row.querySelector('[part~="count"]')!.getBoundingClientRect();
+        expect(count.width).toBeGreaterThan(1);
+        expect(count.height).toBeGreaterThan(1);
       }
+    });
+
+    it("keeps the rename swatch tappable beside the name field across the row", async () => {
+      const { el, root, table } = await mountPhone({ reordering: false });
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      el.nameError = "Choose a different name for this category";
+      await el.updateComplete;
+      await table.updateComplete;
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const swatch = row.querySelector<HTMLButtonElement>('[data-test="name-box-color"]')!;
+      const box = row.querySelector('wt-input[name="category-name"]')!;
+      const target = swatch.getBoundingClientRect();
+      const bounds = row.getBoundingClientRect();
+      expect(target.top).toBeCloseTo(bounds.top, 0);
+      expect(target.bottom).toBeCloseTo(bounds.bottom, 0);
+      expect(target.right).toBeLessThanOrEqual(box.getBoundingClientRect().left);
+      const choose = vi.fn();
+      el.addEventListener("name-color", choose);
+      const hit = root.elementFromPoint(target.left + target.width / 2, target.bottom - 2);
+      expect(hit?.closest("button")).toBe(swatch);
+      swatch.click();
+      expect(choose).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens a wrapped row's photo editor from the top and bottom of the target", async () => {
+      const dish = product({
+        id: "croquettes",
+        name: "Homemade croquettes with roast garlic and pieces of aged cured ham",
+        image: "croquettes.png",
+      });
+      const { el, root } = await mountPhone({
+        products: [dish],
+        categories: [],
+        reordering: false,
+      });
+      const row = root.querySelector('tr[data-row-key="croquettes"]')!;
+      const media = row.querySelector<HTMLElement>('[part~="product-media"]')!;
+      const edit = vi.fn();
+      el.addEventListener("edit-product", edit);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(53);
+      const box = media.getBoundingClientRect();
+      const bounds = row.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(bounds.top, 0);
+      expect(box.bottom).toBeCloseTo(bounds.bottom, 0);
+      for (const y of [box.top + 2, box.bottom - 2]) {
+        const hit = root.elementFromPoint(box.left + box.width / 2, y);
+        expect(hit?.closest("a")).toBe(media);
+        (hit as HTMLElement).click();
+      }
+      expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([
+        { productId: "croquettes", field: "image" },
+        { productId: "croquettes", field: "image" },
+      ]);
     });
 
     it.each(
@@ -4137,13 +4462,15 @@ describe("the Products tree's Name column", () => {
         [true, false].map((reordering) => ({ selecting, reordering })),
       ),
     )(
-      "steps category and product names in evenly per level without media slots (selecting: $selecting, reordering: $reordering)",
+      "steps category and product names in evenly per level with media slots (selecting: $selecting, reordering: $reordering)",
       async ({ selecting, reordering }) => {
         const { root } = await mountPhone({ selecting, reordering });
         const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
         const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
         expect(step).toBeGreaterThan(0);
-        expect(root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect().width).toBe(0);
+        expect(root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect().width).toBe(
+          44,
+        );
         for (const row of all) {
           const expected = all[0]!.name.left + (row.level - 1) * step;
           expect(row.name.left, row.key).toBeCloseTo(expected, 0);
@@ -4151,7 +4478,7 @@ describe("the Products tree's Name column", () => {
       },
     );
 
-    it("lets a long name use the room the photo gave up, up to its row's pinned actions", async () => {
+    it("fits a long name within the Name column and beside its photo", async () => {
       const long = product({
         id: "croquetas",
         name: "Homemade croquettes with old cured ham chunks",
@@ -4165,29 +4492,28 @@ describe("the Products tree's Name column", () => {
         'tr[data-row-key="croquetas"] [part~="name-stack"]',
       )!;
       const cell = name.closest("td")!;
-      const pinned = cell
-        .closest("tr")!
-        .querySelector('td[data-pinned="end"]')!
-        .getBoundingClientRect().left;
       expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-      const room =
-        pinned -
-        name.getBoundingClientRect().left -
-        parseFloat(getComputedStyle(cell).paddingInlineEnd);
-      expect(Math.abs(parseFloat(getComputedStyle(name).maxInlineSize) - room)).toBeLessThanOrEqual(
-        1,
-      );
+      const right =
+        cell.getBoundingClientRect().right - parseFloat(getComputedStyle(cell).paddingInlineEnd);
+      const text = document.createRange();
+      text.selectNodeContents(name.querySelector("strong")!);
+      expect(text.getClientRects().length).toBeGreaterThan(1);
+      expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(right + 1);
     });
 
     it.each([false, true])(
-      "puts the Name heading over the first name in the column (selecting: %s)",
+      "keeps the Name heading over its column at phone width (selecting: %s)",
       async (selecting) => {
         const { root } = await mountPhone({ selecting });
         const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
-        expect(heading.getBoundingClientRect().left).toBeCloseTo(
-          pieces(root, ROOT_KEY).name.left,
-          0,
-        );
+        const next = root.querySelector<HTMLElement>(
+          selecting ? 'thead th[data-pinned="end"]' : 'thead th button[data-sort="price"]',
+        )!;
+        const nameLeft = pieces(root, ROOT_KEY).name.left;
+        const bounds = heading.getBoundingClientRect();
+        if (selecting) expect(bounds.left).toBeLessThanOrEqual(nameLeft);
+        else expect(bounds.left).toBeCloseTo(nameLeft, 0);
+        expect(bounds.right).toBeLessThanOrEqual(next.getBoundingClientRect().left);
       },
     );
   });
@@ -4638,7 +4964,7 @@ describe("a refresh during a drag", () => {
     press(nameOf(root, "folder:d"), "pointermove");
     expect(gapBefore(root)).toEqual(["cola"]);
     expect(Math.abs(row.getBoundingClientRect().height - height * 2)).toBeLessThanOrEqual(
-      width === 390 ? 3 : 0.5,
+      width === 390 ? 3 : 2,
     );
     const after = await refreshed(el, {
       products: [
@@ -4699,6 +5025,7 @@ describe("a category row's leading slot", () => {
         el.nameDraft = { kind: "create", parentId: "d" };
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        await new Promise(requestAnimationFrame);
         expect(root.querySelectorAll('tbody tr wt-icon[name="folder"]')).toHaveLength(0);
         for (const id of ["d", "b", "f"]) {
           const row = `tr[data-row-key="folder:${id}"]`;
@@ -4769,7 +5096,11 @@ describe("a category row's leading slot", () => {
           `${row} [part~="folder-frame"] > [data-test="name-box-color"]`,
         )!;
         expect(square).not.toBeNull();
-        expect(rectValues(square.getBoundingClientRect())).toEqual(squareAtRest);
+        const target = square.getBoundingClientRect();
+        expect(target.left).toBe(squareAtRest.x);
+        expect(target.top).toBe(squareAtRest.y);
+        expect(target.width).toBe(squareAtRest.width);
+        expect(target.height).toBeCloseTo(square.closest("tr")!.getBoundingClientRect().height, 0);
         expect(rectOf(root, `${row} wt-input[name="category-name"]`).left).toBe(nameLeft);
         expect(root.querySelector('wt-input[name="category-name"] > [slot="end"]')).toBeNull();
       }),
@@ -4815,7 +5146,7 @@ describe("a category row's leading slot", () => {
       { kind: "create", parentId: "d" } as const,
     ].flatMap((draft) => [true, false].map((reordering) => ({ draft, reordering }))),
   )(
-    "shows the square in the row's leading slot above the name box at 390 px ($draft.kind, reordering: $reordering)",
+    "shows the square in the row's leading slot beside the name box at 390 px ($draft.kind, reordering: $reordering)",
     ({ draft, reordering }) =>
       atWidth(390, async () => {
         const { el, root, table } = await mountTree({
@@ -4836,9 +5167,8 @@ describe("a category row's leading slot", () => {
         const rect = square.getBoundingClientRect();
         expect(rect.width).toBeGreaterThan(0);
         expect(rect.height).toBeGreaterThan(0);
-        expect(rect.bottom).toBeLessThanOrEqual(box.getBoundingClientRect().top);
-        const cell = row.querySelector('[part~="folder-cell"]')!.getBoundingClientRect();
-        expect(box.getBoundingClientRect().left).toBeCloseTo(cell.left, 0);
+        expect(rect.right).toBeLessThanOrEqual(box.getBoundingClientRect().left);
+        expect(rect.height).toBeCloseTo(row.getBoundingClientRect().height, 0);
         expect(box.querySelector(':scope > [slot="end"]')).toBeNull();
       }),
   );
@@ -4995,7 +5325,7 @@ describe("a category whose name wraps", () => {
       [true, false].map((reordering) => ({ locale, reordering })),
     ),
   )(
-    "keeps its grip beside the name's first line and hides its swatch at 390 px ($locale, reordering: $reordering)",
+    "keeps its grip beside the wrapped name and shows its swatch at 390 px ($locale, reordering: $reordering)",
     async ({ locale, reordering }) => {
       const restore = {
         width: window.innerWidth,
@@ -5022,19 +5352,14 @@ describe("a category whose name wraps", () => {
         const text = document.createRange();
         text.selectNodeContents(row.querySelector("strong")!);
         const lines = [...text.getClientRects()];
-        const first = lines[0]!;
-        const firstMiddle = first.top + first.height / 2;
-        const whole = text.getBoundingClientRect();
-        const wholeMiddle = whole.top + whole.height / 2;
+        const swatch = row.querySelector('[data-test="color-long"]')!.getBoundingClientRect();
         expect(new Set(lines.map(({ bottom }) => Math.round(bottom))).size).toBeGreaterThan(1);
-        expect(row.querySelector('[data-test="color-long"]')!.getBoundingClientRect().width).toBe(
-          0,
-        );
-        for (const part of reordering ? [".drag-grip"] : []) {
-          const box = row.querySelector(part)!.getBoundingClientRect();
-          const middle = box.top + box.height / 2;
-          expect(Math.abs(middle - firstMiddle), part).toBeLessThanOrEqual(3);
-          expect(wholeMiddle - middle, part).toBeGreaterThan(first.height / 3);
+        expect(swatch.width).toBe(44);
+        if (reordering) {
+          const grip = row.querySelector(".drag-grip")!.getBoundingClientRect();
+          expect(grip.right).toBeLessThanOrEqual(swatch.left);
+          expect(grip.top).toBeGreaterThanOrEqual(swatch.top);
+          expect(grip.bottom).toBeLessThanOrEqual(swatch.bottom);
         }
       } finally {
         setLocale(restore.locale);
@@ -5046,7 +5371,7 @@ describe("a category whose name wraps", () => {
 
 describe("a category's count", () => {
   it.each(["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ locale, width }))))(
-    "is visually hidden on a phone, still names its row, and is shown on a wide screen ($locale, $width px)",
+    "stays visible and names its row at both widths ($locale, $width px)",
     async ({ locale, width }) => {
       const restore = {
         width: window.innerWidth,
@@ -5075,14 +5400,8 @@ describe("a category's count", () => {
         for (const count of counts) {
           const test = count.dataset.test;
           expect(count.textContent!.trim(), test).not.toBe("");
-          if (width === 390) {
-            expect(getComputedStyle(count).display, test).not.toBe("none");
-            expect(getComputedStyle(count).clipPath, test).toBe("inset(50%)");
-            expect(count.getBoundingClientRect().width, test).toBe(1);
-          } else {
-            expect(getComputedStyle(count).clipPath, test).toBe("none");
-            expect(count.getBoundingClientRect().width, test).toBeGreaterThan(1);
-          }
+          expect(getComputedStyle(count).clipPath, test).toBe("none");
+          expect(count.getBoundingClientRect().width, test).toBeGreaterThan(1);
         }
       } finally {
         setLocale(restore.locale);
@@ -5094,7 +5413,7 @@ describe("a category's count", () => {
 
 describe("A303 tree media slots", () => {
   it.each([1280, 440, 390])(
-    "uses equal category and product boxes, hiding both at %i px only when narrow",
+    "uses equally sized category and product media at %i px",
     async (width) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
@@ -5111,16 +5430,11 @@ describe("A303 tree media slots", () => {
           '[data-test="color-d"] [part~="color-swatch"]',
         )!;
         const photo = root.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
-        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
-        if (width <= 440) {
-          expect(slot.getBoundingClientRect().width).toBe(0);
-          expect(photo.getBoundingClientRect().width).toBe(0);
-        } else {
-          const a = chip.getBoundingClientRect(),
-            b = photo.getBoundingClientRect();
-          expect(a.width).toBeGreaterThan(0);
-          expect(a.width).toBe(b.width);
-          expect(a.height).toBe(b.height);
+        const expected = width <= 440 ? 30 : 36;
+        for (const media of [chip, photo]) {
+          const box = media.getBoundingClientRect();
+          expect(box.width).toBe(expected);
+          expect(box.height).toBe(expected);
         }
       } finally {
         await page.viewport(before.width, before.height);
@@ -5137,6 +5451,7 @@ it.each([390, 1280])(
     table.setExpanded("folder:d", true);
     table.setExpanded("folder:b", true);
     await table.updateComplete;
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width === 390));
     const controls = ["folder:d", "folder:b", "cola", "lager"].map((key) => {
       const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
       return {
@@ -5144,6 +5459,8 @@ it.each([390, 1280])(
         box: row.querySelector<HTMLElement>('input[type="checkbox"]')!,
       };
     });
+    const headerCheckbox = root.querySelector('[data-test="select-all"]')!.getBoundingClientRect();
+    const headerMiddle = headerCheckbox.left + headerCheckbox.width / 2;
     expect(controls[0]!.grip).not.toBeNull();
     for (const { grip, box } of controls) {
       expect(grip.getBoundingClientRect().left).toBeCloseTo(
@@ -5156,6 +5473,21 @@ it.each([390, 1280])(
       );
       expect(grip.closest("td")).toBe(box.closest("td"));
       expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+      const gripBounds = grip.getBoundingClientRect();
+      const boxBounds = box.getBoundingClientRect();
+      if (width === 390) {
+        expect(gripBounds.top).toBeGreaterThanOrEqual(boxBounds.bottom);
+        const gripMiddle = gripBounds.left + gripBounds.width / 2;
+        const boxMiddle = boxBounds.left + boxBounds.width / 2;
+        expect(Math.abs(headerMiddle - boxMiddle)).toBeLessThanOrEqual(1);
+        expect(Math.abs(gripMiddle - boxMiddle)).toBeLessThanOrEqual(1);
+      } else {
+        expect(gripBounds.left).toBeGreaterThanOrEqual(boxBounds.right);
+        expect(gripBounds.top).toBeLessThan(boxBounds.bottom);
+        const gripMiddle = gripBounds.top + gripBounds.height / 2;
+        const boxMiddle = boxBounds.top + boxBounds.height / 2;
+        expect(Math.abs(gripMiddle - boxMiddle)).toBeLessThanOrEqual(1);
+      }
     }
   },
 );
@@ -5179,7 +5511,7 @@ describe("product media link", () => {
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb"]')!;
     expect(getComputedStyle(frame).borderTopColor).toBe("rgb(37, 107, 177)");
     expect(parseFloat(getComputedStyle(frame).borderTopWidth)).toBeGreaterThan(1);
-    const name = media!.parentElement!.querySelector("strong")!;
+    const name = media!.closest("td")!.querySelector("strong")!;
     expect(media!.getBoundingClientRect().right).toBeLessThanOrEqual(
       name.getBoundingClientRect().left,
     );
@@ -5231,7 +5563,7 @@ describe("product media link", () => {
     expect(fill("plain")).toBe("rgb(119, 119, 119)");
     expect(fill("cola")).toBe("rgb(37, 107, 177)");
   });
-  it("fills a product without a photo with its own colour and hides the swatch at phone width", async () => {
+  it("keeps a product's own colour in its smaller phone swatch", async () => {
     const { el, root } = await mountTree({
       products: [product({ id: "plain", name: "Plain", color: "#b12525" })],
     });
@@ -5240,7 +5572,8 @@ describe("product media link", () => {
     const frame = media!.querySelector<HTMLElement>('[data-test="thumb-placeholder"]')!;
     expect(getComputedStyle(frame).backgroundColor).toBe("rgb(177, 37, 37)");
     await page.viewport(390, 844);
-    await expect.poll(() => media!.getBoundingClientRect().width).toBe(0);
+    await expect.poll(() => frame.getBoundingClientRect().width).toBe(30);
+    expect(getComputedStyle(frame).backgroundColor).toBe("rgb(177, 37, 37)");
     expect((await tableRoot(el)).querySelector('[data-test="edit-plain"]')).not.toBeNull();
   });
 });
@@ -5591,7 +5924,7 @@ describe("variant media slot", () => {
     expect(root.querySelector("[popover]:popover-open")).toBeNull();
   });
 
-  it("indents a variant's swatch past its product's swatch and hides it at phone width", async () => {
+  it("keeps a variant's swatch indented past its product's swatch at both widths", async () => {
     const { root } = await mountOpen();
     const box = (id: string) =>
       root.querySelector<HTMLElement>(`[data-test="color-${id}"]`)!.getBoundingClientRect();
@@ -5601,8 +5934,11 @@ describe("variant media slot", () => {
     }
     expect(box("pollo").width).toBeGreaterThan(0);
     await page.viewport(390, 844);
-    await expect.poll(() => box("pollo").width).toBe(0);
-    expect(box("half").width).toBe(0);
+    await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(true));
+    for (const id of ["half", "quarter"]) {
+      expect(box(id).left - box("pollo").left, id).toBeCloseTo(8, 0);
+      expect(box(id).width, id).toBe(box("pollo").width);
+    }
   });
 });
 
@@ -6720,7 +7056,7 @@ describe("A668 effective allergen cells", () => {
       const name = cellUnder(root, "dish", "Name").querySelector<HTMLElement>(
         '[part~="product-cell"]',
       )!;
-      expect(getComputedStyle(name).display).toBe("block");
+      expect(name.checkVisibility()).toBe(true);
       const badge = (key: string) =>
         cellUnder(root, key, "Allergens").querySelector<HTMLElement>(
           '[data-test="allergen-state"]',
@@ -6921,6 +7257,13 @@ it.each(
       const markers = [...row.querySelectorAll<HTMLElement>(selectors)];
       expect(markers).toHaveLength(width === 390 ? 1 : 2);
       for (const marker of markers) {
+        if (width !== 390) {
+          const name = row.querySelector('wt-input[name="category-name"]')!.getBoundingClientRect();
+          const label = marker.getBoundingClientRect();
+          expect(
+            Math.abs((label.top + label.bottom - name.top - name.bottom) / 2),
+          ).toBeLessThanOrEqual(2);
+        }
         const range = document.createRange();
         range.selectNodeContents(marker);
         for (const rect of range.getClientRects())

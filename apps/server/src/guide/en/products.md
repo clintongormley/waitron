@@ -16,7 +16,9 @@ it contains something you need to fix, it opens itself and stays open until you 
 
 In **List**, search by product or variant name. To find dishes in a category and its subcategories,
 choose a **Category** in **Filters**. Under **Available**, choose **No** to find dishes or variants that are off sale.
-A dish with an unavailable variant can appear under **Yes** and **No**.
+A dish with an unavailable variant can appear under **Yes** and **No**. On a phone, look under
+the product name for its category. The switch beside the price controls availability. On a phone,
+exit **Select** to see the price and switch again.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
 you sort products, and matching categories open while you filter. To add directly in a category,
@@ -225,7 +227,7 @@ in the product editor, whichever column the list is sorted by; drag them in the 
 Each variant's row shows its photo, its own name, the price it sells at, its availability and its
 row menu. A variant with no photo of its own shows its product's or, when neither has one, the same
 square as its product's row. Choose the photo or square to open the variant's own page at its photo.
-On a phone the photo is hidden. If a variant's VAT when taken away differs from its product's, the list notes it
+If a variant's VAT when taken away differs from its product's, the list notes it
 under the variant's price. Choose **Delete** in a product or variant's row menu to remove it permanently from
 Products. Its past sales stay on record.
 

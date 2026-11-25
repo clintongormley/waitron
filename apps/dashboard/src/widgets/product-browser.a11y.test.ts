@@ -89,6 +89,9 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
   });
 
   it("renders the Select button's tooltip on keyboard focus accessibly", async () => {
+    const viewport = [window.innerWidth, window.innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(1180, 844);
     const { el, host } = await mountPlain();
     const select = el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
     (document.activeElement as HTMLElement | null)?.blur();

@@ -18,7 +18,9 @@ abierta hasta que lo corriges.
 En **Lista**, busca por nombre de producto o variante. Para encontrar platos de una categoría y
 sus subcategorías, elige una **Categoría** en **Filtros**. En **Disponible**, elige **No** para encontrar platos o
 variantes que no están a la venta. Un plato con una variante no disponible puede aparecer bajo
-**Sí** y **No**.
+**Sí** y **No**. En un teléfono, busca la categoría debajo del nombre del producto. El interruptor
+junto al precio controla la disponibilidad. En un teléfono, sal de **Seleccionar** para volver a
+ver el precio y el interruptor.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir
@@ -240,8 +242,7 @@ producto, el de la lista de variantes del editor, sea cual sea la columna por la
 lista; arrástralas en el editor para cambiarlo. La fila de cada variante muestra su foto, su propio
 nombre, el precio al que se vende, su disponibilidad y su menú de fila. Una variante sin foto propia
 muestra la de su producto o, si ninguno tiene, el mismo cuadrado que la fila de su producto. Elige la
-foto o el cuadrado para abrir la página propia de la variante en su foto. En un teléfono la foto no se
-muestra. Si el IVA para llevar de una variante es distinto del de su producto, la lista lo indica bajo el precio de
+foto o el cuadrado para abrir la página propia de la variante en su foto. Si el IVA para llevar de una variante es distinto del de su producto, la lista lo indica bajo el precio de
 la variante. Elige **Eliminar** en el menú de un producto o una variante para quitarlo de
 Productos de forma permanente. Sus ventas pasadas se conservan.
 

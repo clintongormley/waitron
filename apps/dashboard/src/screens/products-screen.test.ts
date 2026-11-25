@@ -724,6 +724,8 @@ describe("menu-screen", () => {
     root.querySelector<HTMLButtonElement>('button[data-sort="available"]')!.click();
     await table.updateComplete;
     expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+    await table.revealRow("p0");
+    await new Promise(requestAnimationFrame);
     await userEvent.click(page.getByRole("switch", { name: `${t("editor.available")}: Dish 10` }), {
       position: { x: 40, y: 22 },
       timeout: 2000,
@@ -1508,23 +1510,42 @@ describe("menu-screen", () => {
     );
   });
 
-  it("returns focus to that row's ⋮ after the product editor is cancelled", async () => {
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    const table = await productTable(el);
-    table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product-c1"]')!.click();
-    await el.updateComplete;
-    const closed = dialogClosed(editor(el));
-    emit(editor(el), "wt-cancel", {});
-    await closed;
-    await vi.waitFor(() => expect(editor(el).open).toBe(false));
-    await afterDialogCloses(el);
-    expect(table.shadowRoot!.activeElement).toBe(
-      table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"] wt-row-actions'),
-    );
-  });
+  it.each([false, true])(
+    "returns focus to that row's ⋮ after the product editor is cancelled (resize: %s)",
+    async (resize) => {
+      if (resize) {
+        const viewport = [innerWidth, innerHeight] as const;
+        onTestFinished(() => page.viewport(...viewport));
+        await page.viewport(1280, 844);
+      }
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const table = await productTable(el);
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product-c1"]')!.click();
+      await el.updateComplete;
+      const closed = dialogClosed(editor(el));
+      emit(editor(el), "wt-cancel", {});
+      await closed;
+      await vi.waitFor(() => expect(editor(el).open).toBe(false));
+      await afterDialogCloses(el);
+      expect(table.shadowRoot!.activeElement).toBe(
+        table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"] wt-row-actions'),
+      );
+      if (resize) {
+        await page.viewport(390, 844);
+        await vi.waitFor(() =>
+          expect(
+            table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"] td[colspan]'),
+          ).not.toBeNull(),
+        );
+        expect(table.shadowRoot!.activeElement).toBe(
+          table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"] wt-row-actions'),
+        );
+      }
+    },
+  );
 
   it.each([true, false])(
     "opens the saved dish's category once the new dish matches (%s)",

@@ -554,6 +554,19 @@ test("a column asking for end alignment aligns its header and its cells to the e
   expect(getComputedStyle(countCell!).textAlign).toBe("end");
 });
 
+test("a visually hidden heading label still names the column and its sort button", async () => {
+  const el = await table({
+    columns: [columns[0], { ...columns[1], hideHeadingLabel: true }],
+  });
+  const heading = page.getByRole("columnheader", { name: "Count" });
+  const button = heading.getByRole("button", { name: "Count" });
+  const label = heading.element().querySelector("span.visually-hidden");
+  expect(label?.textContent).toBe("Count");
+  expect(el.shadowRoot!.querySelector('[data-sort="name"] .visually-hidden')).toBeNull();
+  await button.click();
+  expect(heading.element().getAttribute("aria-sort")).toBe("ascending");
+});
+
 test("only a sortable column offers a sort button, and one not sorted by carries no aria-sort", async () => {
   const el = await table({ sortKey: "name" });
   const [name, count, actions] = [...el.shadowRoot!.querySelectorAll("th")];
@@ -5250,6 +5263,22 @@ test("a tree without selection hides a chosen column's header and cells", async 
       cell.textContent!.trim(),
     ),
   ).toEqual(["Eggs", "eggs", "eggs"]);
+});
+
+test("temporarily hidden columns keep the person's sort active", async () => {
+  const el = await table({
+    sortKey: "count",
+    sortDirection: "descending",
+    layoutHiddenColumns: ["count"],
+  });
+  expect(headers(el)).toEqual(["Name", "Actions"]);
+  expect(el.isColumnShown("count")).toBe(false);
+  expect(rowText(el)).toEqual(["AdaEdit", "BeaEdit"]);
+
+  el.layoutHiddenColumns = undefined;
+  await el.updateComplete;
+  expect(el.isColumnShown("count")).toBe(true);
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
 });
 
 test("the fixed first column cannot be hidden while other choices remain available", async () => {

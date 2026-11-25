@@ -54,6 +54,11 @@ export const productsToolbarStyles = css`
     flex: 1 1 calc(var(--wt-tap-min) * 7);
     min-width: 0;
   }
+  wt-input[name="menu-search"]::part(field) {
+    outline: var(--wt-field-line-width) solid var(--wt-color-border);
+    outline-offset: calc(-1 * var(--wt-field-line-width));
+    border-radius: var(--wt-radius-md);
+  }
   wt-segmented-control {
     flex: none;
     inline-size: max-content;
@@ -93,7 +98,11 @@ export function productSearchAndSelect(
   select: () => void,
   view: ProductsView,
   noRows: boolean,
+  phone: boolean,
 ) {
+  const searchLabel = t(
+    phone ? "products.search_short" : view === "list" ? "product.search" : "folders.search",
+  );
   return html`<wt-icon-button
       slot="toolbar-start"
       data-test="select"
@@ -107,7 +116,9 @@ export function productSearchAndSelect(
       slot="toolbar-search"
       name="menu-search"
       type="search"
-      label=${t(view === "list" ? "product.search" : "folders.search")}
+      hide-label
+      placeholder=${searchLabel}
+      label=${searchLabel}
       .disabled=${noRows && search === ""}
       .value=${search}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {

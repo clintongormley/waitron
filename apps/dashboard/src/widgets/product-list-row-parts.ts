@@ -7,8 +7,8 @@ export const productRowStyles = css`
   wt-data-table::part(thumb-frame),
   wt-data-table::part(thumb-placeholder),
   wt-data-table::part(color-swatch) {
-    inline-size: calc(var(--wt-space-6) + var(--wt-space-1));
-    block-size: calc(var(--wt-space-6) + var(--wt-space-1));
+    inline-size: var(--products-media-size);
+    block-size: var(--products-media-size);
   }
   wt-data-table::part(product-media) {
     align-items: center;
@@ -69,6 +69,10 @@ export const productRowStyles = css`
     grid-column: 1 / -1;
   }
 `;
+
+export function productDetailText(text: string) {
+  return text ? html`<span part="product-detail product-detail-text">${text}</span>` : nothing;
+}
 
 export function unavailableLabel(available: boolean) {
   return available

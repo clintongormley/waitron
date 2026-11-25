@@ -12,32 +12,23 @@ type ProductCategory = { product: Product; variant: Product["variants"][number] 
 export const PRODUCTS_PHONE_WIDTH = 440;
 
 export const productListCategoryStyles = css`
-  wt-data-table[wrap-to-fit]::part(list-cell) {
-    vertical-align: middle;
-  }
-  wt-data-table[data-list][wrap-to-fit]::part(tree-cell) {
-    align-items: center;
-  }
-  wt-data-table[data-list][wrap-to-fit]::part(product-cell),
-  wt-data-table[data-list][wrap-to-fit]::part(variant-cell) {
-    display: flex;
-    align-items: center;
-  }
-  wt-data-table[data-list][wrap-to-fit]::part(name-stack),
-  wt-data-table[data-list][wrap-to-fit]::part(variant-name) {
-    min-inline-size: 0;
-  }
   wt-data-table::part(category-path-cell) {
     display: inline-grid;
     grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    vertical-align: middle;
+    align-items: start;
+    vertical-align: top;
     max-inline-size: calc(var(--wt-tap-min) * 4);
     gap: var(--wt-space-2);
     overflow-wrap: anywhere;
   }
   wt-data-table::part(category-path-name) {
     min-width: 0;
+    padding-block-start: var(--products-first-line-inset);
+  }
+  wt-data-table::part(category-path-swatch) {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--wt-tap-min);
   }
 `;
 
@@ -45,7 +36,9 @@ export function productCategoryColumn(
   categories: readonly CategorySummary[],
   defaultColor: string | null,
   phone: boolean,
-): DataTableColumn<ProductCategory> {
+): DataTableColumn<ProductCategory> & {
+  categoryName: (row: ProductCategory) => string | undefined;
+} {
   const byId = new Map(categories.map((category) => [category.id, category]));
   const paths = new Map(
     categories.map((category) => [category.id, categoryAncestors(category, categories).reverse()]),
@@ -60,12 +53,14 @@ export function productCategoryColumn(
     key: "category",
     label: t("product.category"),
     choosable: phone ? "hidden" : "shown",
+    categoryName: name,
     cell: (row) => {
       const category = path(row)?.at(-1);
       if (row.variant !== null || !category) return nothing;
       const { color } = categoryColorSource(category.id, byId, defaultColor);
       return html`<span part="category-path-cell"
-        >${swatchChip(color)}<span part="category-path-name">${name(row)}</span></span
+        ><span part="category-path-swatch">${swatchChip(color)}</span
+        ><span part="category-path-name">${name(row)}</span></span
       >`;
     },
     sortValue: (row) => name(row) ?? null,

@@ -27,6 +27,7 @@ import {
   rememberCellPress,
 } from "./wt-data-table-cell-controls.js";
 
+import { tableHeadingStyles } from "./wt-data-table-heading.js";
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
 import { mergeColumnOrder } from "./wt-data-table-column-order.js";
@@ -46,6 +47,8 @@ export interface DataTableColumn<Row> {
   key: string;
   label: string;
   group?: string;
+  /** Keep the heading label in the accessible name while taking it out of the visual layout. */
+  hideHeadingLabel?: boolean;
   cell: (
     row: Row,
     context: { ancestorOnly: boolean; searchRoot?: boolean; filterMatches?: readonly Row[] },
@@ -186,6 +189,7 @@ const KEEPS_ARROWS =
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
+    tableHeadingStyles,
     css`
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -237,27 +241,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .scroll {
         flex: 1 1 auto;
         min-block-size: 0;
-      }
-
-      thead {
-        position: sticky;
-        inset-block-start: 0;
-        z-index: 3;
-        background: var(--wt-color-surface);
-      }
-
-      thead th {
-        border-block-end: 0;
-        position: relative;
-        background: var(--wt-color-surface);
-      }
-
-      thead th::after {
-        content: "";
-        position: absolute;
-        inset-inline: 0;
-        inset-block-end: 0;
-        border-block-end: 1px solid var(--wt-color-border);
       }
 
       .scroll:focus-visible {
@@ -399,33 +382,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
         z-index: 1;
         cursor: default;
-      }
-
-      .sort {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        padding: 0;
-        border: 0;
-        color: inherit;
-        background: transparent;
-        font: inherit;
-        cursor: pointer;
-      }
-
-      .sort:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-
-      .head-label {
-        position: relative;
-        display: inline-block;
-      }
-
-      .indicator {
-        width: var(--wt-font-size-md);
-        text-align: center;
       }
 
       th.select,
@@ -895,6 +851,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @property({ attribute: false }) rows: readonly Row[] = [];
   @property({ attribute: false }) columns: readonly DataTableColumn<Row>[] = [];
+  /** Layout can omit cells while retaining the current column choices, sort and filters. */
+  @property({ attribute: false }) layoutHiddenColumns?: readonly string[];
   @property({ attribute: false }) rowKey: (row: Row, index: number) => string = (_row, index) =>
     String(index);
   @property({ attribute: false }) rowParent?: (row: Row) => string | null;
@@ -939,6 +897,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Part names for every cell of a row, so a screen can style one kind of row's cells, a group
    * heading row's band for one. */
   @property({ attribute: false }) rowCellParts?: (row: Row) => string;
+  /** Tree rows with only a heading and pinned controls can use the empty columns for their heading. */
+  @property({ attribute: false }) rowSpansUnpinnedColumns?: (
+    row: Row,
+    columns: readonly DataTableColumn<Row>[],
+  ) => boolean;
   @property({ type: Boolean }) initiallyCollapsed = false;
   @property({ type: Boolean }) collapseDescendants = false;
   @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
@@ -1420,7 +1383,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const keys = this.#rowsByKey();
       this.searchExpanded = new Set([...this.searchExpanded].filter((key) => keys.has(key)));
     }
-    if (changed.has("rows") || changed.has("columns") || changed.has("selectable"))
+    if (
+      changed.has("rows") ||
+      changed.has("columns") ||
+      changed.has("selectable") ||
+      changed.has("layoutHiddenColumns")
+    )
       this.#releaseColumnWidths();
     if (
       !this.#hasFilters() ||
@@ -1572,7 +1540,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return [first, ...ordered.map((key) => byKey.get(key)!), ...pinned];
   }
 
-  /** The columns drawn, in the person's order; the first column stays shown. */
+  isColumnShown(key: string): boolean {
+    return (
+      !this.layoutHiddenColumns?.includes(key) &&
+      this.#shownColumns().some((column) => column.key === key)
+    );
+  }
+
+  /** The person's visible columns, in their order; the first column stays selected. */
   #shownColumns(): DataTableColumn<Row>[] {
     const ordered = this.#orderedColumns();
     const shown = ordered.filter(
@@ -2314,7 +2289,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return searched.tree;
   }
 
-  /** A hidden column sorts nothing, though `sortKey` still names it for when it is shown again. */
+  /** A column hidden by the person's choice stops sorting until they show it again. */
   #sortColumn(shown: readonly DataTableColumn<Row>[]): DataTableColumn<Row> | undefined {
     return shown.find((column) => column.key === this.sortKey && column.sortValue !== undefined);
   }
@@ -2725,7 +2700,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   ${this.rowControls ? html`<span class="visually-hidden">${this.rowControlsLabel}</span>` : nothing}
                   ${
                     this.selectable
-                      ? html`<span class="row-controls"
+                      ? html`<span class="row-controls" part="row-controls"
                           ><input
                             type="checkbox"
                             data-test="select-all"
@@ -2774,7 +2749,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       ? column.key === "actions" && column.pinned === "end"
                         ? html`<wt-icon name="kebab"></wt-icon
                             ><span class="visually-hidden">${column.label}</span>`
-                        : column.label
+                        : this.#headingLabel(column)
                       : html`<button
                           class="sort"
                           data-sort=${column.key}
@@ -2783,7 +2758,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                             this.#sort(column);
                           }}
                         >
-                          ${column.label}<span class="indicator" aria-hidden="true"
+                          ${this.#headingLabel(column)}<span class="indicator" aria-hidden="true"
                             >${
                               this.sortKey === column.key
                                 ? this.sortDirection === "ascending"
@@ -2801,6 +2776,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
         </tr>
       </thead>
     `;
+  }
+
+  #headingLabel(column: DataTableColumn<Row>) {
+    return column.hideHeadingLabel
+      ? html`<span class="visually-hidden">${column.label}</span>`
+      : column.label;
   }
 
   #withHelp(column: DataTableColumn<Row>, content: unknown) {
@@ -2834,11 +2815,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       role=${isTree ? "gridcell" : nothing}
       part=${this.rowCellParts?.(row) || nothing}
     >
-      <span class="row-controls">
+      <span class="row-controls" part="row-controls">
         ${
           selectable
             ? html`<input
                 type="checkbox"
+                part="row-checkbox"
                 data-test=${`select-${key}`}
                 aria-label=${this.selectionLabel(row)}
                 .checked=${this.selected.includes(this.#selectionKey(row, key))}
@@ -3274,14 +3256,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (renderedCount === 0)
       return this.#withToolbar(tableMessage(this.noMatchesMessage, "no-matches-action"));
 
-    const shown = this.#shownColumns();
+    const preferred = this.#shownColumns();
+    const hidden = this.layoutHiddenColumns;
+    const shown = hidden ? preferred.filter((column) => !hidden.includes(column.key)) : preferred;
     const widths =
       this.filterColumnWidths?.length ===
       shown.length + Number(this.selectable || this.rowControls !== undefined)
         ? this.filterColumnWidths
         : null;
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
-    const sortColumn = this.#sortColumn(shown);
+    const sortColumn = this.#sortColumn(preferred);
     const activatorColumn = shown.findIndex((column) => column.activatesRow !== false);
     if (!isTree) {
       const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
@@ -3352,6 +3336,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
     const entries = this.#treeShown().entries ?? this.#treeRows(treeRows, heldOpen, sortColumn);
+    const unpinned = shown.filter((column) => column.pinned !== "end");
+    const spanningColumns = [shown[0]!, ...shown.slice(unpinned.length)];
     const visibleKeys = entries
       .filter(({ row }) => this.rowSelectable(row))
       .map(({ row, key }) => this.#selectionKey(row, key));
@@ -3402,18 +3388,24 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   : clicks
                     ? () => this.rowClick!(row)
                     : undefined;
+                const span = this.rowSpansUnpinnedColumns?.(row, unpinned) ? unpinned.length : 1;
+                const rowColumns = span > 1 ? spanningColumns : shown;
                 return html`<tr
                   data-row-key=${key}
                   role="row"
+                  part="tree-row"
                   class=${classMap({ clickable: activate !== undefined, joined })}
                   aria-level=${depth + 1}
                   aria-expanded=${hasChildren ? String(expanded) : nothing}
                 >
                   ${this.#renderSelectCell(key, row, true)}
-                  ${shown.map(
+                  ${repeat(
+                    rowColumns,
+                    (column) => column.key,
                     (column, ci) =>
                       html`<td
                         role="gridcell"
+                        colspan=${ci === 0 && span > 1 ? span : nothing}
                         part=${cellParts || nothing}
                         data-align=${column.align ?? "start"}
                         data-pinned=${column.pinned ?? nothing}
@@ -3428,7 +3420,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         }
                       >
                         ${
-                          ci === activatorColumn
+                          column === shown[activatorColumn]
                             ? html`${
                                 toggles
                                   ? html`<button
@@ -3459,9 +3451,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               >
                                 ${
                                   !branch
-                                    ? html`<span class="tree-spacer"></span>`
+                                    ? html`<span class="tree-spacer" part="tree-indent"></span>`
                                     : toggles
-                                      ? html`<span class="tree-arrow" aria-hidden="true"
+                                      ? html`<span
+                                          class="tree-arrow"
+                                          part="tree-indent"
+                                          aria-hidden="true"
                                           >${expanded ? "▾" : "▸"}</span
                                         >`
                                       : html`<button
