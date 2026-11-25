@@ -4658,8 +4658,16 @@ describe("till-app: service cancellation consent", () => {
       await chooseRefund(el);
       await submitGiveBack(el);
       await expect
-        .poll(() => giving(el)!.shadowRoot!.querySelector("wt-form-actions")?.error)
+        .poll(
+          () =>
+            giving(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+              "wt-price-input[name=amount]",
+            )?.error,
+        )
         .toBe(codeMessage("tender.refund_exceeds_payment"));
+      expect(giving(el)!.shadowRoot!.querySelector("wt-form-actions")?.error).toBe(
+        t("form.fix_fields"),
+      );
       expect(inForm(el, "[data-outcome]")).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(ticket(el)?.result).toEqual(paidReceipt);
