@@ -66,7 +66,7 @@ describe("till-today-name-dialog", () => {
         setLocale(locale);
         const el = await mountDialog({ normalName: "Bar+Window", value: "" });
 
-        expect(field(el).inherited?.value).toBe("Bar+Window");
+        expect(field(el).inherited).toEqual({ value: "Bar+Window", suffix: t("inherit.suffix") });
         expect(field(el).hint).toBe("");
         expect(nativeInput(el).placeholder).toBe("Bar+Window");
       } finally {

@@ -102,7 +102,7 @@ describe("till-party-name-dialog", () => {
         setLocale(locale);
         const el = await mountDialog({ tables: "Table 4, 5", value: "" });
 
-        expect(field(el).inherited?.value).toBe("Table 4, 5");
+        expect(field(el).inherited).toEqual({ value: "Table 4, 5", suffix: t("inherit.suffix") });
         expect(field(el).hint).toBe("");
         expect(nativeInput(el).placeholder).toBe("Table 4, 5");
       } finally {

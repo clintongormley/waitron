@@ -672,7 +672,7 @@ export class TillTicketView extends LitElement {
                           noResultsLabel=${t("form.combobox_no_results")}
                           .value=${live(this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? "")))}
                           .options=${[
-                            inheritEquipmentOption(role.default),
+                            inheritEquipmentOption(role),
                             ...role.choices.map(paperOption),
                             ...(offListChoice === null
                               ? []

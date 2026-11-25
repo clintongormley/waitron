@@ -922,6 +922,7 @@ describe("till-modifier-picker", () => {
         ],
       });
       const field = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="course"]')!;
+      expect(field.inheritedSuffix).toBe("inherited");
       expect(field.options[0]).toEqual({
         value: "",
         label: "Inherit: Starters",

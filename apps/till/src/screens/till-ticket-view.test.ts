@@ -2022,26 +2022,27 @@ describe("A790 recorded document then printer", () => {
     },
   );
 
-  it("shows None when the receipt printer the profile names is held elsewhere", async () => {
-    const held = {
-      ...bar,
-      heldBy: { deviceId: "elsewhere", deviceName: "Patio till", personName: null },
-    };
-    const { el } = await mountChoice(
-      {
-        receiptEquipment: { ...roleOf("receipt", null, [held]), default: held },
-      },
-      "F2",
-    );
-    await press(el, "document-print-toggle");
-    const field = el.shadowRoot!.querySelector("wt-combobox")!;
-    expect(field.options[0]).toEqual({
-      value: "",
-      label: "Inherit: None",
-      valueLabel: "None",
-      inherited: true,
-    });
-  });
+  it.each([null, { deviceId: "elsewhere", deviceName: "Patio till", personName: null }])(
+    "shows None when this device does not hold the profile’s portable printer (%o)",
+    async (heldBy) => {
+      const held = { ...bar, portable: true, heldBy };
+      const { el } = await mountChoice(
+        {
+          receiptEquipment: { ...roleOf("receipt", null, [held]), default: held },
+        },
+        "F2",
+      );
+      await press(el, "document-print-toggle");
+      const field = el.shadowRoot!.querySelector("wt-combobox")!;
+      expect(field.options[0]).toEqual({
+        value: "",
+        label: "Inherit: None",
+        valueLabel: "None",
+        inherited: true,
+      });
+      expect(field.inheritedSuffix).toBe("inherited");
+    },
+  );
 
   it("keeps a missing explicit selection unresolved and offers Refresh instead of choosing the only printer", async () => {
     const { el } = await mountChoice(

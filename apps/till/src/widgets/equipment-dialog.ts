@@ -432,7 +432,7 @@ export class TillEquipmentDialog extends LitElement {
     if (equipment === undefined) return nothing;
     const label = t(`equipment.${row.role}`);
     const options: ComboboxOption[] = [
-      inheritEquipmentOption(equipment.default),
+      inheritEquipmentOption(equipment),
       ...equipment.choices.map((choice) => ({ value: choice.id, label: optionLabel(choice) })),
     ];
     // A choice the device may not newly make (switched off, off the list) stays shown as chosen.

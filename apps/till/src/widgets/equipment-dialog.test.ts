@@ -216,10 +216,22 @@ describe("till-equipment-dialog", () => {
       inherited: true,
     });
     expect(reader.value).toBe("");
+    expect(reader.inheritedSuffix).toBe("inherited");
     expect(optionLabels(combobox(el, "cashDrawerPrinterId")!)[0]).toBe("Inherit: None");
     const receipt = combobox(el, "receiptPrinterId")!;
     expect(receipt.options.map((option) => option.value)).toEqual(["", "P1", "P2"]);
     expect(receipt.value).toBe("P1");
+  });
+
+  it("shows None until this device holds the profile's portable printer", async () => {
+    const el = await mountDialog({
+      equipment: equipment({ receipt: onDefault("receipt", PP, [PP], null) }),
+    });
+    const picker = combobox(el, "receiptPrinterId")!;
+    expect(picker.options[0]?.valueLabel).toBe("None");
+    el.equipment = equipment({ receipt: onDefault("receipt", PP, [PP]) });
+    await el.updateComplete;
+    expect(picker.options[0]?.valueLabel).toBe("Portable printer");
   });
 
   it("a held item is labelled with its holder, and a held default says who carries it", async () => {

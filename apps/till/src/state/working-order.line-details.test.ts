@@ -137,6 +137,24 @@ it("keeps manual placement when fixing or inheriting the same course", () => {
   }
 });
 
+it("re-places a dish when a new variant and fixed course replace its inherited course", () => {
+  const store = courseDraft();
+  const line = store.lines[0]!;
+  line.product = { ...dish, variantId: "small", courseId: starter.id };
+  delete line.courseId;
+  delete line.course;
+
+  expect(
+    store.setLineDetails(0, {
+      ...change,
+      quantity: "2",
+      product: { ...dish, variantId: "large", courseId: mains.id },
+      course: { id: mains.id, value: mains },
+    }),
+  ).toBe(true);
+  expect(line.place).toEqual({ kind: "new", slot: 1 });
+});
+
 it("A738 a combined course change inserts an earlier group and shifts its neighbour once", () => {
   const store = courseDraft();
   const line = store.lines[0]!;
