@@ -33,7 +33,7 @@ import { bumpRevisionKeepingPayment, type OrderLinePatch } from "./working-order
 import { updateOrderLine } from "./working-order-held-write.js";
 import { unsentDishLines } from "./working-order-kitchen-fire.js";
 import { setLineCourse, sendLines } from "./working-order-kitchen-service.js";
-import { checkZones } from "./zone-access.js";
+import { checkKitchenOrderZone, checkZones } from "./zone-access.js";
 import type { TillSaleDeps } from "./working-order-context.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -139,7 +139,7 @@ export function mountTillOrderLineRoutes(
       const body = await readJsonBody<Record<string, unknown>>(c);
       const request = stationMoveRequest(id, body);
       const result = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId: id }]);
+        await checkKitchenOrderZone(tx, session, id);
         return moveDishesToStation(
           tx,
           cfg,

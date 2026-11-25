@@ -620,10 +620,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Table screen panels that do not fit** (bundle of 1, size S). Holds A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 
-- **A1031. Show paid food waiting at the counter on the counter's tills.** The food still takes
-  its table's zone. Queued in MOVED-ORDER-PLACE (lane E).
-  [Detail](backlog/till.md#a1031-food-a-finished-table-sent-to-the-counter-keeps-the-tables-zone-left-open-by-a758-7)
-
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
   Owner question 2, #2360).** Correct invoice (A802) does not issue a full invoice; offer one
   from the ⋮ for a paid bill once something does.

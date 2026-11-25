@@ -285,8 +285,8 @@ disponible para devolver.
 
 En la ventana de pagos de la cuenta, elige **Devolver** junto al pago. La ventana **Devolver un
 pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **Importe a devolver**.
-Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo. En una cuenta impresa, un pago de artículos
-concretos se devuelve entero y después esos artículos pueden pagarse de nuevo.
+Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo. Un pago de artículos concretos se devuelve
+entero y después esos artículos pueden pagarse de nuevo.
 
 Mientras la cuenta no tenga factura, **Devolver** junto a un pago que tiene su propio ticket abre
 **Rectificar factura** en ese ticket.
@@ -324,9 +324,6 @@ cancelado, cobra la cuenta.
 En **Pedidos aparcados**, elige **Pasar a mesa** y selecciona una mesa. Si un pedido sin enviar de
 esa mesa bloquea el traslado, elige **Tomar el pedido** en cada cuenta indicada. Cierra el aviso
 y vuelve a elegir la mesa.
-
-Si das un nombre al pedido al aparcarlo, usa hasta 40 caracteres. Tras moverlo, busca el mismo
-nombre junto a su nueva mesa o el mostrador en **Pedidos aparcados**.
 
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
@@ -379,9 +376,8 @@ Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo re
 mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación. No se cancela ni se
 devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
 tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
-cierra. El pedido espera en **Pedidos pendientes**, en la pantalla **Mostrador**, marcado
-**Pagado, sin entregar**, y aparece en **Buscar cuenta**. Busca **Mostrador** en el pase y en
-**Pedidos pendientes**. Elige **Entregar** cuando lo recojan.
+cierra. Abre **Pedidos pendientes** en el primer mostrador activo del departamento de la mesa.
+Elige **Entregar** en el pedido marcado **Pagado, sin entregar** cuando lo recojan.
 
 ## Devolver un pago desde el recibo {#refund-receipt}
 
@@ -477,8 +473,7 @@ antes de devolver el dinero en el datáfono: Waitron no puede registrar la devol
 
 Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
 cuando la ventana te lo pida, y completa allí la devolución antes de confirmarlo en la ventana.
-Después, un supervisor o encargado aprueba su registro en Waitron con su PIN, salvo que devuelva
-como mucho lo que la cuenta se pagó de más.
+Después, un supervisor o encargado aprueba su registro en Waitron con su PIN.
 
 Si una devolución no recibe respuesta, revisa los pagos de la cuenta antes de intentarla otra vez.
 La primera petición puede haberse completado.
@@ -609,7 +604,9 @@ cuestan las variantes. Toca el producto para elegir una y ver su precio.
 
 Indica cuántos menús de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
 o escribe su nombre en **Buscar** y pulsa el resultado. Después, elige los platos. En la
-carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento.
+carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento. Todavía no se puede
+cobrar ni imprimir una cuenta para llevar que tenga un menú: si la comida es para llevar, marca
+los platos por separado.
 
 Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
 Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
@@ -620,11 +617,6 @@ pulsa **Descuento…** en él dentro del resumen.
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus
 platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
 cuenta antes de confirmar.
-
-En el **Mostrador**, elige **Para llevar**, indica cuántos menús quieres y abre la
-carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los
-platos. Para añadirlos después, busca la cuenta en **Pedidos aparcados** y pulsa
-**Recuperar**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
@@ -652,8 +644,8 @@ Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. 
 usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
-el nombre de la cuenta, lo que queda por pagar, lo que se pagó de más, por ejemplo **5,00 € de
-más**, o **Pagada ✓** (**Pago aplazado** si se cerró como pago aplazado), y una línea como **Ana tiene un
+el nombre de la cuenta, lo que queda por pagar o **Pagada ✓** (**Pago aplazado** si se cerró
+como pago aplazado), y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
 cuenta tiene platos tuyos sin enviar, el selector lo indica, como **✎ Cuenta 2 sin enviar**, y la
 lista marca esa cuenta con **✎ Sin enviar**. Elige una fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
@@ -714,9 +706,7 @@ completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
 sin pagar. Cóbrala antes de cerrar la mesa** encima del pie. **Cobrar esta cuenta** pone en pantalla
 una cuenta sin pagar para que la cobres. **Imprimir la cuenta**, cuando aparece, pone esa cuenta
-en pantalla y la imprime, o muestra los platos aún sin servir. Una cuenta pagada por encima de lo que
-suma también impide **Cerrar mesa**: la caja indica qué cuenta es y cuánto sobra, e **Ir a la**
-cuenta la pone en pantalla para devolver lo que sobra o dejarlo de propina.
+en pantalla y la imprime, o muestra los platos aún sin servir.
 
 Si un cliente se va sin pagar, selecciona su cuenta, abre **⋮** y elige **Registrar salida sin
 pagar** bajo esa cuenta. Comprueba el importe e indica el motivo. Si hace falta autorización,
@@ -819,6 +809,8 @@ fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. U
 
 Algunas casillas salen en gris, con el motivo debajo del plato:
 
+- **Tiene un pago**: el plato tiene un pago en curso o recibido, así que se queda en esta cuenta.
+  Espera a que termine un pago en curso; devuelve un pago recibido antes de mover su plato.
 - **Los pagos retienen 40,00 € en esta cuenta: mueve menos platos**: elige menos platos para que
   la cuenta conserve lo necesario para sus pagos, incluidos los que siguen en curso. Los demás
   platos sí pueden pasar.
@@ -827,14 +819,18 @@ En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la
 nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
 pantalla. Cada plato conserva su orden de plato y sigue enviado, marchado o servido como estaba. Si mueves
-platos de una cuenta pagada en parte hasta que sus pagos cubren lo que queda, la cuenta queda
-pagada del todo y se emite su factura.
+los últimos platos sin pagar de una cuenta pagada en parte, la cuenta queda pagada del todo y se
+emite su factura.
 
 Si una cuenta está a nombre de un cliente para factura completa y mueves todos sus platos a una
 cuenta que no nombra al mismo cliente, la caja pregunta antes: elige el cliente al que se facturan
 los platos, o **No mover**.
 
-Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, la caja dice cuánto
+Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Tiene un pago**
+cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas
+**Mover** antes, la caja rechaza el cambio con el motivo, por ejemplo **Este artículo ya está
+pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago**, y no se
+mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, la caja dice cuánto
 y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
 elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
 o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
@@ -1037,25 +1033,12 @@ total original de la cuenta.
 queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
 una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
-tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
-toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
-cuenta. Si no pueden volver, se quedan en una cuenta propia, para cobrarlos allí: en una mesa
-aparece en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
-tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
-y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, los artículos se
-siguen cobrando en esa misma cuenta. Una cuenta impresa ofrece estas opciones para cobrar lo que
-queda. Si la cuenta está presentada para su cobro y aún no se ha emitido su factura, elige
-**Cobrar por partes** para ver las mismas opciones.
+si solo se pagan algunos. Una cuenta impresa ofrece estas opciones para cobrar lo que queda. Si la
+cuenta está presentada para su cobro y aún no se ha emitido su factura, elige **Cobrar por partes**
+para ver las mismas opciones.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
-
-**Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
-aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
-ofrece **Cobrar**. Elige **Devolver 5,00 €** para devolver lo que sobra; para ese importe no hace
-falta el PIN de un encargado. Si el local acepta propinas, **Dejar 5,00 € de propina** lo guarda
-como propina.
 
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
 va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket

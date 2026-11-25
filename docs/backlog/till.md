@@ -556,14 +556,6 @@ bar's map draws its tables as three 10-pixel dots in a map 29 pixels tall
 (`e13-next-signin-390-light-en.png`).
 
 
-## A1031. Food a finished table sent to the counter keeps the table's zone (left open by A758-7).
-
-The order keeps its table's zone, so a till or pass limited to the counter's zone does not show it.
-MOVED-ORDER-PLACE (lane E) covers it. Not a question: the settled-order freeze lets any paid table
-bill not yet handed over leave its party, and only the server limits that to Finish table, an
-exception `scripts/behavioural-triggers.test.ts` does not hold.
-[Plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds)
-
 ## A1033. A full invoice's later copies change their guests line when a bill moves to the counter (left open by A758-7).
 
 A full invoice reads its guests from the bill's party each time

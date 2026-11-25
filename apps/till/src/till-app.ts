@@ -1909,7 +1909,6 @@ interface WaitingOrderMove {
   busy: boolean;
   session: number;
   api: TillApi;
-  expectedEdit: BillEditExpected | null;
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
@@ -16899,7 +16898,6 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       await this.#loadStations(true, { signal: limit.signal });
-      const bill = await api.getFindBill(id, { signal: limit.signal });
       const row = this.#movableWaitingRow(id);
       if (
         this.#moveStationOpening !== opening ||
@@ -16918,15 +16916,6 @@ export class TillApp extends LitElement {
         busy: false,
         session,
         api,
-        expectedEdit:
-          bill.partyId === null
-            ? null
-            : {
-                billId: bill.edit!.billId,
-                editorVersion: bill.edit!.editorVersion,
-                draftId: bill.edit!.draftId,
-                draftRevision: bill.edit!.draftRevision,
-              },
       };
     } catch (error) {
       if (
@@ -16964,7 +16953,7 @@ export class TillApp extends LitElement {
       submissionId: crypto.randomUUID(),
       lineIds,
       stationId,
-      expectedEdit: open.expectedEdit,
+      expectedEdit: null,
     };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;

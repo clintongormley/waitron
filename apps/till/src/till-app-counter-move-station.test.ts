@@ -676,26 +676,29 @@ describe("till-app: moving a paid counter order to another station", () => {
     expect(dialog(el)!.currentStationId).toBeNull();
   });
 
-  it("A773 cancels an unanswered bill observation and allows a later destination choice", async () => {
-    const getFindBill = vi.fn(
-      (_id: string, options?: { signal?: AbortSignal }) =>
-        new Promise((_resolve, reject) =>
-          options?.signal?.addEventListener(
-            "abort",
-            () => reject(new DOMException("Timed out", "AbortError")),
-            { once: true },
+  it("A773 cancels an unanswered station list and allows a later destination choice", async () => {
+    const el = await signedIn();
+    const listStations = vi.mocked(api.listStations);
+    listStations
+      .mockClear()
+      .mockImplementationOnce(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Timed out", "AbortError")),
+              { once: true },
+            ),
           ),
-        ),
-    );
-    const el = await signedIn({ getFindBill });
+      );
     try {
       vi.useFakeTimers();
       moveButton(el)!.click();
       await vi.advanceTimersByTimeAsync(0);
-      expect(getFindBill).toHaveBeenCalledExactlyOnceWith("wo-paid", {
+      expect(listStations).toHaveBeenCalledExactlyOnceWith({
         signal: expect.any(AbortSignal),
       });
-      const signal = getFindBill.mock.calls[0]![1]!.signal!;
+      const signal = listStations.mock.calls[0]![0]!.signal!;
       expect(signal.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
       expect(signal.aborted).toBe(true);
@@ -704,36 +707,22 @@ describe("till-app: moving a paid counter order to another station", () => {
     }
     await flush(el);
     expect(dialog(el)).toBeNull();
-    vi.mocked(api.getFindBill).mockResolvedValue({
-      workingOrderId: "wo-paid",
-      partyId: null,
-      edit: null,
-    } as Awaited<ReturnType<TillApi["getFindBill"]>>);
     moveButton(el)!.click();
     await expect.poll(() => dialog(el)).not.toBeNull();
   });
 
-  it("A773 reads and retains a waiting table bill's editing observation", async () => {
-    const expectedEdit = {
-      billId: "wo-paid",
-      editorVersion: 6,
-      draftId: null,
-      draftRevision: null,
-    };
-    const getFindBill = vi.fn().mockResolvedValue({
-      workingOrderId: "wo-paid",
-      partyId: "party-1",
-      edit: { ...expectedEdit, editorId: null, editorName: null },
-    });
+  it("moves a paid Waiting order the till cannot look up in Find a bill", async () => {
+    const getFindBill = vi.fn().mockRejectedValue({ code: "working_order.not_found" });
     const el = await openMove({ getFindBill });
+    expect(dialog(el)).not.toBeNull();
     await choose(el, "grill");
     await expect.poll(() => vi.mocked(api.moveDishStation).mock.calls.length).toBe(1);
-    expect(getFindBill).toHaveBeenCalledOnce();
+    expect(getFindBill).not.toHaveBeenCalled();
     expect(vi.mocked(api.moveDishStation).mock.calls[0]![1]).toEqual({
       submissionId: expect.any(String),
       lineIds: ["line-1", "line-2"],
       stationId: "grill",
-      expectedEdit,
+      expectedEdit: null,
     });
   });
 

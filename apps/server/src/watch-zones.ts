@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { diningTables, partySurvivors, partyTables } from "@waitron/db";
+import { diningTables, partySurvivors, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { inIds } from "./in-ids.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 /** What {@link orderWatchZones} reads of an order. */
@@ -8,6 +9,37 @@ export interface ZonedOrder {
   id: string;
   partyId: string | null;
   deliveryTableId: string | null;
+}
+
+export async function pickupZones(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (orderIds.length === 0) return new Map();
+  const eligible = await tx
+    .select({ id: workingOrders.id, departmentId: workingOrders.departmentId })
+    .from(workingOrders)
+    .where(
+      and(
+        inIds(workingOrders.id, orderIds),
+        eq(workingOrders.status, "settled"),
+        eq(workingOrders.serviceMode, "table_tab"),
+        isNull(workingOrders.partyId),
+        isNull(workingOrders.deliveryTableId),
+      ),
+    );
+  if (eligible.length === 0) return new Map();
+  const firstCounter = new Map<string, string>();
+  for (const zone of await VENUE_SERVICE.listServiceZones(tx)) {
+    if (zone.serviceMode !== "table_tab" && !firstCounter.has(zone.departmentId))
+      firstCounter.set(zone.departmentId, zone.id);
+  }
+  const zones = new Map<string, string>();
+  for (const order of eligible) {
+    const zone = order.departmentId === null ? undefined : firstCounter.get(order.departmentId);
+    if (zone !== undefined) zones.set(order.id, zone);
+  }
+  return zones;
 }
 
 /** The current zone of each order's food, keyed by order. */
@@ -41,8 +73,9 @@ export async function orderWatchZones(
     else zones.set(order.id, zone);
   }
   if (unresolved.length > 0) {
+    const pickup = await pickupZones(tx, unresolved);
     const recorded = await VENUE_SERVICE.findOrderZones(tx, unresolved);
-    for (const id of unresolved) zones.set(id, recorded.get(id) ?? null);
+    for (const id of unresolved) zones.set(id, pickup.get(id) ?? recorded.get(id) ?? null);
   }
   return zones;
 }

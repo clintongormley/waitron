@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   billPayments,
   devices,
+  floorZones,
   lineServiceCancellations,
   orderGroups,
   parties,
@@ -27,6 +28,8 @@ import { adjustments } from "@waitron/adjustments";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import {
   readProfileServiceScopes,
+  createServiceZone,
+  createDepartment,
   listDepartments,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
@@ -49,6 +52,8 @@ import { recordHeldPaper } from "./order-group-hold-paper.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { createZone } from "./testing/service-zone.js";
 import { combineParties } from "./testing/table-action-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { placeByHand } from "./testing/party-venue.js";
 
 import {
   billWith,
@@ -755,6 +760,113 @@ async function whereItShows(billId: string, itemId: string, orderNumber: number)
 }
 
 describe("a bill sent to the counter waits there until handed over", () => {
+  it("shows a finished table's food only at its first counter and lets that till hand it over", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
+    const billId = t.billIds[0]!;
+    const [item] = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, billId),
+    );
+    const [pickup, later] = await inTx(venue, async (tx) => {
+      const { departmentId } = (await VENUE_SERVICE.findOrderContext(tx, billId))!;
+      const zone = (name: string, displayOrder: number) =>
+        createServiceZone(tx, { departmentId, name, displayOrder, orderStart: "counter" });
+      const retired = await zone("Retired pickup", -30);
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, retired.id));
+      const other = await createDepartment(tx, { name: "Other pickup department" });
+      await createServiceZone(tx, {
+        departmentId: other.id,
+        name: "Other counter",
+        displayOrder: -20,
+        orderStart: "counter",
+      });
+      return [await zone("First pickup", -10), await zone("Later pickup", 10)];
+    });
+    const finish = await collect(t.partyId, await bodyFor(t));
+    expect(await post(t.partyId, finish)).toEqual({ status: 200, body: { state: "closed" } });
+    expect(await post(t.partyId, finish)).toEqual({ status: 200, body: { state: "closed" } });
+
+    const waitingIn = (zoneId: string) =>
+      withZones([zoneId], async () => {
+        const { status, body } = await get("/api/orders/counter-waiting");
+        expect(status).toBe(200);
+        return (body as { id: string }[]).some((order) => order.id === billId);
+      });
+    const shownOnPass = (zoneId: string) =>
+      inTx(venue, async (tx) =>
+        boardItems(await readScopedPassBoard(tx, { stationIds: null, zoneIds: [zoneId] })).some(
+          (dish) => dish.id === item!.id,
+        ),
+      );
+    expect(await waitingIn(pickup.id)).toBe(true);
+    expect(await shownOnPass(pickup.id)).toBe(true);
+    for (const zoneId of [later.id, venue.tables.zoneId]) {
+      expect(await waitingIn(zoneId)).toBe(false);
+      expect(await shownOnPass(zoneId)).toBe(false);
+    }
+
+    const act = (zoneId: string, action: string) =>
+      withZones([zoneId], async () =>
+        venue.app.request(`/api/orders/${billId}/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: venue.cookie.staff },
+          body: JSON.stringify({ submissionId: randomUUID() }),
+        }),
+      );
+    expect((await act(venue.tables.zoneId, "reprint")).status).toBe(200);
+    const refused = await act(later.id, "collect");
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "service_zone.not_allowed" } });
+    const note = await withZones([pickup.id], () =>
+      get(`/api/working-orders/${billId}/kitchen-note`),
+    );
+    expect(note.status).toBe(200);
+    const handedOver = await act(pickup.id, "collect");
+    expect(handedOver.status, await handedOver.clone().text()).toBe(200);
+    expect(await waitingIn(pickup.id)).toBe(false);
+    expect(await shownOnPass(pickup.id)).toBe(false);
+  });
+
+  it("keeps a presented unpaid bill in the table's zone until payment", async () => {
+    const t = await table([{ name: "Burger" }], "fire", [], [null]);
+    const billId = t.billIds[0]!;
+    await placeByHand(venue, billId);
+    const expectedPartyRevision = await partyRevision(t.partyId);
+    const pickup = await inTx(venue, async (tx) => {
+      const { departmentId } = (await VENUE_SERVICE.findOrderContext(tx, billId))!;
+      const { id } = await createServiceZone(tx, {
+        departmentId,
+        name: "Unpaid control counter",
+        orderStart: "counter",
+      });
+      await moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { counter: { zoneId: id } },
+        {
+          partyId: t.partyId,
+          expectedPartyRevision,
+          operatorId: venue.staffId,
+        },
+      );
+      return id;
+    });
+    expect(await billRow(billId)).toMatchObject({
+      status: "placed",
+      partyId: null,
+      zoneId: venue.tables.zoneId,
+    });
+    const crossZone = await withZones([pickup], () =>
+      cashPayment(venue, venue.cookie.staff, billId, "12.00"),
+    );
+    expect(crossZone).toMatchObject({
+      status: 403,
+      json: { code: "service_zone.not_allowed", params: { zoneId: venue.tables.zoneId } },
+    });
+    await withZones([venue.tables.zoneId], () => pay(billId, "12.00"));
+    expect(await billRow(billId)).toMatchObject({ status: "settled", zoneId: venue.tables.zoneId });
+  });
+
   it("shows on the pass, the station, Waiting orders and Find a bill, then leaves them all on hand over", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], [null]);
     const billId = t.billIds[0]!;
