@@ -95,7 +95,7 @@ export async function reopenToSplitIn(
     tillSessionId: operator.sessionId,
   });
   await abandonPlacedOrder(tx, cfg, id);
-  await carryReceivedPayments(tx, id, opened.billId, invoice.id);
+  await carryReceivedPayments(tx, id, opened.billId);
   await bumpPartyRevision(tx, partyId);
   await recordPlacedOrderCancelled(
     tx,

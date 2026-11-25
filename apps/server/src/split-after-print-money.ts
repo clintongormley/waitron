@@ -39,14 +39,13 @@ export async function refuseSplitMoney(tx: Transaction, id: string): Promise<voi
 /**
  * Moves every received payment of the abandoned printed bill `fromBillId` to `toBillId`, the bill
  * reopened from it, where its money now counts, and a card's provider row with it, unlinked from
- * `fromSaleId`, the credited ticket. A failed or declined payment holds no money and stays as the
+ * the credited ticket. A failed or declined payment holds no money and stays as the
  * printed bill's history.
  */
 export async function carryReceivedPayments(
   tx: Transaction,
   fromBillId: string,
   toBillId: string,
-  fromSaleId: string,
 ): Promise<void> {
   const moved = await tx
     .update(billPayments)
@@ -56,6 +55,5 @@ export async function carryReceivedPayments(
   await carryProviderRows(tx, {
     billPaymentIds: moved.map((row) => row.id),
     toWorkingOrderId: toBillId,
-    fromSaleId,
   });
 }

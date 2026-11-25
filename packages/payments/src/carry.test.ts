@@ -19,13 +19,12 @@ describe("carryProviderRows", () => {
       await carryProviderRows(tx, {
         billPaymentIds: [],
         toWorkingOrderId: "00000000-0000-4000-8000-000000000001",
-        fromSaleId: "00000000-0000-4000-8000-000000000002",
       });
       expect(update).not.toHaveBeenCalled();
     });
   });
 
-  it("moves the named rows to the bill and clears only the old sale", async () => {
+  it("moves the named rows to the bill with no sale", async () => {
     const seeded = await seedWorkingOrder(suite.db);
     const printed = seeded.workingOrderId;
     const requestedBy = await seedPerson(suite.db, { displayName: "Cashier" });
@@ -112,7 +111,6 @@ describe("carryProviderRows", () => {
       carryProviderRows(tx, {
         billPaymentIds: carried,
         toWorkingOrderId: reopened,
-        fromSaleId: ticket!.id,
       }),
     );
 
