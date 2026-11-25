@@ -474,8 +474,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su ticket, o tiene factura completa y ya se ha cobrado un pago.",
   },
   "invoice_correction.not_settled": {
-    en: "This bill is not fully paid, so its invoice cannot be corrected yet.",
-    es: "Esta cuenta no está pagada del todo, así que su factura aún no se puede rectificar.",
+    en: "This bill is not fully paid yet, so money for dishes or goodwill cannot go back from its receipt.",
+    es: "Esta cuenta aún no está pagada del todo, así que no se puede devolver desde su ticket dinero de platos o por cortesía.",
   },
   "invoice_correction.already_open": {
     en: "Money back on this receipt is already under way. Close this window and open Give money back again to carry on.",
@@ -499,7 +499,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "invoice_correction.still_correctable": {
     en: "Money has gone back and it can still be recorded. Press Finish or Stop here.",
-    es: "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Terminar aquí.",
+    es: "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Parar aquí.",
   },
   "invoice_correction.cash_short": {
     en: "This bill's cash payments hold less than that. Give the rest back on the card it was paid with.",
@@ -515,27 +515,27 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "invoice_correction.refund_pending": {
     en: "A card refund of this bill is still waiting for the card company's answer. Try again once it has answered.",
-    es: "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la entidad de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
+    es: "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   },
   "invoice_correction.money_short": {
     en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The box's invoice records need checking, so no invoice can be corrected now.",
-    es: "Hay que revisar los registros de facturas del servidor, así que ahora no se puede rectificar ninguna factura.",
+    en: "The box's receipt records need checking, so money for dishes or goodwill cannot go back now.",
+    es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver dinero de platos o por cortesía.",
   },
   "sale.correction_amount_invalid": {
-    en: "Enter an amount above zero and no more than is left to correct of the dishes chosen.",
-    es: "Escribe un importe mayor que cero y no superior a lo que queda por rectificar de los platos elegidos.",
+    en: "Enter an amount above zero and no more than is left to give back for the dishes chosen.",
+    es: "Escribe un importe mayor que cero y no superior a lo que queda por devolver de los platos elegidos.",
   },
   "sale.correction_scope_invalid": {
     en: "The dishes chosen are not on this receipt. Close this window and open Give money back again.",
     es: "Los platos elegidos no están en este ticket. Cierra esta ventana y vuelve a abrir Devolver dinero.",
   },
   "sale.correction_history_unusable": {
-    en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",
-    es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar.",
+    en: "This receipt's earlier money back cannot be read, so money for dishes or goodwill cannot go back from it.",
+    es: "No se pueden leer las devoluciones anteriores de este ticket, así que no se puede devolver desde él dinero de platos o por cortesía.",
   },
   "give_back.changed": {
     en: "What can go back on this receipt changed since it was checked. Nothing has been given back. Check the new amounts and press Give back again.",
@@ -715,7 +715,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "advance.correction_open": {
     en: "The table's receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
-    es: "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, pulsa Terminar, Terminar aquí o Anular esta devolución y vuelve a intentarlo.",
+    es: "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
@@ -727,7 +727,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "tender.refund_in_progress": {
     en: "A card refund of this payment is still waiting for the card company's answer. Try again once it has answered.",
-    es: "Una devolución a tarjeta de este pago aún espera la respuesta de la entidad de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
+    es: "Una devolución a tarjeta de este pago aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   },
   "tender.manual_refund_pin_required": {
     en: "A manager must enter their PIN to confirm this terminal refund",

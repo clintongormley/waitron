@@ -213,7 +213,8 @@ export const en = {
   "give_back.submit_any": "Give back",
   "give_back.preview_failed":
     "The box could not be reached to check this money back. Nothing has been given back. Press Give back to try again.",
-  "give_back.way_not_here": "This device's profile does not give money back this way.",
+  "give_back.way_not_here":
+    "This device's profile does not give money back this way. To give it back this way, open Give money back on a device whose profile does.",
   "give_back.changed_while_checking":
     "The money back changed while it was being checked. Check what is shown and press Give back again.",
   "give_back.terminal_heading": "Refund it on the separate card terminal",
@@ -228,7 +229,7 @@ export const en = {
   "give_back.approvers_failed":
     "The people who can approve this could not be read. Nothing has been given back. Press Give back to try again.",
   "give_back.storage":
-    "This device could not save the money back before sending it. Nothing has been given back.",
+    "This device could not save the money back before sending it. Nothing has been given back. Close this window and, on another device that takes payments, open Give money back on the receipt.",
   "give_back.lost":
     "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
   "give_back.send_again": "Send again",
@@ -248,7 +249,7 @@ export const en = {
   "give_back.still_waiting":
     "The card company has not answered yet. Check again later: the rest stays waiting on this till.",
   "give_back.rest_failed":
-    "The card company did not make the first refund, so the rest was not sent. Nothing more has gone back.",
+    "The card company did not make the first refund, so the rest was not sent. Nothing more has gone back. Open Give money back again to try again or to choose another way.",
   "give_back.under_way": "Money back under way",
   "give_back.done": "Done",
   "give_back.uw_back": "{back} given back so far, of {gross}.",
@@ -2688,7 +2689,8 @@ export const es: Record<StringKey, string> = {
   "give_back.submit_any": "Devolver",
   "give_back.preview_failed":
     "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
-  "give_back.way_not_here": "El perfil de este dispositivo no permite devolver dinero así.",
+  "give_back.way_not_here":
+    "El perfil de este dispositivo no permite devolver dinero así. Para devolverlo así, abre Devolver dinero en un dispositivo cuyo perfil lo permita.",
   "give_back.changed_while_checking":
     "La devolución cambió mientras se comprobaba. Revisa lo que se muestra y vuelve a pulsar Devolver.",
   "give_back.terminal_heading": "Devuélvelo en el datáfono aparte",
@@ -2702,7 +2704,7 @@ export const es: Record<StringKey, string> = {
   "give_back.approvers_failed":
     "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
   "give_back.storage":
-    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada.",
+    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
   "give_back.lost":
     "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
   "give_back.send_again": "Enviar de nuevo",
@@ -2721,9 +2723,9 @@ export const es: Record<StringKey, string> = {
     "{amount} aún no se han devuelto. Pulsa Devolver el resto para devolverlos ahora.",
   "give_back.send_rest": "Devolver el resto",
   "give_back.still_waiting":
-    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde: el resto sigue esperando en este TPV.",
+    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde: el resto sigue esperando en esta caja.",
   "give_back.rest_failed":
-    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más.",
+    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
   "give_back.under_way": "Devolución en curso",
   "give_back.done": "Listo",
   "give_back.uw_back": "Devueltos {back} hasta ahora, de {gross}.",
@@ -2751,7 +2753,7 @@ export const es: Record<StringKey, string> = {
     "Una devolución anterior a tarjeta en este ticket sigue esperando respuesta, así que no se ha enviado nada. Pulsa Comprobar de nuevo antes de devolver más a una tarjeta.",
   "give_back.uw_finish": "Terminar",
   "give_back.uw_finish_hint": "Registra los {amount} devueltos.",
-  "give_back.uw_stop": "Terminar aquí",
+  "give_back.uw_stop": "Parar aquí",
   "give_back.uw_stop_hint": "Se quedan los {amount} ya devueltos; no se devuelve más.",
   "give_back.uw_cancel": "Anular esta devolución",
   "give_back.uw_cancel_hint": "Aún no se ha devuelto nada.",

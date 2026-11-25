@@ -1067,7 +1067,7 @@ describe("a money back left unfinished", () => {
       "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its money back receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
-      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket de devolución. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Terminar aquí o Terminar para emitirlo por lo devuelto. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket de devolución. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 });

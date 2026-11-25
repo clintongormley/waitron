@@ -473,7 +473,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "invoice_correction.unfinished": {
     en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its money back receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back.${MORE_EN}`,
-    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket de devolución. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Terminar aquí o Terminar para emitirlo por lo devuelto.${MORE_ES}`,
+    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket de devolución. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto.${MORE_ES}`,
   },
   "invoice_correction.filing_refused": {
     en: `{moneyBack:money} went back to a customer, but its money back receipt could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish.${MORE_EN}`,

@@ -350,8 +350,8 @@ all.
 
 Choose **Cancel and refund** with the ticked dishes' total, or **Cancel** when nothing is ticked.
 **Back** leaves the table open. If you tick **Refund** and cannot give refunds yourself, someone who
-can enters their PIN. When a payment was taken in a way this device does not take, the window tells
-you to refund it at a till from the receipt.
+can enters their PIN. When a payment was taken in a way this device does not take, the window says
+**Give the money back at a till: choose Give money back on the receipt.**
 
 Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
 open **Give money back** on it, filled in. When there is only one receipt, it opens straight away.

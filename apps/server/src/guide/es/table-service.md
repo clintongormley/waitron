@@ -370,7 +370,7 @@ pagados de la cuenta cuando los marcas todos.
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
 alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
-acepta, la ventana te indica que lo devuelvas en una caja desde el recibo.
+acepta, la ventana dice **Devuelve el dinero en una caja: Devolver dinero, en el recibo.**
 
 Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
 uno para abrir **Devolver dinero** en él, ya rellenada. Si solo hay un recibo, se abre
@@ -432,12 +432,12 @@ ticket de devolución que no se imprime solo se puede imprimir desde **Buscar cu
 pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
-**Devoluciones en curso**. Si no está, la devolución espera en este TPV: vuelve a abrir **Devolver
+**Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver
 dinero** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto.
-- **Terminar aquí**, que aparece en su lugar mientras queda dinero, se queda con lo ya devuelto y
+- **Parar aquí**, que aparece en su lugar mientras queda dinero, se queda con lo ya devuelto y
   no devuelve más.
 - **Anular esta devolución** termina una que no ha devuelto nada.
 

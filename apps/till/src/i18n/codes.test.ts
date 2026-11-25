@@ -76,7 +76,7 @@ it("words a card refund still waiting on a payment like one waiting on the bill"
     "A card refund of this payment is still waiting for the card company's answer. Try again once it has answered.",
   );
   expect(codeMessage("tender.refund_in_progress", "es")).toBe(
-    "Una devolución a tarjeta de este pago aún espera la respuesta de la entidad de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
+    "Una devolución a tarjeta de este pago aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   );
 });
 
@@ -110,7 +110,7 @@ it("tells staff money back that can still be recorded ends with Finish or Stop h
     "Money has gone back and it can still be recorded. Press Finish or Stop here.",
   );
   expect(codeMessage("invoice_correction.still_correctable", "es")).toBe(
-    "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Terminar aquí.",
+    "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Parar aquí.",
   );
 });
 
@@ -1035,7 +1035,7 @@ it.each([
   [
     "es",
     es,
-    "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la entidad de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
+    "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   ],
 ] as const)(
   "in %s, tells staff a card refund still waits for its answer, naming no old window",
@@ -1325,7 +1325,7 @@ it("tells staff the table's receipt waits for the advance's open correction, nam
     "The table's receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Terminar aquí o Anular esta devolución y vuelve a intentarlo.",
+    "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
     /while money back on the payment on account is under way\. /,
