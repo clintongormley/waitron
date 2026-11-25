@@ -803,10 +803,14 @@ async function liveAsCopy(
 describe("a live version in format 4, before declarations were frozen again", () => {
   it("refuses it with the venue-reset code", async () => {
     const f = await menusFixture(fx.db);
-    await liveAsCopy(
+    const versionId = await liveAsCopy(
       f.lunch,
       (published) => ({ ...published, format: 4 }) as unknown as MenuDocument,
     );
+    await expect(app((tx) => readRecordedDocuments(tx, [versionId]))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.lunch },
+    });
     await expect(app((tx) => readLiveDocuments(tx, [f.lunch]))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: f.lunch },
@@ -934,29 +938,16 @@ describe("a live version published before the Device Home Page", () => {
 describe("a live version published before its document froze the takeaway VAT class", () => {
   it("refuses a format-3 document with the venue-reset code", async () => {
     const f = await menusFixture(fx.db);
-    const { versionId } = await publish(f.lunch);
-    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document = JSON.parse(
-      JSON.stringify({ ...row!.document, format: 3 }, (key, value: unknown) =>
-        key === "takeawayVatClass" ? undefined : value,
-      ),
-    ) as typeof row.document;
-    const [earlier] = await fx.db
-      .insert(menuVersions)
-      .values({
-        menuId: f.lunch,
-        number: row!.number + 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdAt: row!.createdAt,
-        createdBy: "person-1",
-      })
-      .returning({ id: menuVersions.id });
-    await fx.db
-      .update(menuReleases)
-      .set({ versionId: earlier!.id })
-      .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
-    await expect(app((tx) => readRecordedDocuments(tx, [earlier!.id]))).rejects.toMatchObject({
+    const versionId = await liveAsCopy(
+      f.lunch,
+      (published) =>
+        JSON.parse(
+          JSON.stringify({ ...published, format: 3 }, (key, value: unknown) =>
+            key === "takeawayVatClass" ? undefined : value,
+          ),
+        ) as MenuDocument,
+    );
+    await expect(app((tx) => readRecordedDocuments(tx, [versionId]))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: f.lunch },
     });
@@ -971,32 +962,17 @@ describe("a live version published while its document froze a VAT rate", () => {
   /** Makes the menu's live version a copy of its current one that also holds a `vatRate` beside
    * every `vatClass`, as a version published before the rate left the document does. */
   async function liveWithFrozenRates(menuId: string): Promise<string> {
-    const { versionId } = await publish(menuId);
-    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document = JSON.parse(
-      JSON.stringify({ ...row!.document, format: MENU_DOCUMENT_FORMAT }, (_key, value: unknown) =>
-        typeof value === "object" && value !== null && "vatClass" in value
-          ? { ...value, vatRate: "10.00" }
-          : value,
-      ),
-    ) as typeof row.document;
-    expect(JSON.stringify(document)).toMatch(/"vatRate":"10.00"/);
-    const [earlier] = await fx.db
-      .insert(menuVersions)
-      .values({
-        menuId,
-        number: row!.number + 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdAt: row!.createdAt,
-        createdBy: "person-1",
-      })
-      .returning({ id: menuVersions.id });
-    await fx.db
-      .update(menuReleases)
-      .set({ versionId: earlier!.id })
-      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
-    return earlier!.id;
+    return liveAsCopy(menuId, (published) => {
+      const document = JSON.parse(
+        JSON.stringify({ ...published, format: MENU_DOCUMENT_FORMAT }, (_key, value: unknown) =>
+          typeof value === "object" && value !== null && "vatClass" in value
+            ? { ...value, vatRate: "10.00" }
+            : value,
+        ),
+      ) as MenuDocument;
+      expect(JSON.stringify(document)).toMatch(/"vatRate":"10.00"/);
+      return document;
+    });
   }
 
   it("is still served for selling, and its menu shows changed until it is published again", async () => {
@@ -1112,36 +1088,21 @@ describe("a live version whose offers carry no colour", () => {
   /** Makes the menu's live version a copy of its current one with no `color` on any offer; a
    * section's colour predates it and stays. */
   async function liveWithoutOfferColors(menuId: string): Promise<string> {
-    const { versionId } = await publish(menuId);
-    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document: typeof row.document = {
-      ...row!.document,
-      format: MENU_DOCUMENT_FORMAT,
-      offers: Object.fromEntries(
-        Object.entries(row!.document.offers).map(([id, offer]) => {
-          const earlier = { ...offer };
-          delete earlier.color;
-          return [id, earlier];
-        }),
-      ),
-    };
-    for (const offer of Object.values(document.offers)) expect(offer).not.toHaveProperty("color");
-    const [earlier] = await fx.db
-      .insert(menuVersions)
-      .values({
-        menuId,
-        number: row!.number + 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdAt: row!.createdAt,
-        createdBy: "person-1",
-      })
-      .returning({ id: menuVersions.id });
-    await fx.db
-      .update(menuReleases)
-      .set({ versionId: earlier!.id })
-      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
-    return earlier!.id;
+    return liveAsCopy(menuId, (published) => {
+      const document: MenuDocument = {
+        ...published,
+        format: MENU_DOCUMENT_FORMAT,
+        offers: Object.fromEntries(
+          Object.entries(published.offers).map(([id, offer]) => {
+            const earlier = { ...offer };
+            delete earlier.color;
+            return [id, earlier];
+          }),
+        ),
+      };
+      for (const offer of Object.values(document.offers)) expect(offer).not.toHaveProperty("color");
+      return document;
+    });
   }
 
   it("is served, serves no colour, and its menu shows each offer's colour as a change", async () => {
@@ -2339,24 +2300,11 @@ describe("previewMenu", () => {
 
   it("keeps a publication without price origins current and retains its original Preview link", async () => {
     const f = await menusFixture(fx.db);
-    const { versionId } = await publish(f.dinner);
-    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document = { ...row!.document };
-    delete document.priceOrigins;
-    const [earlier] = await fx.db
-      .insert(menuVersions)
-      .values({
-        ...row!,
-        id: undefined,
-        number: row!.number + 1,
-        document,
-        contentHash: menuDocumentHash(document),
-      })
-      .returning({ id: menuVersions.id });
-    await fx.db
-      .update(menuReleases)
-      .set({ versionId: earlier!.id })
-      .where(eq(menuReleases.versionId, versionId));
+    await liveAsCopy(f.dinner, (published) => {
+      const document = { ...published };
+      delete document.priceOrigins;
+      return document;
+    });
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
     await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" }));
     expect(changeBodies((await app((tx) => previewMenu(tx, f.dinner))).changes)).toContainEqual({
