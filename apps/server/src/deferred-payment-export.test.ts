@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { unzipSync } from "fflate";
-import { row, sheetNamed } from "./testing/xlsx-rows.js";
+import { row, sheetNamed, worksheetRows } from "./testing/xlsx-rows.js";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { hashPin, startManagementSession } from "@waitron/identity";
@@ -168,8 +168,8 @@ describe("listDeferredPaymentInvoices", () => {
       DEFERRED_PAYMENT_EXPORT_WORDS.es.sheet,
     );
     expect(sheet).toBeDefined();
-    expect(row(sheet!, 2).slice(2, 4)).toEqual([`${year}-01-02`, `${year}-01-01`]);
-    expect(row(sheet!, 3)).toEqual([]);
+    expect(row(sheet!, 3).slice(2, 4)).toEqual([`${year}-01-02`, `${year}-01-01`]);
+    expect(row(sheet!, 4)).toEqual([]);
   });
   it("names a replaced invoice's replacement apart, and totals only the corrections of the two", async () => {
     const bill = await t.counterOrder("placed", true);
@@ -198,21 +198,43 @@ describe("listDeferredPaymentInvoices", () => {
       correctionsTotal: "-1.21",
       replacedBy: numberOf(replacement),
     });
+    const sheet = await deferredSheet(await accountantDownload(day));
+    const original = worksheetRows(sheet).find(([number]) => number === numberOf(sale!.id));
+    expect(original?.slice(9)).toEqual([numberOf(refund), "-1.21", numberOf(replacement)]);
   });
 });
 
-function accountantDownload(day: string) {
+function accountantDownload(from: string, to = from) {
   const app = new Hono();
   mountReportApi(
     app,
     { db: t.venue.db, cfg: { nodeId: t.venue.cfg.nodeId }, venueLocale: "es-ES" },
     () => {},
   );
-  return app.request(`/management-api/reports/accountant-export?from=${day}&to=${day}`, {
+  return app.request(`/management-api/reports/accountant-export?from=${from}&to=${to}`, {
     method: "POST",
     headers: { cookie: managerCookie },
   });
 }
+
+async function deferredSheet(response: Response) {
+  expect(response.status).toBe(200);
+  const sheet = sheetNamed(
+    unzipSync(new Uint8Array(await response.arrayBuffer())),
+    DEFERRED_PAYMENT_EXPORT_WORDS.es.sheet,
+  );
+  expect(sheet).toBeDefined();
+  return sheet!;
+}
+
+it("uses the complete range and keeps full invoice customer details", async () => {
+  const sheet = await deferredSheet(await accountantDownload(days.closedNow!, days.closedLater!));
+  const rows = worksheetRows(sheet);
+  const full = rows.find((cells) => cells[1] === "F1");
+  expect(full?.slice(3, 6)).toEqual([days.closedNow, RECIPIENT.legalName, RECIPIENT.taxId]);
+  const ticket = rows.find(([number]) => number === "A/1");
+  expect(ticket?.slice(1, 6)).toEqual(["F2", days.issued, days.closedLater, "", ""]);
+});
 
 it("includes signed credit amounts as numbers in the accountant attachment", async () => {
   const day = days.closedLater!;
@@ -226,7 +248,7 @@ it("includes signed credit amounts as numbers in the accountant attachment", asy
     DEFERRED_PAYMENT_EXPORT_WORDS.es.sheet,
   );
   expect(sheet).toBeDefined();
-  expect(row(sheet!, 2)).toEqual([
+  expect(row(sheet!, 3)).toEqual([
     "A/1",
     "F2",
     days.issued,
@@ -240,6 +262,6 @@ it("includes signed credit amounts as numbers in the accountant attachment", asy
     "-1.10",
     "",
   ]);
-  expect(sheet).toContain('<c r="K2" t="n" s="1"><v>-1.10</v></c>');
-  expect(row(sheet!, 3)).toEqual([]);
+  expect(sheet).toContain('<c r="K3" t="n" s="1"><v>-1.10</v></c>');
+  expect(row(sheet!, 4)).toEqual([]);
 });

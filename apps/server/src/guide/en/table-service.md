@@ -1043,7 +1043,7 @@ number, and print your bank account. Without a bank account in **Venue settings 
 ([how to set it](table-service.md#full-invoice)), they say only **Deferred payment**.
 
 In **Sales & takings** on the dashboard, select the trading days you want and choose **Download
-for accountant (XLSX)**. Open the **Deferred payments** tab to see the bills closed on those days.
+for accountant (XLSX)**. The deferred payments sheet lists the bills closed on those days.
 
 ## Practise with different devices in Demo {#demo-devices}
 

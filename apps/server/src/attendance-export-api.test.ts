@@ -134,25 +134,6 @@ async function deadline<T>(promise: Promise<T>): Promise<T> {
 }
 
 describe("authenticated working-time downloads", () => {
-  it("serves Excel working-time files privately through the own and manager routes", async () => {
-    for (const response of [
-      await ask("own", { format: "xlsx" }),
-      await ask("manager", { format: "xlsx" }, managerCookie),
-    ]) {
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      );
-      expect(response.headers.get("content-disposition")).toBe(
-        'attachment; filename="time-record-2026-01-01-2026-02-01-standard.xlsx"',
-      );
-      expect(response.headers.get("cache-control")).toBe("no-store");
-      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-      expect(sheetNamed(files, "Working-time record")).toContain("María Muñoz");
-    }
-  });
-
   it("exports staff's own rich history and frozen snapshots without changing the record", async () => {
     const before = snapshot();
     const response = await ask();
@@ -165,7 +146,8 @@ describe("authenticated working-time downloads", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    const text = await worksheet(response);
+    const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    const text = sheetNamed(files, "Working-time record")!;
     expect(text).toContain(">540<");
     expect(text).toContain("frozen-history");
     expect(text).toContain("2026-01-05T18:00:00+01:00");
@@ -333,7 +315,12 @@ describe("authenticated working-time downloads", () => {
         } finally {
           await loading.destroy();
         }
-      } else text = await worksheet(response);
+      } else {
+        const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+        const sheet = sheetNamed(files, "Registro de jornada");
+        expect(sheet).toBeDefined();
+        text = sheet!;
+      }
       expect(text).toContain("María Muñoz");
       expect(text).toContain("José");
       expect(text).toContain("2026-01-05T18:00:00+01:00");

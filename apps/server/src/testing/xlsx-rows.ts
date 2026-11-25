@@ -3,9 +3,16 @@ import { strFromU8, unzipSync } from "fflate";
 /** The text of each cell in row `number` of a worksheet's XML, numbers as written. */
 export function row(xml: string, number: number): string[] {
   const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
-  return [...body.matchAll(/<c [^>]*>([\s\S]*?)<\/c>/g)].map(
-    (cell) => cell[1]!.match(/<(?:t(?: [^>]*)?|v)>([\s\S]*?)<\/(?:t|v)>/)?.[1] ?? "",
-  );
+  const values: string[] = [];
+  for (const cell of body.matchAll(/<c r="([A-Z]+)\d+"[^>]*>([\s\S]*?)<\/c>/g)) {
+    const column = Array.from(cell[1]!).reduce(
+      (n, letter) => n * 26 + letter.charCodeAt(0) - 64,
+      0,
+    );
+    while (values.length < column - 1) values.push("");
+    values.push(cell[2]!.match(/<(?:t(?: [^>]*)?|v)>([\s\S]*?)<\/(?:t|v)>/)?.[1] ?? "");
+  }
+  return values;
 }
 
 /** The worksheet XML of the sheet called `name` (written as is, unescaped), found through the workbook's relationships. */

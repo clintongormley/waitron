@@ -125,10 +125,11 @@ export function deferredPaymentsSheet(
   rows: readonly DeferredPaymentInvoice[],
   language: "en" | "es",
 ): WorkbookSheet {
-  const { sheet, ...columns } = DEFERRED_PAYMENT_EXPORT_WORDS[language];
+  const { sheet, note, ...columns } = DEFERRED_PAYMENT_EXPORT_WORDS[language];
   return {
     name: sheet,
     rows: [
+      [note],
       Object.values(columns),
       ...rows.map((row) => [
         row.invoiceNumber,

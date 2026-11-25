@@ -64,7 +64,7 @@ describe("working-time Excel", () => {
         const actual = data.find((r) => r[0] === section.key && r[1] === row.key)!;
         expect(actual, section.key).toBeDefined();
         for (const { key } of section.columns)
-          expect(actual[header!.indexOf(key)], `${section.key}.${key}`).toBe(
+          expect(actual[header!.indexOf(key)] ?? "", `${section.key}.${key}`).toBe(
             key === "text"
               ? "&lt;script&gt;alert(1)&lt;/script&gt; /OpenAction https://example.test/ � � 😀 TEXT-FINAL"
               : String(row.cells[key] ?? ""),
@@ -72,7 +72,9 @@ describe("working-time Excel", () => {
       }
     expect(data[1]![header!.indexOf("reason")]).toBe(longReason);
     expect(data[1]![header!.indexOf("token")]).toBe(longToken);
-    expect(xml).toMatch(/t="n" s="0"><v>\d+<\/v>/);
+    expect(xml.includes('<c r="C7"')).toBe(false);
+    expect(xml).toContain('<c r="E7" t="n" s="0"><v>480</v></c>');
+    expect(xml.includes('<c r="I8"')).toBe(false);
   });
 
   it.each([
@@ -108,7 +110,7 @@ describe("working-time Excel", () => {
     const [header, ...rows] = worksheetRows(
       worksheetText(await renderAttendanceXlsx(document(value))),
     );
-    expect(rows.at(-1)![header!.indexOf("personName")]).toBe(
+    expect(rows.at(-1)![header!.indexOf("personName")] ?? "").toBe(
       String(value ?? "")
         .replaceAll('"', "&quot;")
         .replaceAll("\r", "&#13;"),

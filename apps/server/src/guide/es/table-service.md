@@ -1116,7 +1116,7 @@ factura como referencia, e imprimen tu cuenta bancaria. Sin cuenta bancaria en *
 Datos del local** ([cómo indicarla](table-service.md#full-invoice)), dicen solo **Pago aplazado**.
 
 En **Ventas y recaudación** del panel, selecciona las jornadas que quieras y elige **Descargar
-para tu gestor (XLSX)**. Abre la pestaña **Pagos aplazados** para ver las cuentas cerradas en esas jornadas.
+para tu gestor (XLSX)**. La hoja de pagos aplazados recoge las cuentas cerradas en esas jornadas.
 
 ## Practicar con distintos dispositivos en Demostración {#demo-devices}
 
