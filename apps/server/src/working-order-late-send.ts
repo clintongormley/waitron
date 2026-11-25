@@ -194,13 +194,15 @@ async function judgeLateUnsent(
     if (context === undefined) continue;
     const decision = routed.get(line.lineId);
     if (decision !== undefined) {
-      if (decision.stopped && decision.route.kind === "station")
+      if (decision.stopped)
         cutoffLate.push({
           ...line,
           menuId: context.menuId,
           menuItemId: context.menuItemId,
           ...decision.run,
-          stationId: decision.route.stationId,
+          ...(decision.route.kind === "station"
+            ? { stationId: decision.route.stationId }
+            : { noPreparation: true }),
         });
       continue;
     }

@@ -773,8 +773,9 @@ asks the till to keep the original quantity.
 Without station adjustments, a period's menus can be picked and sent from its start until its end: for
 Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepartmentService`,
 `packages/venue-service/src/menu-timetable.ts`). A dish line whose period has ended is refused
-`menu_period.not_running` (`apps/server/src/working-order-pricing.ts`); increasing a line already sent to
-an order is refused the same way, while unchanged lines, decreases and notes keep their stored-line
+`menu_period.not_running` (`apps/server/src/working-order-pricing.ts`). Raising the quantity of
+a stored dish after its period ends can give `menu_period.not_running` or, for a linked set-menu
+dish, `menu_period.last_orders`. Unchanged lines, decreases and notes keep their stored-line
 behaviour. A new dish whose period ended earlier the same business day (`endedMenus`) is the
 exception: `priceOrderLines` accepts it at its taken price when a menu the running period offers
 in the zone also sells its product and variant, including inside a set menu. Otherwise the server

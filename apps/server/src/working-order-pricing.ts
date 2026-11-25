@@ -469,17 +469,24 @@ export async function priceOrderLines(
     if (cutoff !== undefined) {
       if (cutoff.stopped && line[STORED_RISE] === true)
         throw new AppError("menu_period.last_orders", { menuItemId: offer.id });
-      if (cutoff.stopped && cutoff.route.kind === "station")
-        confirmations.push({
-          index,
-          menuItemId: offer.id,
-          menuId: offer.menuId,
-          ...cutoff.run,
-          stationId: cutoff.route.stationId,
-        });
+      if (cutoff.stopped) {
+        const { periodId, periodName } = cutoff.run;
+        if (cutoff.route.kind === "no_preparation")
+          marks.set(index, { periodId, periodName, confirmedBy: null });
+        else
+          confirmations.push({
+            index,
+            menuItemId: offer.id,
+            menuId: offer.menuId,
+            periodId,
+            periodName,
+            stationId: cutoff.route.stationId,
+          });
+      }
     } else if (
       line[STORED_RISE] === true &&
       selected?.fromRecordedCopy === true &&
+      (line[STORED_DEPARTMENT] ?? service?.departmentId) === service?.departmentId &&
       periodOf.has(offer.menuId)
     ) {
       throw new AppError("menu_period.last_orders", { menuItemId: offer.id });

@@ -175,6 +175,7 @@ interface DishKitchenPlace {
   productId: string | null;
   stationId: string | null;
   courseId: string | null;
+  chosenStation?: boolean;
   /** Whether the dish's extras leave hold: the dish is initiated, or it is made here, even in a
    *  held group. */
   initiated: boolean;
@@ -254,7 +255,7 @@ export async function insertSplitExtras(
     resolver,
     zoneId,
     fresh.flatMap(({ id, parentLineId, latePeriodId, lateStationId }) =>
-      latePeriodId === null || lateStationId === null
+      latePeriodId === null || lateStationId === null || byDish.get(parentLineId!)!.chosenStation
         ? []
         : [
             {
@@ -613,6 +614,7 @@ export async function fireLines(
         productId: line.productId,
         stationId,
         courseId,
+        chosenStation: chosenStations.has(line.id),
         initiated: fired,
       });
       return {

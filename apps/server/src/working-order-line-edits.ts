@@ -1009,6 +1009,7 @@ export async function applyLineEdits(
       productId: parent.productId,
       stationId: parent.ticket?.stationId ?? null,
       courseId: parent.ticket?.courseId ?? parent.courseId,
+      chosenStation: parent.ticket?.stationId === parent.makeAtStationId,
       initiated:
         parent.ticket !== null
           ? initiatedAt(parent.ticket) !== null
