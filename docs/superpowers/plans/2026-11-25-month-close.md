@@ -1,0 +1,19 @@
+# Close monthly hours automatically
+
+Managers can set 0–10 working days of grace, see what still needs attention and download the closed totals. The owner chose “3 working days of grace, adjustable” on 24 November. The watcher’s definition counts Monday through Friday and skips holidays present in the venue calendar. Close at the venue’s business-day boundary after the last grace day. The default November 2026 close is 4 December if the calendar lists no holiday on 1–3 December. Zero closes at the boundary starting 1 December.
+
+## 1. Keep closure records safe when boxes change roles
+
+Use the existing return seat in `packages/workforce/src/handover-return.ts` to carry the former primary’s frozen closures before entries that reference them. Preserve their original IDs and hashes and verify the closure chain. Test replay, a real snapshot against the existing batch limit, and a former primary returning a closure and its counting marker that the destination lacks (`handover-return.test.ts`, `apps/server/src/handover-two-boxes.test.ts`). A disconnected primary and its promoted spare could close the same month independently. The current unique period index cannot hold both, and replacing either snapshot would change the saved record. Settle that collision with the watcher before enabling the job. This prerequisite can land independently once its return behaviour is agreed.
+
+## 2. Close automatically and show the result in Hours
+
+Put `graceWorkingDays` in the workforce settings document (default 3). Expose it through `management-attendance-api.ts` and `apps/dashboard/src/api/hours.ts`. Use the existing Hours screen (`attendance-corrections-screen.ts`) and save-form controls, with `system.manage` for writes. The Hours read (`hours-reads.ts`, `attendance-contract.ts`) returns the due date and unresolved items for that month only, alongside the existing closed totals and corrections. Keep the established approval process. Add English and Spanish staff guidance and a dated pointer from decision 10 in the October clocking design. Leave cadence editing and tips for their own items.
+
+Use one shared due-date calculation for that read and a primary-only job registered beside `attendance.end_of_day` (`boot.ts`, `job-catalogue.ts`). Read the venue clock and the existing `readHolidays` calendar on the closure transaction. Process due months oldest first from the first month with working-time data and record the actual close time on restart. Reuse `closePayPeriod` and its replay protection in `pay-period-close.ts`, with the computed due time in the saved snapshot. Use the existing working-time rules and paid-break policy. Existing saved totals stay fixed when the policy changes. Test weekends, holidays, zero and exact cutover in Workforce, then restart and stepdown in Server. Route and browser tests cover permissions, saving and the open/closed display. Show pictures to the owner before landing.
+
+## 3. Remind managers and carry later corrections to the next download
+
+Use the outgoing-mail queue and its deduplication key for one reminder per eligible manager and month, only if unresolved items remain on the calendar day before the close. Reuse the Hours permission and link, with English and Spanish copy. Put the approved net change in the following period’s accountant export, labelled with the original month, through the existing working-time document projection. Test one queued reminder, none for an empty list, and an export spanning successive months where one late approval contributes exactly once. Retain the current frozen-history export and keep the remaining cadence item in the backlog.
+
+Estimate 250 product and 220 test lines for return, 310 product and 260 test lines for automatic close and Hours, and 200 product and 180 test lines for reminder and export. Confirm the cut with the watcher before building. No part adds a manual close or reopen action.
