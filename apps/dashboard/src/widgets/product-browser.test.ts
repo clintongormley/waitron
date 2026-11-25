@@ -1222,6 +1222,25 @@ it.each(["with products", "empty"])(
   },
 );
 
+it("shows a refused Move ahead of a category refusal left over from Tree", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.name_taken" });
+  vi.mocked(el.api.moveProductItems).mockRejectedValueOnce({ code: "category.parent_cycle" });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Drinks");
+  await chooseView(el, "List");
+  const notice = () => el.shadowRoot!.querySelector('[data-test="list-action-error"]');
+  await vi.waitFor(() =>
+    expect(notice()?.textContent).toContain(codeMessage("category.name_taken")),
+  );
+  await selectKeys(el, ["bread"]);
+  await press(el, "move");
+  await destination(el, "f");
+  await confirmDrop(el);
+  await vi.waitFor(() => expect(notice()?.textContent).toContain("Choose a parent outside"));
+});
+
 it("ends Select when the last List product goes away", async () => {
   localStorage.setItem("waitron.products.view", "list");
   const el = await mountBrowser({ products: [PRODUCTS[3]!] });
@@ -1235,13 +1254,25 @@ it("ends Select when the last List product goes away", async () => {
   ).toBeNull();
 });
 
-it("drops a stored Category filter when a fresh visit opens a category link in Tree", async () => {
+it("drops only the Category filter when a fresh visit opens a category link in Tree", async () => {
   localStorage.setItem("waitron.products.view", "list");
-  sessionStorage.setItem("waitron.products.table", JSON.stringify({ filters: { category: "b" } }));
-  const linked = await mountBrowser({ categoryId: "d" });
+  sessionStorage.setItem(
+    "waitron.products.table",
+    JSON.stringify({
+      sortKey: "price",
+      sortDirection: "descending",
+      filters: { category: "b", available: "yes" },
+    }),
+  );
+  const dishes = [
+    { ...PRODUCTS[0]!, unitPrice: "3.00" },
+    PRODUCTS[2]!,
+    { ...PRODUCTS[3]!, available: false },
+  ];
+  const linked = await mountBrowser({ categoryId: "d", products: dishes });
   expect(await rowKeys(linked)).toContain("folder:d");
   linked.remove();
-  expect(await rowKeys(await mountBrowser())).toEqual(["bread", "burger", "cola"]);
+  expect(await rowKeys(await mountBrowser({ products: dishes }))).toEqual(["cola", "burger"]);
 });
 
 it("drops a stored Category sort when a fresh visit opens a category link in Tree", async () => {

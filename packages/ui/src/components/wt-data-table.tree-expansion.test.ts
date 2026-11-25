@@ -255,7 +255,7 @@ test("changing an active filter opens a branch closed under the previous filter"
   expect(keys(el)).toEqual(["menu", "water"]);
 });
 
-test("a no-matches search offers its action while an empty table offers its own", async () => {
+test("empty search and filter results offer their action while an empty table offers its own", async () => {
   const el = await flatSearch({ searchTerm: "missing" });
   const action = document.createElement("button");
   action.slot = "no-matches-action";
@@ -265,6 +265,10 @@ test("a no-matches search offers its action while an empty table offers its own"
   await el.updateComplete;
   expect(action.assignedSlot?.name).toBe("no-matches-action");
   el.searchTerm = "";
+  await el.updateComplete;
+  expect(keys(el)).toEqual([]);
+  expect(action.assignedSlot?.name).toBe("no-matches-action");
+  el.clearFilters();
   await el.updateComplete;
   expect(action.assignedSlot).toBeNull();
   el.rows = [];

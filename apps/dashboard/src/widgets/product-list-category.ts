@@ -15,6 +15,9 @@ export const productListCategoryStyles = css`
   wt-data-table[wrap-to-fit]::part(list-cell) {
     vertical-align: middle;
   }
+  wt-data-table[data-list][wrap-to-fit]::part(tree-cell) {
+    align-items: center;
+  }
   wt-data-table[data-list][wrap-to-fit]::part(product-cell),
   wt-data-table[data-list][wrap-to-fit]::part(variant-cell) {
     display: flex;

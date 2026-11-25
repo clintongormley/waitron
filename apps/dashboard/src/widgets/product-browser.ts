@@ -283,10 +283,8 @@ export class ProductBrowser extends LitElement {
   }
 
   get #actionNotice(): string {
-    return (
-      ((this.view === "list" || this.nameDraft?.kind === "rename") && this.nameError) ||
-      this.actionError
-    );
+    if (this.view === "list") return this.actionError || this.nameError;
+    return (this.nameDraft?.kind === "rename" && this.nameError) || this.actionError;
   }
 
   override updated(changed: PropertyValues): void {

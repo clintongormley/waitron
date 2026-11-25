@@ -3526,7 +3526,10 @@ describe("a product's variants in the list", () => {
         { id: "deli", name: "Cured meats from local producers", parentId: "d", color: null },
         { ...food, name: "Fish" },
       ],
-      products: [dish, product({ id: "fish", name: "Roast fish", primaryCategoryId: "f" })],
+      products: [
+        dish,
+        product({ id: "fish", name: "Roast fish", primaryCategoryId: "f", variants: [bunVariant] }),
+      ],
     });
     el.parentElement!.style.width = "848px";
     const root = await tableRoot(el);
@@ -3569,6 +3572,12 @@ describe("a product's variants in the list", () => {
         .getBoundingClientRect();
       expect(
         Math.abs(shortSwatch.top + shortSwatch.height / 2 - shortMedia.top - shortMedia.height / 2),
+      ).toBeLessThan(2);
+      const toggle = nameCell(root, "fish")
+        .querySelector('[part~="variant-toggle"]')!
+        .getBoundingClientRect();
+      expect(
+        Math.abs(toggle.top + toggle.height / 2 - shortMedia.top - shortMedia.height / 2),
       ).toBeLessThan(2);
     });
     await openVariants(root, table, "cecina");
