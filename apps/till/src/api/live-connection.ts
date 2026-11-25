@@ -58,6 +58,8 @@ const KITCHEN_TYPES = [
   "print_jobs",
   "kitchen_notices",
   "menu_periods",
+  "menu_releases",
+  "menu_versions",
   "settings.venue",
   "party_allergy_guests",
   "allergy_line_ticks",

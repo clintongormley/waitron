@@ -283,6 +283,9 @@ consigo sus propias declaraciones. Una opción de una lista de opciones no: una 
 o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una forma de pedir el mismo
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
+Los alérgenos y las etiquetas dietéticas forman parte de la carta publicada: publica la carta para que
+un cambio entre en vigor.
+
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
 comprobado de uno que sí. Una variante muestra el estado de los alérgenos que usa.
 El color gris indica que sigue a su producto. El filtro de Alérgenos usa el mismo estado. Las columnas
@@ -298,13 +301,13 @@ fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
 y tamaños sin revisar. Revisa los alérgenos de cada tamaño que vendes, o elige **No contiene
-ninguno de los 14**, y guarda. No necesitas publicar la carta.
+ninguno de los 14**, guarda y publica la carta.
 
 Con una dieta elegida en **Filtros** de la caja, solo se muestran los platos con esa marca en
 **Dietética**, así que marca **Sin carne** o **Sin pescado** en los platos que correspondan.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
-alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
+alérgenos y la aptitud dietética de los productos los gestionas en **Productos**.
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
@@ -430,7 +433,7 @@ idioma que las carpetas fijan en todos los sitios donde aparece la sección se m
 con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aquí.
 
 Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
-el propio producto; consulta
+el propio producto y entran en vigor al publicar la carta; consulta
 [Declara los alérgenos y la aptitud dietética directamente](products.md#allergens). Tampoco puede
 cambiar la unidad, la disponibilidad, el orden de plato ni la categoría, el orden de los
 elementos, los colores ni qué elementos y secciones tiene la carta.
@@ -525,13 +528,13 @@ sin añadirlo.
 Las líneas del pedido muestran iconos nutricionales tras el nombre del plato. Un plato sin revisar no
 muestra iconos; consulta su ventana de información en lugar de tomar la falta de iconos como una
 declaración. Los extras mantienen su propia información nutricional separada de la del plato. Al
-elegir los extras de un plato, cada extra muestra los alérgenos que declara su producto antes de
+elegir los extras de un plato, cada extra muestra sus propios alérgenos antes de
 añadirlo. Un extra sin revisar no muestra ninguno, lo que no establece que sea apto. La caja no
 tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
 Abre los detalles de un plato enviado para consultar **Registrado al enviar**. Esas declaraciones
-describen el plato cuando lo enviaste, aunque después edites el producto. Los platos en espera
-mantienen sus declaraciones actuales hasta que los liberas. Usa la información actual de
+describen el plato cuando lo enviaste, aunque después se publique una corrección. Los platos en espera
+muestran lo que está publicado ahora hasta que los liberas. Usa la información actual de
 la estación para preparar la comida.
 Para revisar una cuenta anterior, abre sus detalles en **Pedidos**. Las declaraciones guardadas
 aparecen debajo de cada plato y extra.

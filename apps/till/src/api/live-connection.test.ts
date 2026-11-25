@@ -214,3 +214,13 @@ it("follows changes to a bill's recorded set-menu copies", () => {
 it("follows a tip given back from an advance's tender, which the Pay window's tip left reads", () => {
   expect(TILL_LIVE_TYPES.billDraft).toContain("refunds");
 });
+
+it.each(["station", "pass"])(
+  "refreshes the %s screen when a menu version or release changes, which its dishes' allergens follow",
+  (screen) => {
+    const { connection, reads } = setup();
+    connection.addInterests(screen, TILL_LIVE_TYPES[screen]!);
+    expect(reads.at(-1)!.types).toContain("menu_versions");
+    expect(reads.at(-1)!.types).toContain("menu_releases");
+  },
+);

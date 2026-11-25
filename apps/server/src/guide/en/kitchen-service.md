@@ -46,7 +46,7 @@ before preparing it.
 
 The guest's block keeps the instructions the station first received: later guest or menu
 edits do not silently replace it on the dish card, the pass or a reprint. A dish's **Contains**
-line shows what the dish declared when the ticket was made; a reprint reads it again.
+line shows its published allergens when the ticket was made; a reprint reads them again.
 
 ## Read and acknowledge a correction {#corrections}
 

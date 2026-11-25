@@ -488,11 +488,11 @@ its own extras. **Comp** and **Void** work on the row and let you choose how man
 count. To reduce the count, use **Void…**, which opens **Cancel item**. Choose **Fire now** in
 a held row's details to send every dish in that row, with its extras.
 
-Allergens and diet labels update from the live product while you keep the order open. You do not
-need to publish the menu or save the order.
+Allergens and diet labels come from the published menu. A dish already sent keeps, on the till, what
+it was sent with; the kitchen screens show any correction published since.
 
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
-sent**. A dish on hold still shows its current declaration until you release it.
+sent**. A dish on hold shows what is published now until you release it.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
 twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill

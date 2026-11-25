@@ -2130,7 +2130,7 @@ before their item and printer loops; whole-portion corrections share the languag
 for notice folding. The collection path reads after its policy and printer gates.
 They need no browser refresh or server restart. A language save enqueues nothing.
 
-New reprints use current frame words, the current declared allergens of each dish and extra and the matching frozen allergy translation while keeping
+New reprints use current frame words, the published allergens of each dish and extra and the matching frozen allergy translation while keeping
 recorded names and instructions. Outbox resends to the job's own printer reuse the saved payload; on another printer a kitchen ticket keeps its words and is only centred. Unit-map selection keeps
 `cfg.locale`, the venue's display language (`readVenueLocale`); payment-slip words, dates and amounts use the sale's receipt language, or, before there is a sale, the order's, else the venue's receipt language. Boundary
 checks live in `kitchen-print.language.test.ts` and `kitchen-language.boundaries.test.ts`.
@@ -2147,7 +2147,7 @@ sign-in (`#enterSignedIn`, `apps/till/src/till-app.ts`).
 in a zone already held shows that menu at once and sends one `/api/menu-state` check for the zone
 (`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
 published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and
-options) is applied in place. `liveFields` digests current declarations, course and reporting category
+options) is applied in place. `liveFields` digests the current course and reporting category
 of each dish, variant and extras item, plus deleted modifier-list identities
 (`liveFieldsDigest`, `packages/menu/src/menu-document.ts`); without it a dish moved to another
 course would not be noticed. The held menus are forgotten on every start (`#boot`, which a server

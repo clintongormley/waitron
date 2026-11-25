@@ -120,8 +120,9 @@ that one product's Modifiers group.
 ## Allergens and dietary information {#allergens}
 
 An extras entry declares its allergens and its dietary suitability through the product it names, so
-you maintain those on that product under **Products**, not here. Save the product to correct its
-declarations without publishing. Options are text and carry no declarations.
+you maintain those on that product under **Products**, not here. Allergens and diet labels are part
+of the published menu: publish the menu to put a change live. Options are text and carry no
+declarations.
 
 ## What the till does with a list {#till}
 
@@ -130,7 +131,7 @@ arranged them. A dish sold by weight, or by a unit that allows decimal places, a
 and then shows only its options lists: extras cannot be added to it. A dish in a unit switched to
 **Measures a quantity (ml, g…) — no extras** shows only its options lists too. An extras list shows each
 entry's price per portion, with a tick box each, or a stepper where you allowed more than one.
-Under each entry's name are the allergens its product declares. A
+Under each entry's name are its own allergens. A
 list you made required keeps **Add** shut until something is picked. An options list shows its
 available options as a set of radio buttons, exactly one to choose, with your default already
 selected. While the default is switched off, the first available option is selected instead. If no

@@ -48,8 +48,8 @@ plato sea apto. Consúltalo con quien atiende la mesa antes de prepararlo.
 
 El bloque de la persona conserva las instrucciones que la estación recibió primero: los cambios
 posteriores de la persona o de la carta no lo sustituyen silenciosamente en la tarjeta del
-plato, el pase o una reimpresión. La línea **Contiene** de un plato muestra lo que declaraba al
-hacerse el ticket; una reimpresión lo vuelve a leer.
+plato, el pase o una reimpresión. La línea **Contiene** de un plato muestra sus alérgenos
+publicados al hacerse el ticket; una reimpresión los vuelve a leer.
 
 ## Lee y confirma una corrección {#corrections}
 

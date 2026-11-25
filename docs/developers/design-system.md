@@ -7398,7 +7398,7 @@ for the hierarchy's separate immediate cleanup and retained-history limits.
 ### Nutrition at the till
 
 A short press anywhere on a product button selects the dish. A held pointer press opens the product
-information window without selecting it. The window shows the published description, current allergens
+information window without selecting it. The window shows the published description, allergens
 and dietary labels, and offers Close and Add to order.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
