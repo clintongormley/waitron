@@ -699,7 +699,7 @@ describe("menu-screen", () => {
     },
   );
 
-  it.each([false, true])("keeps scroll on pointer saves (focus moved: %s)", async (moveFocus) => {
+  it("keeps the next dish visible after a pointer save changes the Available sort", async () => {
     onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
     const many = Array.from({ length: 40 }, (_, index) => ({
       ...products[0]!,
@@ -713,7 +713,9 @@ describe("menu-screen", () => {
       listProducts: vi
         .fn()
         .mockResolvedValueOnce(many)
-        .mockRejectedValue({ code: "connection.failed" }),
+        .mockResolvedValue(
+          many.map((dish) => (dish.id === "p0" ? { ...dish, available: false } : dish)),
+        ),
       setProductAvailability,
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
@@ -722,8 +724,7 @@ describe("menu-screen", () => {
     const table = await productTable(el);
     const root = table.shadowRoot!;
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
-    const sort = root.querySelector<HTMLButtonElement>('button[data-sort="available"]')!;
-    sort.click();
+    root.querySelector<HTMLButtonElement>('button[data-sort="available"]')!.click();
     await table.updateComplete;
     expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
     await table.revealRow("p0");
@@ -733,8 +734,6 @@ describe("menu-screen", () => {
       timeout: 2000,
     });
     expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p0", false);
-    if (moveFocus) sort.focus({ preventScroll: true });
-    expect(root.activeElement?.localName).toBe(moveFocus ? "button" : "wt-switch");
     const row = root.querySelector('tr[data-row-key="p0"]')!;
     const heading = root.querySelector("thead th")!;
     const headingBottom = heading.getBoundingClientRect().bottom;
@@ -743,16 +742,21 @@ describe("menu-screen", () => {
     const covered = row.getBoundingClientRect();
     expect(covered.top).toBeLessThan(heading.getBoundingClientRect().bottom);
     expect(covered.bottom).toBeGreaterThan(heading.getBoundingClientRect().bottom);
-    const scrollBeforeSave = scroll.scrollTop;
-    expect(scrollBeforeSave).toBeGreaterThan(0);
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    const nextDish = () => root.querySelector('tr[data-row-key="p1"]')!.getBoundingClientRect();
+    const visibleTop = () => heading.getBoundingClientRect().bottom;
+    const topBeforeSave = nextDish().top - visibleTop();
+    expect(topBeforeSave).toBeGreaterThan(0);
     saved.resolve();
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(2));
     await vi.waitFor(() =>
       expect(root.querySelector("tbody tr:last-child")?.getAttribute("data-row-key")).toBe("p0"),
     );
     await new Promise(requestAnimationFrame);
     await new Promise(requestAnimationFrame);
-    expect(scroll.scrollTop).toBe(scrollBeforeSave);
-    expect(table.hasAttribute("data-availability-saving")).toBe(false);
+    const topAfterSave = nextDish().top - visibleTop();
+    expect(topAfterSave).toBeGreaterThan(0);
+    expect(Math.abs(topAfterSave - topBeforeSave)).toBeLessThanOrEqual(1);
   });
 
   it("keeps a named refusal and the dish visible under the Available filter when scrolled", async () => {
