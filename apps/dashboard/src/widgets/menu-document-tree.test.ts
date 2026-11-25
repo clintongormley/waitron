@@ -158,6 +158,16 @@ it("fits the prices, names and fallback media at phone width and reveals the exa
   const priceRight = (key: string) =>
     row(el, key)!.querySelector('[data-test="price"]')!.getBoundingClientRect().right;
   expect(priceRight("juice/1")).toBeCloseTo(priceRight("juice"), 0);
+  expect(row(el, "juice/0")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
+    "€2.00",
+  );
+  el.clashes = [{ productId: "juice", variantId: "1", field: "price", candidates: [] }];
+  await settle(el);
+  expect(row(el, "juice")?.querySelector('[data-test="price"]')).toBeNull();
+  expect(row(el, "juice/1")?.querySelector('[data-test="price"]')).toBeNull();
+  expect(row(el, "juice/0")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
+    "€2.00",
+  );
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
 });
 

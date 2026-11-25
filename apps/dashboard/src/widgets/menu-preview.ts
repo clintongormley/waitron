@@ -470,6 +470,7 @@ export class MenuPreviewPanel extends LitElement {
         .view=${view}
         .languages=${config}
         .rootMedia=${this.rootMedia}
+        .clashes=${preview.clashes}
       >
         <wt-combobox
           slot="view"

@@ -1180,9 +1180,10 @@ function variantPriceAttribution(
   decision: CombinedOffer | undefined,
   prev: Shape,
   next: Shape,
-): Pick<MenuChangeBody, "source" | "includedMenu"> {
-  if (previous.menuPrice !== variant.menuPrice) return { source: "this_menu" };
+): Pick<MenuChangeBody, "source" | "includedMenu"> | null {
   const setting = decision?.variants.find((candidate) => candidate.variantId === variant.id)?.price;
+  if (setting?.state === "clash") return null;
+  if (previous.menuPrice !== variant.menuPrice) return { source: "this_menu" };
   const source = setting?.state === "decided" ? setting.source : undefined;
   const ownProductPriceChanged = was.grossPrice !== offer.grossPrice;
   if ((source === undefined || source.kind === "parent") && ownProductPriceChanged)
@@ -1437,7 +1438,10 @@ export function diffEntries(
       );
     }
     const decision = combined.get(productId);
-    if (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice) {
+    if (
+      decision?.price.state !== "clash" &&
+      (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice)
+    ) {
       const price = decision?.price;
       const origin = changedPriceOrigin(productId, offer.placements, prev, next);
       const includedMenu =
@@ -1470,6 +1474,16 @@ export function diffEntries(
       if (previous === undefined) continue;
       if (previous.unitPrice === variant.unitPrice && previous.menuPrice === variant.menuPrice)
         continue;
+      const attribution = variantPriceAttribution(
+        was,
+        offer,
+        variant,
+        previous,
+        decision,
+        prev,
+        next,
+      );
+      if (attribution === null) continue;
       push({
         kind: "price_changed",
         productId,
@@ -1480,7 +1494,7 @@ export function diffEntries(
         ...(previous.unitPrice === variant.unitPrice
           ? { override: variant.menuPrice === null ? ("cleared" as const) : ("set" as const) }
           : {}),
-        ...variantPriceAttribution(was, offer, variant, previous, decision, prev, next),
+        ...attribution,
       });
     }
     const fields = productFields(was, offer, previousVariants);

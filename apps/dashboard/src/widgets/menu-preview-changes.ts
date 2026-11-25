@@ -121,7 +121,7 @@ export function changeWords(change: MenuChange, subject: (name: string) => unkno
             fields: change.fields.map((field) => t(SECTION_FIELDS[field])).join(", "),
           });
     case "order_changed":
-      return subject(change.list.length ? place(change.list) : t("menus.tab_structure"));
+      return subject(change.list.length ? place(change.list) : t("menus.move_top_level"));
     case "home_shortcuts_changed":
       return subject(t("menu_preview.home_shortcuts_changed"));
     case "home_display_changed":
@@ -132,15 +132,19 @@ export function changeWords(change: MenuChange, subject: (name: string) => unkno
 }
 
 export function changeSource(change: MenuChange): string {
-  const source =
-    change.kind === "extra_portion_changed" || change.kind === "extra_max_quantity_changed"
-      ? t("menu_preview.changed_in_modifiers")
-      : (change.includedMenu?.name ??
-        (change.source === "shared_product"
-          ? t("menu_preview.changed_in_products")
-          : change.source === "included_menu"
-            ? t("menu_preview.source_included_menu")
-            : ""));
+  if (change.source === "this_menu") return "";
+  const modifierTerms =
+    change.kind === "product_changed" &&
+    change.fields.some((field) => field === "extras" || field === "options");
+  let source = change.includedMenu?.name ?? "";
+  if (change.kind === "extra_portion_changed" || change.kind === "extra_max_quantity_changed")
+    source = t("menu_preview.changed_in_modifiers");
+  else if (change.source === "shared_product")
+    source = t(
+      modifierTerms ? "menu_preview.source_shared_product" : "menu_preview.changed_in_products",
+    );
+  else if (change.source === "included_menu" && source === "")
+    source = t("menu_preview.source_included_menu");
   return change.alsoOn?.length
     ? [source, fill("menu_preview.also_on", { menus: conjunctionList(change.alsoOn) })]
         .filter(Boolean)

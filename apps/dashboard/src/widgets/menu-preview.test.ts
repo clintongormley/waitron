@@ -108,6 +108,40 @@ it("names the changed size and describes setting or clearing a price at the same
   expect(text(q(el, '[data-change-row="clear"]'))).toBe("Burger price no longer set on this menu");
 });
 
+it("keeps other menus off a change made only here", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        id: "rename-here",
+        kind: "menu_renamed",
+        from: "Lunch",
+        to: "Midday",
+        source: "this_menu",
+        alsoOn: ["Dinner"],
+        targets: { before: [], after: [] },
+      },
+    ]),
+  });
+  expect(text(q(el, '[data-change-row="rename-here"]'))).toBe("Menu renamed from Lunch to Midday");
+});
+
+it("keeps the source of an edit to a modifier list neutral", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        id: "modifiers",
+        kind: "product_changed",
+        productId: "p-burger",
+        name: "Burger",
+        fields: ["extras"],
+        source: "shared_product",
+        targets: { before: [], after: [] },
+      },
+    ]),
+  });
+  expect(text(q(el, '[data-change-row="modifiers"]'))).toBe("Burger: extras · shared product");
+});
+
 it("keeps counted warning details folded until opened and keeps the product link", async () => {
   const el = await mount({
     preview: preview(
@@ -315,13 +349,13 @@ it("words every kind of change, each with where it came from", async () => {
       "Drinks › Beer › Lager · included menu, also on Dinner Menu and Terrace Menu",
       "Chips",
       "Soup Starters → the top level and Mains › Hot",
-      "Cola: names, description, photo, unit, how it is sold, variants, extras, options · changed in Products",
+      "Cola: names, description, photo, unit, how it is sold, variants, extras, options · shared product",
       "Desserts",
       "Bread",
       "Specials",
       "Drinks › Beer · included menu",
       "Mains: name, photo, colour · included menu",
-      "Structure",
+      "Top level",
       "Drinks · included menu",
       "Device Home Page shortcuts changed",
       "What appears first on the Device Home Page changed",
@@ -380,7 +414,7 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual(
     [
       "Soup Starters → el nivel principal y Mains › Hot",
-      "Estructura",
+      "Nivel principal",
       "Burger 12,00 € → 13,00 € · cambio en Productos, también en Dinner Menu y Terrace Menu",
       "Han cambiado los accesos directos de la página de inicio del dispositivo",
       "Ha cambiado lo que se muestra primero en la página de inicio del dispositivo",
@@ -414,7 +448,7 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: extras · changed in Products, also on Dinner Menu",
+      "Lemonade: extras · shared product, also on Dinner Menu",
       "Extra lemon deleted · changed in Products, also on Dinner Menu",
     ].sort(),
   );
@@ -424,7 +458,7 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: extras · cambio en Productos, también en Dinner Menu",
+      "Lemonade: extras · producto compartido, también en Dinner Menu",
       "Se ha eliminado Extra lemon · cambio en Productos, también en Dinner Menu",
     ].sort(),
   );

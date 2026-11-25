@@ -213,6 +213,47 @@ it("links a changed set menu to its editor from the full menu's Preview", async 
   });
 });
 
+it("takes the root media and links removed set menus that remain available", async () => {
+  const client = api();
+  const structure = await client.getMenuStructure("lunch");
+  client.getMenuStructure.mockResolvedValue({
+    ...structure,
+    root: { ...structure.root, color: "#225588" },
+  });
+  client.getMenuPreview.mockResolvedValue({
+    ...preview,
+    setMenuProblems: [],
+    changes: [
+      { id: daily.id, name: daily.name },
+      { id: "deleted", name: "Retired menu" },
+    ].map((setMenu) => ({
+      id: setMenu.id,
+      kind: "set_menu_removed" as const,
+      setMenu,
+      sectionIds: [],
+      under: [],
+      source: "this_menu" as const,
+      targets: { before: [], after: [] },
+    })),
+  } satisfies MenuPreview);
+  const el = await mount(lunchPath, client);
+  await vi.waitFor(() => {
+    const root = el.shadowRoot!.querySelector("dashboard-menu-preview")?.shadowRoot;
+    const removed = root?.querySelector(`[data-change-row="${daily.id}"] a`);
+    expect(removed?.getAttribute("href")).toBe(dailyPath);
+    const retired = root?.querySelector('[data-change-row="deleted"]');
+    expect(retired?.textContent).toContain("Retired menu");
+    expect(retired?.querySelector("a")).toBeNull();
+    const rows = root
+      ?.querySelector("dashboard-menu-document-tree")
+      ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
+    const media = rows?.querySelector<HTMLElement>(
+      'tr[data-row-key="root"] [data-test="thumb-placeholder"]',
+    );
+    expect(media?.style.getPropertyValue("--product-media-color")).toBe("#225588");
+  });
+});
+
 const starterLine = { id: "first", count: 1, courseIds: ["starters"] };
 const courses = [
   { id: "starters", name: "Starters" },

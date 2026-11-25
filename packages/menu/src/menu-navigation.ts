@@ -663,9 +663,6 @@ export function navigateMenuChanges(
       keys("before"),
       keys("after"),
       ...("setMenu" in change ? [change.setMenu.id] : []),
-      ...(change.kind === "price_changed" && change.variant !== undefined
-        ? [change.variant.id]
-        : []),
     ]);
     return { ...change, id, targets };
   });

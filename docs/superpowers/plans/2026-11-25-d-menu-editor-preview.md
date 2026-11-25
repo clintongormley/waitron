@@ -9,7 +9,10 @@ Managers see publishing blockers first, read a short list of changes, and open t
 
 Estimate 500 production lines added and 250 removed, 330 test lines added and 240 removed, plus about 45 guide and design lines. Use the runbook's cross-package review for the Preview response.
 
-Watcher clearance, 25 November: remove the inherited price fields from the Preview response. Keep
+The watcher's 25 November 11:05 entry in Lane D’s questions.md says “plan CLEARED by the watcher
+with points 1 to 6” and “pictures to the owner before landing”.
+
+Remove the inherited price fields from the Preview response. Keep
 equal-price override changes and say whether they were set or cleared. Group additions and
 removals together, credit extra portions and maxima to Modifiers, and link removed set menus
 only while they can still be opened. Let phone panes scroll with the page. Capture both phone

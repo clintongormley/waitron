@@ -111,6 +111,31 @@ it.each([1, 2])(
     ).toContain("/view/prices");
   },
 );
+it("places both kinds of publishing blocker before any folded warning", async () => {
+  const p = preview();
+  p.clashes = [{ productId: "lager", variantId: null, field: "price", candidates: [] }];
+  p.setMenuProblems = [
+    {
+      menuId: "daily",
+      name: "Daily menu",
+      problems: [{ kind: "dish_sold_by_measure", productId: "lager", name: "Lager" }],
+    },
+  ];
+  p.warnings = [{ kind: "shortcut_missing", name: "Missing" }];
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
+  const root = el.shadowRoot!;
+  const warning = root.querySelector("wt-disclosure")!;
+  expect(warning.open).toBe(false);
+  for (const blocker of [
+    root.querySelector('[data-test="clash-count"]')!,
+    root.querySelector('a[href="/set-menus/menu/daily"]')!,
+  ]) {
+    expect(blocker.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  }
+});
+
 it("shows no clash error when every price resolves", async () => {
   const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
     preview: preview(),

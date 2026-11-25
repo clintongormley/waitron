@@ -2432,9 +2432,7 @@ describe("a published menu serves each variant as sellable as it is itself", () 
 describe("combined menu publication", () => {
   it("refuses to publish a variant price clash, writing nothing", async () => {
     const f = await menusFixture(fx.db);
-    await publish(f.dinner);
     await app(async (tx) => {
-      await addMember(tx, f.dinnerRoot, product(f.lemonade));
       await setMenuVariants(
         tx,
         await offerOf(tx, f.drinksMenu, f.lemonade),
@@ -2442,10 +2440,13 @@ describe("combined menu publication", () => {
         f.drinksMenu,
       );
     });
+    await publish(f.dinner);
+    await app((tx) => addMember(tx, f.dinnerRoot, product(f.lemonade)));
     const preview = await app((tx) => previewMenu(tx, f.dinner));
     expect(
       preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
     ).toEqual([{ productId: f.lemonade, variantId: f.large, field: "price" }]);
+    expect(preview.changes.filter((change) => change.kind === "price_changed")).toEqual([]);
     const before = await versionRows();
     const publications = await fx.db
       .select()

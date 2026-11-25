@@ -5977,7 +5977,7 @@ focus the row. Removed rows without a destination read as text. Set-menu names l
 editor while the set menu exists, and Home page changes link to the Home page tab.
 
 Draw the menu as a read-only Structure tree with prices, variant rows, set menus and photos.
-An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
+Show prices once they resolve. An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
 and **Expand all** above the tree. Draw the actual translation's language tag and name a missing
 requested language beside its fallback. A replacement preview resets the tree's expansion and
 highlight. Changing the content language makes no request.

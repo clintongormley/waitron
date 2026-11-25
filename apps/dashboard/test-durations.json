@@ -392,7 +392,6 @@
   "src/widgets/menu-preview-tree.test.ts": 2.4,
   "src/widgets/menu-preview.a11y.test.ts": 5.5,
   "src/widgets/menu-preview.test.ts": 2.3,
-  "src/widgets/menu-preview.edit-links.test.ts": 0.5,
   "src/widgets/menu-preview.unit-changes.test.ts": 3.1,
   "src/widgets/menu-price-inheritance.test.ts": 1.1,
   "src/widgets/menu-prices-table.a11y.test.ts": 5.6,

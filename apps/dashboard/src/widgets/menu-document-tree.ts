@@ -9,6 +9,7 @@ import type {
   DocumentMember,
   FrozenOfferVariant,
   MenuDocument,
+  MenuClash,
   MenuTarget,
 } from "@waitron/shared";
 import {
@@ -129,6 +130,7 @@ export class MenuDocumentTree extends LitElement {
     languages: ["es", "en"],
   };
   @property({ attribute: false }) rootMedia?: { image: string | null; color: string | null };
+  @property({ attribute: false }) clashes: readonly MenuClash[] = [];
   #snapshot: MenuDocument | null = null;
   #generation = 0;
   @state() private highlightedKey: string | null = null;
@@ -301,9 +303,14 @@ export class MenuDocumentTree extends LitElement {
       item?.unit && item.unit.id !== EACH_UNIT_ID
         ? unitPresentation(item.unit, locale, this.languages).abbreviation
         : "";
-    const price = item
-      ? tilePrice(item.unitPrice, variant ? [] : offer!.variants, unit, locale)
-      : set && formatMoney(set.terms.price, locale);
+    const disputed = this.clashes.some(
+      ({ productId, variantId }) =>
+        productId === offer?.productId && (variant === undefined || variantId === variant.id),
+    );
+    const price =
+      item && !disputed
+        ? tilePrice(item.unitPrice, variant ? [] : offer!.variants, unit, locale)
+        : set && formatMoney(set.terms.price, locale);
     return html`<span part="preview-row"
       >${menuTreeCell(folder ? "section" : "product", media, stack)}
       ${price ? html`<span part="preview-price" data-test="price">${price}</span>` : nothing}
