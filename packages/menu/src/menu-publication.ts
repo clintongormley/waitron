@@ -881,8 +881,7 @@ export async function patchLiveMenu(
 }
 
 /** Queues the menu's still-queued versions again, each `changes` names with its own declarations
- * changes applied, leaving the live version, if any, as it is. Writes nothing and answers [] when
- * no named version would change. */
+ * changes applied, leaving the live version, if any, as it is. */
 export async function correctQueuedVersions(
   tx: Transaction,
   menuId: string,
@@ -900,9 +899,7 @@ export async function correctQueuedVersions(
     return own === undefined ? [] : [{ ...edition, changes: own }];
   });
   const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
-  const corrections = await correctionsOf(tx, named, languages);
-  if (corrections.size === 0) return [];
-  return requeueAfter(tx, menuId, waiting, at, personId, corrections);
+  return requeueAfter(tx, menuId, waiting, at, personId, await correctionsOf(tx, named, languages));
 }
 
 async function correctionsOf(

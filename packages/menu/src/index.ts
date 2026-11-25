@@ -249,6 +249,7 @@ export type {
 } from "./menu-patch-types.js";
 export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 export {
+  correctMenuDeclarations,
   declarationChanges,
   findDeclarationDrift,
   waitingDeclarationMenus,

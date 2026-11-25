@@ -10,6 +10,7 @@ import {
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import type { ProductAllergens } from "@waitron/shared";
 import { useMenuDb } from "../test/fixtures.js";
+import { libraryImageName } from "../test/library-images.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
 import {
   correctMenuDeclarations,
@@ -17,15 +18,9 @@ import {
   findDeclarationDrift,
   waitingDeclarationMenus,
 } from "./declaration-correction.js";
-import { documentSetMenuOffers, menuDocumentHash } from "./menu-document.js";
+import { documentSetMenuOffers } from "./menu-document.js";
 import * as publication from "./menu-publication.js";
-import {
-  insertVersion,
-  patchLiveMenu,
-  previewMenu,
-  publishMenu,
-  readLiveDocuments,
-} from "./menu-publication.js";
+import { patchLiveMenu, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { readMenuStructure } from "./menu-structure.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, updateProduct } from "./operations.js";
@@ -363,6 +358,10 @@ describe("correctMenuDeclarations", () => {
     expect(dinnerQueued!.activatesAt).toEqual(dinnerAt);
     const lunchQueued = await queuedOf(f.lunch);
     expect(lunchQueued).toHaveLength(2);
+    // Before: live and two queued. After: one new live version and each queued one requeued once.
+    expect(
+      await fx.db.select().from(menuVersions).where(eq(menuVersions.menuId, f.lunch)),
+    ).toHaveLength(6);
     expect((await documentOf(lunchQueued[1]!.versionId)).contentHash).toBe(unnamedHash);
     // Only Lunch's unnamed queued version still shows the old value.
     expect(await drift([f.extraLemon], before)).toEqual([
@@ -392,15 +391,26 @@ describe("correctMenuDeclarations", () => {
     const v1 = await publish(f.lunch);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
     const queued = await queue(f.lunch, hoursFromNow(24));
+    await app((tx) => updateProduct(tx, f.lager, { unitPrice: "4.50" }));
+    const unnamedAt = hoursFromNow(48);
+    const unnamed = await queue(f.lunch, unnamedAt);
+    const unnamedHash = (await documentOf(unnamed)).contentHash;
     await declare(f.burger, { sesame: {} });
     expect(await corrections(f.burger, [queued])).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
       productIds: [f.burger],
     });
     expect((await liveOf(f.lunch))!.versionId).toBe(v1);
-    const [requeued] = await queuedOf(f.lunch);
+    const [requeued, requeuedUnnamed] = await queuedOf(f.lunch);
     expect(requeued!.versionId).not.toBe(queued);
-    expect(await drift([f.burger], new Map())).toEqual([]);
+    expect(requeuedUnnamed!.activatesAt).toEqual(unnamedAt);
+    expect((await documentOf(requeuedUnnamed!.versionId)).contentHash).toBe(unnamedHash);
+    expect(await drift([f.burger], new Map())).toEqual([
+      expect.objectContaining({
+        live: [],
+        queued: [expect.objectContaining({ versionId: requeuedUnnamed!.versionId })],
+      }),
+    ]);
   });
 
   it("a second call corrects nothing and answers menus: []", async () => {
@@ -419,52 +429,73 @@ describe("correctMenuDeclarations", () => {
     expect((await queuedOf(f.lunch))[0]!.versionId).toBe(requeued!.versionId);
   });
 
-  it("corrects a variant copied under the dish that the product does not list, and names it", async () => {
-    // A variant's parent is fixed, so the live version is written by hand: Lemonade's copy also
-    // holds Lager's variant Pint, which Lemonade's variants do not include.
-    const pint = await app(async (tx) => {
-      const [made] = await setProductVariants(
+  const lemonadeWithJugScheduled = async () => {
+    await publish(f.lunch);
+    const jug = await app(async (tx) => {
+      const [, made] = await setProductVariants(
         tx,
-        f.lager,
+        f.lemonade,
         [
           {
-            name: "Pint",
+            id: f.large,
+            name: "Large",
+            customerName: { en: "A big glass" },
+            kitchenName: "LRG",
+            image: libraryImageName("large.jpg"),
+            unitPrice: "3.50",
+            available: true,
+          },
+          {
+            name: "Jug",
             customerName: null,
             kitchenName: null,
             image: null,
-            unitPrice: "5.00",
+            unitPrice: "9.00",
             available: true,
           },
         ],
         "en",
       );
-      const { document } = await previewMenu(tx, f.lunch);
-      const lemonade = Object.values(document.offers).find(
-        ({ productId }) => productId === f.lemonade,
-      )!;
-      lemonade.variants.push({ ...lemonade.variants[0]!, id: made!.id });
-      const versionId = await insertVersion(tx, {
-        menuId: f.lunch,
-        number: 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdAt: new Date(Date.now() - HOUR),
-        createdBy: PERSON,
-      });
-      await tx.insert(menuReleases).values({
-        menuId: f.lunch,
-        versionId,
-        state: "live",
-        activatesAt: new Date(Date.now() - HOUR),
-      });
       return made!.id;
     });
+    const scheduled = await queue(f.lunch, hoursFromNow(24));
     await declare(f.lemonade, { milk: {} });
+    return { jug, scheduled, hash: (await documentOf(scheduled)).contentHash };
+  };
+
+  it("a ticked scheduled version holding a variant the live version lacks has that copy corrected, and names it", async () => {
+    const { jug, scheduled } = await lemonadeWithJugScheduled();
+    expect(await corrections(f.lemonade, [scheduled])).toEqual({
+      menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
+      productIds: [f.lemonade, f.large, jug],
+    });
+    expect(await drift([f.lemonade, f.large, jug], new Map())).toEqual([]);
+  });
+
+  it("an unticked scheduled version holding a variant the live version lacks keeps its document", async () => {
+    const { jug, hash } = await lemonadeWithJugScheduled();
     expect(await corrections(f.lemonade)).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      productIds: [f.lemonade, f.large, pint],
+      productIds: [f.lemonade, f.large],
     });
-    expect(await drift([f.lemonade, f.large, pint], new Map())).toEqual([]);
+    const [requeued] = await queuedOf(f.lunch);
+    expect((await documentOf(requeued!.versionId)).contentHash).toBe(hash);
+    expect(await drift([f.lemonade, f.large, jug], new Map())).toEqual([
+      expect.objectContaining({
+        live: [],
+        queued: [expect.objectContaining({ versionId: requeued!.versionId })],
+      }),
+    ]);
+  });
+
+  it("leaves a menu whose live version agrees and whose out-of-date scheduled version is unticked", async () => {
+    const v1 = await publish(f.lunch);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
+    const scheduled = await queue(f.lunch, hoursFromNow(24));
+    await declare(f.burger, { sesame: {} });
+    expect(await corrections(f.burger)).toEqual({ menus: [], productIds: [f.burger] });
+    expect((await liveOf(f.lunch))!.versionId).toBe(v1);
+    expect((await queuedOf(f.lunch)).map(({ versionId }) => versionId)).toEqual([scheduled]);
   });
 
   it("a throw on the second menu leaves the first unpatched", async () => {
