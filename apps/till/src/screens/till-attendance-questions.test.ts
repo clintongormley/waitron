@@ -168,8 +168,26 @@ describe("attendance questions before work", () => {
     const [clockIn, clockOut, answer] = prompt.history;
     prompt.history = [
       { ...clockIn!, extension: undefined },
-      { ...clockOut!, entryKind: "break_start", extension: clockIn!.extension },
-      { ...answer!, entryKind: "correction", correctionReason: "Corrected the closing time" },
+      {
+        ...clockOut!,
+        entryId: "break",
+        entryKind: "break_start",
+        recordedByPersonId: "worker",
+        extension: clockIn!.extension,
+      },
+      {
+        ...answer!,
+        entryKind: "correction",
+        correctsEntryId: clockOut!.entryId,
+        correctionStatus: "approved",
+        correctionReason: "Corrected the closing time",
+        correctionActorId: "worker",
+        extension: {
+          ...answer!.extension!,
+          direction: "manager_proposal",
+          respondsToEntryId: "request",
+        },
+      },
       {
         ...clockOut!,
         entryId: "manager-out",
@@ -182,6 +200,7 @@ describe("attendance questions before work", () => {
       ["19:10", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00"],
     );
     expect(el.shadowRoot!.textContent).toContain("Corrected the closing time");
+    expect(el.shadowRoot!.querySelectorAll("li")[3]!.textContent).toContain("· Manager");
   });
 
   it("proposals show the distinct original and proposed times, reason and both worker decisions", async () => {

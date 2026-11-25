@@ -158,9 +158,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 The owner chose the Suggested panel in `.impeccable/shots/mock-check-times.png` on 25 November
 2026 (“Build it that way”), as recorded at `b5425d2ba9`. The card shows the work date in words,
-short recorded times, and one **Add missing times** button for a day with missing times. The screen
-shows the full recorded time when the date or offset differs and keeps the details for breaks,
-corrections and entries recorded by a manager.
+short recorded times, and one **Add missing times** button for a day with missing times. The owner
+asked to see pictures of entries outside that design before deciding how they should read.
 
 ### A1268 corrections after a backward clock step
 
