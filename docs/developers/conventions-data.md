@@ -7230,6 +7230,8 @@ export is refused as outdated. The previous format is pinned by the pre-menu-ren
 `packages/provisioning/src/configuration-transfer.ts`. Guest sharing uses `settings.guest_menu`;
 menu defaults retain `settings.menu`.
 
+The [customer menu removal](../superpowers/specs/2026-11-24-customer-menu-design.md#delivery)
+retires the guest sharing settings document in delivery piece 1.
 
 ### Product units and configuration format 33 (2026-11-15, A1308 mn4)
 

@@ -346,30 +346,33 @@ it.each(["with-origin", "without-origin"] as const)(
   },
 );
 
-it("withdraws a missing guest publication through boot's Cloud job and reports its confirmation to the manager", async () => {
-  const actions: string[] = [];
-  const f = await installationFixture(undefined, {
-    guestMenu: async (values, saved, _req, res) => {
-      const action = String(values[2]);
-      actions.push(action);
-      res.end(
-        JSON.stringify({
-          version: 1,
-          url: `https://menus.example.test/m/${(saved.view as { registration: { venueId: string } }).registration.venueId}`,
-          revision: action === "guest-menu-withdraw" ? 2 : 1,
-          state: action === "guest-menu-withdraw" ? "off" : "current",
-          publication:
-            action === "guest-menu-withdraw"
-              ? null
-              : {
-                  bodySha256: "a".repeat(64),
-                  defaultLanguage: "en",
-                  receivedAt: "2026-11-14T05:00:00.000Z",
-                },
-        }),
-      );
-    },
-  });
+it("returns the trading box's plain 404 for the retired Guest menu routes", async () => {
+  const { port, venue } = await boot({ modules: VERIFACTU, testSubmissions: false });
+  const menu = "/management-api/menus/01990000-0000-7000-8000-000000000000";
+  const manager = { cookie: venue.managerCookie, "x-waitron-live": "1" };
+  const fromDashboard = {
+    ...manager,
+    origin: "https://dashboard.example",
+    "content-type": "application/json",
+  };
+  const routes: [string, RequestInit?][] = [
+    ["/public/menu"],
+    ["/management-api/guest-menu", { headers: manager }],
+    ["/management-api/guest-menu", { method: "PUT", headers: fromDashboard, body: "{}" }],
+    [`${menu}/guest-preview`, { headers: manager }],
+    [`${menu}/guest-paper`, { method: "POST", headers: fromDashboard, body: "{}" }],
+  ];
+  const answers = [];
+  for (const [route, request] of routes) {
+    const reply = await fetch(`http://127.0.0.1:${port}${route}`, request);
+    answers.push({ status: reply.status, body: await reply.text() });
+  }
+  expect(answers).toEqual(routes.map(() => ({ status: 404, body: "404 Not Found" })));
+});
+
+it("refreshes the Cloud connection without requesting any guest menu action", async () => {
+  const f = await installationFixture();
+  const beforeBoot = f.requests.length;
   onTestFinished(async () => {
     if (server) {
       await server.close();
@@ -379,7 +382,7 @@ it("withdraws a missing guest publication through boot's Cloud job and reports i
   });
   const source = join(f.stateDir, "cloud/connection.json");
   const saved = JSON.parse(await readFile(source, "utf8"));
-  const running = await boot({
+  await boot({
     modules: VERIFACTU,
     testSubmissions: false,
     beforeStart: async (_venue, directory, env) => {
@@ -395,10 +398,13 @@ it("withdraws a missing guest publication through boot's Cloud job and reports i
       env.WAITRON_ENV = "dev";
     },
   });
-  await vi.waitFor(() => expect(actions).toEqual(["guest-menu-status", "guest-menu-withdraw"]));
-  const response = await fetch(`http://127.0.0.1:${running.port}/management-api/guest-menu`, {
-    headers: { cookie: running.venue.managerCookie, "x-waitron-live": "1" },
+  await vi.waitFor(() => {
+    expect(server?.health.readJobs?.()["cloud.connection"]).toMatchObject({
+      state: "waiting",
+      lastOkAt: expect.any(String),
+    });
   });
-  expect(response.status).toBe(200);
-  expect((await response.json()).delivery).toEqual({ state: "off", receivedAt: null });
+  const actions = f.requests.slice(beforeBoot).map((request) => String(request[2]));
+  expect(actions).toContain("configuration");
+  expect(actions.filter((action) => action.startsWith("guest-menu-"))).toEqual([]);
 });

@@ -107,8 +107,6 @@ answer is stored as the wording that was chosen. An extra picked from a deleted 
 parked counter order, with its charge, until staff open the dish it is on and save a change there,
 which takes it off; until then, + cannot raise that dish's count.
 
-To remove a deleted list from the guest menu too, publish that menu again.
-
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the station gets the change. A row of identical dishes
 changes together. To take one or more sent dishes off the bill, use **Void…**, which opens
@@ -122,8 +120,7 @@ that one product's Modifiers group.
 
 An extras entry declares its allergens and its dietary suitability through the product it names, so
 you maintain those on that product under **Products**, not here. Save the product to correct its
-declarations without publishing. Reopen a guest preview to check the saved declarations. An option declares neither —
-it is wording, not something eaten.
+declarations without publishing. Options are text and carry no declarations.
 
 ## What the till does with a list {#till}
 

@@ -3798,68 +3798,6 @@ export class DashboardApi {
     });
   }
 
-  getGuestMenuSharing(): Promise<{
-    enabled: boolean;
-    revision: number;
-    available: boolean;
-    delivery?: {
-      state:
-        "not_connected" | "pending" | "current" | "off" | "blocked" | "refused" | "plan_required";
-      receivedAt: string | null;
-      billingUrl?: string;
-    };
-    paper?: import("@waitron/shared").GuestMenuPaperAppearance;
-  }> {
-    return this.#request("/management-api/guest-menu", "GET", undefined, { passive: true });
-  }
-
-  setGuestMenuSharing(
-    enabled: boolean,
-    expectedRevision: number,
-    paper?: import("@waitron/shared").GuestMenuPaperAppearance,
-  ): ReturnType<DashboardApi["getGuestMenuSharing"]> {
-    return this.#request("/management-api/guest-menu", "PUT", {
-      enabled,
-      expectedRevision,
-      ...(paper ? { paper } : {}),
-    });
-  }
-
-  getGuestMenuPreview(
-    menuId: string,
-    language?: string,
-  ): Promise<{
-    html: string;
-    versionId: string;
-    members: { name: string; section: boolean }[];
-    language: string;
-    languages: string[];
-  } | null> {
-    const query = language === undefined ? "" : `?language=${encodeURIComponent(language)}`;
-    return this.#request(
-      `/management-api/menus/${encodeURIComponent(menuId)}/guest-preview${query}`,
-      "GET",
-    );
-  }
-
-  getGuestMenuPaper(
-    menuId: string,
-    options: {
-      versionId: string;
-      language: string;
-      paper: import("@waitron/shared").GuestMenuPaperAppearance;
-      order: number[];
-      breaks: number[];
-      logo: string | null;
-    },
-  ): Promise<{ html: string }> {
-    return this.#request(
-      `/management-api/menus/${encodeURIComponent(menuId)}/guest-paper`,
-      "POST",
-      options,
-    );
-  }
-
   /** `null` when the menu has never been published. */
   getLiveMenu(menuId: string): Promise<LiveMenu | null> {
     return this.#request<LiveMenu | null>(`/management-api/menus/${menuId}/live`, "GET");

@@ -7,15 +7,13 @@ export function cloudConnectionJob(options: {
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
   onEmergencyError?: (error: unknown, level: "info" | "warn") => void;
-  onGuestMenu?: (signal: AbortSignal) => unknown;
-  onGuestMenuError?: (error: unknown) => void;
   managementOrigin?: string;
   onStaffCertificate?: (signal: AbortSignal) => unknown;
 }): JobDefinition {
   return {
     name: "cloud.connection",
     applies: () => true,
-    minSleepMs: 2_000,
+    minSleepMs: 60_000,
     maxSleepMs: 60_000,
     backoff: { firstMs: 60_000, maxMs: 60_000 },
     async pass({ signal }) {
@@ -45,13 +43,6 @@ export function cloudConnectionJob(options: {
                   error,
                   codeOf(error) === "cloud.unavailable" ? "info" : "warn",
                 );
-            }
-          }
-          if (status.installation?.state === "active" && !signal.aborted && options.isPrimary()) {
-            try {
-              await options.onGuestMenu?.(signal);
-            } catch (error) {
-              if (!signal.aborted) options.onGuestMenuError?.(error);
             }
           }
           if (

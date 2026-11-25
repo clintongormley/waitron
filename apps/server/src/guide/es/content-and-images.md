@@ -40,18 +40,17 @@ Para cambiar el predeterminado, elige **Hacer predeterminado** en el menú ⋮ d
 Para usar palabras regionales, elige **Añadir versión regional** en el menú ⋮ de un idioma principal.
 Por ejemplo, conserva **Inglés** para tu carta de Londres y añade **Inglés (Estados Unidos)**.
 Escribe **chips** en inglés y **fries** en el campo estadounidense de un plato. Deja los demás campos
-estadounidenses vacíos para que usen sus nombres en inglés. La carta para clientes usa esas palabras
-solo cuando se elige el inglés estadounidense; el inglés sin región conserva
-**chips**. Edita estos nombres en los editores de productos y cartas. **Editar traducciones** y
-**Traducir todo** incluyen los idiomas principales.
+estadounidenses vacíos para que usen sus nombres en inglés. Edita estos nombres en los editores
+de productos y cartas. En la pestaña **Vista previa** de la carta, selecciona el idioma regional
+para revisar el texto. **Editar traducciones** y **Traducir todo** incluyen los idiomas principales.
 
 Un idioma que Waitron mantiene activado para tu región aparece como **Obligatorio** y no tiene
 **Eliminar**. Si falta, el siguiente guardado en esta página lo vuelve a añadir. Donde la región
 pide también idiomas extranjeros, aparece un aviso mientras tengas menos de los que pide.
 
 Por ejemplo, con el español como predeterminado y el inglés al lado, puedes guardar **Pan de verano**
-en español y dejar el inglés vacío. Donde se pide contenido en inglés se muestra **Pan de verano**
-hasta que escribes **Summer bread**. El texto español no se copia al campo inglés, así que sus
+en español y dejar el inglés vacío. Si seleccionas inglés en **Vista previa**, verás **Pan de verano**
+hasta que escribas **Summer bread**. El texto español no se copia al campo inglés, así que sus
 cambios siguen viéndose mientras falte la traducción.
 
 Puedes cambiar el predeterminado aunque falten traducciones o nombres de fotografías.

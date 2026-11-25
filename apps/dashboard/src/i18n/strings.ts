@@ -46,7 +46,7 @@ export const en = {
   "permission.workforce.self_approve.help":
     "Approve your own working-time corrections without another person’s approval. You also need Correct working time.",
   "permission.menu.manage.help":
-    "Edit products, menus, modifiers and product images. Configure and publish guest menus where the venue uses them.",
+    "Edit products, menus, modifiers and product images. Publish menus.",
   "permission.venue.view.help":
     "View venue settings, courses, appearance, job roles and staffing calendars. Changing those settings needs their editing permission.",
   "permission.venue.configure.help":
@@ -3777,8 +3777,7 @@ export const en = {
   "menus.delete_period_blocked":
     "No replacement is available for {name}. Set up another full menu for this period before deleting this one.",
   "menus.delete_period_publish": "Publish another full menu for {name} before deleting this one.",
-  "menus.delete_default_reason":
-    "Customers see this menu on your online menu, and new departments start with it.",
+  "menus.delete_default_reason": "New departments start with this menu.",
   "menus.delete_default_blocked": "Publish another full menu, then delete this one.",
   "menus.delete_default_choice": "New venue default menu",
   "menus.delete_dependants": "These menus will drop this menu the next time you publish them:",
@@ -3915,54 +3914,6 @@ export const en = {
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.price_not_saved": "Could not save prices for {name}. Open Price overrides to try again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
-  "menus.guest_sharing_unavailable":
-    "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it.",
-  "menus.guest_cloud_not_connected":
-    "Connect this box to Cloud to deliver the guest menu. A last delivered copy may still be available; stop sharing in the Cloud portal to remove it.",
-  "menus.guest_cloud_pending":
-    "Cloud update pending. Its last delivered menu stays available until the update arrives, including when you turn sharing off.",
-  "menus.guest_cloud_current":
-    "Cloud has the current publication. Public access is still being prepared.",
-  "menus.guest_cloud_refused":
-    "Cloud could not accept this publication. Check the menu and its content languages. The box will retry; to remove the last delivered copy, stop sharing in the Cloud portal.",
-  "menus.guest_cloud_plan_required":
-    "Your Cloud guest menu is hidden until your venue has an active trial or paid plan. Start the venue’s free trial in Waitron Cloud Billing.",
-  "menus.guest_cloud_billing": "Open Cloud Billing",
-  "menus.guest_cloud_off": "Cloud has confirmed that the menu is off.",
-  "menus.guest_cloud_blocked":
-    "Guest sharing is stopped in Cloud. Enable it in the Cloud portal to resume delivery.",
-  "menus.guest_local_link": "Open the shared menu on this box",
-  "menus.guest_sharing_on":
-    "Public sharing is On for the default menu. Only its published version is shared.",
-  "menus.guest_sharing_off":
-    "Public sharing is Off. Turning it on shares the default menu’s published version on this box, not necessarily the menu shown here.",
-  "menus.guest_turn_on": "Turn sharing on",
-  "menus.guest_turn_off": "Turn sharing off",
-  "menus.guest_preview": "Guest menu preview",
-  "menus.paper_title": "A4 printed menu",
-  "menus.paper_preset": "Layout",
-  "menus.paper_bistro": "Bistro",
-  "menus.paper_lunch-wine": "Lunch and wine",
-  "menus.paper_font": "Font",
-  "menus.paper_serif": "Serif",
-  "menus.paper_sans": "Sans serif",
-  "menus.paper_spacing": "Spacing",
-  "menus.paper_comfortable": "Comfortable",
-  "menus.paper_compact": "Compact",
-  "menus.paper_key": "Allergen words",
-  "menus.paper_end": "Written key at the end",
-  "menus.paper_inline": "Words beside each dish",
-  "menus.paper_ink": "Text colour",
-  "menus.paper_accent": "Heading colour",
-  "menus.paper_logo": "Print logo",
-  "menus.paper_order": "Paper section order",
-  "menus.paper_up": "Move up",
-  "menus.paper_break": "Page break before",
-  "menus.paper_save": "Save appearance on this box",
-  "menus.paper_preview": "Preview A4",
-  "menus.paper_print": "Print / Save as PDF",
-  "menus.guest_language": "Guest language",
-  "menus.guest_unpublished": "Publish this menu to preview what guests will read.",
   "menus.tab_preview": "Preview",
   "menus.tab_preview_unpublished": "unpublished changes",
   "menus.tab_home": "Home page",
@@ -4868,7 +4819,7 @@ export const es: Record<StringKey, string> = {
   "permission.workforce.self_approve.help":
     "Aprueba las correcciones de tu propio registro horario sin la aprobación de otra persona. También necesitas Corregir horas trabajadas.",
   "permission.menu.manage.help":
-    "Edita productos, cartas, modificadores e imágenes de productos. Configura y publica las cartas para clientes cuando el local las utiliza.",
+    "Edita productos, cartas, modificadores e imágenes de productos. Publica cartas.",
   "permission.venue.view.help":
     "Consulta la configuración del local, pases, apariencia, puestos y calendarios de personal. Para cambiarlos necesitas el permiso de edición correspondiente.",
   "permission.venue.configure.help":
@@ -8676,8 +8627,7 @@ export const es: Record<StringKey, string> = {
   "menus.delete_period_blocked":
     "No hay otra carta disponible para {name}. Configura otra carta completa para este periodo antes de eliminar esta.",
   "menus.delete_period_publish": "Publica otra carta completa para {name} antes de eliminar esta.",
-  "menus.delete_default_reason":
-    "Los clientes ven esta carta en línea y los nuevos departamentos la usan al empezar.",
+  "menus.delete_default_reason": "Los nuevos departamentos empiezan con esta carta.",
   "menus.delete_default_blocked": "Publica otra carta completa y luego elimina esta.",
   "menus.delete_default_choice": "Nueva carta predeterminada del local",
   "menus.delete_dependants": "Estas cartas dejarán de incluirla la próxima vez que las publiques:",
@@ -8816,54 +8766,6 @@ export const es: Record<StringKey, string> = {
   "menus.price_not_saved":
     "No se pudieron guardar los precios de {name}. Abre Precios propios para volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
-  "menus.guest_sharing_unavailable":
-    "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala.",
-  "menus.guest_cloud_not_connected":
-    "Conecta este servidor a Cloud para enviar la carta para clientes. La última copia enviada puede seguir disponible; deja de compartir desde el portal de Cloud para retirarla.",
-  "menus.guest_cloud_pending":
-    "Actualización de Cloud pendiente. La última carta enviada sigue disponible hasta que llegue la actualización, incluso al dejar de compartir.",
-  "menus.guest_cloud_current":
-    "Cloud tiene la publicación actual. El acceso público aún se está preparando.",
-  "menus.guest_cloud_refused":
-    "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. El servidor volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
-  "menus.guest_cloud_plan_required":
-    "Tu carta para clientes de Cloud está oculta hasta que tu local tenga una prueba activa o un plan de pago. Inicia la prueba gratuita del local en Facturación de Waitron Cloud.",
-  "menus.guest_cloud_billing": "Abrir Facturación de Cloud",
-  "menus.guest_cloud_off": "Cloud ha confirmado que la carta ya no se comparte.",
-  "menus.guest_cloud_blocked":
-    "La carta está bloqueada en Cloud. Actívala en el portal de Cloud para reanudar los envíos.",
-  "menus.guest_local_link": "Abrir la carta compartida en este servidor",
-  "menus.guest_sharing_on":
-    "La carta predeterminada está compartida. Solo se comparte su versión publicada.",
-  "menus.guest_sharing_off":
-    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en este servidor, que puede no ser la que ves aquí.",
-  "menus.guest_turn_on": "Compartir carta",
-  "menus.guest_turn_off": "Dejar de compartir",
-  "menus.guest_preview": "Vista previa para clientes",
-  "menus.paper_title": "Carta impresa A4",
-  "menus.paper_preset": "Diseño",
-  "menus.paper_bistro": "Bistró",
-  "menus.paper_lunch-wine": "Platos y vinos",
-  "menus.paper_font": "Tipografía",
-  "menus.paper_serif": "Con remates",
-  "menus.paper_sans": "Sin remates",
-  "menus.paper_spacing": "Espaciado",
-  "menus.paper_comfortable": "Amplio",
-  "menus.paper_compact": "Compacto",
-  "menus.paper_key": "Alérgenos por escrito",
-  "menus.paper_end": "Leyenda al final",
-  "menus.paper_inline": "Palabras junto a cada plato",
-  "menus.paper_ink": "Color del texto",
-  "menus.paper_accent": "Color de los títulos",
-  "menus.paper_logo": "Logotipo impreso",
-  "menus.paper_order": "Orden de las secciones en papel",
-  "menus.paper_up": "Subir",
-  "menus.paper_break": "Salto de página antes",
-  "menus.paper_save": "Guardar apariencia en este servidor",
-  "menus.paper_preview": "Vista previa A4",
-  "menus.paper_print": "Imprimir / Guardar como PDF",
-  "menus.guest_language": "Idioma del cliente",
-  "menus.guest_unpublished": "Publica esta carta para ver lo que leerán los clientes.",
   "menus.tab_preview": "Vista previa",
   "menus.tab_preview_unpublished": "cambios sin publicar",
   "menus.tab_home": "Página de inicio",

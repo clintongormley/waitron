@@ -242,23 +242,6 @@ Choices, all in `wt-tabs`, the screen otherwise unchanged:
   accepted;
 - (d) leave it until the owner reviews the Modifiers screen.
 
-## A670 — guest-menu sharing and fixed A4 presets
-
-_2026-11-24: the owner replaced this with the
-[customer menu design](../superpowers/specs/2026-11-24-customer-menu-design.md): each menu's own tab for
-online and print, served by the box through Cloud, and no copy kept in Cloud. The two checks that remained,
-a takeover and a phone on mobile data, are dropped with the hosted copy; the design's piece 6 qualifies its
-own path. What follows records decisions about today's version until piece 1 removes it._
-
-The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
-forwarding to the box with a hosted published read-only copy when unreachable, fixed presets
-before blocks/uploads, and name fallback through guest language, venue default, then internal
-name, never kitchen. The watcher’s 23:28 clearance chooses default-menu-only sharing, box-local
-non-transferring preferences, browser printing and a written key with inline words as an alternative.
-The watcher’s 14 November 00:22 amendment narrows read-only Cloud work to the hosted copy,
-with live forwarding reserved for ordering (A509); slices 1, 2 and 4 stay unchanged.
-These are watcher-cleared plan decisions, not owner approval of the plan.
-
 ## Category authoring serialises across the whole database, and nobody has measured what that costs
 
 `withTransaction` admits one write transaction per venue file
@@ -395,7 +378,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
 
 - **Allergen choices (A1517, owner 2026-11-11, “As recommended”).** Hide unchecked dishes while
   excluding allergens, then extend filtering to extras/options; print live declarations on every
-  kitchen ticket; bring forward A670's basic guest-menu design; label extras before selection; keep
+  kitchen ticket; bring forward the basic guest-menu design, now superseded by the
+  [customer menu design](../superpowers/specs/2026-11-24-customer-menu-design.md); label extras before selection; keep
   sent-order/history declarations as sent while kitchen and guest-clash checks stay current.
   Option-list labels carry no allergen declarations and remain unfiltered; new-dish filtering covers
   sizes and extra products, while saved dishes keep their choices.

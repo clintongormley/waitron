@@ -1,9 +1,15 @@
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { validateConfigurationBundle } from "./configuration-transfer.js";
 import { expect, it } from "vitest";
-import { GUEST_MENU_SETTINGS, MENU_SETTINGS } from "@waitron/menu";
+import { MENU_SETTINGS } from "@waitron/menu";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, readSettings, saveSettings, withTransaction } from "@waitron/db";
+import {
+  BUSINESS_DAY_SETTINGS,
+  CORE_MIGRATIONS,
+  readSettings,
+  saveSettings,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import {
@@ -122,32 +128,23 @@ it("keeps the module mismatch refusal ahead of document checking", () => {
   );
 });
 
-it.each([false, true])(
-  "keeps this box's guest sharing %s across configuration imports",
-  async (enabled) => {
-    await withTransaction(suite.db, (tx) =>
-      saveSettings(tx, GUEST_MENU_SETTINGS, {
-        doc: { enabled },
-        expectedRevision: 0,
-        personId: null,
-      }),
-    );
-    expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual({});
-    await imported();
-    expect(await readSettings(suite.db, GUEST_MENU_SETTINGS)).toEqual({
-      doc: { enabled },
-      revision: 1,
-    });
-    expect(() =>
-      checkImportedSettings(
-        { [GUEST_MENU_SETTINGS.module]: { version: 1, doc: { enabled: !enabled } } },
-        ALL_MODULES,
-      ),
-    ).toThrow(
-      expect.objectContaining({ code: "setup.request_invalid", params: { field: "settings" } }),
-    );
-  },
-);
+it("keeps the box's business day setting across configuration imports", async () => {
+  const doc = { timeZone: "Europe/Dublin" };
+  await withTransaction(suite.db, (tx) =>
+    saveSettings(tx, BUSINESS_DAY_SETTINGS, { doc, expectedRevision: 0, personId: null }),
+  );
+  expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual({});
+  await imported();
+  expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).toEqual({ doc, revision: 1 });
+  expect(() =>
+    checkImportedSettings(
+      { [BUSINESS_DAY_SETTINGS.module]: { version: 1, doc: { timeZone: "Europe/Madrid" } } },
+      ALL_MODULES,
+    ),
+  ).toThrow(
+    expect.objectContaining({ code: "setup.request_invalid", params: { field: "settings" } }),
+  );
+});
 
 it("round-trips the saved menu document with its starter-unit history", async () => {
   const doc = {

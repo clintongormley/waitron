@@ -33,7 +33,6 @@ import {
 } from "../test/menus-fixture.js";
 import {
   applyLiveFields,
-  hydrateDeclarationDocument,
   buildMenuDocument,
   NO_LIVE_FIELDS,
   readLiveState,
@@ -127,60 +126,6 @@ it("serves current declarations for a dish, its variant and its extra, retaining
     gluten: { kinds: ["barley"] },
     sesame: {},
   });
-});
-
-it("hydrates guest declarations without changing published membership, names or prices", async () => {
-  const f = await menusFixture(fx.db);
-  const document = await build(f.dinner);
-  const itemId = await app((tx) => offerOf(tx, f.dinner, f.lemonade));
-  Object.assign(document.offers[itemId]!, {
-    allergens: { milk: {} },
-    dietaryDeclarations: ["halal"],
-    dietOverride: { vegan: "yes" },
-    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
-  });
-  const original = structuredClone(document);
-  await app(async (tx) => {
-    await updateProduct(tx, f.lemonade, {
-      allergens: { eggs: {} },
-      dietaryDeclarations: ["vegetarian"],
-      dietOverride: { vegan: "no" },
-      name: "New lemonade",
-      unitPrice: "9.00",
-    });
-    await updateProduct(tx, f.large, { allergens: null });
-    await updateProduct(tx, f.extraLemon, { allergens: null, dietaryDeclarations: ["vegan"] });
-    await updateProduct(tx, f.lemonade, { active: false });
-  });
-  const hydrated = await app((tx) => hydrateDeclarationDocument(tx, document));
-  const offer = hydrated.offers[itemId]!;
-  expect(hydrated.root).toEqual(document.root);
-  expect(offer).toMatchObject({
-    name: "Lemonade",
-    unitPrice: "3.00",
-    allergens: { eggs: {} },
-    dietaryDeclarations: ["vegetarian"],
-    dietOverride: { vegan: "no" },
-    diet: { vegan: "no" },
-  });
-  expect(offer.variants[0]).toMatchObject({
-    allergens: { eggs: {} },
-    dietaryDeclarations: ["vegetarian"],
-  });
-  expect(offer.offeredModifiers[0]).toMatchObject({
-    items: [{ addAllergens: null, suitableFor: ["vegan", "vegetarian", "no_meat", "no_fish"] }],
-  });
-  expect(document).toEqual(original);
-  const missing = structuredClone(document);
-  missing.offers[itemId]!.productId = "00000000-0000-4000-8000-000000000000";
-  expect((await app((tx) => hydrateDeclarationDocument(tx, missing))).offers[itemId]).toMatchObject(
-    {
-      allergens: null,
-      dietOverride: null,
-      dietaryDeclarations: [],
-      diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
-    },
-  );
 });
 
 /** The same value with every object's keys in reverse order, all the way down. */
@@ -2482,7 +2427,7 @@ it("a published offer's pricingUnit follows its unit for the offer and its varia
 });
 
 describe("A884 deleted lists", () => {
-  it("omits deleted lists from full and selected offers, moves both digests and retains guest membership", async () => {
+  it("omits deleted lists from full and selected offers and moves both digests", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const original = structuredClone(document);
@@ -2517,11 +2462,6 @@ describe("A884 deleted lists", () => {
     }
     expect(document).toEqual(original);
     expect(menuDocumentHash(document)).toBe(hash);
-    const guest = await app((tx) => hydrateDeclarationDocument(tx, document));
-    expect(guest.offers[id]!.offeredModifiers.map((entry) => entry.kind)).toEqual([
-      "extras",
-      "options",
-    ]);
   });
 
   it("retains inactive and detached published lists, but makes a deleted label unavailable", async () => {

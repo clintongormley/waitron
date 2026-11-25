@@ -453,7 +453,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   more on the terrace today is to make it a department of its own with its own menu. Not designed.
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations. The remaining guest-menu checks are tracked under A670.
+  the recommendations.
   The [cleared new-selection plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/menu.md#a1517-allergen-points-to-revisit-before-go-live)
 
@@ -467,11 +467,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   category changes, and an Available switch that uses the existing request.
   [Design](superpowers/specs/2026-11-24-products-list-redesign-design.md)
 
-- **A670 — the customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
-  tab with Online and Print, named styles, and a customer page the box serves through Cloud; today's
-  Guest menu preview and the hosted copy go.
-  [Design](superpowers/specs/2026-11-24-customer-menu-design.md) ·
-  [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
+- **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
+  tab with Online and Print, named styles, and a customer page the box serves through Cloud.
+  Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
+  piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)
 - **Allergens and diets are published with the menu (owner, 2026-11-24), replacing A1150.** Piece 2 of
   the same design, section 8; it stands alone.
 
@@ -1808,7 +1807,7 @@ partial scope; the detail for a live thread is in its area.
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17 | Accounting export | XLSX period download from Sales & takings: issued invoices, recorded purchases and manual-card payment details | Real accountant import trial before claiming support for a named accounting program |
-| 18  | Menu/allergens       | EU-14 allergens, declared directly on the product since #345, product images, venue↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297); guest-menu allergen and diet symbols open script-free native disclosures | menu schedule (publishing landed, #677); guest menu mobile-data qualification       |
+| 18  | Menu/allergens       | EU-14 allergens, declared directly on the product since #345, product images, venue↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer menu, online and printed       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
 | 20  | Procurement & inventory      | received purchase invoices (`@waitron/purchasing`, feeds modelo 303)                                                                                                                                                                                                                                                                                                                                                              | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred                                                                                           |
 

@@ -49,7 +49,6 @@ import {
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
-import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { cloudErrorReportsJob, createCloudErrorReports } from "./cloud-error-reports.js";
 import { cloudProblemReportsJob, createCloudProblemReports } from "./cloud-problem-reports.js";
@@ -381,7 +380,6 @@ import {
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
-import { mountGuestMenuApi, mountPublicGuestMenu, readGuestMenuPages } from "./guest-menu-api.js";
 import { mountMenuApi, translationContextFor } from "./menu-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1387,15 +1385,10 @@ async function bootServer(
     } else await next();
   });
 
-  // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
+  // Setup and recovery must answer /public/availability before their HTML catch-all.
   let cloudServing = () => false;
   let readCloudEmergency: () => { address: string } | null = () => null;
   mountCloudPublic(app, () => cloudServing());
-  mountPublicGuestMenu(
-    app,
-    { db, serving: () => cloudServing(), venueLocale: () => venueLocale },
-    log,
-  );
 
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
@@ -4265,27 +4258,6 @@ async function bootServer(
     log("warn", "cloud.replacement_resume_failed", { errorCode: codeOf(error) });
   }
   cloudServing = cloudPrimary;
-  const guestMenuDelivery = cloudConnection
-    ? createGuestMenuDelivery({
-        connection: cloudConnection,
-        isPrimary: cloudPrimary,
-        readPages: () => readGuestMenuPages(db, venueLocale),
-      })
-    : undefined;
-  mountGuestMenuApi(
-    app,
-    {
-      db,
-      venueLocale,
-      serving: cloudPrimary,
-      delivery: () =>
-        guestMenuDelivery?.status() ??
-        Promise.resolve({ state: "not_connected", receivedAt: null }),
-      wake: () => jobRunner.wake("cloud.connection"),
-    },
-    log,
-  );
-
   const errorReports = createCloudErrorReports({
     ...cloudReportOptions,
     connection: cloudConnection,
@@ -4833,9 +4805,6 @@ async function bootServer(
         onEmergencyError: (error, level) =>
           log(level, "cloud.emergency_read_failed", { errorCode: codeOf(error) }),
         isPrimary: cloudPrimary,
-        onGuestMenu: (signal) => guestMenuDelivery!.reconcile(signal),
-        onGuestMenuError: (error) =>
-          log("error", "cloud.guest_menu_failed", { errorCode: codeOf(error) }),
         ...(config.staff && config.environment !== "production"
           ? {
               onStaffCertificate: async (signal) => {

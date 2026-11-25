@@ -45,13 +45,15 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
   let primary = false,
     ticks = 0;
   const errors: unknown[] = [];
+  const pauses: number[] = [];
   try {
     await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => primary,
       onError: (e) => errors.push(e),
-      sleep: async () => {
+      sleep: async (ms) => {
+        pauses.push(ms);
         ticks++;
         if (ticks === 1) {
           expect(f.requests).toHaveLength(0);
@@ -63,6 +65,7 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
         } else controller.abort();
       },
     });
+    expect(pauses).toEqual([60_000, 60_000, 60_000]);
     expect((await f.client.status()).installation?.state).toBe("active");
     expect(f.requests[0]![4]).toBe(f.requests[1]![4]);
   } finally {
@@ -71,43 +74,30 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
   }
 });
 
-it.each(["guest", "certificate"] as const)(
-  "tries both Cloud services even when %s fails",
-  async (failed) => {
-    const f = await installationFixture();
-    onTestFinished(() => f.close());
-    const controller = new AbortController();
-    const failure = new Error("service unavailable");
-    const seen: string[] = [],
-      guestErrors: unknown[] = [],
-      refreshErrors: unknown[] = [];
-    await runCloudConnectionForTest({
-      connection: {
-        ...f.client,
-        staffCertificate: async () => {
-          if (failed === "certificate") throw failure;
-          return true;
-        },
+it("reports a failed staff certificate check through the Cloud worker error handler", async () => {
+  const f = await installationFixture();
+  onTestFinished(() => f.close());
+  const controller = new AbortController();
+  const failure = new Error("service unavailable");
+  const errors: unknown[] = [];
+  await runCloudConnectionForTest({
+    connection: {
+      ...f.client,
+      staffCertificate: async () => {
+        throw failure;
       },
-      signal: controller.signal,
-      isPrimary: () => true,
-      onGuestMenu: async () => {
-        seen.push("guest");
-        if (failed === "guest") throw failure;
-      },
-      onGuestMenuError: (error) => guestErrors.push(error),
-      onStaffCertificate: () => seen.push("staff ready"),
-      onError: (error) => refreshErrors.push(error),
-      sleep: async () => controller.abort(),
-    });
-    expect(seen).toEqual(failed === "guest" ? ["guest", "staff ready"] : ["guest"]);
-    expect(guestErrors).toEqual(failed === "guest" ? [failure] : []);
-    expect(refreshErrors).toEqual(failed === "certificate" ? [failure] : []);
-    expect((await f.client.status()).installation?.state).toBe("active");
-  },
-);
+    },
+    signal: controller.signal,
+    isPrimary: () => true,
+    onStaffCertificate: () => expect.unreachable("the certificate is unavailable"),
+    onError: (error) => errors.push(error),
+    sleep: async () => controller.abort(),
+  });
+  expect(errors).toEqual([failure]);
+  expect((await f.client.status()).installation?.state).toBe("active");
+});
 
-it("skips guest delivery when the box steps down during connection refresh", async () => {
+it("skips the emergency read when the box steps down during connection refresh", async () => {
   const f = await installationFixture(undefined, {
     emergency: async (_v, saved, _q, res) => {
       const r = (saved.view as { registration: { installationId: string; venueId: string } })
@@ -119,8 +109,7 @@ it("skips guest delivery when the box steps down during connection refresh", asy
   });
   onTestFinished(() => f.close());
   const controller = new AbortController();
-  let primary = true,
-    deliveries = 0;
+  let primary = true;
   f.delay(async () => {
     primary = false;
   });
@@ -129,12 +118,8 @@ it("skips guest delivery when the box steps down during connection refresh", asy
     managementOrigin: "https://staff.test",
     signal: controller.signal,
     isPrimary: () => primary,
-    onGuestMenu: async () => {
-      deliveries++;
-    },
     sleep: async () => controller.abort(),
   });
-  expect(deliveries).toBe(0);
   expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(0);
 });
 
@@ -164,7 +149,6 @@ it.each([true, false])(
       managementOrigin: "https://staff.test",
       signal: controller.signal,
       isPrimary: () => true,
-      onGuestMenu: () => seen.push("guest"),
       onStaffCertificate: () => seen.push("staff"),
       onError: (error) => {
         throw error;
@@ -176,7 +160,7 @@ it.each([true, false])(
     expect(f.client.emergencyHints("https://staff.test")).toEqual(
       ready ? { address: "https://emergency.example.test/" } : null,
     );
-    expect(seen).toEqual(["guest", "staff"]);
+    expect(seen).toEqual(["staff"]);
     if (ready) expect(errors).toEqual([]);
     else expect(errors).toMatchObject([{ error: { code: "cloud.unavailable" }, level: "info" }]);
   },

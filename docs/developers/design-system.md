@@ -75,7 +75,6 @@ in their own styles (`baseStyles` includes it). A host that uses neither must in
 The fragment also keeps open fallback surfaces above the following field. The fallback has no native
 top layer. Pinned cells with an open fallback row menu need their own stacking rule. Check real
 pointer hit-testing in containing tables and dialogs.
-The server-rendered guest menu has its own script-free delivery and is separate from these app entries.
 
 ## Setting up a theme root
 
@@ -676,8 +675,8 @@ root, preserving larger inherited or venue text. Resting and floated labels keep
 file controls and buttons keep theirs. Price boxes use 6.25rem, range boxes 10.5rem and number
 steppers 5.5rem, so enlarged typing text has room. Standalone server pages and connection-bootstrap
 keep their independent styling. The copied tokens that hold rem lengths match the shared rem defaults; every server page that
-declares them converts each rem back to pixels when rendering (`fixedFontValue`), including the
-printed guest menu, to keep those pages outside this change. A venue's theme
+declares them converts each rem back to pixels when rendering (`fixedFontValue`) to keep those
+pages outside this change. A venue's theme
 can scale all four together, from 100% to 130% in 5% steps, rounded to whole reference pixels before conversion to rem (`fontSizes`,
 `packages/ui-core/src/theme/tokens.ts`); spacing, the tap minimum and every other token stay as
 they are. A theme can also set the typeface — the device's own or a serif, named in `TYPEFACES`
@@ -7366,29 +7365,3 @@ from country-packs to the shared naming helpers. A pack’s short name keeps a t
 readable; a missing name falls back to the runtime. The picker caches only base-language data,
 then adds the installed packs’ variants and labels for each call. Region-only and script-only
 versions stay grouped with their main language. A variant can be a main language on its own.
-Public guest links use native runtime names separately from these staff labels.
-
-### Guest menu preview
-
-The menu editor’s **Guest menu preview** opens an authenticated preview of its published content.
-Its language choice uses the venue’s enabled content languages. The server renders one HTML page
-in an isolated frame; the guest page keeps fixed light styling while the surrounding dashboard
-follows its theme. Section links retain that page’s language. Allergen/diet symbols are native
-`details` disclosures with a labelled `summary`: focus alone opens nothing, Enter or Space
-opens the explanation below its symbol on a full row, and activating that summary again closes
-it. The page needs no script or Popover support. Specific cereal/nut kinds remain written beside their symbol; the written key names
-the wording bundle’s language and asks guests to tell staff about allergies. No missing or empty
-declaration becomes an absence claim. EN/ES/CA/GL wording falls back as a whole bundle to the
-venue default, then English, independently of dish text.
-
-The guest preview also offers immediate sharing actions for the default menu, with a passive
-status read and a local page link when On. These actions apply to the default menu rather than
-the previewed menu. Cloud delivery remains a later slice; the page names that limitation.
-
-
-The guest preview's A4 editor uses the same server renderer. Bistro balances two columns;
-Lunch and wine gives dishes a wider column and, for a menu with several sections, the last section a narrow panel. Its saved scalar
-appearance has a draft scope under the preview, so Close and Escape ask before discarding edits.
-Logo, order and page breaks belong to the current captured publication. Preview A4 must be
-regenerated after a presentation edit; Print uses that captured HTML in a frame of its own and
-removes it after `afterprint`. Paper keeps a written declaration key or inline words and no popovers.

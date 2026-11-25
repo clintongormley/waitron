@@ -29,7 +29,6 @@ import type {
   DocumentMember,
   DocumentTile,
   FrozenOffer,
-  DeclarationDocument,
   FrozenOfferedModifier,
   LiveOffer,
   LiveOfferedModifier,
@@ -659,7 +658,6 @@ const labelAvailable = (rows: LiveRows, labelId: string) => rows.labels.get(labe
 async function readLiveRows(
   tx: Transaction,
   offers: readonly FrozenOffer[],
-  checkLists = true,
   setMenuOffers: readonly SetMenuFrozenOffer[] = [],
 ): Promise<LiveRows> {
   const productIds = new Set<string>();
@@ -709,24 +707,22 @@ async function readLiveRows(
       .where(inArray(optionLabels.id, batch)))
       labels.set(row.id, row.available);
   const missingLists = new Set<string>();
-  if (checkLists) {
-    for (const [kind, table] of [
-      ["options", optionLists],
-      ["extras", extraLists],
-    ] as const) {
-      const ids = new Set(
-        allOffers.flatMap((offer) =>
-          offer.offeredModifiers.filter((entry) => entry.kind === kind).map((entry) => entry.id),
-        ),
-      );
-      for (const batch of batches([...ids]))
-        for (const row of await tx
-          .select({ id: table.id })
-          .from(table)
-          .where(inArray(table.id, batch)))
-          ids.delete(row.id);
-      for (const id of ids) missingLists.add(`${kind}:${id}`);
-    }
+  for (const [kind, table] of [
+    ["options", optionLists],
+    ["extras", extraLists],
+  ] as const) {
+    const ids = new Set(
+      allOffers.flatMap((offer) =>
+        offer.offeredModifiers.filter((entry) => entry.kind === kind).map((entry) => entry.id),
+      ),
+    );
+    for (const batch of batches([...ids]))
+      for (const row of await tx
+        .select({ id: table.id })
+        .from(table)
+        .where(inArray(table.id, batch)))
+        ids.delete(row.id);
+    for (const id of ids) missingLists.add(`${kind}:${id}`);
   }
   for (const batch of batches([...overrideCourses.keys()]))
     for (const row of await tx
@@ -777,7 +773,7 @@ export async function readLiveState(
 ): Promise<{ unavailable: MenuUnavailable; liveFields: string }> {
   const offers = documents.flatMap(documentOffers);
   const copyOffers = includeSetMenus ? documents.flatMap(documentSetMenuOffers) : [];
-  const rows = await readLiveRows(tx, offers, true, copyOffers);
+  const rows = await readLiveRows(tx, offers, copyOffers);
   const unsellableProducts = new Set<string>();
   const labels = new Set<string>();
   const unsellable = (productId: string) => {
@@ -836,12 +832,7 @@ export async function applyLiveFields(
     ]),
   );
   const copies = new Map(setMenuCopies.map((copy) => [copy, setMenuOffersInOrder(copy)]));
-  const rows = await readLiveRows(
-    tx,
-    [...offersOf.values()].flat(),
-    true,
-    [...copies.values()].flat(),
-  );
+  const rows = await readLiveRows(tx, [...offersOf.values()].flat(), [...copies.values()].flat());
   for (const [menuId, frozen] of offersOf)
     offers.set(
       menuId,
@@ -935,40 +926,6 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
           }),
         };
       }),
-  };
-}
-
-export async function hydrateDeclarationDocument(
-  tx: Transaction,
-  document: MenuDocument,
-): Promise<DeclarationDocument> {
-  const rows = await readLiveRows(tx, documentOffers(document), false);
-  return {
-    ...document,
-    offers: Object.fromEntries(
-      Object.entries(document.offers).map(([id, offer]) => [
-        id,
-        {
-          ...offer,
-          ...productDeclarationValues(rows.products.get(offer.productId)),
-          variants: offer.variants.map((variant) => ({
-            ...variant,
-            ...productDeclarationValues(rows.products.get(variant.id)),
-          })),
-          offeredModifiers: offer.offeredModifiers.map((entry) =>
-            entry.kind === "options"
-              ? entry
-              : {
-                  ...entry,
-                  items: entry.items.map((item) => ({
-                    ...item,
-                    ...extraDeclarationValues(rows.products.get(item.productId)),
-                  })),
-                },
-          ),
-        },
-      ]),
-    ),
   };
 }
 

@@ -37,9 +37,9 @@ To change the default, open that language's ⋮ menu and select **Make default**
 For regional wording, open a main language's ⋮ menu and choose **Add regional version**.
 For example, keep **English** for your London menu, add **English (United States)**, and write
 **chips** in English and **fries** in the US field for one dish. Leave its other US fields blank:
-they use their English names. The guest menu uses the US wording only when US English is selected;
-Other English requests keep **chips**. Edit regional names in the product and menu
-editors. **Edit translations** and **Translate all** cover the main languages.
+they use their English names. Edit regional names in the product and menu editors. In the menu’s
+**Preview** tab, select the regional language to check its wording. **Edit translations** and
+**Translate all** cover the main languages.
 
 A language Waitron keeps enabled for your region is marked **Required** and has no **Delete**, and
 if it is ever missing, your next save on this page adds it back. Where the region also asks for
@@ -47,7 +47,7 @@ foreign languages, the page shows a notice while you have fewer than it asks for
 
 For example, with Spanish as the default and English alongside, a product whose customer-facing name
 reads **Pan de verano** in Spanish can leave its English one empty while you prepare the translation.
-Where English content is requested, it displays **Pan de verano** until you enter **Summer bread**.
+When you select English in **Preview**, you see **Pan de verano** until you enter **Summer bread**.
 This fallback uses the Spanish text without copying it into the English field, so later Spanish edits
 remain visible where the translation is still missing.
 

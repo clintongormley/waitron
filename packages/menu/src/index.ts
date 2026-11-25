@@ -182,7 +182,6 @@ export {
 export {
   MENU_DOCUMENT_FORMAT,
   applyLiveFields,
-  hydrateDeclarationDocument,
   buildMenuDocument,
   diffMenuDocuments,
   documentOffers,
@@ -318,8 +317,6 @@ export * from "./product-items.js";
 export { menusHolding } from "./menu-removal.js";
 
 export * from "./settings.js";
-export { GUEST_MENU_SETTINGS } from "./guest-menu-settings.js";
-export { readGuestMenu } from "./guest-menu.js";
 
 export * from "./content-translation-types.js";
 export * from "./content-translation-targets.js";

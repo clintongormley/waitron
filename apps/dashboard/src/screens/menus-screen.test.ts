@@ -10331,6 +10331,7 @@ describe("publishing", () => {
   it("publishes the hash it previewed, names the one menu, and says the new version is live", async () => {
     const client = api();
     const el = await mountPreview(client);
+    expect(q(el, "dashboard-guest-menu-preview")).toBeNull();
     expect(text(inPanel(el, "publish"))).toBe("Publish now");
     const previews = client.getMenuPreview.mock.calls.length;
     client.getMenuPreview.mockResolvedValue({
