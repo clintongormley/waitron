@@ -929,9 +929,8 @@ declare module "@waitron/shared" {
     "bill.tip_not_allowed_on_excess": { workingOrderId: string };
     /**
      * Money has been taken on the bill. Paying it in one go by the
-     * single-payment routes, placing it, merging it with another bill and moving items between it
-     * and another are refused while it has any pending or received bill payment, even one given
-     * back in full; abandoning it and finishing its table are refused while it still holds money,
+     * single-payment routes, placing it and merging it with another bill are refused while it has
+     * any pending or received bill payment, even one given back in full; abandoning it and finishing its table are refused while it still holds money,
      * except by Reopen bill, which moves the money to the reopened bill.
      */
     "bill.payments_received": { workingOrderId: string };
