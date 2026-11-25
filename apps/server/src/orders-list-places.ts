@@ -1,5 +1,5 @@
 import { orderPlaceFactsSql, type OrderPlaceFacts, type Transaction } from "@waitron/db";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 
 export const LIVE_ORDER_PLACE = sql`r.kind = 'bill' and r.status in ('open', 'waiting_for_payment')`;
 const livePlace = orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`, {
