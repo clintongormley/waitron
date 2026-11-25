@@ -211,6 +211,25 @@ describe("NFC sticker window", () => {
     expect(button(el, "lock-equipment-nfc").disabled).toBe(false);
   });
 
+  it("a lock the phone blocks says where to allow NFC, and locks once allowed", async () => {
+    const el = await mountWritten();
+    FakeWriter.lockResult = () => Promise.reject(new DOMException("denied", "NotAllowedError"));
+    await confirmLock(el);
+    await vi.waitFor(() =>
+      expect(message(el)).toBe(
+        "NFC is blocked for Waitron. Allow it in this app’s or browser’s permissions, then try again.",
+      ),
+    );
+    expect(footer(el)).toEqual([t("action.close"), "Lock…", "Write another"]);
+    expect(button(el, "write-equipment-nfc").disabled).toBe(false);
+    expect(button(el, "lock-equipment-nfc").disabled).toBe(false);
+    FakeWriter.lockResult = () => Promise.resolve();
+    await confirmLock(el);
+    await vi.waitFor(() => expect(message(el)).toBe(t("equipment.nfc_locked")));
+    expect(FakeWriter.locks).toHaveLength(2);
+    expect(FakeWriter.writes).toHaveLength(1);
+  });
+
   it("says in Spanish that a failed write may be a locked sticker", async () => {
     setLocale("es");
     FakeWriter.writeResult = refused;

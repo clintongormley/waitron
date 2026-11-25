@@ -830,6 +830,19 @@ describe("equipment dialog NFC", () => {
     await el.updateComplete;
     expect(line(el)).toBe("No printer role selected. Choose a role in Equipment.");
   });
+  it("an earlier tap's answer leaves a later reading error said", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    nfc.read(code("reader", READER_ID));
+    nfc.dispatchEvent(new Event("readingerror"));
+    await el.updateComplete;
+    expect(line(el)).toBe(t("equipment.nfc_read_error"));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(t("equipment.nfc_read_error"));
+  });
   it.each(["a later tap", "a later choice", "reopening"])(
     "an answer that comes back after %s confirms nothing",
     async (later) => {

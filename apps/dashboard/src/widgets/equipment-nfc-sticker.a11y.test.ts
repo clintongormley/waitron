@@ -25,6 +25,7 @@ for (const locale of ["en", "es"] as const) {
         "locked",
         "locking",
         "lock-failed",
+        "lock-blocked",
       ] as const)("has no axe violations when %s, at phone width", async (state) => {
         await page.viewport(390, 844);
         await vi.waitFor(() => expect(innerWidth).toBe(390));
@@ -45,6 +46,7 @@ for (const locale of ["en", "es"] as const) {
             makeReadOnly() {
               if (state === "locking") return new Promise<void>(() => {});
               if (state === "lock-failed") return refuse("NetworkError");
+              if (state === "lock-blocked") return refuse("NotAllowedError");
               return Promise.resolve();
             }
           },
@@ -75,18 +77,20 @@ for (const locale of ["en", "es"] as const) {
             blocked: "equipment.nfc_blocked" as const,
           }[state as string] ?? "equipment.nfc_written_printer",
         );
-        if (["confirmation", "locked", "locking", "lock-failed"].includes(state)) {
+        if (["confirmation", "locked", "locking", "lock-failed", "lock-blocked"].includes(state)) {
           action("lock-equipment-nfc").click();
           await el.updateComplete;
         }
-        if (["locked", "locking", "lock-failed"].includes(state)) {
+        if (["locked", "locking", "lock-failed", "lock-blocked"].includes(state)) {
           action("confirm-lock-equipment-nfc").click();
           await shows(
             state === "locked"
               ? "equipment.nfc_locked"
               : state === "locking"
                 ? "equipment.nfc_hold"
-                : "equipment.nfc_failed",
+                : state === "lock-blocked"
+                  ? "equipment.nfc_blocked"
+                  : "equipment.nfc_failed",
           );
         }
         await expectNoA11yViolations(host);

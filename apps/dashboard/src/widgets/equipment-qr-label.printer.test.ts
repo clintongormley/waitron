@@ -248,6 +248,45 @@ it("a failed read of the printers says so, still offers this computer, and tries
   expect(error(el)).toBe("");
   expect(q(el, "retry-equipment-printers")).toBeNull();
 });
+it.each([
+  ["keyboard", "list"],
+  ["keyboard", "failure"],
+  ["pointer", "list"],
+  ["pointer", "failure"],
+] as const)(
+  "Try again by %s moves focus to Close while the printers are read, and leaves it there after a %s",
+  async (press, answer) => {
+    const { el, api } = await mount("printer", new Error("offline"));
+    await listed(el);
+    let resolve!: (printers: typeof active) => void;
+    let reject!: (error: Error) => void;
+    api.listPrinters.mockImplementationOnce(
+      () =>
+        new Promise((done, refuse) => {
+          resolve = done;
+          reject = refuse;
+        }),
+    );
+    const retry = q<WtButton>(el, "retry-equipment-printers");
+    if (press === "keyboard") {
+      retry.focus();
+      expect(el.shadowRoot!.activeElement).toBe(retry);
+      await userEvent.keyboard("{Enter}");
+    } else await userEvent.click(page.elementLocator(retry.shadowRoot!.querySelector("button")!));
+    await el.updateComplete;
+    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    expect(q<WtButton>(el, "print-equipment-label").loading).toBe(true);
+    expect(q(el, "retry-equipment-printers")).toBeNull();
+    const close = q<WtButton>(el, "close-equipment-label");
+    expect(el.shadowRoot!.activeElement).toBe(close);
+    if (answer === "list") resolve(active);
+    else reject(new Error("offline"));
+    await vi.waitFor(() => expect(items(el)).toHaveLength(answer === "list" ? 3 : 1));
+    await trigger(el).updateComplete;
+    expect(q(el, "retry-equipment-printers") === null).toBe(answer === "list");
+    expect(el.shadowRoot!.activeElement).toBe(close);
+  },
+);
 it("Print is quiet while the printers are read", async () => {
   let complete!: (printers: typeof active) => void;
   const { el } = await mount(

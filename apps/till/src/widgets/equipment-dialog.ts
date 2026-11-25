@@ -255,6 +255,7 @@ export class TillEquipmentDialog extends LitElement {
       reader.addEventListener(
         "readingerror",
         () => {
+          this.#tapped = null;
           this.nfcMessage = "equipment.nfc_read_error";
         },
         { signal: abort.signal },

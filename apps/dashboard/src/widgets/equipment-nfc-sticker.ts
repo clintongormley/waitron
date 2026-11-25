@@ -24,7 +24,15 @@ export function nfcWriter(): (new () => NfcWriter) | undefined {
 }
 
 type Step =
-  "idle" | "writing" | "written" | "failed" | "blocked" | "locking" | "locked" | "lock-failed";
+  | "idle"
+  | "writing"
+  | "written"
+  | "failed"
+  | "blocked"
+  | "locking"
+  | "locked"
+  | "lock-failed"
+  | "lock-blocked";
 
 const MESSAGES: Record<Exclude<Step, "idle" | "written">, StringKey> = {
   writing: "equipment.nfc_ready",
@@ -33,7 +41,10 @@ const MESSAGES: Record<Exclude<Step, "idle" | "written">, StringKey> = {
   locking: "equipment.nfc_hold",
   locked: "equipment.nfc_locked",
   "lock-failed": "equipment.nfc_failed",
+  "lock-blocked": "equipment.nfc_blocked",
 };
+
+const permissionRefused = (error: unknown): boolean => (error as Error).name === "NotAllowedError";
 
 /** Starts writing as it opens. Chrome asks for NFC permission only while the click that opened the
  * window still counts as the person's own act, so the first write starts in the update that opens it. */
@@ -142,7 +153,7 @@ export class EquipmentNfcSticker extends LitElement {
           { signal },
         ),
       "written",
-      (error) => ((error as Error).name === "NotAllowedError" ? "blocked" : "failed"),
+      (error) => (permissionRefused(error) ? "blocked" : "failed"),
     );
   }
 
@@ -152,7 +163,7 @@ export class EquipmentNfcSticker extends LitElement {
       "locking",
       (writer, signal) => writer.makeReadOnly({ signal }),
       "locked",
-      () => "lock-failed",
+      (error) => (permissionRefused(error) ? "lock-blocked" : "lock-failed"),
     );
   }
 
@@ -181,7 +192,8 @@ export class EquipmentNfcSticker extends LitElement {
   #actions(): TemplateResult | typeof nothing {
     if (this.step === "idle" || this.step === "writing" || this.step === "locking") return nothing;
     const again = this.step === "failed" || this.step === "blocked";
-    const lockable = this.step === "written" || this.step === "lock-failed";
+    const lockable =
+      this.step === "written" || this.step === "lock-failed" || this.step === "lock-blocked";
     return html`${
         lockable
           ? html`<wt-button

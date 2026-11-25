@@ -167,6 +167,12 @@ export class EquipmentQrLabel extends LitElement {
     }
   }
 
+  /** The pressed button is gone while the printers are read, so focus moves to Close. */
+  #retryPrinters(): void {
+    this.renderRoot.querySelector<HTMLElement>("[data-test=close-equipment-label]")?.focus();
+    void this.#loadPrinters();
+  }
+
   async #send(printer: Printer): Promise<void> {
     if (!this.api || this.sending) return;
     const generation = this.#generation;
@@ -323,7 +329,7 @@ export class EquipmentQrLabel extends LitElement {
             ? nothing
             : html`<wt-button
                 data-test="retry-equipment-printers"
-                @click=${() => void this.#loadPrinters()}
+                @click=${() => this.#retryPrinters()}
                 >${t("equipment.try_again")}</wt-button
               >`
         }
