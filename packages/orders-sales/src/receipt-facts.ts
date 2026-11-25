@@ -318,7 +318,7 @@ export function receiptFigures({
       });
     });
   }
-  const discounts = invoiceDiscounts(filedGroups, billAdjustments);
+  const discounts = invoiceDiscounts(filedGroups, billAdjustments, result.lines);
   const withVat = discountsWithVat(filedGroups, discounts.under);
 
   const filedRow = (

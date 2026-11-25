@@ -779,10 +779,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A4 receipt copies.** When adding A4 receipt printing, have the copy-audit writer require a
   receipt-page job. Test that it accepts a receipt page and refuses an A4 invoice page.
 
-- **A full invoice can print `Descuento 100%` on a row that still has a charge.** On a takeaway
-  bill, make the 10% olives on a 21% pizza free and issue a full invoice. The pizza and olives can
-  each say `Descuento 100%` while both still carry filed amounts after sharing the price paid (A445).
-
 ### Payments and card readers
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).

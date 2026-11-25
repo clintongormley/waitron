@@ -219,6 +219,8 @@ async function dishLines(
         delete display.priceQuantity;
         return {
           ...display,
+          // A free item's share of the price paid (A445) is on the filed row, not the bill's line.
+          ...(row.gross === null ? {} : { gross: centsToDecimal(row.gross) }),
           ...(row.listGross === null ? {} : { listGross: centsToDecimal(row.listGross) }),
           ...(row.listGross === null || row.listUnitPriceGross === null
             ? {}
@@ -274,11 +276,9 @@ async function dishLines(
   }
 
   const listed = sumDecimals(
-    lines.map((line) =>
-      line.listGross === undefined ? chargedAmount(line) : decimal(line.listGross),
-    ),
+    lines.map((line) => (line.listGross === undefined ? soldGross(line) : decimal(line.listGross))),
   );
-  const charged = sumDecimals(lines.map(chargedAmount));
+  const charged = sumDecimals(lines.map(soldGross));
   if (placed && compareDecimal(subtractDecimal(listed, takenOff), charged) === 0) {
     return {
       lines: withFamilies(lines, records, rowIndex).map((line, i) =>
@@ -333,14 +333,6 @@ function withFamilies(
   });
 }
 
-/** What the bill's comps and discounts left the line at: a divided set menu's rows are judged by
- * their sold amounts, which the records were made on, not by the parts they file. */
-function chargedAmount(line: TillSaleLine) {
-  return line.net?.tax === undefined || line.setMenuPart !== undefined
-    ? soldGross(line)
-    : addDecimal(decimal(line.net.base), decimal(line.net.tax));
-}
-
 function withEntries(line: TillSaleLine, entries: ReceiptAdjustment[] | undefined): TillSaleLine {
   return entries === undefined ? line : { ...line, adjustments: entries };
 }
@@ -355,9 +347,9 @@ function perDish(lines: TillSaleLine[]): TillSaleLine[] {
     const changed = [dish, ...options].filter((line) => line.listGross !== undefined);
     if (changed.length === 0) continue;
     const lost = sumDecimals(
-      changed.map((line) => subtractDecimal(decimal(line.listGross!), chargedAmount(line))),
+      changed.map((line) => subtractDecimal(decimal(line.listGross!), soldGross(line))),
     );
-    const comp = changed.every((line) => isZeroDecimal(chargedAmount(line)));
+    const comp = changed.every((line) => isZeroDecimal(soldGross(line)));
     entries.set(dish, [{ kind: comp ? "comp" : "discount", amount: lost }]);
   }
   return lines.map((line) => withEntries(line, entries.get(line)));

@@ -247,13 +247,14 @@ export async function addSpecLunch(spec: SpecVenue): Promise<SpecLunch> {
 /**
  * A takeaway bill with Soup, Hake and Lemonade sent from the Lunch menu's copy `versionId`, then
  * each of `moreItems` (menu item ids of the Lunch menu), fired. Sending groups the three into one
- * Lunch menu: 14.00.
+ * Lunch menu: 14.00. The Soup takes `soupExtras` too, at their own price.
  */
 export async function lunchBill(
   spec: SpecVenue,
   lunch: SpecLunch,
   versionId = lunch.versionId,
   moreItems: readonly string[] = [],
+  soupExtras: SpecExtra[] = [],
 ) {
   const { venue } = spec;
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
@@ -274,6 +275,7 @@ export async function lunchBill(
       menuVersionId: versionId,
       setMenuId: lunch.menuId,
       quantity: "1",
+      ...(menuItemId === lunch.items.Soup && soupExtras.length > 0 ? { extras: soupExtras } : {}),
     })),
   );
   await sendSpecDraft(spec, bill.partyId, draft.id, "fire");
