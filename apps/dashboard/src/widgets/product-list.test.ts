@@ -1520,7 +1520,7 @@ describe("product-list", () => {
         product({
           id: "bottle",
           unitId: "bottle",
-          unit: { ...kilo, id: "bottle", staffAbbreviation: "botella", abbreviation: {} },
+          unit: { ...kilo, id: "bottle", staffAbbreviation: "portion", abbreviation: {} },
         }),
       ],
     });
@@ -3500,10 +3500,7 @@ describe("a product's variants in the list", () => {
     setLocale(locale);
     await page.viewport(1180, 844);
     const dish = cecina();
-    dish.name =
-      locale === "en-GB"
-        ? "Mushroom croquettes with roasted garlic and aged sheep cheese"
-        : "Croquetas de setas con ajo asado y queso de oveja curado";
+    dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
     dish.modifiers = [{ kind: "extras", id: "extras" }];
     dish.ordering = "not_sold_separately";
     dish.variants[0]!.available = false;
