@@ -25,14 +25,6 @@ Opened on a private copy of main that day by holding House coffee on Counter. To
 - **Each press closes the window** (read in `apps/till/src/widgets/product-info.ts`, not tried), so
   marking two sizes means holding the tile twice.
 
-## A Make now instruction can disappear or come back while the till checks its device again
-
-If an order response arrives while the till is waiting for its device identity, the till can lose
-the Make now instruction when it reloads that device's saved list. Keep the instruction when the
-same device comes back, and keep each device's list separate when the device changes.
-If you press Done during that wait, the saved list can bring back the instruction you dismissed.
-Keep it dismissed.
-
 ## The table screen's redundant exit configuration was not audited
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: the table screen still needs its
@@ -869,10 +861,6 @@ here is asked or built before that. They were separate entries, many of them que
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
-
-## Options on a withdrawn dish
-
-If the server requires an options list on a recalled dish absent from the live menu, the till cannot offer that list and staff cannot save the order with the dish on it.
 
 ## Decisions and deliberate limits
 

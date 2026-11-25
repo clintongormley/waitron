@@ -372,7 +372,10 @@ Six things it is worth knowing about that payload:
   it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
   version no longer offers checks that line's options answer against the dish's own current lists
   (`productOptionLists`, `apps/server/src/working-order-pricing.ts`), because no published list is left to
-  check it against. A required list the picker never drew would refuse the order with
+  check it against. Recall includes those current options on an unsent ordinary dish's stored
+  product (`readBasketOrder`, `apps/server/src/working-order-held-read.ts`). The till uses them when
+  the dish's offer is gone and keeps its recorded extras when staff answer a missing list. A required
+  list the picker never drew would refuse the order with
   `options.label_required` or `extras.limit_exceeded` — except an extras list on a dish not sold
   by the unit, which neither the till draws nor the server requires — and an offered list the server does not know
   about would be refused as `options.invalid`.

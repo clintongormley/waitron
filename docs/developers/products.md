@@ -811,8 +811,9 @@ its list has since been deleted. The till refuses raising its line's count befor
 with `extras.invalid`, worded by `held.extra_blocks_raise` (`setLineQuantity`,
 `apps/till/src/state/working-order.ts`), and never adds a tap to that line; the server refuses a
 raise that reaches it anyway with the same code, because it prices a raised line afresh. Editing
-its own line through the line's window takes it off, and a pick whose stored line names no list or
-product cannot be sent, so any edit, a raise included, takes that one off.
+its own line through the line's window takes it off. On a dish taken off the menu, the edit that
+answers a missing required choice keeps the extra. A pick whose stored line names no list or
+product cannot be sent, so an edit takes that one off.
 
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own

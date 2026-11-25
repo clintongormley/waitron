@@ -8255,6 +8255,56 @@ describe("till-app", () => {
     };
   }
 
+  it("offers and sends a required answer for a recalled dish off the live menu", async () => {
+    const order = answeredOrder(frozenDoneness);
+    order.lines[0]!.optionSnapshots = [];
+    order.lines[0]!.product = { ...coffee, offeredModifiers: [donenessList] };
+    const lines = order.lines.map((line) => ({ ...line, extras: [heldMilk] }));
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({ ...order, lines }),
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    expect.soft(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
+    await userEvent.click(basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="0"]')!);
+    const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    const displayedTotal = picker.shadowRoot!.querySelector(".running")!;
+    const breakdown = displayedTotal.previousElementSibling;
+    expect.soft(breakdown?.textContent?.replace(/\s+/g, " ").trim()).toBe("Leche extra 3,00 €");
+    expect.soft(breakdown?.querySelector("button, input")).toBeNull();
+    expect
+      .soft(picker.shadowRoot!.querySelector(".running-amount")!.textContent)
+      .toBe(formatMoney("6.00", currentLocale()));
+    await userEvent.click(
+      picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="options-list-punto"]')!,
+    );
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLButtonElement>(".confirm")!);
+    await flush(el);
+
+    emit(counter, "park-order", { label: counter.store.label });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+      "wo-answered",
+      expect.objectContaining({
+        lines: [
+          expect.objectContaining({
+            workingOrderLineId: "line-answered",
+            options: [{ listId: "list-punto", labelId: "label-rare" }],
+            extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
+          }),
+        ],
+      }),
+    );
+  });
+
   it("re-sends a retrieved line's options answer, matched to the list its dish still offers", async () => {
     const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
     const { el } = await mountApp({

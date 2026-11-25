@@ -50,6 +50,8 @@ import type {
   GiveBackWrite,
 } from "./give-back-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
+import type { MadeHereItem } from "./made-here-types.js";
+export type { MadeHereExtra, MadeHereItem } from "./made-here-types.js";
 import type {
   ItemPaymentAsk,
   ItemPaymentPreview,
@@ -2515,25 +2517,6 @@ export interface TabLine {
   portion?: boolean;
 }
 
-export interface MadeHereExtra {
-  name: string;
-  quantity: string;
-  unitName: Record<string, string> | null;
-  soldInEach: boolean;
-  perDish: number;
-}
-
-export interface MadeHereItem {
-  lineId: string;
-  name: string;
-  quantity: string;
-  unitName: Record<string, string> | null;
-  soldInEach: boolean;
-  optionSnapshots: OptionSnapshot[];
-  extras: MadeHereExtra[];
-  note: string | null;
-}
-
 export type OriginalReceiptPrint =
   | { status: "not_queued" }
   | {
@@ -2695,7 +2678,8 @@ export interface BoxClockConfirmed {
 }
 
 export class TillApi {
-  #madeHereListener?: (items: MadeHereItem[]) => void;
+  #madeHereListener?: (items: MadeHereItem[], source: string | symbol) => void;
+  #madeHereSource?: () => string | symbol | undefined;
   readonly #unansweredWholeBills = new Map<
     string,
     {
@@ -2705,8 +2689,12 @@ export class TillApi {
     }
   >();
 
-  onMadeHere(listener: (items: MadeHereItem[]) => void): void {
+  onMadeHere(
+    listener: (items: MadeHereItem[], source: string | symbol) => void,
+    source: () => string | symbol | undefined,
+  ): void {
     this.#madeHereListener = listener;
+    this.#madeHereSource = source;
   }
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -5605,6 +5593,7 @@ export class TillApi {
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
+    const madeHereSource = this.#madeHereSource?.();
     const res = await this.#fetchFor(person)(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
@@ -5621,8 +5610,13 @@ export class TillApi {
     }
     const text = await res.text();
     const answer: unknown = text === "" ? undefined : JSON.parse(text);
-    if (isRecord(answer) && Array.isArray(answer.madeHere) && answer.madeHere.length > 0)
-      this.#madeHereListener?.(answer.madeHere as MadeHereItem[]);
+    if (
+      madeHereSource !== undefined &&
+      isRecord(answer) &&
+      Array.isArray(answer.madeHere) &&
+      answer.madeHere.length > 0
+    )
+      this.#madeHereListener?.(answer.madeHere as MadeHereItem[], madeHereSource);
     rememberInvoiceEvidence(answer);
     return answer as T;
   }
