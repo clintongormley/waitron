@@ -91,19 +91,33 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
+### Overtime when a contract changes
+
+When a contract starts, ends or changes during the month, calculate overtime separately for each
+contract's part of the month, then add those amounts. Days without a contract contribute to worked
+hours only. The watcher recorded the owner's calculation decision on 25 November 2026 at 10:02
+and the owner's choice to deliver it “With the contracts screen (Recommended)” at 16:37.
+
+The January examples use period-net overtime, which compares worked and contracted minutes
+over each contract's part of the month.
+
+- Ana moves from 40 to 20 hours a week on 15 January. She works 5,100 minutes against 4,800
+  contracted minutes in the first part and 2,800 against 2,914 in the second. The month has 300
+  minutes of overtime.
+- Ana starts a 20-hour contract on 20 January. She works 600 minutes before it starts and
+  2,357 against 2,057 contracted minutes afterwards. The month has 2,957 worked minutes and
+  300 minutes of overtime.
+
+Reuse `summarisePeriod` for each contract span, including its last day. Use the latest applicable
+contract start, sum each overtime measure over the spans and show the separate calculations in
+the export.
+Check both January examples in `pay-period-closure.test.ts`.
+
 ## MONTH-CLOSE. Reminder and adjustments after a month closes
 
-When a contract starts, ends or changes during the month, calculate overtime separately for the
-part covered by each contract and add the results. Days without a contract contribute to worked
-hours only (owner choice recorded by the watcher on 25 November 2026 at 10:02). Plan two worked
-examples, one for a change from 40 to 20 hours on the 15th and one for a contract starting on the 20th.
-
-List unresolved hours for the selected month by the shift's work date. Send one reminder the day
-before closure if issues remain. At each close, save earlier months' changes that have yet to be
-included and show them in the next working-time export. First agree which period owns an adjustment,
-then plan the list, reminder and adjustments together (watcher, 2026-11-25 at 06:37 and 09:11).
-This is PR 2 in
-[the monthly close plan](../superpowers/plans/2026-11-25-month-close.md).
+At each close, save earlier months' changes that have yet to be included and show them in the next
+working-time export. Send a reminder the day before closure if managers still have work to do.
+See [the monthly Hours follow-up](../superpowers/plans/2026-11-25-month-close-follow-up.md).
 
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
 
@@ -134,7 +148,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. Calculate overtime by contract, list the month’s issues, send a reminder and include later adjustments in the next export.**
+- **MONTH-CLOSE. Send a reminder and include later adjustments in the next export.**
   [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
@@ -161,9 +175,10 @@ another offset) goes back to the owner as a picture. Check the shared helper's o
   (watcher, 2026-11-25). A snapshot that never reached the spare can be lost with the former box.
   [Implementation plan](../superpowers/plans/2026-11-25-month-close.md#pr-1-settings-automatic-close-and-hours).
 
-- Hours keeps the full history for a person with a correction awaiting a decision, to check
-  whether it can still be applied. Open shifts, disputed corrections, unanswered questions
-  and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
+- Hours reads a person's full clock history to check whether a correction awaiting a decision can
+  still be applied. Personal Hours and shorter pay periods can show open work from outside the
+  chosen dates (watcher, 2026-11-18). Monthly manager Hours groups open work by shift start
+  (watcher, 2026-11-25).
 
 - Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept by the watcher 2026-11-24, not asked (A644).
 

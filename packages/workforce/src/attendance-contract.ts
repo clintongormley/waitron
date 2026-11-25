@@ -111,6 +111,7 @@ export interface HoursDay {
 export interface HoursOpenShift {
   start: TimeEntryRecord;
   breakStart: TimeEntryRecord | null;
+  questionId?: string;
 }
 export interface HoursClosure {
   closureId: string;
@@ -133,7 +134,7 @@ export interface PersonHours {
   record: TimeRecord;
   openShifts: HoursOpenShift[];
   pending: {
-    prompts: AttendancePrompt[];
+    prompts: (AttendancePrompt & { workDate?: string })[];
     items: CorrectionItem[];
     automaticEntryIds: string[];
   };

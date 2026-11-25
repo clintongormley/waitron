@@ -248,8 +248,9 @@ solicitud. Consulta su estado en **Mis horas**.
 
 ## Cerrar las horas del mes {#monthly-hours-close}
 
-Abre **Horas** en el panel y elige el mes. Consulta la fecha de cierre y revisa las horas
-pendientes antes de que se cierre el mes.
+Abre **Horas** en el panel. Usa **Anterior** y **Siguiente** junto al mes para cambiar de mes.
+Consulta la fecha de cierre y revisa las horas pendientes del mes seleccionado. Si un turno
+termina al día siguiente, búscalo en el mes en que empezó.
 
 Si puedes gestionar los ajustes del sistema, cambia **Días laborables antes del cierre** y
 pulsa **Guardar**. Por defecto tienes tres días laborables para revisar las horas. Los fines

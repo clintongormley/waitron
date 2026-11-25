@@ -10,7 +10,10 @@ export function storedAttendanceTime(at: string, offset: number): string {
   return `${wall.slice(0, 10)} ${wall.slice(11, 16)} ${zone}`;
 }
 
-export function attendanceHistory(entry: AttendancePrompt["history"][number]) {
+export function attendanceHistory(
+  entry: AttendancePrompt["history"][number],
+  time = storedAttendanceTime(entry.eventAt, entry.offsetMinutes),
+) {
   const author = entry.extension?.authorKind ?? "worker";
   const label =
     entry.entryKind === "confirmation" || entry.extension?.respondsToEntryId
@@ -19,10 +22,7 @@ export function attendanceHistory(entry: AttendancePrompt["history"][number]) {
         ? t("attendance.proposed")
         : t("attendance.original");
   return html`<li>
-    <span>${label}: </span
-    ><time datetime=${entry.eventAt}
-      >${storedAttendanceTime(entry.eventAt, entry.offsetMinutes)}</time
-    >
+    <span>${label}: </span><time datetime=${entry.eventAt}>${time}</time>
     <span> · ${t(`attendance.author_${author}`)}</span>
     ${entry.correctionReason ? html`<p>${entry.correctionReason}</p>` : nothing}
   </li>`;

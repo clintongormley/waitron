@@ -203,10 +203,12 @@ export async function readOutstandingHoursEntries(
     personId,
     questionWindows,
     questionEntryIds,
+    includeShiftContext = false,
   }: {
     personId: string;
     questionWindows: readonly (readonly [string, string])[];
     questionEntryIds: readonly string[];
+    includeShiftContext?: boolean;
   },
 ): Promise<TimeEntryRecord[]> {
   // Checking whether an undecided correction is ready still needs the full sequence.
@@ -227,17 +229,13 @@ export async function readOutstandingHoursEntries(
   if (undecided.rows.length > 0) return readRecordedEntries(tx, { personId });
 
   // An unretimed direct in or out resets open shifts. Keep every event at its instant.
-  const latest = sql`(
+  const latest = (before = sql``) => sql`(
     select anchor.event_at from time_entries anchor indexed by time_entries_person_event_idx
     where anchor.person_id = ${personId} and anchor.entry_kind in ('in', 'out')
-      and ${unretimedAnchor}
+      and ${unretimedAnchor} ${before}
     order by anchor.event_at desc limit 1
   )`;
-  const seeds = sql`
-    select ${seedColumns}
-    from time_entries seed indexed by time_entries_person_event_idx
-    where seed.person_id = ${personId} and seed.event_at >= coalesce(${latest}, ${FIRST_EVENT_AT})
-    union
+  const outstanding = sql`
     select ${seedColumns}
     from time_entries seed indexed by time_entries_person_event_idx
     where seed.person_id = ${personId}
@@ -251,6 +249,30 @@ export async function readOutstandingHoursEntries(
         or (seed.entry_kind = 'correction' and seed.correction_status = 'disputed'
           and seed.responds_to_entry_id is not null)
       )
+  `;
+  // A corrected endpoint can move across a clock boundary, so take context at each related time.
+  const shiftContext = includeShiftContext
+    ? sql`
+    union
+    select ${seedColumns}
+    from (
+      with recursive ${entryFamily(outstanding)}
+      select distinct event_at from family
+    ) issue
+    cross join time_entries seed indexed by time_entries_person_event_idx
+    where seed.person_id = ${personId}
+      and seed.event_at between
+        coalesce(${latest(sql`and anchor.event_at < issue.event_at`)}, ${FIRST_EVENT_AT})
+        and issue.event_at
+  `
+    : sql``;
+  const seeds = sql`
+    select ${seedColumns}
+    from time_entries seed indexed by time_entries_person_event_idx
+    where seed.person_id = ${personId} and seed.event_at >= coalesce(${latest()}, ${FIRST_EVENT_AT})
+    union
+    ${outstanding}
+    ${shiftContext}
     union
     select ${seedColumns}
     from json_each(${JSON.stringify(questionWindows)}) question

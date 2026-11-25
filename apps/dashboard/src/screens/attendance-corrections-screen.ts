@@ -32,6 +32,15 @@ import { AttendanceApi } from "../api/attendance.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { wallClock } from "../date-utils.js";
+import {
+  hoursDate,
+  hoursTime,
+  periodLabel,
+  periodStep,
+  requestedPeriodLabel,
+} from "../hours-format.js";
+import { storedAttendanceTime } from "../widgets/attendance-history.js";
 import "../widgets/attendance-proposal-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -41,11 +50,6 @@ import "@waitron/ui/src/components/wt-button.js";
 const validCloseGrace = (value: string) => /^(?:[0-9]|10)$/.test(value);
 
 type Entry = AttendanceDayView["record"]["entries"][number]["entry"];
-function storedTime(at: string, offset: number): string {
-  const wall = new Date(Date.parse(at) + offset * 60_000).toISOString();
-  const abs = Math.abs(offset);
-  return `${wall.slice(0, 10)} ${wall.slice(11, 16)} ${offset < 0 ? "-" : "+"}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-}
 function statusLabel(status: CorrectionItem["status"]): string {
   switch (status) {
     case "waiting-manager":
@@ -113,6 +117,9 @@ export class AttendanceCorrectionsScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
+      .period {
+        align-items: center;
+      }
       section,
       article {
         padding: var(--wt-space-3);
@@ -148,6 +155,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @state() private savingCloseGrace = false;
   #closeGraceScope?: DraftScope<string>;
   @state() private periodDate = "";
+  @state() private periodFrom: ManagerHours["period"] | null = null;
   @state() private hoursReading = false;
   @state() private exportOptions: AttendanceExportOptions | null = null;
   @state() private exportOpen = false;
@@ -242,6 +250,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     for (const slot of ["lookups", "queue", "day", "hours"]) this.#queries.release(slot);
     this.hours = null;
     this.periodDate = "";
+    this.periodFrom = null;
     this.hoursReading = false;
     this.#hoursApi = new HoursApi(this.request, this.liveData);
     this.#api = new AttendanceApi(this.request, this.liveData);
@@ -306,6 +315,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
         }),
         (value) => {
           this.hours = value;
+          this.periodFrom = value.period;
           this.queue = value.people.flatMap((person) => person.hours.pending.items);
           if (
             !(this.hours?.people ?? value.people).some(
@@ -323,8 +333,13 @@ export class AttendanceCorrectionsScreen extends LitElement {
       if (generation === this.#generation && date === this.periodDate) this.hoursReading = false;
     }
   }
-  #period(date: string): void {
+  #period(direction: -1 | 1): void {
     if (!this.isConnected || this.#blocked || this.editorOpen || !this.lookups) return;
+    const from = this.periodFrom;
+    if (!from) return;
+    const step = periodStep(from, direction);
+    if (!this.hours && this.periodDate === step) return;
+    const date = !this.hours && this.periodDate !== from.start ? from.start : step;
     this.periodDate = date;
     this.hours = null;
     this.queue = [];
@@ -451,18 +466,26 @@ export class AttendanceCorrectionsScreen extends LitElement {
     </section>`;
   }
   #periodControls(disabled: boolean) {
-    return html`<div class="selectors">
-        <wt-input
-          name="hoursPeriodDate"
-          type="date"
-          .label=${t("hours.window")}
-          .value=${this.periodDate}
-          .disabled=${disabled || !this.lookups}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.#period(event.detail.value);
-          }}
-        ></wt-input>
+    const from = this.periodFrom;
+    const unavailable = disabled || !this.lookups || !from;
+    return html`<div class="actions period" role="group" aria-label=${t("hours.window")}>
+        <wt-button
+          data-hours-previous
+          variant="secondary"
+          .disabled=${unavailable || (!this.hours && !!from && this.periodDate === periodStep(from, -1))}
+          @click=${() => this.#period(-1)}
+          >${t("hours.previous")}</wt-button
+        >
+        <span data-hours-period aria-live="polite"
+          >${this.hours ? periodLabel(this.hours.period) : from ? requestedPeriodLabel(from, this.periodDate) : nothing}</span
+        >
+        <wt-button
+          data-hours-next
+          variant="secondary"
+          .disabled=${unavailable || (!this.hours && !!from && this.periodDate === periodStep(from, 1))}
+          @click=${() => this.#period(1)}
+          >${t("hours.next")}</wt-button
+        >
       </div>
       ${this.#monthlyClose(disabled)}
       <div class="actions">
@@ -487,28 +510,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
               >`
             : nothing
         }
-        <wt-button
-          data-hours-previous
-          variant="secondary"
-          .disabled=${disabled || !this.hours}
-          @click=${() => {
-            if (this.hours) {
-              const date = new Date(this.hours.period.start + "T00:00:00Z");
-              date.setUTCDate(date.getUTCDate() - 1);
-              this.#period(date.toISOString().slice(0, 10));
-            }
-          }}
-          >${t("hours.previous")}</wt-button
-        >
-        <wt-button
-          data-hours-next
-          variant="secondary"
-          .disabled=${disabled || !this.hours}
-          @click=${() => {
-            if (this.hours) this.#period(this.hours.period.end);
-          }}
-          >${t("hours.next")}</wt-button
-        >
         <wt-button
           data-hours-refresh
           variant="secondary"
@@ -598,7 +599,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.selectedItemId = item.id;
     this.view = null;
     const change = item.changes[0]!;
-    this.date = storedTime(change.at, change.offsetMinutes).slice(0, 10);
+    this.date = wallClock(change.at, change.offsetMinutes).date;
     void this.#day();
   }
   #edit(changes: AttendanceChange[]): void {
@@ -789,14 +790,24 @@ export class AttendanceCorrectionsScreen extends LitElement {
         : entry.entryKind === "correction"
           ? t("attendance.proposed")
           : t("attendance.original");
+    const timeZone = this.mode === "hours" ? this.view?.timeZone : undefined;
+    const time = timeZone
+      ? hoursTime(entry.eventAt, entry.offsetMinutes, timeZone, undefined, this.periodFrom?.start)
+      : storedAttendanceTime(entry.eventAt, entry.offsetMinutes);
+    const recordedAt = timeZone
+      ? dateTimeFormat(currentLocale(), {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone,
+        }).format(new Date(entry.recordedAt))
+      : entry.recordedAt;
     return html`<li>
       <span data-entry-kind
         >${["in", "out", "break_start", "break_end"].includes(entry.entryKind) ? t(`clock.${entry.entryKind as "in" | "out" | "break_start" | "break_end"}`) : entry.extension?.missingEntryKind ? t(`clock.${entry.extension.missingEntryKind}`) : nothing}</span
-      ><span> · ${label}: </span
-      ><time datetime=${entry.eventAt}>${storedTime(entry.eventAt, entry.offsetMinutes)}</time>
+      ><span> · ${label}: </span><time datetime=${entry.eventAt}>${time}</time>
       <p>
         ${author === "automatic" ? t("attendance.author_automatic") : this.#person(entry.recordedByPersonId ?? entry.personId)}
-        · ${t("attendance.recorded")}: <time datetime=${entry.recordedAt}>${entry.recordedAt}</time>
+        · ${t("attendance.recorded")}: <time datetime=${entry.recordedAt}>${recordedAt}</time>
       </p>
       ${entry.correctionReason ? html`<p>${entry.correctionReason}</p>` : nothing}${entry.extension?.selfApproved ? html`<p>${t("attendance.self_approved")}</p>` : nothing}
     </li>`;
@@ -866,7 +877,10 @@ export class AttendanceCorrectionsScreen extends LitElement {
       ${
         this.view
           ? html`<section data-day>
-              <h2>${this.#person(this.view.personId)} · ${this.view.date}</h2>
+              <h2>
+                ${this.#person(this.view.personId)} ·
+                ${this.mode === "hours" ? hoursDate(this.view.date, this.periodFrom?.start) : this.view.date}
+              </h2>
               ${this.view.record.entries.length === 0 ? html`<p>${t("attendance.no_times")}</p>` : nothing}
               <ul>
                 ${this.view.record.entries.map((projected) => html`${this.#history(projected.entry)}${projected.effective && projected.author.kind === "automatic" ? html`<li>${t("attendance.automatic_counted")}</li>` : nothing}${projected.confirmedByWorker ? html`<li>${t("attendance.confirmed_by_worker")}</li>` : nothing}${projected.selfApproved ? html`<li>${t("attendance.self_approved")}</li>` : nothing}${projected.effective && !ownDay ? html`<li><wt-button data-retime .disabled=${disabled} variant="primary" @click=${() => this.#retime(projected.entry)}>${t("attendance.propose")}</wt-button></li>` : nothing}`)}

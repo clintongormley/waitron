@@ -5,7 +5,11 @@ import type { AttendanceDayView, OwnAttendanceCommand } from "@waitron/dashboard
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
-import { attendanceInbox, attendancePrompt } from "../../test/attendance-fixtures.js";
+import {
+  attendanceEntry,
+  attendanceInbox,
+  attendancePrompt,
+} from "../../test/attendance-fixtures.js";
 import type { MyHoursPanel } from "./my-hours-panel.js";
 const modules = import.meta.glob<typeof import("./my-hours-panel.js")>("./my-hours-panel.ts");
 const locale = currentLocale();
@@ -125,6 +129,28 @@ it("makes zero reads while inactive, starts lazily and releases private content 
   await el.updateComplete;
   await ready(el);
   expect(paths.filter((p) => p.endsWith("/inbox"))).toHaveLength(2);
+});
+it("shows both clock stamps in a personal Hours question", async () => {
+  const value = inbox();
+  value.prompts[0]!.history[0]!.eventAt = "2026-01-05T17:00:00.000Z";
+  value.prompts[0]!.history.unshift(
+    attendanceEntry({
+      entryId: "original-in",
+      personId: "p1",
+      entryKind: "in",
+      eventAt: "2026-01-05T09:00:00.000Z",
+    }),
+  );
+  const { el } = await mount({
+    fetch: async (url) =>
+      url.endsWith("/inbox") ? value : hoursView({ selection: { kind: "week" } }),
+  });
+  await ready(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll("article time")].map((time) =>
+      time.getAttribute("datetime"),
+    ),
+  ).toEqual(["2026-01-05T09:00:00.000Z", "2026-01-05T17:00:00.000Z"]);
 });
 it("reads the current own day before fixing and sends a reasoned request without person or manager authority", async () => {
   const { el, sent, paths } = await mount();

@@ -123,19 +123,21 @@ export async function mountManagerHours(
       if (fail) throw new Error("offline");
       if (path.includes("/hours?")) {
         const args = new URL(path, location.origin).searchParams;
+        const selection = {
+          kind: "pay-period",
+          ...(args.has("date") ? { date: args.get("date")! } : {}),
+        } as const;
         return Response.json({
           ...data.hours,
           people: data.hours.people.map((person) => ({
             ...person,
             hours: {
               ...person.hours,
+              selection,
               period: data.hours.period,
             },
           })),
-          selection: {
-            kind: "pay-period",
-            ...(args.has("date") ? { date: args.get("date") } : {}),
-          },
+          selection,
         });
       }
       if (path.endsWith("/queue")) return Response.json({ items: [] });

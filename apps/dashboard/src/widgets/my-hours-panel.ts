@@ -524,7 +524,7 @@ export class MyHoursPanel extends LitElement {
     return html`<article>
       ${prompt.businessDay ? html`<h3>${prompt.businessDay}</h3>` : nothing}
       <ul>
-        ${prompt.history.map(attendanceHistory)}
+        ${prompt.history.map((entry) => attendanceHistory(entry))}
       </ul>
       <div class="actions">
         ${prompt.kind === "automatic-out" ? button("confirm", t("attendance.confirm")) : nothing}${prompt.kind === "proposal" ? html`${button("accept", t("attendance.accept"))}${button("disagree", t("attendance.disagree"))}` : button("edit", t("attendance.fix_hours"))}

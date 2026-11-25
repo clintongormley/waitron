@@ -53,10 +53,12 @@ async function choose(app: ManagerHoursLeaveApp, decision: "keep" | "discard") {
 it("protects a manager Hours proposal on native Escape, page leave and selector changes", async () => {
   const m = await mount();
   await change(m.root, "attendancePerson", "retained");
-  await change(m.root, "hoursPeriodDate", "2025-12-01");
+  const previous = m.root.querySelector<HTMLElement>("[data-hours-previous]")!;
+  expect(previous).toHaveProperty("disabled", true);
+  previous.click();
   expect(m.editor.view?.personId).toBe("worker");
   expect(m.native.value).toBe("Finished the stock count");
-  expect(m.reads.some((r) => r.path.includes("date=2025-12-01"))).toBe(false);
+  expect(m.reads.some((r) => r.path.includes("date=2025-12-31"))).toBe(false);
   await userEvent.keyboard("{Escape}");
   await choose(m.app, "keep");
   expect(m.editor.open).toBe(true);
