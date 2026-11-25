@@ -125,8 +125,13 @@ async function saleIdOf(billId: string) {
 /** The printed lines from the first item to the end of the VAT table, spaces collapsed. */
 function itemsAndVat(text: string): string[] {
   const lines = text.split("\n").map((line) => line.replace(/\s+/gu, " ").trim());
-  const first = lines.findIndex((line) => /Lunch menu/u.test(line));
-  const total = lines.findIndex((line, at) => at > first && /^TOTAL/iu.test(line));
+  const total = lines.findIndex((line) => /^TOTAL/iu.test(line));
+  // The items start after the last line giving a date and time.
+  const dated = lines
+    .slice(0, total)
+    .map((line) => /\d{4}, \d{2}:\d{2}$/u.test(line))
+    .lastIndexOf(true);
+  const first = dated + 1;
   const vat = lines.slice(total + 1).filter((line) => /\d+ ?%/u.test(line));
   return [
     ...lines.slice(first, total).filter((line) => line !== "" && !/^-+$/u.test(line)),
@@ -188,10 +193,10 @@ async function hakeSupplement(cents: number | null) {
 }
 
 const DIVIDED = [
-  "1 Lunch menu 14,00",
   "1 Soup A",
   "1 Hake A",
   "1 Lemonade B",
+  "1 Lunch menu 14,00",
   "A 10% 10,65 1,07 11,72",
   "B 21% 1,88 0,40 2,28",
 ];
@@ -217,10 +222,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
       await printSpecBill(spec, bill.partyId, bill.tabId);
       const { original, settled, bySaleId } = await prints(bill.tabId);
       expect(itemsAndVat(original)).toEqual([
-        "1 Lunch menu 14,00",
         "1 Soup A",
         "1 Hake +2,00 A",
         "1 Lemonade B",
+        "1 Lunch menu 14,00",
         "A 10% 12,47 1,25 13,72",
         "B 21% 1,88 0,40 2,28",
       ]);
@@ -237,11 +242,11 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
-      expect.stringMatching(/^Descuento 10 ?% -1,40$/u),
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
+      "1 Lunch menu 14,00",
+      expect.stringMatching(/^Descuento 10 ?% -1,40$/u),
       "A 10% 9,59 0,96 10,55",
       "B 21% 1,69 0,36 2,05",
     ]);
@@ -281,10 +286,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
       creditId,
     );
     expect(itemsAndVat(credit)).toEqual([
-      "-1 Lunch menu -14,00",
       "-1 Soup A",
       "-1 Hake A",
       "-1 Lemonade B",
+      "-1 Lunch menu -14,00",
       "A 10% -10,65 -1,07 -11,72",
       "B 21% -1,88 -0,40 -2,28",
     ]);
@@ -297,10 +302,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
+      "1 Lunch menu 14,00",
       "1 Agua mineral 2,00 A",
       expect.stringMatching(/^Descuento 100 ?% -2,00 A$/u),
       // 14.00 shared 12.25 : 1.75 by menu price, the 12.25 divided 3.13, 7.12 and 2.00.

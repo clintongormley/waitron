@@ -150,10 +150,10 @@ describe("reports of a takeaway set menu divided between 10% and 21%", () => {
       },
     });
     expect(await detailOf(bill.tabId)).toEqual([
-      ["Lunch menu", "14.00"],
       ["Soup", "0.00"],
       ["Hake", "0.00"],
       ["Lemonade", "0.00"],
+      ["Lunch menu", "14.00"],
     ]);
   });
 
@@ -179,10 +179,10 @@ describe("reports of a takeaway set menu divided between 10% and 21%", () => {
         },
       });
       expect(await detailOf(bill.tabId)).toEqual([
-        ["Lunch menu", "14.00"],
         ["Soup", "0.00"],
         ["Hake", "2.00"],
         ["Lemonade", "0.00"],
+        ["Lunch menu", "14.00"],
       ]);
     } finally {
       lunch.versionId = await hakeSupplement(grossPrice);

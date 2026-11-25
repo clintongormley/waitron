@@ -685,10 +685,10 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
   // The plan's worked example.
   const DIVIDED = {
     rows: [
-      ["Lunch menu", 0, 1000, -1400],
       ["Soup", 358, 1000, 358],
       ["Hake", 814, 1000, 814],
       ["Lemonade", 228, 2100, 228],
+      ["Lunch menu", 0, 1000, -1400],
     ],
     total: 1400,
     vat: [
@@ -700,10 +700,10 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
   // S3: every dish at 10%, so the set menu files its whole price.
   const WHOLE = {
     rows: [
-      ["Lunch menu", 1400, 1000, null],
       ["Soup", 0, 1000, null],
       ["Hake", 0, 1000, null],
       ["Lemonade", 0, 1000, null],
+      ["Lunch menu", 1400, 1000, null],
     ],
     total: 1400,
     vat: [{ rate: "10.00", base: "12.73", tax: "1.27" }],
@@ -763,10 +763,10 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
       .where(eq(sales.correctsSaleId, saleId!));
     expect(await filed(tab.tabId, credit!.id)).toEqual({
       rows: [
-        ["Lunch menu", -1400, 1000, null],
         ["Soup", 0, 1000, null],
         ["Hake", 0, 1000, null],
         ["Lemonade", 0, 1000, null],
+        ["Lunch menu", -1400, 1000, null],
       ],
       total: -1400,
       vat: [{ rate: "10.00", base: "-12.73", tax: "-1.27" }],
@@ -821,7 +821,7 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
           { ...wholePayment("14.00"), method: "cash", tendered: "14.00" },
           venue.operator,
         ),
-      ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 2 } });
+      ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 1 } });
     } finally {
       await inTx(venue, (tx) => tx.insert(productTakeawayVatRates).values(saved.rates));
     }
@@ -881,7 +881,7 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
         { ...wholePayment("14.00"), method: "cash", tendered: "14.00" },
         venue.operator,
       ),
-    ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 4 } });
+    ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 3 } });
     expect(await paymentsOf(venue, tab.tabId)).toEqual([]);
 
     const paymentId = await inTx(venue, (tx) => capturedCardPayment(tx, venue, tab.tabId, "14.00"));
