@@ -1221,6 +1221,12 @@ default. The owner landed #3876 on 2026-11-20 ("land it"), whose description lis
 change. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tables keyed to a dish
 line by hand; nothing checks it.
 
+_2026-11-25: the owner's answers of 24 November replace D1 and D3 (A1515 piece 1, pull request 4,
+[plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)). D1: **Reopen to split**
+asks nobody for a PIN; the credit note names the signed-in person, backed by the reopened bill it
+opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to the reopened bill
+("2 B"); one holding a payment on its own receipt is still refused (owner, "ok", 24 November)._
+
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
 The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,

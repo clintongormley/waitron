@@ -289,8 +289,7 @@ disponible para devolver.
 
 En la ventana de pagos de la cuenta, elige **Devolver** junto al pago. La ventana **Devolver un
 pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **Importe a devolver**.
-Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo. En una cuenta impresa, un pago de artículos
-concretos se devuelve entero y después esos artículos pueden pagarse de nuevo.
+Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo.
 
 Mientras la cuenta no tenga factura, o cuando su factura ya ha descontado ese pago, **Devolver**
 junto a un pago que tiene su propio ticket abre [Devolver dinero](table-service.md#give-money-back)
@@ -746,8 +745,8 @@ nueva**.
 
 Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir para dividir**. El
 ticket se abona y sus platos pasan a una cuenta nueva, listos para [**Mover platos…**](table-service.md#move-dishes).
-Una vez pagada una parte, ya no se puede dividir así: los demás clientes pagan el resto con
-**Cobrar**.
+Lo ya pagado cuenta para la cuenta nueva. Una cuenta con un pago que tiene su propio ticket no se
+puede dividir así: cobra el resto con **Una cantidad** o **Dividir a partes iguales**.
 
 Cuando un cliente ya ha pagado una parte de la cuenta con
 [un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta
@@ -1015,10 +1014,12 @@ toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos
 cuenta. Si no pueden volver, se quedan en una cuenta propia, para cobrarlos allí: en una mesa
 aparece en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
-y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, los artículos se
-siguen cobrando en esa misma cuenta. Una cuenta impresa ofrece estas opciones para cobrar lo que
-queda. Si la cuenta está presentada para su cobro y aún no se ha emitido su factura, elige
-**Cobrar por partes** para ver las mismas opciones.
+y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
+primero abona su ticket y pasa sus platos a una cuenta abierta, y después cobra los elegidos en una
+cuenta propia. Si la tarjeta se rechaza, todos los platos se quedan en esa cuenta abierta, para
+imprimirla de nuevo o cobrarla. Si la cuenta está presentada para su cobro y aún no se ha emitido
+su factura, elige **Cobrar por partes** para ver las mismas opciones. Un pedido de mostrador ya
+enviado a cocina se cobra entero, por importe o a partes iguales.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.

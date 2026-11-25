@@ -272,8 +272,7 @@ available to refund.
 In the bill's payment window, choose **Refund** beside the payment. The **Refund a payment**
 window asks how much to refund and why. For **Part of it**, enter the **Amount to refund**. Choose
 the **Reason** from the list. A reason that needs a note, such as **Other**, asks you to type one,
-and the note is recorded as the reason. On a printed bill, a payment for particular items is
-refunded in full, and those items can then be paid for again.
+and the note is recorded as the reason.
 
 While the bill has no invoice, or once its invoice has taken that payment off, **Refund** beside a
 payment that has a ticket of its own opens [Give money back](table-service.md#give-money-back) on
@@ -703,8 +702,8 @@ A printed bill takes no more dishes. If the guests order something else, put it 
 
 If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The receipt
 is credited and its dishes go onto a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
-Once part of the bill is paid it cannot be split this way: the other guests pay the rest with
-**Pay**.
+Money already paid counts towards the new bill. A bill with a payment on its own receipt cannot be
+split this way: take the rest with **An amount** or **Split equally**.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment
@@ -954,9 +953,11 @@ on this bill. Choosing every dish pays the whole bill. If the card is declined o
 their own, to be paid there: at a table it is listed in the bill switcher, and at the Counter under
 **Parked orders**. While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
-On a printed bill, items are still paid on that bill. A printed bill offers these choices for what
-it still owes. If the bill is presented for collection and its invoice has yet to be issued,
-choose **Pay in parts** to see the same choices.
+On a printed bill, **Items** first credits its receipt and puts its dishes on an open bill, then
+pays the chosen ones on a bill of their own. If the card is declined, every dish stays on that open
+bill, to print again or pay. If the bill is presented for collection and its invoice has yet to be
+issued, choose **Pay in parts** to see the same choices. A Counter order already sent to the kitchen
+is paid whole, by an amount or in equal shares.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.
