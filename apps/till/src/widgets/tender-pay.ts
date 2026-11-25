@@ -318,7 +318,7 @@ export class TillTenderPay extends LitElement {
   /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */
   @property({ type: Boolean }) held = false;
   @property() mode: OrderFlow = "prepay";
-  /** Only a weighed dish's weight entry, for a screen that takes payment elsewhere. */
+  /** Only amount entry, for a screen that takes payment elsewhere. */
   @property({ type: Boolean }) weighOnly = false;
   @property({ type: Boolean }) paymentWindow = false;
   /** Ignored when {@link mode} is `"prepay"`, which has no separate collect stage. */
@@ -519,8 +519,8 @@ export class TillTenderPay extends LitElement {
     return (this.busy && !this.held) || this.store.sending || this.store.editsLocked;
   }
 
-  #entryBlocked(): boolean {
-    return this.view === "weighing" ? this.#quantityBlocked() : this.busy;
+  #cancelBlocked(): boolean {
+    return this.busy && (this.view !== "weighing" || !this.held);
   }
 
   #requestCancel(): void {
@@ -529,13 +529,13 @@ export class TillTenderPay extends LitElement {
       this.#cancel();
       return;
     }
-    if (this.#entryBlocked()) return;
+    if (this.#cancelBlocked()) return;
     if (this.#entryScope && this.#leave) {
       void this.#leave.request({
         scopes: [this.#entryOwner],
         reason: "cancel",
         proceed: () => {
-          if (this.isConnected && !this.#entryBlocked()) this.#cancel();
+          if (this.isConnected && !this.#cancelBlocked()) this.#cancel();
         },
       });
     } else this.#cancel();
@@ -553,9 +553,14 @@ export class TillTenderPay extends LitElement {
   }
 
   #onProductSelected(product: TillProduct): void {
-    if (!this.isConnected || this.#quantityBlocked() || soldByTheUnit(product)) return;
+    const canOpen = () =>
+      this.isConnected &&
+      !this.#quantityBlocked() &&
+      this.view !== "card_outcome" &&
+      this.view !== "collecting";
+    if (soldByTheUnit(product) || !canOpen()) return;
     const select = () => {
-      if (!this.isConnected || this.#quantityBlocked()) return;
+      if (!canOpen()) return;
       this.#finishEntry();
       this.selected = product;
       this.entry = "";
@@ -613,12 +618,8 @@ export class TillTenderPay extends LitElement {
 
   #onPadChange(event: Event): void {
     event.stopPropagation();
-    if (
-      !this.isConnected ||
-      !(event.currentTarget as HTMLElement).isConnected ||
-      this.#entryBlocked()
-    )
-      return;
+    const blocked = this.view === "weighing" ? this.#quantityBlocked() : this.busy;
+    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || blocked) return;
     this.entry = (event as CustomEvent<{ value: string }>).detail.value;
     this.#entryScope?.changed();
   }
@@ -1668,7 +1669,7 @@ export class TillTenderPay extends LitElement {
         @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
       ></till-numeric-pad>
       ${
-        manualMeasure && this.entry !== "" && invalid
+        manualMeasure && invalid && compareDecimal(quantity, decimal("0")) > 0
           ? html`<p role="status">${t("line.quantity_invalid")}</p>`
           : nothing
       }
@@ -1685,7 +1686,7 @@ export class TillTenderPay extends LitElement {
         <wt-button
           class="cancel"
           variant="secondary"
-          ?disabled=${blocked}
+          ?disabled=${this.#cancelBlocked()}
           @click=${() => this.#requestCancel()}
         >
           ${t("action.cancel")}

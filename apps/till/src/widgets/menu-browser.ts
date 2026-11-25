@@ -479,8 +479,7 @@ export class TillMenuBrowser extends LitElement {
   /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
 
-  /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
-   * pay widget does not take the dish. */
+  /** Uses the shared amount keypad when this screen takes payment elsewhere. */
   @property({ type: Boolean }) weighs = false;
 
   #waitingForMenu(): boolean {

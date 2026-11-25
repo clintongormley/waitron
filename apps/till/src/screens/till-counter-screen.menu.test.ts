@@ -294,10 +294,15 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!.click();
     await panel.updateComplete;
     expect(add()?.disabled).toBe(true);
-    await userEvent.keyboard("1000000000");
+    expect(amount()).toBe("");
+    expect(root.querySelector('[data-quantity-step="-1"]')!.hasAttribute("disabled")).toBe(true);
+    await userEvent.keyboard("999999999");
+    expect(root.querySelector('[data-quantity-step="1"]')!.hasAttribute("disabled")).toBe(true);
+    await userEvent.keyboard("{Backspace>9/}1000000000");
     expect(add()?.disabled).toBe(true);
-    await userEvent.keyboard("{Backspace>10/}");
-    await userEvent.keyboard("0,125");
+    await userEvent.keyboard("{Backspace>10/}0,");
+    expect(root.textContent).not.toContain(t("line.quantity_invalid"));
+    await userEvent.keyboard("125");
     expect(amount()).toBe("0,125");
     await userEvent.click(root.querySelector<HTMLElement>('[data-quantity-step="1"]')!);
     expect(amount()).toBe("1,125");

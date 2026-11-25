@@ -152,6 +152,9 @@ describe("till-table-order-screen: the last-added bar", () => {
       panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
     await userEvent.keyboard("250.5");
     expect(add().disabled).toBe(true);
+    expect(panel.shadowRoot!.querySelector('[role="status"]')?.textContent).toBe(
+      t("line.quantity_invalid"),
+    );
     await userEvent.keyboard("{Backspace}{Backspace}");
     expect(add().disabled).toBe(false);
     add().click();

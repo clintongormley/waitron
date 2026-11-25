@@ -7771,16 +7771,13 @@ describe("till-app", () => {
     precision: 0,
     hardwareUnit: null,
   };
-  const heldWineProduct: TillProduct = {
-    ...coffee,
-    unit: { ...mlUnit, abbreviation: { en: "ml" }, staffAbbreviation: "ml", measure: true },
-  };
+  const heldWineProduct: TillProduct = { ...coffee, unit: mlUnit };
   const liveWineProduct: TillProduct = {
     ...coffee,
     unit: { ...mlUnit, measure: true },
     offeredModifiers: [milkList],
   };
-  function heldWineOrder(extras: (typeof heldMilk)[]) {
+  function heldWineOrder(extras: (typeof heldMilk)[], product = heldWineProduct) {
     return {
       zoneId: null,
       kitchenNote: {
@@ -7798,7 +7795,7 @@ describe("till-app", () => {
           menuItemId: "menu-item-cafe-0",
           productId: "cafe",
           quantity: "250.000",
-          product: heldWineProduct,
+          product,
           ...(extras.length === 0 ? {} : { extras }),
         },
       ],
@@ -7820,8 +7817,22 @@ describe("till-app", () => {
     expect(counter.store.lines[0]!.product.offeredModifiers).toEqual([]);
     const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
     expect(basket.shadowRoot!.textContent).toContain("Café");
-    expect(basket.shadowRoot!.querySelector(".count")?.textContent).toBe("250 ml");
     expect(basket.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+  });
+
+  it("shows the saved unit of a reopened measured line", async () => {
+    const product: TillProduct = {
+      ...heldWineProduct,
+      unit: { ...mlUnit, abbreviation: { es: "ml" }, staffAbbreviation: "ml", measure: true },
+    };
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldWineOrder([], product)),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-vino" });
+    await flush(el);
+    const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
+    expect(basket.shadowRoot!.querySelector(".count")?.textContent).toBe("250 ml");
   });
 
   it("a held pick on a dish now sold in a measure is marked not offered", async () => {

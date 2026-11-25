@@ -1495,31 +1495,34 @@ describe("counter pay", () => {
     expect(api.recordSale).not.toHaveBeenCalled();
   });
 
-  it("lists the measured amount with its unit when asking about a late dish", async () => {
-    const el = await counterBasket({}, { products: [] });
-    const juice = menuOfferToTillProduct(
-      {
-        ...offer(BREAKFAST_MENU, "Omelette"),
-        name: "Juice",
-        unit: {
-          ...unit,
-          name: { en: "millilitre" },
-          abbreviation: { en: "ml" },
-          staffAbbreviation: "ml",
-          measure: true,
+  it.each([{ en: "ml" }, {}] as Record<string, string>[])(
+    "lists a late measured dish with its short unit label (%j)",
+    async (abbreviation) => {
+      const el = await counterBasket({}, { products: [] });
+      const juice = menuOfferToTillProduct(
+        {
+          ...offer(BREAKFAST_MENU, "Omelette"),
+          name: "Juice",
+          unit: {
+            ...unit,
+            name: { en: "millilitre" },
+            abbreviation,
+            staffAbbreviation: "ml",
+            measure: true,
+          },
         },
-      },
-      "v1",
-    );
-    counterScreen(el).store.addProduct(juice, "250");
-    counterMenus = menu("lunch", "zone-bar", counterFlow);
-    await poll(el);
+        "v1",
+      );
+      counterScreen(el).store.addProduct(juice, "250");
+      counterMenus = menu("lunch", "zone-bar", counterFlow);
+      await poll(el);
 
-    emit(counterScreen(el), "confirm-payment", CASH);
-    await flush(el, 6);
+      emit(counterScreen(el), "confirm-payment", CASH);
+      await flush(el, 6);
 
-    expect(windowDishes(el)).toEqual(["250 ml× Juice"]);
-  });
+      expect(windowDishes(el)).toEqual(["250 ml× Juice"]);
+    },
+  );
 
   it("records the sale once with the ended menu once the kitchen agreed, and does not ask again", async () => {
     const el = await lateCounter();

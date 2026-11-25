@@ -681,6 +681,38 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(0); // the weighed product was not rung up
   });
 
+  it("can cancel amount entry after the basket is locked", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", ham);
+    await el.updateComplete;
+    await type(el, "0.320");
+    store.lockEdits();
+    await el.updateComplete;
+    expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(store.lines).toHaveLength(0);
+  });
+
+  it("keeps a declined card's Retry when staff tap a measured product", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardOutcome: { outcome: "declined" },
+      cardProvider: "simulator",
+    });
+    expect(query(el, ".retry")).not.toBeNull();
+    store.emit("product-selected", {
+      ...portion,
+      unit: { ...portion.unit!, precision: 0, measure: true },
+    } satisfies TillProduct);
+    await el.updateComplete;
+    expect(query(el, ".retry")).not.toBeNull();
+    expect(query(el, "till-numeric-pad")).toBeNull();
+  });
+
   it("prompts for kg when a weight product is selected", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
@@ -688,6 +720,7 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("weigh.prompt"));
     expect(query(el, "till-numeric-pad")).not.toBeNull();
+    expect(query(el, "[data-quantity-step]")).toBeNull();
   });
 
   it("ignores a non-weight product selection", async () => {
