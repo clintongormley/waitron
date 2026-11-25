@@ -125,8 +125,7 @@ approve the new request in Cloud.
 
 At the end of Preparation, the **Recovery pack** step shows the master key once. Choose
 **Download**, **Print** or **Copy**, keep the pack or the copied key somewhere other than the box, then choose
-**Continue**. If setup offers **Save as a file**, keep that file with your
-other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
+**Continue**. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose the recovery pack that holds this backup's
 master key with **Choose the recovery pack PDF**; or type the master key printed on it in **Master key**. A pack with

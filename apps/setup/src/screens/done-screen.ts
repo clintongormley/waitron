@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-master-key-box.js";
-import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { JoinCopyStage, SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -66,7 +66,6 @@ export class SetupDoneScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     statusStyles,
-    errorStyles,
     introStyles,
     modePillStyles,
     css`
@@ -272,7 +271,7 @@ export class SetupDoneScreen extends LitElement {
       );
       this.#recoveryPackUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     } catch {
-      // The server key can still be saved as text.
+      // The master key box then offers Copy alone.
     }
   }
 

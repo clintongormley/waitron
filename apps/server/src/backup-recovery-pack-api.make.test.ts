@@ -508,9 +508,15 @@ describe("a made pack", () => {
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: oldMasterKey.name }]);
     const retried = await fixture().make(true);
     expect(retried.status).toBe(200);
+    const shown = shownMasterKey(retried);
     expect(await storedMasterKeys()).toMatchObject([
       { number: 1, name: oldMasterKey.name },
-      { number: 2, name: shownMasterKey(retried).masterKeyName, madeBy: admin.personId },
+      {
+        number: 2,
+        name: shown.masterKeyName,
+        madeBy: admin.personId,
+        checkValue: masterKeyCheckValue(decodeMasterKeyCode(shown.masterKey!)),
+      },
     ]);
     expect(await packs()).toMatchObject([{ number: 1 }]);
   });

@@ -188,8 +188,8 @@ function keepList(input: PackStatusInput): Keep[] {
 }
 
 /**
- * The pack showing the current master key is the only copy of the key restore asks for, so a later
- * pack, received or not, never hides that it was not confirmed received.
+ * The box keeps no copy of the key restore asks for, so a later pack, received or not, never hides
+ * that the pack showing the current master key was not confirmed received.
  */
 function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
   const view = (record: RecoveryPackRecord, holdsCurrentMasterKey: boolean) => ({

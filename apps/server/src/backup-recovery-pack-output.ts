@@ -83,7 +83,7 @@ export async function drawRecoveryPack(
 }
 
 /**
- * The pack every setup ends with: the master key's page alone. A drawing
+ * The pack the provision route ends with: the master key's page alone. A drawing
  * failure is logged and answers no pack; the key is still shown on the screen.
  */
 export async function makeMasterKeyRecoveryPack(

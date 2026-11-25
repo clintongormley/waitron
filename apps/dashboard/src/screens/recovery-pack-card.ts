@@ -256,7 +256,7 @@ export class RecoveryPackCard extends LitElement {
   }
 
   /**
-   * The PDF holds secrets, so no link to it outlives the card or its permission. A pack older than
+   * The PDF can hold secrets, so no link to it outlives the card or its permission. A pack older than
    * the one on offer, whose receipt was confirmed late, never replaces it; its receipt changes the
    * status either way.
    */

@@ -42,6 +42,18 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
+// GB is not offered for venue setup yet; its `GB-vat` territory is the one whose module has no tax regime.
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/country-packs")>();
+  return {
+    ...actual,
+    getVenueSetupCountryPack: (code: string) =>
+      code.trim().toUpperCase() === "GB"
+        ? { ...actual.getCountryPack("GB")!, availableForVenueSetup: true }
+        : actual.getVenueSetupCountryPack(code),
+  };
+});
+
 type Mode = "demo" | "prepare" | "live";
 type Box = { environment: DeploymentEnvironment; devMode: boolean; installationOrigin?: "usb" };
 
@@ -124,6 +136,34 @@ function body(mode: Mode): Record<string, unknown> {
           },
         }
       : {}),
+  };
+}
+
+/** A Preparation body for a venue whose territory has no tax regime (`fiscal-none`). */
+function britishPrepareBody(): Record<string, unknown> {
+  const prepare = body("prepare");
+  return {
+    ...prepare,
+    venue: {
+      country: "GB",
+      taxId: "GB 123 456 789",
+      legalName: "Readiness Ltd",
+      taxpayerDomicile: "1 Fiscal Quay, SW1A 1AA London",
+      name: "Front of house",
+      fiscalTerritory: "GB-vat",
+      invoiceLocales: ["en-GB"],
+      addressLine1: "1 High Street",
+      addressLine2: null,
+      postalCode: "SW1A 1AA",
+      city: "London",
+      province: "Greater London",
+      timeZone: "Europe/London",
+      dayCutover: "05:00",
+      seriesCode: "A",
+      fullSeriesCode: "FF",
+      correctiveSeriesCode: "R",
+      admin: (prepare.venue as { admin: unknown }).admin,
+    },
   };
 }
 
@@ -754,15 +794,21 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   });
 
   it.each([
-    [false, "http://box.test", "setup.connection_insecure"],
-    [true, "https://other.test", "setup.owner_required"],
-  ])("refuses Preparation before writing on secure=%s from %s", async (secure, origin, code) => {
-    const response = await realApp(PREPRODUCTION_BOX)(body("prepare"), { secure, origin });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: { code, params: {} } });
-    emptyVenue();
-    expect(await createSetupOperationStore(stateDir).read()).toBeNull();
-  });
+    [false, "http://box.test", "setup.connection_insecure", "ES-common"],
+    [true, "https://other.test", "setup.owner_required", "ES-common"],
+    [false, "http://box.test", "setup.connection_insecure", "GB-vat"],
+    [true, "https://other.test", "setup.owner_required", "GB-vat"],
+  ])(
+    "refuses Preparation before writing on secure=%s from %s with %s for %s",
+    async (secure, origin, code, territory) => {
+      const request = territory === "GB-vat" ? britishPrepareBody() : body("prepare");
+      const response = await realApp(PREPRODUCTION_BOX)(request, { secure, origin });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: { code, params: {} } });
+      emptyVenue();
+      expect(await createSetupOperationStore(stateDir).read()).toBeNull();
+    },
+  );
 
   it("returns a new usable Preparation pack after retrying a failure before publication", async () => {
     const request = body("prepare");

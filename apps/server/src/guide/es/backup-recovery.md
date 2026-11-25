@@ -136,8 +136,7 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 
 Al terminar la Preparación, el paso **Paquete de recuperación** muestra la clave maestra una sola
 vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clave copiada fuera del servidor y elige
-**Continuar**. Si la configuración ofrece **Guardar en un archivo**, guarda ese
-archivo con tus otros documentos de recuperación. Abre **Copias de seguridad** desde el aviso del
+**Continuar**. Abre **Copias de seguridad** desde el aviso del
 panel para configurar tus copias.
 
 Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
