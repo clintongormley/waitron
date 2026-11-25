@@ -3754,8 +3754,12 @@ it("makes Reload, not Put live now, the review's action once the values changed,
       return button === null ? null : [button.variant, button.disabled];
     });
   expect(buttons()).toEqual([["primary", false], null]);
-  await press(el, "put-live");
-  expect(bottomMessage(el)).toBe(declarationsChanged);
+  footerButton(el, "put-live")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(declarationsChanged));
+  // Focus is lost from a disabled button only once the page is drawn.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "reload"));
   const refused = [
     ["secondary", true],
     ["primary", false],
@@ -3773,8 +3777,10 @@ it("makes Reload, not Put live now, the review's action once the values changed,
   await press(el, "review");
   expect(buttons()).toEqual([["primary", false], null]);
   // A refusal raised by the values changing under the review, not by a send, is the same.
+  footerButton(el, "keep-editing")!.focus();
   await deliver(withEggs());
   expect(buttons()).toEqual(refused);
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "keep-editing"));
   await press(el, "reload");
   await press(el, "review");
   expect(buttons()).toEqual([["primary", false], null]);

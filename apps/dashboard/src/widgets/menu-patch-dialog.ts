@@ -12,6 +12,7 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type WtButton,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -246,6 +247,7 @@ export class MenuPatchDialog extends LitElement {
   }
 
   override updated(): void {
+    this.#leaveDisabledPutLive();
     const layout = this.renderRoot.querySelector(".layout");
     if (layout === this.#layout) return;
     this.#resize.disconnect();
@@ -595,6 +597,14 @@ export class MenuPatchDialog extends LitElement {
     this.step = step;
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>(focus)?.focus();
+  }
+
+  /** Disabled, Put live now would drop the focus it holds to the page behind the dialog. */
+  #leaveDisabledPutLive(): void {
+    const focused = (this.renderRoot as ShadowRoot).activeElement;
+    if (!this.#reviewOutdated() || focused?.getAttribute("data-test") !== "put-live") return;
+    const reload = this.renderRoot.querySelector<WtButton>('[data-test="reload"]')!;
+    void reload.updateComplete.then(() => reload.focus());
   }
 
   /** Whether what was reviewed is out of date, so only Reload leads on. */
