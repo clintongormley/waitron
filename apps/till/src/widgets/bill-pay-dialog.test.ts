@@ -29,7 +29,6 @@ function balanceOf(over: Partial<BillBalance> = {}): BillBalance {
     outstanding: "120.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
     ...over,
   };
 }
@@ -1332,7 +1331,6 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
       state: "received",
       createdAt: "2026-09-30T20:00:00.000Z",
       receivedAt: "2026-09-30T20:00:00.000Z",
-      lines: [],
       refunds: [],
       ...over,
     };
@@ -3258,7 +3256,6 @@ it.each(
             outstanding: "70.00",
             tips: "0.00",
             payments: [],
-            paidLines: [],
             captureWarning: { requestedAmount: "120.00", reportedAmount: "50.00" },
           },
         },

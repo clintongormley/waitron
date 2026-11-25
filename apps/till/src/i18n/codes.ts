@@ -609,10 +609,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That bill belongs to other guests",
     es: "Esa cuenta es de otros clientes",
   },
-  "bill.line_paid": {
-    en: "This item has already been paid for, so it cannot be changed, moved or charged again. Refund its payment first",
-    es: "Este artículo ya está pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago",
-  },
   "bill.received_exceeds_total": {
     en: "The bill would owe less than has already been paid on it. Take less off the bill, or refund the difference first",
     es: "La cuenta quedaría por debajo de lo que ya se ha pagado. Quita menos de la cuenta o devuelve antes la diferencia",
@@ -744,10 +740,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "tender.manual_refund_pin_required": {
     en: "A manager must enter their PIN to confirm this terminal refund",
     es: "Un responsable debe introducir su PIN para confirmar esta devolución en el datáfono",
-  },
-  "bill.refund_not_whole": {
-    en: "A payment for particular items can only be refunded in full, which frees those items to be paid for again",
-    es: "Un pago de artículos concretos solo se puede devolver entero, y así esos artículos se pueden volver a cobrar",
   },
   "bill.refund_unsupported": {
     en: "This card payment can't be refunded automatically. If it was taken on a separate terminal, refund it there and record it with a manager's PIN",

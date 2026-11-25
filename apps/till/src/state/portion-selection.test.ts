@@ -58,7 +58,6 @@ function balance(total: string, received: string, reserved = "0.00"): BillBalanc
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
   };
 }
 

@@ -127,7 +127,6 @@ it.each([false, true])(
         outstanding: "4.00",
         tips: "0.00",
         payments: [],
-        paidLines: [],
       },
     });
     expect(el.shadowRoot!.querySelectorAll("[data-sent-fallback] .sent-fallback-row")).toHaveLength(

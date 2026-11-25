@@ -4056,7 +4056,6 @@ describe("till-app logout while a request is waiting for the server", () => {
         reserved: "0.00",
         tips: "0.00",
         payments: [],
-        paidLines: [],
       }),
       getFiledTicket: vi.fn().mockResolvedValue(saleResult),
     });

@@ -104,7 +104,6 @@ function balance(over: Partial<BillBalance> = {}): BillBalance {
     outstanding: "39.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
     ...over,
   };
 }

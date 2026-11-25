@@ -1269,8 +1269,6 @@ export interface BillPaymentView extends OutsideCardDetails {
   state: "pending" | "received" | "failed" | "declined";
   createdAt: string;
   receivedAt: string | null;
-  /** An item payment's lines; `lineNo` is null for a line no longer on this bill. */
-  lines: { lineId: string; lineNo: number | null; quantity: string; amount: string }[];
   refunds: BillRefundView[];
 }
 
@@ -1301,8 +1299,6 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: string;
   payments: BillPaymentView[];
-  /** `paidQuantity` at three places, such as "1.000". */
-  paidLines: { lineId: string; lineNo: number; paidQuantity: string }[];
   /** On an open bill: the bill its chosen items moved to while a card payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
 }
@@ -1323,7 +1319,7 @@ export interface BillPaymentResult {
 
 type WholeBillTender = Omit<
   BillPaymentRequest,
-  "kind" | "shareOf" | "lines" | "amount" | "choice" | "submissionId" | "applied" | "tip"
+  "kind" | "shareOf" | "amount" | "submissionId" | "applied" | "tip"
 >;
 
 type CounterPaymentEdit = { revision: number; label?: string };
@@ -5038,7 +5034,7 @@ export class TillApi {
    * Takes a payment against the bill → `POST /api/working-orders/:id/payments`. A resend with the
    * same submission id and body is answered as the first was. A reader card's decline is an answer,
    * not a refusal. Refuses, among others, `bill.allocation_changed` (carrying the fresh `preview`),
-   * `bill.line_paid`, `bill.tip_not_allowed` (carrying `chargeable`), `bill.nothing_outstanding`,
+   * `bill.tip_not_allowed` (carrying `chargeable`), `bill.nothing_outstanding`,
    * `order.payment_in_flight`, `bill.refund_in_progress`, `working_order.not_open` and
    * `submission.id_reused`.
    */
@@ -5103,7 +5099,7 @@ export class TillApi {
   /** Gives money back from one payment of the bill →
    * `POST /api/working-orders/:id/payments/:paymentId/refunds`. Refuses, among others,
    * `authorization.not_permitted`, `pin.invalid`, `bill.refund_exceeds_payment`,
-   * `bill.refund_not_whole`, `bill.refund_unsupported` and `bill.manual_refund_pin_required`. */
+   * `bill.refund_unsupported` and `bill.manual_refund_pin_required`. */
   refundBillPayment(
     billId: string,
     paymentId: string,
@@ -5455,7 +5451,7 @@ export class TillApi {
   /**
    * Move whole dishes, named by line id, from one bill of a party to another, or to a new bill of
    * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
-   * bill they went to. Rejects, among others, `bill.line_paid`,
+   * bill they went to. Rejects, among others, `bill.received_exceeds_total`,
    * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
    * `invoiceChoice` answers `bill.merge_invoice_choice_required` for a move that takes every dish,
    * and is sent only when given, as {@link mergeBills} sends it.

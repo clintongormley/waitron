@@ -2208,8 +2208,6 @@ export const en = {
   "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
   "split.unconfirmed":
     "Reopen bill got no answer, so it may have been done. Check the table's bills before trying again.",
-  "split.refused_payments":
-    "Part of this bill was paid for by item, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
   "split.refused_left_unpaid": "This bill was recorded as left unpaid, so its guests have gone.",
   "split.refused_not_at_table": "Only a table's bill can be reopened.",
   "split.refused_not_issued": "This bill has no receipt yet.",
@@ -4607,8 +4605,6 @@ export const es: Record<StringKey, string> = {
   "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
   "split.unconfirmed":
     "Reabrir cuenta no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
-  "split.refused_payments":
-    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   "split.refused_left_unpaid": "Esta cuenta se registró como no pagada: los clientes se han ido.",
   "split.refused_not_at_table": "Solo se puede reabrir la cuenta de una mesa.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",

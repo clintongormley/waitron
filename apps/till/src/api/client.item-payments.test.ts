@@ -24,7 +24,6 @@ const balance: BillBalance = {
   overpaid: "0.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 
 describe("TillApi: Pay for items", () => {
@@ -82,7 +81,6 @@ describe("TillApi: Pay for items", () => {
           state: "received",
           createdAt: "2026-11-24T20:00:00.000Z",
           receivedAt: "2026-11-24T20:00:00.000Z",
-          lines: [],
           refunds: [],
         },
         balance,

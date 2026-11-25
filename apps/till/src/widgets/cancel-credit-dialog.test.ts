@@ -453,10 +453,6 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
   });
 
   it.each([
-    [
-      "bill.payments_received",
-      "Part of this bill was paid for by item, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
-    ],
     ["bill.left_unpaid", "This bill was recorded as left unpaid, so its guests have gone."],
     ["bill.not_at_table", "Only a table's bill can be reopened."],
     ["bill.not_issued", "This bill has no receipt yet."],
@@ -552,12 +548,6 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     await el.updateComplete;
     expect(text(unservedBox(el))).toContain(
       "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir cuenta.",
-    );
-
-    el.refusal = { code: "bill.payments_received" };
-    await el.updateComplete;
-    expect(actions(el).error).toBe(
-      "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
     );
 
     el.done = { corrective: "R/3" };

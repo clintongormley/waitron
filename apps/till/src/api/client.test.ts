@@ -1425,7 +1425,6 @@ describe("TillApi", () => {
         state: "received",
         createdAt: "2026-08-06T10:00:00.000Z",
         receivedAt: "2026-08-06T10:00:00.000Z",
-        lines: [],
         refunds: [],
       },
     });
@@ -6406,7 +6405,6 @@ describe("TillApi: a bill's payments", () => {
     state: "received",
     createdAt: "2026-09-30T20:00:00.000Z",
     receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
     refunds: [],
   };
   const balance: BillBalance = {
@@ -6418,7 +6416,6 @@ describe("TillApi: a bill's payments", () => {
     outstanding: "20.00",
     tips: "0.00",
     payments: [cashPayment],
-    paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "1.000" }],
   };
 
   it("getBillBalance GETs the bill's payments and answers its balance", async () => {

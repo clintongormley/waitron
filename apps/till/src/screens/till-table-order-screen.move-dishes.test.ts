@@ -419,7 +419,6 @@ describe("A803 move dishes panel", () => {
       outstanding: "11.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     };
     const el = await mountScreen({
       bills: [
@@ -611,7 +610,6 @@ describe("A803 move dishes refresh:", () => {
       outstanding: "27.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     };
     await el.updateComplete;
     await picker(el).updateComplete;
@@ -712,7 +710,6 @@ describe("A803 move dishes refresh:", () => {
       outstanding: "32.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     };
     const el = await mountScreen({ balance });
     await openMoveDishes(el);

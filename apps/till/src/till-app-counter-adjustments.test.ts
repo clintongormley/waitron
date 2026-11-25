@@ -2158,7 +2158,6 @@ describe("till-app: comping a stored counter order", () => {
             outstanding: "4.50",
             tips: "0.00",
             payments: [],
-            paidLines: [],
           }),
           retrieveWorkingOrder: vi
             .fn()
@@ -2307,7 +2306,6 @@ describe("till-app: comping a stored counter order", () => {
           outstanding: "3.50",
           tips: "0.00",
           payments: [],
-          paidLines: [],
         }),
         retrieveWorkingOrder: vi
           .fn()

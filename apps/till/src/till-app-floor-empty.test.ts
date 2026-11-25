@@ -270,7 +270,6 @@ it("says the read failed, not that the zone has no tables, when the re-read afte
         outstanding: "3.00",
         tips: "0.00",
         payments: [],
-        paidLines: [],
       })),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
       moveGuests,

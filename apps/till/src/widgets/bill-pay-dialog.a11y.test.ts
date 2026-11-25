@@ -28,7 +28,6 @@ const balance: BillBalance = {
   outstanding: "50.00",
   tips: "0.00",
   payments: [],
-  paidLines: [{ lineId: "l-3", lineNo: 3, paidQuantity: "1.000" }],
 };
 
 const lines: PayLine[] = [
@@ -845,7 +844,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
         received: "0.00",
         reserved: "0.00",
         outstanding: "62.40",
-        paidLines: [],
       },
       equipment,
     });
@@ -1140,7 +1138,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       state: "received",
       createdAt: "2026-09-30T20:00:00.000Z",
       receivedAt: "2026-09-30T20:00:00.000Z",
-      lines: [],
       refunds: [],
       ...over,
     });

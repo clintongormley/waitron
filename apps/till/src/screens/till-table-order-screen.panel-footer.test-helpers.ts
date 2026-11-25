@@ -52,7 +52,6 @@ export const footerBalance: BillBalance = {
   outstanding: "8.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 
 export function mountFooter(over: Partial<TillTableOrderScreen> = {}, theme?: "light" | "dark") {

@@ -237,6 +237,29 @@ it("offers no Change dish when the till does not have the dish's product", async
   );
 });
 
+it("offers and sends Change dish on a part-paid bill", async () => {
+  const el = await openRow({
+    lines: [line()],
+    bills: [{ ...bill("open"), outstanding: "8.00", hasPayments: true }],
+    billBalance: {
+      workingOrderId: "wo-4",
+      status: "open",
+      total: "10.00",
+      received: "2.00",
+      reserved: "0.00",
+      outstanding: "8.00",
+      tips: "0.00",
+      payments: [],
+    },
+  });
+  expect(offered(el)).toBe(true);
+  const seen = changes(el);
+  await editNote(el, "no cream");
+  await userEvent.click(q(el, "[data-sent-change]")!);
+  expect(seen).toHaveLength(1);
+  expect(seen[0]).toMatchObject({ lineNo: 1, patch: { note: "no cream" } });
+});
+
 it("offers no Change dish on a paid row", async () => {
   const orders: CurrentOrders = structuredClone(current());
   orders.groups[2]!.rows[0]!.billStatus = "settled";

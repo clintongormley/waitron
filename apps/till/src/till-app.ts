@@ -927,7 +927,6 @@ const TABLE_REFUSALS = new Set([
   "bill.presented",
   "bill.paid",
   "bill.other_party",
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "bill.not_overpaid",
@@ -961,7 +960,6 @@ const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.o
  * payments are read again, so the screen shows what the bill now holds. */
 const BILL_MONEY_REFUSALS = new Set([
   "bill.payments_received",
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "order.payment_in_flight",
@@ -982,7 +980,6 @@ const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
 
 /** A split refused for the state of one of its bills, each named when it is not on screen. */
 const SPLIT_BILL_REFUSALS: ReadonlySet<string> = new Set([
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "order.payment_in_flight",

@@ -851,13 +851,15 @@ describe("till-app: an adjustment with no answer", () => {
 describe("till-app: a refused adjustment", () => {
   it("shows a refusal that names no field above the action, and the action stays usable", async () => {
     const { el } = await mountApp({
-      applyAdjustment: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
+      applyAdjustment: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.received_exceeds_total", status: 409 }),
     });
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
-    expect(bottomMessage(el)).toBe(codeMessage("bill.line_paid"));
+    expect(bottomMessage(el)).toBe(codeMessage("bill.received_exceeds_total"));
     expect(
       (inDialog(el, "[data-adjust-confirm]") as HTMLElement & { disabled: boolean }).disabled,
     ).toBe(false);
@@ -1123,7 +1125,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
       const reads = vi.mocked(api.getTabLines).mock.calls.length;
       if (outcome === "applied")
         answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
-      else answer.reject({ code: "bill.line_paid" });
+      else answer.reject({ code: "bill.received_exceeds_total" });
       await flush(el);
       expect(dialog(el)).toBeNull();
       expect(banner(el)).toBeNull();

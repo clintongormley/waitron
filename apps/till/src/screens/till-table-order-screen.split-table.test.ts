@@ -95,7 +95,6 @@ function balanceOf(billId: string, total: string): BillBalance {
     outstanding: total,
     tips: "0.00",
     payments: [],
-    paidLines: [],
   };
 }
 

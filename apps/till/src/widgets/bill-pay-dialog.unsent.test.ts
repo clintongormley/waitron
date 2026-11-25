@@ -42,7 +42,6 @@ describe.each([
             outstanding: "40.00",
             tips: "0.00",
             payments: [],
-            paidLines: [],
           },
           refusal: { code: "bill.unsent_dishes", unsent: { billId: "bill-2" }, billLabel: label },
         },

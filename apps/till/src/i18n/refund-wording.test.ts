@@ -74,10 +74,6 @@ describe("A803 refund refusal wording", () => {
       "That is more than can be refunded from this payment. A tip is refunded on its own, or with all the remaining payment",
     ],
     [
-      "bill.refund_not_whole",
-      "A payment for particular items can only be refunded in full, which frees those items to be paid for again",
-    ],
-    [
       "payment.not_refundable",
       "This card payment can no longer be refunded. Reload the bill and try again",
     ],

@@ -943,19 +943,6 @@ describe("till-app: reopening a printed bill", () => {
     expect(doneText(el)).toBeNull();
   });
 
-  it("a bill paid for by item says so", async () => {
-    const server = billServer(async () => {
-      throw { code: "bill.payments_received", status: 409, workingOrderId: "wo-check" };
-    });
-    const { el } = await openSplit(server);
-    await confirmSplit(el);
-
-    expect(bottom(el)).toBe(
-      "Part of this bill was paid for by item, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
-    );
-    expect(doneText(el)).toBeNull();
-  });
-
   it("lists the dishes not marked served, and Mark served serves them and splits again", async () => {
     let refused = false;
     const server = billServer(async () => {

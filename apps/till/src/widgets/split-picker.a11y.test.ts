@@ -63,7 +63,6 @@ function source(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
   };
   const keyOf = (row: TabLine) => tabLinePortionKey(row, DISHES);
   return {

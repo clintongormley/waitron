@@ -717,7 +717,6 @@ describe("a payment's refunds", () => {
     state: "received",
     createdAt: "2026-09-30T20:00:00.000Z",
     receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
     refunds: [],
     ...over,
   });

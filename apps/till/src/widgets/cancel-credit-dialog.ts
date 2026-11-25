@@ -51,7 +51,6 @@ const TEXT = {
     refusals: {
       ...REFUSALS,
       network: "split.unconfirmed",
-      "bill.payments_received": "split.refused_payments",
       "order.payment_in_flight": "split.refused_payment_in_flight",
       "bill.left_unpaid": "split.refused_left_unpaid",
       "bill.not_at_table": "split.refused_not_at_table",

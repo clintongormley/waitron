@@ -49,7 +49,6 @@ function balance(total: string, received: string) {
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
   } satisfies BillBalance;
 }
 

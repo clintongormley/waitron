@@ -79,7 +79,6 @@ function balance(over: Partial<BillBalance> = {}): BillBalance {
     outstanding: "3.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
     ...over,
   };
 }
@@ -584,7 +583,6 @@ describe("A803 move dishes app:", () => {
             state: "received",
             createdAt: "2026-09-30T20:00:00.000Z",
             receivedAt: "2026-09-30T20:00:00.000Z",
-            lines: [],
             refunds: [],
           },
         ],
@@ -722,7 +720,7 @@ describe("A803 move dishes app:", () => {
       expect(order.shadowRoot!.querySelector("[data-move-dishes]")).not.toBeNull();
       expect(api.moveDishes).toHaveBeenCalledOnce();
     } finally {
-      moving.refuse({ code: "bill.line_paid", status: 409 });
+      moving.refuse({ code: "bill.received_exceeds_total", status: 409 });
       await flush(el, 6);
     }
   });
@@ -789,10 +787,10 @@ describe("A803 move dishes app:", () => {
     },
   );
 
-  it("bill.line_paid shows its sentence and reads the party's bills and the bill's balance again, not its lines", async () => {
+  it("bill.received_exceeds_total shows its sentence and reads the party's bills and the bill's balance again, not its lines", async () => {
     const { el, order } = await open({
       getPartyBills: vi.fn().mockResolvedValue(partPaid()),
-      moveDishes: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
+      moveDishes: vi.fn().mockRejectedValue({ code: "bill.received_exceeds_total", status: 409 }),
     });
     const bills = api.getPartyBills.mock.calls.length;
     const balances = api.getBillBalance.mock.calls.length;
@@ -805,7 +803,7 @@ describe("A803 move dishes app:", () => {
     emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: "bill-1" });
     await flush(el, 6);
 
-    expect(bannerText(el)).toContain(codeMessage("bill.line_paid"));
+    expect(bannerText(el)).toContain(codeMessage("bill.received_exceeds_total"));
     expect(api.getPartyBills.mock.calls.length).toBe(bills + 1);
     expect(api.getBillBalance.mock.calls.length).toBeGreaterThan(balances);
     expect(api.getTabLines.mock.calls.length).toBe(lineReads);
@@ -1079,7 +1077,7 @@ describe("A803 move dishes app:", () => {
     const { el, order } = await open({
       getPartyBills: vi.fn().mockResolvedValue(partPaid()),
       getBillBalance,
-      moveDishes: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
+      moveDishes: vi.fn().mockRejectedValue({ code: "bill.received_exceeds_total", status: 409 }),
     });
     const menu = () => order.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
     const picker = () => order.shadowRoot!.querySelector<TillPortionPicker>("till-portion-picker");
@@ -1387,7 +1385,7 @@ describe("A803 move dishes app:", () => {
     const bills = api.getPartyBills.mock.calls.length;
     const drafts = api.listDrafts.mock.calls.length;
 
-    move.refuse({ code: "bill.line_paid", status: 409 });
+    move.refuse({ code: "bill.received_exceeds_total", status: 409 });
     await flush(el, 6);
 
     expect(move.call).toHaveBeenCalledOnce();

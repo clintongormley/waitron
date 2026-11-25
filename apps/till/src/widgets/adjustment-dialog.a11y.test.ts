@@ -109,7 +109,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
   });
 
   it("has no violations with a refusal above the action", async () => {
-    const { host } = await mount({ refusal: "bill.line_paid" });
+    const { host } = await mount({ refusal: "bill.received_exceeds_total" });
     await expectNoA11yViolations(host);
   });
 

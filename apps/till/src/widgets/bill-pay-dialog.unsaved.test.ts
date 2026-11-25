@@ -17,7 +17,7 @@ class BillPayLeaveApp extends LitElement {
   handheld = false;
   override render() {
     return html`<till-bill-pay-dialog
-        .balance=${{ workingOrderId: "bill-1", status: "open", total: "30.00", received: "0.00", reserved: "0.00", outstanding: "30.00", tips: "0.00", payments: [], paidLines: [] }}
+        .balance=${{ workingOrderId: "bill-1", status: "open", total: "30.00", received: "0.00", reserved: "0.00", outstanding: "30.00", tips: "0.00", payments: [] }}
         .way=${"contribution"}
         .amount=${"10.00"}
         .takesCash=${this.takesCash}

@@ -92,7 +92,6 @@ function balanceOf(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: [],
   };
 }
 

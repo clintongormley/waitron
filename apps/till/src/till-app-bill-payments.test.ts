@@ -2570,7 +2570,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     let leftElsewhere = false;
     const payForItems = vi.fn(async () => {
       leftElsewhere = true;
-      throw { code: "bill.line_paid", lineNo: 1 };
+      throw { code: "bill.received_exceeds_total" };
     });
     const getBillBalance = vi.fn(async () =>
       balanceOf(leftElsewhere ? { total: "80.00", outstanding: "80.00" } : {}),
@@ -2593,7 +2593,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(
-      `${t("form.fix_fields")} ${codeMessage("bill.line_paid")}`,
+      `${t("form.fix_fields")} ${codeMessage("bill.received_exceeds_total")}`,
     );
     expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(true);
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "0.00", "80.00"));
@@ -4366,8 +4366,8 @@ describe("till-app: a change refused on a bill that holds money", () => {
       expect(vi.mocked(api.getTabLines).mock.calls.length).toBeGreaterThan(reads.lines);
   }
 
-  it("says a paid item's quantity cannot be raised, and reads the bill, its lines and its payments again", async () => {
-    const updateOrderLine = vi.fn().mockRejectedValue({ code: "bill.line_paid", lineNo: 1 });
+  it("says a line change refused for the money on the bill in its own words, and reads the bill, its lines and its payments again", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValue({ code: "bill.received_exceeds_total" });
     const { el, order, reads } = await openHolding({ updateOrderLine });
 
     emit(order, "change-line", {
@@ -4386,7 +4386,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
       order.billEdit,
       undefined,
     );
-    expect(text(banner(el))).toBe(codeMessage("bill.line_paid"));
+    expect(text(banner(el))).toBe(codeMessage("bill.received_exceeds_total"));
     expectReadAgain(reads);
   });
 

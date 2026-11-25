@@ -544,7 +544,6 @@ describe("till-table-order-screen: Finish table", () => {
           overpaid: "5.00",
           tips: "0.00",
           payments: [],
-          paidLines: [],
         },
       });
 

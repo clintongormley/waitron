@@ -79,7 +79,6 @@ const balance: BillBalance = {
   outstanding: "39.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 
 const lines = [
@@ -217,7 +216,6 @@ describe.each(["light", "dark"] as const)(
             received: "15.00",
             outstanding: "-5.00",
             overpaid: "5.00",
-            paidLines: [],
           },
           tipsEnabled: true,
         },

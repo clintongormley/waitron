@@ -315,14 +315,12 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
   };
   for (const code of [
     "bill.payments_received",
-    "bill.line_paid",
     "bill.received_exceeds_total",
     "bill.nothing_outstanding",
     "bill.tip_not_allowed",
     "bill.allocation_changed",
     "bill.payment_not_found",
     "bill.refund_exceeds_payment",
-    "bill.refund_not_whole",
     "bill.refund_unsupported",
     "bill.manual_refund_pin_required",
     "bill.refund_in_progress",

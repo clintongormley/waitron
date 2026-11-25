@@ -74,7 +74,6 @@ const balance = (workingOrderId: string, total: string) => ({
   outstanding: total,
   tips: "0.00",
   payments: [],
-  paidLines: [],
 });
 const splitRead: SplitSources = {
   partyRevision: 3,

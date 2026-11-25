@@ -247,7 +247,6 @@ export function stubApi(
       outstanding: "3.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     })),
     getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
