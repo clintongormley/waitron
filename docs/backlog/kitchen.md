@@ -147,10 +147,11 @@ fired" dropdown (A773) is not adopted.
 retires Recall and moves every sent-dish removal to Cancel item. The following dated ruling
 records the earlier order-edit removal path; the station setting still governs Change dish.
 
-**2026-11-25 (A1080, owner's answer B of 2026-10-25).** A save that would change started work
-reports "already started" ahead of an earlier "already fired" refusal. The existing served,
-already-sent and paid checks still take precedence where they did before this decision. Keeping
-a started dish as it is or only raising its quantity leaves the started work alone.
+**2026-11-25 (A1080, owner's answer B of 2026-10-25).** If the save encounters "already fired",
+it keeps checking the other affected dishes for "already started". Paid, served and already-sent
+refusals still stop the save when encountered first. Checks such as paid work, served work and
+allowed options can refuse a dish before its started check. An unchanged dish or a quantity
+increase on its own leaves the started work alone.
 
 Under the earlier ruling, a dish the kitchen has started is refused
 first. Since A1382 (owner, 2026-11-07), a bare quantity raise of a started dish is not refused as

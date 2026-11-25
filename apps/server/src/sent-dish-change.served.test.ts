@@ -13,6 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { updateMenuItem } from "@waitron/menu";
 import { setRoutingCell } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { markServed } from "./working-order-serving.js";
@@ -22,6 +23,7 @@ import {
   setChangesAfterSending,
 } from "./testing/changes-after-sending.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;
@@ -129,7 +131,13 @@ const noticesOf = (billId: string) =>
 /** The bill's whole-basket save, as the counter sends it. */
 async function saveBasket(
   billId: string,
-  lines: { workingOrderLineId?: string; menuItemId: string; quantity: string; note?: string }[],
+  lines: {
+    workingOrderLineId?: string;
+    menuItemId: string;
+    menuVersionId?: string;
+    quantity: string;
+    note?: string;
+  }[],
 ) {
   const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
@@ -156,6 +164,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
     "started first",
     "waiting omitted",
     "waiting and started omitted",
+    "waiting omitted after a menu publish",
   ] as const)("reports the started dish in a mixed save with %s", async (scenario) => {
     const names = ["Steak", "Red wine bottle", "House salad", "Small beer"] as const;
     const [steak, ...otherItems] = names;
@@ -172,10 +181,16 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, started!.workingOrderLineId));
     const stations = await inTx(venue, readChangesAfterSending);
+    const menuChanged = scenario === "waiting omitted after a menu publish";
+    const { menuId, menuVersionId } = originals[0]!;
     try {
       await inTx(venue, async (tx) => {
         await setChangesAfterSending(tx, "never");
         await advanceTicketItem(tx, ticket!.id, "preparing");
+        if (menuChanged) {
+          await updateMenuItem(tx, menuId!, waiting!.menuItemId, { grossPrice: "26.00" });
+          expect(await publishWorkingMenu(tx, menuId!)).not.toBe(menuVersionId);
+        }
       });
       const edited = [waiting!, started!].map((line) => ({ ...line, note: "no onions" }));
       const lines = {
@@ -183,6 +198,11 @@ describe("the whole-basket save of a bill with a sent dish", () => {
         "started first": [...edited].reverse().concat(sent!),
         "waiting omitted": [edited[1]!, sent!],
         "waiting and started omitted": [],
+        "waiting omitted after a menu publish": [
+          edited[1]!,
+          sent!,
+          { menuItemId: waiting!.menuItemId, quantity: "1", menuVersionId: menuVersionId! },
+        ],
       }[scenario];
 
       expect(await saveBasket(billId, [...lines, kept!])).toMatchObject({
@@ -204,6 +224,10 @@ describe("the whole-basket save of a bill with a sent dish", () => {
     } finally {
       await inTx(venue, async (tx) => {
         for (const [id, policy] of stations) await setChangesAfterSending(tx, policy, [id]);
+        if (menuChanged) {
+          await updateMenuItem(tx, menuId!, waiting!.menuItemId, { grossPrice: "25.00" });
+          await publishWorkingMenu(tx, menuId!);
+        }
       });
     }
   });
@@ -239,6 +263,42 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       json: { code: "ticket.already_fired", params: { workingOrderId: billId } },
     });
     expect(await lineOf(billId, 1)).toEqual(steak);
+  });
+
+  it("reports a refused sent edit before pricing a new sold-out dish", async () => {
+    const billId = await firedTabOf("Steak", "1");
+    const steak = await lineOf(billId, 1);
+    const [salad] = await venue.db.select().from(products).where(eq(products.name, "House salad"));
+    const stations = await inTx(venue, readChangesAfterSending);
+    const saved = {
+      workingOrderLineId: steak.id,
+      menuItemId: venue.offerFor("Steak"),
+      quantity: "1",
+    };
+    const newDish = { menuItemId: venue.offerFor("House salad"), quantity: "1" };
+    try {
+      await inTx(venue, async (tx) => {
+        await setChangesAfterSending(tx, "never");
+        await tx.update(products).set({ available: false }).where(eq(products.id, salad!.id));
+      });
+      expect(await saveBasket(billId, [saved, newDish])).toMatchObject({
+        status: 409,
+        json: { code: "product.unavailable", params: { productId: salad!.id } },
+      });
+      expect(await saveBasket(billId, [{ ...saved, note: "no onions" }, newDish])).toMatchObject({
+        status: 409,
+        json: { code: "ticket.already_fired", params: { workingOrderId: billId } },
+      });
+      expect(await lineOf(billId, 1)).toEqual(steak);
+    } finally {
+      await inTx(venue, async (tx) => {
+        for (const [id, policy] of stations) await setChangesAfterSending(tx, policy, [id]);
+        await tx
+          .update(products)
+          .set({ available: salad!.available })
+          .where(eq(products.id, salad!.id));
+      });
+    }
   });
 
   it("refuses to leave out a dish the kitchen has, voiding nothing", async () => {

@@ -207,7 +207,6 @@ export async function applyLineEdits(
   let firedRefusal: AppError | undefined;
   const keepFirstFired = (error: unknown): void => {
     if (!(error instanceof AppError) || error.code === "ticket.already_started") throw error;
-    // A fired refusal can give way to started work on a later line only.
     if (error.code === "ticket.already_fired") firedRefusal ??= error;
     else if (firedRefusal === undefined) throw error;
   };
@@ -258,10 +257,11 @@ export async function applyLineEdits(
   );
   const contentConfig = needsModifiers ? await readContentLanguages(tx, cfg.locale) : undefined;
   const defaultLanguage = contentConfig?.defaultLanguage ?? "";
-  // Read once for the answers the edits are checked against and for the lines priced below.
+  // With a refusal held, only edits to existing lines can change the answer.
+  const freshForSnapshot = firedRefusal === undefined ? plan.fresh : [];
   const snapshot = needsModifiers
-    ? await readBasketOffers(tx, orderId, context?.zoneId, plan.fresh, [
-        ...plan.fresh.map((line) => line.menuItemId),
+    ? await readBasketOffers(tx, orderId, context?.zoneId, freshForSnapshot, [
+        ...freshForSnapshot.map((line) => line.menuItemId),
         ...plan.edits.map(({ parent }) => parent.menuItemId),
       ])
     : undefined;
