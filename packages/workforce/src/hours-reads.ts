@@ -17,6 +17,7 @@ import type { PayPeriodClosure } from "./record-types.js";
 import { readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
 import type { Period, TimeEntryRecord } from "./projection.js";
 import { isRecordDate } from "./record-dates.js";
+import { monthlyIssues } from "./hours-monthly-issues.js";
 import { projectTimeRecord, recordRoot } from "./record-projection.js";
 import { readOutstandingHoursEntries, readTimeRecord } from "./record-reads.js";
 import "./errors.js";
@@ -73,7 +74,7 @@ async function windowFor(
 }
 function openShiftsFor(entries: TimeEntryRecord[]): HoursOpenShift[] {
   let open: HoursOpenShift | undefined;
-  for (const entry of effectiveClockEntries(entries).sort(compareEvents)) {
+  for (const entry of entries) {
     switch (entry.entryKind) {
       case "in":
         open = { start: entry, breakStart: null };
@@ -97,10 +98,12 @@ async function personInWindow(
   window: { period: Period; businessDay: string },
   policy: PaidBreakPolicy | null,
   saved: readonly PayPeriodClosure[],
+  manager = false,
 ): Promise<PersonHours> {
   const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
   const { period, businessDay } = window;
+  const monthly = manager && period.start.endsWith("-01") && period.end.endsWith("-01");
   const inputs = await readAttendanceInboxInputs(tx, personId, "possible-prompts");
   const questionIds = new Set(inputs.questions.map((q) => q.id));
   const questionEntryIds = inputs.questions
@@ -114,11 +117,13 @@ async function personInWindow(
     personId,
     questionWindows: inputs.questions.map((q) => [q.startAt, q.endAt]),
     questionEntryIds,
+    includeDisputed: monthly,
   });
   const record = await readTimeRecord(tx, { personId, period }, policy, saved);
   const inbox = projectAttendanceInboxWork(personId, entries, inputs);
   const fullRecord = projectTimeRecord(entries);
-  const openShifts = openShiftsFor(entries);
+  const effective = effectiveClockEntries(entries).sort(compareEvents);
+  let openShifts = openShiftsFor(effective);
   const pending = {
     prompts: inbox.prompts,
     items: inbox.items.filter((i) =>
@@ -135,6 +140,9 @@ async function personInWindow(
       .map((row) => row.entry.entryId),
   };
   const byId = new Map(entries.map((e) => [e.entryId, e]));
+  if (monthly) {
+    openShifts = monthlyIssues(period, effective, byId, inputs, pending, openShifts);
+  }
   const extraRoots = new Set(
     [
       ...pending.prompts.flatMap((p) => p.history),
@@ -210,7 +218,14 @@ export async function readManagerHours(
   for (const row of rows)
     people.push({
       ...row,
-      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, policy, saved),
+      hours: await personInWindow(
+        tx,
+        { ...input, personId: row.personId },
+        window,
+        policy,
+        saved,
+        true,
+      ),
     });
   return {
     selection: { ...input.selection },

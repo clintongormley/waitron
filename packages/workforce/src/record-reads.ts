@@ -203,28 +203,34 @@ export async function readOutstandingHoursEntries(
     personId,
     questionWindows,
     questionEntryIds,
+    includeDisputed = false,
   }: {
     personId: string;
     questionWindows: readonly (readonly [string, string])[];
     questionEntryIds: readonly string[];
+    includeDisputed?: boolean;
   },
 ): Promise<TimeEntryRecord[]> {
-  // Checking whether an undecided correction is ready still needs the full sequence.
-  const undecided = await tx.execute(sql`
+  // Readiness and a disputed correction's work date depend on the surrounding clock entries.
+  const needsSequence = await tx.execute(sql`
     select 1 from time_entries request indexed by time_entries_person_event_idx
     where request.person_id = ${personId} and request.entry_kind = 'correction'
-      and request.correction_status = 'requested'
-      and request.correction_direction in ('worker_request', 'manager_proposal')
-      and ${hasNoApprovedReplacement(sql`request.corrects_entry_id`, sql`request.person_id`)}
-      and not exists (
-        select 1 from time_entries decision indexed by time_entries_person_event_idx
-        where decision.person_id = request.person_id and decision.event_at = request.event_at
-          and decision.entry_kind = 'correction' and decision.correction_status <> 'requested'
-          and decision.responds_to_entry_id = request.id
+      and (
+        (${includeDisputed} and request.correction_status = 'disputed'
+          and request.responds_to_entry_id is not null)
+        or (request.correction_status = 'requested'
+          and request.correction_direction in ('worker_request', 'manager_proposal')
+          and ${hasNoApprovedReplacement(sql`request.corrects_entry_id`, sql`request.person_id`)}
+          and not exists (
+            select 1 from time_entries decision indexed by time_entries_person_event_idx
+            where decision.person_id = request.person_id and decision.event_at = request.event_at
+              and decision.entry_kind = 'correction' and decision.correction_status <> 'requested'
+              and decision.responds_to_entry_id = request.id
+          ))
       )
     limit 1
   `);
-  if (undecided.rows.length > 0) return readRecordedEntries(tx, { personId });
+  if (needsSequence.rows.length > 0) return readRecordedEntries(tx, { personId });
 
   // An unretimed direct in or out resets open shifts. Keep every event at its instant.
   const latest = sql`(

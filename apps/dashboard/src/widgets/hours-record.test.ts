@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
-import { attendancePrompt } from "../../test/attendance-fixtures.js";
+import { attendanceEntry, attendancePrompt } from "../../test/attendance-fixtures.js";
 import type { HoursRecord } from "./hours-record.js";
 const modules = import.meta.glob<typeof import("./hours-record.js")>("./hours-record.ts");
 const locale = currentLocale();
@@ -18,15 +18,12 @@ async function mount(view = hoursView(), dayActionLabel = "") {
   setLocale("en-GB");
   return mountWidget<HoursRecord>("dashboard-hours-record", { view, dayActionLabel });
 }
-it("shows authoritative completed totals, stored full times and an empty calendar day", async () => {
+it("shows authoritative completed totals, readable shift times and an empty calendar day", async () => {
   const { el } = await mount();
   const root = el.shadowRoot!;
   expect(root.querySelector("[data-total]")!.textContent).toContain("8 h 00 min");
   expect(root.querySelector('[data-day="2026-01-05"]')!.textContent).toContain(
-    "2026-01-05 10:00 +01:00",
-  );
-  expect(root.querySelector('[data-day="2026-01-05"]')!.textContent).toContain(
-    "2026-01-05 18:00 +01:00",
+    "Mon 5 Jan, 10:00–18:00",
   );
   expect(root.querySelector('[data-day="2026-01-06"]')!.textContent).toContain("No recorded times");
   expect(root.textContent).toContain("This automatic finish already counts");
@@ -44,7 +41,7 @@ it("offers a calendar-day event only with a supplied action label", async () => 
 it("heads a pending question card by its work day alone", async () => {
   const { el } = await mount(hoursView());
   const headings = [...el.shadowRoot!.querySelectorAll("section article h3")];
-  expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
+  expect(headings.map((h) => h.textContent!.trim())).toEqual(["Mon 5 Jan"]);
   expect(el.shadowRoot!.querySelector("section")!.textContent).not.toContain("The deli");
 });
 it("draws no heading on a pending proposal card without a work day", async () => {
@@ -63,8 +60,8 @@ it("keeps pending outside the selected week and preserves480 until the server pu
   const root = el.shadowRoot!;
   expect(root.textContent).toContain("Waiting for a manager");
   expect(root.textContent).toContain("Finished the stock count");
-  expect(root.textContent).toContain("2026-10-13 17:00 +02:00");
-  expect(root.textContent).toContain("2026-10-13 18:00 +02:00");
+  expect(root.textContent).toContain("Tue 13 Oct, 17:00");
+  expect(root.textContent).toContain("Tue 13 Oct, 18:00");
   expect(root.querySelector("[data-total]")!.textContent).toContain("8 h 00 min");
   el.view = hoursView({
     workedMinutes: 540,
@@ -112,7 +109,7 @@ it("separates open break, worker acknowledgement, frozen month and later impact"
   ];
   const { el } = await mount(view);
   const root = el.shadowRoot!;
-  expect(root.querySelector("[data-open-shift]")!.textContent).toContain("2026-01-05 19:00 +02:00");
+  expect(root.querySelector("[data-open-shift]")!.textContent).toContain("Mon 5 Jan, 19:00");
   expect(root.textContent).toContain("Confirmed by the worker");
   expect(root.textContent).toContain("Self-approved by an admin");
   expect(root.textContent).toContain("Disputed");
@@ -141,6 +138,65 @@ it("does not describe a replaced automatic finish as still counted", async () =>
   view.record.entries[0]!.effective = false;
   const { el } = await mount(view);
   expect(el.shadowRoot!.textContent).not.toContain("This automatic finish already counts");
+});
+
+it.each([
+  ["en-GB", "Sun 25 Oct", "Mon 26 Oct"],
+  ["es-ES", "dom 25 oct", "lun 26 oct"],
+])(
+  "shows both offsets of a repeated hour and spells out the next date in %s",
+  async (language, day, nextDay) => {
+    const view = hoursView();
+    const shift = view.days[0]!.sessions[0]!;
+    view.days = [
+      {
+        date: "2026-10-25",
+        workedMinutes: 120,
+        sessions: [
+          {
+            ...shift,
+            workDate: "2026-10-25",
+            startedAt: "2026-10-25T00:30:00Z",
+            endedAt: "2026-10-25T01:30:00Z",
+            startOffsetMinutes: 120,
+            endOffsetMinutes: 60,
+          },
+          {
+            ...shift,
+            workDate: "2026-10-25",
+            startedAt: "2026-10-25T22:00:00Z",
+            endedAt: "2026-10-26T00:00:00Z",
+            startOffsetMinutes: 60,
+            endOffsetMinutes: 60,
+          },
+        ],
+      },
+    ];
+    const { el } = await mount(view);
+    setLocale(language);
+    await el.updateComplete;
+    const text = el.shadowRoot!.querySelector("[data-day]")!.textContent;
+    expect(text).toContain(`${day}, 02:30 +02:00–02:30 +01:00`);
+    expect(text).toContain(`${day}, 23:00–${nextDay}, 01:00`);
+  },
+);
+
+it("places the missing-time question inside its open-shift card", async () => {
+  const view = hoursView();
+  const start = attendanceEntry({ entryKind: "in" });
+  view.period = { start: "2026-01-01", end: "2026-02-01" };
+  view.openShifts = [{ start, breakStart: null, questionId: "missing" }];
+  view.pending.prompts = [
+    attendancePrompt({ id: "missing", kind: "missing-times", history: [start] }),
+  ];
+  const { el } = await mount(view);
+  el.manager = true;
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  expect(root.querySelector("[data-open-shift] time")?.getAttribute("datetime")).toBe(
+    start.eventAt,
+  );
+  expect(root.querySelectorAll("section article h3")).toHaveLength(0);
 });
 
 it.each(["en-GB", "es-ES"] as const)(

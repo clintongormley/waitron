@@ -361,6 +361,148 @@ it("keeps old missing questions and unacknowledged automatic history outside a s
   expect(value.pending.prompts.map((p) => p.id)).toEqual([questionId]);
   expect(value.record.entries.map((e) => e.entry.entryId)).toEqual([start, end]);
 });
+async function managerMonth(date: string) {
+  const result = await manager({ kind: "pay-period", date });
+  return result.people.find((person) => person.personId === f.personId)!.hours;
+}
+
+it("puts an overnight automatic finish, its question and a finish correction in the shift's start month", async () => {
+  const start = await event("clockIn", "2026-01-31T21:00:00Z", 60);
+  const end = await f.run((tx) =>
+    f.backend.recordAutomaticClose(tx, {
+      ...f.event("2026-02-01T04:30:00Z"),
+      offsetMinutes: 60,
+      openEntryId: start,
+    }),
+  );
+  const day = {
+    businessDay: "2026-02-01",
+    startAt: "2026-02-01T04:00:00.000Z",
+    endAt: "2026-02-02T04:00:00.000Z",
+  };
+  const question = await f.run(async (tx) =>
+    api.upsertAttendanceQuestion(
+      tx,
+      {
+        personId: f.personId,
+        day,
+        shiftKey: `open:${start}`,
+        kind: "automatic-out",
+        missingKinds: [],
+        openEntryId: start,
+        automaticEntryId: end,
+        evidenceKeys: [],
+      },
+      now,
+      await seedAttendanceDay(tx, day),
+    ),
+  );
+  const january = await managerMonth("2026-01-31");
+  const february = await managerMonth("2026-02-01");
+  expect(january.pending.prompts.map((prompt) => [prompt.id, prompt.workDate])).toEqual([
+    [question, "2026-01-31"],
+  ]);
+  expect(january.pending.automaticEntryIds).toEqual([end]);
+  expect(february.pending).toEqual({ prompts: [], items: [], automaticEntryIds: [] });
+  const correction = await request(end, "2026-02-01T05:00:00Z");
+  expect((await managerMonth("2026-01-31")).pending.items.map((item) => item.id)).toEqual(
+    correction.entryIds,
+  );
+  expect((await managerMonth("2026-02-01")).pending.items).toEqual([]);
+  expect(
+    (await read({ kind: "month", date: "2026-02-01" })).pending.items.map((item) => item.id),
+  ).toEqual(correction.entryIds);
+});
+
+it("retains the original and proposed history in both months when a retime moves the start", async () => {
+  const { start, end } = await shift("2026-02-01");
+  const request = await send({
+    action: "request",
+    questionId: null,
+    changes: [{ target: { entryId: start }, at: "2026-01-31T23:00:00Z", offsetMinutes: 0 }],
+    reason: "I started during the night shift",
+  });
+  for (const month of ["2026-01-01", "2026-02-01"]) {
+    const value = await managerMonth(month);
+    expect(value.pending.items.map((item) => item.id)).toEqual(request.entryIds);
+    expect(value.record.entries.map((entry) => entry.entry.entryId)).toEqual(
+      expect.arrayContaining([start, ...request.entryIds]),
+    );
+  }
+  const march = await managerMonth("2026-03-01");
+  expect(march.pending.items).toEqual([]);
+  expect(march.record.entries.map((entry) => entry.entry.entryId)).not.toContain(end);
+  expect(march.record.entries).toEqual([]);
+});
+
+it("keeps a disputed overnight finish with the original shift after the reply is recorded", async () => {
+  await event("clockIn", "2026-01-31T20:00:00Z");
+  const end = await event("clockOut", "2026-02-01T03:00:00Z");
+  const proposed = await send(
+    {
+      action: "propose",
+      personId: f.personId,
+      changes: [{ target: { entryId: end }, at: "2026-02-01T04:00:00Z", offsetMinutes: 0 }],
+      reason: "Check finish",
+    },
+    f.manager,
+  );
+  await send({ action: "disagree", itemId: proposed.entryIds[0]!, reason: "I left at three" });
+  expect((await managerMonth("2026-01-31")).pending.items.map((item) => item.id)).toEqual(
+    proposed.entryIds,
+  );
+  expect((await managerMonth("2026-02-01")).pending.items).toEqual([]);
+});
+
+it("uses the proposed start month when both clocks are missing on an overnight shift", async () => {
+  const proposed = await send(
+    {
+      action: "propose",
+      personId: f.personId,
+      changes: [
+        { target: { missingKind: "in" }, at: "2026-01-31T20:00:00Z", offsetMinutes: 0 },
+        { target: { missingKind: "out" }, at: "2026-02-01T04:00:00Z", offsetMinutes: 0 },
+      ],
+      reason: "Both stamps are missing",
+    },
+    f.manager,
+  );
+  const january = await managerMonth("2026-01-31");
+  expect(january.pending.items.map((item) => item.id)).toEqual([proposed.commandId]);
+  expect(january.pending.prompts.map((prompt) => prompt.itemId)).toEqual([proposed.commandId]);
+  const february = await managerMonth("2026-02-01");
+  expect(february.pending.items).toEqual([]);
+  expect(february.pending.prompts).toEqual([]);
+});
+
+it("links a missing-times question to its open shift and keeps it in the start month", async () => {
+  const start = await f.open();
+  const question = await f.run((tx) =>
+    api.upsertAttendanceQuestion(
+      tx,
+      {
+        personId: f.personId,
+        day: f.day(),
+        shiftKey: `open:${start}`,
+        kind: "missing-times",
+        missingKinds: ["out"],
+        openEntryId: start,
+        automaticEntryId: null,
+        evidenceKeys: [],
+      },
+      now,
+      f.dayId,
+    ),
+  );
+  const january = await managerMonth("2026-01-01");
+  expect(january.openShifts).toMatchObject([{ start: { entryId: start }, questionId: question }]);
+  expect(january.pending.prompts.map((prompt) => prompt.id)).toEqual([question]);
+  const february = await managerMonth("2026-02-01");
+  expect(february.openShifts).toEqual([]);
+  expect(february.pending.prompts).toEqual([]);
+  expect(february.record.entries).toEqual([]);
+});
+
 it("reads only the current shift boundary once a competing correction has changed the target", async () => {
   await shift("2026-01-02");
   const { end } = await shift();
@@ -497,21 +639,28 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
   });
   const start = await f.open("2027-01-11T09:00:00Z");
   const pause = await event("breakStart", "2027-01-11T12:00:00Z");
-  const getHours = () =>
+  const getHours = (date: string) =>
     f.run((tx) =>
       api.readManagerHours(tx, {
-        selection: { kind: "pay-period", date: "2026-06-16" },
+        selection: { kind: "pay-period", date },
         clock,
         now: new Date("2027-01-11T12:30:00Z"),
       }),
     );
-  const actual = await getHours();
-  const { hours } = actual.people.find((person) => person.personId === f.personId)!;
-  const { hours: otherHours } = actual.people.find((person) => person.personId === f.other)!;
-  expect(hours.workedMinutes).toBe(14_400);
-  expect(hours.openShifts).toMatchObject([
-    { start: { entryId: start }, breakStart: { entryId: pause } },
-  ]);
+  const june = await getHours("2026-06-16");
+  const juneHours = june.people.find((person) => person.personId === f.personId)!.hours;
+  expect(juneHours.workedMinutes).toBe(14_400);
+  for (const { hours } of june.people) {
+    expect(hours.openShifts).toEqual([]);
+    expect(hours.pending).toEqual({ items: [], prompts: [], automaticEntryIds: [] });
+  }
+  const current = await getHours("2027-01-11");
+  expect(
+    current.people.find((person) => person.personId === f.personId)!.hours.openShifts,
+  ).toMatchObject([{ start: { entryId: start }, breakStart: { entryId: pause } }]);
+  const january = await getHours("2026-01-05");
+  const { hours } = january.people.find((person) => person.personId === f.personId)!;
+  const { hours: otherHours } = january.people.find((person) => person.personId === f.other)!;
   expect(hours.pending.items.map(({ id, status }) => ({ id, status }))).toEqual([
     { id: disputed, status: "disputed" },
   ]);
@@ -528,7 +677,8 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
     { id: pending, status: "waiting-manager", readyToApply: false },
   ]);
 
-  await expectFullHistoryResult(actual, getHours);
+  await expectFullHistoryResult(june, () => getHours("2026-06-16"));
+  await expectFullHistoryResult(january, () => getHours("2026-01-05"));
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {
   await setBuiltInRoleForTest(f.suite.db, f.personId, "admin");

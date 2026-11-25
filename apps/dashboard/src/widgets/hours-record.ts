@@ -1,19 +1,16 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { dateTimeFormat } from "@waitron/dashboard-kit";
+import { dateTimeFormat, formatBusinessDate } from "@waitron/dashboard-kit";
 import type { PersonHours } from "@waitron/dashboard-modules";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { attendanceHistory, attendanceStatus, storedAttendanceTime } from "./attendance-history.js";
+import { attendanceHistory, attendanceStatus } from "./attendance-history.js";
+import { wallClock } from "../date-utils.js";
+import { hoursTime, hoursZone, periodLabel, wholeMonth } from "../hours-format.js";
 import "@waitron/ui/src/components/wt-button.js";
 function duration(minutes: number): string {
   return `${minutes < 0 ? "−" : ""}${Math.floor(Math.abs(minutes) / 60)} h ${String(Math.abs(minutes) % 60).padStart(2, "0")} min`;
-}
-function dateAfter(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 @customElement("dashboard-hours-record")
 export class HoursRecord extends LitElement {
@@ -117,63 +114,90 @@ export class HoursRecord extends LitElement {
   override render() {
     const view = this.view;
     if (!view) return nothing;
+    const grouped = this.manager && wholeMonth(view.period);
+    const items = new Set(view.pending.items.map((item) => item.id));
+    const byQuestion = new Map(view.pending.prompts.map((prompt) => [prompt.id, prompt]));
+    const prompts = grouped
+      ? view.pending.prompts.filter(
+          (prompt) =>
+            !items.has(prompt.itemId ?? "") &&
+            !view.openShifts.some((shift) => shift.questionId === prompt.id),
+        )
+      : view.pending.prompts;
+    const automatic = (id: string) =>
+      view.pending.automaticEntryIds.includes(id)
+        ? html`<p>
+            ${t("attendance.automatic_counted")}
+            ${t(this.manager ? "hours.awaiting_worker_acknowledgement" : "hours.awaiting_acknowledgement")}
+          </p>`
+        : nothing;
+    const standaloneAutomatic = view.pending.automaticEntryIds.filter(
+      (id) => !grouped || !prompts.some((prompt) => prompt.automaticEntryId === id),
+    );
+    const history = (entry: PersonHours["record"]["entries"][number]["entry"]) =>
+      attendanceHistory(entry, hoursZone(view, wallClock(entry.eventAt, entry.offsetMinutes).date));
     return html`<div class="content">
-      <p>${view.period.start} · ${dateAfter(view.period.end, -1)}</p>
+      ${this.manager ? nothing : html`<p>${periodLabel(view.period)}</p>`}
       <p data-total>${t("hours.total")}: ${duration(view.workedMinutes)}</p>
       <p data-paid-break-note>${t("hours.paidBreakNote")}</p>
-      ${view.openShifts.map(
-        (open) =>
-          html`<article data-open-shift>
-            <h2>${t(open.breakStart ? "clock.on_break" : "hours.open_shift")}</h2>
-            <p>${storedAttendanceTime(open.start.eventAt, open.start.offsetMinutes)}</p>
-            ${open.breakStart ? html`<p>${storedAttendanceTime(open.breakStart.eventAt, open.breakStart.offsetMinutes)}</p>` : nothing}
-          </article>`,
-      )}
+      ${view.openShifts.map((open) => {
+        const prompt = grouped && open.questionId ? byQuestion.get(open.questionId) : undefined;
+        const zone = hoursZone(view, wallClock(open.start.eventAt, open.start.offsetMinutes).date);
+        return html`<article data-open-shift>
+          <h2>${t(open.breakStart ? "clock.on_break" : "hours.open_shift")}</h2>
+          <p>${hoursTime(open.start.eventAt, open.start.offsetMinutes, zone)}</p>
+          ${open.breakStart ? html`<p>${hoursTime(open.breakStart.eventAt, open.breakStart.offsetMinutes, zone)}</p>` : nothing}
+          ${
+            prompt
+              ? html`<ul>
+                  ${prompt.history.map(history)}
+                </ul>`
+              : nothing
+          }
+        </article>`;
+      })}
       ${view.days.map(
         (day) =>
           html`<article data-day=${day.date}>
-            <h2>${day.date}</h2>
+            <h2>${formatBusinessDate(day.date)}</h2>
             <p>${duration(day.workedMinutes)}</p>
             ${
               day.sessions.length
-                ? day.sessions.map(
-                    (session) =>
-                      html`<p>
-                          <time datetime=${session.startedAt}
-                            >${storedAttendanceTime(session.startedAt, session.startOffsetMinutes)}</time
-                          >
-                          ·
-                          <time datetime=${session.endedAt}
-                            >${storedAttendanceTime(session.endedAt, session.endOffsetMinutes)}</time
-                          >
-                        </p>
-                        <p>${t("hours.breaks")}: ${duration(session.breakMinutes)}</p>`,
-                  )
+                ? day.sessions.map((session) => {
+                    const zone = hoursZone(view, session.workDate);
+                    return html`<p>
+                        <time datetime=${session.startedAt}
+                          >${hoursTime(session.startedAt, session.startOffsetMinutes, zone)}</time
+                        >–<time datetime=${session.endedAt}
+                          >${hoursTime(session.endedAt, session.endOffsetMinutes, zone, session.workDate)}</time
+                        >
+                      </p>
+                      <p>${t("hours.breaks")}: ${duration(session.breakMinutes)}</p>`;
+                  })
                 : html`<p>${t("attendance.no_times")}</p>`
             }${this.dayActionLabel ? html`<wt-button data-fix=${day.date} variant="secondary" .disabled=${this.blocked} @click=${(event: Event) => this.#day(event, day.date)}>${this.dayActionLabel}</wt-button>` : nothing}
           </article>`,
       )}
       ${
-        view.pending.prompts.length ||
-        view.pending.items.length ||
-        view.pending.automaticEntryIds.length
+        prompts.length || view.pending.items.length || standaloneAutomatic.length
           ? html`<section>
               <h2>${t("hours.pending")}</h2>
-              ${view.pending.automaticEntryIds.map(() => html`<p>${t("attendance.automatic_counted")} ${t(this.manager ? "hours.awaiting_worker_acknowledgement" : "hours.awaiting_acknowledgement")}</p>`)}${view.pending.prompts.map(
-                (prompt) =>
-                  html`<article>
-                    ${prompt.businessDay ? html`<h3>${prompt.businessDay}</h3>` : nothing}
-                    <ul>
-                      ${prompt.history.map(attendanceHistory)}
-                    </ul>
-                  </article>`,
-              )}${view.pending.items.map(
+              ${standaloneAutomatic.map(automatic)}${prompts.map((prompt) => {
+                const date = prompt.workDate ?? prompt.businessDay;
+                return html`<article>
+                  ${date ? html`<h3>${formatBusinessDate(date)}</h3>` : nothing}
+                  ${grouped && prompt.automaticEntryId ? automatic(prompt.automaticEntryId) : nothing}
+                  <ul>
+                    ${prompt.history.map(history)}
+                  </ul>
+                </article>`;
+              })}${view.pending.items.map(
                 (item) =>
                   html`<article>
                     <h3>${attendanceStatus(item.status)}</h3>
                     <p>${item.reason}</p>
                     <ul>
-                      ${item.history.map(attendanceHistory)}
+                      ${item.history.map(history)}
                     </ul>
                   </article>`,
               )}
@@ -187,7 +211,7 @@ export class HoursRecord extends LitElement {
               ${view.record.entries.map(
                 (row) =>
                   html`<ul>
-                    ${attendanceHistory(row.entry)}
+                    ${history(row.entry)}
                     <li>
                       ${t(row.effective ? "hours.effective" : "hours.history")}${row.author.kind === "automatic" && row.effective ? html` · ${t("attendance.automatic_counted")}` : nothing}${row.confirmedByWorker ? html` · ${t("attendance.confirmed_by_worker")}` : nothing}${row.selfApproved ? html` · ${t("attendance.self_approved")}` : nothing}${row.corrected ? html` · ${t("attendance.corrected")}` : nothing}${row.disputed ? html` · ${t("attendance.disputed")}` : nothing}
                     </li>
@@ -197,20 +221,11 @@ export class HoursRecord extends LitElement {
           : nothing
       }
       ${view.closures.map((closure) => {
-        const { start, end } = closure.period;
-        const lastDay = dateAfter(end, -1);
-        const wholeMonth =
-          start.endsWith("-01") && lastDay.startsWith(start.slice(0, 7)) && end.endsWith("-01");
-        const month = dateTimeFormat(currentLocale(), {
-          month: "long",
-          year: "numeric",
-          timeZone: "UTC",
-        });
+        const monthly = wholeMonth(closure.period);
+        const label = periodLabel(closure.period);
         return html`<section data-closure=${closure.closureId}>
-          <h2>
-            ${wholeMonth ? fill("hours.closed_month", { month: month.format(new Date(start)) }) : t("hours.frozen")}
-          </h2>
-          ${wholeMonth ? nothing : html`<p>${dateTimeFormat(currentLocale(), { dateStyle: "medium", timeZone: "UTC" }).formatRange(new Date(start), new Date(lastDay))}</p>`}
+          <h2>${monthly ? fill("hours.closed_month", { month: label }) : t("hours.frozen")}</h2>
+          ${monthly ? nothing : html`<p>${label}</p>`}
           <dl>
             <dt>${t("hours.closed_total")}</dt>
             <dd>${duration(closure.frozenWorkedMinutes)}</dd>

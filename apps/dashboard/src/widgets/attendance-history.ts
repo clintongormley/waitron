@@ -2,6 +2,7 @@ import { html, nothing } from "lit";
 import type { AttendanceInbox, CorrectionItem } from "@waitron/dashboard-modules";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+import { hoursTime } from "../hours-format.js";
 
 export function storedAttendanceTime(at: string, offset: number): string {
   const wall = new Date(Date.parse(at) + offset * 60_000).toISOString();
@@ -10,7 +11,7 @@ export function storedAttendanceTime(at: string, offset: number): string {
   return `${wall.slice(0, 10)} ${wall.slice(11, 16)} ${zone}`;
 }
 
-export function attendanceHistory(entry: AttendancePrompt["history"][number]) {
+export function attendanceHistory(entry: AttendancePrompt["history"][number], timeZone?: string) {
   const author = entry.extension?.authorKind ?? "worker";
   const label =
     entry.entryKind === "confirmation" || entry.extension?.respondsToEntryId
@@ -21,7 +22,7 @@ export function attendanceHistory(entry: AttendancePrompt["history"][number]) {
   return html`<li>
     <span>${label}: </span
     ><time datetime=${entry.eventAt}
-      >${storedAttendanceTime(entry.eventAt, entry.offsetMinutes)}</time
+      >${timeZone ? hoursTime(entry.eventAt, entry.offsetMinutes, timeZone) : storedAttendanceTime(entry.eventAt, entry.offsetMinutes)}</time
     >
     <span> · ${t(`attendance.author_${author}`)}</span>
     ${entry.correctionReason ? html`<p>${entry.correctionReason}</p>` : nothing}

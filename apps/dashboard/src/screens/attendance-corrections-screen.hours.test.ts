@@ -26,7 +26,8 @@ it("opens the configured pay period, counted automatic hours and retained worker
   const m = await mountManagerHours();
   const view = await record(m.root);
   expect(m.root.querySelector("h1")!.textContent).toBe("Hours");
-  expect(view.shadowRoot!.textContent).toContain("2026-01-01 · 2026-01-31");
+  expect(m.root.querySelector("[data-hours-period]")?.textContent?.trim()).toBe("January 2026");
+  expect(m.root.querySelector('[name="hoursPeriodDate"]')).toBeNull();
   expect(view.shadowRoot!.querySelector("[data-total]")!.textContent).toContain("8 h 00 min");
   expect(view.shadowRoot!.textContent).toContain("already counts");
   expect(view.shadowRoot!.textContent).toContain("Waiting for the worker’s acknowledgement.");
@@ -130,18 +131,37 @@ it("uses the returned period bounds for previous and next, and ignores an old pe
   m.hold("date=2025-12-31", old.promise);
   await click(m.root, "[data-hours-previous]");
   await expect.poll(() => m.reads.some((r) => r.path.endsWith("date=2025-12-31"))).toBe(true);
+  expect(m.root.querySelector("[data-hours-period]")?.textContent?.trim()).toBe("December 2025");
   m.release();
-  m.data.hours.period = { start: "2026-02-01", end: "2026-03-01" };
-  await change(m.root, "hoursPeriodDate", "2026-02-10");
+  await click(m.root, "[data-hours-next]");
   await expect
-    .poll(() => m.root.querySelector("dashboard-hours-record")?.view?.period.start)
-    .toBe("2026-02-01");
-  old.resolve(managerHours());
+    .poll(() => m.root.querySelector("dashboard-hours-record")?.view?.selection.date)
+    .toBe("2026-01-01");
+  old.resolve({ ...managerHours(), period: { start: "2025-12-01", end: "2026-01-01" } });
   await m.el.updateComplete;
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  expect(m.root.querySelector("dashboard-hours-record")?.view?.period.start).toBe("2026-02-01");
+  expect(m.root.querySelector("dashboard-hours-record")?.view?.period.start).toBe("2026-01-01");
+  m.data.hours.period = { start: "2026-02-01", end: "2026-02-15" };
   await click(m.root, "[data-hours-next]");
-  await expect.poll(() => m.reads.some((r) => r.path.endsWith("date=2026-03-01"))).toBe(true);
+  await expect
+    .poll(() => m.root.querySelector("[data-hours-period]")?.textContent?.trim())
+    .toMatch(/1.*14 Feb 2026/);
+  await click(m.root, "[data-hours-next]");
+  await expect.poll(() => m.reads.some((r) => r.path.endsWith("date=2026-02-15"))).toBe(true);
+});
+
+it("keeps the requested month visible and can return from a failed read", async () => {
+  const m = await mountManagerHours();
+  await record(m.root);
+  m.fail();
+  await click(m.root, "[data-hours-next]");
+  await expect.poll(() => m.root.querySelector("[data-read-error]")).toBeTruthy();
+  expect(m.root.querySelector("[data-hours-period]")?.textContent?.trim()).toBe("February 2026");
+  expect(m.root.querySelector("dashboard-hours-record")).toBeNull();
+  m.fail(false);
+  await click(m.root, "[data-hours-previous]");
+  await expect.poll(() => m.root.querySelector("[data-read-error]")).toBeNull();
+  expect(m.root.querySelector("[data-hours-period]")?.textContent?.trim()).toBe("January 2026");
 });
 
 it("a worker response refreshes counted and frozen changes without replacing a staged manager proposal", async () => {
@@ -308,10 +328,9 @@ it("reads the initial period alongside lookups but blocks choosing a period unti
   const lookups = deferred<unknown>();
   const m = await mountManagerHours({ hold: { match: "/lookups", promise: lookups.promise } });
   await expect.poll(() => m.reads.some((r) => r.path.endsWith("/lookups"))).toBe(true);
-  const dateDisabledBefore = m.root.querySelector<HTMLInputElement>(
-    '[name="hoursPeriodDate"]',
-  )!.disabled;
-  await change(m.root, "hoursPeriodDate", "2026-02-10");
+  const dateDisabledBefore =
+    m.root.querySelector<HTMLInputElement>("[data-hours-previous]")!.disabled;
+  m.root.querySelector<HTMLElement>("[data-hours-previous]")!.click();
   await m.el.updateComplete;
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   const hoursReadsBefore = m.reads.filter((r) => r.path.includes("/hours?")).map((r) => r.path);
@@ -324,7 +343,7 @@ it("reads the initial period alongside lookups but blocks choosing a period unti
   ]);
   expect(hoursReadsBefore).toEqual(["/management-api/attendance/hours?kind=pay-period"]);
   expect(dateDisabledBefore).toBe(true);
-  expect(m.root.querySelector<HTMLInputElement>('[name="hoursPeriodDate"]')!.disabled).toBe(false);
+  expect(m.root.querySelector("[data-hours-previous]")).toHaveProperty("disabled", false);
 });
 
 it("starts one stream with Hours before lookups, hiding day actions until the viewer arrives", async () => {
