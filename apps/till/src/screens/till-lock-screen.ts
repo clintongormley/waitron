@@ -240,6 +240,10 @@ export class TillLockScreen extends LitElement {
         flex: 1;
         min-inline-size: 0;
       }
+
+      .pin-screen .actions wt-button::part(button) {
+        block-size: 100%;
+      }
     `,
   ];
 

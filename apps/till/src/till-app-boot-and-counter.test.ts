@@ -1594,7 +1594,9 @@ describe("till-app session activity", () => {
       try {
         const { el, host } = await mountApp({
           login,
-          listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
+          listStaff: vi
+            .fn()
+            .mockResolvedValue([{ personId: "p1", displayName: "Ana Martin Soto" }]),
         });
         host.style.height = "100%";
         host.style.setProperty("--wt-font-family", PHONE_FONT);
@@ -1621,6 +1623,9 @@ describe("till-app session activity", () => {
             expect(rect.right).toBeLessThanOrEqual(line.right);
           }
         };
+        const cancel = root.querySelector(".cancel")!.shadowRoot!.querySelector("button")!;
+        const logIn = submit.shadowRoot!.querySelector("button")!;
+        expect(logIn.getBoundingClientRect().height).toBe(cancel.getBoundingClientRect().height);
         expect(submit.getAttribute("size")).toBe("lg");
         expect(innerHeight - submit.getBoundingClientRect().bottom).toBeLessThan(65);
         expect(key.getBoundingClientRect().width).toBeGreaterThanOrEqual(100);
