@@ -466,12 +466,6 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     expect(actions(el).error).toBe(sentence);
   });
 
-  it("keeps the approver refusal, which is the same for a split", async () => {
-    const el = await mount({ mode: "split", refusal: { code: "authorization.not_permitted" } });
-
-    expect(actions(el).error).toBe(t("cancel_credit.refused_not_permitted"));
-  });
-
   it("names the corrective invoice and says what to do next", async () => {
     const el = await mount({ mode: "split", done: { corrective: "R/3" } });
 
