@@ -116,13 +116,15 @@ it("serves the document's declarations for a dish, its variant and its extra, re
     });
   });
   const document = await build(f.dinner);
-  await app((tx) =>
-    updateProduct(tx, f.lemonade, {
-      allergens: { eggs: {} },
-      dietaryDeclarations: ["vegetarian"],
-      dietOverride: { vegan: "no" },
-    }),
-  );
+  await app(async (tx) => {
+    const edited = {
+      dietaryDeclarations: ["vegetarian" as const],
+      dietOverride: { vegan: "no" as const },
+    };
+    await updateProduct(tx, f.lemonade, { allergens: { eggs: {} }, ...edited });
+    await updateProduct(tx, f.large, { allergens: { fish: {} }, ...edited });
+    await updateProduct(tx, f.extraLemon, { allergens: { celery: {} }, ...edited });
+  });
   const state = await app((tx) => applyLiveFields(tx, [document]));
   const offer = state.offers.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
   expect(document.offers[offer.id]!.allergens).toEqual({
@@ -133,14 +135,15 @@ it("serves the document's declarations for a dish, its variant and its extra, re
   expect(offer.diet!.vegan).toBe("unknown");
   expect(offer.dietOverride).toBeNull();
   expect(offer.allergens).toEqual({ gluten: { kinds: ["oats", "wheat"] }, milk: {} });
-  expect(offer.variants.find((variant) => variant.id === f.large)!.allergens).toEqual({
-    nuts: { kinds: ["walnuts"] },
-  });
+  const variant = offer.variants.find((variant) => variant.id === f.large)!;
+  expect(variant.allergens).toEqual({ nuts: { kinds: ["walnuts"] } });
+  expect(variant.dietaryDeclarations).toEqual([]);
+  expect(variant.diet!.vegan).toBe("unknown");
+  expect(variant.dietOverride).toBeNull();
   const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
-  expect(extras.items.find((extra) => extra.productId === f.extraLemon)!.addAllergens).toEqual({
-    gluten: { kinds: ["barley"] },
-    sesame: {},
-  });
+  const extra = extras.items.find((extra) => extra.productId === f.extraLemon)!;
+  expect(extra.addAllergens).toEqual({ gluten: { kinds: ["barley"] }, sesame: {} });
+  expect(extra.suitableFor).toEqual([]);
 });
 
 describe("declarations in the published document", () => {
