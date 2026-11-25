@@ -3700,7 +3700,7 @@ describe("till-app: service cancellation consent", () => {
         await openCancel(el);
         expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
         expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-          "Refund the payment at a till",
+          "Give the money back at a till",
         );
         expect(api.refundTransaction).not.toHaveBeenCalled();
       },
@@ -3721,7 +3721,7 @@ describe("till-app: service cancellation consent", () => {
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
       expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-        "Refund the payment at a till",
+        "Give the money back at a till",
       );
     });
 
