@@ -91,6 +91,9 @@ const paidOnWo9 = (
 
 const formError = (el: TillApp) => inDialog(el, "wt-form-actions")!.error;
 
+/** The printed bill wo-4, its receipt issued. */
+const printedWo4 = billOf({ status: "placed", invoiceNumber: "A-1/405" });
+
 /** The printed bill wo-4 as the bills read lists it once Pay for items has credited its receipt. */
 const creditedWo4 = billOf({
   billNumber: null,
@@ -118,8 +121,7 @@ async function chooseItems(el: TillApp, lineNos: number[]): Promise<void> {
   for (const lineNo of lineNos) await press(el, `input[name="line"][value="${lineNo}"]`);
 }
 
-/** Pay > Items on the printed bill wo-4: its Pay opens the presented sheet, whose Pay in parts opens
- * the Pay window. */
+/** Pay > Items on the printed bill wo-4: its Pay opens the Pay window. */
 async function choosePrintedItems(el: TillApp, lineNos: number[]): Promise<void> {
   const order = await openTable(el);
   if (order.orderId !== "wo-4") {
@@ -127,8 +129,6 @@ async function choosePrintedItems(el: TillApp, lineNos: number[]): Promise<void>
     await flush(el);
   }
   order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
-  await flush(el);
-  emit(el.shadowRoot!.querySelector("till-presented-pay-dialog")!, "presented-pay-parts");
   await flush(el);
   await press(el, 'input[name="way"][value="items"]');
   for (const lineNo of lineNos) await press(el, `input[name="line"][value="${lineNo}"]`);
@@ -375,7 +375,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
               outstanding: "0.00",
             }),
           ]
-        : [owing, billOf({ billNumber: 2, status: "placed" })],
+        : [owing, billOf({ billNumber: 2, status: "placed", invoiceNumber: "A-1/405" })],
     );
     const payForItems = vi.fn(async () => {
       paid = true;
@@ -450,7 +450,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
               outstanding: "0.00",
             }),
           ]
-        : [billOf({ status: "placed" })],
+        : [printedWo4],
     );
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
@@ -485,9 +485,29 @@ describe("till-app: Pay for items on a bill of their own", () => {
     );
   });
 
-  it("the preview's reopen refusal shows before any money", async () => {
+  it("a Counter order sent to the kitchen and moved to the table, with no receipt, shows Items barred", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+    });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-presented-pay-dialog")!, "presented-pay-parts");
+    await flush(el);
+
+    const root = dialog(el)!.shadowRoot!;
+    expect(root.querySelector<HTMLInputElement>('[name="way"][value="items"]')!.disabled).toBe(
+      true,
+    );
+    expect(text(root.querySelector("[data-pay-items-reason]"))).toBe(
+      t("bill_pay.items_barred_counter"),
+    );
+  });
+
+  it("the preview's reopen refusal shows before any money", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([printedWo4]),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi
         .fn()
@@ -586,6 +606,8 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
   });
   const itemsSent = () =>
     vi.mocked(api.payForItems).mock.calls.map(([, request]) => request as ItemPaymentRequest);
+  /** The new bill as a card that charged nothing leaves it once its dishes went back. */
+  const putBack = { status: "abandoned" as const, outstanding: "0.00" };
 
   async function confirmOnReader(el: TillApp): Promise<void> {
     await chooseItems(el, [4, 5]);
@@ -662,15 +684,13 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     const { el } = await mountApp({
       ...withReader(),
       getPartyBills: vi.fn(async () =>
-        paid
-          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
-          : [billOf({ status: "placed" })],
+        paid ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })] : [printedWo4],
       ),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
       payForItems: vi.fn(async () => {
         paid = true;
-        return { ...onWo9("declined", "failed"), sourceBalance: reopened };
+        return { ...onWo9("declined", "failed", putBack), sourceBalance: reopened };
       }),
     });
     await choosePrintedItems(el, [4, 5]);
@@ -696,6 +716,55 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)![0]).toBe("wo-5");
   });
 
+  it("a declined card whose dishes could not go back to the reopened bill shows the bill they stayed on", async () => {
+    let paid = false;
+    // While the card was out the reopened bill wo-5 was printed again, so the dishes stay on wo-9.
+    const stayed = { status: "open" as const, outstanding: "30.00" };
+    const { el } = await mountApp({
+      ...withReader(),
+      getPartyBills: vi.fn(async () =>
+        paid
+          ? [
+              creditedWo4,
+              billOf({
+                workingOrderId: "wo-5",
+                billNumber: 2,
+                status: "placed",
+                invoiceNumber: "A-1/406",
+              }),
+              billOf({ workingOrderId: "wo-9", billNumber: 3, total: "30.00", ...stayed }),
+            ]
+          : [printedWo4],
+      ),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return {
+          ...onWo9("declined", "failed", stayed),
+          sourceBalance: balanceOf({
+            workingOrderId: "wo-5",
+            status: "placed",
+            outstanding: "90.00",
+          }),
+        };
+      }),
+    });
+    await choosePrintedItems(el, [4, 5]);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el, 6);
+
+    const kept = fill(t("table.bill_credited_kept"), { number: "R-1/4", shown: "Bill 3" });
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(kept);
+    expect(windowCredited(el)).toBe(kept);
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-9");
+  });
+
   /** A declined card on the printed bill wo-4, whose dishes are `printed`, after choosing the
    * dishes on `chosen`. The reopened bill wo-5 holds copies of them, with ids of their own and
    * numbered from 1, the chosen ones moved back to its end under new numbers, as the server's
@@ -715,9 +784,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     ];
     const { el } = await mountApp({
       ...withReader(),
-      getPartyBills: vi.fn(async () => [
-        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
-      ]),
+      getPartyBills: vi.fn(async () => [paid ? billOf({ workingOrderId: "wo-5" }) : printedWo4]),
       getTabLines: vi.fn(async (billId: string) => ({
         lines: billId === "wo-5" ? reopenedLines : printed,
         revision: 0,
@@ -727,7 +794,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       payForItems: vi.fn(async () => {
         paid = true;
         return {
-          ...onWo9("declined", "failed"),
+          ...onWo9("declined", "failed", putBack),
           sourceBalance: balanceOf({ workingOrderId: "wo-5" }),
         };
       }),
@@ -801,10 +868,17 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         defaultReaderId: readers[0]!.id,
       }),
       getPartyBills: vi.fn(async () =>
-        paid
-          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
-          : [billOf({ status: "placed" })],
+        paid ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })] : [printedWo4],
       ),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 1,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
       payForItems: vi.fn(async () => {
@@ -816,6 +890,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
     });
     await choosePrintedItems(el, [4, 5]);
+    expect(dialog(el)!.deferredOffered).toEqual({ state: "offered" });
     const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
     await press(el, 'input[name="method"][value="card"]');
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
@@ -878,9 +953,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       ...withReader("sumup_cloud"),
       cancelBillReaderPayment,
       getPartyBills: vi.fn(async () =>
-        paid
-          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
-          : [billOf({ status: "placed" })],
+        paid ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })] : [printedWo4],
       ),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
@@ -899,7 +972,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await press(el, "[data-pay-cancel-reader]");
     paid = true;
     settle({
-      ...onWo9("declined", "failed"),
+      ...onWo9("declined", "failed", putBack),
       sourceBalance: balanceOf({ workingOrderId: "wo-5" }),
     });
     await flush(el, 6);

@@ -13,6 +13,7 @@ import type {
   ItemPaymentRequest,
   ItemPick,
 } from "../api/item-payment-types.js";
+import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
@@ -89,6 +90,21 @@ export function itemsAllocated(
     charged: method === "card" ? moneyPlus(preview.applied, preview.tip) : null,
     total: preview.total,
   };
+}
+
+/** Why the Pay window offers no Items: from Find a bill; or on a Counter order sent to the kitchen
+ * (`placed` with no receipt), at the Counter or since moved to a table, which Pay for items refuses
+ * (`bill.not_issued`); else null. */
+export function itemsBarredReason(open: {
+  found: boolean;
+  counterCollect: boolean;
+  printed: boolean;
+  status: BillBalance["status"] | undefined;
+}): StringKey | null {
+  if (open.found) return "bill_pay.items_barred_found";
+  if (open.counterCollect || (!open.printed && open.status === "placed"))
+    return "bill_pay.items_barred_counter";
+  return null;
 }
 
 /** Whether `preview` is Pay for items': only it carries the chosen items' price, as they are paid

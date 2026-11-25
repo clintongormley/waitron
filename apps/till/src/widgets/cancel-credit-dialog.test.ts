@@ -434,6 +434,21 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     },
   );
 
+  it.each(["en", "es"] as const)(
+    "says a bill holding an advance cannot be reopened to split in its own words, in %s",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const el = await mount({ mode: "split", refusal: { code: "bill.has_advance" } });
+
+        expect(actions(el).error).toBe(t("split.refused_advance"));
+        expect(actions(el).error).not.toBe(codeMessage("bill.has_advance"));
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
   it("says the dishes are not served even when the refusal lists none", async () => {
     const el = await mount({ mode: "split", refusal: { code: "bill.unserved_dishes" } });
 

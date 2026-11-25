@@ -949,16 +949,17 @@ particular dishes. For an equal share, enter how many people are still to pay, i
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
 on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
-**Cancel payment**, the dishes go back to this bill. If they cannot go back, they stay on a bill of
-their own, to be paid there: at a table it is listed in the bill switcher, and at the Counter under
-**Parked orders**. While their card is still out, the till that
+**Cancel payment**, the dishes go back to this bill. If they cannot go back, for example because
+this bill was printed or paid while the card was out, they stay on a bill of their own, to be paid
+there: at a table it is listed in the bill switcher, and at the Counter under **Parked orders**.
+While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, **Items** first credits its receipt and puts its dishes on an open bill, then
 pays the chosen ones on a bill of their own. If the card is declined or you choose **Cancel
-payment**, every dish stays on that open bill, to print again or pay. If the bill is presented for
-collection and its invoice has yet to be issued, choose **Pay in parts** to see the same choices. A
-Counter order already sent to the kitchen is paid with **An amount**, **Split equally** or **Whole
-bill**, not by item.
+payment**, the chosen dishes go back to that open bill in the same way. A Counter order already
+sent to the kitchen, even once moved to a table, is paid with **An amount**, **Split equally** or
+**Whole bill**, not by item; when its bill is presented for collection, choose **Pay in parts** to
+see those choices.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

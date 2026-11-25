@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { billOf } from "../../test/bill-pay-app.js";
 import type { BillBalance, BillEditExpected } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import { billNoticeText, creditedNotice, goneNotice, movedToBill } from "./reopened-bill.js";
+import {
+  billAfterItems,
+  billNoticeText,
+  creditedNotice,
+  goneNotice,
+  movedToBill,
+} from "./reopened-bill.js";
 
 const balance = (workingOrderId: string) => ({ workingOrderId }) as unknown as BillBalance;
 const edit: BillEditExpected = {
@@ -56,6 +62,19 @@ describe("creditedNotice and billNoticeText", () => {
     expect(creditedNotice([billOf()], reopen)).toBeNull();
   });
 
+  it("says the chosen dishes stayed on the bill shown when they could not go back", () => {
+    const printed = billOf({ billNumber: null, status: "abandoned", correctives: ["R-1/4"] });
+    const own = billOf({ workingOrderId: "wo-9", billNumber: 3 });
+    const kept = { from: "wo-4", to: "wo-9", kept: true };
+
+    expect(billNoticeText(creditedNotice([printed, own], kept))).toBe(
+      fill(t("table.bill_credited_kept"), { number: "R-1/4", shown: "Bill 3" }),
+    );
+    expect(billNoticeText(creditedNotice([own], kept))).toBe(
+      fill(t("table.bill_credited_kept_unnumbered"), { shown: "Bill 3" }),
+    );
+  });
+
   it("words a bill that left the table, with or without its number, in the language shown now", () => {
     const shown = billOf({ workingOrderId: "wo-5", billNumber: 2 });
     const notice = goneNotice(billOf(), shown);
@@ -73,5 +92,34 @@ describe("creditedNotice and billNoticeText", () => {
     } finally {
       setLocale("en");
     }
+  });
+});
+
+describe("billAfterItems", () => {
+  const items = (status: BillBalance["status"]) =>
+    ({ workingOrderId: "wo-9", status }) as unknown as BillBalance;
+  const answer = (status: BillBalance["status"]) => ({
+    balance: items(status),
+    paidOn: "wo-9",
+    sourceBalance: balance("wo-5"),
+  });
+
+  it("is the reopened bill, unless a card that charged nothing left the dishes on their open bill", () => {
+    expect(billAfterItems("wo-4", answer("abandoned"), true)).toEqual({
+      balance: balance("wo-5"),
+      kept: false,
+    });
+    expect(billAfterItems("wo-4", answer("open"), false)).toEqual({
+      balance: balance("wo-5"),
+      kept: false,
+    });
+    expect(billAfterItems("wo-4", answer("open"), true)).toEqual({
+      balance: items("open"),
+      kept: true,
+    });
+  });
+
+  it("is nothing when the answer names the bill paid from", () => {
+    expect(billAfterItems("wo-5", answer("open"), true)).toBeUndefined();
   });
 });

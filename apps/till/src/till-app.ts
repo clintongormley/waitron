@@ -332,6 +332,7 @@ import {
 import { CounterOverpaidRead } from "./state/counter-overpaid.js";
 import {
   itemsAllocatedFrom,
+  itemsBarredReason,
   itemsRefusal,
   paysOnNewBill,
   previewPayment,
@@ -339,6 +340,7 @@ import {
   withItems,
 } from "./state/pay-for-items.js";
 import {
+  billAfterItems,
   billNoticeText,
   creditedNotice,
   goneNotice,
@@ -3743,7 +3745,7 @@ export class TillApp extends LitElement {
    * this visit. An explicit bill choice ends that wait. */
   #billAfterSplit?: { partyId: string; visit: number; billId?: string };
   /** The printed bill the last Pay for items answer credited, and the bill it reopened as. */
-  #reopenedByItems?: { from: string; to: string };
+  #reopenedByItems?: { from: string; to: string; kept: boolean };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -12739,7 +12741,7 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsBarred=${open.found !== undefined ? "bill_pay.items_barred_found" : open.surface === "counter" && this.stage === "collect" ? "bill_pay.items_barred_counter" : null}
+        .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counterCollect: open.surface === "counter" && this.stage === "collect", printed: open.printed === true, status: open.balance?.status ?? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status })}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -23693,8 +23695,13 @@ export class TillApp extends LitElement {
     // Pay for items answers the new bill's balance, never the table's.
     const own = result.paidOn === undefined ? result.balance : undefined;
     const shown = own === undefined ? {} : { balance: own };
-    const to = own === undefined ? reopenedBill(open.billId, result.sourceBalance) : undefined;
-    this.#reopenedByItems = to && { from: open.billId, to: to.workingOrderId };
+    const notCharged = NOT_CHARGED_OUTCOMES.has(result.outcome);
+    const to = own === undefined ? billAfterItems(open.billId, result, notCharged) : undefined;
+    this.#reopenedByItems = to && {
+      from: open.billId,
+      to: to.balance.workingOrderId,
+      kept: to.kept,
+    };
     if (this.activeTabId === open.billId && own !== undefined) this.billBalance = own;
     const held = this.#unansweredPayments.get(open.billId);
     if (result.payment.state === "pending" && held?.pendingRefusal !== undefined) {
@@ -23709,7 +23716,7 @@ export class TillApp extends LitElement {
       await this.#rereadAfterPaid(open, own, result.sourceBalance);
       return;
     }
-    if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
+    if (notCharged) {
       // The put-back moved the table's bill's revisions, so its confirmation could only be refused.
       this.billPaying = {
         ...now,
@@ -23726,7 +23733,8 @@ export class TillApp extends LitElement {
             },
         busy: false,
       };
-      if (own === undefined) await this.#rereadAfterPaid(open, undefined, result.sourceBalance);
+      if (own === undefined)
+        await this.#rereadAfterPaid(open, undefined, to?.balance ?? result.sourceBalance);
       return;
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();

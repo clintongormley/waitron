@@ -1767,9 +1767,13 @@ export const en = {
   "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
   "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
   "table.bill_credited":
-    "Corrective invoice {number} issued: the printed receipt is cancelled. Dishes still to pay are on {shown}.",
+    "Corrective invoice {number} issued: the printed receipt is credited. Dishes still to pay are on {shown}.",
   "table.bill_credited_unnumbered":
-    "A corrective invoice was issued: the printed receipt is cancelled. Dishes still to pay are on {shown}.",
+    "A corrective invoice was issued: the printed receipt is credited. Dishes still to pay are on {shown}.",
+  "table.bill_credited_kept":
+    "Corrective invoice {number} issued: the printed receipt is credited. The chosen dishes stay on {shown}, to be paid there.",
+  "table.bill_credited_kept_unnumbered":
+    "A corrective invoice was issued: the printed receipt is credited. The chosen dishes stay on {shown}, to be paid there.",
   "table.bill_count": "{bill} · {count} bills",
   "table.unsent_bill": "{bill} unsent",
   "table.unsent_bills": "{n} bills unsent",
@@ -2279,6 +2283,8 @@ export const en = {
     "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
   "split.refused_not_at_table": "Only a table's bill can be split this way. Nothing was credited.",
   "split.refused_not_issued": "This bill has no receipt yet, so nothing was credited.",
+  "split.refused_advance":
+    "Part of this bill was paid with its own receipt, so it cannot be reopened to split. Nothing was credited. Take the rest of the payment on this bill by amount or in equal shares.",
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
   "split.done":
@@ -4242,6 +4248,10 @@ export const es: Record<StringKey, string> = {
     "Factura rectificativa {number} emitida: el ticket impreso queda abonado. Los platos por pagar están en {shown}.",
   "table.bill_credited_unnumbered":
     "Se emitió una factura rectificativa: el ticket impreso queda abonado. Los platos por pagar están en {shown}.",
+  "table.bill_credited_kept":
+    "Factura rectificativa {number} emitida: el ticket impreso queda abonado. Los platos elegidos siguen en {shown}, para pagarlos allí.",
+  "table.bill_credited_kept_unnumbered":
+    "Se emitió una factura rectificativa: el ticket impreso queda abonado. Los platos elegidos siguen en {shown}, para pagarlos allí.",
   "table.bill_count": "{bill} · {count} cuentas",
   "table.unsent_bill": "{bill} sin enviar",
   "table.unsent_bills": "{n} cuentas sin enviar",
@@ -4745,6 +4755,8 @@ export const es: Record<StringKey, string> = {
   "split.refused_not_at_table":
     "Solo la cuenta de una mesa se puede dividir así. No se ha abonado nada.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket, así que no se ha abonado nada.",
+  "split.refused_advance":
+    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir para dividirla. No se ha abonado nada. Cobra el resto en esta cuenta por importe o a partes iguales.",
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir para dividir.",
   "split.done":

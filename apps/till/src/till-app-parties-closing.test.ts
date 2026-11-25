@@ -827,7 +827,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     const { el } = await openSplit(server);
     await confirmSplit(el);
 
-    expect(bottom(el)).toBe(codeMessage("bill.has_advance"));
+    expect(bottom(el)).toBe(t("split.refused_advance"));
     expect(bottom(el)).toContain("by amount or in equal shares");
     expect(doneText(el)).toBeNull();
   });

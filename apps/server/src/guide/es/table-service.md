@@ -1011,16 +1011,17 @@ personas quedan por pagar, incluida esta. Para artículos, elige los platos y aj
 si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
 tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
 toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
-cuenta. Si no pueden volver, se quedan en una cuenta propia, para cobrarlos allí: en una mesa
-aparece en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
+cuenta. Si no pueden volver, por ejemplo porque esta cuenta se imprimió o se cobró mientras la
+tarjeta estaba en curso, se quedan en una cuenta propia, para cobrarlos allí: en una mesa aparece
+en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
 primero abona su ticket y pasa sus platos a una cuenta abierta, y después cobra los elegidos en una
-cuenta propia. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, todos los platos se quedan en
-esa cuenta abierta, para imprimirla de nuevo o cobrarla. Si la cuenta está presentada para su cobro
-y aún no se ha emitido su factura, elige **Cobrar por partes** para ver las mismas opciones. Un
-pedido de mostrador ya enviado a cocina se cobra con **Una cantidad**, **Dividir a partes iguales**
-o **Toda la cuenta**, no por artículos.
+cuenta propia. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos elegidos vuelven a
+esa cuenta abierta del mismo modo. Un pedido de mostrador ya enviado a cocina, aunque después se
+haya pasado a una mesa, se cobra con **Una cantidad**, **Dividir a partes iguales** o **Toda la
+cuenta**, no por artículos; cuando su cuenta está presentada para su cobro, elige **Cobrar por
+partes** para ver esas opciones.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
