@@ -1138,4 +1138,24 @@ describe("declaration changes", () => {
     hake(proposed).unitPrice = "3.00";
     expect(await changes(live, proposed)).toEqual([setMenuChange(["allergens", "diet", "dishes"])]);
   });
+
+  it.each([
+    [
+      "variant's price",
+      (doc: MenuDocument) => {
+        hake(doc).variants[0]!.unitPrice = "9.00";
+      },
+    ],
+    [
+      "extra's price",
+      (doc: MenuDocument) => {
+        lemon(doc).price = "1.50";
+      },
+    ],
+  ] as const)("lists a set-menu-only %s change as its dishes", async (_name, edit) => {
+    const live = withSetMenu(document()),
+      proposed = withSetMenu(document());
+    edit(proposed);
+    expect(await changes(live, proposed)).toEqual([setMenuChange(["dishes"])]);
+  });
 });
