@@ -18,6 +18,14 @@ declare module "@waitron/shared" {
       invoiceCorrectionId: string;
       reason: "not_found" | "not_open" | "other_sale" | "over_amount";
     };
+    /** A whole credit filed on a reopened bill's authority (`authorizeReopenedCredit`) that is
+     * partial (`not_whole`), or whose `reopenedBillId` is not an open bill reopened from the
+     * credited ticket's bill (`no_reopened_bill`). Refused before a number is allocated. */
+    "sale.correction_reopen_invalid": {
+      saleId: string;
+      reopenedBillId: string;
+      reason: "not_whole" | "no_reopened_bill";
+    };
     "sale.correction_not_admitted": {
       reason:
         | Extract<CorrectionAdmission, { eligible: false }>["reason"]

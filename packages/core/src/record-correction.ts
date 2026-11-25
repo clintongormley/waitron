@@ -29,6 +29,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
 import { authorizeCorrectionApproval } from "./correction-approval.js";
+import { authorizeReopenedCredit } from "./correction-reopen.js";
 import { correctionTargetFor } from "./correction-target.js";
 import {
   checkPartialCorrectionBreakdown,
@@ -85,8 +86,14 @@ export interface RecordCorrectionInput {
   partialVatBreakdown?: readonly VatBreakdownLine[];
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
    * recorded on `sales.authorized_by`. An `invoiceCorrectionId` files on the approval given when
-   * that correction was opened (`authorizeCorrectionApproval`), with nobody signed in. */
-  authz: AuthzInput | { managementSessionId: string } | { invoiceCorrectionId: string };
+   * that correction was opened (`authorizeCorrectionApproval`), with nobody signed in. A
+   * `reopenedBillId` files a whole credit for the open session's person without `sale.rectify`
+   * (`authorizeReopenedCredit`). */
+  authz:
+    | AuthzInput
+    | { managementSessionId: string }
+    | { invoiceCorrectionId: string }
+    | { reopenedBillId: string; sessionId: string };
   clock: TrustedClock;
 }
 
@@ -163,23 +170,32 @@ export async function recordCorrection(
 
   const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId, "corrective");
 
+  // The reopen kind carries `sessionId` too, so it is tested before the last branch, which would
+  // send it to `authorize` for `sale.rectify`.
   const authorization =
-    "invoiceCorrectionId" in input.authz
-      ? await authorizeCorrectionApproval(tx, {
-          invoiceCorrectionId: input.authz.invoiceCorrectionId,
-          correctsSaleId,
-          total: input.total,
+    "reopenedBillId" in input.authz
+      ? await authorizeReopenedCredit(tx, {
+          saleId: input.correctsSaleId,
+          reopenedBillId: input.authz.reopenedBillId,
+          sessionId: input.authz.sessionId,
+          wholeInvoice: input.wholeInvoice === true,
         })
-      : "managementSessionId" in input.authz
-        ? await authorizeManager(tx, {
-            managementSessionId: input.authz.managementSessionId,
-            permission: "sale.rectify",
+      : "invoiceCorrectionId" in input.authz
+        ? await authorizeCorrectionApproval(tx, {
+            invoiceCorrectionId: input.authz.invoiceCorrectionId,
+            correctsSaleId,
+            total: input.total,
           })
-        : await authorize(tx, {
-            sessionId: input.authz.sessionId,
-            permission: "sale.rectify",
-            override: input.authz.override,
-          });
+        : "managementSessionId" in input.authz
+          ? await authorizeManager(tx, {
+              managementSessionId: input.authz.managementSessionId,
+              permission: "sale.rectify",
+            })
+          : await authorize(tx, {
+              sessionId: input.authz.sessionId,
+              permission: "sale.rectify",
+              override: input.authz.override,
+            });
 
   requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);
 
