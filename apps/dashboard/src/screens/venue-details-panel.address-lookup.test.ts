@@ -284,8 +284,9 @@ it("Enter on a suggestion fills the fields without pressing Save", async () => {
   const el = await editing(api);
   const search = lookup(el)!;
   search.delay = 0;
-  search.shadowRoot!.querySelector("input")!.focus();
-  await userEvent.keyboard("Calle Mayor");
+  const input = search.shadowRoot!.querySelector("input")!;
+  input.focus();
+  await userEvent.fill(input, "Calle Mayor");
   await vi.waitFor(() =>
     expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
   );
