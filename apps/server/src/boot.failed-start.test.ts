@@ -1795,26 +1795,32 @@ describe("settled-tender recovery boot lifetime", () => {
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
     let stopped = false;
     let signal: AbortSignal | undefined;
-    let release = () => {};
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markRecoveryStarted!: () => void;
+    const recoveryStarted = new Promise<void>((resolve) => {
+      markRecoveryStarted = resolve;
+    });
     let abort!: () => void;
     const aborted = new Promise<void>((resolve) => {
       abort = resolve;
     });
-    vi.mocked(recoverTenderRefunds).mockImplementationOnce((options) => {
+    vi.mocked(recoverTenderRefunds).mockImplementationOnce(async (options) => {
       signal = options.stopSignal!;
-      return new Promise((resolve) => {
-        release = () => {
-          stopped = true;
-          resolve({ pending: 0, nextDueAt: null });
-        };
-        options.stopSignal!.addEventListener("abort", abort, { once: true });
-      });
+      signal.addEventListener("abort", abort, { once: true });
+      markRecoveryStarted();
+      await released;
+      stopped = true;
+      return { pending: 0, nextDueAt: null };
     });
     const server = await startServer(env);
     let closing: Promise<void> | undefined;
     const deadline = new AbortController();
     try {
       await listening(Number(env.WAITRON_HTTP_PORT));
+      await Promise.race([recoveryStarted, delay(10_000, undefined, { signal: deadline.signal })]);
       expect(recoverTenderRefunds).toHaveBeenCalledOnce();
       expect(recoverTenderRefunds).toHaveBeenCalledWith(
         expect.objectContaining({ log: expect.any(Function) }),
