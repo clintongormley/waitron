@@ -3,7 +3,7 @@ import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { formatMoney, DEFAULT_HOME_ORDER } from "@waitron/shared";
+import { formatMoney, DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
@@ -615,12 +615,11 @@ describe("set-menu folders", () => {
       return { ...mounted, tapDish, addDaily };
     }
 
-    it("is taken by a dish picked before its set menu was added", async () => {
-      const { el, store, tapDish, addDaily } = await mountPlacing();
-      await tapDish();
+    it("is taken by a dish tapped from a copy drawn before it", async () => {
+      const { el, store, tapDish } = await mountPlacing();
       el.ownSetMenuOffer = corrected();
-      await addDaily();
-      await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+      await tapDish();
+      expect(store.lines).toHaveLength(1);
       expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
     });
 

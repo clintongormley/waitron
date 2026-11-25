@@ -9,12 +9,12 @@ import {
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readPartyAllergyView } from "./party-allergy.js";
+import { recordBillSetMenuVersions } from "./set-menu-bill.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
 import {
   sendSpecDraft,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specRows,
   type SpecVenue,
@@ -78,7 +78,6 @@ it("reads each kind of stored order line's published declarations", async () => 
       { menuItemId: hakeItem, variantId: large, quantity: "1" },
     ]),
   );
-  await setSpecCount(spec, bill.tabId, daily, 1);
   const fromDaily = { menuVersionId: versionId, setMenuId: daily.menuId, quantity: "1" };
   const draft = await saveSetMenuDraft(
     venue,
@@ -111,6 +110,7 @@ it("reads each kind of stored order line's published declarations", async () => 
       [daily.items.Soup, productIds.Soup, null, { milk: {} }],
       [daily.items.Soup, breadId, bread.listId, { sesame: {} }],
       [daily.items.Hake, large, null, { molluscs: {} }],
+      [null, null, null, undefined],
     ].map(([menuItemId, productId, listId, allergens]) => ({
       menuItemId,
       productId,
@@ -130,7 +130,10 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
     return { large, versionId: await publishWorkingMenu(tx, venue.tables.menuId) };
   });
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, { ...daily, versionId }, 1);
+  // As a dish sent earlier leaves it: the bill goes on ordering from the version it records.
+  await inTx(venue, (tx) =>
+    recordBillSetMenuVersions(tx, bill.tabId, [{ menuId: daily.menuId, versionId }]),
+  );
   const fromDaily = { menuVersionId: versionId, setMenuId: daily.menuId, quantity: "1" };
   const draft = await saveSetMenuDraft(
     venue,
@@ -179,7 +182,6 @@ it("reads a set-menu draft naming no known menu version as not reviewed", async 
     return publishWorkingMenu(tx, venue.tables.menuId);
   });
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, { ...daily, versionId }, 1);
   await saveSetMenuDraft(venue, bill, {
     menuVersionId: versionId,
     setMenuId: daily.menuId,
