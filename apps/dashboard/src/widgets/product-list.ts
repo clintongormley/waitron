@@ -1518,9 +1518,21 @@ export class ProductList extends LitElement {
     const key = `folder:${id}`;
     table.setExpanded(key, true);
     await table.revealRow(key);
-    // Fitting the newly expanded rows can move the linked category below the scroll box.
-    await new Promise(requestAnimationFrame);
-    await table.revealRow(key);
+    // The table applies its measured width on a frame before Products can fit the expanded rows.
+    await new Promise<void>((ready) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => ready())),
+    );
+    this.#fitNames();
+    const root = table.shadowRoot!;
+    const name = root.querySelector(`tr[data-row-key="${CSS.escape(key)}"] strong`);
+    const header = root.querySelector("thead");
+    const scroll = root.querySelector<HTMLElement>(".scroll");
+    if (!name || !header || !scroll) return;
+    const { top, bottom } = name.getBoundingClientRect();
+    // Keep the first line readable even when the wrapped title is taller than the space left.
+    const above = top - header.getBoundingClientRect().bottom;
+    const below = bottom - scroll.getBoundingClientRect().bottom;
+    scroll.scrollTop += Math.min(above, Math.max(0, below));
   }
 
   /** Opens every category above a product and scrolls it into view. */

@@ -546,9 +546,13 @@ describe("menu-screen", () => {
     },
   );
 
-  it.each([390, 1180])(
-    "reveals a deep-linked category when the list first becomes visible at %i px",
-    async (width) => {
+  it.each([
+    { width: 390, tableHeight: 330, fits: true },
+    { width: 390, tableHeight: 280, fits: false },
+    { width: 1180, tableHeight: 280, fits: true },
+  ])(
+    "reveals a deep-linked category at $width px with a $tableHeight px table",
+    async ({ width, tableHeight, fits }) => {
       const viewport = [window.innerWidth, window.innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));
       await page.viewport(width, 844);
@@ -575,7 +579,8 @@ describe("menu-screen", () => {
         ]),
       });
       const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-      host.style.setProperty("--wt-table-max", "280px");
+      host.style.setProperty("--wt-table-max", `${tableHeight}px`);
+      host.style.setProperty("--wt-font-size-md", "21px");
       const table = await productTable(el);
       await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
       expect(table.checkVisibility()).toBe(false);
@@ -587,12 +592,13 @@ describe("menu-screen", () => {
         const root = table.shadowRoot!;
         const name = root.querySelector('tr[data-row-key="folder:child"] strong');
         expect(name?.checkVisibility()).toBe(true);
-        expect(name!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-          root.querySelector("thead th")!.getBoundingClientRect().bottom,
-        );
-        expect(name!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-          root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
-        );
+        const bounds = name!.getBoundingClientRect();
+        const top = root.querySelector("thead th")!.getBoundingClientRect().bottom;
+        const bottom = root.querySelector(".scroll")!.getBoundingClientRect().bottom;
+        expect(bounds.height <= bottom - top).toBe(fits);
+        expect(bounds.top).toBeGreaterThanOrEqual(top - 1);
+        if (fits) expect(bounds.bottom).toBeLessThanOrEqual(bottom + 1);
+        else expect(bounds.top).toBeLessThanOrEqual(top + 1);
       });
       expect(table.isExpanded("folder:child")).toBe(true);
     },
