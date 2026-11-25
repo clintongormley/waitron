@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   menuItems,
   menuItemVariantOverrides,
@@ -7,6 +7,7 @@ import {
   sectionMembers,
   type Transaction,
 } from "@waitron/db";
+import { allParentsWithActiveVariants } from "./active-variant-parents.js";
 import { batches } from "./batches.js";
 import { onStructureChanged } from "./section-structure.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
@@ -41,14 +42,7 @@ export async function dropProductMenuPrices(
 
 /** Deletes, on every ordinary menu, the price of every product that has an Active variant. */
 export async function dropMenuPricesOfProductsWithVariants(tx: Transaction): Promise<void> {
-  const parents = await tx
-    .selectDistinct({ id: products.parentId })
-    .from(products)
-    .where(and(isNotNull(products.parentId), eq(products.active, true)));
-  await dropProductMenuPrices(
-    tx,
-    parents.map((row) => row.id!),
-  );
+  await dropProductMenuPrices(tx, [...(await allParentsWithActiveVariants(tx))]);
 }
 
 /**

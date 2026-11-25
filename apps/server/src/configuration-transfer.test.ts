@@ -1479,6 +1479,16 @@ describe("configuration transfer database path", () => {
     expect(bundle.tables.menu_items!.map((row) => row.gross_price).sort()).toEqual([
       150, 150, 550, 550,
     ]);
+    // Export leaves Inactive products behind, so the bundle carries Water's Inactive variant only
+    // when a test puts it there.
+    const colaSingle = bundle.tables.products!.find((row) => row.id === "Cola-single")!;
+    const waterId = bundle.tables.products!.find((row) => row.name === "Water")!.id;
+    bundle.tables.products!.push({
+      ...colaSingle,
+      id: "Water-single-imported",
+      parent_id: waterId,
+      active: 0,
+    });
     await applyVenue(planVenue(venue("B99887714"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
