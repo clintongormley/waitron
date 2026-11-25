@@ -1548,7 +1548,9 @@ type DraftOffers = {
   menus: readonly Pick<ZoneMenu, "id" | "versionId">[];
 };
 
-function hasSetMenu<T extends { setMenuId?: string }>(line: T): line is T & { setMenuId: string } {
+export function hasSetMenu<T extends { setMenuId?: string }>(
+  line: T,
+): line is T & { setMenuId: string } {
   return line.setMenuId !== undefined;
 }
 

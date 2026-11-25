@@ -28,7 +28,7 @@ import {
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readDrafts } from "./order-drafts.js";
+import { hasSetMenu, readDrafts, type DraftLine } from "./order-drafts.js";
 import { readCurrentOrders, type CurrentOrderRow } from "./order-group-reads.js";
 import { requireGroup } from "./order-group-records.js";
 import { fingerprint, partyFamily, partyZone } from "./parties.js";
@@ -37,6 +37,7 @@ import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { readLineCancellations } from "./line-service-state.js";
 import "./errors.js";
 import { notSetMenuLine } from "./set-menu-bill.js";
+import { setMenuOfferLookup } from "./set-menu-offers.js";
 
 function invalid(field: string): never {
   throw new AppError("allergy.invalid", { field });
@@ -58,6 +59,10 @@ function draftPickId(lineId: string, listId: string, productId: string): string 
   return `${lineId}:${listId}:${productId}`;
 }
 
+function draftDishId(lineId: string): string {
+  return `draft:${lineId}`;
+}
+
 function active(row: CurrentOrderRow): boolean {
   return compareDecimal(decimal(row.quantity), decimal(row.cancelledQuantity ?? "0")) > 0;
 }
@@ -75,8 +80,20 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(inArray(workingOrders.partyId, family));
   const storedById = new Map(stored.map(({ line }) => [line.id, line]));
+  // The zone's offers hold no set menu's dishes; a set-menu draft line names its version.
+  const setMenuLines = drafts.flatMap(({ lines }) => lines).filter(hasSetMenu);
+  const setMenus = await setMenuOfferLookup(tx, null, setMenuLines, [], "stored");
+  const setMenuOffer = (line: DraftLine) =>
+    hasSetMenu(line) ? setMenus.offerFor(line)?.offer : undefined;
   const published = await readPublishedDeclarations(tx, [
     ...storedById.values(),
+    ...setMenuLines.map((line) => ({
+      id: draftDishId(line.id),
+      menuVersionId: line.menuVersionId,
+      menuItemId: line.menuItemId,
+      productId: line.variantId ?? setMenuOffer(line)?.productId ?? null,
+      extraListId: null,
+    })),
     ...drafts.flatMap((draft) =>
       draft.lines.flatMap(({ id, menuVersionId, menuItemId, extras }) =>
         extras.flatMap(({ listId, picks }) =>
@@ -121,7 +138,7 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
   );
   for (const draft of drafts) {
     for (const line of draft.lines) {
-      const offer = offers.get(line.menuItemId);
+      const offer = setMenuOffer(line) ?? offers.get(line.menuItemId);
       const variant =
         line.variantId === null ? undefined : offer?.variants.find((v) => v.id === line.variantId);
       dishes.push({
@@ -132,8 +149,9 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
           variantName: variant?.name ?? null,
         }),
         quantity: line.quantity,
-        allergens:
-          line.variantId === null ? (offer?.allergens ?? null) : (variant?.allergens ?? null),
+        allergens: hasSetMenu(line)
+          ? allergens(draftDishId(line.id))
+          : ((line.variantId === null ? offer : variant)?.allergens ?? null),
         extras: line.extras.flatMap((selection) => {
           const list = offer?.offeredModifiers.find(
             (m) => m.kind === "extras" && m.id === selection.listId,
@@ -153,7 +171,6 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
                 ),
                 QUANTITY_SCALE,
               ),
-              // The zone's offers hold no set menu's dishes; a set-menu draft line names its version.
               allergens:
                 line.menuVersionId === null
                   ? (item?.addAllergens ?? null)
