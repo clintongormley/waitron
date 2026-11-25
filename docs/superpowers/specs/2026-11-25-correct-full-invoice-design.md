@@ -10,7 +10,7 @@ recommend" is mine (lane L), not the owner's.
 *corrective invoice* (Spanish *factura rectificativa*) is a new invoice, with its own number, that
 reduces an invoice already issued; AEAT gives each kind a code: R5 for a ticket's, R1 to R4 for a
 full invoice's. *Give money back* is the till's one button for giving money back on a past receipt
-(#4257 on main, #4300 waiting to land).
+(#4257, #4300 and #4344).
 
 ## 1. The ask, and what happens today
 
@@ -48,7 +48,7 @@ AEAT. Nothing simpler meets the ask.
   says "A corrective receipt (−€10.00) is printing."_
 - **The customer** receives a corrective full invoice (section 4), delivered the way the original
   full invoice was (question 1). _2026-11-25: unless staff choose another way (answer 1)._
-- **The accountant:** the refund no longer appears on the "Refunds, no corrective invoice" sheet,
+- **The accountant:** the refund no longer appears on the "Refunds with no corrective" sheet,
   because it now has one. The corrective counts in the VAT return like any other.
 
 ## 3. Which kind of corrective, and why — R1, by differences
