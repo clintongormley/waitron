@@ -3,7 +3,12 @@ import { expect, it } from "vitest";
 import { adjustmentLines, billSetMenuCopies, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { groupSetMenus, suggestMove, type SetMenuGroupingInput } from "@waitron/shared";
+import {
+  groupSetMenus,
+  suggestMove,
+  thousandthsToDecimal,
+  type SetMenuGroupingInput,
+} from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
@@ -11,7 +16,8 @@ import { readGroupingCopies, saveBillGrouping } from "./set-menu-regroup.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
-import { inTx, type PartyVenue } from "./testing/party-venue.js";
+import { commandFor, inTx, type PartyVenue } from "./testing/party-venue.js";
+import { markServed } from "./working-order-serving.js";
 import {
   addEmptySpecSetMenus,
   printSpecBill,
@@ -263,4 +269,58 @@ it("a bill whose set menus were not proven cheapest splits after print still not
 
   expect(await exactOf(billId)).toBe(false);
   expect((await inTx(venue, (tx) => readBillSetMenus(tx, billId))).exact).toBe(false);
+});
+
+it("Reopen with stopUnserved takes a set-menu dish that never came off the new bill", async () => {
+  const tab = await specBill(spec, "fire");
+  const rows = await specRows(spec, tab.tabId);
+  const [unserved, ...served] = rows.filter(
+    ({ parentLineId, setMenuRole }) => parentLineId === null && setMenuRole !== "set_menu",
+  );
+  const command = await commandFor(venue, tab.partyId);
+  await inTx(venue, (tx) =>
+    markServed(
+      tx,
+      venue.cfg,
+      tab.partyId,
+      served.map(({ id, quantity }) => ({ lineId: id, quantity: thousandthsToDecimal(quantity) })),
+      { ...command, submissionId: crypto.randomUUID() },
+    ),
+  );
+  await printSpecBill(spec, tab.partyId, tab.tabId);
+
+  const { billId } = await splitAfterPrint(
+    specDeps(spec),
+    venue.cfg,
+    tab.tabId,
+    venue.operator,
+    true,
+  );
+
+  // One Soup fewer leaves the Sea bass without a Special menu: the bill is worked out again as a
+  // waiter taking the Soup off would leave it.
+  const copied = await specRows(spec, billId);
+  expect(
+    copied.map(({ name, setMenuRole, servedQuantity, lineTotal }) => [
+      name,
+      setMenuRole,
+      servedQuantity,
+      lineTotal,
+    ]),
+  ).toEqual([
+    ["Soup", "dish", 1000, 0],
+    ["Soup", "dish", 1000, 0],
+    ["Soup", "dish", 1000, 0],
+    ["Hake", "dish", 1000, 0],
+    ["Sea bass", null, 1000, 1900],
+    ["Sirloin", "dish", 1000, 500],
+    ["Sirloin", "dish", 1000, 500],
+    ["Daily menu", "set_menu", 1000, 1400],
+    ["Daily menu", "set_menu", 1000, 1400],
+    ["Daily menu", "set_menu", 1000, 1400],
+  ]);
+  expect(unserved!.name).toBe("Soup");
+  const { saleId } = await printSpecBill(spec, tab.partyId, billId);
+  const ticket = await specSaleLines(spec, billId, saleId!);
+  expect(ticket.reduce((sum, { lineGross }) => sum + lineGross!, 0)).toBe(7100);
 });

@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   newId,
   insertInChunks,
   lineServiceCancellations,
+  orderGroups,
   sales,
   unpaidDepartures,
   workingOrderLines,
@@ -14,11 +15,18 @@ import {
   requireSupportedCorrection,
   withIssuanceTransaction,
 } from "@waitron/core";
-import { AppError } from "@waitron/shared";
+import { AppError, stringToThousandths } from "@waitron/shared";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { readSplitOrderLabel } from "./receipt-order.js";
-import { unservedDishes } from "./meal-end.js";
+import { dishKitchenItems } from "./dish-kitchen.js";
+import { isStarted } from "./kitchen-ticket-state.js";
+import {
+  enqueueServiceCancellation,
+  serviceCancellationFamilies,
+  writeServiceCancellations,
+} from "./line-service-cancel.js";
+import { unservedDishes, type UnservedBillDish } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
@@ -32,7 +40,9 @@ import {
   type BillRead,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
+import { servedOrCharged } from "./served-dishes.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
+import { removeFromLine } from "./working-order-removal.js";
 import { type TillSaleDeps } from "./working-order-context.js";
 import "./errors.js";
 
@@ -59,27 +69,37 @@ export async function splitAfterPrint(
   cfg: DeviceRequestConfig,
   id: string,
   operator: { personId: string; sessionId: string },
+  stopUnserved = false,
 ): Promise<SplitAfterPrint> {
   return withIssuanceTransaction(deps.db, async (tx) => {
-    const { billId, correctiveNumber } = await reopenToSplitIn(tx, deps, cfg, id, operator);
+    const { billId, correctiveNumber } = await reopenToSplitIn(
+      tx,
+      deps,
+      cfg,
+      id,
+      operator,
+      undefined,
+      stopUnserved,
+    );
     return { billId, correctiveNumber };
   });
 }
 
-/** Reopen bill's refusals, which write nothing; answers the bill's party and ticket. `read` is
- * the bill as the caller has read it in this transaction, when it has. */
+/** Reopen bill's refusals, which write nothing; answers the bill's party and ticket, and the
+ * unserved dishes `stopUnserved` lets through. `read` is the bill as the caller has read it in
+ * this transaction, when it has. */
 export async function refuseReopen(
   tx: Transaction,
   deps: Pick<TillSaleDeps, "admission">,
   cfg: DeviceRequestConfig,
   id: string,
   read?: BillRead,
-): Promise<{ partyId: string; invoice: IssuedInvoice }> {
+  stopUnserved = false,
+): Promise<{ partyId: string; invoice: IssuedInvoice; unserved: UnservedBillDish[] }> {
   const placed = await lockPlacedOrder(tx, deps, cfg, id, read);
   const refused = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
   await refuseSplitMoney(tx, id);
-  await refuseUnservedDishes(tx, id);
-  return refused;
+  return { ...refused, unserved: await refuseUnservedDishes(tx, id, stopUnserved) };
 }
 
 /**
@@ -94,15 +114,18 @@ export async function reopenToSplitIn(
   id: string,
   operator: { personId: string; sessionId: string },
   read?: BillRead,
+  stopUnserved = false,
 ): Promise<ReopenedBill> {
-  const { partyId, invoice } = await refuseReopen(tx, deps, cfg, id, read);
+  const { partyId, invoice, unserved } = await refuseReopen(tx, deps, cfg, id, read, stopUnserved);
   const opened = await openSplitBill(tx, cfg, id, partyId);
+  await stopUnservedIn(tx, cfg, id, unserved, operator.personId);
   const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, {
     reopenedBillId: opened.billId,
     tillSessionId: operator.sessionId,
   });
   await abandonPlacedOrder(tx, cfg, id);
   await carryReceivedPayments(tx, id, opened.billId);
+  await takeOffCopies(tx, cfg, opened, unserved, operator.personId);
   const revision = (await bumpPartyRevision(tx, partyId))!;
   await recordPlacedOrderCancelled(
     tx,
@@ -144,9 +167,95 @@ async function refuseSplitBill(
   return { partyId, invoice };
 }
 
-async function refuseUnservedDishes(tx: Transaction, id: string): Promise<void> {
+async function refuseUnservedDishes(
+  tx: Transaction,
+  id: string,
+  stopUnserved: boolean,
+): Promise<UnservedBillDish[]> {
   const dishes = await unservedDishes(tx, id);
-  if (dishes.length > 0) throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes });
+  if (dishes.length === 0) return dishes;
+  const canStop = (await servedOrCharged(tx, id)).length > 0;
+  if (!stopUnserved || !canStop)
+    throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes, canStop });
+  return dishes;
+}
+
+/** Stops each unserved quantity in the kitchen as a cancel of a sent dish does. Runs before the
+ * bill is abandoned, which voids whatever fired quantity is still unserved. */
+async function stopUnservedIn(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  billId: string,
+  unserved: readonly UnservedBillDish[],
+  operatorId: string,
+): Promise<void> {
+  if (unserved.length === 0) return;
+  const rows = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, billId));
+  const taken = unserved.map(({ lineId, quantity }) => ({
+    dish: rows.find((row) => row.id === lineId)!,
+    off: stringToThousandths(quantity),
+  }));
+  const ids = taken.map(({ dish }) => dish.id);
+  const priors = await tx
+    .select()
+    .from(lineServiceCancellations)
+    .where(inArray(lineServiceCancellations.lineId, ids));
+  const work = await dishKitchenItems(tx, ids);
+  const groups = await tx
+    .select()
+    .from(orderGroups)
+    .where(
+      inArray(
+        orderGroups.id,
+        taken.flatMap(({ dish }) => dish.groupId ?? []),
+      ),
+    );
+  const families = serviceCancellationFamilies(rows, taken, priors);
+  await enqueueServiceCancellation(tx, cfg, billId, families, work, undefined, {
+    groupOf: (dish) => groups.find((group) => group.id === dish.groupId),
+  });
+  for (const family of families)
+    await writeServiceCancellations(
+      tx,
+      [family],
+      operatorId,
+      (work.get(family.dish.id) ?? []).some((item) => isStarted(item.state)),
+    );
+}
+
+/** Takes the stopped quantities off the reopened bill's copies as Take off does on an open bill. */
+async function takeOffCopies(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  opened: { billId: string; lineCopies: Map<string, string> },
+  unserved: readonly UnservedBillDish[],
+  operatorId: string,
+): Promise<void> {
+  for (const { lineId, quantity } of unserved) {
+    const [copy] = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, opened.lineCopies.get(lineId)!));
+    const off = stringToThousandths(quantity);
+    await removeFromLine(
+      tx,
+      cfg,
+      opened.billId,
+      {
+        ...copy!,
+        ticketItemId: null,
+        firedAt: null,
+        stationId: null,
+        state: null,
+        firedQuantity: 0,
+      },
+      off === copy!.quantity ? null : off,
+      operatorId,
+    );
+  }
 }
 
 /** A new open bill of the party, made as Move dishes makes one, holding copies of the bill's dishes. */

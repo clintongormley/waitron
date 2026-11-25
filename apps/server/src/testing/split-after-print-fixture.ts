@@ -116,8 +116,9 @@ export function split(
   billId: string,
   cookie = venue.supervisorTill,
   app: Hono = venue.app,
+  body: Record<string, unknown> = {},
 ): Promise<Answer> {
-  return send(app, cookie, "POST", `/api/working-orders/${billId}/split-after-print`, {});
+  return send(app, cookie, "POST", `/api/working-orders/${billId}/split-after-print`, body);
 }
 
 export function creditsOf(venue: OrderVenue, saleId: string) {

@@ -26,6 +26,7 @@ import {
 import { filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
+import { servedOrCharged } from "./served-dishes.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
 import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
@@ -91,7 +92,7 @@ useVenueDb({
 });
 
 type Party = { partyId: string; tabId: string; tableId: string };
-type Line = { name: string; extras?: unknown[] };
+type Line = { name: string; extras?: unknown[]; quantity?: string };
 
 async function revisionOfBill(billId: string): Promise<number> {
   const [bill] = await inTx(venue, (tx) =>
@@ -121,7 +122,9 @@ const expectRefused = (
 ) => fixture.expectRefused(venue, billId, answer, refusal);
 
 /** A party seated at a fresh table with one guest, its dishes sent to the kitchen as one group. */
-async function seat(...lines: (string | Line)[]): Promise<Party> {
+const seat = (...lines: (string | Line)[]): Promise<Party> => seatWith("fire", ...lines);
+
+async function seatWith(release: "fire" | "hold", ...lines: (string | Line)[]): Promise<Party> {
   const { id: tableId } = await inTx(venue, (tx) =>
     createTable(tx, { label: `S-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
@@ -153,14 +156,14 @@ async function seat(...lines: (string | Line)[]): Promise<Party> {
       groups: [
         {
           lines: lines.map((line) => {
-            const { name, extras } = typeof line === "string" ? { name: line } : line;
+            const { name, extras, quantity } = typeof line === "string" ? { name: line } : line;
             return {
               menuItemId: venue.offerFor(name),
-              quantity: "1",
+              quantity: quantity ?? "1",
               ...(extras === undefined ? {} : { extras }),
             };
           }),
-          release: "fire",
+          release,
         },
       ],
     },
@@ -300,6 +303,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(refused.json.params).toEqual({
       workingOrderId: party.tabId,
       dishes: [{ lineId: tarta.id, dishName: "Tarta", quantity: "1.000", released: true }],
+      canStop: true,
     });
     expect((await serve(party, party.tabId, "Tarta")).status).toBe(200);
     expect((await split(party.tabId)).status).toBe(200);
@@ -1000,5 +1004,264 @@ describe("the Given free sheet for a printed bill", () => {
     expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");
     expect(await freeOn(party.tabId)).toEqual([]);
+  });
+});
+
+describe("Reopen bill stopping the dishes that never came", () => {
+  const stop = (billId: string) =>
+    fixture.split(venue, billId, venue.supervisorTill, venue.app, { stopUnserved: true });
+
+  /** Marks `quantity` of the bill's dish `name` served. */
+  async function serveSome(party: Party, name: string, quantity: string) {
+    const dish = (await dishesOf(party.tabId)).find(
+      (line) => line.parentLineId === null && line.name === name,
+    )!;
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/served`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: revisionOf(party.partyId),
+        items: [{ lineId: dish.id, quantity }],
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  }
+
+  function kitchenNotices(billId: string) {
+    return venue.db.all<{ kind: string; lineName: string; quantity: number }>(sql`
+      select kind, line_name as lineName, quantity from kitchen_notices
+      where working_order_id = ${billId} and kind = 'void' order by rowid`);
+  }
+
+  function keptCharges(lineIds: string[]) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({
+          lineId: lineServiceCancellations.lineId,
+          quantity: lineServiceCancellations.quantity,
+        })
+        .from(lineServiceCancellations)
+        .where(inArray(lineServiceCancellations.lineId, lineIds)),
+    );
+  }
+
+  /** The dishes the kitchen still holds a ticket for. */
+  function ticketsOf(billId: string) {
+    return venue.db.all<{ name: string }>(sql`
+      select l.name from ticket_items t
+      join working_order_lines l on l.id = t.working_order_line_id
+      where l.working_order_id = ${billId} order by l.line_no`);
+  }
+
+  /** Steak never came, the beer was served, and the bill printed anyway. */
+  async function steakAndBeer(): Promise<Party> {
+    const party = await seat("Steak", "Small beer");
+    await serveSome(party, "Small beer", "1");
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    return party;
+  }
+
+  it("refuses without the flag, saying the dishes can be stopped", async () => {
+    const party = await steakAndBeer();
+    const steak = (await dishesOf(party.tabId)).find((line) => line.name === "Steak")!;
+
+    const refused = await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "bill.unserved_dishes",
+    });
+
+    expect(refused.json.params).toEqual({
+      workingOrderId: party.tabId,
+      dishes: [{ lineId: steak.id, dishName: "Steak", quantity: "1.000", released: true }],
+      canStop: true,
+    });
+  });
+
+  it("credits the receipt, stops the steak in the kitchen and leaves only the beer to charge", async () => {
+    const party = await steakAndBeer();
+    const original = await invoiceOf(party.tabId);
+    const before = kitchenNotices(party.tabId);
+
+    const answer = await stop(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const credits = await creditsOf(original.id);
+    expect(credits.map((credit) => credit.total)).toEqual([-original.total]);
+    expect(kitchenNotices(party.tabId).slice(before.length)).toEqual([
+      { kind: "void", lineName: "CHULETA", quantity: 1000 },
+    ]);
+    expect(ticketsOf(party.tabId)).toEqual([{ name: "Small beer" }]);
+    const newBill = answer.json.billId as string;
+    const copies = await dishesOf(newBill);
+    expect(copies.map((line) => [line.name, line.quantity])).toEqual([["Small beer", 1000]]);
+    expect(await keptCharges(copies.map((line) => line.id))).toEqual([]);
+    const reprinted = await printBill(party, newBill);
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    expect(reprinted.json.total).toBe("3.00");
+  });
+
+  it("takes off the unserved portion of a dish and its extras, keeping the served one", async () => {
+    const party = await seat(
+      {
+        name: "Steak",
+        quantity: "2",
+        extras: [{ listId: extraListId, picks: [{ productId: croquettesId, quantity: 1 }] }],
+      },
+      "Small beer",
+    );
+    await serveSome(party, "Steak", "1");
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+
+    const answer = await stop(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const copies = await dishesOf(answer.json.billId as string);
+    expect(copies.map((line) => [line.name, line.quantity, line.servedQuantity])).toEqual([
+      ["Steak", 1000, 1000],
+      ["Croquettes", 1000, 1000],
+    ]);
+    expect(
+      kitchenNotices(party.tabId).map(({ lineName, quantity }) => [lineName, quantity]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["CHULETA", 1000],
+        ["BEER SMALL", 1000],
+      ]),
+    );
+  });
+
+  it("refuses the flag when nothing was served, as Reopen does today", async () => {
+    const party = await seat("Steak");
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+
+    const refused = await expectRefused(party.tabId, () => stop(party.tabId), {
+      status: 409,
+      code: "bill.unserved_dishes",
+    });
+
+    expect(refused.json.params).toMatchObject({ canStop: false });
+  });
+
+  it("stops the dishes when only a charge was kept", async () => {
+    const party = await seat("Tarta", "Steak");
+    const cancelled = await cancelItemHttp(
+      venue.db,
+      venue.app,
+      venue.supervisorTill,
+      party.tabId,
+      1,
+      undefined,
+      {
+        outcome: "keep_charge",
+        preparationStarted: true,
+        reasonId: await inTx(venue, cancelReasonId),
+      },
+    );
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const refused = await split(party.tabId);
+    expect(refused.json).toMatchObject({ code: "bill.unserved_dishes", params: { canStop: true } });
+
+    const answer = await stop(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const copies = await dishesOf(answer.json.billId as string);
+    expect(copies.map((line) => line.name)).toEqual(["Tarta"]);
+    expect(await keptCharges(copies.map((line) => line.id))).toEqual([
+      { lineId: copies[0]!.id, quantity: 1000 },
+    ]);
+  });
+
+  it("stops a held dish, which never reached the kitchen", async () => {
+    const party = await seatWith("hold", "Steak");
+    const moved = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${party.partyId}/groups`,
+      {
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+        submissionId: randomUUID(),
+        expectedPartyRevision: revisionOf(party.partyId),
+        groups: [
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
+        ],
+      },
+    );
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    await serveSome(party, "Small beer", "1");
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const refused = await split(party.tabId);
+    expect(refused.json.params).toMatchObject({
+      dishes: [expect.objectContaining({ dishName: "Steak", released: false })],
+      canStop: true,
+    });
+
+    const answer = await stop(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const copies = await dishesOf(answer.json.billId as string);
+    expect(copies.map((line) => line.name)).toEqual(["Small beer"]);
+    expect(kitchenNotices(party.tabId)).toEqual([
+      { kind: "void", lineName: "CHULETA", quantity: 1000 },
+    ]);
+    expect(ticketsOf(party.tabId)).toEqual([{ name: "Small beer" }]);
+  });
+
+  it("refuses a flag other than true", async () => {
+    const party = await steakAndBeer();
+    for (const stopUnserved of [false, "yes", null]) {
+      const refused = await expectRefused(
+        party.tabId,
+        () => fixture.split(venue, party.tabId, venue.supervisorTill, venue.app, { stopUnserved }),
+        { status: 400, code: "management.request_invalid" },
+      );
+      expect(refused.json.params).toEqual({ field: "stopUnserved" });
+    }
+  });
+});
+
+describe("servedOrCharged", () => {
+  it("leaves out the rows an unpaid departure wrote for the dishes it stopped", async () => {
+    const party = await departed(venue, "Tarta");
+    const [tarta] = await dishesOf(party.tabId);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ quantity: lineServiceCancellations.quantity })
+          .from(lineServiceCancellations)
+          .where(eq(lineServiceCancellations.lineId, tarta!.id)),
+      ),
+    ).toEqual([{ quantity: 1000 }]);
+
+    expect(await inTx(venue, (tx) => servedOrCharged(tx, party.tabId))).toEqual([]);
+  });
+
+  it("names a served row and a kept charge", async () => {
+    const party = await seat("Tarta", "Small beer");
+    const cancelled = await cancelItemHttp(
+      venue.db,
+      venue.app,
+      venue.supervisorTill,
+      party.tabId,
+      1,
+      undefined,
+      {
+        outcome: "keep_charge",
+        preparationStarted: true,
+        reasonId: await inTx(venue, cancelReasonId),
+      },
+    );
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+    await serve(party, party.tabId, "Small beer");
+    const [tarta, beer] = await dishesOf(party.tabId);
+
+    expect(await inTx(venue, (tx) => servedOrCharged(tx, party.tabId))).toEqual([
+      { lineId: tarta!.id, dishName: "Tarta", quantity: "1.000" },
+      { lineId: beer!.id, dishName: "Small beer", quantity: "1.000" },
+    ]);
   });
 });
