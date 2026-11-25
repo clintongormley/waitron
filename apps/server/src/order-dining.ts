@@ -93,7 +93,7 @@ export async function storedOrderDining(tx: Transaction, workingOrderId: string)
  * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
  * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
  * keep both their classes. Taken away, the order records the set menus on sale that list its dishes
- * and is grouped into its cheapest set menus; eaten here at the counter, it may hold none. A request
+ * and is grouped into the cheapest set menus the search finds; eaten here at the counter, it may hold none. A request
  * for the way the order already has changes nothing, not even the revision. Answers the order's
  * revision after.
  */
