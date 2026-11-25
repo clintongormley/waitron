@@ -25,6 +25,7 @@ export const outgoingMailKinds = [
   "email_changed",
   "security_change",
   "daily_report",
+  "monthly_hours_reminder",
 ] as const;
 export const outgoingMailStatuses = [
   "pending",

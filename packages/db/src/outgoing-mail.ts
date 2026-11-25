@@ -3,7 +3,7 @@ import type { Transaction } from "./client.js";
 import { outgoingMail, type OutgoingMail, type OutgoingMailKind } from "./schema/outgoing-mail.js";
 
 export const MAIL_LIFETIME_MS: Readonly<
-  Record<Exclude<OutgoingMailKind, "account_action">, number>
+  Record<Exclude<OutgoingMailKind, "account_action" | "monthly_hours_reminder">, number>
 > = {
   invoice: 604800000,
   attendance_question: 604800000,

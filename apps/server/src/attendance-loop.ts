@@ -13,6 +13,7 @@ import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-f
 import type { JobDefinition } from "./job-runner.js";
 import { businessDayBounds, jobOrigin } from "@waitron/shared";
 import { nextMonthlyHoursClose } from "./monthly-hours-close.js";
+import { monthlyHoursReminderAt, queueMonthlyHoursReminder } from "./monthly-hours-reminder.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 
 export type AttendancePassDeps = {
@@ -125,8 +126,16 @@ export function attendanceJob(
         });
         return { nextDueAt: now };
       }
+      const reminderAt = monthlyHoursReminderAt(close);
+      const nextMonthlyAt = now < reminderAt ? reminderAt : closeAt;
+      if (now >= reminderAt) {
+        await queueMonthlyHoursReminder(deps.db, close, deps.now, () => {
+          return isPrimary() && !deps.clockUnconfirmed();
+        });
+      }
       return {
-        nextDueAt: attendanceAt !== null && attendanceAt < closeAt ? attendanceAt : closeAt,
+        nextDueAt:
+          attendanceAt !== null && attendanceAt < nextMonthlyAt ? attendanceAt : nextMonthlyAt,
       };
     },
   };
