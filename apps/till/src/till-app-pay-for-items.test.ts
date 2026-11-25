@@ -1387,8 +1387,9 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       signals: [],
     };
 
-    /** Signed in at the counter with the held order `wo-1` retrieved, its edit state as each
-     * read in `edits` gives it (the last one repeating). */
+    /** Signed in at the counter with the held order `wo-1` retrieved. As the server does for an
+     * order with no party, its held read carries no edit state; the bill read gives it as each
+     * read in `edits` does (the last one repeating). */
     async function retrieved(
       overrides: Record<string, unknown>,
       edits: (typeof counterEdit | null)[] = [counterEdit],
@@ -1397,6 +1398,13 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       let reads = 0;
       const { el } = await mountApp({
         listWorkingOrders: vi.fn().mockResolvedValue([heldWo1]),
+        getFindBill: vi.fn(async () => ({
+          ...heldWo1,
+          workingOrderId: "wo-1",
+          edit: ((edit) => (edit === null ? null : { ...edit, editorId: null, editorName: null }))(
+            edits[Math.min(reads++, edits.length - 1)]!,
+          ),
+        })),
         retrieveWorkingOrder: vi.fn(async () => ({
           zoneId: null,
           kitchenNote: {
@@ -1409,7 +1417,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           orderNumber: 5,
           label: "Ana",
           revision: 3,
-          expectedEdit: edits[Math.min(reads++, edits.length - 1)],
+          expectedEdit: null,
           lines: [
             {
               workingOrderLineId: "counter-dish",
@@ -1881,6 +1889,42 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       >("[data-capture-warning]");
       expect(warning?.open).toBe(true);
       expect(warning?.message).toContain(money("25.00"));
+    });
+
+    it("at the Counter items are paid with the edit state the bill read gives, read at Continue", async () => {
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        payForItems: vi.fn().mockResolvedValue(paidOnWo9({}, onWo1)),
+      });
+      await chooseFirst(el);
+      expect(api.getFindBill).not.toHaveBeenCalled();
+      await press(el, "[data-pay-continue]");
+
+      expect(api.getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1");
+      expect(api.previewItemPayment).toHaveBeenCalledOnce();
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      expect(vi.mocked(api.payForItems).mock.calls[0]![1]).toMatchObject({
+        expectedEdits: [counterEdit],
+      });
+    });
+
+    it("at the Counter a bill read naming a party pays no items", async () => {
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        getFindBill: vi.fn(async () => ({
+          ...heldWo1,
+          workingOrderId: "wo-1",
+          partyId: "v1",
+          edit: { ...counterEdit, editorId: null, editorName: null },
+        })),
+      });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+
+      expect(api.previewItemPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
     });
 
     it("at the Counter with no edit state the order is read again before items are paid", async () => {

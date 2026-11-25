@@ -320,6 +320,7 @@ import {
 } from "./state/bill-payment.js";
 import { CounterOverpaidRead } from "./state/counter-overpaid.js";
 import {
+  counterItemsEdit,
   itemsAllocatedFrom,
   itemsBarredReason,
   itemsRefusal,
@@ -22956,9 +22957,16 @@ export class TillApp extends LitElement {
           : open.surface === "counter"
             ? this.#counterExpectedEdit(open.billId)
             : this.#draftSync?.expectedEditFor(open.billId);
+      const readCounterEdit =
+        expectedEdit === null &&
+        open.found === undefined &&
+        open.surface === "counter" &&
+        asked.choice.kind === "items";
       if (
         expectedEdit === undefined ||
-        (expectedEdit === null && (open.surface === "table" || asked.choice.kind === "items"))
+        (expectedEdit === null &&
+          !readCounterEdit &&
+          (open.surface === "table" || asked.choice.kind === "items"))
       )
         throw { code: "draft.out_of_date" };
       const api = this.api;
@@ -22978,9 +22986,11 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const preview = await previewPayment(api, open.billId, asked, expectedEdit);
+      const paidEdit = readCounterEdit ? await counterItemsEdit(api, open.billId) : expectedEdit;
+      const preview = await previewPayment(api, open.billId, asked, paidEdit);
       const now = this.#billPayingNow(open.id);
-      if (now !== null) this.billPaying = { ...now, asked, preview, expectedEdit, busy: false };
+      if (now !== null)
+        this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
     }

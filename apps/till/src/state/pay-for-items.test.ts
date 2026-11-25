@@ -12,6 +12,7 @@ import type { PayLine, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { refusalText } from "../widgets/pay-refusal.js";
 import { confirmationOf, paymentAsk, refusalOf, type Confirmation } from "./bill-payment.js";
 import {
+  counterItemsEdit,
   itemsAllocated,
   itemsAllocatedFrom,
   itemsAsk,
@@ -452,5 +453,40 @@ describe("previewPayment and takePayment", () => {
     await expect(
       takePayment(api as unknown as TillApi, "wo-4", itemsAsked.choice, request, { signal }),
     ).resolves.toEqual({ ...paid, paidOn: "wo-9", sourceBalance });
+  });
+});
+
+describe("counterItemsEdit", () => {
+  const found = (bill: Record<string, unknown>) =>
+    ({ getFindBill: vi.fn().mockResolvedValue(bill) }) as unknown as TillApi;
+  const stored = {
+    billId: "wo-1",
+    editorId: null,
+    editorName: null,
+    editorVersion: 4,
+    draftId: null,
+    draftRevision: null,
+  };
+
+  it("answers the bill read's edit state for an order with no party, as the route parses it", async () => {
+    const api = found({ workingOrderId: "wo-1", partyId: null, edit: stored });
+
+    await expect(counterItemsEdit(api, "wo-1")).resolves.toEqual({
+      billId: "wo-1",
+      editorVersion: 4,
+      draftId: null,
+      draftRevision: null,
+    });
+    expect(api.getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1");
+  });
+
+  it.each([
+    ["names a party", { partyId: "v1", edit: stored }],
+    ["has no edit state", { partyId: null, edit: null }],
+    ["gives another bill's edit state", { partyId: null, edit: { ...stored, billId: "wo-2" } }],
+  ])("is out of date when the bill read %s", async (_, bill) => {
+    await expect(counterItemsEdit(found(bill), "wo-1")).rejects.toEqual({
+      code: "draft.out_of_date",
+    });
   });
 });
