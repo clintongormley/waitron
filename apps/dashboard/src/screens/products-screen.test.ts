@@ -724,6 +724,8 @@ describe("menu-screen", () => {
     root.querySelector<HTMLButtonElement>('button[data-sort="available"]')!.click();
     await table.updateComplete;
     expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+    await table.revealRow("p0");
+    await new Promise(requestAnimationFrame);
     await userEvent.click(page.getByRole("switch", { name: `${t("editor.available")}: Dish 10` }), {
       position: { x: 40, y: 22 },
       timeout: 2000,

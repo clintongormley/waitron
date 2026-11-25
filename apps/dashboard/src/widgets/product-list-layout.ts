@@ -161,6 +161,8 @@ export const productListLayoutStyles = css`
 export const fullRowProductsMediaStyles = css`
   wt-data-table::part(tree-row) {
     position: relative;
+    /* A switch can move its row under the active sort while the pointer stays in place. */
+    overflow-anchor: none;
   }
   wt-data-table::part(tree-indent) {
     flex: none;
