@@ -24,6 +24,7 @@ import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
+import { extrasKeptForWithdrawnChoice } from "../state/working-order.js";
 import type {
   LineSelection,
   OrderLine,
@@ -1125,6 +1126,7 @@ export class TillBasket extends LitElement {
               .disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
               .quantity=${this.modifierLine.quantity}
               .showTotal=${true}
+              .retainedExtras=${extrasKeptForWithdrawnChoice(this.modifierLine)}
               .initialSelections=${this.#modifierSelection}
               .stagedRemoval=${this.#modifierRemoval}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {

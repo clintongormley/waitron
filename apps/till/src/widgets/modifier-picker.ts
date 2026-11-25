@@ -287,6 +287,7 @@ export class TillModifierPicker extends LitElement {
   @property() quantity = "1";
 
   @property({ type: Boolean }) showTotal = true;
+  @property({ attribute: false }) retainedExtras: OrderLine["notOfferedExtras"];
 
   /** The answers a line already carries, when the dialog was opened to EDIT one. Present also when
    * it is empty, which is how "the operator deliberately picked nothing" is told from a fresh open:
@@ -662,6 +663,7 @@ export class TillModifierPicker extends LitElement {
       product: this.#selectedProduct,
       quantity: this.lineDetails ? this.editedQuantity : this.quantity,
       extras: this.#selectedExtras(),
+      notOfferedExtras: this.retainedExtras,
     };
     return formatMoney(lineGross(previewLine), currentLocale());
   }

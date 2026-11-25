@@ -1104,19 +1104,6 @@ describe("WorkingOrderStore", () => {
     });
 
     it.each([
-      ["setLineModifiers", (s: WorkingOrderStore) => s.setLineModifiers(0, { selection: {} })],
-      [
-        "setLineDetails",
-        (s: WorkingOrderStore) => s.setLineDetails(0, { quantity: "2", note: "", selection: {} }),
-      ],
-    ])("%s on their own line drops them, and the total with them", (_, edit) => {
-      const s = loaded();
-      edit(s);
-      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
-      expect(lineGross(s.lines[0]!)).toBe("3.00");
-    });
-
-    it.each([
       [
         "setLineModifiers",
         (s: WorkingOrderStore, selection: LineSelection) => s.setLineModifiers(0, { selection }),
@@ -1126,44 +1113,51 @@ describe("WorkingOrderStore", () => {
         (s: WorkingOrderStore, selection: LineSelection) =>
           s.setLineDetails(0, { quantity: "2", note: "", selection }),
       ],
-    ])("%s keeps the extra for the first missing choice on a withdrawn dish", (_, edit) => {
-      const s = new WorkingOrderStore();
-      const warm = {
-        id: "warm",
-        name: "Warm",
-        customerName: null,
-        kitchenName: null,
-        available: true,
-      };
-      const list = {
-        kind: "options" as const,
-        id: "list-temperature",
-        name: "Temperature",
-        customerName: null,
-        kitchenName: null,
-        defaultLabelId: null,
-        labels: [warm],
-      };
-      s.loadFrom("held-1", [
-        {
-          workingOrderLineId: "dish",
-          product: { ...coffee, offeredModifiers: [list] },
-          quantity: "2",
-          notOffered: true,
-          notOfferedExtras: [milk],
-        },
-      ]);
-      const selection = {
-        options: [{ listId: list.id, labelId: warm.id }],
-        optionSnapshots: [optionSnapshotOf(list, warm)],
-      };
-      expect(edit(s, selection)).toBe(true);
-      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
-      expect(s.total).toBe("6.00");
-      expect(edit(s, selection)).toBe(true);
-      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
-      expect(s.total).toBe("3.00");
-    });
+    ])(
+      "%s drops unavailable extras except for the first missing choice on a withdrawn dish",
+      (_, edit) => {
+        const s = loaded();
+        edit(s, {});
+        expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+        expect(lineGross(s.lines[0]!)).toBe("3.00");
+
+        const warm = {
+          id: "warm",
+          name: "Warm",
+          customerName: null,
+          kitchenName: null,
+          available: true,
+        };
+        const list = {
+          kind: "options" as const,
+          id: "list-temperature",
+          name: "Temperature",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          labels: [warm],
+        };
+        s.loadFrom("held-1", [
+          {
+            workingOrderLineId: "dish",
+            product: { ...coffee, offeredModifiers: [list] },
+            quantity: "2",
+            notOffered: true,
+            notOfferedExtras: [milk],
+          },
+        ]);
+        const selection = {
+          options: [{ listId: list.id, labelId: warm.id }],
+          optionSnapshots: [optionSnapshotOf(list, warm)],
+        };
+        expect(edit(s, selection)).toBe(true);
+        expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+        expect(s.total).toBe("6.00");
+        expect(edit(s, selection)).toBe(true);
+        expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+        expect(s.total).toBe("3.00");
+      },
+    );
 
     it("refuses raising the count of the line that holds them, and keeps a lowering", () => {
       const s = loaded();

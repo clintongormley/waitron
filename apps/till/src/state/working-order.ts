@@ -238,15 +238,27 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
   if (selection?.optionSnapshots?.length) line.optionSnapshots = selection.optionSnapshots;
 }
 
+// The picker previews a completed answer when it does not yet have the staff member's choice.
+export function extrasKeptForWithdrawnChoice(
+  line: OrderLine,
+  answers?: readonly OptionSelection[],
+): NotOfferedExtra[] | undefined {
+  if (!line.notOffered || line.setMenuId !== undefined || !line.notOfferedExtras?.length) return;
+  const { unanswered } = deriveOptionSelections(
+    line.product.offeredModifiers ?? [],
+    line.optionSnapshots,
+  );
+  if (
+    !unanswered.some(
+      (id) => answers === undefined || answers.some((answer) => answer.listId === id),
+    )
+  )
+    return;
+  return line.notOfferedExtras.filter((extra) => extra.listId !== null && extra.productId !== null);
+}
+
 function replaceLineSelection(line: OrderLine, selection: LineSelection): void {
-  const missing =
-    line.notOffered && line.setMenuId === undefined && line.notOfferedExtras?.length
-      ? deriveOptionSelections(line.product.offeredModifiers ?? [], line.optionSnapshots).unanswered
-      : [];
-  // Keep the extra while staff are forced to answer an option on a dish they can no longer add.
-  const kept = selection.options?.some((answer) => missing.includes(answer.listId))
-    ? line.notOfferedExtras?.filter((extra) => extra.listId !== null && extra.productId !== null)
-    : undefined;
+  const kept = extrasKeptForWithdrawnChoice(line, selection.options ?? []);
   delete line.extras;
   delete line.notOfferedExtras;
   delete line.options;

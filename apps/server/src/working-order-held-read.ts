@@ -344,23 +344,14 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       };
     });
 
-    const optionProductIds = new Set(
-      lineRows.flatMap((line) =>
-        line.productId !== null &&
-        line.parentLineId === null &&
-        line.setMenuId === null &&
-        line.sentAt === null
-          ? [line.productId]
-          : [],
-      ),
+    const unsentDishes = lineRows.flatMap(({ productId, parentLineId, setMenuId, sentAt }) =>
+      productId !== null && parentLineId === null && setMenuId === null && sentAt === null
+        ? [{ productId, menuItemId: null }]
+        : [],
     );
-    const ownModifiers =
-      optionProductIds.size === 0
-        ? new Map<string, OfferedOptionsList[]>()
-        : await readOfferedModifiers(
-            tx,
-            [...optionProductIds].map((productId) => ({ productId, menuItemId: null })),
-          );
+    const ownModifiers = unsentDishes.length
+      ? await readOfferedModifiers(tx, unsentDishes)
+      : undefined;
 
     const declarationOf = (line: (typeof lineRows)[number]) => {
       if (line.sentAt === null) return declarations.get(line.variantId ?? line.productId!);
@@ -401,7 +392,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         const options =
           line.sentAt === null && line.setMenuId === null
             ? ownModifiers
-                .get(line.productId.toLowerCase())
+                ?.get(line.productId.toLowerCase())
                 ?.filter((list) => list.kind === "options")
             : undefined;
         const extras = (childrenByParent.get(line.id) ?? []).map((child) => ({

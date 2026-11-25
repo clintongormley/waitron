@@ -8271,6 +8271,9 @@ describe("till-app", () => {
     await userEvent.click(basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="0"]')!);
     const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
     await picker.updateComplete;
+    expect
+      .soft(picker.shadowRoot!.querySelector(".running-amount")!.textContent)
+      .toBe(formatMoney("6.00", currentLocale()));
     await userEvent.click(
       picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="options-list-punto"]')!,
     );

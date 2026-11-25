@@ -1659,13 +1659,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
         .select({ menuId: menu.menuItems.menuId })
         .from(menu.menuItems)
         .where(eq(menu.menuItems.id, premiumCoffeeOfferId));
-      const root = await menu.requireMenuRoot(tx, offer!.menuId);
-      const [member] = await tx
-        .select({ id: menu.sectionMembers.id })
-        .from(menu.sectionMembers)
-        .where(eq(menu.sectionMembers.sectionId, root));
-      await menu.removeMember(tx, root, member!.id);
-      await republishMenus(tx);
+      await menu.deactivateMenu(tx, offer!.menuId);
       return list;
     });
 
