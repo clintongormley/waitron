@@ -134,7 +134,6 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) rememberedAddress?: RememberedAddress;
   /** What the latest Use full invoice sent, for the opener to pass back as `rememberedAddress`. */
   confirmedAddress?: RememberedAddress;
-  /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @property({ attribute: false }) lookupAddress?: (
     operation: CloudAddressOperation,

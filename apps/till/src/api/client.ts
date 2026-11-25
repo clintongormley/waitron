@@ -2990,13 +2990,13 @@ export class TillApi {
     );
   }
 
-  /** A challenge for "Check the time": the box's time, valid for a few seconds, and `keepOffered`
-   * while its start waits. `override` says an administrator signing in here asks; its PIN is
-   * checked by the confirm. */
   addressLookup(operation: CloudAddressOperation): Promise<CloudAddressReply> {
     return this.#request("/api/address-lookup", "POST", operation);
   }
 
+  /** A challenge for "Check the time": the box's time, valid for a few seconds, and `keepOffered`
+   * while its start waits. `override` says an administrator signing in here asks; its PIN is
+   * checked by the confirm. */
   boxClockChallenge(override?: {
     personId: string;
     pin: string;

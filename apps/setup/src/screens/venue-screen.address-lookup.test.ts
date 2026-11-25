@@ -107,6 +107,7 @@ async function fillTheRest(el: SetupVenueScreen): Promise<void> {
 describe("the venue screen's address search", () => {
   it("is hidden without a provider, so the form is its manual fields alone", async () => {
     const el = await mount();
+    await type(el, "registeredSameAsVenue", "off");
     for (const which of ["address-lookup", "domicile-lookup"]) {
       expect(lookup(el, which)!.hidden).toBe(true);
       expect(lookup(el, which)!.getBoundingClientRect().height).toBe(0);
