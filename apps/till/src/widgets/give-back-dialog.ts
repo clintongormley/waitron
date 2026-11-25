@@ -55,12 +55,14 @@ import {
   afterCheck,
   approverRights,
   doneStep,
+  lostAfter,
   lostFor,
   lostStep,
   readApprovers,
   recoveryLinkOf,
   recoveryText,
   restOutcome,
+  sendRefusalOf,
   signInEnded,
   stillStarting,
   summaryOf,
@@ -526,7 +528,7 @@ export class TillGiveBackDialog extends LitElement {
       this.#approval = undefined;
       this.#scope?.commit(this.draft);
       this.step = stillStarting(outcome)
-        ? { kind: "lost", way: sending.way, needs: sending.needs, refusal: null }
+        ? lostAfter(sending, this.#saved()?.sent)
         : { kind: "done", outcome, way: sending.way, notice: null };
     } catch (error) {
       this.#sendFailed(sending, error, override);
@@ -535,19 +537,16 @@ export class TillGiveBackDialog extends LitElement {
     }
   }
   #sendFailed(sending: Sending, error: unknown, override?: Override): void {
-    const refusal =
-      error instanceof TenderRefundAttemptError
-        ? { code: error.kind === "storage" ? "storage" : "network" }
-        : refusalOf(error);
+    const refusal = sendRefusalOf(error);
     if (signInEnded(this, refusal.code)) return;
-    if (refusal.code === "network") {
+    const lost = this.step?.kind === "lost" ? this.step : null;
+    if (refusal.code === "network" || (refusal.code === "busy" && lost !== null)) {
       this.approvers = null;
       this.#approval = undefined;
-      const kept = error instanceof TenderRefundAttemptError && error.kind === "locked";
-      const sent = kept ? (this.#saved()?.sent ?? null) : null;
-      this.step = sent
-        ? lostFor(sent)
-        : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null };
+      this.step =
+        refusal.code === "busy"
+          ? { ...lost!, busy: true }
+          : lostAfter(sending, this.#saved()?.sent, lost?.ids);
     } else if (override !== undefined && APPROVER_PIN_REFUSALS.has(refusal.code))
       this.pinError = approverRefusal(error, override.personId);
     else if (override === undefined && NEEDS_APPROVER.has(refusal.code))
@@ -586,7 +585,8 @@ export class TillGiveBackDialog extends LitElement {
    * writing, and a reader's later part answers it instead); after a part went back, `moved`, not. */
   #sendRefusalText(refusal: Refusal, moved = false): string {
     if (refusal.code === "approvers") return t("give_back.approvers_failed");
-    if (refusal.code === "storage") return t("give_back.storage");
+    if (refusal.code === "storage" || refusal.code === "busy")
+      return t(`give_back.${refusal.code}`);
     const text = this.#refusalText(refusal, "give_back.preview_failed");
     return !moved && refusal.code === "sif.allocation_invalid" && recoveryText(refusal) !== null
       ? `${text} ${t("give_back.nothing_given")}`
@@ -598,7 +598,8 @@ export class TillGiveBackDialog extends LitElement {
     try {
       check = await this.session.checkRest(this.saleId);
     } catch (error) {
-      const refusal = refusalOf(error);
+      const busy = error instanceof TenderRefundAttemptError && error.kind === "busy";
+      const refusal = busy ? { code: "busy" } : refusalOf(error);
       if (!signInEnded(this, refusal.code))
         this.step = { ...step, notice: this.#sendRefusalText(refusal, true) };
       return;
@@ -867,7 +868,7 @@ export class TillGiveBackDialog extends LitElement {
         close,
         resend: () =>
           void this.#send({
-            send: (override) => this.session.resend(this.saleId, override),
+            send: (override) => this.session.resend(this.saleId, override, step.ids),
             rights: [],
             needs: step.needs,
             way: step.way,

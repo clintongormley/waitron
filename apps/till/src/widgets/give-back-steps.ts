@@ -8,12 +8,15 @@ import type {
   GiveBackOutcome,
   GiveBackPreview,
   GiveBackRight,
+  GiveBackSubmissionIds,
   GiveBackWay,
 } from "../api/give-back-types.js";
 import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
+import { refusalOf } from "../state/bill-payment.js";
+import { TenderRefundAttemptError } from "../state/tender-refund.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
@@ -65,6 +68,10 @@ export type Step =
       needs: GiveBackRight[];
       /** What the server answered last, when it answered. */
       refusal: { code: string; params: Record<string, unknown> } | null;
+      /** The press's ids, so Send again takes only that press's answer; null when unread. */
+      ids: GiveBackSubmissionIds | null;
+      /** Send again found the press still waiting for its answer. */
+      busy?: boolean;
     }
   | { kind: "done"; outcome: GiveBackOutcome; way: string; notice: string | null };
 
@@ -198,8 +205,9 @@ export function lostStep(
   sending: boolean,
   on: { close: () => void; resend: () => void },
 ) {
-  const said =
-    step.refusal === null
+  const said = step.busy
+    ? t("give_back.busy")
+    : step.refusal === null
       ? t("give_back.lost")
       : (recoveryText(step.refusal) ??
         codeMessage(step.refusal.code, currentLocale(), step.refusal.params));
@@ -298,7 +306,26 @@ export const lostFor = (sent: GiveBackSent): Extract<Step, { kind: "lost" }> => 
   way: sent.request.way,
   needs: sent.needs,
   refusal: sent.refusal,
+  ids: sent.submissionIds,
 });
+
+/** A press whose answer is not known: `saved`, the press this device holds, else the one sent
+ * with `ids`. */
+export const lostAfter = (
+  sending: Sending,
+  saved: GiveBackSent | null | undefined,
+  ids: GiveBackSubmissionIds | null = null,
+): Extract<Step, { kind: "lost" }> =>
+  saved
+    ? lostFor(saved)
+    : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null, ids };
+
+/** A send's refusal: this device's own when its saved attempt stopped it (storage that cannot be
+ * used, or a send already out on the receipt), otherwise the server's. */
+export const sendRefusalOf = (error: unknown) =>
+  error instanceof TenderRefundAttemptError
+    ? { code: error.kind === "storage" || error.kind === "busy" ? error.kind : "network" }
+    : refusalOf(error);
 
 /** The outcome a saved rest reopens on: the card refund it waits for, if any, and the rest. */
 export const restOutcome = (rest: GiveBackRest): GiveBackOutcome => ({

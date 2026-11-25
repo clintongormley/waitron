@@ -234,6 +234,8 @@ export const en = {
     "This device could not save the money back before sending it. Nothing has been given back. Close this window and, on another device that takes payments, open Give money back on the receipt.",
   "give_back.lost":
     "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
+  "give_back.busy":
+    "Money back on this receipt is still waiting for the box's answer, so nothing more has been sent. Try again in a moment.",
   "give_back.send_again": "Send again",
   "give_back.uw_card_refused":
     "A card refund on this receipt was refused, so no money went back. Send again sends it again, asking for approval if it needs it.",
@@ -2711,6 +2713,8 @@ export const es: Record<StringKey, string> = {
     "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
   "give_back.lost":
     "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
+  "give_back.busy":
+    "Una devolución de este ticket aún espera la respuesta del servidor, así que no se ha enviado nada más. Inténtalo de nuevo en un momento.",
   "give_back.send_again": "Enviar de nuevo",
   "give_back.uw_card_refused":
     "Se rechazó una devolución a tarjeta de este ticket, así que no se devolvió dinero. Enviar de nuevo la envía otra vez y pide la aprobación si hace falta.",

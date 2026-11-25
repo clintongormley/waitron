@@ -27809,8 +27809,8 @@ describe("A737 post-invoice refund integration", () => {
       expect(refundKeys()).toEqual([foreign]);
       expect(giveBack(el)).toBeNull();
       resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+      await giveBackCall.mock.results[0]!.value;
       await flush(el);
-      await new Promise<void>((done) => requestAnimationFrame(() => done()));
       expect(lock(el)).not.toBeNull();
       expect(ticket(el)).toBeNull();
       expect(giveBack(el)).toBeNull();
@@ -27852,8 +27852,8 @@ describe("A737 post-invoice refund integration", () => {
       await flush(el);
       expect(giveBack(el)).toBeNull();
       resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+      await giveBackCall.mock.results[0]!.value;
       await flush(el);
-      await new Promise<void>((done) => requestAnimationFrame(() => done()));
       expect(giveBack(el)).toBeNull();
     });
 

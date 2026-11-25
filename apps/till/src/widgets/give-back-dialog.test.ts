@@ -1630,6 +1630,60 @@ describe("sending", () => {
     expect(api.giveBack).toHaveBeenCalledTimes(2);
   });
 
+  const goodwillAsk = {
+    request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" },
+    reasonId: "complaint",
+    note: null,
+    expected: [{ kind: "refund" as const, amount: "5.00", way: "cash" }],
+  };
+  /** Holds the next give-back sent unanswered until the returned function answers it. */
+  function holdNext(api: Api) {
+    let answer!: (value: ReturnType<typeof completedFor>) => void;
+    api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    return (body: GiveBackWrite) => answer(completedFor(body));
+  }
+
+  it("says a press waits while another give-back on the receipt is still out, sending nothing", async () => {
+    const api = fakeGiveBackApi();
+    const el = await ready(api);
+    const answer = holdNext(api);
+    const out = el.session.submit("sale-1", goodwillAsk);
+    submit(el).click();
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.busy")));
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
+    expect(amountField(el).value).toBe("5");
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    answer(sent(api));
+    await out;
+  });
+
+  it("says Send again waits while its press is still out, then shows that press's answer, sending it once", async () => {
+    const api = fakeGiveBackApi();
+    const session = new GiveBackSession(SCOPE, api);
+    const answer = holdNext(api);
+    const out = session.submit("sale-1", goodwillAsk);
+    const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
+      api,
+      session,
+      saleId: "sale-1",
+      invoiceNumber: "A/1042",
+      namesLocale: "en",
+    });
+    await vi.waitFor(() => expect(root(el).querySelector("[data-send-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-lost]"))).toBe(t("give_back.busy")),
+    );
+    expect(root(el).querySelector("[data-send-again]")).not.toBeNull();
+    answer(sent(api));
+    await out;
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
   it("a press sent again and refused goes back to the choice with its sentence", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));

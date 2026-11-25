@@ -102,19 +102,25 @@ const refusalOf = (error: unknown) => {
   return typeof code === "string" ? { code, params } : null;
 };
 const waitingKinds = new Set(["refund", "extra"]);
+const sameIds = (a: GiveBackSubmissionIds, b: GiveBackSubmissionIds) =>
+  a.refund === b.refund && a.extra === b.extra && a.correction === b.correction && a.leg === b.leg;
 
 /**
  * Give money back's saved attempt, in the refund journal so signing out clears it with the rest:
  * each press is saved with its ids before it is sent, so a lost answer is sent again under them and
  * the server answers it from what it stored. A rest, the part of a card reader's press not yet
  * sent, is saved whether or not a card refund still waits, and gets ids of its own when first sent.
- * One send at a time.
+ * One send at a time on each receipt.
  */
 export class GiveBackSession {
-  #busy = false;
-  /** How the last press of each sale ended once it is no longer saved, so a window opened on its
-   * Send again before the answer came shows that answer instead of sending again. */
-  readonly #settled = new Map<string, { answer: GiveBackOutcome } | { error: unknown }>();
+  /** The receipts with a send out: one at a time on each. */
+  readonly #busy = new Set<string>();
+  /** How each receipt's last press ended once it is no longer saved, under that press's ids, so a
+   * window opened on its Send again before the answer came shows that answer instead of sending. */
+  readonly #settled = new Map<
+    string,
+    { ids: GiveBackSubmissionIds } & ({ answer: GiveBackOutcome } | { error: unknown })
+  >();
   constructor(
     private readonly scope: TenderRefundScope,
     private readonly api: GiveBackApi,
@@ -142,13 +148,13 @@ export class GiveBackSession {
     });
   }
 
-  async #run<T>(work: () => Promise<T>): Promise<T> {
-    if (this.#busy) return fail("busy");
-    this.#busy = true;
+  async #run<T>(saleId: string, work: () => Promise<T>): Promise<T> {
+    if (this.#busy.has(saleId)) return fail("busy");
+    this.#busy.add(saleId);
     try {
       return await work();
     } finally {
-      this.#busy = false;
+      this.#busy.delete(saleId);
     }
   }
 
@@ -176,7 +182,7 @@ export class GiveBackSession {
       const refusal = refusalOf(error);
       if (refusal !== null && PROVES_NOTHING.has(refusal.code)) {
         this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
-        this.#settled.set(saleId, { error });
+        this.#settled.set(saleId, { ids: submissionIds, error });
       } else if (refusal !== null) {
         const proves = firstSend && FIRST_SEND_REFUSALS.has(refusal.code);
         this.#write({ ...saved, sent: { ...sent, firstSendRefused: proves, refusal } }, saleId);
@@ -187,7 +193,7 @@ export class GiveBackSession {
         );
       throw error;
     }
-    this.#settled.set(saleId, { answer });
+    this.#settled.set(saleId, { ids: submissionIds, answer });
     try {
       this.#keep(saleId, sent, answer);
     } catch (error) {
@@ -236,7 +242,8 @@ export class GiveBackSession {
     override?: GiveBackWrite["override"],
     needs: GiveBackRight[] = [],
   ): Promise<GiveBackOutcome> {
-    return this.#run(() => {
+    this.#settled.delete(saleId);
+    return this.#run(saleId, () => {
       const saved = this.read(saleId);
       if (saved?.sent) {
         if (fingerprint(saved.sent) === fingerprint(ask))
@@ -249,18 +256,23 @@ export class GiveBackSession {
         rest: saved?.rest ?? null,
       };
       this.#write(next, saleId);
-      this.#settled.delete(saleId);
       return this.#send(saleId, next, override, true);
     });
   }
 
-  /** Sends the press whose answer was lost again, under its ids; once its answer has come and it is
-   * no longer saved, answers as that answer did, sending nothing. */
-  resend(saleId: string, override?: GiveBackWrite["override"]): Promise<GiveBackOutcome> {
-    return this.#run(async () => {
+  /** Sends the press whose answer was lost again, under its ids; once the answer to the press
+   * with `ids` has come and it is no longer saved, answers as that answer did, sending nothing. */
+  resend(
+    saleId: string,
+    override?: GiveBackWrite["override"],
+    ids: GiveBackSubmissionIds | null = null,
+  ): Promise<GiveBackOutcome> {
+    return this.#run(saleId, async () => {
       const saved = this.read(saleId);
       if (!saved?.sent) {
-        const settled = this.#settled.get(saleId) ?? fail("missing");
+        const settled = this.#settled.get(saleId);
+        if (settled === undefined || ids === null || !sameIds(settled.ids, ids))
+          return fail("missing");
         if ("error" in settled) throw settled.error;
         return settled.answer;
       }
@@ -279,7 +291,7 @@ export class GiveBackSession {
   /** Whether the waiting card refund, if any, is done and, once it is, what any rest would do. A
    * settled refund with nothing to follow is forgotten. */
   checkRest(saleId: string): Promise<RestCheck> {
-    return this.#run(async () => {
+    return this.#run(saleId, async () => {
       const rest = this.read(saleId)?.rest ?? fail("missing");
       const { state } =
         rest.waitFor === undefined

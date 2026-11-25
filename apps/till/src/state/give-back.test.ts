@@ -324,7 +324,9 @@ it("answers a Send again of a press answered meanwhile as that answer did, sendi
   answer(pendingWithRest);
   await first;
   expect(session.read("sale-1")?.sent).toBeNull();
-  expect(await session.resend("sale-1")).toEqual(pendingWithRest);
+  expect(await session.resend("sale-1", undefined, sent(api, 0).submissionIds)).toEqual(
+    pendingWithRest,
+  );
   expect(api.giveBack).toHaveBeenCalledOnce();
 });
 
@@ -335,7 +337,9 @@ it("answers a Send again of a press refused meanwhile with a refusal proving not
   const session = new GiveBackSession(scope, api);
   await expect(session.submit("sale-1", ask)).rejects.toBe(changed);
   expect(session.read("sale-1")).toBeNull();
-  await expect(session.resend("sale-1")).rejects.toBe(changed);
+  await expect(session.resend("sale-1", undefined, sent(api, 0).submissionIds)).rejects.toBe(
+    changed,
+  );
   expect(api.giveBack).toHaveBeenCalledOnce();
 });
 
@@ -347,8 +351,43 @@ it("answers no Send again from an earlier press once a new press was made", asyn
   await expect(session.submit("sale-1", ask)).rejects.toMatchObject({ code: "pin.invalid" });
   session.abandon("sale-1");
   expect(session.read("sale-1")).toBeNull();
-  await expect(session.resend("sale-1")).rejects.toMatchObject({ kind: "missing" });
+  for (const index of [0, 1])
+    await expect(
+      session.resend("sale-1", undefined, sent(api, index).submissionIds),
+    ).rejects.toMatchObject({ kind: "missing" });
   expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
+it("sends a press on one receipt while another receipt's press is out, and Send again takes only its own press's answer", async () => {
+  const api = fakeApi();
+  const cash: GiveBackAsk = {
+    request: { purpose: "goodwill", amount: "5.00", extra: "0.00", way: "cash" },
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+  };
+  const given = (id: string) =>
+    outcome({ parts: [{ kind: "refund", amount: "5.00", state: "completed", refundId: id }] });
+  const session = new GiveBackSession(scope, api);
+  api.giveBack.mockResolvedValueOnce(given("first"));
+  await session.submit("sale-b", cash);
+  const firstIds = sent(api, 0).submissionIds;
+  let answerA!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answerA = resolve)));
+  const onA = session.submit("sale-a", ask);
+
+  api.giveBack.mockResolvedValueOnce(given("second"));
+  expect(await session.submit("sale-b", cash)).toEqual(given("second"));
+  const secondIds = sent(api, 2).submissionIds;
+  expect(secondIds).not.toEqual(firstIds);
+  answerA(outcome());
+  await onA;
+  expect(session.read("sale-b")).toBeNull();
+  await expect(session.resend("sale-b", undefined, firstIds)).rejects.toMatchObject({
+    kind: "missing",
+  });
+  expect(await session.resend("sale-b", undefined, secondIds)).toEqual(given("second"));
+  expect(api.giveBack).toHaveBeenCalledTimes(3);
 });
 
 it("refuses to send again, check or send a rest when nothing is saved", async () => {
