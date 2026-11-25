@@ -114,6 +114,11 @@ box (it then takes no payment, where today €1.00 is taken; Finish and unpaid d
   había retirado». (Owner, 25 Nov 18:19: Reopen keeps "This cancels the existing receipt and reopens the bill."; its
   other lines follow those words.)
 
+*As built (PR 2):* the press takes off the dishes the kitchen had not started (watcher 17:48, point 1); a started or
+ready dish is stopped and keeps its charge on the reopened bill (watcher 22:42); the stop is not offered on a bill
+holding a payment; the words follow the owner's 18:19 answer: `split.done` "Receipt cancelled and the bill reopened.
+Move each guest's dishes to their own bill, then print each one."
+
 ## 5. PR 3. Nothing was served
 
 On PR 2's branch; the server half can start now, but it lands after PR 2 (a partly served bill is refused by both, run)
