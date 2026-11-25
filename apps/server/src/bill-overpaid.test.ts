@@ -207,7 +207,7 @@ async function paymentOf(paymentId: string) {
 }
 
 /** Keep as tip, as a till showing the bill paid `overpaid` over its total asks for it. */
-function keepAsTip(billId: string, overpaid: string, submissionId = randomUUID()) {
+function keepAsTip(billId: string, overpaid: string, submissionId: string = randomUUID()) {
   return send(
     venue.app,
     venue.cookie,
