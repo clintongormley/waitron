@@ -3314,7 +3314,7 @@ describe("till-app: service cancellation consent", () => {
           quantity: "1.000",
           gross: "30.00",
           left: "30.00",
-          cancelled: { quantity: "1.000", owed, back: "0.00" },
+          cancelled: { quantity: "1.000", owed, back: "0.00", waiting: "0.00" },
           cancelIds,
           partOf: null,
           givenFree: false,

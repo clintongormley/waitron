@@ -34,8 +34,7 @@ import type {
   GiveBackWay,
 } from "../api/give-back-types.js";
 import { reasonPicker } from "./reason-picker.js";
-import { lineName } from "../screens/till-ticket-view.js";
-import { unservedDishText } from "./dish-format.js";
+import { dishLines } from "./give-back-lines.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
 import type { GiveBackSession } from "../state/give-back.js";
@@ -655,61 +654,6 @@ export class TillGiveBackDialog extends LitElement {
         )}${this.#cancelButton()}</wt-form-actions
       >`;
   }
-  #dishText(line: GiveBackLine): string {
-    const dishName = lineName(line.descriptions, this.namesLocale);
-    return `${unservedDishText({ dishName, quantity: line.quantity })} · ${this.#money(line.gross)}`;
-  }
-  #extrasOf(view: GiveBackView, dish: GiveBackLine) {
-    return view.lines
-      .filter((extra) => extra.partOf === dish.id)
-      .map(
-        (extra) =>
-          html`<p class="muted extra-of" data-extra-of=${dish.id}>${this.#dishText(extra)}</p>`,
-      );
-  }
-  #lines(view: GiveBackView) {
-    const label = (line: GiveBackLine) =>
-      line.cancelled === null
-        ? ""
-        : t(
-            positive(line.cancelled.owed) ? "give_back.cancelled_owed" : "give_back.cancelled_back",
-          );
-    return html`<fieldset>
-      <legend data-which>${t("give_back.which")}</legend>
-      <div class="lines">
-        ${view.lines
-          .filter((line) => line.partOf === null)
-          .map((line) =>
-            line.givenFree
-              ? html`<div class="free" data-free=${line.id}>
-                    <span>${this.#dishText(line)}</span>
-                    <span class="muted">${t("give_back.given_free")}</span>
-                  </div>
-                  ${this.#extrasOf(view, line)}`
-              : html`<wt-switch
-                    name="dish"
-                    data-line=${line.id}
-                    .label=${this.#dishText(line)}
-                    .description=${label(line)}
-                    .checked=${this.draft.lineIds.includes(line.id)}
-                    .disabled=${!line.available}
-                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                      event.stopPropagation();
-                      this.#tick(line, event.detail.checked);
-                    }}
-                  ></wt-switch>
-                  ${
-                    !line.available && line.reason !== null
-                      ? html`<p class="reason" data-line-reason=${line.id}>
-                          ${this.#reasonText(line.reason)}
-                        </p>`
-                      : nothing
-                  }
-                  ${this.#extrasOf(view, line)}`,
-          )}
-      </div>
-    </fieldset>`;
-  }
   #ways(purpose: GiveBackPurpose) {
     return html`<fieldset data-how>
       <legend>${t("give_back.how")}</legend>
@@ -759,7 +703,16 @@ export class TillGiveBackDialog extends LitElement {
     const total =
       amount !== null && !this.#errors().has("amount") ? moneyPlus(amount, this.#extra()) : null;
     return html`<p class="heading" data-purpose>${t(`give_back.${purpose}`)}</p>
-      ${purpose === "dishes" ? this.#lines(view) : nothing}
+      ${
+        purpose === "dishes"
+          ? dishLines(view, {
+              namesLocale: this.namesLocale,
+              ticked: this.draft.lineIds,
+              onTick: (line, checked) => this.#tick(line, checked),
+              reasonText: (reason) => this.#reasonText(reason),
+            })
+          : nothing
+      }
       <wt-price-input
         name="amount"
         fixed-unit

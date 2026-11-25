@@ -997,7 +997,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         quantity: "1.000",
         gross: money,
         left: money,
-        cancelled: { quantity: "1.000", owed: money, back: "0.00" },
+        cancelled: { quantity: "1.000", owed: money, back: "0.00", waiting: "0.00" },
         cancelIds,
         partOf: null,
         givenFree: false,

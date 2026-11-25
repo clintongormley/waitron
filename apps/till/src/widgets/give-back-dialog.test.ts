@@ -228,6 +228,19 @@ describe("A dish", () => {
     );
   });
 
+  it("says a cancelled dish's money is waiting while a card refund of it waits for the card company", async () => {
+    const salad = VIEW.lines.find((line) => line.id === "salad")!;
+    const waiting = { ...salad, cancelled: { ...salad.cancelled!, waiting: "4.00" } };
+    const { el } = await mount(
+      withView({ lines: VIEW.lines.map((line) => (line.id === "salad" ? waiting : line)) }),
+    );
+    await choose(el, "dishes");
+    expect(dish(el, "salad")!.description).toBe(
+      "Cancelled, money back waiting for the card company",
+    );
+    expect(dish(el, "paella")!.description).toBe("Cancelled, not served");
+  });
+
   it("fills the amount from what is left, a cancelled dish from what it is owed, and keeps an edit", async () => {
     const { el } = await mount();
     await choose(el, "dishes");
@@ -581,6 +594,16 @@ describe("in Spanish", () => {
       ),
     );
     expect(text(submit(el))).toBe(said("give_back.submit", "8.00"));
+  });
+
+  it("words a cancelled dish's money still waiting for the card company", async () => {
+    const salad = VIEW.lines.find((line) => line.id === "salad")!;
+    const waiting = { ...salad, cancelled: { ...salad.cancelled!, waiting: "9.50" } };
+    const { el } = await mount(
+      withView({ lines: VIEW.lines.map((line) => (line.id === "salad" ? waiting : line)) }),
+    );
+    await choose(el, "dishes");
+    expect(dish(el, "salad")!.description).toBe(es["give_back.cancelled_waiting"]);
   });
 });
 
@@ -1643,7 +1666,7 @@ describe("opened filled in after a cancel (D9)", () => {
       ...VIEW.lines[1]!,
       id: "flan",
       descriptions: { en: "Flan", es: "Flan" },
-      cancelled: { quantity: "1.000", owed: "5.00", back: "0.00" },
+      cancelled: { quantity: "1.000", owed: "5.00", back: "0.00", waiting: "0.00" },
       cancelIds: ["cancel-0"],
     };
     const { el } = await mountFilled(withView({ lines: [...VIEW.lines, earlier] }));

@@ -573,7 +573,23 @@ describe("readGiveBack: the lines", () => {
     expect((await plainRefund(saleId, cash, { applied: "10.00" }, [cancelId])).status).toBe(200);
     expect(lineOf(await read(saleId), "Paella")).toMatchObject({
       left: "0.00",
-      cancelled: { owed: "0.00", back: "18.50" },
+      cancelled: { owed: "0.00", back: "18.50", waiting: "0.00" },
+    });
+  });
+
+  it("counts a card refund still waiting for the card company as back, and says how much waits", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const card = await tenderOf(saleId, "card");
+    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+    expect(await plainRefund(saleId, card, { applied: "18.50" }, [cancelId])).toMatchObject({
+      status: 200,
+      json: { state: "pending" },
+    });
+    expect(lineOf(await read(saleId), "Paella")).toMatchObject({
+      left: "0.00",
+      cancelled: { quantity: "1.000", owed: "0.00", back: "18.50", waiting: "18.50" },
     });
   });
 
@@ -585,6 +601,7 @@ describe("readGiveBack: the lines", () => {
       quantity: "1.000",
       owed: "4.00",
       back: "0.00",
+      waiting: "0.00",
     });
   });
 

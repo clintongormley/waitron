@@ -50,7 +50,7 @@ export const LINES: GiveBackLine[] = [
     name: "Paella",
     gross: "18.50",
     left: "20.00",
-    cancelled: { quantity: "1.000", owed: "20.00", back: "0.00" },
+    cancelled: { quantity: "1.000", owed: "20.00", back: "0.00", waiting: "0.00" },
     cancelIds: ["cancel-1"],
   }),
   line({
@@ -66,7 +66,7 @@ export const LINES: GiveBackLine[] = [
     name: "Salad",
     gross: "9.50",
     left: "0.00",
-    cancelled: { quantity: "1.000", owed: "0.00", back: "9.50" },
+    cancelled: { quantity: "1.000", owed: "0.00", back: "9.50", waiting: "0.00" },
     available: false,
   }),
   line({
