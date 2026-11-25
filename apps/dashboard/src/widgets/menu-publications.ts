@@ -799,16 +799,19 @@ export class MenuPublicationsPanel extends LitElement {
     const errors = { ...own };
     if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal, this.preview);
     const marked = Object.values(errors).some(Boolean);
+    const moving = this.moving;
+    const blocked =
+      moving === null && this.preview !== null && publicationBlockerCount(this.preview) > 0;
+    const blockerMessage = blocked ? t("menu_preview.see_blockers") : null;
     const bottom = bottomMessage(
+      blockerMessage,
       refusal !== null && refusal.field === null ? refusalMessage(refusal, this.preview) : null,
       marked ? t("form.fix_fields") : null,
     );
     const invalid = Object.keys(own).length > 0;
     const submitAction = saveActionState(this.#scope);
     const repeated = this.repeated;
-    const moving = this.moving;
-    const blocked =
-      moving === null && this.preview !== null && publicationBlockerCount(this.preview) > 0;
+
     const zone = this.answer?.timeZone ?? "";
     return html`<wt-dialog
       data-test="schedule-dialog"
@@ -910,7 +913,7 @@ export class MenuPublicationsPanel extends LitElement {
           data-test="schedule-submit"
           .loading=${this.scheduleBusy}
           ?disabled=${blocked || submitAction.unchanged || invalid || this.confirming !== null}
-          .ariaDescription=${blocked ? t("menu_preview.see_blockers") : null}
+          .ariaDescription=${blockerMessage}
           @click=${() => void this.#submitSchedule()}
           >${t(
             moving === null ? "menu_publications.schedule_action" : "menu_publications.move_action",

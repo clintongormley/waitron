@@ -881,6 +881,7 @@ describe("scheduling a publication", () => {
     });
     await flush(el);
     expect(submitButton(el).disabled).toBe(true);
+    expect(await bottom(el)).toBe("See Fix before publishing in Preview.");
     submitButton(el).dispatchEvent(new MouseEvent("click"));
     await flush(el);
     expect(scheduleMenuPublication).not.toHaveBeenCalled();

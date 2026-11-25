@@ -2457,6 +2457,62 @@ describe("combined menu publication", () => {
     await publish(f.lunch);
   });
 
+  it("leaves the dish price out of changes when a size that follows it clashes", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      const variants = await listProductVariants(tx, f.lemonade);
+      await setProductVariants(
+        tx,
+        f.lemonade,
+        variants.map((variant) => ({ ...variant, unitPrice: null })),
+        "en",
+      );
+      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+        grossPrice: "2.60",
+      });
+    });
+    await publish(f.dinner);
+    await app((tx) => addMember(tx, f.dinnerRoot, product(f.lemonade)));
+    const preview = await app((tx) => previewMenu(tx, f.dinner));
+    expect(preview.clashes.map(({ variantId }) => variantId)).toEqual([f.large]);
+    expect(preview.changes.filter(({ kind }) => kind === "price_changed")).toEqual([]);
+  });
+
+  it("only links other menus affected by the same included menu's variant price", async () => {
+    const f = await menusFixture(fx.db);
+    const [bar, brunch] = await app(async (tx) => {
+      const bar = await createMenu(tx, { name: "Bar" });
+      const barRoot = await requireMenuRoot(tx, bar.id);
+      await addMember(tx, barRoot, product(f.lemonade));
+      const brunch = await createMenu(tx, { name: "Brunch" });
+      await addMember(tx, await requireMenuRoot(tx, brunch.id), section(barRoot));
+      return [bar.id, brunch.id];
+    });
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await publish(brunch);
+    await app(async (tx) => {
+      for (const [menu, price] of [
+        [f.drinksMenu, "4.20"],
+        [bar, "6.00"],
+      ] as const)
+        await setMenuVariants(
+          tx,
+          await offerOf(tx, menu, f.lemonade),
+          [{ variantId: f.large, price }],
+          menu,
+        );
+    });
+    const change = (await app((tx) => previewMenu(tx, f.dinner))).changes.find(
+      ({ kind }) => kind === "price_changed",
+    );
+    expect(change).toMatchObject({
+      variant: { id: f.large },
+      includedMenu: { id: f.drinksMenu },
+      alsoOn: ["Lunch Menu"],
+    });
+  });
+
   it("names the other menu affected by a shared price change even when that menu has a clash", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {

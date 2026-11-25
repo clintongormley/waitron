@@ -82,7 +82,6 @@ it("says menú in Spanish only for an on-screen menu or a set menu, never a rest
     "appearance.colour.surface-raised",
     "kitchen.delete_course_set_menu_lines",
     "kitchen.delete_course_set_menu_lines_one",
-    "menu_preview.set_menu_problems",
     "menus.add_set_menu",
     "menus.choose_set_menu",
     "menus.place_set_menu",

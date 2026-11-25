@@ -163,8 +163,10 @@ it("fits the prices, names and fallback media at phone width and reveals the exa
   );
   el.clashes = [{ productId: "juice", variantId: "1", field: "price", candidates: [] }];
   await settle(el);
-  expect(row(el, "juice")?.querySelector('[data-test="price"]')).toBeNull();
-  expect(row(el, "juice/1")?.querySelector('[data-test="price"]')).toBeNull();
+  for (const key of ["juice", "juice/1"])
+    expect(row(el, key)?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
+      "Price clash",
+    );
   expect(row(el, "juice/0")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
     "€2.00",
   );

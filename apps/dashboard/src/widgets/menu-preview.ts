@@ -648,7 +648,6 @@ export class MenuPreviewPanel extends LitElement {
         <div
           class="pane changes-pane"
           data-test="changes-pane"
-          tabindex="0"
           role="region"
           aria-labelledby="changes-heading"
         >
@@ -658,7 +657,6 @@ export class MenuPreviewPanel extends LitElement {
       <div
         class="pane menu-pane"
         data-test="document-pane"
-        tabindex="0"
         role="region"
         aria-labelledby="document-heading"
       >

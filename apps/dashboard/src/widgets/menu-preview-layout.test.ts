@@ -78,14 +78,10 @@ it.each([
     }
     for (const pane of [changes, menu]) {
       expect(pane.getAttribute("role")).toBe("region");
-      expect(pane.tabIndex).toBe(0);
+      expect(pane.tabIndex).toBe(-1);
       expect(
         el.shadowRoot!.getElementById(pane.getAttribute("aria-labelledby")!)?.textContent?.trim(),
       ).toBeTruthy();
-      if (pane.getClientRects().length > 0) {
-        pane.focus();
-        expect(el.shadowRoot!.activeElement).toBe(pane);
-      }
     }
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   },

@@ -427,7 +427,7 @@ function changeSubject({ change, section }: DiffEntry): string {
     case "product_changed":
       return `${change.kind}:${change.productId}`;
     case "price_changed":
-      return `${change.kind}:${change.productId}:${change.variant?.id ?? ""}`;
+      return `${change.kind}:${change.productId}:${change.variant?.id ?? ""}:${change.includedMenu?.id ?? ""}`;
     case "extra_unit_changed":
     case "extra_portion_changed":
     case "extra_max_quantity_changed":
@@ -473,7 +473,8 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       change.kind !== "price_changed" ||
       !mine.clashes.some(
         ({ productId, variantId }) =>
-          productId === change.productId && variantId === (change.variant?.id ?? null),
+          productId === change.productId &&
+          (change.variant === undefined || variantId === change.variant.id),
       ),
   );
   const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);

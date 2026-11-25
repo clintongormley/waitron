@@ -1234,11 +1234,6 @@ it("lets long desktop panes scroll with the page", async () => {
     for (const name of ["document", "changes"]) {
       const pane = q(el, `[data-test="${name}-pane"]`)!;
       expect(pane.scrollHeight).toBe(pane.clientHeight);
-      expect(pane.tabIndex).toBe(0);
-      expect(pane.getAttribute("role")).toBe("region");
-      expect(pane.getAttribute("aria-labelledby")).toBe(`${name}-heading`);
-      pane.focus();
-      expect(el.shadowRoot!.activeElement).toBe(pane);
       expect(pane.clientHeight).toBeGreaterThan(window.innerHeight);
     }
   } finally {
