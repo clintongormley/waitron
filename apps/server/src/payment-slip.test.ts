@@ -17,6 +17,7 @@ const input = {
   amount: "1.00",
   tip: "0.50",
   charged: "1.50",
+  cash: null,
   invoiceLocale: "es-ES",
   card: { scheme: "VISA", last4: "5838", entryMode: "contactless" as const, authCode: "328600" },
   printer: { paperWidth: "80mm", resolution: "180dpi" } as const,
@@ -166,9 +167,9 @@ describe("payment slip (pure renderer, no database)", () => {
       formatPaymentSlip({ ...input, card: null, orderLabel: null, tip: "0.00", charged: "1.00" }),
     );
     expect(text).toContain("\nPedido 41\n");
-    for (const fragment of ["Tarjeta", "Entrada", "Autorización", "Propina", "Table"])
+    for (const fragment of ["Tarjeta", "Entrada", "Autorización", "Propina", "Cobrado", "Table"])
       expect(text).not.toContain(fragment);
-    expect(text).toContain("Cobrado");
+    expect(text).toContain("Importe");
   });
   it.each([
     ["chip", "Chip"],
@@ -182,6 +183,83 @@ describe("payment slip (pure renderer, no database)", () => {
     if (label) expect(text).toContain(label);
     else expect(text).not.toContain("Entrada");
   });
+});
+
+describe("payment slip amounts", () => {
+  const labels = receiptLabelsFor("es-ES");
+  const amountLines = (
+    extra: Partial<Parameters<typeof formatPaymentSlip>[0]>,
+    invoiceLocale = "es-ES",
+  ) =>
+    printedLines(formatPaymentSlip({ ...input, invoiceLocale, ...extra }))
+      .filter((line) => line.includes("€"))
+      .map((line) => line.trim().replace(/\s+/gu, " "));
+  const row = (label: string, amount: string) => `${label} ${amount} €`;
+  const noTip = { amount: "2.00", tip: "0.00", charged: "2.00" };
+  const noTipLines = [row(labels.paymentAmount, "2,00")];
+  const withTip = { amount: "20.00", tip: "2.00", charged: "22.00" };
+  const withTipLines = [
+    row(labels.paymentAmount, "20,00"),
+    row(labels.tip, "2,00"),
+    row(labels.charged, "22,00"),
+  ];
+  const cash = (tendered: string, change: string) => ({
+    method: "cash" as const,
+    card: null,
+    cash: { tendered, change },
+  });
+
+  it("cash over the amount prints the cash handed over and the change, and no charged line", () => {
+    expect(amountLines({ ...noTip, ...cash("3.00", "1.00") })).toEqual([
+      ...noTipLines,
+      row(labels.cashTendered, "3,00"),
+      row(labels.change, "1,00"),
+    ]);
+  });
+
+  it("exact cash prints the amount alone", () => {
+    expect(amountLines({ ...noTip, ...cash("2.00", "0.00") })).toEqual(noTipLines);
+  });
+
+  it("exact cash with a tip prints neither the cash handed over nor change", () => {
+    expect(amountLines({ ...withTip, ...cash("22.00", "0.00") })).toEqual(withTipLines);
+  });
+
+  it("cash with a tip and change prints the cash handed over and the change after what was charged", () => {
+    expect(amountLines({ ...withTip, ...cash("50.00", "28.00") })).toEqual([
+      ...withTipLines,
+      row(labels.cashTendered, "50,00"),
+      row(labels.change, "28,00"),
+    ]);
+  });
+
+  it("a reader card prints the tip and what was charged, or the amount alone without a tip", () => {
+    expect(amountLines(withTip)).toEqual(withTipLines);
+    expect(amountLines(noTip)).toEqual(noTipLines);
+  });
+
+  it("another card machine prints the same amount lines as a reader card", () => {
+    const typed = { method: "card" as const, card: null, machine: "Solo", reference: "OP-77" };
+    expect(amountLines({ ...withTip, ...typed })).toEqual(withTipLines);
+    expect(amountLines({ ...noTip, ...typed })).toEqual(noTipLines);
+  });
+
+  it("a payment not taken prints its amount and tip, with nothing charged", () => {
+    expect(amountLines({ ...noTip, notTaken: true })).toEqual(noTipLines);
+    expect(amountLines({ ...withTip, notTaken: true })).toEqual(withTipLines.slice(0, 2));
+  });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "names the cash handed over and the change in %s",
+    (invoiceLocale) => {
+      const words = receiptLabelsFor(invoiceLocale);
+      const lines = amountLines({ ...noTip, ...cash("3.00", "1.00") }, invoiceLocale);
+      const printed = lines.map((line) => line.replace(/€|[\d.,]+/gu, "").trim());
+      expect(printed).toEqual([words.paymentAmount, words.cashTendered, words.change]);
+      expect(lines[1]).toMatch(/3[.,]00/u);
+      expect(lines[2]).toMatch(/1[.,]00/u);
+    },
+  );
 });
 
 describe("payment slip printer layout", () => {

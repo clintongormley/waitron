@@ -15,6 +15,8 @@ export interface PaymentSlipInput {
   amount: string;
   tip: string;
   charged: string;
+  /** The cash handed over and the change from it; null for a card. */
+  cash: { tendered: string; change: string } | null;
   /** Cash or a card typed into another machine, which has no card facts to print. */
   method?: "cash" | "card";
   /** Another card machine's operation number and name, as typed; printed only with a `card` method. */
@@ -58,9 +60,17 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
     if (input.reference) text(`${labels.reference} ${input.reference}`);
   }
   row(labels.paymentAmount, formatMoney(input.amount, input.invoiceLocale));
-  // A zero tip prints no line. `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which
-  // always renders two places, so a zero tip is "0.00" and nothing else.
-  if (input.tip !== "0.00") row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
-  if (input.notTaken !== true) row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
+  // `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which always renders two places, so
+  // a zero tip is "0.00" and nothing else.
+  if (input.tip !== "0.00") {
+    row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
+    if (input.notTaken !== true) {
+      row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
+    }
+  }
+  if (input.cash !== null && input.cash.change !== "0.00") {
+    row(labels.cashTendered, formatMoney(input.cash.tendered, input.invoiceLocale));
+    row(labels.change, formatMoney(input.cash.change, input.invoiceLocale));
+  }
   return b.feedAndCut().bytes();
 }

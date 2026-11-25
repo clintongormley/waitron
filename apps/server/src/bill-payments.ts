@@ -2277,6 +2277,7 @@ async function takeBillPaymentWithin(
       method: req.method,
       charged: payment.applied + payment.tip,
       tip: payment.tip,
+      tendered: payment.tendered,
       paidAt: payment.receivedAt!,
       reference: req.externalRef ?? null,
       machine: outsideCardDetails(req).externalMachine ?? null,

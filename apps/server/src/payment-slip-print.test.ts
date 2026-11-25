@@ -8,6 +8,7 @@ import {
   devices,
   deviceProfiles,
   invoiceDeliveries,
+  workingOrderLines,
   workingOrders,
   printAgents,
   printJobs,
@@ -26,6 +27,7 @@ import { AppError, decimal } from "@waitron/shared";
 import type { DiskFullState } from "./disk-full-state.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { cardReaders } from "@waitron/payments";
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { validateCapabilities } from "@waitron/layouts";
 import {
   claimPrintJobs,
@@ -134,6 +136,7 @@ it("prints the payment instant on the next date in the venue's time zone", async
         method: "cash",
         charged: 1000,
         tip: 0,
+        tendered: 1000,
         paidAt: "2026-09-12T23:30:00.000Z",
         reference: null,
         machine: null,
@@ -729,6 +732,11 @@ it("ignores a forged slip request without the print capability", async () => {
 describe("a payment after the ticket was issued", () => {
   const labels = receiptLabelsFor("es-ES");
 
+  it("makes every caller of enqueueRequestedPaymentSlip state the cash handed over, null for a card", () => {
+    type Payment = Parameters<typeof enqueueRequestedPaymentSlip>[4];
+    expectTypeOf<Payment["tendered"]>().toEqualTypeOf<number | null>();
+  });
+
   it("makes every caller say the operation number and machine, null when none was typed", () => {
     type Payment = Parameters<typeof enqueueRequestedPaymentSlip>[4];
     expectTypeOf<Payment["reference"]>().toEqualTypeOf<string | null>();
@@ -866,6 +874,13 @@ describe("a payment after the ticket was issued", () => {
     expect(text).not.toContain(labels.owed);
     expect(opensDrawer(job.payload)).toBe(false);
   }
+
+  /** The slip's amount lines in print order, each with its padding closed up. */
+  const amountLines = (job: { payload: Uint8Array | null }) =>
+    decodeTicket(job.payload)
+      .split("\n")
+      .filter((line) => line.includes("€"))
+      .map((line) => line.trim().replace(/\s+/gu, " "));
 
   /** The slip's line naming how it was paid: the line that is the method's label and nothing else. */
   const methodLine = (job: { payload: Uint8Array | null }, label: string) =>
@@ -1020,6 +1035,228 @@ describe("a payment after the ticket was issued", () => {
       expect(decodeTicket(slips[0]!.payload)).toContain(line);
     },
   );
+
+  const row = (label: string, amount: string) => `${label} ${amount} €`;
+  const tipped = (amount: string, tip: string, charged: string) => [
+    row(labels.paymentAmount, amount),
+    row(labels.tip, tip),
+    row(labels.charged, charged),
+  ];
+  const otherMachine = { entry: "manual", externalProvider: "other", externalMachine: "Solo" };
+  const amountCases = [
+    {
+      name: "cash with change",
+      body: { method: "cash", amount: "2.00", applied: "2.00", tendered: "3.00" },
+      lines: [
+        row(labels.paymentAmount, "2,00"),
+        row(labels.cashTendered, "3,00"),
+        row(labels.change, "1,00"),
+      ],
+    },
+    {
+      name: "exact cash",
+      body: { method: "cash", amount: "2.00", applied: "2.00", tendered: "2.00" },
+      lines: [row(labels.paymentAmount, "2,00")],
+    },
+    {
+      name: "cash with a tip and change",
+      body: {
+        method: "cash",
+        amount: "20.00",
+        applied: "20.00",
+        tip: "2.00",
+        addedTip: "2.00",
+        tendered: "50.00",
+      },
+      lines: [
+        ...tipped("20,00", "2,00", "22,00"),
+        row(labels.cashTendered, "50,00"),
+        row(labels.change, "28,00"),
+      ],
+    },
+    {
+      name: "a reader card with a tip",
+      body: {
+        ...readerContribution,
+        amount: "20.00",
+        applied: "20.00",
+        tip: "2.00",
+        addedTip: "2.00",
+      },
+      lines: tipped("20,00", "2,00", "22,00"),
+    },
+    {
+      name: "a reader card with no tip",
+      body: readerContribution,
+      lines: [row(labels.paymentAmount, "10,00")],
+    },
+    {
+      name: "another card machine with a tip",
+      body: {
+        ...otherMachine,
+        method: "card",
+        amount: "20.00",
+        applied: "20.00",
+        tip: "2.00",
+        addedTip: "2.00",
+      },
+      lines: tipped("20,00", "2,00", "22,00"),
+    },
+    {
+      name: "another card machine with no tip",
+      body: { ...otherMachine, method: "card", amount: "2.00", applied: "2.00" },
+      lines: [row(labels.paymentAmount, "2,00")],
+    },
+  ];
+  const askedSlip = { whenPaying: "as it is paid", afterwards: "from its confirmation" } as const;
+
+  it.each(
+    amountCases.flatMap((entry) => Object.values(askedSlip).map((asked) => ({ ...entry, asked }))),
+  )("a slip asked for $asked prints the amounts of $name", async ({ body, lines, asked }) => {
+    const id = await tabWith(venue, "Red wine bottle");
+    const before = await jobCount();
+
+    const paid = await billPayment(id, {
+      ...body,
+      ...(asked === askedSlip.whenPaying ? { printCardSlip: true } : {}),
+    });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json).toMatchObject({ outcome: "received" });
+    if (asked === askedSlip.afterwards) {
+      const [payment] = await venue.db
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, id));
+      const printed = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payment-slip`,
+        { paymentId: payment!.id },
+      );
+      expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+    }
+
+    const slips = await slipsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(amountLines(slips[0]!)).toEqual(lines);
+  });
+
+  it.each(Object.values(askedSlip))(
+    "a slip asked for %s prints the change of the cash that pays a bill's balance",
+    async (asked) => {
+      const bill = await billPrintedByPrintTheBill();
+      expect((await billPayment(bill.id, cash("28.00"))).status).toBe(200);
+      const before = await jobCount();
+
+      const paid = await billPayment(bill.id, {
+        ...cash("2.00"),
+        tendered: "3.00",
+        ...(asked === askedSlip.whenPaying ? { printCardSlip: true } : {}),
+      });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      if (asked === askedSlip.afterwards) {
+        const payments = await venue.db
+          .select({ id: billPayments.id, tendered: billPayments.tendered })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, bill.id));
+        const last = payments.find(({ tendered }) => tendered === 300)!;
+        const printed = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${bill.id}/payment-slip`,
+          { paymentId: last.id },
+        );
+        expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+      }
+
+      const slips = await slipsSince(before);
+      expect(slips).toHaveLength(1);
+      expect(amountLines(slips[0]!)).toEqual([
+        row(labels.paymentAmount, "2,00"),
+        row(labels.cashTendered, "3,00"),
+        row(labels.change, "1,00"),
+      ]);
+    },
+  );
+
+  it("a counter cash sale's slip prints the cash handed over and the change", async () => {
+    const before = await jobCount();
+
+    const sold = await counterSale({ tendered: "50.00", printCardSlip: true });
+
+    expect(sold.status, JSON.stringify(sold.json)).toBe(200);
+    const slips = await slipsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(amountLines(slips[0]!)).toEqual([
+      row(labels.paymentAmount, "30,00"),
+      row(labels.cashTendered, "50,00"),
+      row(labels.change, "20,00"),
+    ]);
+  });
+
+  it("a slip for cash that paid for chosen items prints the cash handed over and the change", async () => {
+    const party = await seatedWith(venue, "Red wine bottle", "Small beer");
+    const [beer] = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, party.tabId),
+          eq(workingOrderLines.lineTotal, 300),
+        ),
+      );
+    const edit = await withTransaction(venue.db, (tx) => readBillEditState(tx, party.tabId));
+    const before = await jobCount();
+
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/item-payments`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party.revision,
+        expectedEdits: [
+          {
+            billId: party.tabId,
+            editorVersion: edit.editorVersion,
+            draftId: edit.draftId,
+            draftRevision: edit.draftRevision,
+          },
+        ],
+        picks: [{ lineId: beer!.id }],
+        method: "cash",
+        applied: "3.00",
+        tip: "0.00",
+        tendered: "5.00",
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const billId = paid.json.billId as string;
+    expect(billId).not.toBe(party.tabId);
+    const [payment] = await venue.db
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, billId));
+    const printed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payment-slip`,
+      { paymentId: payment!.id },
+    );
+
+    expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+    const slips = await slipsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(amountLines(slips[0]!)).toEqual([
+      row(labels.paymentAmount, "3,00"),
+      row(labels.cashTendered, "5,00"),
+      row(labels.change, "2,00"),
+    ]);
+  });
 
   it("does not infer a payment to print from a settled order", async () => {
     const bill = await billPrintedByPrintTheBill();
@@ -2187,7 +2424,7 @@ describe("a slip asked for on a reader payment whose answer comes later", () => 
   const payLost = async (
     id: string,
     lost: () => void,
-    slip: { printCardSlip?: boolean } = { printCardSlip: true },
+    slip: { printCardSlip?: boolean; tip?: string; addedTip?: string } = { printCardSlip: true },
   ) => {
     lost();
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
@@ -2213,18 +2450,27 @@ describe("a slip asked for on a reader payment whose answer comes later", () => 
     const before = (await venue.db.select().from(printJobs)).length;
     await payLost(id, captured);
     expect(await jobsSince(before)).toEqual([]);
+    await liftPaymentGuard(venue.db, () =>
+      venue.db.execute(
+        sql`update payments set card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+      ),
+    );
     await checkPayments();
     await checkPayments();
     const slips = await jobsSince(before);
     expect(slips).toHaveLength(1);
     expect(slips[0]).toContain(labels.paymentHeading);
-    expect(slipRowOf(slips[0]!, labels.charged)).toContain("10,00");
+    expect(slips[0]).toContain("Visa ****5838");
+    expect(slips[0]).toContain(labels.paymentContactless);
+    expect(slips[0]).toContain("328600");
+    expect(slips[0]).not.toContain(labels.charged);
+    expect(slipRowOf(slips[0]!, labels.paymentAmount)).toContain("10,00");
   });
 
   it("prints a slip saying the payment was not taken once when the payment check finds no charge", async () => {
     const id = await tabWith(venue, "Red wine bottle");
     const before = (await venue.db.select().from(printJobs)).length;
-    await payLost(id, neverAsked);
+    await payLost(id, neverAsked, { printCardSlip: true, tip: "1.00", addedTip: "1.00" });
     await checkPayments();
     await checkPayments();
     const slips = await jobsSince(before);
