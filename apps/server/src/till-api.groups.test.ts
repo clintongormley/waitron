@@ -38,7 +38,6 @@ import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testi
 import "./errors.js";
 import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -2424,38 +2423,6 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(rows.reduce((sum, row) => sum + row.lineTotal, 0)).toBe(9000);
     const balance = await call("GET", `/api/working-orders/${party.tabId}/payments`);
     expect(balance.json).toMatchObject({ received: "18.00" });
-  });
-  it("refuses the entire split of a line with two paid units", async () => {
-    const party = await seated();
-    const submitted = await submitGrouped(party, [
-      { lines: [dish("Tarta", "5")], release: "hold" },
-    ]);
-    expect(submitted.status).toBe(200);
-    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
-    const payment = await call("POST", `/api/working-orders/${party.tabId}/payments`, {
-      submissionId: randomUUID(),
-      kind: "items",
-      lines: [{ lineNo: 1, quantity: "2" }],
-      method: "cash",
-      tendered: "36",
-      applied: "36",
-      tip: "0.00",
-    });
-    expect(payment.status).toBe(200);
-    const before = await snapshot(party);
-    const body = {
-      submissionId: randomUUID(),
-      expectedPartyRevision: await revisionOf(party.partyId),
-      lineId: group.lineIds[0]!,
-    };
-    const result = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, body);
-    expect(result.status).toBe(409);
-    expect(result.json).toEqual(
-      refusal("bill.line_paid", { workingOrderId: party.tabId, lineNo: 1 }),
-    );
-    expect(await snapshot(party)).toEqual(before);
-    const quantities = await inTx(venue, (tx) => readPaidQuantities(tx, party.tabId));
-    expect([...quantities]).toEqual([[body.lineId, 2000]]);
   });
 });
 

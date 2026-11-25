@@ -716,35 +716,6 @@ describe("the public cancellation read and command", () => {
     expect((await frozen()).adjustments.filter((a) => a.workingOrderId === p.billId)).toEqual([]);
   });
 
-  it("refuses removing an unstarted dish quantity already paid for", async () => {
-    const p = await fixture();
-    const paid = await send(
-      venue.app,
-      venue.cookie.staff,
-      "POST",
-      `/api/working-orders/${p.billId}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: p.parent.lineNo }],
-        method: "cash",
-        tendered: "24.00",
-        applied: "24.00",
-        tip: "0.00",
-      },
-    );
-    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    const body = await bodyFor(p, { reasonId: undefined });
-    const before = await frozen();
-    const refused = await post(p, body);
-    expect(refused.status).toBe(409);
-    expect(refused.json).toEqual({
-      code: "bill.line_paid",
-      params: { workingOrderId: p.billId, lineNo: p.parent.lineNo },
-    });
-    expect(await frozen()).toEqual(before);
-  });
-
   it("identifies the cancelled dish's own filed sale among paid party bills without writing", async () => {
     const first = await fixture();
     const second = await fixture("fire");

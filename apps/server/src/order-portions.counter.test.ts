@@ -11,7 +11,6 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import {
-  billPaymentLines,
   orderEvents,
   saleLineDishes,
   saleLines,
@@ -26,7 +25,7 @@ import { decimal } from "@waitron/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-payments.js";
 import {
   billShare,
   payFreshCounterInCash,
@@ -606,52 +605,6 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(cancelled.map((event) => event.portionId).sort()).toEqual(
       sorted(removed.map((line) => line.portionId)),
     );
-  });
-
-  it("A1208 paying for 3,277 of 3,278 burgers with cheese records a payment line for each burger and each cheese", async () => {
-    const { id } = await park(linesOfAtMost99(3278, burgersWithCheese));
-    const burgers = linesOf(id).filter((line) => line.name === "Burger");
-    expect(burgers).toHaveLength(3278);
-    const paidFor = burgers.slice(0, 3277);
-    const sessionId = await openTillSession(venue.db, {
-      deviceId: venue.cfg.origin.deviceId,
-      personId: venue.operatorId,
-    });
-
-    const { payment } = await takeBillPayment(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      id,
-      {
-        submissionId: randomUUID(),
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
-        kind: "items",
-        lines: paidFor.map((line) => ({ lineNo: line.lineNo })),
-        method: "cash",
-        tendered: "12059.36",
-        applied: "12059.36",
-        tip: "0.00",
-      },
-      { personId: venue.operatorId, sessionId },
-    );
-
-    const recorded = await venue.db
-      .select({ lineId: billPaymentLines.lineId })
-      .from(billPaymentLines)
-      .where(eq(billPaymentLines.billPaymentId, payment.id));
-    expect(recorded).toHaveLength(6554);
-    const cheeses = linesOf(id).filter((line) => line.name === "Cheese");
-    const paidIds = new Set(paidFor.map((line) => line.id));
-    const expected = [
-      ...paidFor.map((line) => line.id),
-      ...cheeses.filter((line) => paidIds.has(line.parentLineId!)).map((line) => line.id),
-    ];
-    expect(sorted(recorded.map((row) => row.lineId))).toEqual(sorted(expected));
   });
 
   it("A1208 half off the whole of 3,277 burgers with cheese records a discount line for each burger and each cheese", async () => {

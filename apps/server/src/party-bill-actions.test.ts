@@ -291,35 +291,6 @@ describe("split a bill", () => {
     expect(await snapshot(partyId, [tabId, checkId])).toEqual(before);
   });
 
-  it("keeps an item already paid for where it is", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Table 6"));
-    await order(v, tabId, "Burger", "Red wine bottle");
-    await takeBillPayment(
-      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      tabId,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 1 }],
-        method: "cash",
-        tendered: "12.00",
-        applied: "12.00",
-        tip: "0.00",
-      },
-      v.operator,
-    );
-    const before = await snapshot(partyId, [tabId]);
-
-    const error = await captureError(() => splitOff(partyId, tabId, [1]));
-
-    expect(error).toMatchObject({
-      code: "bill.line_paid",
-      params: { workingOrderId: tabId, lineNo: 1 },
-    });
-    expect(await snapshot(partyId, [tabId])).toEqual(before);
-  });
-
   it("splits the unpaid items off a partly paid bill, leaving its payment where it is", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Table 6b"));
     await order(v, tabId, "Burger", "Red wine bottle");

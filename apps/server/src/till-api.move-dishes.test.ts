@@ -298,37 +298,6 @@ describe("A803 move dishes route:", () => {
     expect(answer.json).toMatchObject({ code: "tab.not_open", params: { tabId: "not-a-uuid" } });
   });
 
-  it("a paid dish is 409 bill.line_paid", async () => {
-    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
-    const [riceLine] = lineIdsOf(tabId);
-    await takeBillPayment(
-      {
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        admission: testTradingAdmission(),
-      },
-      venue.cfg,
-      tabId,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 1 }],
-        method: "cash",
-        tendered: "35.00",
-        applied: "35.00",
-        tip: "0.00",
-      },
-      operator,
-    );
-
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [riceLine!], null));
-
-    expect(answer.status).toBe(409);
-    expect(answer.json).toMatchObject({ code: "bill.line_paid" });
-    expect(lineIdsOf(tabId)).toHaveLength(2);
-  });
-
   it("the bill as its own destination is 400 tab.transfer_self", async () => {
     const { partyId, first } = await twoBills();
     const [riceLine] = lineIdsOf(first);

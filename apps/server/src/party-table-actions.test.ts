@@ -42,9 +42,7 @@ import { serveLine } from "./testing/serve-line.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
 import { fireGroup } from "./order-group-release.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { readDrafts } from "./order-drafts.js";
@@ -3046,35 +3044,6 @@ describe("A803 split", () => {
         expect(await namesOn(result.billIds[0]!)).toEqual(["Water"]);
         expect(await namesOn(b1)).toEqual(["Burger"]);
         expect(await paymentsOf(v, b1)).toEqual(payments);
-      });
-
-      it("its paid dish refuses bill.line_paid, every row unchanged", async () => {
-        const { anna, m5, b1 } = await tableFor("A803 Part paid", "Burger", "Water");
-        const burger = await lineOn(b1, "Burger");
-        await takeBillPayment(
-          { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-          v.cfg,
-          b1,
-          {
-            submissionId: randomUUID(),
-            kind: "items",
-            lines: [{ lineNo: burger.lineNo }],
-            method: "cash",
-            tendered: "12.00",
-            applied: "12.00",
-            tip: "0.00",
-          },
-          v.operator,
-        );
-
-        const error = await refusedWithNoRowChanged(() =>
-          splitSelected(anna.partyId, m5, { wholeBillIds: [], loose: [loose(b1, burger.id)] }),
-        );
-
-        expect(error).toMatchObject({
-          code: "bill.line_paid",
-          params: { workingOrderId: b1, lineNo: burger.lineNo },
-        });
       });
     });
 

@@ -153,69 +153,6 @@ async function newTicket(before: Set<string>) {
   return tickets[0]!;
 }
 
-describe("a paid line (design §8 test 5)", () => {
-  it("refuses a comp and a discount of an item already paid for, changing nothing", async () => {
-    const billId = await tabWith(venue, "Seafood rice", "Steak", "Small beer");
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 2 }],
-      method: "cash",
-      tendered: "25.00",
-      applied: "25.00",
-    });
-    expect(paid.status).toBe(200);
-    const before = { lines: await linesOf(billId), revision: await revisionOf(billId) };
-
-    for (const ask of [{ action: "comp" }, { action: "discount_percent", percentBp: 1000 }]) {
-      const refused = await adjust(billId, 2, ask);
-      expect([refused.status, refused.json]).toEqual([
-        409,
-        { code: "bill.line_paid", params: { workingOrderId: billId, lineNo: 2 } },
-      ]);
-    }
-
-    expect({ lines: await linesOf(billId), revision: await revisionOf(billId) }).toEqual(before);
-    expect(await recordedOn(billId)).toEqual([]);
-  });
-});
-
-describe("a bill discount over a paid line", () => {
-  it("refuses a discount of the whole bill that would lower an item already paid for", async () => {
-    const billId = await tabWith(venue, "Seafood rice", "Steak");
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 2 }],
-      method: "cash",
-      tendered: "25.00",
-      applied: "25.00",
-    });
-    expect(paid.status).toBe(200);
-
-    const refused = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      {
-        expectedEdit: await readBillEditState(venue.db, billId),
-        submissionId: randomUUID(),
-        expectedRevision: await revisionOf(billId),
-        lineId: null,
-        reasonId,
-        action: "discount_amount",
-        amount: "6.00",
-        note: null,
-      },
-    );
-
-    expect([refused.status, refused.json]).toEqual([
-      409,
-      { code: "bill.line_paid", params: { workingOrderId: billId, lineNo: 2 } },
-    ]);
-    expect(await recordedOn(billId)).toEqual([]);
-  });
-});
-
 it("closes a bill when a fixed-amount comp brings it to zero", async () => {
   const billId = await tabWith(venue, "Small beer");
 

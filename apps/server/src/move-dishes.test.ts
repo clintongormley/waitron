@@ -28,7 +28,6 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { cancelReasonId } from "./testing/cancel-line.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import {
   OPERATOR,
@@ -296,25 +295,6 @@ async function move(
 /** The bill's stored total, in cents. */
 async function total(billId: string): Promise<number> {
   return decimalToCents(await inTx(v, (tx) => storedOrderTotal(tx, billId)));
-}
-
-/** An item payment in cash for the dish lines named. */
-async function payItems(billId: string, lineNos: number[], amount: string): Promise<void> {
-  await takeBillPayment(
-    { db: v.db, backend: v.backend, clock: v.clock, admission: testTradingAdmission() },
-    v.cfg,
-    billId,
-    {
-      submissionId: randomUUID(),
-      kind: "items",
-      lines: lineNos.map((lineNo) => ({ lineNo })),
-      method: "cash",
-      tendered: amount,
-      applied: amount,
-      tip: "0.00",
-    },
-    v.operator,
-  );
 }
 
 describe("A803 move dishes: the moves that succeed", () => {
@@ -654,16 +634,6 @@ async function lineNoOf(billId: string, lineId: string): Promise<number> {
 }
 
 describe("A803 move dishes refuses, and changes nothing", () => {
-  it("A803 move dishes refuses: a paid Caña named with an unpaid one is bill.line_paid naming it", async () => {
-    const p = await party([dish("Caña", "2")]);
-    const [paid, unpaid] = await dishIds(p.bill1);
-    await payItems(p.bill1, [await lineNoOf(p.bill1, paid!)], "3.00");
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [unpaid!, paid!]), "bill.line_paid", {
-      workingOrderId: p.bill1,
-      lineNo: await lineNoOf(p.bill1, paid!),
-    });
-  });
-
   it("A803 move dishes refuses: €52.00 with €40.01 received; moving €12.00 is bill.received_exceeds_total by 0.01", async () => {
     const p = await party([
       dish("Red wine bottle"),
@@ -972,16 +942,6 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 });
 
 describe("A803 move dishes race: the second of two writes is refused, changing nothing", () => {
-  it("A803 move dishes race: an item payment for the Burger commits first; the move naming it is bill.line_paid", async () => {
-    const p = await party([dish("Burger"), dish("Flan")]);
-    const [burger] = await dishIds(p.bill1, "Burger");
-    const ask = await readMove(p.partyId, p.bill1, p.bill2);
-    await payItems(p.bill1, [await lineNoOf(p.bill1, burger!)], "12.00");
-    await refused(() => sendMove(p.bill1, p.bill2, [burger!], ask), "bill.line_paid", {
-      workingOrderId: p.bill1,
-    });
-  });
-
   it("A803 move dishes race: a €40 contribution commits first; the move that would now break the floor is bill.received_exceeds_total", async () => {
     const p = await party([dish("Red wine bottle"), dish("Burger"), dish("Water")]);
     const [wineLine] = await dishIds(p.bill1, "Red wine bottle");

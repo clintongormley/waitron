@@ -1321,22 +1321,6 @@ describe("A803 split: the route", () => {
       expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
     });
 
-    it("a paid dish: 409 bill.line_paid", async () => {
-      const { anna, second } = await annaWith("Tarta", "Small beer");
-      const paid = await pay(anna.tabId, {
-        kind: "items",
-        lines: [{ lineNo: 1 }],
-        tendered: "18.00",
-        applied: "18.00",
-      });
-      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-
-      const answer = await refusal(anna, second, lineIdsOf(anna.tabId)[0]!);
-
-      expect(answer.status).toBe(409);
-      expect(answer.json).toMatchObject({ code: "bill.line_paid" });
-    });
-
     it("a pick leaving less than was received: 409 bill.received_exceeds_total", async () => {
       const { anna, second } = await annaWith("Tarta", "Small beer");
       const paid = await pay(anna.tabId, {

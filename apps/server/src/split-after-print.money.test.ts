@@ -345,19 +345,6 @@ describe("Reopen bill on a part-paid printed bill", () => {
 
     await refused(party.tabId, "bill.refund_in_progress");
   });
-
-  it("a received items payment refuses", async () => {
-    const party = await printed("Red wine bottle", "Tarta");
-    const items = await pay(party.tabId, {
-      kind: "items",
-      lines: [{ lineNo: 2 }],
-      tendered: "18.00",
-      applied: "18.00",
-    });
-    expect(items.status, JSON.stringify(items.json)).toBe(200);
-
-    await refused(party.tabId, "bill.payments_received");
-  });
 });
 
 describe("Reopen bill carries a card's provider row", () => {

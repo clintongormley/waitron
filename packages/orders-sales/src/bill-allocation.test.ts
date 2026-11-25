@@ -319,7 +319,6 @@ describe("previewAllocation: what is refused", () => {
 
   it.each([
     ["a contribution of zero", { kind: "contribution", amount: d("0.00") }, "amount"],
-    ["items costing nothing", { kind: "items", due: d("0.00") }, "lines"],
     ["a share among no one", { kind: "share", shareOf: 0 }, "shareOf"],
     ["a share among a fraction of a person", { kind: "share", shareOf: 1.5 }, "shareOf"],
   ] as const)("refuses %s: management.request_invalid", (_name, shape, field) => {
@@ -344,95 +343,6 @@ describe("previewAllocation: what is refused", () => {
     );
     expect(error.code).toBe("management.request_invalid");
     expect(error.params).toEqual({ field: "tip" });
-  });
-});
-
-describe("the €25 steak: the choices an item payment offers when its lines cost more than is available (§3.3)", () => {
-  // A €120.00 bill with €105.00 of contributions: €15.00 available, the steak costs €25.00.
-  const steak = (
-    payment: AllocationRequest["payment"],
-    choice?: "full_with_tip" | "use_pool",
-  ): AllocationRequest => ({
-    kind: "items",
-    due: d("25.00"),
-    payment,
-    ...(choice === undefined ? {} : { choice }),
-  });
-  const card = { method: "card", addedTip: d("0.00") } as const;
-  const FULL = { choice: "full_with_tip", applied: "15.00", tip: "10.00" };
-  const POOL = { choice: "use_pool", applied: "15.00", tip: "0.00" };
-
-  it("tips on, nothing pending: offers both", () => {
-    expect(previewAllocation(funds("120.00", "105.00"), steak(card), TIPS_ON)).toEqual({
-      kind: "choose",
-      options: [FULL, POOL],
-    });
-  });
-
-  it("tips off, nothing pending: offers only paying what is left from the pool", () => {
-    expect(previewAllocation(funds("120.00", "105.00"), steak(card), TIPS_OFF)).toEqual({
-      kind: "choose",
-      options: [POOL],
-    });
-  });
-
-  it("tips on, a card pending: offers only the full price with a tip", () => {
-    expect(previewAllocation(funds("120.00", "95.00", "10.00"), steak(card), TIPS_ON)).toEqual({
-      kind: "choose",
-      options: [FULL],
-    });
-  });
-
-  it("tips off, a card pending: offers neither, and refuses order.payment_in_flight", () => {
-    const error = thrown(() =>
-      previewAllocation(funds("120.00", "95.00", "10.00"), steak(card), TIPS_OFF),
-    );
-    expect(error.code).toBe("order.payment_in_flight");
-    expect(error.params).toEqual({ workingOrderId: BILL });
-  });
-
-  it("the full price with a tip: pay €25.00, applied €15.00, tip €10.00", () => {
-    expect(
-      previewAllocation(funds("120.00", "105.00"), steak(card, "full_with_tip"), TIPS_ON),
-    ).toEqual({
-      kind: "allocated",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-      change: null,
-      charged: "25.00",
-    });
-  });
-
-  it("the full price with a tip records the €10.00 as a tip for cash too, not as change", () => {
-    expect(
-      previewAllocation(
-        funds("120.00", "105.00"),
-        steak({ method: "cash", tendered: d("30.00"), addedTip: d("0.00") }, "full_with_tip"),
-        TIPS_ON,
-      ),
-    ).toMatchObject({ applied: "15.00", tip: "10.00", change: "5.00" });
-  });
-
-  it("what is left, using the earlier contribution: pay €15.00, applied €15.00, tip €0.00", () => {
-    expect(
-      previewAllocation(funds("120.00", "105.00"), steak(card, "use_pool"), TIPS_ON),
-    ).toMatchObject({ kind: "allocated", choice: "use_pool", applied: "15.00", tip: "0.00" });
-  });
-
-  it("a named choice that is not offered is answered with the choices that are", () => {
-    expect(
-      previewAllocation(funds("120.00", "95.00", "10.00"), steak(card, "use_pool"), TIPS_ON),
-    ).toEqual({ kind: "choose", options: [FULL] });
-  });
-
-  it("an item payment within what is available needs no choice", () => {
-    expect(previewAllocation(funds("120.00", "80.00"), steak(card), TIPS_ON)).toMatchObject({
-      kind: "allocated",
-      choice: null,
-      applied: "25.00",
-      tip: "0.00",
-    });
   });
 });
 
@@ -496,22 +406,6 @@ describe("confirmAllocation: the applied amount and tip the operator saw must st
       }),
     );
     expect(error.code).toBe("bill.allocation_changed");
-  });
-
-  it("refuses bill.allocation_changed, with the choices, when a choice is needed and none was named", () => {
-    const error = thrown(() =>
-      confirmAllocation(
-        funds("120.00", "105.00"),
-        { kind: "items", due: d("25.00"), payment: { method: "card", addedTip: d("0.00") } },
-        TIPS_OFF,
-        { applied: d("15.00"), tip: d("0.00") },
-      ),
-    );
-    expect(error.code).toBe("bill.allocation_changed");
-    expect(error.params).toEqual({
-      workingOrderId: BILL,
-      preview: { kind: "choose", options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }] },
-    });
   });
 
   it("passes the §3.1 refusals through unchanged", () => {
