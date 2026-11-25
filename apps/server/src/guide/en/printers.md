@@ -87,9 +87,12 @@ alongside the last reported printing error.
 
 If prints take several seconds to start over Bluetooth, switch the printer off and on again.
 
-If an A4 job says the printer is out of paper, add paper and let the job finish. If the queue says
-**May have printed**, check the printer before sending the invoice again. Open **Orders** to
-request another A4 print.
+Choose **View printout** on an A4 invoice to see its pages redrawn from the sale. If the queue
+shows the invoice printed, choose **Reprint** to send a marked copy to any active receipt or A4
+printer. If printing failed or the queue says **May have printed**, check the printer and use
+**Orders** to send the invoice again.
+
+If an A4 job says the printer is out of paper, add paper and let the job finish.
 
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was
@@ -97,8 +100,8 @@ reported, check whether the drawer opened before opening it again.
 
 If you moved cash by hand, [record it on the till](table-service.md#drawer-cash-entry).
 
-Choose **Reprint** to send a receipt or invoice to any receipt printer. If the original
-already printed, you get a marked copy. Use **Orders** for an A4 copy. You can also reprint a
+Use a receipt printer to reprint a job sent to a receipt printer. If the original already
+printed, you get a marked copy. For an A4 copy of an invoice sent to a receipt printer, use **Orders**. You can also reprint a
 station ticket or refund receipt on a printer at least as wide. A printout waiting on a
 printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
 same way, and is cancelled there. Other

@@ -88,6 +88,12 @@ import type { TradingContext } from "./trading-context.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
+import {
+  activeA4QueuePrinters,
+  linkedPrintDelivery,
+  previewA4Invoice,
+  readA4QueueInvoice,
+} from "./print-job-a4.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { layOutPrinterTestPage } from "./printer-test-page.js";
@@ -1789,6 +1795,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             pageDocument: printJobs.pageDocument,
             printerHold: printJobs.printerHold,
             deliveryStatus: invoiceDeliveries.status,
+            deliveryMedium: invoiceDeliveries.medium,
             receiptCopy: printJobs.receiptCopy,
             saleId: printJobs.saleId,
             attempts: printJobs.attempts,
@@ -1814,7 +1821,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             ),
           )
-          .leftJoin(invoiceDeliveries, eq(invoiceDeliveries.printJobId, printJobs.id))
+          .leftJoin(invoiceDeliveries, linkedPrintDelivery())
           .where(
             or(
               and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
@@ -1869,6 +1876,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           id: printer.id,
           dots: textGrid(printer.paperWidth, printer.resolution).widthDots,
         }));
+        const a4Targets = jobs.some((job) => job.deliveryMedium === "a4" && job.status === "done")
+          ? [...targets.map(({ id }) => id), ...(await activeA4QueuePrinters(tx))]
+          : [];
         const reprint = (job: {
           printerId: string;
           saleId: string | null;
@@ -1897,6 +1907,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             pageDocument,
             printerHold,
             deliveryStatus,
+            deliveryMedium,
             printerDeletedAt,
             printerActive,
             printerTransport,
@@ -1908,6 +1919,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ...job
           }) => {
             if (kind === "a4") {
+              const canResend =
+                pageDocument === "invoice" &&
+                deliveryMedium === "a4" &&
+                deliveryStatus === "sent" &&
+                job.status === "done" &&
+                printerActive;
               return {
                 ...job,
                 kind,
@@ -1919,10 +1936,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                     : job.status === "printing"
                       ? printerHold
                       : null,
-                reprintRule: "own" as const,
-                reprintPrinterIds: [],
+                reprintRule: canResend ? ("any" as const) : ("own" as const),
+                reprintPrinterIds: canResend ? a4Targets.filter((id) => id !== job.printerId) : [],
                 stuck: false,
-                canResend: false,
+                canResend,
               };
             }
             const where = reprint({ printerId: job.printerId, saleId, head, linked });
@@ -1976,7 +1993,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const { job, payload } = await gated(sessionId, async (tx) => {
+      const read = await gated(sessionId, async (tx) => {
         const [job] = await tx
           .select({
             id: printJobs.id,
@@ -1991,11 +2008,20 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
           .where(eq(printJobs.id, id));
-        if (job === undefined) throw new AppError("print_job.not_found", { id });
+        if (job === undefined) {
+          const invoice = await readA4QueueInvoice(tx, id);
+          if (invoice === undefined) throw new AppError("print_job.not_found", { id });
+          const document = await deps.readInvoiceDocument(tx, invoice.saleId);
+          return {
+            kind: "a4" as const,
+            document: { ...document, duplicate: invoice.designation === "duplicate" },
+          };
+        }
         assertPrintPayload(job);
         // Only a sale's original gives up as out of date; its saved bytes never print, and a
         // resend lays it out again, so that is what it shows.
         return {
+          kind: "receipt" as const,
           job,
           payload:
             job.lastError === RECEIPT_OUT_OF_DATE
@@ -2009,6 +2035,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               : job.payload!,
         };
       });
+      if (read.kind === "a4")
+        return c.json(await previewA4Invoice(read.document), 200, { "Cache-Control": "no-store" });
+      const { job, payload } = read;
       // The printer's setting now sizes only a job that draws no line of text.
       return c.json(
         previewPrintJob(payload, {

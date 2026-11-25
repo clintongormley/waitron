@@ -60,7 +60,7 @@ import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { jobStatusName, transportName } from "../i18n/domain.js";
+import { a4Choices, jobStatusName, transportName } from "../i18n/domain.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
@@ -91,6 +91,7 @@ import type {
   PrintJobRow,
   PrintJobStatus,
   PrintJobPreview,
+  A4PrintJobPreview,
   PrintPaperWidth,
   PrintResolution,
   PrintTransport,
@@ -1149,7 +1150,7 @@ export class PrintersScreen extends LitElement {
   }
   /** Whether the open agent, printer or printer-name form has been submitted since it opened. */
   @state() private formAttempted = false;
-  @state() private preview: PrintJobPreview | null = null;
+  @state() private preview: PrintJobPreview | A4PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
   @state() private completedJobsPage = 0;
@@ -4478,7 +4479,7 @@ export class PrintersScreen extends LitElement {
         key: "preview",
         label: t("printers.actions"),
         cell: (j) =>
-          j.kind === "a4"
+          j.kind === "a4" && j.pageDocument !== "invoice"
             ? nothing
             : html`<div part="job-actions">
                 <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
@@ -4568,7 +4569,11 @@ export class PrintersScreen extends LitElement {
     return html`<dashboard-print-job-reprint-dialog
       .api=${this.#reprintApi}
       .job=${this.reprintJob}
-      .printers=${this.printers}
+      .printers=${
+        this.reprintJob.kind === "a4"
+          ? [...this.printers, ...a4Choices(this.pagePrinters)]
+          : this.printers
+      }
       @reprint-close=${() => {
         this.reprintJob = null;
       }}

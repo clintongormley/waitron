@@ -94,6 +94,16 @@ it("offers the original chosen, then every other receipt printer by name, whatev
   expect(reprint(el).variant).toBe("primary");
 });
 
+it("puts an unavailable destination refusal beneath the A4 printer choice", async () => {
+  const { el } = await mount(job({ kind: "a4", pageDocument: "invoice" }), {
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+  });
+  reprint(el).click();
+  await vi.waitFor(() =>
+    expect(combobox(el)!.error).toBe("That printer is unavailable. Choose another printer."),
+  );
+});
+
 it("says only printers wide enough are offered for a kitchen ticket or refund receipt", async () => {
   const { el } = await mount(job({ reprintRule: "wide_enough", reprintPrinterIds: ["p3"] }));
   expect(offered(el)).toEqual(["Kitchen", "Bar"]);

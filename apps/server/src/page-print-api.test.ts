@@ -22,7 +22,11 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { hashDeviceToken } from "@waitron/identity";
+import { hashDeviceToken, startManagementSession } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import sharp from "sharp";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { createClient, PAGE_FORMATS, PAGE_HOLDS, PAGE_MEDIA } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -789,6 +793,53 @@ describe("the print agent's own client", () => {
       failure: { kind: "claim_lost" },
     });
   });
+});
+
+it("redraws the queued A4 preview with the linked sale and its recorded copy mark", async () => {
+  const v = await venue();
+  const office = await printer(v.agentOne);
+  const saleId = await fullInvoice(v, "Orange juice");
+  const original = await queueA4(saleId, office);
+  const job = (await claim(v))!;
+  expect((await result(v, original, { ...held(job), status: "sent" })).status).toBe(204);
+  const copy = await queueA4(saleId, office, 1000);
+  const session = await withTransaction(suite.db, async (tx) => {
+    const [person] = await seedPersons(tx, {
+      displayName: "Printer manager",
+      pinHash: fixturePinHash("1234"),
+      role: "manager",
+    });
+    return startManagementSession(tx, { method: "password", personId: person!.id });
+  });
+
+  const response = await v.app.request(`/management-api/print-jobs/${copy}/preview`, {
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  const preview = (await response.json()) as {
+    kind: string;
+    pages: { data: string; width: number; height: number }[];
+  };
+  expect(preview.kind).toBe("a4");
+  expect(preview.pages).toHaveLength(1);
+  const page = preview.pages[0]!;
+  const image = sharp(Buffer.from(page.data, "base64"));
+  expect(await image.metadata()).toMatchObject({
+    format: "png",
+    width: page.width,
+    height: page.height,
+  });
+  expect(page.width).toBeLessThan(2480);
+  const [expected] = await renderInvoiceRaster(await documentFor(v, saleId, true), 300);
+  const { width, height, pixels } = expected!;
+  expect(await image.greyscale().raw().toBuffer()).toEqual(
+    await sharp(pixels, { raw: { width, height, channels: 1 } })
+      .resize(page.width)
+      .greyscale()
+      .raw()
+      .toBuffer(),
+  );
 });
 
 describe("fetching a page job's document", () => {

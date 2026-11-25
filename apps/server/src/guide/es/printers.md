@@ -93,9 +93,12 @@ conexión puede aparecer junto al último error de impresión comunicado.
 
 Si la impresora tarda varios segundos en empezar a imprimir por Bluetooth, apágala y vuelve a encenderla.
 
-Si un trabajo en A4 indica que falta papel, añade papel y deja que termine. Si la cola indica
-**Puede haberse impreso**, revisa la impresora antes de volver a enviar la factura. Abre **Pedidos**
-para solicitar otra impresión en A4.
+Elige **Ver impresión** en una factura en A4 para ver las páginas generadas a partir de la venta.
+Si la cola indica que la factura se imprimió, elige **Reimprimir** para enviar un duplicado a
+cualquier impresora de tickets o A4 activa. Si la impresión falló o la cola indica **Puede haberse
+impreso**, revisa la impresora y usa **Pedidos** para volver a enviar la factura.
+
+Si un trabajo en A4 indica que falta papel, añade papel y deja que termine.
 
 Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
@@ -103,8 +106,9 @@ el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
 Si moviste efectivo a mano, [regístralo en el terminal](table-service.md#drawer-cash-entry).
 
-Elige **Reimprimir** para enviar un ticket o una factura a cualquier impresora de tickets.
-Si el original ya se imprimió, obtendrás un duplicado. Para una copia en A4, abre **Pedidos**.
+Usa una impresora de tickets para reimprimir un trabajo enviado a una impresora de tickets.
+Si el original ya se imprimió, obtendrás un duplicado. Para imprimir en A4 una copia de una
+factura enviada a una impresora de tickets, usa **Pedidos**.
 También puedes reimprimir una comanda de estación o un justificante de devolución en una
 impresora al menos igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
 ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora. Reimprime un justificante

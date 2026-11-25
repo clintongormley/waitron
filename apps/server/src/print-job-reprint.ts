@@ -1,7 +1,9 @@
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import {
   receiptRollColumns,
+  isA4Printer,
   kitchenPrintJobs,
   printJobs,
   isReceiptPrinter,
@@ -25,7 +27,8 @@ import {
   endInvoicePrintDeliveries,
   resendInvoicePrintJob,
 } from "./invoice-print.js";
-import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
+import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { readA4QueueInvoice } from "./print-job-a4.js";
 import { deliversAsFullInvoiceSql } from "./invoice-selection.js";
 import { enqueueInvoiceReceipt, type LayOutSaleReceipt } from "./receipt-print.js";
 
@@ -126,7 +129,7 @@ export async function reprintJobOn(
     .from(printJobs)
     .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
     .where(eq(printJobs.id, jobId));
-  if (found === undefined) throw new AppError("print_job.not_found", { id: jobId });
+  if (found === undefined) return reprintA4Invoice(tx, layOut, jobId, printerId, personId, now);
   const { job } = found;
   assertPrintPayload(job);
   const completedOriginal = isCompletedReceiptOriginal(job);
@@ -183,6 +186,44 @@ export async function reprintJobOn(
     printerId: targetId,
     payload,
   });
+}
+
+async function reprintA4Invoice(
+  tx: Transaction,
+  layOut: LayOutSaleReceipt,
+  jobId: string,
+  printerId: string | undefined,
+  personId: string,
+  now: Date,
+): Promise<{ jobId: string }> {
+  const source = await readA4QueueInvoice(tx, jobId);
+  if (source === undefined) throw new AppError("print_job.not_found", { id: jobId });
+  if (!source.printerActive) throw new AppError("printer.not_found", { id: source.printerId });
+  if (source.jobStatus !== "done" || source.deliveryStatus !== "sent")
+    throw new AppError("print_job.not_resendable", { id: jobId });
+
+  const targetId = printerId ?? source.printerId;
+  const [receipt] = await tx
+    .select({ id: printers.id, ...receiptRollColumns })
+    .from(printers)
+    .where(and(isReceiptPrinter(), eq(printers.id, targetId), eq(printers.active, true)));
+  if (receipt !== undefined)
+    return enqueueCompletedReceiptCopy(tx, layOut, source.saleId, null, receipt, personId, now);
+
+  const [office] = await tx
+    .select({ id: printers.id })
+    .from(printers)
+    .where(and(isA4Printer(), eq(printers.id, targetId), eq(printers.active, true)));
+  if (office === undefined)
+    throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
+  await expireInvoiceDeliveryClaims(tx, now);
+  const copy = await reserveInvoiceDelivery(tx, source.saleId, {
+    medium: "a4",
+    pagePrinterId: office.id,
+    requestKey: randomUUID(),
+    personId,
+  });
+  return { jobId: copy.printJobId! };
 }
 
 async function enqueueCompletedReceiptCopy(
