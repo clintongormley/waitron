@@ -22,7 +22,7 @@ exit **Select** to see the price and switch again.
 
 To change several products together, turn on **Select**, tick the products and choose
 **Mark available** or **Mark unavailable**. The count on each button includes ticks hidden by
-search or filters. Clear any category ticks to show the availability buttons.
+search or filters. Clear any category ticks to enable the availability buttons.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
 you sort products, and matching categories open while you filter. To add directly in a category,

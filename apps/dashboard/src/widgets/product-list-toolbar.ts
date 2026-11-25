@@ -46,6 +46,21 @@ export const productsToolbarStyles = css`
     gap: var(--wt-space-2);
     padding: var(--wt-space-3) 0;
   }
+  .selection-count,
+  wt-button[data-test^="mark-"]::part(button) {
+    font-variant-numeric: tabular-nums;
+  }
+  .selection-count {
+    display: grid;
+  }
+  .selection-count > span,
+  .selection-count::after {
+    grid-area: 1 / 1;
+  }
+  .selection-count::after {
+    content: attr(data-width-text);
+    visibility: hidden;
+  }
   .empty-tree-action {
     text-align: center;
     margin-block-start: var(--wt-space-3);
@@ -136,8 +151,9 @@ export function productSelectionBar(options: {
   deleteWaiting: boolean;
   availabilityCount: number;
   availabilityWaiting: boolean;
-  availabilityWriting: boolean | null;
-  markAvailability: (available: boolean, button: HTMLElement) => void;
+  availabilityWriting: { available: boolean; count: number } | null;
+  showAvailabilityProgress: boolean;
+  markAvailability: (available: boolean) => void;
   move: () => void;
   remove: () => void;
   done: () => void;
@@ -153,8 +169,12 @@ export function productSelectionBar(options: {
     ${options.showSpinner && options.busy ? html`<wt-spinner></wt-spinner>` : nothing}
     ${
       options.selecting
-        ? html`<span data-test="selected-count" aria-live="polite"
-              >${countOf("folders.selected", options.count)}</span
+        ? html`<span
+              class="selection-count"
+              data-test="selected-count"
+              aria-live="polite"
+              data-width-text=${countOf("folders.selected", Math.max(2, options.count))}
+              ><span>${countOf("folders.selected", options.count)}</span></span
             >
             <wt-button
               data-test="move"
@@ -163,30 +183,27 @@ export function productSelectionBar(options: {
               @click=${options.move}
               >${t("folders.move")}</wt-button
             >
-            ${
-              options.availabilityCount
-                ? [true, false].map((available) => {
-                    const loading = options.availabilityWriting === available;
-                    const action = available ? "available" : "unavailable";
-                    return html`<wt-button
-                      data-test=${`mark-${action}`}
-                      variant="secondary"
-                      .loading=${loading}
-                      .disabled=${
-                        !loading &&
-                        (options.busy ||
-                          options.availabilityWaiting ||
-                          options.availabilityWriting !== null)
-                      }
-                      @click=${(event: Event) =>
-                        options.markAvailability(available, event.currentTarget as HTMLElement)}
-                      >${fill(available ? "product.mark_available" : "product.mark_unavailable", {
-                        count: String(options.availabilityCount),
-                      })}</wt-button
-                    >`;
-                  })
-                : nothing
-            }
+            ${[true, false].map((available) => {
+              const batch = options.availabilityWriting;
+              const loading = options.showAvailabilityProgress && batch?.available === available;
+              const action = available ? "available" : "unavailable";
+              return html`<wt-button
+                data-test=${`mark-${action}`}
+                variant="secondary"
+                .loading=${loading}
+                .disabled=${
+                  !loading &&
+                  (!options.availabilityCount ||
+                    options.busy ||
+                    options.availabilityWaiting ||
+                    batch !== null)
+                }
+                @click=${() => options.markAvailability(available)}
+                >${fill(available ? "product.mark_available" : "product.mark_unavailable", {
+                  count: String(loading ? batch.count : options.availabilityCount),
+                })}</wt-button
+              >`;
+            })}
             <wt-button
               data-test="delete"
               variant=${options.deleteWaiting ? "secondary" : "danger"}

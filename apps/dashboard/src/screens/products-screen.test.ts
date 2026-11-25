@@ -3459,7 +3459,6 @@ describe("menu-screen", () => {
       const button = browser.shadowRoot!.querySelector<HTMLElement>(
         '[data-test="mark-unavailable"]',
       );
-      expect(button).not.toBeNull();
       await userEvent.click(button!);
       await vi.waitFor(() =>
         expect(el.shadowRoot!.querySelector('[data-test="products-retry"]')).not.toBeNull(),

@@ -3,8 +3,10 @@
 [Design §5 and delivery 7(c)](../specs/2026-11-24-products-list-redesign-design.md).
 
 **Finish line.** In List or Tree, tick dishes and choose **Mark available (2)** or **Mark unavailable (2)**.
-Count every tick, including those hidden by search or filters. Show both actions for a nonempty
-selection of products only. Send one request and change each product’s own flag.
+Count every tick, including those hidden by search or filters. Keep both actions visible in Select
+and enable them for a nonempty selection of products only. Send one request and change each
+product’s own flag. The watcher cleared the disabled state at 19:57 on 25 November after a real
+second tap hit the wrong row when conditional controls changed the bar's height.
 
 **Request.** In `apps/dashboard/src/api/client.ts`, add `setProductsAvailability(productIds: string[],
 available: boolean): Promise<void>` and delegate from the existing single-item method. Reuse #4272’s
@@ -21,7 +23,7 @@ with loading, disable its opposite and ignore row writes to the batch IDs. Keep 
 
 **Result.** Use one `availabilitySaved(ids, available)` callback and one refresh on success. Patch the flags
 together in `widgets/product-tree-availability.ts`, with a line-neutral callback change in
-`screens/products-screen.ts`. Clear only submitted ticks after success. If the focused action disappears,
+`screens/products-screen.ts`. Clear only submitted ticks after success. If the focused action becomes unavailable,
 focus Done. On refusal, keep the saved flags and show the reason in `product-list-action-feedback.ts`.
 Name the dish when `productId` matches a captured name. Otherwise show the refusal reason alone.
 For a deleted or missing dish, invalidate `products` through `api.liveData?.invalidate` so the next
@@ -29,7 +31,7 @@ snapshot drops its stale tick. Clear the old notice when an availability write s
 that follows Done or a view switch leaves the new selection and focus alone.
 
 **Test first.** `widgets/product-browser.test.ts` covers product-only, mixed and empty selections, a
-hidden tick, overlapping writes in both directions, keyboard focus through pending and success, and a
+hidden tick, a second tap at the original row position, overlapping writes, keyboard focus, and a
 deleted tick that disappears on refresh so staff can retry. Prove new ticks survive and an unnamed
 refusal replaces an older notice. Check one request in each view and the ticked 390 px Spanish bar.
 `screens/products-screen.test.ts` checks both flags update and the variant flag is preserved even when

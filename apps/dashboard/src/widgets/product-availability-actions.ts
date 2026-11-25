@@ -12,7 +12,7 @@ type AvailabilityHost = HTMLElement &
 
 export class ProductAvailabilityActions {
   pending: ReadonlyMap<string, boolean> = new Map();
-  batch: boolean | null = null;
+  batch: { available: boolean; count: number } | null = null;
   refusal: { name: string | undefined; error: unknown } | null = null;
 
   constructor(private readonly host: AvailabilityHost) {}
@@ -33,7 +33,7 @@ export class ProductAvailabilityActions {
     const names = new Map(
       this.host.products.filter(({ id }) => selected.has(id)).map(({ id, name }) => [id, name]),
     );
-    this.batch = available;
+    this.batch = { available, count: ids.length };
     try {
       return await this.#save(
         ids,

@@ -147,6 +147,7 @@ export class ProductBrowser extends LitElement {
   @state() private selecting = false;
   @state() private selected: string[] = [];
   #selectionVersion = 0;
+  #availabilitySelectionVersion?: number;
   @state() private operation: "move" | "delete" | null = null;
   @state() private operationSelection: ProductSelection = { productIds: [], categoryIds: [] };
   @state() private destination = "";
@@ -259,6 +260,13 @@ export class ProductBrowser extends LitElement {
     if (changed.has("summaries")) this.#operationScope?.changed();
     if (changed.has("operationError")) this.#operationFeedback.newRefusal();
     if (changed.has("products") || changed.has("categories")) this.#keepSelectionOwned();
+    if (
+      this.selecting &&
+      !changed.has("view") &&
+      this.shadowRoot?.activeElement?.matches('wt-button[data-test^="mark-"]') &&
+      !this.#availabilitySelection.length
+    )
+      this.renderRoot.querySelector<HTMLElement>('[data-test="cancel-selection"]')?.focus();
     if (
       [
         "operation",
@@ -963,20 +971,17 @@ export class ProductBrowser extends LitElement {
     return categoryIds.length ? [] : productIds;
   }
 
-  readonly #markAvailability = async (available: boolean, button: HTMLElement): Promise<void> => {
+  readonly #markAvailability = async (available: boolean): Promise<void> => {
     const ids = this.#availabilitySelection;
     if (!this.selecting || !ids.length || this.summaryLoading || this.operationBusy) return;
 
     const selectionVersion = this.#selectionVersion;
+    if (this.#availability.batch === null) this.#availabilitySelectionVersion = selectionVersion;
     const saved = await this.#availability.changeSelected(ids, available);
     if (!saved || !this.isConnected || selectionVersion !== this.#selectionVersion) return;
 
     const submitted = new Set(ids);
-    const restoreFocus = this.shadowRoot?.activeElement === button;
     this.selected = this.selected.filter((id) => !submitted.has(id));
-    await this.updateComplete;
-    if (restoreFocus && this.selecting && !button.isConnected && !this.shadowRoot?.activeElement)
-      this.renderRoot.querySelector<HTMLElement>('[data-test="cancel-selection"]')?.focus();
   };
 
   get #emptyProducts(): boolean {
@@ -1101,7 +1106,8 @@ export class ProductBrowser extends LitElement {
           availabilityCount: availability.length,
           availabilityWaiting: availability.some((id) => this.#availability.pending.has(id)),
           availabilityWriting: this.#availability.batch,
-          markAvailability: (available, button) => void this.#markAvailability(available, button),
+          showAvailabilityProgress: this.#availabilitySelectionVersion === this.#selectionVersion,
+          markAvailability: (available) => void this.#markAvailability(available),
           move: () => this.#openMove(),
           remove: () => void this.#openDelete(),
           done: () => void this.#leaveSelection(),

@@ -2558,9 +2558,9 @@ Put the checklist icon button after Filters and before Search. Show its pressed 
 selecting. Pressing it again clears the selection and leaves the mode.
 
 While selecting, show a separate bar directly below Search, above the table body. Put the live
-selected count, Move to…, Delete and Done in that bar. With only products selected, add
-**Mark available** and **Mark unavailable** between Move to… and Delete. Each action counts
-all selected products, including hidden ticks, and applies to all of them in one request.
+selected count, Move to…, **Mark available**, **Mark unavailable**, Delete and Done in that bar.
+Enable the availability actions only when the selection contains products alone. Each action counts
+the products it will change, including hidden ticks, and applies to all of them in one request.
 Let the controls wrap at phone width. Keep Customise after Search in the toolbar.
 The All products row has a named chevron: closing it closes every category and product branch;
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays

@@ -779,7 +779,6 @@ describe("DashboardApi", () => {
   it("changes several products' availability in one request", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    expect(api.setProductsAvailability).toBeTypeOf("function");
     await api.setProductsAvailability(["p1", "p2"], true);
     expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
       "/management-api/products/availability",

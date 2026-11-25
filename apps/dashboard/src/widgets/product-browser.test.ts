@@ -2138,9 +2138,7 @@ const bulkApi = () =>
   }) satisfies Partial<DashboardApi>;
 function pendingAvailability() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
+  const promise = new Promise<void>((done) => (resolve = done));
   return { promise, resolve };
 }
 const availabilitySwitch = async (el: ProductBrowser, id: string) =>
@@ -2171,12 +2169,12 @@ it.each(["List", "Tree"] as const)(
     expect(bulkButton(el, "available")?.disabled).toBe(true);
     saved.resolve();
     await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
-    expect(bulkButton(el, "unavailable")).toBeNull();
+    expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
     expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
   },
 );
 
-it("shows availability actions for product-only ticks on a Spanish phone", async () => {
+it("disables availability actions for empty or mixed ticks on a Spanish phone", async () => {
   const viewport = [innerWidth, innerHeight] as const;
   onTestFinished(async () => {
     setLocale("en-GB");
@@ -2186,7 +2184,7 @@ it("shows availability actions for product-only ticks on a Spanish phone", async
   setLocale("es-ES");
   const el = await mountBrowser();
   await selectKeys(el, []);
-  expect(bulkButton(el, "available")).toBeNull();
+  expect(bulkButton(el, "available")?.disabled).toBe(true);
   const table = await tableOf(el);
   const tick = (id: string) =>
     table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${id}"]`)!.click();
@@ -2198,13 +2196,50 @@ it("shows availability actions for product-only ticks on a Spanish phone", async
   ] as const) {
     const button = bulkButton(el, action);
     expect(button?.textContent?.trim()).toBe(label);
+    expect(button?.disabled).toBe(false);
     expect(button!.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
   }
   tick("folder:d");
   await typeSearch(el, "Bread");
-  expect(bulkButton(el, "available")).toBeNull();
-  expect(bulkButton(el, "unavailable")).toBeNull();
+  expect(bulkButton(el, "available")?.disabled).toBe(true);
+  expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
 });
+
+it.each([
+  ["en-GB", 334],
+  ["en-GB", 390],
+  ["es-ES", 390],
+  ["es-ES", 434],
+] as const)(
+  "keeps the next checkbox under a second tap in %s at %s px",
+  async (locale, viewportWidth) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    onTestFinished(() => setLocale("en-GB"));
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(viewportWidth, 844);
+    setLocale(locale);
+    localStorage.setItem("waitron.products.view", "list");
+    const el = await mountBrowser();
+    await selectKeys(el, []);
+    await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
+    const table = await tableOf(el);
+    const root = table.shadowRoot!;
+    const tick = (id: string) =>
+      root.querySelector<HTMLInputElement>(`[data-test="select-${id}"]`)!;
+    await document.fonts.ready;
+    await new Promise(requestAnimationFrame);
+    const { left, top, width, height } = tick("burger").getBoundingClientRect();
+    const nextTap = () => root.elementFromPoint(left + width / 2, top + height / 2);
+    expect(nextTap()).toBe(tick("burger"));
+    await userEvent.click(tick("bread"));
+    await tableOf(el);
+    const second = nextTap();
+    expect(second?.getAttribute("data-test")).toBe("select-burger");
+    await userEvent.click(second!);
+    expect(tick("bread").checked).toBe(true);
+    expect(tick("burger").checked).toBe(true);
+  },
+);
 
 it("keeps a new tick and prevents overlapping writes to the same product", async () => {
   const viewport = [innerWidth, innerHeight] as const;
@@ -2236,6 +2271,8 @@ it("keeps a new tick and prevents overlapping writes to the same product", async
   (await tableOf(el))
     .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
     .click();
+  await el.updateComplete;
+  expect(bulkButton(el, "unavailable")?.textContent?.trim()).toBe("Mark unavailable (1)");
   batch.resolve();
   await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
   expect(
@@ -2252,7 +2289,6 @@ it.each(["Done", "view switch"])(
     api.setProductsAvailability.mockReturnValue(saved.promise);
     const el = await mountBrowser({ api: api as unknown as DashboardApi });
     await selectKeys(el, ["bread"]);
-    expect(bulkButton(el, "unavailable")).not.toBeNull();
     await userEvent.click(bulkButton(el, "unavailable")!);
     if (exit === "Done") {
       await press(el, "cancel-selection");
@@ -2267,8 +2303,10 @@ it.each(["Done", "view switch"])(
     expect(count(el)).toBe("1 selected");
     const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="menu-search"]')!;
     search.focus();
+    expect(bulkButton(el, "unavailable")?.loading).toBe(false);
+    expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
     saved.resolve();
-    await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.loading).toBe(false));
+    await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.disabled).toBe(false));
     expect(count(el)).toBe("1 selected");
     expect(el.shadowRoot!.activeElement).toBe(search);
   },
@@ -2285,7 +2323,6 @@ it("refreshes a deleted tick and shows the reason alone when a new refusal names
   const el = await mountBrowser({ api: api as unknown as DashboardApi });
   await chooseView(el, "List");
   await selectKeys(el, ["bread", "cola"]);
-  expect(bulkButton(el, "available")).not.toBeNull();
   await userEvent.click(bulkButton(el, "available")!);
   const notice = () => el.shadowRoot!.querySelector(".availability-error[role=alert]");
   await vi.waitFor(() => expect(notice()?.textContent).toContain("Cola"));
@@ -4739,13 +4776,14 @@ it("at phone width fits Select controls beneath the final search and Customise l
     await press(el, "select");
     const table = await tableOf(el);
     await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
-    const controls = ["selected-count", "move", "delete", "cancel-selection"].map((key) =>
-      el.shadowRoot!.querySelector(`[data-test="${key}"]`)!.getBoundingClientRect(),
-    );
+    const controls = el.shadowRoot!.querySelectorAll('[data-test="selection-bar"] > *');
+    expect(controls).toHaveLength(6);
     const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-    for (const box of controls) {
+    const header = table.shadowRoot!.querySelector("thead")!.getBoundingClientRect();
+    for (const control of controls) {
+      const box = control.getBoundingClientRect();
       expect(box.top).toBeGreaterThanOrEqual(toolbar.bottom);
-      expect(box.top).toBeLessThan(controls[0]!.bottom);
+      expect(box.bottom).toBeLessThanOrEqual(header.top);
       expect(box.left).toBeGreaterThanOrEqual(table.getBoundingClientRect().left);
       expect(box.right).toBeLessThanOrEqual(table.getBoundingClientRect().right);
     }

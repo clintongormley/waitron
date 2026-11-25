@@ -24,7 +24,7 @@ ver el precio y el interruptor.
 
 Para cambiar varios productos a la vez, activa **Seleccionar**, marca los productos y elige
 **Marcar como disponible** o **Marcar como no disponible**. El número de cada botón incluye
-los productos marcados que ocultan la búsqueda o los filtros. Desmarca las categorías para ver
+los productos marcados que ocultan la búsqueda o los filtros. Desmarca las categorías para activar
 los botones de disponibilidad.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
