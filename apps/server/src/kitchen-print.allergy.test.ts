@@ -370,7 +370,7 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     expect(lines.some((line) => line.startsWith("Contains"))).toBe(false);
   });
 
-  it("reprints the declaration as it is now, while the guest block keeps its original text", async () => {
+  it("reprints the declaration as published now, while the guest block keeps its original text", async () => {
     await setAllergens(v.productId("Burger"), { gluten: { kinds: ["wheat"] } });
     const p = await seat(v, await v.table("Edited dish"));
     await send(p, "fire");

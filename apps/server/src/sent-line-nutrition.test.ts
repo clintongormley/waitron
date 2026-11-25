@@ -40,7 +40,7 @@ async function updatePublished(...edit: Parameters<typeof updateProduct>) {
   await republishMenus(edit[0]);
 }
 
-it("keeps the dish declaration from its first send after the product changes", async () => {
+it("keeps the dish declaration from its first send after a republished edit", async () => {
   const v = await setupPartyVenue(suite.db);
   await inTx(v, (tx) =>
     updatePublished(tx, v.productId("Burger"), {
@@ -134,7 +134,7 @@ it("holds a line no menu version holds as not reviewed at first send", async () 
   ]);
 });
 
-it("keeps a held dish live and records its declaration only on release", async () => {
+it("shows a held dish's published declaration and records its declaration only on release", async () => {
   const { v, party, groupId } = await tableDish("hold");
   await inTx(v, (tx) => updatePublished(tx, v.productId("Burger"), { allergens: { eggs: {} } }));
   const held = await inTx(v, (tx) => readTabLines(tx, party.tabId));
@@ -169,7 +169,7 @@ it.each([null, {}] as const)(
   },
 );
 
-it("never substitutes current allergens when a sent row has no captured declaration", async () => {
+it("never substitutes published allergens when a sent row has no captured declaration", async () => {
   const { v, party } = await tableDish("fire");
   const [line] = await inTx(v, (tx) => readTabLines(tx, party.tabId));
   await inTx(v, async (tx) => {
@@ -186,7 +186,7 @@ it("never substitutes current allergens when a sent row has no captured declarat
     expect(row).not.toHaveProperty("nutrition");
 });
 
-it("records the current counter declaration when placed and leaves a replay unchanged", async () => {
+it("records the published counter declaration when placed and leaves a replay unchanged", async () => {
   const v = await setupPartyVenue(suite.db);
   const id = randomUUID();
   await inTx(v, (tx) =>

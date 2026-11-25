@@ -1322,7 +1322,7 @@ describe("readCurrentOrders (spec §4)", () => {
     },
   );
 
-  it("keeps the first-send declaration on a current-order row after a product edit", async () => {
+  it("keeps the first-send declaration on a current-order row after a published edit", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await suite.db.execute(
