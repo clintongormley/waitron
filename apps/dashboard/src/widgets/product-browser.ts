@@ -126,6 +126,7 @@ export class ProductBrowser extends LitElement {
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) takeawayVat = false;
   @state() private search = "";
+  @state() private hiddenSave: { id: string; name: string } | null = null;
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
   /** The colour chosen in the open name box; undefined until one is. */
@@ -276,9 +277,9 @@ export class ProductBrowser extends LitElement {
     const saved = this.hiddenSave;
     if (saved && (changed.has("products") || changed.has("categories")))
       void this.#list()
-        ?.hidesSavedProduct(saved.id)
-        .then((hidden) => {
-          if (!hidden && this.hiddenSave === saved) this.hiddenSave = null;
+        ?.hiddenSavedProductName(saved.id)
+        .then((name) => {
+          if (name === undefined && this.hiddenSave === saved) this.hiddenSave = null;
         });
     if (changed.has("categoryId") || changed.has("categories") || changed.has("tableHidden")) {
       const id = this.categoryId;
@@ -307,15 +308,12 @@ export class ProductBrowser extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
   }
 
-  @state() private hiddenSave: { id: string; name: string } | null = null;
-  async showSavedProduct(
-    saved: { id: string; name: string } | null,
-    created: boolean,
-  ): Promise<void> {
+  async showSavedProduct(id: string | null, created: boolean): Promise<void> {
     await this.updateComplete;
     const list = this.#list();
-    this.hiddenSave = saved && (await list?.hidesSavedProduct(saved.id)) ? saved : null;
-    if (created && saved) await list?.revealProduct(saved.id);
+    const name = id === null ? undefined : await list?.hiddenSavedProductName(id);
+    this.hiddenSave = id !== null && name !== undefined ? { id, name } : null;
+    if (created && id !== null) await list?.revealProduct(id);
   }
   readonly #clearProductSearch = (): void => {
     const saved = this.hiddenSave;

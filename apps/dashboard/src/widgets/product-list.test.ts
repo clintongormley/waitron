@@ -2519,7 +2519,9 @@ describe("the product list as a tree", () => {
   });
 
   it("nests a category's subcategories, then its products, under it, whichever column sorts the table", async () => {
-    const { el, root, table } = await mountTree();
+    const { el, root, table } = await mountTree({
+      categories: [{ ...food, name: "Shelf 10" }, { ...drinks, name: "Shelf 2" }, beer],
+    });
     await openRow(el, "folder:d");
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
     expect(root.querySelector('tr[data-row-key="folder:b"]')!.getAttribute("aria-level")).toBe("3");
@@ -6135,6 +6137,11 @@ describe("product-list filters (A463)", () => {
           variants: [bunVariant, { ...bunVariant, id: "large", available: false }],
         }),
         product({ id: "off", name: "B bun", available: false, variants: [bunVariant] }),
+        product({
+          id: "inactive-variant",
+          name: "C bun",
+          variants: [{ ...bunVariant, active: false, available: false }],
+        }),
       ],
     });
     expect(filterOptions(root, "available")).toEqual([
@@ -6146,7 +6153,7 @@ describe("product-list filters (A463)", () => {
     table.setExpanded("off", true);
     table.chooseFilter("available", ["yes"]);
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["mixed", "mixed:small"]);
+    expect(rowKeys(root)).toEqual(["mixed", "mixed:small", "inactive-variant"]);
     table.chooseFilter("available", ["no"]);
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["mixed", "mixed:large", "off", "off:small"]);

@@ -525,7 +525,7 @@ export class ProductsScreen extends LitElement {
       const refreshed = await this.#reloadProducts();
       if (this.isConnected) {
         await this.updateComplete;
-        await this.#browser()?.showSavedProduct(refreshed ? saved : null, !editing);
+        await this.#browser()?.showSavedProduct(refreshed ? saved.id : null, !editing);
       }
     } catch (error) {
       const fieldErrors = this.#rejectedField(error, event.detail.value);

@@ -1034,11 +1034,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
     hasFilters: boolean,
   ) => readonly Row[];
 
-  /** During column filtering, hold these branches open and keep their toggles temporary. */
+  /** For trees with collapseDescendants, temporarily opens these branches during column filtering. */
   @property({ attribute: false }) filterOpensBranch?: (row: Row) => boolean;
   #filterExpansion = new FilterExpansion();
   #filteringTree(): boolean {
     return (
+      this.collapseDescendants &&
       this.rowParent !== undefined &&
       this.filterOpensBranch !== undefined &&
       this.#searched().hasFilters === true
@@ -2569,8 +2570,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const row = this.#treeShown().byKey.get(key);
       return (row !== undefined && !this.rowCollapsible(row)) || this.searchExpanded.has(key);
     }
-    if (!this.rowParent || (!this.collapseDescendants && !this.#filteringTree()))
-      return !this.collapsed.has(key);
+    if (!this.collapseDescendants || !this.rowParent) return !this.collapsed.has(key);
     return this.#ordinaryOpen(key, this.#treeShown().shown.heldOpen);
   }
 
@@ -3365,18 +3365,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ({ row, key, depth, hasChildren }) => {
                 const collapsible = this.rowCollapsible(row);
                 const held = heldOpen.has(key);
-                const temporary = this.#filteringTree() && this.filterOpensBranch!(row);
                 const expanded =
-                  !collapsible ||
-                  this.isExpanded(key) ||
-                  (!temporary && !this.collapseDescendants && held);
+                  !collapsible || this.isExpanded(key) || (!this.collapseDescendants && held);
                 const cellContext = {
                   ancestorOnly: ancestorOnly.has(key),
                   ...(filterMatches === undefined ? {} : { filterMatches }),
                   ...(this.#flatSearching() ? { searchRoot: depth === 0 } : {}),
                 };
-                const branch =
-                  hasChildren && collapsible && (!held || temporary || this.collapseDescendants);
+                const branch = hasChildren && collapsible && (!held || this.collapseDescendants);
                 const mode = this.rowActivation?.(row) ?? "click";
                 const toggles = mode === "toggle" && branch;
                 const clicks = mode === "click" && this.rowClick !== undefined;

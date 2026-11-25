@@ -1464,7 +1464,7 @@ describe("menu-screen", () => {
         await vi.waitFor(() =>
           expect(table.shadowRoot!.querySelector('tr[data-row-key="p1"]')).not.toBeNull(),
         );
-        expect(notice()).toBeNull();
+        await vi.waitFor(() => expect(notice()).toBeNull());
         return;
       }
       notice()!.querySelector<HTMLElement>("wt-button")!.click();
@@ -3383,9 +3383,14 @@ describe("menu-screen", () => {
         emit(editor(el), "wt-submit", { value: saved });
         await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(2));
         await flush(el);
-        expect(
-          Boolean(list(el).shadowRoot!.querySelector('[data-test="product-saved-hidden"]')),
-        ).toBe(hidden);
+        const notice = list(el).shadowRoot!.querySelector('[data-test="product-saved-hidden"]');
+        if (hidden) {
+          expect(notice?.textContent).toContain("Croquettes, Half portion");
+          notice!.querySelector<HTMLElement>("wt-button")!.click();
+          await vi.waitFor(() =>
+            expect(table.shadowRoot!.querySelector('tr[data-row-key="p1:v1"]')).not.toBeNull(),
+          );
+        } else expect(notice).toBeNull();
       },
     );
 

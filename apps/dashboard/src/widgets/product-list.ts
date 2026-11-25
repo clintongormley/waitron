@@ -1593,16 +1593,18 @@ export class ProductList extends LitElement {
     await table.revealRow(this.#productRow(id)?.key ?? id);
   }
 
-  async hidesSavedProduct(id: string): Promise<boolean> {
+  async hiddenSavedProductName(id: string): Promise<string | undefined> {
     await this.updateComplete;
     const table = this.#table();
-    if (!table) return false;
+    if (!table) return;
     await table.updateComplete;
     const row = this.#productRow(id);
-    return (
-      row !== undefined &&
-      !table.shownKeys({ includeCollapsedSearchMatches: true }).includes(row.key)
-    );
+    if (
+      row?.kind !== "product" ||
+      table.shownKeys({ includeCollapsedSearchMatches: true }).includes(row.key)
+    )
+      return;
+    return row.variant ? `${row.product.name}, ${row.variant.name}` : row.product.name;
   }
 
   #productRow(id: string): ListRow | undefined {
