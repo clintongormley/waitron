@@ -110,9 +110,7 @@ describe("the invoice recipient dialog's address search", () => {
     const availability = new Promise<{ available: boolean }>((resolve) => {
       answer = resolve;
     });
-    const lookupAddress = vi.fn(
-      (_operation: CloudAddressOperation, _signal?: AbortSignal) => availability,
-    );
+    const lookupAddress = vi.fn<NonNullable<Dialog["lookupAddress"]>>(() => availability);
     const el = await mountDialog({ lookupAddress });
     await vi.waitFor(() => expect(lookupAddress.mock.calls[0]?.[0]).toEqual({ kind: "available" }));
     await chooseCountry(el, "FR");
@@ -186,9 +184,7 @@ describe("the invoice recipient dialog's address search", () => {
     const reply = new Promise<{ available: boolean }>((resolve) => {
       available = resolve;
     });
-    const lookupAddress = vi.fn(
-      (_operation: CloudAddressOperation, _signal?: AbortSignal) => reply,
-    );
+    const lookupAddress = vi.fn<NonNullable<Dialog["lookupAddress"]>>(() => reply);
     const el = await mountDialog({ lookupAddress });
     const saved = confirmed(el);
     await fill(el, "taxId", "12345678Z");
