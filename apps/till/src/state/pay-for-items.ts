@@ -34,12 +34,11 @@ function wholeLine(line: PayLine, units: number): boolean {
   return line.unitTotal === null || units === Number(line.quantity);
 }
 
-/** The choice for `picks` (units by line number) of the `offered` lines: every line of the bill
- * picked whole is the whole bill, paid as today. */
+/** The choice for `picks` (units by line number): every line of the bill picked whole is the whole
+ * bill, paid as today. */
 export function itemsChoiceOf(
   lines: readonly PayLine[],
   picks: ReadonlyMap<number, number>,
-  offered: readonly PayLine[],
 ): PayChoice {
   const everyLine = lines.every((line) => {
     const units = picks.get(line.lineNo);
@@ -48,7 +47,7 @@ export function itemsChoiceOf(
   if (lines.length > 0 && everyLine) return { kind: "whole" };
   return {
     kind: "items",
-    picks: offered.flatMap((line) => {
+    picks: lines.flatMap((line) => {
       const units = picks.get(line.lineNo);
       if (units === undefined) return [];
       const pick = { lineNo: line.lineNo, lineId: line.lineId };
@@ -84,7 +83,6 @@ export function itemsAllocated(
 ): AllocationPreview {
   return {
     kind: "allocated",
-    choice: null,
     applied: preview.applied,
     tip: preview.tip,
     change: preview.change,
@@ -113,14 +111,14 @@ export function itemsBarredReason(open: {
  * on a bill of their own. */
 export function paysOnNewBill(
   preview: AllocationPreview | null,
-): preview is Extract<AllocationPreview, { kind: "allocated" }> & { total: string } {
-  return preview?.kind === "allocated" && preview.total !== undefined;
+): preview is AllocationPreview & { total: string } {
+  return preview?.total !== undefined;
 }
 
 /** A `bill.allocation_changed` refusal's fresh preview: a whole payment of the would-be new bill,
  * which holds nothing else, so what it applies is the items' total. */
 export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPreview {
-  return preview.kind === "allocated" ? { ...preview, total: preview.applied } : preview;
+  return { ...preview, total: preview.applied };
 }
 
 /** The Pay window's words for a set-menu dish that leaves only with its set menu, its cancel having
@@ -208,10 +206,7 @@ export async function previewPayment(
 ): Promise<AllocationPreview> {
   if (asked.choice.kind === "items")
     return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
-  return api.previewBillPayment(
-    billId,
-    paymentAsk(asked.choice, asked.pay, asked.allocation, expectedEdit),
-  );
+  return api.previewBillPayment(billId, paymentAsk(asked.choice, asked.pay, expectedEdit));
 }
 
 /** Takes the payment: with an items part through Pay for items, answering the new bill as
@@ -220,10 +215,14 @@ export async function previewPayment(
 export async function takePayment(
   api: TillApi,
   billId: string,
+  choice: PayChoice,
   request: Confirmation & { submissionId: string },
   options: ReadOptions,
 ): Promise<BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance }> {
   const { items } = request;
+  // An items choice is asked for as a whole bill, so the bill's own route would charge all of it.
+  if (items === undefined && choice.kind === "items")
+    throw new Error("Pay for items needs its items part");
   if (items === undefined) return api.takeBillPayment(billId, request, options);
   const paid = await api.payForItems(billId, itemsRequestOf({ ...request, items }), options);
   return { ...paid.payment, paidOn: paid.billId, sourceBalance: paid.sourceBalance };

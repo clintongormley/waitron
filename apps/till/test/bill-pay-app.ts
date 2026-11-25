@@ -235,7 +235,6 @@ export function takenOf(
 
 export const cash = (applied: string, change: string, tip = "0.00"): AllocationPreview => ({
   kind: "allocated",
-  choice: null,
   applied,
   tip,
   change,

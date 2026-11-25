@@ -166,7 +166,6 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
 
 const cashPreview = (applied: string, change: string, tip = "0.00"): AllocationPreview => ({
   kind: "allocated",
-  choice: null,
   applied,
   tip,
   change,
@@ -234,21 +233,22 @@ it("groups twelve portions and keeps only selected members that remain on the bi
   expect(field(el, "tendered")!.value).toBe("20");
 });
 
-it("caps a selected quantity and drops paid or departed picks on a successful refresh", async () => {
+it("caps a selected quantity and drops departed picks on a successful refresh", async () => {
   const el = await mount();
   await pick(el, "line", "1");
   await pick(el, "line", "2");
   await type(el, "tendered", "50");
-  el.lines = [beers, tiramisu];
-  el.balance = balanceOf({ paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "2.000" }] });
+  el.lines = [{ ...beers, quantity: "2", total: "6.00" }, tiramisu];
   await el.updateComplete;
+  expect(text(root(el).querySelector('[data-units="2"]'))).toBe("2");
+  expect(button(el, '[data-units-more="2"]').disabled).toBe(true);
   const asked = capture<PayRequest>(el, "bill-pay-preview");
   await click(el, "[data-pay-continue]");
   expect(asked[0]!.choice).toEqual({
     kind: "items",
-    picks: [{ lineNo: 2, lineId: "line-2", units: 1 }],
+    picks: [{ lineNo: 2, lineId: "line-2" }],
   });
-  el.balance = balanceOf({ paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "3.000" }] });
+  el.lines = [tiramisu];
   await el.updateComplete;
   expect(button(el, "[data-pay-continue]").disabled).toBe(true);
   expect(field(el, "tendered")!.value).toBe("50");
@@ -341,19 +341,6 @@ describe("till-bill-pay-dialog: the bill's balance", () => {
 });
 
 describe("till-bill-pay-dialog: paying for items", () => {
-  it("offers every item not yet paid for, and the units of a line still to pay", async () => {
-    const el = await mount({
-      balance: balanceOf({
-        paidLines: [
-          { lineId: "l-2", lineNo: 2, paidQuantity: "1.000" },
-          { lineId: "l-3", lineNo: 3, paidQuantity: "1.000" },
-        ],
-      }),
-    });
-
-    expect(offered(el)).toEqual([`Paella ×1 · ${money("35.00")}`, `Beer ×2 · ${money("6.00")}`]);
-  });
-
   it.each([
     ["en", "0.35"],
     ["es", "0,35"],
@@ -407,22 +394,7 @@ describe("till-bill-pay-dialog: paying for items", () => {
     ]);
   });
 
-  it("asks for the units still to pay by their count once some of a line is paid", async () => {
-    const el = await mount({
-      balance: balanceOf({ paidLines: [{ lineId: "l-2", lineNo: 2, paidQuantity: "1.000" }] }),
-    });
-    const asked = capture<PayRequest>(el, "bill-pay-preview");
-    await pick(el, "line", "2");
-    await type(el, "tendered", "6");
-    await click(el, "[data-pay-continue]");
-
-    expect(asked[0]!.choice).toEqual({
-      kind: "items",
-      picks: [{ lineNo: 2, lineId: "line-2", units: 2 }],
-    });
-  });
-
-  it("does not step units beyond one or beyond what is still to pay", async () => {
+  it("does not step units beyond one or beyond the line's quantity", async () => {
     const el = await mount();
     await pick(el, "line", "2");
 
@@ -433,12 +405,13 @@ describe("till-bill-pay-dialog: paying for items", () => {
     expect(text(root(el).querySelector('[data-units="2"]'))).toBe("1");
   });
 
-  it("says when every item is already paid for", async () => {
-    const el = await mount({
-      lines: [tiramisu],
-      balance: balanceOf({ paidLines: [{ lineId: "l-3", lineNo: 3, paidQuantity: "1.000" }] }),
-    });
-    expect(text(root(el).querySelector("[data-items-none]"))).toBe(t("bill_pay.items_none"));
+  it.each([
+    ["en", "Nothing to choose on this bill."],
+    ["es", "No hay nada que elegir en esta cuenta."],
+  ])("says when the bill has nothing to choose, in %s", async (locale, words) => {
+    setLocale(locale);
+    const el = await mount({ lines: [] });
+    expect(text(root(el).querySelector("[data-items-none]"))).toBe(words);
   });
 });
 
@@ -679,7 +652,6 @@ describe("till-bill-pay-dialog: confirming a card", () => {
     await type(el, "cardTip", "10");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "10.00",
       change: null,
@@ -709,7 +681,6 @@ describe("till-bill-pay-dialog: moving between steps", () => {
     await type(el, "cardTip", "5");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "5.00",
       change: null,
@@ -896,21 +867,6 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
     expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
   });
 
-  it("says to contribute instead when the chosen items cost more than is left", async () => {
-    const el = await mount();
-    await pick(el, "line", "1");
-    await type(el, "tendered", "50");
-    await previewed(el, {
-      kind: "choose",
-      options: [{ choice: "use_pool", applied: "20.00", tip: "0.00" }],
-    });
-
-    expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
-    expect(text(root(el).querySelector("[data-pay-choose-note]"))).toBe(t("bill_pay.choose_later"));
-    expect(root(el).querySelector("[data-pay-choose-note]")!.getAttribute("role")).toBeNull();
-    expect(actions(el).error).toBe("");
-  });
-
   it("says a payment was taken and the change to give, and starts the form again", async () => {
     const el = await mount({ way: "contribution" });
     await type(el, "amount", "40");
@@ -940,193 +896,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
   });
 });
 
-// Design §3.3: after €105.00 contributed on a €120.00 bill, a €25.00 steak costs more than the
-// €15.00 left, so the server offers two ways to pay for it.
-describe("till-bill-pay-dialog: the steak's two choices", () => {
-  const steak: PayLine = {
-    lineNo: 4,
-    lineId: "line-4",
-    name: "Steak",
-    quantity: "1",
-    total: "25.00",
-    unitTotal: null,
-  };
-  const steakChoices: AllocationPreview = {
-    kind: "choose",
-    options: [
-      { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-      { choice: "use_pool", applied: "15.00", tip: "0.00" },
-    ],
-  };
-
-  async function toChoices(over: Partial<TillBillPayDialog> = {}, preview = steakChoices) {
-    const el = await mount({
-      lines: [...lines, steak],
-      balance: balanceOf({ received: "105.00", outstanding: "15.00" }),
-      ...over,
-    });
-    await pick(el, "line", "4");
-    await type(el, "tendered", "30");
-    const first = await previewed(el, preview);
-    return { el, first };
-  }
-
-  const choiceButtons = (el: TillBillPayDialog) =>
-    [...root(el).querySelectorAll<HTMLElement>("[data-pay-choice]")].map((choice) => ({
-      choice: choice.dataset.payChoice,
-      label: text(choice),
-    }));
-
-  it("shows both choices as buttons with their amounts, and nothing to take until one is chosen", async () => {
-    const { el } = await toChoices();
-
-    expect(choiceButtons(el)).toEqual([
-      {
-        choice: "full_with_tip",
-        label: t("bill_pay.choice_tip")
-          .replace("{amount}", money("25.00"))
-          .replace("{tip}", money("10.00")),
-      },
-      {
-        choice: "use_pool",
-        label: t("bill_pay.choice_pool")
-          .replace("{amount}", money("15.00"))
-          .replace("{pool}", money("10.00")),
-      },
-    ]);
-    expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
-    expect(scope(el)).toContain("Steak");
-  });
-
-  it("asks again naming the choice pressed: the full price with a tip", async () => {
-    const { el, first } = await toChoices();
-    const asked = capture<PayRequest>(el, "bill-pay-preview");
-
-    await click(el, '[data-pay-choice="full_with_tip"]');
-
-    expect(asked).toEqual([{ ...first, allocation: "full_with_tip" }]);
-  });
-
-  it("asks again naming the choice pressed: what is left, using the earlier contribution", async () => {
-    const { el, first } = await toChoices();
-    const asked = capture<PayRequest>(el, "bill-pay-preview");
-
-    await click(el, '[data-pay-choice="use_pool"]');
-
-    expect(asked).toEqual([{ ...first, allocation: "use_pool" }]);
-  });
-
-  it("goes back to the form from the choices", async () => {
-    const { el } = await toChoices();
-    const edits = capture(el, "bill-pay-edit");
-    await click(el, "[data-pay-back]");
-    expect(edits).toHaveLength(1);
-  });
-
-  it("leaves only the change as a tip on top of the choice's own tip", async () => {
-    const { el, first } = await toChoices();
-    const chosen = { ...first, allocation: "full_with_tip" as const };
-    el.asked = chosen;
-    el.preview = {
-      kind: "allocated",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-      change: "5.00",
-      charged: null,
-    };
-    await el.updateComplete;
-    const asked = capture<PayRequest>(el, "bill-pay-preview");
-
-    await pick(el, "leaveTip", "all");
-    el.asked = asked[0]!;
-    el.preview = {
-      kind: "allocated",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "15.00",
-      change: "0.00",
-      charged: null,
-    };
-    await el.updateComplete;
-    await pick(el, "leaveTip", "part");
-    await type(el, "tipAmount", "12");
-    await click(el, "[data-pay-confirm]");
-
-    expect(asked).toEqual([
-      { ...chosen, pay: { method: "cash", tendered: "30", addedTip: "5.00" } },
-      { ...chosen, pay: { method: "cash", tendered: "30", addedTip: "2.00" } },
-    ]);
-  });
-
-  it("refuses a tip below the choice's own tip beside the tip", async () => {
-    const { el, first } = await toChoices();
-    el.asked = { ...first, allocation: "full_with_tip" };
-    el.preview = {
-      kind: "allocated",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-      change: "5.00",
-      charged: null,
-    };
-    await el.updateComplete;
-
-    await pick(el, "leaveTip", "part");
-    await type(el, "tipAmount", "8");
-    await click(el, "[data-pay-confirm]");
-
-    expect(field(el, "tipAmount")!.error).toBe(
-      t("bill_pay.tip_amount_between")
-        .replace("{min}", money("10.00"))
-        .replace("{amount}", money("15.00")),
-    );
-  });
-
-  it("shows the choices again with the refusal when the bill changed under them", async () => {
-    const { el } = await toChoices();
-    el.refusal = { code: "bill.allocation_changed" };
-    await el.updateComplete;
-
-    expect(choiceButtons(el)).toHaveLength(2);
-    expect(actions(el).error).toBe(codeMessage("bill.allocation_changed"));
-    expect(text(root(el).querySelector("[data-pay-choose-note]"))).toBe(t("bill_pay.choose_later"));
-  });
-});
-
 describe("till-bill-pay-dialog: a venue that takes no tips", () => {
-  it("offers only the choice that uses the earlier contribution", async () => {
-    const el = await mount({ tipsEnabled: false });
-    await pick(el, "line", "1");
-    await type(el, "tendered", "50");
-    await previewed(el, {
-      kind: "choose",
-      options: [
-        { choice: "full_with_tip", applied: "15.00", tip: "20.00" },
-        { choice: "use_pool", applied: "15.00", tip: "0.00" },
-      ],
-    });
-
-    expect(
-      [...root(el).querySelectorAll<HTMLElement>("[data-pay-choice]")].map(
-        (choice) => choice.dataset.payChoice,
-      ),
-    ).toEqual(["use_pool"]);
-  });
-
-  it("says a card is in progress when the only choice left would be a tip", async () => {
-    const el = await mount({ tipsEnabled: false });
-    await pick(el, "line", "1");
-    await type(el, "tendered", "50");
-    await previewed(el, {
-      kind: "choose",
-      options: [{ choice: "full_with_tip", applied: "15.00", tip: "20.00" }],
-    });
-
-    expect(root(el).querySelector("[data-pay-choice]")).toBeNull();
-    expect(actions(el).error).toBe(codeMessage("order.payment_in_flight"));
-  });
-
   it("asks for no tip on a card", async () => {
     const el = await mount({ way: "contribution", tipsEnabled: false });
     await type(el, "amount", "40");
@@ -1151,7 +921,6 @@ describe("till-bill-pay-dialog: a venue that takes no tips", () => {
     await pick(el, "method", "card");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "30.00",
       tip: "0.00",
       change: null,
@@ -1267,7 +1036,6 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     const el = await card({ cardReader: "stripe_terminal" });
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "0.00",
       change: null,
@@ -1324,7 +1092,6 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     await pick(el, "method", "card");
     const asked = await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: pending,
       tip: "0.00",
       change: null,
@@ -1820,7 +1587,6 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
     await pick(el, "method", "card");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "20.00",
       tip: "0.00",
       change: null,
@@ -2201,7 +1967,6 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
   };
   const cardPreview: AllocationPreview = {
     kind: "allocated",
-    choice: null,
     applied: "20.80",
     tip: "0.00",
     change: null,
@@ -2579,7 +2344,6 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "20.80",
       tip: "0.00",
       change: null,
@@ -2636,7 +2400,6 @@ describe("till-bill-pay-dialog: the locked confirmation (A796 default 7)", () =>
 describe("till-bill-pay-dialog: the card at the table (A796)", () => {
   const cardPreview: AllocationPreview = {
     kind: "allocated",
-    choice: null,
     applied: "20.80",
     tip: "0.00",
     change: null,
@@ -2820,7 +2583,6 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     });
   const card = (applied: string): AllocationPreview => ({
     kind: "allocated",
-    choice: null,
     applied,
     tip: "0.00",
     change: null,
@@ -3369,31 +3131,6 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await expectInView(el, "[data-pay-confirm]");
   });
 
-  it("the choices' Back, under a long bill", async () => {
-    setLocale("es");
-    await page.viewport(390, 900);
-    const steak: PayLine = {
-      lineNo: 4,
-      lineId: "line-4",
-      name: "Steak",
-      quantity: "1",
-      total: "25.00",
-      unitTotal: null,
-    };
-    const el = await mount({
-      lines: [...lines, steak],
-      balance: { ...longBill(), outstanding: "15.00" },
-    });
-    await pick(el, "line", "4");
-    await type(el, "tendered", "30");
-    await previewed(el, {
-      kind: "choose",
-      options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
-    });
-
-    await expectInView(el, "[data-pay-back]");
-  });
-
   it("the next guest's Next, under a long bill on a handheld", async () => {
     setLocale("es");
     await page.viewport(390, 900);
@@ -3673,7 +3410,6 @@ describe("till-bill-pay-dialog: the payer's own receipt", () => {
         },
         preview: {
           kind: "allocated",
-          choice: null,
           applied: "10.00",
           tip: "0.00",
           change: null,
@@ -3895,7 +3631,6 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
 describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
   const ownBill = (applied: string, total = applied): AllocationPreview => ({
     kind: "allocated",
-    choice: null,
     applied,
     tip: "0.00",
     change: "0.00",

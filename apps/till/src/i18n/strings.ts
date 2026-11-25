@@ -2004,7 +2004,7 @@ export const en = {
   "bill_pay.way_contribution": "An amount",
   "bill_pay.way_share": "Split equally",
   "bill_pay.items": "Items to pay for",
-  "bill_pay.items_none": "Every item on this bill is already paid for.",
+  "bill_pay.items_none": "Nothing to choose on this bill.",
   "bill_pay.items_barred_counter":
     "A Counter order sent to the kitchen is paid with An amount, Split equally or Whole bill.",
   "bill_pay.items_barred_found":
@@ -2090,12 +2090,6 @@ export const en = {
   "bill_pay.stop_unknown":
     "The reader may still be waiting. Check it while the till checks the payment.",
   "bill_pay.no_payment_taken": "No payment was taken.",
-  "bill_pay.choose_later":
-    "These items cost more than is left to pay on the bill. Choose how to pay for them.",
-  "bill_pay.choice_legend": "How are these items paid?",
-  "bill_pay.choice_tip": "Pay {amount} with a {tip} tip",
-  "bill_pay.choice_pool": "Pay {amount}, using {pool} contributed earlier",
-  "bill_pay.tip_amount_between": "Enter a tip above {min} and no more than {amount}",
   "bill_pay.chargeable": "This venue does not take tips, so charge at most {amount} to this card",
   "bill_pay.items_set_menu_dish":
     "{dishName} was cancelled but is still charged, so it can only be paid for with its set menu. Choose the set menu too, or leave {dishName} on this bill.",
@@ -2141,8 +2135,6 @@ export const en = {
   "bill_refund.whole": "The whole payment: {amount}",
   "bill_refund.whole_tip": "The whole payment: {amount}, with its {tip} tip",
   "bill_refund.part": "Part of it",
-  "bill_refund.whole_only":
-    "This payment was for particular items, so it is refunded in full: {amount}. Those items can then be paid for again.",
   "bill_refund.amount": "Amount to refund",
   "bill_refund.amount_invalid": "Enter an amount above zero and no more than {amount}",
   "bill_refund.reason_long": "Keep the reason to 500 characters or fewer",
@@ -4413,7 +4405,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.way_contribution": "Una cantidad",
   "bill_pay.way_share": "Dividir a partes iguales",
   "bill_pay.items": "Artículos que se pagan",
-  "bill_pay.items_none": "Todos los artículos de esta cuenta ya están pagados.",
+  "bill_pay.items_none": "No hay nada que elegir en esta cuenta.",
   "bill_pay.items_barred_counter":
     "Un pedido de mostrador enviado a cocina se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_found":
@@ -4500,12 +4492,6 @@ export const es: Record<StringKey, string> = {
   "bill_pay.stop_unknown":
     "El lector puede seguir esperando. Revísalo mientras el terminal comprueba el cobro.",
   "bill_pay.no_payment_taken": "No se ha cobrado nada.",
-  "bill_pay.choose_later":
-    "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
-  "bill_pay.choice_legend": "¿Cómo se pagan estos artículos?",
-  "bill_pay.choice_tip": "Pagar {amount} con {tip} de propina",
-  "bill_pay.choice_pool": "Pagar {amount}, usando {pool} ya aportados",
-  "bill_pay.tip_amount_between": "Introduce una propina mayor que {min} y de {amount} como mucho",
   "bill_pay.chargeable":
     "Este local no acepta propinas, así que cobra como mucho {amount} en esta tarjeta",
   "bill_pay.items_set_menu_dish":
@@ -4553,8 +4539,6 @@ export const es: Record<StringKey, string> = {
   "bill_refund.whole": "El pago entero: {amount}",
   "bill_refund.whole_tip": "El pago entero: {amount}, con su propina de {tip}",
   "bill_refund.part": "Una parte",
-  "bill_refund.whole_only":
-    "Este pago era de artículos concretos, así que se devuelve entero: {amount}. Después esos artículos se pueden volver a cobrar.",
   "bill_refund.amount": "Importe a devolver",
   "bill_refund.amount_invalid": "Introduce un importe mayor que cero y de {amount} como mucho",
   "bill_refund.reason_long": "Usa 500 caracteres como mucho para el motivo",

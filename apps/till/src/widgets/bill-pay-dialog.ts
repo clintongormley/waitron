@@ -17,7 +17,6 @@ import {
   decimal,
   formatMoney,
   multiplyDecimal,
-  subtractDecimal,
   sumDecimals,
   toScale,
   type Decimal,
@@ -56,11 +55,9 @@ import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
   AdvanceTicket,
-  AllocationChoice,
   AllocationPreview,
   BillBalance,
   BillPaymentView,
@@ -71,7 +68,6 @@ import {
   BILL_PAY_WAYS,
   PAYMENT_STATES,
   moneyPlus,
-  paidQuantities,
   refundOffered,
   refundableOf,
   typedAmount,
@@ -111,13 +107,12 @@ export interface PayLine {
   portionKey?: string;
 }
 
-/** What the operator asks the server to allocate: the choice, how it is paid, for a card how it is
- * charged, and which of the server's two ways items that cost more than is left are paid. */
+/** What the operator asks the server to allocate: the choice, how it is paid, and for a card how it
+ * is charged. */
 export interface PayRequest {
   choice: PayChoice;
   pay: PayMethod;
   card?: CardEntry;
-  allocation?: AllocationChoice;
 }
 
 /** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
@@ -152,10 +147,8 @@ export interface RefundNotice {
 }
 
 type Field = "lines" | "amount" | "people" | "tendered" | "cardTip" | "tipAmount" | "guests";
-type Allocated = Extract<AllocationPreview, { kind: "allocated" }>;
-type Choices = Extract<AllocationPreview, { kind: "choose" }>;
 type CashPay = Extract<PayMethod, { method: "cash" }>;
-type CashPreview = Allocated & { change: string };
+type CashPreview = AllocationPreview & { change: string };
 /** A cash confirmation: the cash handed over, and the server's allocation of it. */
 interface Cash {
   pay: CashPay;
@@ -380,16 +373,6 @@ export class TillBillPayDialog extends LitElement {
         font-size: var(--wt-font-size-lg);
       }
 
-      .choices {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-      }
-
-      .choices .legend {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       .payments {
         display: flex;
         flex-direction: column;
@@ -488,12 +471,11 @@ export class TillBillPayDialog extends LitElement {
     `,
   ];
 
-  /** The bill's total, received, reserved and outstanding, and the quantity of each line paid;
-   * null while it is being read. */
+  /** The bill's total, received, reserved and outstanding; null while it is being read. */
   @property({ attribute: false }) balance: BillBalance | null = null;
   /** The box offers this till "Check the time": a clock refusal points at it. */
   @property({ attribute: false }) checkTimeOffered = false;
-  /** The bill's dishes; those already paid for in full are not offered. */
+  /** The bill's dishes. */
   @property({ attribute: false }) lines: PayLine[] = [];
   /** The way the dialog opens on; unset, Whole bill. */
   @property() way?: PayWay;
@@ -718,7 +700,7 @@ export class TillBillPayDialog extends LitElement {
       });
       this.#entry?.commit(this.#entryBaseline);
     }
-    if (this.asked && this.preview?.kind === "allocated" && this.asked.pay.method === "cash") {
+    if (this.asked && this.preview && this.asked.pay.method === "cash") {
       if (!this.#tip) {
         this.#tipBaseline ??= { mode: this.tipMode, amount: this.tipAmount };
         this.#tip = this.#leave?.register<TipDraft>({
@@ -816,11 +798,11 @@ export class TillBillPayDialog extends LitElement {
         }),
       );
       const picks = new Map<number, number>();
-      for (const line of this.#offered()) {
+      for (const line of this.lines) {
         const units = known.has(line.lineNo)
           ? this.picks.get(line.lineNo)
           : unitsById.get(line.lineId);
-        if (units !== undefined) picks.set(line.lineNo, Math.min(units, this.#remaining(line)));
+        if (units !== undefined) picks.set(line.lineNo, Math.min(units, this.#units(line)));
       }
       this.picks = picks;
     }
@@ -976,20 +958,9 @@ export class TillBillPayDialog extends LitElement {
     return formatMoney(amount, currentLocale());
   }
 
-  #paidUnits(lineNo: number): Decimal {
-    const paid = this.balance === null ? undefined : paidQuantities(this.balance).get(lineNo);
-    return decimal(paid ?? "0");
-  }
-
-  /** The units of `line` still to pay: all of a line paid only whole, or none once any is paid. */
-  #remaining(line: PayLine): number {
-    const paid = this.#paidUnits(line.lineNo);
-    if (line.unitTotal === null) return compareDecimal(paid, decimal("0")) > 0 ? 0 : 1;
-    return Number(subtractDecimal(decimal(line.quantity), paid));
-  }
-
-  #offered(): PayLine[] {
-    return this.lines.filter((line) => this.#remaining(line) > 0);
+  /** The units of `line` that can be picked: one when it is paid only whole. */
+  #units(line: PayLine): number {
+    return line.unitTotal === null ? 1 : Number(line.quantity);
   }
 
   #pickAmount(line: PayLine, units: number): Decimal {
@@ -1009,7 +980,7 @@ export class TillBillPayDialog extends LitElement {
       case "whole":
         return { kind: "whole" };
       case "items":
-        return itemsChoiceOf(this.lines, this.picks, this.#offered());
+        return itemsChoiceOf(this.lines, this.picks);
       case "contribution":
         return { kind: "contribution", amount: typedAmount(this.typedAmountValue)! };
       case "share":
@@ -1112,7 +1083,7 @@ export class TillBillPayDialog extends LitElement {
           this.#shownRefusal,
           this.method,
           this.chosenWay,
-          this.preview?.kind === "allocated" && this.#guestsShown(this.preview),
+          this.preview !== null && this.#guestsShown(this.preview),
         );
   }
 
@@ -1131,7 +1102,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** The one message above the action: the generic one while a field is marked, then a refusal
    * that names no field, in its own words. */
-  #bottomMessage(fieldErrors: ReadonlyMap<Field, string>, extra?: string): string {
+  #bottomMessage(fieldErrors: ReadonlyMap<Field, string>): string {
     const refusal = this.#shownRefusal;
     return bottomMessage(
       this.#feedback.message({}, new Set(fieldErrors.keys()), t("form.fix_fields")),
@@ -1141,7 +1112,6 @@ export class TillBillPayDialog extends LitElement {
             refusal !== null && this.#refusalField() === null
               ? refusalText(refusal, { checkTime: this.checkTimeOffered, billPayment: true })
               : undefined,
-          extra,
         },
         new Set(),
         t("form.fix_fields"),
@@ -1535,15 +1505,12 @@ export class TillBillPayDialog extends LitElement {
     </li>`;
   }
 
-  /** The form; the server's two ways to pay for items that cost more than is left; or the
-   * confirmation of what the server allocated. */
+  /** The form, or the confirmation of what the server allocated. */
   #step(): SheetView {
     const step =
       this.asked === null || this.preview === null
         ? this.#form()
-        : this.preview.kind === "allocated"
-          ? this.#confirmStep(this.asked, this.preview)
-          : this.#chooseStep(this.asked, this.preview);
+        : this.#confirmStep(this.asked, this.preview);
     return { body: html`${this.#unanswered()}${step.body}`, actions: step.actions };
   }
 
@@ -1593,7 +1560,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #picked(): PayLine[] {
-    return this.#offered().filter((line) => this.picks.has(line.lineNo));
+    return this.lines.filter((line) => this.picks.has(line.lineNo));
   }
 
   /** The chosen lines' amounts on this bill. Set-menu dishes can come to another amount on a bill of
@@ -1607,7 +1574,7 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
-  #ownBill(): this is { preview: Allocated & { total: string } } {
+  #ownBill(): this is { preview: AllocationPreview & { total: string } } {
     return paysOnNewBill(this.preview);
   }
 
@@ -1619,7 +1586,7 @@ export class TillBillPayDialog extends LitElement {
           ? ""
           : t("table.bill_to_pay").replace("{amount}", () =>
               this.#money(
-                this.asked?.choice.kind === "whole" && this.preview?.kind === "allocated"
+                this.asked?.choice.kind === "whole" && this.preview !== null
                   ? this.preview.applied
                   : this.balance!.outstanding,
               ),
@@ -1835,14 +1802,13 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #itemsField(error: string | undefined): TemplateResult {
-    const offered = this.#offered();
-    if (offered.length === 0)
+    if (this.lines.length === 0)
       return html`<p class="muted" data-items-none>${t("bill_pay.items_none")}</p>`;
     return html`<fieldset class="choice" data-pay-lines ?disabled=${this.busy}>
       <legend>${t("bill_pay.items")}<span class="required" aria-hidden="true">*</span></legend>
       <div class="lines">
         ${portionGroups(
-          offered,
+          this.lines,
           (line) => line.portionKey ?? null,
           (line) => line.lineNo,
         ).map((group) => this.#lineRow(group, error !== undefined))}
@@ -1858,7 +1824,7 @@ export class TillBillPayDialog extends LitElement {
   #lineRow(group: PayLine[], invalid: boolean): TemplateResult {
     const line = group[0]!;
     const grouped = group.length > 1;
-    const remaining = grouped ? group.length : this.#remaining(line);
+    const remaining = grouped ? group.length : this.#units(line);
     const selected = group.filter((member) => this.picks.has(member.lineNo));
     const units = grouped ? selected.length || undefined : this.picks.get(line.lineNo);
     const quantity = grouped ? String(remaining) : this.#shownQuantity(line, remaining);
@@ -2101,37 +2067,18 @@ export class TillBillPayDialog extends LitElement {
     return moneyPlus(preview.change, preview.tip);
   }
 
-  /** The tip the payment carries before any change is left: the tip of the full price with a
-   * tip, which the server adds to whatever is left from the change. */
-  #ownTip(cash: Cash): Decimal {
-    return subtractDecimal(decimal(cash.preview.tip), decimal(cash.pay.addedTip ?? "0"));
-  }
-
-  /** `addedTip` for a whole tip of `tip`, beyond the payment's own tip. */
-  #addedTipFor(cash: Cash, tip: string): string {
-    const own = this.#ownTip(cash);
-    return compareDecimal(own, decimal("0")) === 0
-      ? tip
-      : toScale(subtractDecimal(decimal(tip), own), MONEY_SCALE);
-  }
-
   #tipErrors(cash: Cash): Map<Field, string> {
     const errors = new Map<Field, string>();
     const most = this.#changeAndTip(cash.preview);
-    const least = this.#ownTip(cash);
     const tip = typedAmount(this.tipAmount);
     if (
       tip === null ||
-      compareDecimal(decimal(tip), least) <= 0 ||
+      compareDecimal(decimal(tip), decimal("0")) <= 0 ||
       compareDecimal(decimal(tip), most) > 0
     )
       errors.set(
         "tipAmount",
-        compareDecimal(least, decimal("0")) === 0
-          ? t("bill_pay.tip_amount_invalid").replace("{amount}", () => this.#money(most))
-          : t("bill_pay.tip_amount_between")
-              .replace("{min}", () => this.#money(least))
-              .replace("{amount}", () => this.#money(most)),
+        t("bill_pay.tip_amount_invalid").replace("{amount}", () => this.#money(most)),
       );
     return errors;
   }
@@ -2151,13 +2098,12 @@ export class TillBillPayDialog extends LitElement {
     this.tipMode = mode;
     this.tipAttempted = false;
     if (mode === "none") this.#askWithTip(asked, cash.pay, undefined);
-    if (mode === "all")
-      this.#askWithTip(asked, cash.pay, this.#addedTipFor(cash, this.#changeAndTip(cash.preview)));
+    if (mode === "all") this.#askWithTip(asked, cash.pay, this.#changeAndTip(cash.preview));
   }
 
   /** Takes the payment shown; with part of the change typed as a tip, first checks it and, when
    * it is not the tip shown, asks the server for the allocation with it. */
-  async #take(asked: PayRequest, preview: Allocated, cash: Cash | null): Promise<void> {
+  async #take(asked: PayRequest, preview: AllocationPreview, cash: Cash | null): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy) return;
     const onReader = asked.card?.entry === "reader";
     if (this.#heldForEquipment(onReader ? "card" : "cash")) return;
@@ -2173,7 +2119,7 @@ export class TillBillPayDialog extends LitElement {
     if (tipChecked) {
       const tip = typedAmount(this.tipAmount)!;
       if (compareDecimal(decimal(tip), decimal(cash.preview.tip)) !== 0) {
-        this.#askWithTip(asked, cash.pay, this.#addedTipFor(cash, tip));
+        this.#askWithTip(asked, cash.pay, tip);
         return;
       }
     }
@@ -2193,7 +2139,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** Only the payment that pays what is left records the sale; `outstanding` leaves out what a
    * card in progress holds. */
-  #guestsShown(preview: Allocated): boolean {
+  #guestsShown(preview: AllocationPreview): boolean {
     return (
       this.asksGuests &&
       !paysOnNewBill(preview) &&
@@ -2204,7 +2150,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   /** Asked of a part payment that leaves something owed; a resend keeps what was sent. */
-  #ownReceiptAsked(preview: Allocated): boolean {
+  #ownReceiptAsked(preview: AllocationPreview): boolean {
     return (
       this.ownReceiptOffered &&
       !paysOnNewBill(preview) &&
@@ -2266,7 +2212,7 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
-  #confirmStep(asked: PayRequest, preview: Allocated): SheetView {
+  #confirmStep(asked: PayRequest, preview: AllocationPreview): SheetView {
     // A cash preview always carries its change, and a card's its charge.
     const cash: Cash | null =
       asked.pay.method === "cash"
@@ -2388,72 +2334,6 @@ export class TillBillPayDialog extends LitElement {
     >
       ${t("action.back")}
     </wt-button>`;
-  }
-
-  /**
-   * The server's ways to pay for items that cost more than is left (bill payments design
-   * §3.3), each a button with its amounts; pressing one asks for its allocation. A venue that
-   * takes no tips is never offered the full price with a tip; the server offers only that one
-   * while a card is at the reader, so when it is all there is, the card in progress is what holds
-   * the items.
-   */
-  #chooseStep(asked: PayRequest, preview: Choices): SheetView {
-    const options = preview.options.filter(
-      (option) => this.tipsEnabled || option.choice !== "full_with_tip",
-    );
-    const bottom = this.#bottomMessage(
-      new Map(),
-      options.length === 0 ? codeMessage("order.payment_in_flight") : undefined,
-    );
-    const body = html`<p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${
-        options.length === 0
-          ? nothing
-          : html`<div class="choices" role="group" aria-labelledby="choices" data-pay-choices>
-                <p class="legend" id="choices">${t("bill_pay.choice_legend")}</p>
-                ${options.map(
-                  (option) =>
-                    html`<wt-button
-                      variant="secondary"
-                      data-pay-choice=${option.choice}
-                      .disabled=${this.busy}
-                      @click=${() => this.#choose(asked, option.choice)}
-                    >
-                      ${this.#choiceLabel(option)}
-                    </wt-button>`,
-                )}
-              </div>
-              <p class="muted" data-pay-choose-note>${t("bill_pay.choose_later")}</p>`
-      }
-      ${this.#notice()}`;
-    return {
-      body,
-      actions: html`<wt-form-actions slot="footer" .error=${bottom}
-        >${recoveryLink(this.#shownRefusal)}${this.#backButton()}</wt-form-actions
-      >`,
-    };
-  }
-
-  #choiceLabel(option: Choices["options"][number]): string {
-    const amount = this.#money(moneyPlus(option.applied, option.tip));
-    if (option.choice === "full_with_tip")
-      return t("bill_pay.choice_tip")
-        .replace("{amount}", () => amount)
-        .replace("{tip}", () => this.#money(option.tip));
-    const pool = toScale(
-      subtractDecimal(this.#pickedAmount(), decimal(option.applied)),
-      MONEY_SCALE,
-    );
-    return t("bill_pay.choice_pool")
-      .replace("{amount}", () => amount)
-      .replace("{pool}", () => this.#money(pool));
-  }
-
-  #choose(asked: PayRequest, allocation: AllocationChoice): void {
-    if (!this.isConnected || !this.#active || this.busy) return;
-    this.#feedback.dismiss("refusal");
-    this.#noTip();
-    this.#emit("bill-pay-preview", { ...asked, allocation } satisfies PayRequest);
   }
 
   #tipChoice(asked: PayRequest, cash: Cash, error: string | undefined): TemplateResult {

@@ -21369,7 +21369,6 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
           getBillBalance: vi.fn().mockResolvedValue(balance),
           previewBillPayment: vi.fn().mockResolvedValue({
             kind: "allocated",
-            choice: null,
             applied: "2.00",
             tip: "0.00",
             change: "3.00",

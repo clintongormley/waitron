@@ -103,7 +103,6 @@ const equipment: DeviceEquipment = {
 };
 const shareOf3: AllocationPreview = {
   kind: "allocated",
-  choice: null,
   applied: "20.80",
   tip: "0.00",
   change: null,
@@ -209,7 +208,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             },
             preview: {
               kind: "allocated",
-              choice: null,
               applied: "20.00",
               tip: "0.00",
               change: "0.00",
@@ -289,7 +287,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await typed(el, "tendered", "50");
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "35.00",
       tip: "0.00",
       change: "15.00",
@@ -313,7 +310,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await typed(mounted.el, "tendered", "50");
     await previewed(mounted.el, {
       kind: "allocated",
-      choice: null,
       applied: "50.00",
       tip: "0.00",
       change: "0.00",
@@ -355,7 +351,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await pressed(el, 'input[name="method"][value="card"]');
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "10.00",
       change: null,
@@ -363,33 +358,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     });
     el.refusal = { code: "bill.allocation_changed" };
     await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations offering the steak's two choices", async () => {
-    const { el, host } = await mount({
-      lines: [
-        ...lines,
-        {
-          lineNo: 4,
-          lineId: "line-4",
-          name: "Chuletón",
-          quantity: "1",
-          total: "25.00",
-          unitTotal: null,
-        },
-      ],
-      balance: { ...balance, received: "105.00", reserved: "0.00", outstanding: "15.00" },
-    });
-    await pressed(el, 'input[name="line"][value="4"]');
-    await typed(el, "tendered", "30");
-    await previewed(el, {
-      kind: "choose",
-      options: [
-        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-        { choice: "use_pool", applied: "15.00", tip: "0.00" },
-      ],
-    });
     await expectNoA11yViolations(host);
   });
 
@@ -438,7 +406,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await pressed(el, 'input[name="method"][value="card"]');
     await previewed(el, {
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "0.00",
       change: null,
@@ -468,7 +435,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await typed(mounted.el, "tendered", "40");
     await previewed(mounted.el, {
       kind: "allocated",
-      choice: null,
       applied: "35.00",
       tip: "0.00",
       change: "5.00",
@@ -1263,35 +1229,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       button: "[data-pay-confirm]",
     },
     locked: { setup: () => lockedConfirmation(), button: "[data-pay-confirm]" },
-    choose: {
-      setup: async () => {
-        const mounted = await mount({
-          lines: [
-            ...lines,
-            {
-              lineNo: 4,
-              lineId: "line-4",
-              name: "Chuletón",
-              quantity: "1",
-              total: "25.00",
-              unitTotal: null,
-            },
-          ],
-          balance: { ...longBalance, outstanding: "15.00" },
-        });
-        await pressed(mounted.el, 'input[name="line"][value="4"]');
-        await typed(mounted.el, "tendered", "30");
-        await previewed(mounted.el, {
-          kind: "choose",
-          options: [
-            { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-            { choice: "use_pool", applied: "15.00", tip: "0.00" },
-          ],
-        });
-        return mounted;
-      },
-      button: "[data-pay-back]",
-    },
     next: { setup: () => nextGuest(), button: "[data-pay-next]" },
     "card-waiting": {
       setup: async () => {

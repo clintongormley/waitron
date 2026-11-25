@@ -41,10 +41,6 @@ describe("A803 refund wording", () => {
     ["bill_pay.refunded", "Refunded: {amount}"],
     ["bill_refund.title", "Refund a payment"],
     ["bill_refund.how_much", "How much to refund"],
-    [
-      "bill_refund.whole_only",
-      "This payment was for particular items, so it is refunded in full: {amount}. Those items can then be paid for again.",
-    ],
     ["bill_refund.amount", "Amount to refund"],
     ["bill_refund.continue", "Refund {amount}"],
     [

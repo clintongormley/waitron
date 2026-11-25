@@ -104,11 +104,11 @@ describe("itemsChoiceOf", () => {
       [3, 1],
     ]);
 
-    expect(itemsChoiceOf(lines, picks, lines)).toEqual({ kind: "whole" });
+    expect(itemsChoiceOf(lines, picks)).toEqual({ kind: "whole" });
   });
 
   it("one of three beers is a part pick by line id", () => {
-    const choice = itemsChoiceOf(lines, new Map([[2, 1]]), lines);
+    const choice = itemsChoiceOf(lines, new Map([[2, 1]]));
 
     expect(choice).toEqual({ kind: "items", picks: [{ lineNo: 2, lineId: "line-2", units: 1 }] });
     expect(itemsAsk({ choice, pay: { method: "cash", tendered: "5" } })).toEqual({
@@ -125,28 +125,12 @@ describe("itemsChoiceOf", () => {
         [1, 1],
         [2, 2],
       ]),
-      lines,
     );
 
     expect(itemsAsk({ choice, pay: { method: "card", addedTip: "1.00" } })).toEqual({
       picks: [{ lineId: "line-1" }, { lineId: "line-2", quantity: "2" }],
       method: "card",
       addedTip: "1.00",
-    });
-  });
-
-  it("a dish not offered any more keeps the rest an items payment", () => {
-    const picks = new Map([
-      [2, 3],
-      [3, 1],
-    ]);
-
-    expect(itemsChoiceOf(lines, picks, [beers, flan])).toEqual({
-      kind: "items",
-      picks: [
-        { lineNo: 2, lineId: "line-2" },
-        { lineNo: 3, lineId: "line-3" },
-      ],
     });
   });
 });
@@ -157,7 +141,6 @@ describe("itemsAllocated", () => {
       itemsAllocated({ total: "17.50", applied: "17.50", tip: "2.50", change: null }, "card"),
     ).toEqual({
       kind: "allocated",
-      choice: null,
       applied: "17.50",
       tip: "2.50",
       change: null,
@@ -171,7 +154,6 @@ describe("itemsAllocated", () => {
       itemsAllocated({ total: "17.50", applied: "17.50", tip: "0.00", change: "2.50" }, "cash"),
     ).toEqual({
       kind: "allocated",
-      choice: null,
       applied: "17.50",
       tip: "0.00",
       change: "2.50",
@@ -183,7 +165,6 @@ describe("itemsAllocated", () => {
   it("a changed allocation keeps the items' total", () => {
     const fresh: AllocationPreview = {
       kind: "allocated",
-      choice: null,
       applied: "16.00",
       tip: "0.00",
       change: "4.00",
@@ -252,10 +233,9 @@ const itemsAsked: PayRequest = {
 
 function itemsConfirmation(asked: PayRequest): Confirmation {
   return confirmationOf(
-    paymentAsk(asked.choice, asked.pay, asked.allocation, edit),
+    paymentAsk(asked.choice, asked.pay, edit),
     {
       kind: "allocated",
-      choice: null,
       applied: "3.00",
       tip: "0.00",
       change: null,
@@ -375,7 +355,6 @@ function apiStub() {
   return {
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "50.00",
       tip: "0.00",
       change: null,
@@ -399,17 +378,16 @@ describe("previewPayment and takePayment", () => {
     await previewPayment(api as unknown as TillApi, "wo-4", whole, edit);
     expect(api.previewBillPayment).toHaveBeenCalledWith(
       "wo-4",
-      paymentAsk(whole.choice, whole.pay, undefined, edit),
+      paymentAsk(whole.choice, whole.pay, edit),
     );
     const confirmation = withItems(itemsConfirmation(whole), whole, edit, revisions);
     await expect(
       takePayment(
         api as unknown as TillApi,
         "wo-4",
+        whole.choice,
         { ...confirmation, submissionId: "s" },
-        {
-          signal,
-        },
+        { signal },
       ),
     ).resolves.toEqual(paid);
     expect(api.takeBillPayment).toHaveBeenCalledWith(
@@ -428,7 +406,6 @@ describe("previewPayment and takePayment", () => {
       previewPayment(api as unknown as TillApi, "wo-4", itemsAsked, edit),
     ).resolves.toEqual({
       kind: "allocated",
-      choice: null,
       applied: "3.00",
       tip: "0.00",
       change: null,
@@ -445,11 +422,22 @@ describe("previewPayment and takePayment", () => {
       items: ItemsPart;
     };
     await expect(
-      takePayment(api as unknown as TillApi, "wo-4", request, { signal }),
+      takePayment(api as unknown as TillApi, "wo-4", itemsAsked.choice, request, { signal }),
     ).resolves.toEqual({ ...paid, paidOn: "wo-9" });
     expect(api.payForItems).toHaveBeenCalledWith("wo-4", itemsRequestOf(request), { signal });
     expect(api.previewBillPayment).not.toHaveBeenCalled();
     expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("takePayment refuses an items choice with no items part", async () => {
+    const api = apiStub();
+    const request = { ...itemsConfirmation(itemsAsked), submissionId: "s" };
+
+    await expect(
+      takePayment(api as unknown as TillApi, "wo-4", itemsAsked.choice, request, { signal }),
+    ).rejects.toThrow("Pay for items needs its items part");
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+    expect(api.payForItems).not.toHaveBeenCalled();
   });
 
   it("takePayment passes on the table's bill an items answer carries", async () => {
@@ -462,7 +450,7 @@ describe("previewPayment and takePayment", () => {
     } as Confirmation & { submissionId: string; items: ItemsPart };
 
     await expect(
-      takePayment(api as unknown as TillApi, "wo-4", request, { signal }),
+      takePayment(api as unknown as TillApi, "wo-4", itemsAsked.choice, request, { signal }),
     ).resolves.toEqual({ ...paid, paidOn: "wo-9", sourceBalance });
   });
 });

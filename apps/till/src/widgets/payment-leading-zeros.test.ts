@@ -155,7 +155,6 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
       },
       preview: {
         kind: "allocated",
-        choice: null,
         applied: "35.00",
         tip: "0.00",
         change: "15.00",

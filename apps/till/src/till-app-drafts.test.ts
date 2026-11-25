@@ -7584,7 +7584,6 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       getPartyBills: vi.fn().mockResolvedValue(bills()),
       previewBillPayment: vi.fn().mockResolvedValue({
         kind: "allocated",
-        choice: null,
         applied: "3.00",
         tip: "0.00",
         change: "0.00",

@@ -6434,19 +6434,19 @@ describe("TillApi: a bill's payments", () => {
     );
   });
 
-  it("previewBillPayment POSTs the ask to the preview route and answers the choices the server offers", async () => {
+  it("previewBillPayment POSTs the ask to the preview route and answers the allocation", async () => {
     const ask: BillPaymentAsk = {
       expectedEdit: null,
-      kind: "items",
-      lines: [{ lineNo: 1 }],
+      kind: "share",
+      shareOf: 2,
       method: "card",
     };
     const preview: AllocationPreview = {
-      kind: "choose",
-      options: [
-        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-        { choice: "use_pool", applied: "15.00", tip: "0.00" },
-      ],
+      kind: "allocated",
+      applied: "15.00",
+      tip: "10.00",
+      change: null,
+      charged: "25.00",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
 
@@ -6513,7 +6513,6 @@ describe("TillApi: a bill's payments", () => {
   it("takeBillPayment surfaces a stale allocation's fresh preview on the refusal", async () => {
     const fresh = {
       kind: "allocated",
-      choice: null,
       applied: "25.00",
       tip: "0.00",
       change: "5.00",

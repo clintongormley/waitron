@@ -970,7 +970,6 @@ describe("the pay sheet's NFC button", () => {
     const { el, api } = await phoneApp({
       previewBillPayment: vi.fn().mockResolvedValue({
         kind: "allocated",
-        choice: null,
         applied: "120.00",
         tip: "0.00",
         change: null,

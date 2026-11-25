@@ -1178,15 +1178,11 @@ export interface BillTenderRefund {
   tip: string;
 }
 
-export type AllocationChoice = "full_with_tip" | "use_pool";
-
 /** What a bill payment asks for, before the operator has seen its allocation. */
 export interface BillPaymentAsk {
   expectedEdit: BillEditExpected | null;
   dining?: Dining;
-  kind: "items" | "contribution" | "share";
-  /** `items` only: parent lines; a line with no `quantity` is paid whole. */
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   /** `contribution` only. */
   amount?: string;
   /** `share` only: how many people are still to pay. The server works out the share. */
@@ -1196,7 +1192,6 @@ export interface BillPaymentAsk {
   tendered?: string;
   /** Cash: the part of the change left as a tip. Card: what is charged above what is due. */
   addedTip?: string;
-  choice?: AllocationChoice;
 }
 
 /**
@@ -1219,22 +1214,18 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   ownReceipt?: true;
 }
 
-/** How one payment splits between the bill, change and tip, or the two ways an item payment that
- * costs more than is left can go. */
-export type AllocationPreview =
-  | {
-      kind: "allocated";
-      choice: AllocationChoice | null;
-      applied: string;
-      tip: string;
-      /** Cash only. */
-      change: string | null;
-      /** Card only: what the card is charged. */
-      charged: string | null;
-      /** Pay for items only: the chosen items' price. */
-      total?: string;
-    }
-  | { kind: "choose"; options: { choice: AllocationChoice; applied: string; tip: string }[] };
+/** How one payment splits between the bill, change and tip. */
+export interface AllocationPreview {
+  kind: "allocated";
+  applied: string;
+  tip: string;
+  /** Cash only. */
+  change: string | null;
+  /** Card only: what the card is charged. */
+  charged: string | null;
+  /** Pay for items only: the chosen items' price. */
+  total?: string;
+}
 
 export interface BillRefundView {
   refusalReason?: "provider_balance_unavailable";
@@ -1265,7 +1256,7 @@ export interface BillPaymentView extends OutsideCardDetails {
   givenBack?: string;
   id: string;
   submissionId: string;
-  kind: "items" | "contribution" | "share";
+  kind: "contribution" | "share";
   shareOf: number | null;
   method: "cash" | "card";
   /** A card's: keyed on a separate terminal (`manual`), or taken at a reader; null for cash. */

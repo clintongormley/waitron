@@ -1454,7 +1454,6 @@ describe("till-app: the three ways to pay part of a bill", () => {
   it("shows a hand-keyed card's tip and charge before it is taken, and records it as a hand-keyed card", async () => {
     const previewBillPayment = vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "10.00",
       change: null,
@@ -2568,26 +2567,23 @@ describe("till-app: a bill payment's refusals and retries", () => {
   });
 
   it("shows a refusal above the action and reads the balance again", async () => {
-    let paidElsewhere = false;
+    let leftElsewhere = false;
     const payForItems = vi.fn(async () => {
-      paidElsewhere = true;
+      leftElsewhere = true;
       throw { code: "bill.line_paid", lineNo: 1 };
     });
     const getBillBalance = vi.fn(async () =>
-      balanceOf(
-        paidElsewhere
-          ? {
-              received: "40.00",
-              outstanding: "80.00",
-              paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
-            }
-          : {},
-      ),
+      balanceOf(leftElsewhere ? { total: "80.00", outstanding: "80.00" } : {}),
     );
+    const getTabLines = vi.fn(async () => ({
+      lines: leftElsewhere ? bill120.slice(1) : bill120,
+      revision: 0,
+    }));
     const { el } = await mountApp({
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview("40.00", "10.00")),
       payForItems,
       getBillBalance,
+      getTabLines,
     });
     await openTable(el);
     await openDialog(el, "items");
@@ -2600,7 +2596,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       `${t("form.fix_fields")} ${codeMessage("bill.line_paid")}`,
     );
     expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(true);
-    expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
+    expect(shownBalance(el)).toEqual(balanceShows("80.00", "0.00", "80.00"));
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="1"]')).toBeNull();
   });
 
@@ -5292,7 +5288,6 @@ describe("till-app: a partly paid order at the counter", () => {
   const counterReaderPreview = (amount: string) =>
     vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: amount,
       tip: "0.00",
       change: null,
@@ -5972,7 +5967,7 @@ describe("till-app: the owner's split after a contribution", () => {
     });
     const takeBillPayment = vi.fn().mockResolvedValue(
       takenOf(
-        { kind: "items", applied: "30.00", tendered: "30.00" },
+        { kind: "share", applied: "30.00", tendered: "30.00" },
         {
           workingOrderId: "wo-check",
           total: "30.00",
@@ -6088,7 +6083,6 @@ describe("till-app: a bill payment on the card reader", () => {
   };
   const cardPreview: AllocationPreview = {
     kind: "allocated",
-    choice: null,
     applied: "40.00",
     tip: "0.00",
     change: null,
@@ -9666,7 +9660,6 @@ it("reports a reader slip failure without retrying the payment", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "10.00",
       tip: "0.00",
       change: null,
@@ -9704,7 +9697,6 @@ it("leaves a part payment's slip failure on the page when the Pay window was clo
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "10.00",
       tip: "0.00",
       change: null,
@@ -9745,7 +9737,6 @@ it("reports a table part payment's slip failure", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "30.00",
       tip: "0.00",
       change: "0.00",
@@ -9787,7 +9778,6 @@ it("says a table bill's last payment's slip could not print", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "120.00",
       tip: "0.00",
       change: null,

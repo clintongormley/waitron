@@ -1794,9 +1794,7 @@ const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
   "network_unavailable",
 ]);
 
-/** Fields of a payment's ask that a preview refuses for what was typed alone; `lines` is not one,
- * as the server also refuses it for a line another device has changed (`itemsDue`,
- * `apps/server/src/bill-payments.ts`). */
+/** Fields of a payment's ask that a preview refuses for what was typed alone. */
 const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
@@ -23033,8 +23031,8 @@ export class TillApp extends LitElement {
       (event as CustomEvent<BillPayConfirmDetail | null>).detail ?? {};
     const confirmation = withItems(
       confirmationOf(
-        paymentAsk(asked.choice, asked.pay, asked.allocation, open.expectedEdit),
-        open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
+        paymentAsk(asked.choice, asked.pay, open.expectedEdit),
+        open.preview!,
         asked.card?.entry === "reader" && readerId !== undefined
           ? { ...asked.card, readerId }
           : asked.card,
@@ -23122,7 +23120,10 @@ export class TillApp extends LitElement {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
           this.#resend(
-            (signal) => takePayment(api, open.billId, submission.request, { signal }),
+            (signal) =>
+              takePayment(api, open.billId, submission.shown.asked.choice, submission.request, {
+                signal,
+              }),
             limit.signal,
             () => session === this.#operatorSession,
             () => {
