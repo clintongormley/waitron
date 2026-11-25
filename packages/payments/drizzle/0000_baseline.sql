@@ -137,7 +137,8 @@ BEGIN
     AND (new.working_order_id IS old.working_order_id
       OR (new.working_order_id = (SELECT working_order_id FROM bill_payments
             WHERE id = old.bill_payment_id)
-        AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'))
+        AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'
+        AND new.sale_id IS NULL))
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.node_id IS old.node_id

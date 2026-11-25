@@ -397,12 +397,9 @@ describe("a card's row follows its bill payment off an abandoned bill", () => {
     expect(await row(providerRow)).toEqual({ working_order_id: reopened, sale_id: null });
   });
 
-  it("…the move alone leaves its sale as it was", async () => {
-    const { reopened, ticket, providerRow } = await reopenedCard(true);
-    await suite.db.execute(
-      sql`update payments set working_order_id = ${reopened} where id = ${providerRow}`,
-    );
-    expect(await row(providerRow)).toEqual({ working_order_id: reopened, sale_id: ticket });
+  it("…not leaving the credited ticket's sale on it", async () => {
+    const { reopened, providerRow } = await reopenedCard(true);
+    await expectRefused(providerRow, sql`working_order_id = ${reopened}`);
   });
 
   it("…not from another sale", async () => {

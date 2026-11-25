@@ -172,7 +172,10 @@ export const workingOrders = table(
       foreignColumns: [t.id],
       name: "working_orders_reopened_from_fk",
     }).onDelete("restrict"),
-    index("working_orders_reopened_from_idx").on(t.reopenedFrom),
+    // One bill is reopened from a printed one.
+    uniqueIndex("working_orders_reopened_from_key")
+      .on(t.reopenedFrom)
+      .where(sql`${t.reopenedFrom} is not null`),
     check("working_orders_status_ck", enumCheck(t.status)),
     check("working_orders_dining_ck", enumCheck(t.dining)),
     foreignKey({

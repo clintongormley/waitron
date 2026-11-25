@@ -327,6 +327,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "adjustment_reasons_name_key",
   "refunds_bill_submission_key",
   "bill_payments_submission_key",
+  "working_orders_reopened_from_key",
   "card_readers_provider_ref_key",
   "content_suggestion_jobs_run_position_key",
   "content_suggestions_item_language_key",

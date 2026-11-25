@@ -260,7 +260,7 @@ CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);--
 CREATE INDEX `working_orders_trusted_opened_at_idx` ON `working_orders` (`trusted_opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);--> statement-breakpoint
 CREATE INDEX `working_orders_items_paid_from_idx` ON `working_orders` (`items_paid_from`);--> statement-breakpoint
-CREATE INDEX `working_orders_reopened_from_idx` ON `working_orders` (`reopened_from`);--> statement-breakpoint
+CREATE UNIQUE INDEX `working_orders_reopened_from_key` ON `working_orders` (`reopened_from`) WHERE "working_orders"."reopened_from" is not null;--> statement-breakpoint
 CREATE TABLE `bill_set_menu_copies` (
 	`working_order_id` text NOT NULL,
 	`set_menu_id` text NOT NULL,

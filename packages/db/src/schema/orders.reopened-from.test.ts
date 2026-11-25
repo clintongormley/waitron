@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { restrictRefused, triggerRaised } from "../constraint-target.js";
+import { refusalOn, restrictRefused, triggerRaised } from "../constraint-target.js";
+import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
@@ -67,6 +68,19 @@ describe("working_orders.reopened_from: an open bill is linked once to the place
     await link(reopened, printed);
     await update(printed, `status = 'abandoned'`);
     expect(await reopenedFrom(reopened)).toBe(printed);
+  });
+
+  it("a second bill cannot be linked to the same printed bill", async () => {
+    const printed = await bill("placed");
+    const first = await bill("open");
+    const second = await bill("open");
+    await link(first, printed);
+    const error = await captureError(() => link(second, printed));
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "working_orders", columns: ["reopened_from"] }),
+    ).toBe(true);
+    expect(await reopenedFrom(second)).toBeNull();
+    expect(await reopenedFrom(first)).toBe(printed);
   });
 
   it.each(["open", "abandoned", "settled"] as const)(

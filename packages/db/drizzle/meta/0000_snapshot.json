@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5643349c-c80e-48e4-aedd-8ec3a5621b1d",
+  "id": "263e66bc-4f84-4ac5-b9d7-5d722b08cf8e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1482,12 +1482,13 @@
           ],
           "isUnique": false
         },
-        "working_orders_reopened_from_idx": {
-          "name": "working_orders_reopened_from_idx",
+        "working_orders_reopened_from_key": {
+          "name": "working_orders_reopened_from_key",
           "columns": [
             "reopened_from"
           ],
-          "isUnique": false
+          "isUnique": true,
+          "where": "\"working_orders\".\"reopened_from\" is not null"
         }
       },
       "foreignKeys": {
