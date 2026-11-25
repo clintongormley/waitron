@@ -12,6 +12,7 @@ import {
   decimalToCents,
   isAppError,
   stringToCents,
+  type ContentLanguages,
   type MenuStructureSaveInput,
   type MenuStructureSaveResult,
   type SectionMember,
@@ -20,6 +21,7 @@ import { batches } from "./batches.js";
 import { readContentLanguages } from "./content-languages.js";
 import { checkedOverrides, columnsFromOverrides } from "./include-folder.js";
 import { isProductPrice } from "./modifier-limits.js";
+import { mergeOptionalTranslations } from "./optional-translations.js";
 import {
   loadSectionGraph,
   menusContaining,
@@ -54,6 +56,17 @@ async function atField<T>(prefix: string, fallback: string, check: () => Promise
       { reason: cause.reason },
     );
   }
+}
+
+function retainedNames(
+  stored: Record<string, string> | undefined,
+  draft: Record<string, string> | undefined,
+  config: ContentLanguages,
+): Record<string, string> | null {
+  const shown = Object.fromEntries(
+    Object.entries(draft ?? {}).filter(([language]) => config.languages.includes(language)),
+  );
+  return mergeOptionalTranslations(stored ?? null, shown, config);
 }
 
 async function heldProducts(tx: Transaction, input: MenuStructureSaveInput) {
@@ -204,9 +217,9 @@ export async function saveMenuStructure(
       });
     if (checkedSections.has(id))
       throw new AppError("menu_section.member_duplicate", { sectionId: id, field: field + ".id" });
-    const values = await atField(field, "names", () =>
-      sectionPatchValues(tx, draft, venueLocale, stored?.names),
-    );
+    const values = await atField(field, "names", () => sectionPatchValues(tx, draft, venueLocale));
+    if (stored !== undefined)
+      values.names = retainedNames(stored.names, values.names, languages) ?? {};
     checkedSections.set(id, { ...values, id, ownerMenuId: menuId });
   }
 
@@ -299,15 +312,12 @@ export async function saveMenuStructure(
       if (folder === undefined) checkedMembers.push(columns);
       else {
         const overrides = await atField(path + ".folder", "names", () =>
-          checkedOverrides(
-            tx,
-            folder.overrides,
-            stored?.childSectionId === columns.childSectionId
-              ? before.folder(id).overrides
-              : undefined,
-            languages,
-          ),
+          checkedOverrides(tx, folder.overrides, undefined, languages),
         );
+        if (stored?.childSectionId === columns.childSectionId)
+          overrides.names =
+            retainedNames(before.folder(id).overrides.names, overrides.names, languages) ??
+            undefined;
         checkedMembers.push({
           ...columns,
           showAsFolder: folder.showAsFolder,

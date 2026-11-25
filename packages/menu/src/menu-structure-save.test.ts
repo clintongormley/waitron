@@ -27,6 +27,7 @@ import {
   createSectionIn,
   deleteSections,
   listMembers,
+  readSection,
   removeMember,
 } from "./sections.js";
 import { setMenuVariantPrice } from "./variants.js";
@@ -87,6 +88,10 @@ it("swaps same-product members, keeps a moved child and its offer, and syncs men
     before.childMember.id,
     before.first.id,
   ]);
+  expect(after.nodes[0]?.internalName).toBe("Owned section");
+  await expect(app((tx) => readSection(tx, before.parent.id))).rejects.toMatchObject({
+    code: "menu_section.not_found",
+  });
   expect(after.nodes[0]?.children?.map((node) => node.memberId)).toEqual([
     before.second.memberId,
     extra.id,
@@ -109,13 +114,18 @@ it("drops deleted placements and prices, a parent price with variants, and an un
   const soup = member(product(f.soup));
   const lager = member(product(f.lager));
   const replaced = member(product(f.lemonade));
+  const deletedSet = await app((tx) =>
+    createMenu(tx, { name: "Old Set", kind: "set_menu", setPrice: "20" }),
+  );
+  const set = member({ kind: "set_menu", menuId: deletedSet.id });
   await app(async (tx) => {
+    await deactivateMenu(tx, deletedSet.id);
     await deactivateProduct(tx, f.soup);
     await deactivateMenu(tx, f.drinksMenu);
   });
   expect(
     await save(f.lunch, {
-      rootMembers: [lager, include, soup, replaced],
+      rootMembers: [lager, include, soup, replaced, set],
       sections: [],
       prices: [
         { productId: f.soup, price: "4.00" },
@@ -127,6 +137,7 @@ it("drops deleted placements and prices, a parent price with variants, and an un
     dropped: [
       { memberId: include.id, reason: "deleted" },
       { memberId: soup.id, reason: "deleted" },
+      { memberId: set.id, reason: "deleted" },
       { productId: f.soup, reason: "deleted" },
       { productId: f.lemonade, reason: "has_variants" },
       { productId: f.burger, reason: "unreachable" },
@@ -143,16 +154,16 @@ it("recreates missing draft rows, keeps disabled-language names on retained rows
     await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
     const kept = await createSectionIn(tx, f.lunchRoot, {
       internalName: "Kept",
-      names: { fr: "Conservé" },
+      names: { fr: "Kept translation" },
     });
     const recreated = await createSectionIn(tx, f.lunchRoot, {
       internalName: "Restored",
-      names: { fr: "Rétabli" },
+      names: { fr: "Restored translation" },
     });
     const include = (await listMembers(tx, f.lunchRoot))[0]!;
     await setIncludeFolder(tx, f.lunchRoot, include.id, {
       showAsFolder: false,
-      overrides: { names: { fr: "Boissons" } },
+      overrides: { names: { fr: "Drinks translation" } },
     });
     await removeMember(tx, f.lunchRoot, include.id);
     await deleteSections(tx, [recreated.id]);
@@ -166,14 +177,17 @@ it("recreates missing draft rows, keeps disabled-language names on retained rows
   const rootMembers: MenuStructureMemberInput[] = [
     {
       ...member(section(f.drinks), before.include.id),
-      folder: { showAsFolder: false, overrides: { names: { fr: "Boissons" }, color: null } },
+      folder: {
+        showAsFolder: false,
+        overrides: { names: { fr: "Drinks translation" }, color: null },
+      },
     },
     member(section(before.kept.id)),
     member(section(before.recreated.id)),
   ];
   const sections = [
     draftSection(before.kept.id),
-    { ...draftSection(before.recreated.id), names: { fr: "Rétabli" } },
+    { ...draftSection(before.recreated.id), names: { fr: "Restored translation" } },
   ];
   const price = { productId: f.lemonade, variantId: f.large, price: "0.00" };
   const sourcePrices = await app((tx) => menuPrices(tx, f.drinksMenu));
@@ -184,30 +198,46 @@ it("recreates missing draft rows, keeps disabled-language names on retained rows
     folder: rootMembers[0]!.folder,
   });
   expect(saved.nodes.slice(1)).toMatchObject([
-    { ref: section(before.kept.id), names: { fr: "Conservé" } },
-    { ref: section(before.recreated.id), names: { fr: "Rétabli" } },
+    { ref: section(before.kept.id), names: { fr: "Kept translation" } },
+    { ref: section(before.recreated.id), names: { fr: "Restored translation" } },
   ]);
   const lemonade = async () =>
     (await app((tx) => menuPrices(tx, f.lunch))).find((offer) => offer.productId === f.lemonade);
   expect((await lemonade())?.variants).toMatchObject([{ variantId: f.large, price: "0.00" }]);
+  await app(async (tx) =>
+    updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: "4.25" }),
+  );
   await save(f.lunch, {
     rootMembers: [
-      { ...member(section(f.drinks), before.include.id), folder },
+      {
+        ...member(section(f.drinks), before.include.id),
+        folder: { ...folder, overrides: { names: { fr: "Old folder translation" } } },
+      },
       ...rootMembers.slice(1),
     ],
-    sections,
+    sections: [{ ...sections[0]!, names: { fr: "Old section translation" } }, sections[1]!],
     prices: [],
   });
   expect((await lemonade())?.variants).toMatchObject([{ variantId: f.large, price: null }]);
-  expect((await app((tx) => readMenuStructure(tx, f.lunch))).nodes[0]).toMatchObject({
-    folder: { showAsFolder: true, overrides: { names: { fr: "Boissons" } } },
+  const lunchPrices = await app((tx) => menuPrices(tx, f.lunch));
+  expect(lunchPrices.find((offer) => offer.productId === f.lager)?.override).toBeNull();
+  const retained = (await app((tx) => readMenuStructure(tx, f.lunch))).nodes;
+  expect(retained[0]).toMatchObject({
+    folder: { showAsFolder: true, overrides: { names: { fr: "Drinks translation" } } },
   });
+  expect(retained[1]?.names).toEqual({ fr: "Kept translation" });
   expect(await app((tx) => menuPrices(tx, f.drinksMenu))).toEqual(sourcePrices);
 });
 
 it.each([
   ["cycle", "menu_section.member_cycle", "rootMembers.0.ref"],
   ["duplicate", "menu_section.member_duplicate", "rootMembers.1.ref"],
+  ["duplicate section ID", "menu_section.member_duplicate", "sections.1.id"],
+  ["duplicate member ID", "menu_section.membership_invalid", "rootMembers.1.id"],
+  ["duplicate price", "product.invalid", "prices.1.price"],
+  ["root as section ID", "menu_section.wrong_role", "sections.0.id"],
+  ["variant member", "menu_section.membership_invalid", "rootMembers.0.ref"],
+  ["folder color", "menu_section.invalid", "rootMembers.0.folder.color"],
   ["two parents", "menu_section.member_duplicate", "sections.1.members.0.ref"],
   ["detached loop", "menu_section.membership_invalid", "sections.0.id"],
   ["foreign section id", "menu_section.wrong_role", "sections.0.id"],
@@ -229,6 +259,32 @@ it.each([
       break;
     case "duplicate":
       draft.rootMembers = [member(product(f.soup)), member(product(f.soup))];
+      break;
+    case "duplicate section ID":
+      draft.sections = [draftSection(a), draftSection(a)];
+      break;
+    case "duplicate member ID":
+      draft.rootMembers = [member(product(f.soup), a), member(product(f.lager), a)];
+      break;
+    case "duplicate price":
+      draft.prices = [
+        { productId: f.soup, price: "4" },
+        { productId: f.soup, price: "3" },
+      ];
+      break;
+    case "root as section ID":
+      draft.sections = [draftSection(f.lunchRoot)];
+      break;
+    case "variant member":
+      draft.rootMembers = [member(product(f.large))];
+      break;
+    case "folder color":
+      draft.rootMembers = [
+        {
+          ...member(section(f.drinks)),
+          folder: { showAsFolder: true, overrides: { color: "blue" } },
+        },
+      ];
       break;
     case "two parents":
       draft.rootMembers = [member(section(a)), member(section(b))];

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedPhotoMetadata, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import {
   addMember,
@@ -11,6 +11,8 @@ import {
   createProduct,
   deactivateProduct,
   requireMenuRoot,
+  menuPrices,
+  setProductVariants,
 } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountMenuApi } from "./menu-api.js";
@@ -88,6 +90,68 @@ it("returns the drops and advances the same revision used by the structure read"
   expect(after.headers.get("x-waitron-menu-revision")).toBe(
     response.headers.get("x-waitron-menu-revision"),
   );
+});
+
+it("saves a complete draft through the HTTP request", async () => {
+  const f = await fixture();
+  const image = "a".repeat(64) + ".jpg";
+  await seedPhotoMetadata(suite.db, { filename: image, names: { en: "Lunch" } });
+  const { variant, includedRoot, set } = await withTransaction(suite.db, async (tx) => {
+    const [variant] = await setProductVariants(
+      tx,
+      f.soup.id,
+      [
+        {
+          name: "Small",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "3",
+          available: true,
+        },
+      ],
+      "en",
+    );
+    const included = await createMenu(tx, { name: "Drinks" });
+    return {
+      variant: variant!,
+      includedRoot: await requireMenuRoot(tx, included.id),
+      set: await createMenu(tx, { name: "Lunch Set", kind: "set_menu", setPrice: "20" }),
+    };
+  });
+  const id = crypto.randomUUID();
+  const included = { kind: "section", sectionId: includedRoot };
+  const setRef = { kind: "set_menu", menuId: set.id };
+  const folder = {
+    showAsFolder: false,
+    overrides: { names: { en: "Drinks Specials" }, color: null },
+  };
+  const presentation = {
+    internalName: "Mains",
+    names: { en: "Main courses" },
+    image,
+    color: "#334455",
+  };
+  const response = await f.send("PUT", f.lunch.id, {
+    rootMembers: [
+      { id: crypto.randomUUID(), ref: { kind: "section", sectionId: id } },
+      { id: crypto.randomUUID(), ref: included, folder },
+      { id: crypto.randomUUID(), ref: setRef },
+    ],
+    sections: [{ id, ...presentation, members: [{ id: f.member.id, ref: f.member.ref }] }],
+    prices: [{ productId: f.soup.id, variantId: variant.id, price: "2.50" }],
+  });
+  expect(response.status).toBe(200);
+  const after = await f.send("GET", f.lunch.id);
+  expect(await after.json()).toMatchObject({
+    nodes: [
+      { ...presentation, children: [{ memberId: f.member.id, ref: f.member.ref }] },
+      { ref: included, folder },
+      { ref: setRef },
+    ],
+  });
+  const prices = await withTransaction(suite.db, (tx) => menuPrices(tx, f.lunch.id));
+  expect(prices).toMatchObject([{ variants: [{ variantId: variant.id, price: "2.50" }] }]);
 });
 
 it("requires permission to write the menu", async () => {
