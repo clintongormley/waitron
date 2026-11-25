@@ -1660,6 +1660,7 @@ export class TillBillPayDialog extends LitElement {
     checked: boolean,
     pick: () => void,
     disabled = false,
+    describedBy?: string,
   ): TemplateResult {
     return html`<label class="option">
       <input
@@ -1668,6 +1669,7 @@ export class TillBillPayDialog extends LitElement {
         .value=${value}
         .checked=${checked}
         ?disabled=${disabled}
+        aria-describedby=${describedBy ?? nothing}
         @change=${(event: Event) => {
           event.stopPropagation();
           if (!this.isConnected || !this.#active || this.busy) return;
@@ -1730,10 +1732,11 @@ export class TillBillPayDialog extends LitElement {
                 this.#shareRun = null;
               },
               (way === "whole" && this.balance === null) || (way === "items" && this.itemsBarred),
+              way === "items" && this.itemsBarred ? "items-reason" : undefined,
             ),
           )}
         </div>
-        ${this.itemsBarred ? html`<p class="way-reason" data-pay-items-reason>${t("bill_pay.items_barred_counter")}</p>` : nothing}
+        ${this.itemsBarred ? html`<p class="way-reason" id="items-reason" data-pay-items-reason>${t("bill_pay.items_barred_counter")}</p>` : nothing}
       </fieldset>
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#deferred()} ${this.#wayFields(errors)} ${this.#methodFields(errors)}
