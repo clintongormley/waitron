@@ -86,8 +86,10 @@ import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
-import { saveHeldOrderIn } from "./working-order-held-write.js";
+import { saveHeldOrderIn, updateOrderLine } from "./working-order-held-write.js";
 import { copyBillDishes } from "./split-after-print.js";
+import { readOrderRevision } from "./working-order-context.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -2711,13 +2713,14 @@ describe("when a bill ordered during a period", () => {
     return rows.map(({ key }) => key);
   }
 
-  it("keeps the first saved add when a waiter edits and places a held dish after Lunch", async () => {
+  it("keeps the first add when identical draft lines merge before a held dish is placed", async () => {
     const { v, lunch } = await timetable();
     at("14:58");
     const { partyId } = await seated(v);
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     at("15:05");
     const edited = await save(v, partyId, ALEX, draft.id, draft.revision, [
+      item(v, "beer", { note: "In a small glass" }),
       { ...draft.lines[0]!, note: "In a small glass" },
     ]);
     const revision = await partyRevision(partyId);
@@ -2752,7 +2755,17 @@ describe("when a bill ordered during a period", () => {
     expect(await orderedDuring(tabId)).toEqual([dinner]);
   });
 
-  it("carries Lunch to the split bill and remembers it after the dish is cancelled", async () => {
+  it("uses Place time when the draft was saved before any period was running", async () => {
+    const { v, lunch } = await timetable();
+    at("11:58");
+    const { partyId, tabId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    at("12:10");
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    expect(await orderedDuring(tabId)).toEqual([lunch]);
+  });
+
+  it("carries Lunch through reopen, split and merge even after the dish is cancelled", async () => {
     const { v, lunch } = await timetable();
     at("14:59");
     const { partyId, tabId } = await seated(v);
@@ -2771,6 +2784,21 @@ describe("when a bill ordered during a period", () => {
     await inTx((tx) => cancelItemForTest(tx, v.cfg, billId, moved!.lineNo, "1", ALEX));
     expect(await tabLines(partyId)).toEqual([]);
     expect(await orderedDuring(billId)).toEqual([lunch]);
+
+    const receiving = randomUUID();
+    const revision = await partyRevision(partyId);
+    await inTx(async (tx) => {
+      await workingOrderOpen.createOpenOrder(tx, v.cfg, receiving, [], null, {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      });
+      await mergeBills(tx, v.cfg, receiving, billId, {
+        operatorId: ALEX,
+        expectedPartyRevision: revision,
+      });
+    });
+    expect(await orderedDuring(receiving)).toEqual([lunch]);
   });
 
   it("records a direct counter order and a new dish added to it in the next period", async () => {
@@ -2798,6 +2826,33 @@ describe("when a bill ordered during a period", () => {
       });
     });
     expect(await orderedDuring(id)).toEqual([lunch, dinner].sort());
+  });
+
+  it("counts more portions of an existing dish at the time they are ordered", async () => {
+    const { v, lunch, dinner } = await timetable();
+    at("14:58");
+    const { partyId, tabId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    const [beer] = await tabLines(partyId);
+    at("15:05");
+    await inTx(async (tx) => {
+      const revision = await readOrderRevision(tx, tabId);
+      await updateOrderLine(
+        tx,
+        v.cfg,
+        tabId,
+        beer!.lineNo,
+        { quantity: "3", portionLineNos: [] },
+        revision,
+        {
+          expectedEdit: await readBillEditState(tx, tabId),
+          operatorId: ALEX,
+          admission: testTradingAdmission(),
+        },
+      );
+    });
+    expect(await orderedDuring(tabId)).toEqual([lunch, dinner].sort());
   });
 });
 

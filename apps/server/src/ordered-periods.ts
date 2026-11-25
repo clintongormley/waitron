@@ -5,19 +5,25 @@ import { VENUE_SERVICE } from "./modules.js";
 export async function recordOrderedPeriods(
   tx: Transaction,
   billId: string,
-  addedTimes: readonly string[],
+  placedAt: Date,
+  draftAddTimes: readonly string[] = [],
 ): Promise<void> {
   const context = await VENUE_SERVICE.findOrderContext(tx, billId);
   if (context === null) return;
   const keys = new Set<string>();
-  // The timetable resolves whole minutes. Several saved dishes can share one lookup.
-  for (const minute of new Set(addedTimes.map((at) => at.slice(0, 16)))) {
+  const recordAt = async (at: Date) => {
     const { periodOccurrenceKey } = await VENUE_SERVICE.resolveDepartmentService(
       tx,
       context.departmentId,
-      new Date(`${minute}:00Z`),
+      at,
     );
     if (periodOccurrenceKey !== null) keys.add(periodOccurrenceKey);
+  };
+  // The timetable resolves whole minutes. Several saved dishes can share one lookup.
+  const draftMinutes = new Set(draftAddTimes.map((at) => at.slice(0, 16)));
+  for (const minute of draftMinutes) await recordAt(new Date(`${minute}:00Z`));
+  if (keys.size === 0 && !draftMinutes.has(placedAt.toISOString().slice(0, 16))) {
+    await recordAt(placedAt);
   }
   const rows = [...keys].map((occurrenceKey) => ({ billId, occurrenceKey }));
   for (const chunk of statementChunks(billOrderedPeriods, rows)) {

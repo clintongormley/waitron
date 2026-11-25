@@ -19,6 +19,7 @@ import { persons } from "@waitron/identity";
 import type { AllergyPatch, ZoneMenu, ZoneMenuOffer } from "@waitron/module";
 import {
   AppError,
+  draftLineMergeKey,
   isUuid,
   normaliseDraftLines,
   stringToThousandths,
@@ -310,9 +311,9 @@ export async function saveDraft(
   await refusePaymentInFlight(tx, [billId]);
   const edit = await requireBillEditor(tx, billId, operatorId, expected);
   if (parsed.length === 0 && edit.draftId === null) return { draft: null, edit };
-  let previous: DraftLine[] = [];
   const draft = edit.draftId === null ? null : await requireDraft(tx, edit.draftId, partyId);
-  if (draft !== null) previous = (await storedLines(tx, [draft.id])).map(({ line }) => line);
+  const stored = draft === null ? [] : await storedLines(tx, [draft.id]);
+  const previous = stored.map(({ line }) => line);
   const owned = new Map(previous.map((line) => [line.id, line]));
   const named = new Set<string>();
   for (const [index, line] of parsed.entries()) {
@@ -424,24 +425,30 @@ export async function saveDraft(
   const assigned = new Set(
     allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
   );
-  await replaceLines(
-    tx,
-    [draftId],
-    draftId,
-    normaliseDraftLines(
-      lines.map((line) => {
-        return {
-          ...line,
-          source: null,
-          id: line.id ?? newId(),
-          noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
-          unavailable: false,
-          measured: soldMeasured(zone.offers.get(line.menuItemId)),
-        };
-      }),
-    ),
-    at,
-  );
+  const draftLines = lines.map((line) => ({
+    ...line,
+    source: null,
+    id: line.id ?? newId(),
+    noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+    unavailable: false,
+    measured: soldMeasured(zone.offers.get(line.menuItemId)),
+  }));
+  const previousTimes = new Map(stored.map(({ line, addedAt }) => [line.id, addedAt]));
+  const firstByMergeKey = new Map<string, string>();
+  for (const line of draftLines) {
+    const addedAt = previousTimes.get(line.id);
+    if (addedAt === undefined) continue;
+    const key = draftLineMergeKey(line);
+    if (key === null) continue;
+    const first = firstByMergeKey.get(key);
+    if (first === undefined || addedAt < first) firstByMergeKey.set(key, addedAt);
+  }
+  const merged = normaliseDraftLines(draftLines).map((line) => {
+    const key = draftLineMergeKey(line);
+    const first = key === null ? undefined : firstByMergeKey.get(key);
+    return { ...line, addedAt: first ?? previousTimes.get(line.id) ?? at };
+  });
+  await replaceLines(tx, [draftId], draftId, merged);
   if (lines.length === 0) {
     const released = await closeBillDraft(tx, billId, operatorId, expected, "discarded");
     await recordDraftEvents(
@@ -1250,7 +1257,13 @@ async function addDiscardedDraft(
     stored.filter(({ draftId }) => draftId === into.id).map(({ line }) => line),
     stored.filter(({ draftId }) => draftId === fromDraftId).map(({ line }) => line),
   );
-  await replaceLines(tx, [into.id, fromDraftId], into.id, combined);
+  const addedTimes = new Map(stored.map(({ line, addedAt }) => [line.id, addedAt]));
+  await replaceLines(
+    tx,
+    [into.id, fromDraftId],
+    into.id,
+    combined.map((line) => ({ ...line, addedAt: addedTimes.get(line.id)! })),
+  );
   await tx
     .update(orderDrafts)
     .set({ revision: into.revision + 1, updatedAt: nowIso() })
@@ -1361,8 +1374,7 @@ async function replaceLines(
   tx: Transaction,
   fromDraftIds: readonly string[],
   intoDraftId: string,
-  lines: readonly DraftLine[],
-  addedAt = nowIso(),
+  lines: readonly (DraftLine & { addedAt: string })[],
 ): Promise<void> {
   const fresh = lines.map((line, index) => ({ line, position: index + 1 }));
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
@@ -1383,7 +1395,7 @@ async function replaceLines(
   const rows = fresh.map(({ line, position }) => ({
     id: line.id,
     draftId: intoDraftId,
-    addedAt,
+    addedAt: line.addedAt,
     position,
     menuItemId: line.menuItemId,
     variantId: line.variantId,
@@ -1410,6 +1422,7 @@ async function replaceLines(
         target: orderDraftLines.id,
         set: {
           draftId: intoDraftId,
+          addedAt: sql`excluded.added_at`,
           position: sql`excluded.position`,
           menuItemId: sql`excluded.menu_item_id`,
           variantId: sql`excluded.variant_id`,

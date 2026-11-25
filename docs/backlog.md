@@ -535,6 +535,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1568. Last orders per prep station** (owner, 24 November). Lunch keeps its hours while each
   station stops taking its orders before or after the end. You can set the times on a period and
   see later station hours in Calendar. The till's ended menus and dish warnings, and the demo remain.
+  Ship the form's note about which tables can order alongside the till's ended-menu restriction.
   [Design](superpowers/specs/2026-11-24-last-orders-per-station-design.md)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
