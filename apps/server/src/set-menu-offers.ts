@@ -87,7 +87,6 @@ export async function setMenuOfferLookup(
       : await serveRecordedSetMenus(
           tx,
           usable.map(([, request]) => request),
-          "recorded",
         );
   const byCopy = new Map(
     usable.map(([key, { menuId, versionId }], i) => {

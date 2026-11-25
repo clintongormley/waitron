@@ -57,12 +57,12 @@ export function markNewestOnSale(copies: readonly UnrankedCopy[]): ServedSetMenu
 
 /**
  * Reads just the published copies a bill names, even after their full menus are republished.
- * `recorded` leaves out the reads for the declarations published since, for a caller that shows none.
+ * `published` also reads the declarations published since, for a caller that shows them.
  */
 export async function serveRecordedSetMenus(
   tx: Transaction,
   requests: readonly { versionId: string; menuId: string }[],
-  declarations: "published" | "recorded" = "published",
+  declarations: "recorded" | "published" = "recorded",
 ): Promise<ServedSetMenuCopy[]> {
   const documents = await readRecordedDocuments(
     tx,

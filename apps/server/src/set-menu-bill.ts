@@ -217,7 +217,8 @@ export async function readBillsSetMenus(
       ].map((request) => [key(request), request]),
     ).values(),
   ];
-  const served = requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests);
+  const served =
+    requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests, "published");
   const servedByVersion = new Map(requests.map((request, i) => [key(request), served[i]!]));
   const exact = new Map(
     (

@@ -82,7 +82,7 @@ it("serves a recorded copy at its own price with the allergens and diets publish
     await declare({ milk: {} }, "vegetarian");
     const { versionId } = await f.publish();
     const recorded = async () => {
-      const [copy] = await serveRecordedSetMenus(tx, [{ versionId, menuId: f.daily }]);
+      const [copy] = await serveRecordedSetMenus(tx, [{ versionId, menuId: f.daily }], "published");
       const offer = copy!.offers.find(({ id }) => id === f.bravasItem)!;
       const [variant] = offer.variants;
       const extras = offer.offeredModifiers.find(({ id }) => id === list.id)!;
