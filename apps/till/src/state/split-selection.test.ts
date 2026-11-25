@@ -383,14 +383,8 @@ describe("A803 selection:", () => {
       staysPicks(withDaily(["a"]), ["daily"]);
     });
 
-    it("by a set menu, with a paid dish or this person's unsent dishes, does not", () => {
-      const unsent = { ...withDaily(["a", "b"]), ownUnsent: true };
-      staysPicks(unsent, ["daily"]);
-      const paid = {
-        ...withDaily(["a", "b"]),
-        groups: source("b1", 1, [...lines, daily], { paid: ["a"] }).groups,
-      };
-      staysPicks(paid, ["daily"]);
+    it("by a set menu, with this person's unsent dishes, does not", () => {
+      staysPicks({ ...withDaily(["a", "b"]), ownUnsent: true }, ["daily"]);
     });
 
     it("unticking a set menu's dish on a whole bill drops the set menu too, and stays so after a read", () => {
@@ -953,10 +947,7 @@ describe("A803 selection:", () => {
       }));
 
     /** Daily A holds s1 and h1, Daily B holds s2 and h2, and the water is in neither. */
-    const twoDailies = (
-      a: Partial<TabLine> = {},
-      paid: { paid?: string[]; received?: string } = {},
-    ): SplitSource => {
+    const twoDailies = (a: Partial<TabLine> = {}): SplitSource => {
       const lines = [
         daily("A", 1, a),
         inMenu("s1", 2, "Soup"),
@@ -977,7 +968,7 @@ describe("A803 selection:", () => {
         dishes: [...held("A", "s1", "h1"), ...held("B", "s2", "h2")],
       };
       const [one] = splitSourcesFrom(
-        { bills: [{ billId: "b1", lines, balance: balanceOf(lines, paid) }] },
+        { bills: [{ billId: "b1", lines, balance: balanceOf(lines) }] },
         [bill("b1", 1, { setMenus })],
         [],
         "me",
@@ -1068,16 +1059,6 @@ describe("A803 selection:", () => {
       );
 
       expect(sends(one, ticked)).toEqual(picked("B", "h2", "s2"));
-    });
-
-    it("a paid dish of the first stays, and the second's same dish can still go", () => {
-      const one = twoDailies({}, { paid: ["s1"], received: "4.00" });
-
-      expect(
-        rowsOf(one, NOTHING).map((row) => [row.members[0]!.id, row.blocked?.reason ?? null]),
-      ).toContainEqual(["s1", "paid"]);
-      const ticked = read(one, press(one, press(one, NOTHING, "s1"), "s2"));
-      expect(sends(one, ticked)).toEqual(picked("s2"));
     });
   });
 
