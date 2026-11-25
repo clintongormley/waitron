@@ -15,7 +15,7 @@ import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import * as regime from "@waitron/fiscal-verifactu";
 import { decodeRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { loginWithPin } from "@waitron/identity";
-import { seriesId, workingOrderId, type SaleId } from "@waitron/shared";
+import { seriesId, workingOrderId } from "@waitron/shared";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 
 const AT = "2026-10-14T23:30:00.000Z";
@@ -101,8 +101,12 @@ function snapshot() {
 async function original(instant = AT) {
   return withTransaction(v.db, (tx) => recordSale(tx, v.backend, input(source(instant))));
 }
-async function voidClock(tx: Transaction, id: SaleId) {
-  return regime.prepareFiscalVoidClock(tx, id, source(), v.cfg.nodeId);
+function voidBackend() {
+  return regime.FISCAL_SLOT.makeBackend({
+    db: v.db,
+    clock: source(),
+    environment: "preproduction",
+  });
 }
 
 describe("core-only callers prepare the saved writing zone", () => {
@@ -241,15 +245,9 @@ describe("core-only callers prepare the saved writing zone", () => {
     const old = await original();
     const before = records(old.saleId)[0];
     const numbers = await v.db.select().from(invoiceSeries);
-    const issued = await withTransaction(v.db, async (tx) => {
-      const clock = await voidClock(tx, old.saleId);
-      const backend = regime.FISCAL_SLOT.makeBackend({
-        db: v.db,
-        clock,
-        environment: "preproduction",
-      });
-      return recordVoid(tx, backend, old.saleId, "Operator error", { sessionId }, v.cfg.nodeId);
-    });
+    const issued = await withTransaction(v.db, (tx) =>
+      recordVoid(tx, voidBackend(), old.saleId, "Operator error", { sessionId }, v.cfg.nodeId),
+    );
     expect(issued.fiscal).toMatchObject({ issuedAt: new Date(AT), offsetMinutes: 120 });
     expect(records(old.saleId)).toHaveLength(2);
     expect(records(old.saleId)[0]).toEqual(before);
@@ -260,19 +258,8 @@ describe("core-only callers prepare the saved writing zone", () => {
     expect(await v.db.select().from(invoiceSeries)).toEqual(numbers);
     const saved = snapshot();
     await expect(
-      withTransaction(v.db, async (tx) =>
-        recordVoid(
-          tx,
-          regime.FISCAL_SLOT.makeBackend({
-            db: v.db,
-            clock: await voidClock(tx, old.saleId),
-            environment: "preproduction",
-          }),
-          old.saleId,
-          "Again",
-          { sessionId },
-          v.cfg.nodeId,
-        ),
+      withTransaction(v.db, (tx) =>
+        recordVoid(tx, voidBackend(), old.saleId, "Again", { sessionId }, v.cfg.nodeId),
       ),
     ).rejects.toMatchObject({ code: "sale.already_voided" });
     expect(snapshot()).toEqual(saved);
@@ -312,10 +299,9 @@ describe("core-only callers prepare the saved writing zone", () => {
       await expect(
         withTransaction(v.db, async (tx) => {
           if (capability === "void") {
-            const clock = await voidClock(tx, old.saleId);
             return recordVoid(
               tx,
-              regime.FISCAL_SLOT.makeBackend({ db: v.db, clock, environment: "preproduction" }),
+              voidBackend(),
               old.saleId,
               "Operator error",
               { sessionId },
