@@ -3,7 +3,7 @@
 Each client is one class today. Move calls and types by area so developers can find them in files
 under 1,000 lines. Keep construction and `api.method(...)` at current call sites. Lane E's watcher
 agreed to area classes, the constructor edits and the route inventory change on 25 November at
-17:26. This plan still needs clearance to build.
+17:26 and cleared this plan with five edits at 17:39. Dashboard comes first.
 
 | PR | Destination groups under `src/api/` | Broad groups that need a second cut |
 | --- | --- | --- |
@@ -14,6 +14,8 @@ Measure modules with imports. Split Menu reads from editing if needed. `client.t
 real client. Dashboard keeps background, fresh-sign-in and locale state with its callers. Till
 keeps person-header, live events and whole-bill state with their callers. `#todayChange` moves
 with its callers. Keep existing package re-exports and point moved local types at their new homes.
+Keep Dashboard's `taxOfficeMonthFileUrl` and `approveBoxJoin` in `client.ts`. Put `placeSetMenu`
+with `addSectionMember`. Record measured lines and file names in the lane log before the move.
 
 1. Give each area class a private `#request` holding the shared callback. Chain area classes in
    dependency order. The real client inherits the last class. Start its constructor with
@@ -24,19 +26,23 @@ with its callers. Keep existing package re-exports and point moved local types a
    `dashboard-client-split.json` and `till-client-split.json`. Start with failing mover tests for an
    edited member, inline type imports and unmapped methods. Compare method bodies and signatures
    before and after formatting, and compare type tokens. Only the two client constructors change.
-   Refuse runtime cycles. Allow a type-only reference back to DashboardApi for `copyDeviceProfile`.
+   Refuse runtime and type-only import cycles. Allow the type-only DashboardApi reference in
+   `copyDeviceProfile`.
    Stage new files before the file-size guard. Remove each cap when its client fits the default.
 3. Run changed API suites, both app typechecks, `handover-browser.e2e.test.ts` for Dashboard, and
-   the file-size, mover and A4 guards. Repoint A4 paths without touching its assertions. Leave
+   the file-size, mover and A4 guards. Keep both `client.test.ts` files whole. Repoint A4 paths without touching its assertions. Leave
    Till's person-fetch anchors and checks in place. Walk Dashboard's prototypes in its route
    inventory and keep its assertion. Plant an inherited `listTills` in a disposable copy and
    show the assertion fails. Update live backlog and developer-doc references in the same PR.
-4. Agree a quiet hour per app with the watcher. Before opening each PR, replay the full map in
+4. Arrange a quiet landing window for each app. Notify the watcher about 30 minutes before
+   Dashboard is ready to land. Before opening each PR, replay the full map in
    installed disposable base and affected-branch trees. Set `split` to the split candidate commit
-   and `app` to `dashboard` or `till`. Copy the new mover and map into **both** trees. Run the
-   mover from each tree. Add any new branch methods to its map or let the mover refuse the split.
-   Compare the two moved trees, verify the branch edits, typecheck and run focused tests. Include
-   the commands in the PR for other lanes to replay. Land after current-head CI and retire each
+   and `app` to `dashboard` or `till`. Use live PR #4335 for the full Dashboard replay. Set
+   `before=$(git merge-base origin/main "$split")` and omit the recipe's working-order `jq` line.
+   Copy the new mover and map into both trees. Add new branch names to the branch map and drop
+   removed names such as `RecoveryPackKeyState` on #4335. Run the mover from each tree. Compare
+   the two moved trees, verify the branch edits, typecheck and run focused tests. Include the
+   commands and affected open branches in the PR. Land after current-head CI and retire each
    map with the mover once lanes finish replaying. [Replay setup](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
 
    ```sh
