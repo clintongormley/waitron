@@ -83,16 +83,7 @@ declare module "@waitron/shared" {
     "menu.deleted": { menuId: string };
     "menu.delete_default": { menuId: string };
     "set_menu.invalid": {
-      field:
-        | "setPrice"
-        | "setVatClass"
-        | "setTakeawayVatClass"
-        | "lines"
-        | "count"
-        | "courseId"
-        | "courseIds"
-        | "variants"
-        | "surcharge";
+      field: "setPrice" | "lines" | "count" | "courseId" | "courseIds" | "variants" | "surcharge";
     };
     "set_menu.not_found": { menuId: string };
     "set_menu.not_publishable": { menuId: string; count: number };

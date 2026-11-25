@@ -1370,7 +1370,7 @@ it.each([
   ["en", "setPrice", "0.00 to 10,000.00"],
   ["es", "surcharge", "0,00 a 10.000,00"],
   ["en", "lines", "20 inclusion lines"],
-  ["es", "setTakeawayVatClass", "IVA para llevar"],
+  ["es", "courseId", "orden de plato que siga disponible"],
 ])("explains an invalid set-menu field in %s (%s)", (locale, field, expected) => {
   expect(codeMessage("set_menu.invalid", locale, { field })).toContain(expected);
 });

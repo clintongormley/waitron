@@ -182,7 +182,10 @@ eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuD
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
 product's current ones. A line added to a held order or a tab stores that class
 (`working_order_lines.vat_class`) with its gross price, which is the same either way, and a
-`takeaway_vat_class`. Neither label decides any line's rate. The order's `working_orders.dining` picks
+`takeaway_vat_class`. Neither label decides any line's rate. A set menu has no VAT of its own: the
+two writers that add a set menu's line (`apps/server/src/set-menu-count.ts`,
+`apps/server/src/set-menu-regroup.ts`) store the fixed placeholder `reduced` in both columns until
+the columns go in VAT rates piece B, PR B5. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,

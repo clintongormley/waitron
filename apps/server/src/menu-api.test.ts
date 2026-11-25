@@ -1489,7 +1489,6 @@ describe("mountMenuApi — the venue's menus", () => {
         name: "Lunch set",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       }),
     );
     for (const response of [
@@ -4545,7 +4544,6 @@ describe("all menu structures", () => {
         name: `Set menu ${crypto.randomUUID()}`,
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       }),
     );
     const expectedMenus = (await (await send(app, "GET", "/management-api/menus")).json()) as {
@@ -4822,7 +4820,6 @@ describe("publishing a menu", () => {
         name: "Empty set menu",
         kind: "set_menu",
         setPrice: "14.00",
-        setVatClass: "reduced",
       });
       await addMember(tx, root, { kind: "set_menu", menuId: draft.id });
       return draft.id;
@@ -5082,7 +5079,6 @@ describe("publishing a menu", () => {
         name: "No own publication",
         kind: "set_menu",
         setPrice: "14",
-        setVatClass: "reduced",
       }),
     );
     const path = "/management-api/menus/status";

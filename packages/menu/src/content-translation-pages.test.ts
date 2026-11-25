@@ -54,7 +54,6 @@ describe("multilingual item pages", () => {
         name: "Lunch special",
         kind: "set_menu",
         setPrice: "12.00",
-        setVatClass: "reduced",
       });
       const root = await requireMenuRoot(tx, set.id);
       const refs = [{ kind: "menu", id: root }] as const;

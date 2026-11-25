@@ -36,7 +36,6 @@ const menu: MenuSummary = {
   active: true,
   kind: "menu",
   setPrice: null,
-  setVatClass: null,
 };
 const daily: MenuSummary & { heldBy: { id: string; name: string }[] } = {
   id: "daily",
@@ -44,7 +43,6 @@ const daily: MenuSummary & { heldBy: { id: string; name: string }[] } = {
   active: true,
   kind: "set_menu",
   setPrice: "14.00",
-  setVatClass: "reduced",
   heldBy: [menu],
 };
 const details: SetMenuDetails = {
@@ -52,8 +50,6 @@ const details: SetMenuDetails = {
   name: "Daily menu",
   names: { en: "Today's menu", es: "Daily lunch for guests" },
   price: "14.00",
-  vatClass: "reduced",
-  takeawayVatClass: null,
   dishes: [],
   lines: [],
   courses: [],
@@ -451,10 +447,10 @@ it("recovers the ordinary Prices tab after the menus list is retried", async () 
   });
 });
 
-it("keeps a set menu address when settings fail before the menu list answers", async () => {
+it("keeps a set menu address when content languages fail before the menu list answers", async () => {
   const client = api();
   let answer!: (menus: MenuSummary[]) => void;
-  client.getMenuSettings.mockRejectedValueOnce(new Error("Settings unavailable"));
+  client.getContentLanguages.mockRejectedValueOnce(new Error("Languages unavailable"));
   client.listMenus.mockReturnValueOnce(
     new Promise((resolve) => {
       answer = resolve;
@@ -533,8 +529,6 @@ it("opens the new set menu's editor after saving its terms", async () => {
     kind: "set_menu",
     names: {},
     setPrice: "14.00",
-    setVatClass: "reduced",
-    setTakeawayVatClass: null,
   });
 });
 

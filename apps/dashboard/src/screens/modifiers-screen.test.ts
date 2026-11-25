@@ -104,7 +104,7 @@ const products: Product[] = [
 ];
 
 const menus: MenuSummary[] = [
-  { id: "cat-1", name: "Main", active: true, kind: "menu", setPrice: null, setVatClass: null },
+  { id: "cat-1", name: "Main", active: true, kind: "menu", setPrice: null },
 ];
 
 /** Staff name, customer-facing name and kitchen name all read differently (CLAUDE.md §3). */

@@ -13,34 +13,25 @@ import {
 } from "@waitron/ui";
 import {
   MAX_SET_MENU_AMOUNT_CENTS,
-  VAT_CLASSES,
   centsToDecimal,
   stringToCents,
   type ContentLanguages,
-  type VatClass,
 } from "@waitron/shared";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { DashboardApi, MenuSummary, SetMenuDetails } from "../api/client.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
-import { vatClassLabel } from "../i18n/domain.js";
-import { fill, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { optionalTextFields, priceField, textField } from "./form-fields.js";
 import { sameValue } from "./product-editor-model.js";
 
-type Value = Pick<
-  SetMenuDetails,
-  "id" | "name" | "names" | "price" | "vatClass" | "takeawayVatClass"
->;
+type Value = Pick<SetMenuDetails, "id" | "name" | "names" | "price">;
 type Draft = {
   name: string;
   names: Record<string, string>;
   setPrice: string;
-  setVatClass: VatClass;
-  setTakeawayVatClass: VatClass | null;
 };
 
 @customElement("dashboard-set-menu-terms-form")
@@ -75,7 +66,6 @@ export class SetMenuTermsForm extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) creating = false;
   @property({ attribute: false }) value: Value | null = null;
-  @property({ attribute: false }) defaultVatClass: VatClass = "general";
   @property({ attribute: false }) languages: ContentLanguages = {
     defaultLanguage: "en",
     languages: ["en"],
@@ -84,8 +74,6 @@ export class SetMenuTermsForm extends LitElement {
     name: "",
     names: {},
     setPrice: "",
-    setVatClass: "general",
-    setTakeawayVatClass: null,
   };
   @state() private saving = false;
   @state() private refusal: Record<string, string> = {};
@@ -132,8 +120,6 @@ export class SetMenuTermsForm extends LitElement {
       name: value?.name ?? "",
       names: value?.names ?? {},
       setPrice: value?.price ?? "",
-      setVatClass: value?.vatClass ?? this.defaultVatClass,
-      setTakeawayVatClass: value?.takeawayVatClass ?? null,
     };
     this.#baseline = this.#submitted();
     this.#scope?.commit(this.#baseline);
@@ -238,31 +224,6 @@ export class SetMenuTermsForm extends LitElement {
     }
   }
 
-  #vatField(
-    key: "setVatClass" | "setTakeawayVatClass",
-    label: string,
-    value: VatClass | null,
-    options: { value: string; label: string }[],
-    errors: Record<string, string>,
-  ) {
-    return html`<wt-combobox
-      name=${key}
-      label=${label}
-      .required=${key === "setVatClass"}
-      .options=${options}
-      .placeholder=${key === "setTakeawayVatClass" ? options[0]!.label : ""}
-      .value=${value ?? ""}
-      .disabled=${this.saving}
-      .error=${errors[key] ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: VatClass | "" }>) => {
-        event.stopPropagation();
-        const value = event.detail.value;
-        if (key === "setTakeawayVatClass") this.#change(key, value || null);
-        else if (value !== "") this.#change(key, value);
-      }}
-    ></wt-combobox>`;
-  }
-
   override render() {
     const validation = this.#feedback.attempted ? this.#validate() : {};
     const errors = { ...this.#feedback.remaining(this.refusal), ...validation };
@@ -275,16 +236,10 @@ export class SetMenuTermsForm extends LitElement {
       [
         "name",
         "setPrice",
-        "setVatClass",
-        "setTakeawayVatClass",
         ...this.languages.languages.map((language) => `names-${language}`),
       ].filter((key) => errors[key]),
     );
     const action = saveActionState(this.#scope);
-    const taxes = VAT_CLASSES.map((value) => ({ value, label: vatClassLabel(value) }));
-    const same = fill("menus.set_takeaway_vat_same", {
-      tax: vatClassLabel(this.draft.setVatClass),
-    });
     const actions = html`<wt-form-actions
       slot=${this.creating ? "footer" : nothing}
       .error=${this.#feedback.message(errors, fieldKeys, t("form.fix_fields"))}
@@ -333,8 +288,6 @@ export class SetMenuTermsForm extends LitElement {
         )}
       </fieldset>
       ${priceField(context, "setPrice", t("menus.set_menu_price"), this.draft.setPrice, (price) => this.#change("setPrice", price), true)}
-      ${this.#vatField("setVatClass", t("menus.set_menu_eat_in_vat"), this.draft.setVatClass, taxes, errors)}
-      ${this.#vatField("setTakeawayVatClass", t("editor.takeaway_vat"), this.draft.setTakeawayVatClass, [{ value: "", label: same }, ...taxes], errors)}
       ${this.creating ? nothing : actions}
     </form>`;
     return this.creating

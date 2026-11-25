@@ -20,9 +20,8 @@ import {
   centsToDecimal,
   MAX_SET_MENU_AMOUNT_CENTS,
   stringToCents,
-  VAT_CLASSES,
 } from "@waitron/shared";
-import type { SetMenuLine, SetMenuProblem, VatClass } from "@waitron/shared";
+import type { SetMenuLine, SetMenuProblem } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { reachableMenuItem, requireMenuRoot, syncMenuOffers } from "./menu-structure.js";
@@ -45,8 +44,6 @@ async function setMenuRow(tx: Transaction, menuId: string) {
     .select({
       name: menus.name,
       price: menus.setPrice,
-      vatClass: menus.setVatClass,
-      takeawayVatClass: menus.setTakeawayVatClass,
     })
     .from(menus)
     .where(and(eq(menus.id, menuId), eq(menus.active, true), eq(menus.kind, "set_menu")));
@@ -54,8 +51,6 @@ async function setMenuRow(tx: Transaction, menuId: string) {
   return {
     name: menu.name,
     price: centsToDecimal(menu.price!),
-    vatClass: menu.vatClass as VatClass,
-    takeawayVatClass: menu.takeawayVatClass as VatClass | null,
   };
 }
 
@@ -85,15 +80,6 @@ export function setMenuSurchargeCents(surcharge: string): number {
   throw new AppError("set_menu.invalid", { field: "surcharge" });
 }
 
-export function setMenuVatClass(
-  vatClass: VatClass | null | undefined,
-  field: "setVatClass" | "setTakeawayVatClass" = "setVatClass",
-): VatClass {
-  if (vatClass == null || !VAT_CLASSES.includes(vatClass))
-    throw new AppError("set_menu.invalid", { field });
-  return vatClass;
-}
-
 export interface SetMenuDishSetting {
   menuItemId: string;
   productId: string;
@@ -117,8 +103,6 @@ export interface SetMenuDetails {
   name: string;
   names: Record<string, string>;
   price: string;
-  vatClass: VatClass;
-  takeawayVatClass: VatClass | null;
   dishes: SetMenuDishSetting[];
   lines: SetMenuLine[];
   courses: { id: string; name: string }[];
@@ -342,7 +326,7 @@ async function dishSettings(
 
 export type SetMenuDraft = Pick<
   SetMenuDetails,
-  "name" | "names" | "price" | "vatClass" | "takeawayVatClass" | "dishes" | "lines" | "problems"
+  "name" | "names" | "price" | "dishes" | "lines" | "problems"
 > & { changedAt: string };
 
 export async function readSetMenuDrafts(
@@ -353,8 +337,6 @@ export async function readSetMenuDrafts(
     menuName: string;
     names: Record<string, string>;
     setPrice: number | null;
-    setVatClass: string | null;
-    setTakeawayVatClass: string | null;
     updatedAt: Date;
   }[],
 ): Promise<Map<string, SetMenuDraft>> {
@@ -375,8 +357,6 @@ export async function readSetMenuDrafts(
         name: row.menuName,
         names: row.names,
         price: centsToDecimal(row.setPrice!),
-        vatClass: row.setVatClass as VatClass,
-        takeawayVatClass: row.setTakeawayVatClass as VatClass | null,
         changedAt: row.updatedAt.toISOString(),
         dishes: dishes.get(row.rootSectionId) ?? [],
         lines: linesForDraft(lines.get(row.menuId)?.values() ?? []),

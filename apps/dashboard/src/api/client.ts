@@ -575,15 +575,10 @@ export type { DashboardMenuSummary, SetMenuDetails, SetMenuLine };
 
 type SetMenuDraftTerms = {
   setPrice?: string;
-  setVatClass?: VatClass;
-  setTakeawayVatClass?: VatClass | null;
 };
 
 type CreateMenuDetails = Omit<SectionInput, "internalName"> &
-  (
-    | { kind?: "menu"; setPrice?: never; setVatClass?: never; setTakeawayVatClass?: never }
-    | ({ kind: "set_menu" } & SetMenuDraftTerms)
-  );
+  ({ kind?: "menu"; setPrice?: never } | ({ kind: "set_menu" } & SetMenuDraftTerms));
 
 type SetMenuDishesResult = { details: SetMenuDetails; addedLines: SetMenuLine[] };
 
@@ -593,7 +588,6 @@ export interface MenuSummary {
   active: boolean;
   kind: MenuKind;
   setPrice: string | null;
-  setVatClass: VatClass | null;
 }
 
 export interface CategorySummary {

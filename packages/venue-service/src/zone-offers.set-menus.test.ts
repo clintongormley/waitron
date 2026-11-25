@@ -63,11 +63,13 @@ it("serves Lunch's Daily menu with its published terms and keeps its dishes out 
       versionIds: [versionId],
       orderable: true,
       name: "Daily menu",
-      terms: { price: "14.00", vatClass: "reduced", takeawayVatClass: "general" },
+      terms: { price: "14.00" },
       structure: {
         members: expect.arrayContaining([expect.objectContaining({ menuItemId: f.soupItem })]),
       },
     });
+    expect(copy!.terms).not.toHaveProperty("vatClass");
+    expect(copy!.terms).not.toHaveProperty("takeawayVatClass");
     expect(copy?.offers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

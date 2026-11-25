@@ -138,7 +138,6 @@ it("names a set menu's direct holder and the menu that includes it", async () =>
       name: "Daily",
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "general",
     });
     await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
     await addMember(tx, f.dinnerRoot, section(f.lunchRoot));
@@ -157,7 +156,6 @@ it("removes a deleted set menu’s placement from the holder’s draft", async (
       name: "Daily",
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "general",
     });
     await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
     return set;

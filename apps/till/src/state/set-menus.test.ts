@@ -13,8 +13,6 @@ function copy(menuId: string, versionId: string, newestOnSale = true): ServedSet
     name: menuId,
     terms: {
       price: "14.00",
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       names: {},
       lines: [{ id: "main-place", count: 1, courseIds: ["mains"] }],
     },

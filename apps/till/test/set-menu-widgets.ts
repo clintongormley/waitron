@@ -58,8 +58,6 @@ export const daily: ServedSetMenuCopy = {
   changedAt: "2026-11-19T10:00:00Z",
   terms: {
     price: "14.00",
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     names: {},
     lines: [
       { id: "starters", count: 2, courseIds: ["starter"] },

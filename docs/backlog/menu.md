@@ -779,13 +779,12 @@ it and stays there (revised 18 November 2026). A set-menu draft has storage for 
 lines and dish choices. Service periods and the venue default take ordinary menus.
 A full menu's structure can hold a set-menu reference and keeps its ordinary offers separate.
 Set-menu drafts can store dish and variant surcharges, leave variants out, copy dishes and
-add a line for each new course. Drafts can store an eat-in and an optional takeaway VAT class.
-Dishes and variants can have different rates from the set menu. Draft writes still enforce
+add a line for each new course. A set menu has no VAT of its own. Draft writes still enforce
 portion-only units and the surcharge limit. A dish can have its own course in the draft.
 Publishing or scheduling a full menu freezes each set menu it holds and refuses drafts with
 problems. Published copies protect their dishes and photos. Preview reports set-menu placements
 and edits. Its existing allergen review and extras-portion warnings include set-menu offers.
-The live correction dialog starts from the full menu's own dishes and modifiers. Wording, VAT and
+The live correction dialog starts from the full menu's own dishes and modifiers. Wording and
 modifier corrections also reach matching dishes and modifiers in the copies. A dish offered only
 by a set menu can be corrected through the API. Extras usage and routing include set-menu dishes.
 The till's zone offers now include published set-menu copies. They identify the newest copy on sale,
@@ -811,7 +810,7 @@ with no place, and move a set menu with its dishes. At the Counter, staff can st
 takeaway with a set menu, park it and retrieve the recorded menu and its prices.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
-The dashboard can open an existing set-menu draft, edit its name, price, VAT rates and inclusion
+The dashboard can open an existing set-menu draft, edit its name, price and inclusion
 lines, and show what to fix before publishing. A full menu’s Preview links to its set menus with changes or publication problems.
 Managers can add and copy dishes in a set-menu draft, give a dish a course for that set menu, and
 edit variant choices. The Dishes Save bar stages dish surcharges across courses. The editor
@@ -837,7 +836,9 @@ taken away, and its price is not split between its items' rates; items ordered s
 away keep their own rates. Covered dishes may be left off the ticket, and a full invoice lists
 the menu and its supplements the same way (owner, 2026-11-18). Owner's decision, 2026-11-18: a set menu carries its own two VAT rates, eaten in
 and taken away, set by the manager like any product's (normally the food's, 10%); any dish may be
-included and takes the menu's rate, and set menus are allowed on takeaway orders. The spec's
+included and takes the menu's rate, and set menus are allowed on takeaway orders. (2026-11-25: replaced by the owner's 21 November VAT design
+([2026-11-21-vat-rates-design.md](../superpowers/specs/2026-11-21-vat-rates-design.md)): a set menu
+has no VAT of its own, and its two VAT fields are gone.) The spec's
 refusal of set menus on takeaway and delivery orders, and the plans' refusal of a dish at another
 rate, go. 2026-11-24: the owner chose instead to divide a takeaway set menu's price between its
 dishes by their à la carte prices, each part at its dish's rate; question 4 of the 19 November sheet

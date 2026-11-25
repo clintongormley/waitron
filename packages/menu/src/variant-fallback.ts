@@ -70,7 +70,7 @@ export const effectiveProductColumns = {
   vatClass: owned(products.vatClass, parentProducts.vatClass),
   // A copy's takeaway label is the eat-in one: a product line taken away files at its product's
   // takeaway rate (`product_takeaway_vat_rates`), and nothing reads this label for it. It goes with
-  // the label columns (plan PR L).
+  // the label columns (VAT rates piece B, PR B5).
   takeawayVatClass: owned(products.vatClass, parentProducts.vatClass) as SQL<VatClass>,
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),

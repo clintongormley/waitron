@@ -14,7 +14,6 @@ const daily: DashboardMenuSummary = {
   kind: "set_menu",
   active: true,
   setPrice: "14.00",
-  setVatClass: "reduced",
   heldBy: [{ id: "lunch", name: "Lunch menus" }],
 };
 
@@ -34,7 +33,6 @@ it.each([
     {
       api: {
         listMenus: async () => [daily, { ...daily, id: "unused", name: "Unused", heldBy: [] }],
-        getMenuSettings: async () => ({ defaultProductVatClass: "general" }),
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       } as unknown as DashboardApi,
     },

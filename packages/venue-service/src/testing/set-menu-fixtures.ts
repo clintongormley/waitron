@@ -34,8 +34,6 @@ export async function setMenuFixture(tx: Transaction) {
     kind: "set_menu",
     name: "Daily menu",
     setPrice: "14.00",
-    setVatClass: "reduced",
-    setTakeawayVatClass: "general",
   });
   const [starters, mains, drinks, sharing] = (
     await tx

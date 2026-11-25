@@ -126,7 +126,7 @@ Looked at on the demo venue and in the code:
 | Product list, variant's inherited price | unmarked | muted, upright (**my call**) |
 | Menu Price overrides | italic placeholder | muted, upright; bold and bar stay |
 | Menu patch window, Edit translations | italic placeholder | arrow where the label shows |
-| Set menu, VAT when taken away | "Same as Eat-in VAT — …" | inherit row |
+| Set menu, VAT when taken away | "Same as Eat-in VAT — …" | inherit row. _2026-11-25: the field is gone (VAT rates piece B, PR B2), so nothing to change._ |
 | Set menu dishes, Course | "{course} (from the product)" | inherit row |
 | Set menu dishes, Surcharge | "Included" in italic | upright hint, no arrow |
 | Set menu variant, Surcharge | italic placeholder | arrow when it is the dish's surcharge; "Included" is a hint, with no arrow |

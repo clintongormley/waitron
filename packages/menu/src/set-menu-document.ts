@@ -47,8 +47,6 @@ export function freezeSetMenu(
     changedAt: draft.changedAt,
     terms: {
       price: draft.price,
-      vatClass: draft.vatClass,
-      takeawayVatClass: draft.takeawayVatClass ?? draft.vatClass,
       names: draft.names,
       lines: draft.lines,
     },

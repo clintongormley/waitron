@@ -569,13 +569,19 @@ Assertions: run the label script with `MODE=A` on the task's packages (measured:
   `upgrade-sale.ts:95`, `set-menu-count.ts:91-92`, `free-items.ts:161`. D8's `$defaultFn` in
   `packages/db/src/schema/{orders,menus}.ts`; run `starting-migrations` and the two split tests read 1
   named ("retains the set-menu placement metadata when carving a stored dish row", "splits a 50 g child
-  with its dish without changing either frozen price").
+  with its dish without changing either frozen price"). _2026-11-25: also the placeholder in
+  `set-menu-regroup.ts` (arrived with #4278); when the placeholders move to the schema default, repoint
+  the two file names in `docs/developers/products.md`._
 - [ ] **B3.2 Menu production.** `packages/menu/src/`: `menu-document.ts:1120, 1132, 1138, 1227`,
   `menu-navigation.ts:184, 259, 362`, `offered-modifiers.ts:121-122, 153-154`,
   `operations.ts:225, 268, 321, 500-501, 522-523, 545-546, 1035, 1114, 1137, 1150, 1317-1318, 1364-1365`,
   `product-editor.ts:50, 67, 89, 228-229`, `variants.ts:486-504, 547-548, 563-564`,
   `variant-fallback.ts:67, 71`; `product-types.ts:87, 122, 176, 219`; the `"vat"` member of
-  `ProductChangeField` (`menu-document-types.ts:228, 365`) with its dashboard words. `MODE=A` on
+  `ProductChangeField` (`menu-document-types.ts:228, 365`) with its dashboard words
+  (_2026-11-25: those words are now in `apps/dashboard/src/widgets/menu-preview-labels.ts` (`PRODUCT_FIELDS`), and #4308
+  added a reader in `productFields` (`menu-document.ts`, `field === "vat" || DECLARATIONS.includes(field)`, which becomes
+  `DECLARATIONS.includes(field)`) and the case "names allergens and VAT on Lemonade and its extra" in
+  `menu-publication.test.ts`_). `MODE=A` on
   `packages/menu`; the label cases of `menu-document`, `menu-publication`, `menu-change-navigation` (about 35).
 - [ ] **B3.3 Menu's other label cases** (`offered-modifiers`, `operations`, `variant-fallback`,
   `variants.db`, `product-editor`, `settings`, `menu-patch`: about 30 by hand) and

@@ -13,7 +13,6 @@ export interface SetMenuCopy extends SetMenuOffer {
   setMenuId: string;
   versionId: string;
   name: string;
-  terms: Pick<ServedSetMenuCopy["terms"], "vatClass" | "takeawayVatClass">;
 }
 
 export function setMenuOfferOf(copy: ServedSetMenuCopy): SetMenuOffer {
@@ -74,13 +73,11 @@ export function setMenuProductIds(copy: PublishedSetMenu): string[] {
 }
 
 export function setMenuCopyOf(copy: ServedSetMenuCopy, versionId: string): SetMenuCopy {
-  const { vatClass, takeawayVatClass } = copy.terms;
   return {
     ...setMenuOfferOf(copy),
     setMenuId: copy.menuId,
     name: copy.name,
     versionId,
-    terms: { vatClass, takeawayVatClass },
   };
 }
 

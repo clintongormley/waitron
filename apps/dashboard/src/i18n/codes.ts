@@ -2053,14 +2053,6 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
     en: "Enter a surcharge from 0.00 to 10,000.00.",
     es: "Indica un suplemento de 0,00 a 10.000,00.",
   },
-  setVatClass: {
-    en: "Choose an eat-in VAT rate.",
-    es: "Elige un tipo de IVA para consumo en el local.",
-  },
-  setTakeawayVatClass: {
-    en: "Choose a takeaway VAT rate or clear it to use the Eat-in VAT.",
-    es: "Elige un tipo de IVA para llevar o quítalo para usar el IVA para comer aquí.",
-  },
   lines: {
     en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",
     es: "Un menú puede tener hasta 20 líneas. Combina varios órdenes de plato en una línea o elimina una.",

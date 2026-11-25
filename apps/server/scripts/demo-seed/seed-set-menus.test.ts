@@ -76,11 +76,9 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
         newestOnSale: true,
         versionIds: [holder!.versionId],
       });
-      expect(copy.terms).toMatchObject({
-        price,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
-      });
+      expect(copy.terms).toMatchObject({ price });
+      expect(copy.terms).not.toHaveProperty("vatClass");
+      expect(copy.terms).not.toHaveProperty("takeawayVatClass");
       expect(
         copy.terms.lines.map(({ count, courseIds }) => [
           count,

@@ -109,8 +109,6 @@ useVenueDb({
         kind: "set_menu",
         name: "Coffee menu",
         setPrice: "3.00",
-        setVatClass: "reduced",
-        setTakeawayVatClass: "general",
       });
       await addSetMenuDishes(tx, setMenuId, [
         { productId: product.id, excludedVariantIds: [small!.id] },

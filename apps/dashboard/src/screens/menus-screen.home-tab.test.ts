@@ -83,7 +83,6 @@ const menus: MenuSummary[] = [
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   },
   {
     id: "menu-dinner",
@@ -91,7 +90,6 @@ const menus: MenuSummary[] = [
     active: true,
     kind: "menu",
     setPrice: null,
-    setVatClass: null,
   },
 ];
 

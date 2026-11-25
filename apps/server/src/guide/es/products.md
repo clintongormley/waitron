@@ -326,9 +326,8 @@ del árbol verás la lista afectada y el motivo.
 ## Menús {#set-menus}
 
 Para ofrecer varios platos por un precio único, abre **Menús** en **Productos y cartas**
-y elige **Añadir menú**. Ponle un nombre y un precio. Si se consume en el local, se cobra con el único tipo de
-[Cómo se cobra el IVA](products.md#vat). Añade los nombres para clientes en
-los idiomas que uses y guarda.
+y elige **Añadir menú**. Ponle un nombre y un precio, añade los nombres para clientes en los
+idiomas que uses y guarda.
 
 En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones

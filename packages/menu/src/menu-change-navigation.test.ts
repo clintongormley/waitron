@@ -1060,8 +1060,6 @@ describe("declaration changes", () => {
         name: "Daily menu",
         terms: {
           price: "15.00",
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           names: { en: "Daily menu" },
           lines: [],
         },

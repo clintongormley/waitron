@@ -16,7 +16,6 @@ export const daily: SetMenuCopy = {
   versionId: "version",
   name: "Daily menu",
   priceCents: 1400,
-  terms: { vatClass: "reduced", takeawayVatClass: "reduced" },
   lines: [
     { count: 1, courseIds: ["starters"] },
     { count: 1, courseIds: ["mains"] },
@@ -38,7 +37,6 @@ export const special: SetMenuCopy = {
   versionId: "version",
   name: "Special menu",
   priceCents: 2000,
-  terms: { vatClass: "reduced", takeawayVatClass: "reduced" },
   lines: [
     { count: 1, courseIds: ["starters"] },
     { count: 1, courseIds: ["mains", "starters"] },

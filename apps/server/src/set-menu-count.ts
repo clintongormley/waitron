@@ -85,8 +85,9 @@ export async function setSetMenuCount(
       servedQuantity: 1000,
       unitPriceGross: price,
       lineTotal: price,
-      vatClass: copy.terms.vatClass,
-      takeawayVatClass: copy.terms.takeawayVatClass ?? copy.terms.vatClass,
+      // vat_class and takeaway_vat_class are required; no rate reads them.
+      vatClass: "reduced" as const,
+      takeawayVatClass: "reduced" as const,
       creditedTo: personId,
       setMenuRole: "set_menu" as const,
       setMenuId: menuId,

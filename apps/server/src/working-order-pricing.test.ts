@@ -263,7 +263,6 @@ describe("a dish's extras children", () => {
         name: "Lunch set menu",
         kind: "set_menu",
         setPrice: "18.00",
-        setVatClass: "reduced",
       });
       const tableId = await makeTable(tx);
       const tabId = await openExtrasTab(tx, cfg, tableId, [{ productId: coffeeId, quantity: "2" }]);

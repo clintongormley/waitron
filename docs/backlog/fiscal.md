@@ -916,9 +916,9 @@ at its dish's takeaway rate, and a takeaway set menu is no longer refused becaus
 24 November; piece B's first pull request, [plan](../superpowers/plans/2026-11-24-vat-rates-b.md)).
 The adviser is asked to confirm it ([question 4](../compliance/2026-11-19-adviser-meeting.md)). Left:
 
-- **Piece B, the rest** ([plan](../superpowers/plans/2026-11-24-vat-rates-b.md), PRs B2–B5): set
-  menus lose their own eat-in and takeaway VAT fields, then the old VAT class labels go: the
-  `vat_class` and `takeaway_vat_class` columns on products and order lines, their checks, the
+- **Piece B, the rest** ([plan](../superpowers/plans/2026-11-24-vat-rates-b.md), PRs B3–B5): the
+  old VAT class labels go: the `vat_class` and `takeaway_vat_class` columns on products and order
+  lines, set menus' leftover VAT class columns, their checks, the
   hidden `defaultProductVatClass` setting and the shared class table's last readers.
 - **Piece C** (no plan yet): scheduled and bulk rate changes. Today an edit to a product's takeaway rate
   replaces its one row from the beginning of time. Piece C must date an edit from the moment it is

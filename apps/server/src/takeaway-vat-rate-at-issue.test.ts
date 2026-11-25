@@ -510,8 +510,6 @@ async function lunchVenue(
       kind: "set_menu",
       name: "Lunch menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
-      setTakeawayVatClass: "general",
     });
     await addSetMenuDishes(
       tx,
