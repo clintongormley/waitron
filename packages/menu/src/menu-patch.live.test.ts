@@ -679,6 +679,7 @@ describe("declarations", () => {
     expect(await draft()).toEqual({
       ...(await app((tx) => readLiveMenu(tx, f.lunch, NOW))),
       queued: [],
+      declarations: expect.any(Object),
     });
     await declareMilk(f.soup);
     await setSoup("6.00");
@@ -697,5 +698,29 @@ describe("declarations", () => {
     const { requeued } = await patchQueued([declarations(soup)], [first.versionId]);
     expect(requeued).toHaveLength(2);
     expect((await draft())!.queued).toEqual([]);
+  });
+
+  it("readPatchDraft answers the current declarations of the dishes, variants and extras, scheduled version or none", async () => {
+    await declareMilk(f.lemonade);
+    await app((tx) => updateProduct(tx, f.extraLemon, { allergens: null }));
+    const { document, declarations: current } = (await draft())!;
+    const { offers } = document;
+    const lemonade = offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+    expect(lemonade.allergens).toEqual({});
+    const milk = {
+      allergens: { milk: {} },
+      dietOverride: { vegan: "no" },
+      diet: { vegan: "no", vegetarian: "unknown", contains: [] },
+      dietaryDeclarations: ["vegetarian"],
+    };
+    expect(current[f.lemonade]).toEqual(milk);
+    expect(current[f.large]).toEqual(milk);
+    expect(current[f.extraLemon]).toEqual({
+      allergens: null,
+      dietOverride: null,
+      diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+      dietaryDeclarations: [],
+    });
+    expect(current[f.soup]).toMatchObject({ allergens: {}, dietaryDeclarations: [] });
   });
 });

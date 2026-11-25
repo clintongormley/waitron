@@ -132,8 +132,12 @@ export const menuPatchDialogStyles = [
       min-width: 0;
       margin: 0;
       padding: 0;
-      padding-inline-start: var(--wt-space-5);
       border: 0;
+    }
+    .scheduled-items {
+      display: block;
+      color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-size-sm);
     }
     legend {
       padding: 0;

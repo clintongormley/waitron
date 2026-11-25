@@ -571,14 +571,17 @@ tests about +300.
 
 The dialog also lists each scheduled version that differs, with its date: a checkbox ticked when
 `stillOld`, sent as `queued` (owner, 2026-11-25 10:02). Nothing is listed until the declarations
-checkbox is ticked.
+checkbox is ticked. (Changed 2026-11-25 by a review: one list for the whole patch, on the review
+step, each version naming the items it differs for; per item it let a tick given for one cover
+another's deliberate copy. The review shows old → new values, from a `declarations` map the draft
+also answers, where it read "from the product".)
 
 - [ ] **Step 1: Failing tests.** The scheduled list: ticked and unticked rows, the date in the
   screen's language, only ticked ids are sent, nothing listed with the box unticked or no queued
   version. For a dish, a variant and an extra target, the dialog draws one
   checkbox "Use the product's current allergens and diets"; ticking it adds exactly
-  `{ target, field: "declarations", value: "product" }`; the review lists "Allergens and diets:
-  from the product". No free-typed allergen field exists (default 2). The Products guide, EN and
+  `{ target, field: "declarations", value: "product" }`; the review lists the old and new
+  values. No free-typed allergen field exists (default 2). The Products guide, EN and
   ES, gains one sentence: "Patch live menu can also put a product's current allergens and diets
   live without publishing." 
 - [ ] **Step 2–4:** run, implement (field primitives only, CLAUDE.md §3), run. Commit `-s`.

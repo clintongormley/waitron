@@ -436,15 +436,15 @@ Elige o quita una imagen igual que en el editor de productos. Un plato con varia
 precio de cada variante, así que corrige el precio en sus variantes, que su formulario muestra con su precio; corregir el
 plato nunca las cambia, salvo sus alérgenos y dietas. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
-extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
-de una carta incluida conserva el nombre o la imagen que le fija esa carpeta, y el nombre en un
+extra, o en dos listas de extras, se corrige en cada sitio por separado. Una sección que aparece
+dentro de la carpeta de una carta incluida conserva el nombre o la imagen que le fija esa carpeta, y el nombre en un
 idioma que las carpetas fijan en todos los sitios donde aparece la sección se muestra desactivado,
 con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aquí.
 
 Para corregir alérgenos o etiquetas dietéticas, [cámbialos primero en el
 producto](products.md#allergens) y luego marca **Usar los alérgenos y dietas actuales del producto**
-en su elemento de la corrección. Debajo aparecen
-las versiones programadas que difieren del producto: deja marcadas las que quieras corregir.
+en su elemento de la corrección. **Revisar** muestra lo que cambia y las versiones programadas que
+difieren del producto: marca las que quieras corregir.
 
 Una corrección no puede cambiar nada más: ni la unidad, la disponibilidad, el orden de plato ni
 la categoría, el orden de los elementos, los colores ni qué elementos y secciones tiene la carta.
@@ -460,7 +460,8 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 
 - Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas
   que se añaden a los pedidos desde entonces usan los valores corregidos. Las líneas que ya están
-  en pedidos abiertos mantienen su precio anterior.
+  en pedidos abiertos mantienen su precio anterior, pero las pantallas de cocina muestran sus
+  alérgenos y dietas corregidos.
 - En un pedido aparcado de caja, cambiar el nombre de una lista de opciones o de una de sus opciones
   hace lo mismo que después de publicar, como explica
   [Qué hace la caja con una lista](modifiers.md#till): con un nombre del personal nuevo, el pedido
@@ -469,10 +470,11 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
 - Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
-  sin la corrección, salvo los alérgenos y dietas de las versiones que dejes marcadas. Recibe un número nuevo, posterior al de la corrección, en **Versiones
-  programadas**, en la pestaña **Vista previa**.
+  sin la corrección, salvo los alérgenos y dietas de las versiones que marques. Recibe un número nuevo,
+  posterior al de la corrección, en **Versiones programadas**, en la pestaña **Vista previa**.
 - La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
-  poner los valores anteriores, salvo que corrijas también los productos.
+  poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los
+  productos.
 
 Un campo que vuelve a su valor publicado no cuenta como corrección. Si otra versión se publica
 mientras tienes correcciones o un campo que corregir en la ventana, la ventana sigue mostrando la

@@ -17,13 +17,13 @@ export async function readPatchDraft(
   const live = await readLiveMenu(tx, menuId, at);
   if (live === null) return null;
   const waiting = await waitingEditions(tx, menuId, at);
-  if (waiting.length === 0) return { ...live, queued: [] };
   const current = await readProductDeclarationValues(
     tx,
     [live, ...waiting].flatMap(({ document }) => declaredProductIds(document)),
   );
   return {
     ...live,
+    declarations: Object.fromEntries(current),
     queued: queuedDeclarationDrift(waiting, current, liveDeclarations(live.document)),
   };
 }

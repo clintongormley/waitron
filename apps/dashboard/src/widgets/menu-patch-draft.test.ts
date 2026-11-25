@@ -12,6 +12,7 @@ import {
   patchTree,
   scheduledCorrections,
   type PatchTreeNode,
+  type ScheduledChoices,
 } from "./menu-patch-draft.js";
 import { documentProduct, documentSection, menuDocument } from "./test-helpers.js";
 
@@ -897,6 +898,7 @@ describe("scheduledCorrections", () => {
       number: 3,
       since: "2026-10-27T09:00:00.000Z",
       document: lunch(),
+      declarations: {},
       queued,
     };
   }
@@ -917,7 +919,7 @@ describe("scheduledCorrections", () => {
       differing("q-bowl", [bowl, true]),
       differing("q-cheese", [extraCheese, true]),
     );
-    const none = new Map<string, boolean>();
+    const none: ScheduledChoices = new Map();
     expect(ticks(draft, [], none)).toEqual([]);
     expect(ticks(draft, [{ target: soup, field: "price", value: "4.00" }], none)).toEqual([]);
     expect(ticks(draft, [declared(soup)], none)).toEqual([["q-soup", true]]);
@@ -937,7 +939,7 @@ describe("scheduledCorrections", () => {
       differing("q-mixed", [soup, true], [salad, false]),
       differing("q-old", [soup, true], [salad, true]),
     );
-    const none = new Map<string, boolean>();
+    const none: ScheduledChoices = new Map();
     expect(ticks(draft, [declared(soup)], none)).toEqual([
       ["q-mixed", true],
       ["q-old", true],
@@ -952,49 +954,31 @@ describe("scheduledCorrections", () => {
     ]);
   });
 
-  it("keeps the person's choice for a scheduled time over what the version still holds", () => {
+  it("names the changed items each version differs for", () => {
     const draft = live(
-      differing("q-1", [soup, true]),
-      differing("q-2", [soup, false], [salad, false]),
+      differing("q-1", [soup, true], [salad, false], [bowl, true]),
+      differing("q-2", [extraCheese, true], [salad, true]),
     );
-    const choices = new Map([
-      ["q-1-time", false],
-      ["q-2-time", true],
-    ]);
-    const chosen = [
-      ["q-1", false],
-      ["q-2", true],
-    ];
-    expect(ticks(draft, [declared(soup)], choices)).toEqual(chosen);
-    expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual(chosen);
+    const items = (...staged: MenuPatchTarget[]) =>
+      scheduledCorrections(draft, staged.map(declared), new Map()).map(({ targets }) => targets);
+    expect(items(salad, soup)).toEqual([[soup, salad], [salad]]);
+    expect(items(extraCheese)).toEqual([[extraCheese]]);
   });
 
-  it("lists a version for a dish the menu holds twice whichever of its places is ticked", () => {
-    const draft = live(differing("q-soup", [soup, true]));
-    draft.document.offers["mi-soup-2"] = {
-      ...draft.document.offers["mi-soup"]!,
-      id: "mi-soup-2",
-    };
-    const second = { kind: "offer", menuItemId: "mi-soup-2" } as const;
-    const rows = scheduledCorrections(draft, [declared(second)], new Map());
-    expect(rows.map(({ versionId }) => versionId)).toEqual(["q-soup"]);
-    expect(rows[0]!.differsFor(second)).toBe(true);
-    expect(rows[0]!.differsFor(soup)).toBe(true);
-    expect(rows[0]!.differsFor(salad)).toBe(false);
+  it("leaves a version the person unticked unticked, whichever items are ticked", () => {
+    const draft = live(differing("q-1", [soup, true], [salad, true]));
+    const choices = new Map([["q-1-time", false as const]]);
+    expect(ticks(draft, [declared(soup)], choices)).toEqual([["q-1", false]]);
+    expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual([["q-1", false]]);
   });
 
-  it("matches a variant by its product, whichever place of its dish is ticked", () => {
-    const draft = live(differing("q-bowl", [bowl, true]));
-    const second = { kind: "variant", menuItemId: "mi-soup-2", variantId: "v-bowl" } as const;
-    expect(ticks(draft, [declared(second)], new Map())).toEqual([["q-bowl", true]]);
-  });
-
-  it("passes over a target only a set menu holds", () => {
-    const draft = live(
-      differing("q-set", [{ kind: "offer", menuItemId: "mi-in-set-menu" }, true], [soup, true]),
-    );
+  it("keeps a version the person ticked only until it differs on purpose for another item", () => {
+    const draft = live(differing("q-1", [soup, false], [salad, true], [bowl, false]));
     const [row] = scheduledCorrections(draft, [declared(soup)], new Map());
-    expect(row!.differsFor(soup)).toBe(true);
-    expect(row!.differsFor(salad)).toBe(false);
+    expect(row!.ticked).toBe(false);
+    const choices = new Map([["q-1-time", row!.deliberate]]);
+    expect(ticks(draft, [declared(soup)], choices)).toEqual([["q-1", true]]);
+    expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual([["q-1", true]]);
+    expect(ticks(draft, [declared(soup), declared(bowl)], choices)).toEqual([["q-1", false]]);
   });
 });

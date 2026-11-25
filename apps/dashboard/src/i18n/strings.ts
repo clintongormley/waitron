@@ -4102,9 +4102,10 @@ export const en = {
   "menu_patch.declarations": "Use the product's current allergens and diets",
   "menu_patch.declarations_variants":
     "Use the product's current allergens and diets, variants included",
-  "menu_patch.declarations_by_dish": "Set on the dish.",
+  "menu_patch.declarations_by_dish": "Corrected with the dish.",
   "menu_patch.declarations_label": "Allergens and diets",
-  "menu_patch.declarations_line": "{item}: {field}: from the product",
+  "menu_patch.declarations_same": "{item}: {field}: no change",
+  "menu_patch.variants_included": "{item}, variants included",
   "menu_patch.scheduled": "Correct these scheduled versions too",
   "menu_patch.corrected_note":
     "The version going live on {date} also gets these allergens and diets, but no other change.",
@@ -8965,14 +8966,15 @@ export const es: Record<StringKey, string> = {
   "menu_patch.declarations": "Usar los alérgenos y dietas actuales del producto",
   "menu_patch.declarations_variants":
     "Usar los alérgenos y dietas actuales del producto, también en sus variantes",
-  "menu_patch.declarations_by_dish": "Se marca en el plato.",
+  "menu_patch.declarations_by_dish": "Se corrige junto con el plato.",
   "menu_patch.declarations_label": "Alérgenos y dietas",
-  "menu_patch.declarations_line": "{item}: {field}: del producto",
+  "menu_patch.declarations_same": "{item}: {field}: sin cambios",
+  "menu_patch.variants_included": "{item}, variantes incluidas",
   "menu_patch.scheduled": "Corregir también estas versiones programadas",
   "menu_patch.corrected_note":
     "La versión que se publica el {date} también recibe estos alérgenos y dietas, pero ninguna otra corrección.",
   "menu_patch.corrected_note_many":
-    "Las versiones que se publican en estas fechas también reciben estos alérgenos y dietas, pero ninguna otra corrección: {dates}.",
+    "Las versiones que se publican en estas fechas ({dates}) también reciben estos alérgenos y dietas, pero ninguna otra corrección.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
   "menu_patch.queued_note_many":
     "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",

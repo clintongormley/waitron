@@ -19,6 +19,7 @@ const LIVE: PatchDraft = {
   versionId: "v-3",
   number: 3,
   since: "2026-10-27T09:00:00.000Z",
+  declarations: {},
   queued: [],
   document: menuDocument(
     [documentSection("sec-starters", "Starters", [documentProduct("mi-soup", "p-soup")])],

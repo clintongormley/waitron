@@ -289,9 +289,10 @@ every waiting edition again after itself.
 A manager can correct the live version itself, leaving the products and the working menu as they
 were.
 
-- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, queued }` for the
-  version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `queued`
-  lists each scheduled version whose allergens or diets differ from the products' current ones, as
+- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, declarations,
+  queued }` for the version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `declarations` holds
+  the current allergens and diets of each dish, variant and extra, by product id. `queued` lists each
+  scheduled version whose allergens or diets differ from the products' current ones, as
   `{ versionId, activatesAt, targets }`; each target is `{ target, stillOld }`, `stillOld` when every
   differing copy holds the value being corrected, and a dish's takes in its variants. An unknown menu answers `menu.not_found` (404).
 - `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued? }`, puts the changes

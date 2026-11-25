@@ -53,15 +53,18 @@ import {
   patchTree,
   scheduledCorrections,
   targetKey,
-  type ScheduledCorrection,
+  type ScheduledChoices,
 } from "./menu-patch-draft.js";
 import {
   changeLines,
   itemNames,
+  onlyDeclarations,
   placeRefusal,
   refusalWords,
+  renderScheduled,
   reviewNotes,
   type Refusal,
+  type ScheduledRow,
 } from "./menu-patch-review.js";
 import { conjunctionList } from "../i18n/list.js";
 import { localTimeWords } from "./menu-publications.js";
@@ -173,8 +176,7 @@ export class MenuPatchDialog extends LitElement {
    * a name language gave way to the text a newer version's folders fix it to. */
   @state() private refixed = new Set<string>();
   @state() private queued: MenuPublicationsAnswer["editions"] = [];
-  /** The ticks the person set on scheduled versions, by activation time (`scheduledCorrections`). */
-  @state() private choices: ReadonlyMap<string, boolean> = new Map();
+  @state() private choices: ScheduledChoices = new Map();
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
    * Reload, or until a later delivery finds nothing staged and no field failing its check. */
   @state() private newer: PatchDraft | null = null;
@@ -946,8 +948,8 @@ export class MenuPatchDialog extends LitElement {
     ];
   }
 
-  /** The scheduled versions the form lists, each with its date; only these are ever sent. */
-  #scheduled(): (ScheduledCorrection & { date: string })[] {
+  /** The scheduled versions the review lists; only these are ever sent. */
+  #scheduled(): ScheduledRow[] {
     return scheduledCorrections(this.live!, this.changes, this.choices).flatMap((row) => {
       const edition = this.queued.find(({ activatesAt }) => activatesAt === row.activatesAt);
       return edition === undefined ? [] : [{ ...row, date: localTimeWords(edition.local) }];
@@ -956,25 +958,28 @@ export class MenuPatchDialog extends LitElement {
 
   #renderReview(): TemplateResult {
     const languages = currentContentLanguages();
+    const { document, declarations } = this.live!;
     const scheduled = this.#scheduled();
-    const fromProducts = this.changes.every(({ field }) => field === "declarations");
     // A version not among `scheduled` needs none of the staged declarations: it agrees with the
     // products already, or holds none of the items.
     const without = this.queued.filter(({ activatesAt }) => {
       const row = scheduled.find((listed) => listed.activatesAt === activatesAt);
-      return row === undefined ? !fromProducts : !row.ticked;
+      return row === undefined ? !onlyDeclarations(this.changes) : !row.ticked;
     });
     return html`<div class="review" data-test="review-step">
       <h3 tabindex="-1">${t("menu_patch.review_heading")}</h3>
       <ul class="changes">
-        ${changeLines(this.live!.document, this.changes, languages).map(
+        ${changeLines(document, this.changes, languages, declarations).map(
           (line) => html`<li data-test="review-line">${line}</li>`,
         )}
       </ul>
+      ${renderScheduled(scheduled, document, this.busy, (row, ticked) => {
+        this.choices = new Map(this.choices).set(row.activatesAt, ticked && row.deliberate);
+      })}
       ${reviewNotes(
+        this.changes,
         without.map(({ local }) => localTimeWords(local)),
         scheduled.flatMap(({ ticked, date }) => (ticked ? [date] : [])),
-        fromProducts,
       ).map((note) => html`<p class="note" data-test="review-note">${note}</p>`)}
     </div>`;
   }
@@ -1089,7 +1094,6 @@ export class MenuPatchDialog extends LitElement {
         : [];
     const byDish =
       target.kind === "variant" && this.#declared({ kind: "offer", menuItemId: target.menuItemId });
-    const declared = this.#declared(target);
     const note = byDish
       ? html`<p class="locked-note" id="declarations-note">
           ${t("menu_patch.declarations_by_dish")}
@@ -1097,13 +1101,12 @@ export class MenuPatchDialog extends LitElement {
       : error === ""
         ? nothing
         : html`<p class="field-error" id="declarations-note">${error}</p>`;
-    const rows = declared ? this.#scheduled().filter((row) => row.differsFor(target)) : [];
     return html`<div data-test="declarations">
       <label class="tick">
         <input
           type="checkbox"
           name="declarations"
-          .checked=${live(byDish || declared)}
+          .checked=${live(byDish || this.#declared(target))}
           ?disabled=${byDish}
           aria-invalid=${error === "" ? "false" : "true"}
           aria-describedby=${note === nothing ? nothing : "declarations-note"}
@@ -1115,29 +1118,6 @@ export class MenuPatchDialog extends LitElement {
         >
       </label>
       ${note}
-      ${
-        rows.length === 0
-          ? nothing
-          : html`<fieldset>
-              <legend>${t("menu_patch.scheduled")}</legend>
-              ${rows.map(
-                ({ activatesAt, date, ticked }) =>
-                  html`<label class="tick">
-                    <input
-                      type="checkbox"
-                      name="scheduled"
-                      value=${activatesAt}
-                      .checked=${live(ticked)}
-                      @change=${(event: Event) => {
-                        const { checked } = event.target as HTMLInputElement;
-                        this.choices = new Map(this.choices).set(activatesAt, checked);
-                      }}
-                    />
-                    <span>${date}</span>
-                  </label>`,
-              )}
-            </fieldset>`
-      }
     </div>`;
   }
 

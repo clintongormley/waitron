@@ -137,51 +137,43 @@ export function targetKey(target: MenuPatchTarget): string {
   }
 }
 
-/** What a declarations change corrects: a dish or variant by its product, whichever of its places
- * on the menu is named, and an extra in its list. A dish only a set menu holds is never picked. */
-function declarationSubject(document: MenuDocument, target: MenuPatchTarget): string | undefined {
-  if (target.kind === "variant") return `variant:${target.variantId}`;
-  if (target.kind !== "offer") return targetKey(target);
-  const offer = document.offers[target.menuItemId];
-  return offer && `offer:${offer.productId}`;
-}
-
 export interface ScheduledCorrection {
   versionId: string;
   activatesAt: string;
+  /** The changed items this version differs for. */
+  targets: MenuPatchTarget[];
+  /** Those of them, by `targetKey`, whose copy here does not hold the value being corrected. */
+  deliberate: string[];
   /** Whether the patch corrects this version too. */
   ticked: boolean;
-  /** Whether `target` is one of the changed items this version differs for. */
-  differsFor(target: MenuPatchTarget): boolean;
 }
 
+/** The person's ticks, by activation time (a patch renumbers a scheduled version, and no two wait
+ * for the same time): `false` for an unticked version, else its `deliberate` items when ticked. */
+export type ScheduledChoices = ReadonlyMap<string, false | readonly string[]>;
+
 /** The scheduled versions that differ from the products' current declarations for an item whose
- * declarations are staged. `choices` holds the ticks the person set, by activation time: a patch
- * renumbers a scheduled version, and no two wait for the same time. */
+ * declarations are staged. One with a `deliberate` item is ticked only by a choice made for it. */
 export function scheduledCorrections(
-  { document, queued }: PatchDraft,
+  { queued }: PatchDraft,
   changes: readonly MenuPatchChange[],
-  choices: ReadonlyMap<string, boolean>,
+  choices: ScheduledChoices,
 ): ScheduledCorrection[] {
   const staged = new Set(
-    changes.flatMap(({ target, field }) =>
-      field === "declarations" ? [declarationSubject(document, target)] : [],
-    ),
+    changes.flatMap(({ target, field }) => (field === "declarations" ? [targetKey(target)] : [])),
   );
-  if (staged.size === 0) return [];
   return queued.flatMap(({ versionId, activatesAt, targets }) => {
-    const held = new Map<string | undefined, boolean>();
-    for (const { target, stillOld } of targets) {
-      const subject = declarationSubject(document, target);
-      if (staged.has(subject)) held.set(subject, stillOld);
-    }
-    if (held.size === 0) return [];
+    const held = targets.filter(({ target }) => staged.has(targetKey(target)));
+    if (held.length === 0) return [];
+    const deliberate = held.flatMap(({ target, stillOld }) => (stillOld ? [] : targetKey(target)));
+    const choice = choices.get(activatesAt) ?? [];
     return [
       {
         versionId,
         activatesAt,
-        ticked: choices.get(activatesAt) ?? [...held.values()].every(Boolean),
-        differsFor: (target) => held.has(declarationSubject(document, target)),
+        targets: held.map(({ target }) => target),
+        deliberate,
+        ticked: choice !== false && deliberate.every((key) => choice.includes(key)),
       },
     ];
   });

@@ -980,7 +980,6 @@ describe("declarations", () => {
       names: { en: "Daily menu" },
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "reduced",
     });
     await tx.update(products).set({ courseId: f.course }).where(eq(products.id, f.lemonade));
     await addSetMenuDishes(tx, id, [{ productId: f.lemonade, excludedVariantIds: [] }]);

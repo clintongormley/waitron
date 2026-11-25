@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { productDeclarationValues } from "@waitron/menu/src/declaration-values.js";
 import type { DashboardApi, PatchDraft } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import {
@@ -14,10 +15,17 @@ import {
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 
+const MILK = productDeclarationValues({
+  allergens: { milk: {} },
+  dietOverride: null,
+  dietaryDeclarations: [],
+});
+
 const LIVE: PatchDraft = {
   versionId: "v-3",
   number: 3,
   since: "2026-10-27T09:00:00.000Z",
+  declarations: { "p-soup": MILK, "v-cup": MILK },
   queued: [],
   document: menuDocument(
     [
@@ -185,10 +193,11 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await expectNoA11yViolations(host);
     boxes()[0]!.click();
     await settle(el);
-    expect(boxes().map(({ checked }) => checked)).toEqual([true, true, false]);
+    expect(boxes().map(({ checked }) => checked)).toEqual([true]);
     await expectNoA11yViolations(host);
     await press(el, "review");
-    expect(el.shadowRoot!.querySelectorAll('[data-test="review-note"]')).toHaveLength(3);
+    expect(boxes().map(({ checked }) => checked)).toEqual([true, false]);
+    expect(el.shadowRoot!.querySelectorAll('[data-test="review-note"]')).toHaveLength(2);
     await expectNoA11yViolations(host);
     await press(el, "put-live");
     await vi.waitFor(() =>
@@ -200,7 +209,14 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
   it("renders a variant whose dish is ticked accessibly", async () => {
     const document = structuredClone(LIVE.document);
     (document.offers["mi-soup"] as { variants: unknown }).variants = [
-      { id: "v-cup", name: "Cup", customerName: null, kitchenName: null, unitPrice: "2.00" },
+      {
+        id: "v-cup",
+        name: "Cup",
+        customerName: null,
+        kitchenName: null,
+        unitPrice: "2.00",
+        ...productDeclarationValues(),
+      },
     ];
     const api = {
       getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
@@ -226,6 +242,11 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await expectNoA11yViolations(host);
     await pick(el, "Cup");
     expect(box().disabled).toBe(true);
+    await expectNoA11yViolations(host);
+    await press(el, "review");
+    expect(el.shadowRoot!.querySelector('[data-test="review-line"]')!.textContent).toContain(
+      "Milk",
+    );
     await expectNoA11yViolations(host);
   });
 

@@ -1,4 +1,5 @@
 import type { MenuDocument, QueuedEdition } from "@waitron/shared";
+import type { DeclarationValues } from "./declaration-values.js";
 
 /** The patch wire shapes. A browser-safe LEAF: types and the field table only. */
 
@@ -49,5 +50,8 @@ export interface QueuedDeclarationDrift {
 }
 
 export interface PatchDraft extends LiveMenu {
+  /** Every dish's, variant's and extra's current values, by product id: what a declarations change
+   * copies. */
+  declarations: Record<string, DeclarationValues>;
   queued: QueuedDeclarationDrift[];
 }
