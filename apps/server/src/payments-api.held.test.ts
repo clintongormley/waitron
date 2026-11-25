@@ -267,24 +267,33 @@ describe("GET /management-api/payments/held", () => {
     ]);
   });
 
-  it("keeps the recorded delivery place after handover and table removal", async () => {
+  it.each([true, false])("keeps the paid place (handed over: %s)", async (handedOver) => {
     const v = await setup();
     const held = await aHeldPayment(v, {
       amount: "12.10",
       providerAmount: "1.21",
-      settledAt: "2026-10-15T20:30:00.000Z",
+      settledAt: "2026-10-15T21:00:00.000Z",
       foundAt: "2026-10-17T03:00:00.000Z",
     });
+    const order = eq(workingOrders.orderNumber, held.orderNumber);
+    const collectedAt = handedOver ? "2026-10-15T20:45:00.000Z" : null;
     const tableId = await withTransaction(suite.db, async (tx) => {
-      const { id: zoneId } = await seedZone(tx, { name: "Terrace" });
+      const { id: zoneId, departmentId } = await seedZone(tx, { name: "Terrace" });
       const [table] = await tx
         .insert(diningTables)
         .values({ zoneId, label: "Terrace 8" })
-        .returning();
+        .returning({ id: diningTables.id });
       await tx
         .update(workingOrders)
-        .set({ deliveryTableId: table!.id, label: "Recorded terrace" })
-        .where(eq(workingOrders.orderNumber, held.orderNumber));
+        .set({
+          deliveryTableId: table!.id,
+          status: "placed",
+          collectedAt,
+          zoneId,
+          departmentId,
+          serviceMode: "ticket_then_pay",
+        })
+        .where(order);
       return table!.id;
     });
     const checkLabel = async (label: string) => {
@@ -298,21 +307,16 @@ describe("GET /management-api/payments/held", () => {
     await checkLabel("Terrace 8");
     await suite.db
       .update(workingOrders)
-      .set({ collectedAt: "2026-10-15T20:45:00.000Z" })
-      .where(eq(workingOrders.orderNumber, held.orderNumber));
+      .set({ status: "settled", settledAt: "2026-10-15T21:00:00.000Z", label: "Terrace 8" })
+      .where(order);
     await suite.db
       .update(diningTables)
       .set({ label: "Birthday" })
       .where(eq(diningTables.id, tableId));
-    await checkLabel("Recorded terrace");
+    await checkLabel(handedOver ? "Terrace 8" : "Birthday");
 
     await withTransaction(suite.db, (tx) => releaseDeliveries(tx, tableId, "Birthday"));
-    await checkLabel("Recorded terrace");
-    await suite.db
-      .update(workingOrders)
-      .set({ label: null })
-      .where(eq(workingOrders.orderNumber, held.orderNumber));
-    await checkLabel("Birthday");
+    await checkLabel("Terrace 8");
   });
 
   it("refuses a session without hardware.manage", async () => {

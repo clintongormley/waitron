@@ -25,6 +25,9 @@ describe("current order labels", () => {
     const place = { names: [], partyName: "Ana", billName: null, counter: false };
     expect(currentOrderLabel(place, "Recorded terrace")).toBe("Recorded terrace");
     expect(currentOrderLabel(place, null)).toBeNull();
+    expect(currentOrderLabel({ ...place, billName: "Ana" }, "Ana · Recorded terrace")).toBe(
+      "Ana · Recorded terrace",
+    );
     expect(refusalOrderName(12, place)).toBe("#12 · Ana");
   });
 });

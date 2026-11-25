@@ -1,9 +1,12 @@
+import { sql } from "drizzle-orm";
 import { readOrderPlaces, workingOrders, type OrderPlaces, type Transaction } from "@waitron/db";
 import { partyTablesName } from "@waitron/shared";
 
 type DisplayPlace = Pick<OrderPlaces, "names" | "partyName" | "billName" | "counter">;
 
-function recordedOrderLabel(savedLabel: string | null, billName: string | null): string | null {
+function recordedOrderLabel(savedLabel: string | null, place?: DisplayPlace): string | null {
+  const billName = place?.billName;
+  if (billName === place?.partyName && savedLabel?.startsWith(`${billName} · `)) return savedLabel;
   return [...new Set([savedLabel, billName])].filter(Boolean).join(" · ") || null;
 }
 
@@ -13,7 +16,7 @@ export function currentOrderLabel(
 ): string | null {
   if (place === undefined) return null;
   if (savedLabel !== undefined && !place.counter && place.names.length === 0)
-    return recordedOrderLabel(savedLabel, place.billName);
+    return recordedOrderLabel(savedLabel, place);
   const tables = new Set(place.names.filter(Boolean));
   const typedNames = new Set(
     [place.partyName, place.billName].filter((name) => name && !tables.has(name)),
@@ -27,33 +30,27 @@ export function refusalOrderName(orderNumber: number, place: DisplayPlace | unde
 
 export const paymentOrderLabelFields = {
   label: workingOrders.label,
-  collectedAt: workingOrders.collectedAt,
-  deliveryTableId: workingOrders.deliveryTableId,
-  deliveryTableLabel: workingOrders.deliveryTableLabel,
+  recordedDeliveryLabel: sql<string | null>`case when ${workingOrders.partyId} is null and (
+    (${workingOrders.deliveryTableId} is null and ${workingOrders.deliveryTableLabel} is not null)
+    or (${workingOrders.deliveryTableId} is not null and ${workingOrders.status} = 'settled' and ${workingOrders.collectedAt} is not null)
+  ) then coalesce(${workingOrders.label}, ${workingOrders.deliveryTableLabel}) end`,
 };
 
 export async function withPaymentOrderLabels<
-  T extends {
-    workingOrderId: string;
-    label: string | null;
-    collectedAt: string | null;
-    deliveryTableId: string | null;
-    deliveryTableLabel: string | null;
-  },
+  T extends { workingOrderId: string; label: string | null; recordedDeliveryLabel: string | null },
 >(tx: Transaction, rows: T[]) {
   const places = await readOrderPlaces(
     tx,
     rows.map((row) => row.workingOrderId),
   );
-  return rows.map(({ collectedAt, deliveryTableId, deliveryTableLabel, ...row }) => {
+  return rows.map(({ recordedDeliveryLabel, ...row }) => {
     const place = places.get(row.workingOrderId);
-    const collectedDelivery =
-      collectedAt !== null && (deliveryTableId !== null || deliveryTableLabel !== null);
     return {
       ...row,
-      label: collectedDelivery
-        ? recordedOrderLabel(row.label ?? deliveryTableLabel, place?.billName ?? null)
-        : currentOrderLabel(place, row.label),
+      label:
+        recordedDeliveryLabel === null
+          ? currentOrderLabel(place, row.label)
+          : recordedOrderLabel(recordedDeliveryLabel, place),
     };
   });
 }
