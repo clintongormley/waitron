@@ -4183,6 +4183,95 @@ it.each([
   },
 );
 
+it("asks only for the order's copies again while that read keeps failing, leaving a dismissed price dialog shut", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  add(el, "Lemonade");
+  api.retrieveWorkingOrder!.mockRejectedValue(new Error("offline"));
+  const published = menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
+  await serve(published, { ...menuState("v2"), liveFields: "v2" });
+  expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await flush(el);
+
+  const zoneReads = api.listZoneOffers.mock.calls.length;
+  const copyReads = api.retrieveWorkingOrder!.mock.calls.length;
+  const dialogs: boolean[] = [];
+  for (let polls = 0; polls < 4; polls++) {
+    await poll(el);
+    dialogs.push(dialog(el) !== null);
+  }
+  expect(dialogs).toEqual([false, false, false, false]);
+  expect(api.listZoneOffers.mock.calls.length).toBe(zoneReads);
+  expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(copyReads + 4);
+
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  await poll(el);
+  expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(copyReads + 5);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("asks for an order's copies again while a price dialog waits over it", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  add(el, "Lemonade");
+  api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+  const published = menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
+  await serve(published, { ...menuState("v2"), liveFields: "v2" });
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  expect(dialog(el)).not.toBeNull();
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it.each(["cleared", "opened again", "left for another operator", "sent unpaid", "read elsewhere"])(
+  "does not ask again about the copies of an order %s since the read failed",
+  async (end) => {
+    const { el, store, serve, retrieve } = await openHeldDaily(null, {
+      placeOrder: vi.fn().mockResolvedValue({}),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
+    });
+    await retrieve();
+    api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+    if (end === "cleared") store.clear();
+    else if (end === "opened again") await retrieve();
+    else if (end === "sent unpaid") {
+      emit(counter(el), "place-order");
+      await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
+    } else if (end === "read elsewhere") el.api = { ...el.api } as unknown as TillApi;
+    else {
+      emit(counter(el), "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+    }
+    await flush(el);
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    const polls = api.menuState.mock.calls.length;
+
+    await poll(el);
+
+    expect(api.menuState.mock.calls.length).toBeGreaterThan(polls);
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads);
+  },
+);
+
+it("drops a late answer about an order's copies from a connection the till has left", async () => {
+  const { el, store, answer } = await rereadOut();
+  el.api = { ...el.api } as unknown as TillApi;
+  await flush(el);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {} });
+});
+
 it("gives up a read of an order's copies that hangs, and asks again at the next poll", async () => {
   const { el, store, serve, retrieve } = await openHeldDaily(null);
   await retrieve();

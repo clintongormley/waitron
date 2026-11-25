@@ -518,6 +518,7 @@ import {
   repriceRebuilt,
   setMenuDish,
 } from "./state/menu-refresh.js";
+import { CounterCopiesRead, isOrderGone } from "./state/counter-copies-read.js";
 import {
   NO_ORDERING_COPIES,
   withCopiesRead,
@@ -1079,10 +1080,6 @@ function refusedSplitSide(
 
 function guestField(count: number | null): string {
   return count === null ? "" : String(count);
-}
-
-function isOrderGone(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "working_order.not_found";
 }
 
 function heldOrderLoadRefusal(error: unknown): CounterError {
@@ -3386,7 +3383,7 @@ export class TillApp extends LitElement {
   /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
   #counterSetMenuBill?: Pick<HeldOrder, "id" | "setMenus" | "setMenuCopies">;
-  #counterCopiesRequest = 0;
+  readonly #counterCopiesRead = new CounterCopiesRead();
   @state() private counterSetMenuSaving = false;
 
   get #currentCounterSetMenuBill() {
@@ -7080,34 +7077,27 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** The recorded copies the open order came with hold the allergens published when it was read. */
-  async #rereadCounterSetMenuCopies(): Promise<void> {
+  #rereadCounterSetMenuCopies(): void {
     const id = this.#currentCounterSetMenuBill?.id;
     if (id === undefined || this.stage === "collect") return;
-    const request = ++this.#counterCopiesRequest;
     const visit = this.#store.loadGeneration;
     const session = this.#operatorSession;
     const api = this.api;
-    const current = () =>
-      request === this.#counterCopiesRequest &&
-      visit === this.#store.loadGeneration &&
-      session === this.#operatorSession &&
-      api === this.api &&
-      this.stage !== "collect";
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    try {
-      const read = await api.retrieveWorkingOrder(id, { signal: limit.signal });
-      const bill = this.#currentCounterSetMenuBill;
-      if (bill === undefined || !current()) return;
-      this.#counterSetMenuBill = withCopiesRead(bill, read);
-      this.#refreshCounterDeclarations();
-      this.requestUpdate();
-    } catch (error) {
-      // The next poll finds the offers moved, and asks again.
-      if (current() && !isOrderGone(error)) this.#counterOffers.liveFields = undefined;
-    } finally {
-      limit.done();
-    }
+    void this.#counterCopiesRead.read(
+      () =>
+        visit === this.#store.loadGeneration &&
+        session === this.#operatorSession &&
+        api === this.api &&
+        this.stage !== "collect",
+      (signal) => api.retrieveWorkingOrder(id, { signal }),
+      (read) => {
+        const bill = this.#currentCounterSetMenuBill;
+        if (bill === undefined) return;
+        this.#counterSetMenuBill = withCopiesRead(bill, read);
+        this.#refreshCounterDeclarations();
+        this.requestUpdate();
+      },
+    );
   }
 
   #showCounterOffers(): void {
@@ -7306,7 +7296,10 @@ export class TillApp extends LitElement {
       }
       if ((counterMoved || serviceMoved) && !busy && this.basketRefresh === undefined)
         void this.#refreshBasket("automatic").then(() => this.#followDefault());
-      else this.#followDefault();
+      else {
+        this.#followDefault();
+        if (this.#counterCopiesRead.due) this.#rereadCounterSetMenuCopies();
+      }
     }
     if (zoneId === this.#tableZoneId && !this.#tableOpenUnclaimed()) {
       if (state.dining !== undefined) this.#tableDining = state.dining;
@@ -7612,7 +7605,7 @@ export class TillApp extends LitElement {
         }
         this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
-        void this.#rereadCounterSetMenuCopies();
+        this.#rereadCounterSetMenuCopies();
       } catch {
         return "failed";
       }
