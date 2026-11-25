@@ -80,9 +80,9 @@ aparece un terminal, asigna el cajón en **Dispositivos**. Si el ajuste del caj�
 actívalo en la calibración. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
-Si la impresora la lleva una persona, elige **Etiqueta QR…** en el menú de su fila y pega la
-etiqueta en ella. El personal la escanea para recogerla. En Chrome en un teléfono Android,
-**Pegatina NFC…** escribe una pegatina a la que basta acercar el teléfono.
+Si **Impresora portátil** está activada, elige **Etiqueta QR…** en el menú de su fila y pega la
+etiqueta en ella. El personal escanea la etiqueta para recoger la impresora. En Chrome en un teléfono
+Android, **Pegatina NFC…** escribe una pegatina a la que basta acercar el teléfono.
 
 ## Cola de impresión {#print-queue}
 

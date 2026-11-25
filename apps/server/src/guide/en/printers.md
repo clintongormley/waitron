@@ -74,8 +74,8 @@ assign the drawer in **Devices** first. If the drawer setting is off, turn it on
 **Delete anyway** keeps the balance and any pending count if you later add a printer at the same
 address and Waitron restores its registration.
 
-If one person carries the printer, choose **QR label…** in its row menu and stick the label on it.
-Staff scan it to pick the printer up. In Chrome on an Android phone, **NFC sticker…** writes a
+If **Portable printer** is on, choose **QR label…** in the printer's row menu and stick the label on
+it. Staff scan it to pick the printer up. In Chrome on an Android phone, **NFC sticker…** writes a
 sticker they tap instead.
 
 ## Print Queue {#print-queue}

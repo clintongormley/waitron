@@ -22,7 +22,7 @@ export function equipmentLabelItems(
       icon="menu-equipment-label"
       data-test=${`qr-label-${id}`}
       @click=${press("qr")}
-      >${t("equipment.qr_label")}</wt-button
+      >${t("equipment.qr_label_dialog")}</wt-button
     >${
       nfcWriter() === undefined
         ? nothing
@@ -30,7 +30,7 @@ export function equipmentLabelItems(
             icon="menu-nfc-sticker"
             data-test=${`nfc-sticker-${id}`}
             @click=${press("nfc")}
-            >${t("equipment.nfc_sticker")}</wt-button
+            >${t("equipment.nfc_sticker_dialog")}</wt-button
           >`
     }`;
 }

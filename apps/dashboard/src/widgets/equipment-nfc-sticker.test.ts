@@ -205,7 +205,7 @@ describe("NFC sticker window", () => {
     const el = await mountWritten();
     FakeWriter.lockResult = refused;
     await confirmLock(el);
-    await vi.waitFor(() => expect(message(el)).toBe("Hold the sticker still and try again"));
+    await vi.waitFor(() => expect(message(el)).toBe("Hold the sticker still and try again."));
     expect(footer(el)).toEqual([t("action.close"), "Lock…", "Write another"]);
     expect(button(el, "write-equipment-nfc").disabled).toBe(false);
     expect(button(el, "lock-equipment-nfc").disabled).toBe(false);
@@ -311,7 +311,7 @@ describe("NFC sticker window", () => {
     const el = await mountWritten();
     await confirmLock(el);
     await el.updateComplete;
-    expect(message(el)).toBe("Hold the sticker against the phone");
+    expect(message(el)).toBe("Hold the sticker against the phone.");
     expect(footer(el)).toEqual([t("action.close")]);
     const reported = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
     button(el, "close-equipment-nfc").click();

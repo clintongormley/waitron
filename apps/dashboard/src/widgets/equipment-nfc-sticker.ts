@@ -36,7 +36,7 @@ const MESSAGES: Record<Exclude<Step, "idle" | "written">, StringKey> = {
 };
 
 /** Starts writing as it opens. Chrome asks for NFC permission only while the click that opened the
- * window still counts as the person's own act, so nothing may be awaited before the first write. */
+ * window still counts as the person's own act, so the first write starts in the update that opens it. */
 @customElement("dashboard-equipment-nfc-sticker")
 export class EquipmentNfcSticker extends LitElement {
   static override styles = [

@@ -691,7 +691,7 @@ its own, so a theme's Bold reaches them; components that include `baseStyles` no
 browser and opt into native OS scaling with `<meta name="text-scale" content="scale">` where
 supported. Safari and Firefox ignore this opt-in, so this change does not follow an iPhone or
 iPad's system Text Size setting; browser zoom remains available. No real iPhone focus-zoom or
-OS-text-size run has been made. Equipment labels and recovery packs convert the default sizes
+OS-text-size run has been made. QR labels and recovery packs convert the default sizes
 back to pixels at their paper boundary, preserving their 14px body and 22px heading sizes.
 
 | Source, checked 2026-11-15 | Source words | Applied here |
@@ -6053,11 +6053,11 @@ registered icon for links, at size `lg`. Action rows start with the icon and use
 labels, neutral hover and pressed fills, and the shared focus ring. A checked bill or counter zone
 uses that same icon column for its tick. Keep the bill's label and amount layout inside the row.
 
-A button that opens a list of choices, rather than a row's kebab, is a `wt-row-actions` with words
-and a ▾ in its `trigger` slot: **Print ▾** on a printer's or card reader's QR label
-(`apps/dashboard/src/widgets/equipment-qr-label.ts`) draws its trigger as a primary button through
-`::part(trigger)`. While it waits or works it is a `wt-button` instead, which can be disabled or
-loading; the window puts keyboard focus back on whichever of the two it shows.
+**Print ▾** on a printer's or card reader's QR label
+(`apps/dashboard/src/widgets/equipment-qr-label.ts`) is a `wt-row-actions` with its words in the
+`trigger` slot, drawn as a primary button through `::part(trigger)`. While the code is drawn, the
+printers are read or a label is sent, and when Waitron has no active printer, it is a `wt-button`
+instead.
 
 Put Delete last with the danger variant. Disconnect and Unpair also use danger. Keep Remove and
 Disable neutral. Use `rowActionTail` to put these actions after ordinary rows and to add the

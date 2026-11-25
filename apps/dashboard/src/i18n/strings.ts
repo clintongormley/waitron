@@ -4258,8 +4258,8 @@ export const en = {
   "equipment.busy": "payment in progress",
   "equipment.holder_with_person": "{device} ({person})",
   "equipment.holder_none": "Nobody has it",
-  "equipment.qr_label": "QR label…",
-  "equipment.nfc_sticker": "NFC sticker…",
+  "equipment.qr_label_dialog": "QR label…",
+  "equipment.nfc_sticker_dialog": "NFC sticker…",
   "equipment.qr_label_title": "QR label: {name}",
   "equipment.nfc_sticker_title": "NFC sticker: {name}",
   "equipment.label_hint_printer":
@@ -4285,9 +4285,9 @@ export const en = {
   "equipment.nfc_lock": "Lock sticker",
   "equipment.nfc_lock_confirmation":
     "Lock the sticker you just wrote? This is permanent: you cannot rewrite or unlock it. Hold that same sticker against the phone.",
-  "equipment.nfc_hold": "Hold the sticker against the phone",
-  "equipment.nfc_locked": "Sticker locked permanently",
-  "equipment.nfc_failed": "Hold the sticker still and try again",
+  "equipment.nfc_hold": "Hold the sticker against the phone.",
+  "equipment.nfc_locked": "Sticker locked permanently.",
+  "equipment.nfc_failed": "Hold the sticker still and try again.",
   "equipment.nfc_blocked":
     "NFC is blocked for Waitron. Allow it in this app’s or browser’s permissions, then try again.",
   "equipment.nfc_write_failed":
@@ -9127,8 +9127,8 @@ export const es: Record<StringKey, string> = {
   "equipment.busy": "cobro en curso",
   "equipment.holder_with_person": "{device} ({person})",
   "equipment.holder_none": "No lo lleva nadie",
-  "equipment.qr_label": "Etiqueta QR…",
-  "equipment.nfc_sticker": "Pegatina NFC…",
+  "equipment.qr_label_dialog": "Etiqueta QR…",
+  "equipment.nfc_sticker_dialog": "Pegatina NFC…",
   "equipment.qr_label_title": "Etiqueta QR: {name}",
   "equipment.nfc_sticker_title": "Pegatina NFC: {name}",
   "equipment.label_hint_printer":
@@ -9154,9 +9154,9 @@ export const es: Record<StringKey, string> = {
   "equipment.nfc_lock": "Bloquear pegatina",
   "equipment.nfc_lock_confirmation":
     "¿Bloquear la pegatina que acabas de escribir? Es permanente: no podrás reescribirla ni desbloquearla. Mantén esa misma pegatina junto al teléfono.",
-  "equipment.nfc_hold": "Mantén la pegatina junto al teléfono",
-  "equipment.nfc_locked": "Pegatina bloqueada permanentemente",
-  "equipment.nfc_failed": "Mantén la pegatina quieta e inténtalo de nuevo",
+  "equipment.nfc_hold": "Mantén la pegatina junto al teléfono.",
+  "equipment.nfc_locked": "Pegatina bloqueada permanentemente.",
+  "equipment.nfc_failed": "Mantén la pegatina quieta e inténtalo de nuevo.",
   "equipment.nfc_blocked":
     "NFC está bloqueado para Waitron. Permítelo en los permisos de esta aplicación o del navegador y vuelve a intentarlo.",
   "equipment.nfc_write_failed":
