@@ -376,6 +376,26 @@ describe("menu-screen", () => {
     expect(el.shadowRoot!.querySelector('select[name="product-menu"]')).toBeNull();
   });
 
+  it("reads products alongside categories and opens a linked product after both are ready", async () => {
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
+    history.replaceState(null, "", "/products/product/p1");
+    const pending = deferred<CategorySummary[]>();
+    const api = stubApi({ listCategories: vi.fn().mockReturnValue(pending.promise) });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    try {
+      await vi.waitFor(() => expect(list(el).products).toEqual(products));
+      expect(table.checkVisibility()).toBe(false);
+      expect(editor(el).open).toBe(false);
+    } finally {
+      pending.resolve(categories);
+    }
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(list(el).categories).toEqual(categories);
+    await vi.waitFor(() => expect(editor(el).value?.id).toBe("p1"));
+  });
+
   it("shows loading until products answer, then shows the count for a genuinely empty list", async () => {
     const pending = deferred<Product[]>();
     const api = stubApi({
@@ -908,10 +928,13 @@ describe("menu-screen", () => {
     await vi.waitFor(() =>
       expect(alert()?.textContent?.trim()).toBe(codeMessage("connection.failed")),
     );
-    expect(api.listProducts).not.toHaveBeenCalled();
+    const table = await productTable(el);
+    expect(api.listProducts).toHaveBeenCalledOnce();
+    expect(table.checkVisibility()).toBe(false);
     vi.mocked(api.listUnits).mockResolvedValue([]);
     api.liveData.refresh();
-    await vi.waitFor(() => expect(list(el).products).toEqual(products));
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(list(el).products).toEqual(products);
     expect(alert()).toBeNull();
   });
 

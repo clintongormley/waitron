@@ -198,7 +198,10 @@ export class ProductsScreen extends LitElement {
     (error) => {
       this.productsReadError = codeOf(error);
     },
-    () => void this.#openLinkedProduct(),
+    () => {
+      if (this.productsLoaded) void this.#openLinkedProduct();
+      else this.#resumeInitialLoad();
+    },
   );
   readonly #routingQueries = new DashboardQueries(
     this,
@@ -297,9 +300,11 @@ export class ProductsScreen extends LitElement {
         this.#queries.watch("listCourses", [], (value) => {
           this.courses = value;
         }),
+        this.#watchProducts(),
       ]);
-      await this.#reloadProducts();
+      this.productsLoaded = true;
       this.initialLoadError = null;
+      await this.#openLinkedProduct();
     } catch (error) {
       if (!this.productsLoaded) this.initialLoadError = codeOf(error);
     } finally {
@@ -349,12 +354,15 @@ export class ProductsScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
+  #watchProducts(): Promise<void> {
+    return this.#productsQueries.watch("listProducts", [], (products) => {
+      this.products = products;
+    });
+  }
+
   async #reloadProducts(): Promise<boolean> {
     try {
-      await this.#productsQueries.watch("listProducts", [], (products) => {
-        this.products = products;
-        this.productsLoaded = true;
-      });
+      await this.#watchProducts();
     } catch {
       return false;
     }
@@ -425,7 +433,7 @@ export class ProductsScreen extends LitElement {
 
   async #openLinkedProduct(): Promise<void> {
     const id = this.#linkedProduct;
-    if (id === null || !this.#knows(id)) return;
+    if (!this.productsLoaded || id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
     if (this.editorValue?.id === id) return;
     await this.#openProduct(id, new URL(location.href).searchParams.get("field") ?? "");
