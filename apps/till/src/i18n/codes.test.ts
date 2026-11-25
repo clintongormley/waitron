@@ -615,12 +615,12 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
   }
 });
 
-it("words a corrective receipt larger than what is left of its receipt", () => {
+it("words money back larger than what is left of its receipt", () => {
   expect(codeMessage("sale.correction_exceeds_total", "en")).toBe(
-    "That corrective receipt is more than is left of the receipt after its earlier corrective receipts",
+    "That is more than is left of this receipt after the money already given back.",
   );
   expect(codeMessage("sale.correction_exceeds_total", "es")).toBe(
-    "Ese ticket rectificativo supera lo que queda del ticket tras sus tickets rectificativos anteriores",
+    "Es más de lo que queda de este ticket después del dinero ya devuelto.",
   );
 });
 
