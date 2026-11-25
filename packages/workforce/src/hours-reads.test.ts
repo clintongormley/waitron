@@ -404,6 +404,12 @@ it("puts an overnight automatic finish, its question and a finish correction in 
   ]);
   expect(january.pending.automaticEntryIds).toEqual([end]);
   expect(february.pending).toEqual({ prompts: [], items: [], automaticEntryIds: [] });
+  await f.suite.db
+    .update(api.attendanceQuestions)
+    .set({ active: false, inactiveReason: "rota_superseded" })
+    .where(eq(api.attendanceQuestions.id, question));
+  expect((await managerMonth("2026-01-31")).pending.automaticEntryIds).toEqual([end]);
+  expect((await managerMonth("2026-02-01")).pending.automaticEntryIds).toEqual([]);
   const correction = await request(end, "2026-02-01T05:00:00Z");
   expect((await managerMonth("2026-01-31")).pending.items.map((item) => item.id)).toEqual(
     correction.entryIds,
@@ -689,6 +695,9 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
 
   await expectFullHistoryResult(june, () => getHours("2026-06-16"));
   await expectFullHistoryResult(january, () => getHours("2026-01-05"));
+  const ownJuly = () =>
+    read({ kind: "month", date: "2026-07-01" }, f.personId, new Date("2027-01-11T12:30:00Z"));
+  await expectFullHistoryResult(await ownJuly(), ownJuly);
 });
 it("keeps stored self-approval after the administrator becomes staff", async () => {
   await setBuiltInRoleForTest(f.suite.db, f.personId, "admin");
