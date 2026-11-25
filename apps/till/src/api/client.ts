@@ -1238,7 +1238,7 @@ export interface BillRefundView {
 export interface BillPaymentView extends OutsideCardDetails {
   externalRef?: string;
   /** It paid an advance, whose own ticket is the sale `saleId`; `left` and `tipLeft` are what
-   * Correct invoice on that ticket has not given back. */
+   * that ticket's corrections have not given back. */
   hasTicket?: true;
   saleId?: string;
   ticket?: AdvanceTicket;
@@ -1246,7 +1246,8 @@ export interface BillPaymentView extends OutsideCardDetails {
   takenOffBy?: TakenOffBy;
   left?: string;
   tipLeft?: string;
-  /** What Refund a payment gave back from the advance's ticket; `left` still counts it. */
+  /** What plain refunds, no leg of a correction, gave back from the advance's ticket; `left`
+   * still counts it. */
   givenBack?: string;
   id: string;
   submissionId: string;
@@ -1283,7 +1284,7 @@ export interface BillBalance {
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   /** The net applied of the received payments; on a settled bill, less the completed refunds of
-   * filed Correct invoices on its payments that paid no advance. */
+   * filed corrections on its payments that paid no advance. */
   received: string;
   /** The applied amount of the pending payments. */
   reserved: string;

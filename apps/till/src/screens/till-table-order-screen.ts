@@ -5549,7 +5549,6 @@ export class TillTableOrderScreen extends LitElement {
       return html`<p class="bill-printed" role="status" data-bill-printed>${t("bill.issued")}</p>`;
     const servable = servableDishes(shown.unserved, this.canMarkServed);
     const bill = this.bills.find((row) => row.workingOrderId === shown.workingOrderId);
-    // The usual "refunded with Correct invoice" would be untrue.
     const notice =
       bill !== undefined && namesCustomer(bill)
         ? t("meal_end.unserved_full_invoice")
