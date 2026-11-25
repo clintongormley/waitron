@@ -115,16 +115,14 @@ export function itemsRefusal(refusal: PayRefusal): PayRefusal {
   };
 }
 
-/** `confirmation` with its items part, for an items choice paid on a bill of its own; one whose
- * items `staysOnBill`, a printed bill's, is still paid where it is. */
+/** `confirmation` with its items part, for an items choice paid on a bill of its own. */
 export function withItems(
   confirmation: Confirmation,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
   revisions: BillRevisions,
-  staysOnBill: boolean,
 ): Confirmation {
-  if (asked.choice.kind !== "items" || staysOnBill) return confirmation;
+  if (asked.choice.kind !== "items") return confirmation;
   // The route refuses an items payment with no edit state, and a resend would repeat it.
   if (expectedEdit === null) throw new Error("Pay for items needs the bill's edit state");
   return {
@@ -173,16 +171,15 @@ export function itemsRequestOf(
   return body;
 }
 
-/** The preview for `asked`: an items choice through Pay for items unless its items `staysOnBill`
- * (a printed bill's), every other through today's bill payment preview. */
+/** The preview for `asked`: an items choice through Pay for items, every other through today's bill
+ * payment preview. */
 export async function previewPayment(
   api: TillApi,
   billId: string,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
-  staysOnBill: boolean,
 ): Promise<AllocationPreview> {
-  if (asked.choice.kind === "items" && !staysOnBill)
+  if (asked.choice.kind === "items")
     return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
   return api.previewBillPayment(
     billId,

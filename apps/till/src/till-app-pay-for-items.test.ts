@@ -89,6 +89,22 @@ async function chooseItems(el: TillApp, lineNos: number[]): Promise<void> {
   for (const lineNo of lineNos) await press(el, `input[name="line"][value="${lineNo}"]`);
 }
 
+/** Pay > Items on the printed bill wo-4: its Pay opens the presented sheet, whose Pay in parts opens
+ * the Pay window. */
+async function choosePrintedItems(el: TillApp, lineNos: number[]): Promise<void> {
+  const order = await openTable(el);
+  if (order.orderId !== "wo-4") {
+    await switchToBill(order, "wo-4");
+    await flush(el);
+  }
+  order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-presented-pay-dialog")!, "presented-pay-parts");
+  await flush(el);
+  await press(el, 'input[name="way"][value="items"]');
+  for (const lineNo of lineNos) await press(el, `input[name="line"][value="${lineNo}"]`);
+}
+
 beforeEach(() => {
   setLocale("en");
   resetBillPayDrafts();
@@ -308,42 +324,94 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(api.payForItems).not.toHaveBeenCalled();
   });
 
-  it("a printed bill's items still go to today's route", async () => {
-    const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
-      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
-      previewBillPayment: vi.fn().mockResolvedValue(cash("12.00", "38.00")),
-      takeBillPayment: vi
-        .fn()
-        .mockResolvedValue(
-          takenOf(
-            { kind: "items", applied: "12.00", tendered: "50.00", change: "38.00" },
-            { status: "placed", received: "12.00", outstanding: "108.00" },
-          ),
-        ),
+  it("a printed bill's items go to the new route and the table shows the reopened bill", async () => {
+    const owing = billOf({ workingOrderId: "bill-1", billNumber: 1, outstanding: "20.00" });
+    // The draft fixture serves wo-5, so it stands for the reopened bill.
+    let paid = false;
+    const getPartyBills = vi.fn(async () =>
+      paid
+        ? [
+            owing,
+            billOf({
+              workingOrderId: "wo-5",
+              billNumber: 2,
+              total: "108.00",
+              outstanding: "108.00",
+            }),
+            billOf({
+              workingOrderId: "wo-9",
+              billNumber: 3,
+              status: "settled",
+              outstanding: "0.00",
+            }),
+          ]
+        : [owing, billOf({ billNumber: 2, status: "placed" })],
+    );
+    const payForItems = vi.fn(async () => {
+      paid = true;
+      return paidOnWo9(
+        { applied: "12.00", change: "38.00" },
+        { workingOrderId: "wo-5", total: "108.00", outstanding: "108.00" },
+      );
     });
-    await openTable(el);
-    // A printed bill's Pay opens its presented sheet, whose Pay in parts opens the Pay window.
-    tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
-    await flush(el);
-    emit(el.shadowRoot!.querySelector("till-presented-pay-dialog")!, "presented-pay-parts");
-    await flush(el);
-    await press(el, 'input[name="way"][value="items"]');
-    await press(el, 'input[name="line"][value="4"]');
+    const { el } = await mountApp({
+      getPartyBills,
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi
+        .fn()
+        .mockResolvedValue(itemsPreview({ total: "12.00", applied: "12.00", change: "38.00" })),
+      payForItems,
+      getReceiptPrintStatus: vi.fn().mockRejectedValue({ code: "network" }),
+    });
+    await choosePrintedItems(el, [4]);
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
-    expect(api.previewBillPayment).toHaveBeenCalledWith(
+
+    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
+      picks: [{ lineId: "line-4" }],
+      method: "cash",
+      tendered: "50",
+    });
+    expect(payForItems).toHaveBeenCalledWith(
       "wo-4",
-      expect.objectContaining({ kind: "items", lines: [{ lineNo: 4 }] }),
-    );
-    expect(api.takeBillPayment).toHaveBeenCalledWith(
-      "wo-4",
-      expect.objectContaining({ kind: "items", lines: [{ lineNo: 4 }], applied: "12.00" }),
+      expect.objectContaining({ picks: [{ lineId: "line-4" }], expectedEdits: [wo4Edit] }),
       expect.anything(),
     );
-    expect(api.previewItemPayment).not.toHaveBeenCalled();
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+    const ticket = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+    expect(ticket).not.toBeNull();
+    expect(api.getReceiptPrintStatus).toHaveBeenCalledWith("wo-9");
+
+    emit(ticket, "settlement-close");
+    await flush(el, 6);
+    const order = tableOrder(el);
+    expect(order.orderId).toBe("wo-5");
+    expect(order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]')).toBeNull();
+    order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-presented-pay-dialog")).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+  });
+
+  it("the preview's reopen refusal shows before any money", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.unserved_dishes", status: 409, dishes: [] }),
+    });
+    await choosePrintedItems(el, [4]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+
+    expect(api.previewItemPayment).toHaveBeenCalledOnce();
+    expect(formError(el)).toBe(codeMessage("bill.unserved_dishes"));
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
     expect(api.payForItems).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
   it("the advances refusal names its amount", async () => {
@@ -469,6 +537,40 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(tableOrder(el).billBalance).toEqual(table);
     expect(dialog(el)!.balance).toEqual(table);
     expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
+  });
+
+  it("a declined card on a printed bill moves to the reopened bill and says so", async () => {
+    let paid = false;
+    // The draft fixture serves wo-5, so it stands for the reopened bill.
+    const reopened = balanceOf({ workingOrderId: "wo-5" });
+    const { el } = await mountApp({
+      ...withReader(),
+      getPartyBills: vi.fn(async () => [
+        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
+      ]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return { ...onWo9("declined", "failed"), sourceBalance: reopened };
+      }),
+    });
+    await choosePrintedItems(el, [4, 5]);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el, 6);
+
+    expect(api.payForItems).toHaveBeenCalledWith("wo-4", expect.anything(), expect.anything());
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(tableOrder(el).billBalance).toEqual(reopened);
+    expect(dialog(el)!.balance).toEqual(reopened);
+    expect(vi.mocked(api.getTabLines).mock.calls).toContainEqual(["wo-5"]);
+    await press(el, "[data-pay-continue]");
+    expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)![0]).toBe("wo-5");
   });
 
   it("Cancel payment stops the reader under the table's bill", async () => {

@@ -338,6 +338,7 @@ import {
   takePayment,
   withItems,
 } from "./state/pay-for-items.js";
+import { movedToBill, reopenedBill } from "./state/reopened-bill.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
 import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
@@ -550,8 +551,9 @@ type SettlementDocument = {
   surface: "counter" | "table";
   cashChange: string | null;
   slipPaymentId?: string;
-  /** The document is a bill of items paid from the bill on screen, which stays on screen at close. */
-  staysOnBill?: true;
+  /** The document is a bill of items paid from a table bill: the bill shown at close, the reopened
+   * bill when the items were paid from a printed one. */
+  returnTo?: string;
 };
 
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
@@ -12797,12 +12799,6 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
-  /** Items still paid where they are: on a printed bill (PR2-D13). */
-  #itemsStayOnBill(open: BillPaying): boolean {
-    const row = this.partyBills.find((bill) => bill.workingOrderId === open.billId);
-    return open.printed === true || (open.balance?.status ?? row?.status) === "placed";
-  }
-
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
    * simplified one: the server builds no advance for a full invoice (`advance.full_invoice_unsupported`). */
   #ownReceiptOffered(open: BillPaying): boolean {
@@ -23443,9 +23439,7 @@ export class TillApp extends LitElement {
             : this.#draftSync?.expectedEditFor(open.billId);
       if (
         expectedEdit === undefined ||
-        (expectedEdit === null &&
-          (open.surface === "table" ||
-            (asked.choice.kind === "items" && !this.#itemsStayOnBill(open))))
+        (expectedEdit === null && (open.surface === "table" || asked.choice.kind === "items"))
       )
         throw { code: "draft.out_of_date" };
       const api = this.api;
@@ -23465,13 +23459,7 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const preview = await previewPayment(
-        api,
-        open.billId,
-        asked,
-        expectedEdit,
-        this.#itemsStayOnBill(open),
-      );
+      const preview = await previewPayment(api, open.billId, asked, expectedEdit);
       const now = this.#billPayingNow(open.id);
       if (now !== null) this.billPaying = { ...now, asked, preview, expectedEdit, busy: false };
     } catch (error) {
@@ -23530,7 +23518,6 @@ export class TillApp extends LitElement {
       asked,
       open.expectedEdit,
       open.surface === "table" ? this.#billRevisions() : {},
-      !paysOnNewBill(open.preview),
     );
     // Named now: a tap while the card is out may change the phone's reader before the answer.
     const ready = this.handheldMode
@@ -23735,6 +23722,7 @@ export class TillApp extends LitElement {
         result.payment.change,
         slipPaymentId,
         result.paidOn,
+        result.sourceBalance?.workingOrderId,
       );
       return;
     }
@@ -23769,13 +23757,19 @@ export class TillApp extends LitElement {
   }
 
   /** The order read again after an answer, on `balance` when it is the bill's own; else on
-   * `answered`, the dialog's bill as Pay for items answered it, shown as a read of it would be;
-   * otherwise the dialog's bill is read first. */
+   * `answered`, the table's bill as Pay for items answered it, shown as a read of it would be, the
+   * screen and the dialog moving to it when it is another bill; otherwise the dialog's bill is read
+   * first. */
   async #rereadAfterPaid(
     open: BillPaying,
     balance?: BillBalance,
     answered?: BillBalance,
   ): Promise<void> {
+    const reopened = balance === undefined ? reopenedBill(open.billId, answered) : undefined;
+    if (reopened !== undefined) {
+      await this.#moveToReopened(open, reopened);
+      return;
+    }
     if (balance === undefined && answered !== undefined)
       await this.#showBillPayingBalance(open.id, open.billId, answered, ++this.#payTicks);
     await this.#rereadPayingOrder(
@@ -23784,12 +23778,23 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** The Pay window and the screen on the bill a printed bill was reopened as (PR4-D7, D8). */
+  async #moveToReopened(open: BillPaying, reopened: BillBalance): Promise<void> {
+    const now = this.#billPayingNow(open.id);
+    if (now !== null) this.billPaying = movedToBill(now, reopened);
+    if (this.#hasLeftOrder(open.billId, open.visit)) return;
+    if (!(await this.#switchToBill(reopened.workingOrderId))) return;
+    this.billBalance = reopened;
+    await this.#rereadPayingOrder(movedToBill(open, reopened), reopened);
+  }
+
   async #showPaidTicket(
     open: BillPaying,
     invoice: TillSaleResult,
     cashChange: string | null,
     slipPaymentId?: string,
     paidOn?: string,
+    returnTo = open.billId,
   ): Promise<void> {
     this.#closeBillPaying();
     this.#releaseFoundCounterBill(open);
@@ -23799,7 +23804,7 @@ export class TillApp extends LitElement {
       surface: open.surface,
       cashChange,
       slipPaymentId,
-      ...(paidOn === undefined ? {} : { staysOnBill: true }),
+      ...(paidOn === undefined ? {} : { returnTo }),
     });
     // The paid order drops off the held list.
     if (open.surface === "counter")
@@ -24389,9 +24394,14 @@ export class TillApp extends LitElement {
   /** Move to the next bill before reading its balance, and read its lines beside the floor. */
   async #onBackToTable(): Promise<void> {
     if (this.settlementDocument?.surface !== "table") return;
-    const { staysOnBill } = this.settlementDocument;
+    const { returnTo } = this.settlementDocument;
     this.settlementDocument = null;
-    const next = staysOnBill === true ? undefined : this.#otherBillsToPay()[0];
+    const next =
+      returnTo === undefined
+        ? this.#otherBillsToPay()[0]?.workingOrderId
+        : returnTo === this.activeTabId
+          ? undefined
+          : returnTo;
     const visit = this.#orderVisit;
     if (
       !this.#draftSync?.ownEditWaiting ||
@@ -24400,7 +24410,7 @@ export class TillApp extends LitElement {
       this.errorKey.code !== "bill.paid"
     )
       this.errorKey = undefined;
-    const moved = next !== undefined && (await this.#switchToBill(next.workingOrderId));
+    const moved = next !== undefined && (await this.#switchToBill(next));
     if (this.activeTabId === undefined) await this.#loadPartyBills();
     else if (moved)
       await Promise.all([
