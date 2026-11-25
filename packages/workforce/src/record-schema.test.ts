@@ -155,7 +155,7 @@ describe("pay period schema", () => {
     );
     expect(engineErrorMessage(error)).toContain("pay_period_settings_singleton_ck");
     expect(suite.db.execute(sql`select * from pay_period_settings`).rows).toEqual([
-      { id: 1, frequency: "monthly", anchor_date: null },
+      { id: 1, frequency: "monthly", anchor_date: null, close_grace_days: 3 },
     ]);
   });
   it.each([
@@ -171,6 +171,12 @@ describe("pay period schema", () => {
       ),
     );
     expect(engineErrorMessage(error)).toContain(constraint);
+  });
+  it.each([-1, 1.5, 11])("refuses %s close grace days at the database", async (days) => {
+    const error = await captureError(() =>
+      suite.db.execute(sql`insert into pay_period_settings (close_grace_days) values (${days})`),
+    );
+    expect(engineErrorMessage(error)).toContain("pay_period_settings_close_grace_ck");
   });
   it("writes a frozen closure, refuses changing or deleting it, and accepts its counting marker", async () => {
     const id = newId();

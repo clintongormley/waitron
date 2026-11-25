@@ -4,7 +4,13 @@ import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { change, click, mountManagerHours, openDay } from "../../test/manager-hours-fixtures.js";
+import {
+  change,
+  click,
+  mountManagerHours,
+  openDay,
+  record,
+} from "../../test/manager-hours-fixtures.js";
 class ManagerHoursLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
@@ -93,4 +99,42 @@ it("retains the manager draft and baseline across a language change", async () =
   expect(m.editor.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
     "Proponer un cambio de horas",
   );
+});
+
+it("keeps an edited monthly grace on cancelled leave and restores it on discard", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: true,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+      closedAt: null,
+      holidayCoverageComplete: true,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  const { el: app } = await mountWidget<ManagerHoursLeaveApp>("manager-hours-leave-app", {});
+  app.append(m.host);
+  await record(m.root);
+  const field = m.root.querySelector<HTMLElement>('[name="closeGraceDays"]')!;
+  const input = field.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(page.elementLocator(input), "5");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+
+  const leave = () =>
+    app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+  const first = leave();
+  await choose(app, "keep");
+  expect(await first).toBe("kept");
+  expect(input.value).toBe("5");
+
+  const second = leave();
+  await choose(app, "discard");
+  expect(await second).toBe("proceeded");
+  await expect.poll(() => input.value).toBe("3");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(m.graceWrites).toEqual([]);
 });

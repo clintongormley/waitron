@@ -6,7 +6,7 @@ import { timeEntries } from "./schema/time-entries.js";
 import type { TimeEntryRecord } from "./projection.js";
 import type { Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
-import type { PayPeriodSnapshot, TimeRecord } from "./record-types.js";
+import type { PayPeriodClosure, PayPeriodSnapshot, TimeRecord } from "./record-types.js";
 import { projectTimeRecord } from "./record-projection.js";
 import { recordInPeriod } from "./record-period.js";
 import { readClosures } from "./pay-period-reads.js";
@@ -22,6 +22,7 @@ export async function readTimeRecord(
   tx: Database | Transaction,
   query: TimeRecordQuery,
   policy: PaidBreakPolicy | null = null,
+  loadedClosures?: readonly PayPeriodClosure[],
 ): Promise<TimeRecord> {
   if (
     (query.personId !== undefined && (typeof query.personId !== "string" || !query.personId)) ||
@@ -32,7 +33,7 @@ export async function readTimeRecord(
     query.period.start >= query.period.end
   )
     throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-  const closures = await readClosures(tx, { period: query.period });
+  const closures = loadedClosures ?? (await readClosures(tx, { period: query.period }));
   const personId = query.personId;
   const period = { ...query.period };
   for (const closure of closures) {
