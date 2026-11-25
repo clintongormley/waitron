@@ -65,7 +65,7 @@ describe("till-table-order-screen: last-added saved-line identity", () => {
         expect(draft.lines[0]).not.toBe(original);
         expect(draft.lastAdded).toBe(replacement);
         expect(bar(el)?.checkVisibility()).toBe(true);
-        expect(bar(el)?.textContent).toContain(locale === "es" ? "×0,375" : "×0.375");
+        expect(bar(el)?.textContent).toContain(locale === "es" ? "0,375 kg" : "0.375 kg");
         expect(bar(el)?.textContent).toContain("Jamón 1.5, 2 small");
         expect(bar(el)?.querySelector("[data-last-added-step]")).toBeNull();
         expect(draft.lines[0]!.quantity).toBe("0.375");

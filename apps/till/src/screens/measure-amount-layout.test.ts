@@ -15,18 +15,16 @@ it.each(["counter", "table"] as const)(
   async (surface) => {
     await pageAt(390, 844);
     try {
-      const products = [
-        ham,
-        ...Array.from({ length: 40 }, (_, n) => ({
-          ...beer,
-          id: `item-${n}`,
-          menuItemId: `offer-${n}`,
-          name: `Menu dish ${n}`,
-        })),
-      ];
-      const common = { products, menus: menuOf(products), handheld: true };
+      const products = Array.from({ length: 41 }, (_, n) => ({
+        ...beer,
+        id: `item-${n}`,
+        menuItemId: `offer-${n}`,
+        name: `Menu dish ${n}`,
+      }));
+      products[3] = { ...ham, menuItemId: ham.menuItemId! };
+      const common = { products, menus: menuOf(products) };
       const store = surface === "counter" ? new WorkingOrderStore() : new DraftStore();
-      store.addProduct(beer, "1");
+      store.addProduct(products[0]!, "1");
       const { el, host } =
         surface === "counter"
           ? await mountWidget<HTMLElementTagNameMap["till-counter-screen"]>("till-counter-screen", {
@@ -45,7 +43,9 @@ it.each(["counter", "table"] as const)(
       host.style.overflowY = "auto";
       const menu = el.shadowRoot!.querySelector("till-menu-browser")!;
       await menu.updateComplete;
-      const tile = menu.shadowRoot!.querySelector<HTMLElement>('wt-button[data-kind="product"]')!;
+      const tile = menu.shadowRoot!.querySelectorAll<HTMLElement>(
+        'wt-button[data-kind="product"]',
+      )[3]!;
       await userEvent.click(tile);
       const panel = (surface === "counter" ? el.shadowRoot : menu.shadowRoot)!.querySelector(
         "till-tender-pay",

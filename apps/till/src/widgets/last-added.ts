@@ -143,7 +143,8 @@ export class TillLastAdded extends LitElement {
       nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations),
     );
     const amount = formatDecimalInput(trimQuantity(line.quantity), currentLocale());
-    const quantity = soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
+    const quantity =
+      line.notOffered || soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
     return html`<div
       class="last-added"
       data-last-added

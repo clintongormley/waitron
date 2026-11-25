@@ -45,7 +45,7 @@ describe("New order quantities keep display separate from submission", () => {
           expect(lead.checkVisibility()).toBe(true);
           expect(quantity.checkVisibility()).toBe(true);
           expect(lead.textContent).toBe(
-            locale === "es" ? "Jamón 1.5, 2 small ×0,375" : "Jamón 1.5, 2 small ×0.375",
+            locale === "es" ? "Jamón 1.5, 2 small 0,375 kg" : "Jamón 1.5, 2 small 0.375 kg",
           );
           expect(quantity.textContent).toBe(locale === "es" ? "0,375 kg" : "0.375 kg");
           expect(basket.shadowRoot!.textContent).toContain("Cut 1.5, 2 small");

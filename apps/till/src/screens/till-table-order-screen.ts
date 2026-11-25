@@ -4696,7 +4696,8 @@ export class TillTableOrderScreen extends LitElement {
       api === this.api;
     const name = lineProductName(line.product);
     const amount = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
-    const quantity = soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
+    const quantity =
+      line.notOffered || soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =

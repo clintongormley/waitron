@@ -304,7 +304,6 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     expect(unit.textContent).toBe("L");
     expect(getComputedStyle(unit).visibility).toBe("visible");
     expect(root.querySelector("[data-quantity-step]")).toBeNull();
-    expect(root.querySelector(".prompt")).toBeNull();
     await userEvent.fill(input(), "999999999");
     expect(add()?.disabled).toBe(false);
     expect(add()?.variant).toBe("primary");

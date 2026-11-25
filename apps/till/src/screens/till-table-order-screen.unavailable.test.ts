@@ -317,5 +317,6 @@ describe("till-table-order-screen: a dish no longer offered at all", () => {
       [...basket.shadowRoot!.querySelectorAll(".qty:not(.stepper)")].map((qty) => qty.textContent),
     );
     expect(quantities).toEqual(["2"]);
+    expect(el.shadowRoot!.querySelector(".draft-line-name")?.textContent?.trim()).toBe("×2");
   });
 });
