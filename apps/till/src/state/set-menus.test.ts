@@ -47,6 +47,25 @@ it("uses the recorded version and adds only the newest copies actually on sale",
   ]);
 });
 
+it("draws nothing from a moved set menu's copy, even one sharing the zone copy's key", () => {
+  const moved = { ...copy("Daily", "lunch"), name: "Dinner's" };
+  const zone = { ...copy("Daily", "lunch"), name: "Lunch's" };
+  const bill = {
+    setMenus: {
+      recorded: {},
+      exact: true,
+      copies: [setMenuCopyOf(moved, "dinner")],
+      setMenus: [{ lineId: "moved", lineNo: 1, copyId: moved.key }],
+      dishes: [],
+    },
+    setMenuCopies: [moved],
+  };
+  expect(orderingCopies(bill, [zone], new Set(["lunch"]))).toEqual([
+    { copy: zone, versionId: "lunch" },
+  ]);
+  expect(orderingCopies(bill, [])).toEqual([]);
+});
+
 const daily = {
   ...setMenuCopyOf(copy("Daily", "v1"), "v1"),
   dishes: [{ productId: "hake", variantId: null, countsAsCourseId: "mains", surchargeCents: 500 }],
