@@ -2,40 +2,41 @@
 
 [Design §5 and delivery 7(c)](../specs/2026-11-24-products-list-redesign-design.md).
 
-**Finish line.** In either Products view, tick dishes and choose **Mark available (2)** or
-**Mark unavailable (2)**. The count includes ticks hidden by search or filters. Show both actions
-only when at least one product and no category is ticked. A press saves every ticked product in
-one request. The action changes each product’s own flag and preserves its variants’ flags.
+**Finish line.** In List or Tree, tick dishes and choose **Mark available (2)** or **Mark unavailable (2)**.
+Count every tick, including those hidden by search or filters. Show both actions for a nonempty
+selection of products only. Send one request and change each product’s own flag.
 
-**Request.** Reuse #4272’s `PUT /management-api/products/availability` with `{ productIds, available }`
-and its existing transaction and menu permission. In `apps/dashboard/src/api/client.ts`, add
-`setProductsAvailability(productIds: string[], available: boolean): Promise<void>` and delegate
-from the existing single-item method. Extend `api/client.test.ts` to prove the exact multi-ID
-request and keep the single-ID assertion. The server’s `menu-api.test.ts` already proves a batch
-with a deleted product leaves the valid one available. Run that case and the existing permission
-cases as receipts for reusing the route.
+**Request.** In `apps/dashboard/src/api/client.ts`, add `setProductsAvailability(productIds: string[],
+available: boolean): Promise<void>` and delegate from the existing single-item method. Reuse #4272’s
+`PUT /management-api/products/availability` with `{ productIds, available }`. `api/client.test.ts`
+checks the exact multi-ID request and keeps the single-ID assertion. `apps/server/src/menu-api.test.ts`
+checks menu permission and a refused batch that leaves the valid dish available.
 
-**Selection and saving.** In `widgets/product-browser.ts`, pass its full `#selection()` to a new
-`widgets/product-bulk-availability.ts` for the counted actions in `product-list-toolbar.ts`, between
-Move and Delete. Use the existing toolbar, `wt-button` and EN/ES keys in `i18n/strings.ts`. Capture
-the IDs when pressed. Share the in-flight availability map with the row switches to keep a second
-availability write off those products until the first answers. Keep unrelated switches usable.
-On 204, let one `availabilitySaved(ids, available)` call patch all saved flags together via
-`widgets/product-tree-availability.ts` and `screens/products-screen.ts`, then use its usual Products
-refresh once. On refusal, keep the ticks and saved flags and show the server’s reason through
-`product-list-action-feedback.ts`. Keep the ticks after success so staff can see which dishes they
-acted on or reverse the change. Done and switching views already clear them.
+**Select.** Add the counted `wt-button` actions between Move and Delete in `widgets/product-list-toolbar.ts`
+with strings in `i18n/strings.ts`. In `widgets/product-browser.ts`, use the full `#selection()` and capture
+its product IDs at press time. Share the current per-ID availability write guard in both directions.
+While a selected ID has a row write pending, disable both actions. During a batch give the pressed
+button the loading state, block another batch and ignore row writes to its IDs. Keep unrelated switches usable.
 
-**Test first.** Add browser cases in `widgets/product-browser.test.ts` for missing actions on empty,
-category-only and mixed selections and for the two counted actions when search hides a tick.
-Exercise each action across List and Tree. Assert one complete request, a refusal that leaves the
-selection ready to retry, and one callback for the saved batch. In `screens/products-screen.test.ts`,
-check the successful snapshot applies both product flags and preserves the variant flag even if a
-refresh fails. Add an axe case in `widgets/product-browser.a11y.test.ts` for the new controls. Run
-focused Dashboard cases, the design’s required fiscal and menu checks, and normal branch gates.
+**Result.** Use one `availabilitySaved(ids, available)` callback and one refresh on success. Patch the flags
+together in `widgets/product-tree-availability.ts`, with a line-neutral callback change in
+`screens/products-screen.ts`. Clear only the submitted ticks after success. On refusal, preserve the saved
+flags and announce the reason using the shared `product-list-action-feedback.ts` availability notice.
+Name the blocked dish from the captured selection when `productId` identifies it. For a deleted or missing
+dish, refresh Products so `#keepSelectionOwned` drops its stale tick. For an uncertain response, say the
+change could not be confirmed. Clear the old availability notice when either availability action starts.
 
-**Delivery.** Update both Products guides, the Select section of `docs/developers/design-system.md`
-and `docs/backlog.md`. Use the existing Products capture setup for the spec’s 1440, 1180 and 390 px
-views, languages, themes and states. Show the owner the captures before landing. Keep the editor’s
-Category field and browser Back in their own pieces. This slice is Dashboard plus guides. Estimate
-130–180 production lines and 140–200 test lines, with no schema change or venue reset.
+**Test first.** `widgets/product-browser.test.ts` covers product-only, mixed and empty selections, a
+hidden tick, both directions of overlapping writes, and a deleted tick that disappears on refresh so
+staff can retry. Check one complete request in each view and a fitted 390 px Spanish bar with ticks.
+`screens/products-screen.test.ts` checks both flags update and the variant flag is preserved even when
+refresh fails. Exercise the new buttons in `widgets/product-browser.a11y.test.ts`. The queue’s unchanged
+gates are `write-path.e2e.test.ts`, `inmutabilidad.test.ts`, `till-api.sell-published.test.ts` and
+`till-app-menu-refresh.test.ts`.
+
+**Delivery.** Update the English and Spanish Products guides, `docs/developers/design-system.md`,
+`docs/developers/product-categories.md` and `docs/backlog.md`. Reuse the 7(b) Products screen capture
+fixture at 1440, 1180 and 390 px in both languages and themes. Show the owner the spec states plus
+product-only, mixed and hidden ticks and a refusal before landing. Leave the Move footer wording,
+editor Category and browser Back outstanding in the redesign backlog. Expect 90–130 production lines
+and 125–175 test lines. The slice needs no schema change or venue reset.
