@@ -252,6 +252,18 @@ describe("A725 Calendar station month, migrated from Times", () => {
     },
   );
 
+  it("keeps the Spanish Show label visible beside a short station name at phone width", async () => {
+    await page.viewport(390, 900);
+    setLocale("es");
+    const { el } = await mount({ stationId: "grill" });
+    await drawn(el, "2026-12-01", "rest").not.toBeNull();
+    const show = picker(el)!;
+    const label = show.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(label.textContent).toBe(VENUE_SERVICE_STRINGS.es["opening.show"]);
+    expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+    expect(show.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+  });
+
   it("a viewer can read the station's rule and open a date from Month", async () => {
     const h = harness();
     h.state.readOnly = true;

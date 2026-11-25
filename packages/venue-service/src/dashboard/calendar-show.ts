@@ -58,6 +58,7 @@ export function showPicker(options: {
   return html`<wt-combobox
     name="departmentId"
     label=${t("opening.show")}
+    style="min-inline-size: calc(2 * var(--wt-tap-min) + var(--wt-space-2)); max-inline-size: 100%"
     search="never"
     .options=${choices}
     .value=${value}
