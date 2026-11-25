@@ -912,11 +912,12 @@ installed till app):
     [Finish table](../../apps/server/src/finish-party-service.ts),
     [service cancellation](../../apps/server/src/line-cancel.ts).
   - A cancellation that reduces the charge can take part of a measured row. A comp or discount
-    refuses a partial quantity on a line with decimal places. Item payment can take whole units
-    from a larger zero-decimal row without extras. These paths use the stored row and its unit
+    refuses a partial quantity on a line with decimal places. Pay for items can take part of
+    any row, measured ones included, where its extras split evenly and the parts cost what the row
+    does; the till offers whole units of a larger row without extras. These paths use the stored row and its unit
     precision, so a zero-decimal check alone cannot identify an ordinary whole dish.
     [Price adjustments](../../apps/server/src/adjustments-apply.ts),
-    [item payments](../../apps/server/src/bill-payments.ts).
+    [Pay for items](../../apps/server/src/pay-for-items.ts).
 - **A table's seats are a guide, never a limit (owner, 2026-10-08, A429 decision 6).** The seat
   count is one number, used as a guide and for bookings; the till seats a larger party without a
   refusal.
