@@ -10,7 +10,8 @@ import {
   parseAttendanceExportOptions,
   parseAttendanceExportQuery,
 } from "./attendance-export-request.js";
-import { renderAttendanceCsv } from "./attendance-export-csv.js";
+import { renderAttendanceXlsx } from "./attendance-export-xlsx.js";
+import { workbookDownloadHeaders } from "./xlsx-workbook.js";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
 import type { Logger } from "./logger.js";
 
@@ -88,22 +89,16 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
           );
         // Formatting outlives the snapshot transaction; recheck authority before returning any bytes.
         const document = await captured.format();
+        const { from, before, audience, format } = captured.selection;
+        const filename = `time-record-${from}-${before}-${audience}.${format}`;
         const bytes =
-          captured.selection.format === "pdf"
+          format === "pdf"
             ? await renderAttendancePdf(document)
-            : renderAttendanceCsv(document);
+            : await renderAttendanceXlsx(document);
         await withTransaction(deps.db, (tx) => authorize(tx, token, mode, false));
-        c.header(
-          "Content-Type",
-          captured.selection.format === "pdf" ? "application/pdf" : "text/csv; charset=utf-8",
-        );
-        c.header(
-          "Content-Disposition",
-          `attachment; filename="time-record-${captured.selection.from}-${captured.selection.before}-${captured.selection.audience}.${captured.selection.format}"`,
-        );
-        c.header("Cache-Control", "no-store");
-        c.header("X-Content-Type-Options", "nosniff");
-        return c.body(Uint8Array.from(bytes));
+        const headers = workbookDownloadHeaders(filename);
+        if (format === "pdf") headers["Content-Type"] = "application/pdf";
+        return c.body(Uint8Array.from(bytes), 200, headers);
       }),
     );
   }

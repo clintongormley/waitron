@@ -41,7 +41,7 @@ export interface PersonalDataPart {
 
 /** Lower-case ASCII only, so no name can collide with a `README.txt` the server adds and none
  * needs the ZIP's UTF-8 flag. */
-const FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.(?:json|csv|pdf)$/;
+const FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*\.(?:json|csv|pdf|xlsx)$/;
 
 export function personalDataParts(modules: readonly WaitronModule[]): PersonalDataPart[] {
   return modules.flatMap((m) =>

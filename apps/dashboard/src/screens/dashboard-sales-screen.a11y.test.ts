@@ -277,22 +277,6 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("renders the deferred-payments file action and its refusal accessibly", async () => {
-    const api = stubApi({
-      downloadDeferredPayments: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-    });
-    const { el, host } = await mountWidget<SalesScreen>(
-      "dashboard-sales-screen",
-      { api, canExport: true },
-      theme,
-    );
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-deferred]")!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=export-error]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
   it("renders the accountant download and its refusal accessibly", async () => {
     const { el, host } = await mountWidget<SalesScreen>(
       "dashboard-sales-screen",

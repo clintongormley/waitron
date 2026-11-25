@@ -1042,8 +1042,8 @@ The receipt and the invoice ask the customer to pay by bank transfer, quoting th
 number, and print your bank account. Without a bank account in **Venue settings → Venue details**
 ([how to set it](table-service.md#full-invoice)), they say only **Deferred payment**.
 
-Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
-dashboard's **Sales & takings** page.
+In **Sales & takings** on the dashboard, select the trading days you want and choose **Download
+for accountant (XLSX)**. Open the **Deferred payments** tab to see the bills closed on those days.
 
 ## Practise with different devices in Demo {#demo-devices}
 

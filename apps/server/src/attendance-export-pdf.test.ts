@@ -10,7 +10,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
-import { renderAttendanceCsv } from "./attendance-export-csv.js";
+import { renderAttendanceXlsx } from "./attendance-export-xlsx.js";
+import { worksheetText } from "./testing/xlsx-rows.js";
 
 async function rendered(input = attendanceExportFixture()) {
   const bytes = await renderAttendancePdf(input);
@@ -169,7 +170,7 @@ describe("real provider document bytes", () => {
     const representatives = await fixture.document("representatives");
     for (const doc of [standard, representatives]) {
       const output = await rendered(doc);
-      const csv = new TextDecoder().decode(renderAttendanceCsv(doc));
+      const sheet = worksheetText(await renderAttendanceXlsx(doc));
       const metadata = JSON.stringify(output.metadata);
       for (const forbidden of [
         "CONTACT-CANARY",
@@ -179,7 +180,7 @@ describe("real provider document bytes", () => {
         "LOGIN-CANARY",
       ]) {
         expect(output.text).not.toContain(forbidden);
-        expect(csv).not.toContain(forbidden);
+        expect(sheet).not.toContain(forbidden);
         expect(metadata).not.toContain(forbidden);
       }
       for (const retained of [
@@ -191,7 +192,7 @@ describe("real provider document bytes", () => {
         "2026-01-05T18:00:00+01:00",
       ]) {
         expect(output.text).toContain(retained);
-        expect(csv).toContain(retained);
+        expect(sheet).toContain(retained);
       }
       const history = doc.sections.find((s) => s.key === "history")!;
       const frozen = doc.sections.find((s) => s.key === "frozen-history")!;
@@ -199,13 +200,13 @@ describe("real provider document bytes", () => {
       expect(frozen.rows).toHaveLength(4);
       for (const entry of history.rows) {
         expect(output.text).toContain(entry.cells.entryId);
-        expect(csv).toContain(entry.cells.entryId);
+        expect(sheet).toContain(entry.cells.entryId);
       }
       expect(output.text.includes("ID-NUMBER-CANARY")).toBe(doc.audience === "standard");
-      expect(csv.includes("ID-NUMBER-CANARY")).toBe(doc.audience === "standard");
+      expect(sheet.includes("ID-NUMBER-CANARY")).toBe(doc.audience === "standard");
       expect(metadata).not.toContain("ID-NUMBER-CANARY");
       expect(output.text).toContain("540");
-      expect(csv).toContain('"540"');
+      expect(sheet).toContain(">540<");
     }
   });
 });

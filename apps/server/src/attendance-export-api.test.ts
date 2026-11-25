@@ -1,5 +1,7 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
+import { unzipSync } from "fflate";
+import { sheetNamed, worksheetRows, worksheetText } from "./testing/xlsx-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, withFoldedPersonChanges } from "@waitron/db";
@@ -64,7 +66,7 @@ function query(patch: Record<string, string> = {}) {
   return new URLSearchParams({
     from: "2026-01-01",
     before: "2026-02-01",
-    format: "csv",
+    format: "xlsx",
     audience: "standard",
     locale: "en",
     ...patch,
@@ -86,6 +88,9 @@ const snapshot = () => ({
     sql`select * from outgoing_mail where kind = 'attendance_question' order by id`,
   ),
 });
+async function worksheet(response: Response) {
+  return worksheetText(new Uint8Array(await response.arrayBuffer()));
+}
 async function fail(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
   expect(await response.json()).toMatchObject({ error: { code } });
@@ -129,18 +134,39 @@ async function deadline<T>(promise: Promise<T>): Promise<T> {
 }
 
 describe("authenticated working-time downloads", () => {
+  it("serves Excel working-time files privately through the own and manager routes", async () => {
+    for (const response of [
+      await ask("own", { format: "xlsx" }),
+      await ask("manager", { format: "xlsx" }, managerCookie),
+    ]) {
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      expect(response.headers.get("content-disposition")).toBe(
+        'attachment; filename="time-record-2026-01-01-2026-02-01-standard.xlsx"',
+      );
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+      expect(sheetNamed(files, "Working-time record")).toContain("María Muñoz");
+    }
+  });
+
   it("exports staff's own rich history and frozen snapshots without changing the record", async () => {
     const before = snapshot();
     const response = await ask();
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(response.headers.get("content-type")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="time-record-2026-01-01-2026-02-01-standard.csv"',
+      'attachment; filename="time-record-2026-01-01-2026-02-01-standard.xlsx"',
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    const text = await response.text();
-    expect(text).toContain('"540"');
+    const text = await worksheet(response);
+    expect(text).toContain(">540<");
     expect(text).toContain("frozen-history");
     expect(text).toContain("2026-01-05T18:00:00+01:00");
     expect(text).toContain("María Muñoz");
@@ -171,7 +197,7 @@ describe("authenticated working-time downloads", () => {
       for (const patch of selections) {
         const response = await ask("manager", patch, managerCookie);
         expect(response.status).toBe(200);
-        expect(await response.text()).toContain("María Muñoz");
+        expect(await worksheet(response)).toContain("María Muñoz");
       }
     },
   );
@@ -261,21 +287,20 @@ describe("authenticated working-time downloads", () => {
       await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
       await backend.clockOut(tx, { ...common, at: "2026-01-06T10:00:00Z" });
     });
-    const all = await (await ask("manager", {}, managerCookie)).text();
-    const selected = await (
-      await ask("manager", { personId: fixture.managerId }, managerCookie)
-    ).text();
-    const own = await (await ask()).text();
+    const all = await worksheet(await ask("manager", {}, managerCookie));
+    const selected = await worksheet(
+      await ask("manager", { personId: fixture.managerId }, managerCookie),
+    );
+    const own = await worksheet(await ask());
     expect(all).toContain(fixture.personId);
-    expect(all).toContain('"600"');
+    expect(all).toContain(">600<");
     expect(selected).not.toContain(fixture.personId);
-    expect(selected).toContain('"60"');
-    expect(own).toContain('"540"');
+    expect(selected).toContain(">60<");
+    expect(own).toContain(">540<");
     expect(own).not.toContain("2026-01-06T09:00:00");
-    const [, ...ownLines] = own.split("\r\n");
-    expect(ownLines.filter((line) => line.startsWith('"frozen-sessions"'))).toHaveLength(1);
+    expect(worksheetRows(own).filter(([section]) => section === "frozen-sessions")).toHaveLength(1);
   });
-  it.each(["csv", "pdf"] as const)(
+  it.each(["xlsx", "pdf"] as const)(
     "serves real %s representatives bytes with links, authors and offsets but no reasons",
     async (format) => {
       const response = await ask(
@@ -285,7 +310,9 @@ describe("authenticated working-time downloads", () => {
       );
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe(
-        format === "pdf" ? "application/pdf" : "text/csv; charset=utf-8",
+        format === "pdf"
+          ? "application/pdf"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       );
       let text: string;
       if (format === "pdf") {
@@ -306,7 +333,7 @@ describe("authenticated working-time downloads", () => {
         } finally {
           await loading.destroy();
         }
-      } else text = await response.text();
+      } else text = await worksheet(response);
       expect(text).toContain("María Muñoz");
       expect(text).toContain("José");
       expect(text).toContain("2026-01-05T18:00:00+01:00");
@@ -369,16 +396,16 @@ describe("authenticated working-time downloads", () => {
     const before = snapshot();
     const response = await ask();
     expect(response.status).toBe(200);
-    const rows = (await response.text()).split("\r\n");
-    expect(rows.find((r) => r.startsWith('"totals"'))).toContain('"600"');
-    expect(rows.find((r) => r.startsWith('"frozen-sessions"'))).toContain('"540"');
-    const impacts = rows.filter((r) => r.startsWith('"impacts"'));
+    const rows = worksheetRows(await worksheet(response));
+    expect(rows.find((r) => r[0] === "totals")).toContain("600");
+    expect(rows.find((r) => r[0] === "frozen-sessions")).toContain("540");
+    const impacts = rows.filter((r) => r[0] === "impacts");
     expect(impacts).toHaveLength(1);
-    expect(impacts[0]).toContain('"540","600","60"');
-    expect(rows.filter((r) => r.startsWith('"history"')).join("\n")).toContain(
-      "LATE-DECISION-MARKER",
-    );
-    expect(rows.filter((r) => r.startsWith('"frozen-history"')).join("\n")).not.toContain(
+    const start = rows[0]!.indexOf("beforeWorkedMinutes");
+    expect(start).toBeGreaterThan(0);
+    expect(impacts[0]!.slice(start, start + 3)).toEqual(["540", "600", "60"]);
+    expect(rows.filter((r) => r[0] === "history").join("\n")).toContain("LATE-DECISION-MARKER");
+    expect(rows.filter((r) => r[0] === "frozen-history").join("\n")).not.toContain(
       "LATE-DECISION-MARKER",
     );
     expect(snapshot()).toEqual(before);
@@ -389,11 +416,11 @@ describe("authenticated working-time downloads", () => {
     const following = await ask("own", { from: "2026-01-05", before: "2030-01-01" });
     expect(january.status).toBe(200);
     expect(following.status).toBe(200);
-    const left = (await january.text()).split("\r\n"),
-      right = (await following.text()).split("\r\n");
-    expect(left.filter((r) => r.startsWith('"sessions"'))).toHaveLength(0);
-    expect(right.filter((r) => r.startsWith('"sessions"'))).toHaveLength(1);
-    expect(right.find((r) => r.startsWith('"totals"'))).toContain('"540"');
+    const left = worksheetRows(await worksheet(january)),
+      right = worksheetRows(await worksheet(following));
+    expect(left.filter((r) => r[0] === "sessions")).toHaveLength(0);
+    expect(right.filter((r) => r[0] === "sessions")).toHaveLength(1);
+    expect(right.find((r) => r[0] === "totals")).toContain("540");
   });
   it("reports unavailable only after authentication and refuses empty attachments", async () => {
     const disabled = mount({ prepare: provider.prepare });
@@ -451,11 +478,11 @@ describe("authenticated working-time downloads", () => {
     }
     const response = await delayed;
     expect(response.status).toBe(200);
-    const captured = await response.text();
-    expect(captured).toContain('"540"');
+    const captured = await worksheet(response);
+    expect(captured).toContain(">540<");
     expect(captured).not.toContain("2026-01-07T09:00:00");
-    const current = await (await ask()).text();
-    expect(current).toContain('"600"');
+    const current = await worksheet(await ask());
+    expect(current).toContain(">600<");
     expect(current).toContain("2026-01-07T09:00:00");
   });
   it.each(["expired", "ended", "suspended", "demoted", "unchanged"] as const)(
@@ -491,7 +518,7 @@ describe("authenticated working-time downloads", () => {
       const response = await delayed;
       if (kind === "unchanged") {
         expect(response.status).toBe(200);
-        expect(await response.text()).toContain("María Muñoz");
+        expect(await worksheet(response)).toContain("María Muñoz");
       } else
         await fail(
           response,

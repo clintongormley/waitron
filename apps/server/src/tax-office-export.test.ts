@@ -1074,6 +1074,18 @@ describe("the month's CSV and README", () => {
     expect(lineIn("UTC")).toMatch(/,"2026-01-31"$/);
   });
 
+  it.each(["=1", "+1", "-60", "@SUM(1)", "\ttext", "\rtext", "  =1", " \ttext", "\n@SUM(1)"])(
+    "writes customer text %j as a literal CSV cell",
+    (value) => {
+      const bytes = renderTaxOfficeCsv(
+        [{ ...row, customerName: value, customerTaxId: "TAX-ID" }],
+        "en",
+        "Europe/Madrid",
+      );
+      expect(new TextDecoder().decode(bytes)).toContain(`,"'${value}","TAX-ID",`);
+    },
+  );
+
   it("guards a rate cell that is not a plain decimal against spreadsheet formulas", () => {
     const odd = { ...row, vat: [{ rate: "=1+1", base: "-1.00", tax: "-0.10" }] };
     const [, line] = new TextDecoder()

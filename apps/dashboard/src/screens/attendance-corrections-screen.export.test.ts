@@ -38,7 +38,7 @@ async function open(theme?: "light" | "dark") {
     .toBe(false);
   return { ...m, dialog };
 }
-it("starts with the chosen person and period, and downloads Everyone as representatives CSV", async () => {
+it("starts with the chosen person and period, and downloads Everyone as representatives XLSX", async () => {
   const m = await open();
   expect(m.dialog.mode).toBe("manager");
   expect(m.dialog.personId).toBe("worker");
@@ -46,14 +46,14 @@ it("starts with the chosen person and period, and downloads Everyone as represen
   expect(m.dialog.people.map((p) => p.personId)).toEqual(["worker", "retained"]);
   await change(m.dialog.shadowRoot!, "exportPerson", "");
   await change(m.dialog.shadowRoot!, "exportAudience", "representatives");
-  await change(m.dialog.shadowRoot!, "exportFormat", "csv");
+  await change(m.dialog.shadowRoot!, "exportFormat", "xlsx");
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:manager");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   const anchor = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   await click(m.dialog.shadowRoot!, "[data-test=export-download]");
   await expect.poll(() => anchor.mock.calls.length).toBe(1);
   expect(m.reads.find((r) => r.path.includes("/export?"))).toEqual({
-    path: "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
+    path: "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=xlsx&audience=representatives&locale=en",
     passive: null,
   });
   expect(

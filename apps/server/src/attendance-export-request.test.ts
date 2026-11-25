@@ -26,14 +26,14 @@ describe("working-time export selection", () => {
     });
     const query = valid();
     query.set("personId", personId);
-    query.set("format", "csv");
+    query.set("format", "xlsx");
     query.set("audience", "representatives");
     query.set("locale", "es");
     expect(parseAttendanceExportQuery(query, "manager")).toEqual({
       selection: {
         from: "2020-01-01",
         before: "2026-02-01",
-        format: "csv",
+        format: "xlsx",
         audience: "representatives",
         locale: "es",
       },
@@ -61,7 +61,7 @@ describe("working-time export selection", () => {
     ["before", "not-a-date", "before"],
     ["before", "2026-2-1", "before"],
     ["format", "PDF", "format"],
-    ["format", "xlsx", "format"],
+    ["format", "csv", "format"],
     ["audience", "Standard", "audience"],
     ["audience", "all", "audience"],
     ["locale", "en-US", "locale"],

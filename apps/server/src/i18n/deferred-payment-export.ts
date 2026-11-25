@@ -1,6 +1,6 @@
-/** The column headings of the file of deferred payments, in the venue's language. */
 export const DEFERRED_PAYMENT_EXPORT_WORDS = {
   en: {
+    sheet: "Deferred payments",
     invoiceNumber: "Invoice number",
     invoiceType: "Type",
     issueDate: "Issue date",
@@ -15,6 +15,7 @@ export const DEFERRED_PAYMENT_EXPORT_WORDS = {
     replacedBy: "Replaced by",
   },
   es: {
+    sheet: "Pagos aplazados",
     invoiceNumber: "Número de factura",
     invoiceType: "Tipo",
     issueDate: "Fecha de expedición",

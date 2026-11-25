@@ -65,7 +65,7 @@ Con Normativa laboral española desactivada, puedes seguir planificando turnos y
 Las comprobaciones de normativa española y la exportación española del registro horario no están disponibles
 hasta que actives el módulo y reinicies.
 La descarga de tus datos personales conserva tus fichajes en `clock-entries.json`; omite los archivos
-`time-record.pdf` y `time-record.csv` en formato español mientras el módulo está desactivado.
+`time-record.pdf` y `time-record.xlsx` en formato español mientras el módulo está desactivado.
 
 ## Revisar devoluciones de pedidos abandonados {#abandoned-refunds}
 

@@ -320,7 +320,8 @@ registro diario de jornada que exige la ley.
   Social.
 - Plazo de conservación: cuatro años, que fija la ley.
 - Seguridad: Waitron se niega a cambiar o borrar un fichaje una vez escrito. La copia de los propios
-  datos de cada persona incluye su registro de jornada.
+  datos de cada persona incluye su registro de jornada en PDF y Excel cuando está activado el
+  módulo de personal español.
 
 **Quién hizo qué en la caja.** Waitron anota quién cobró las ventas, quién cambió los pedidos, quién
 autorizó las anulaciones, quién pidió o autorizó las devoluciones, y quién abrió el cajón de efectivo

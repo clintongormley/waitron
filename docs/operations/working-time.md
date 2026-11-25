@@ -23,7 +23,7 @@ In the dashboard's **Hours**, choose **Export working-time record**.
 1. Set **From** and **Before**. From is included; Before is excluded. For a complete October,
    choose 1 October through Before 1 November.
 2. Choose **Everyone** or one person, and **Standard** or **Representatives**.
-3. Choose **PDF** or **CSV**, then **Download**.
+3. Choose **PDF** or **Excel (XLSX)**, then **Download**.
 
 Use the access your account has been given. The export dialog's representative version is
 a distinct choice; it does not give its reader access to other dashboard actions.

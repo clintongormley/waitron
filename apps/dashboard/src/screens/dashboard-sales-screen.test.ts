@@ -813,12 +813,12 @@ describe("dashboard-sales-screen date fields", () => {
   });
 });
 
-describe("dashboard-sales-screen deferred-payments file", () => {
-  const FILE = new Blob(["﻿header\r\n"]);
-  const exportButton = (el: SalesScreen) =>
-    el.shadowRoot!.querySelector<WtButton>("[data-test=export-deferred]");
-  const exportError = (el: SalesScreen) =>
-    el.shadowRoot!.querySelector("[data-test=export-error]")?.textContent?.trim() ?? null;
+describe("dashboard-sales-screen accountant workbook", () => {
+  const button = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector<WtButton>("[data-test=export-accountant]");
+  const error = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=accountant-error]")?.textContent?.trim() ?? null;
+  afterEach(() => vi.restoreAllMocks());
   const fieldValue = (el: SalesScreen, test: string) =>
     el.shadowRoot!.querySelector<WtInput>(`[data-test=${test}]`)!.value;
   async function mount(api: DashboardApi, canExport: boolean): Promise<SalesScreen> {
@@ -835,112 +835,22 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     });
     return { clicked };
   }
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
 
-  it("offers no deferred-payments file to a session that may not export reports", async () => {
-    const el = await mount(stubApi({ downloadDeferredPayments: vi.fn() }), false);
-    expect(exportButton(el)).toBeNull();
-  });
-
-  it("calls the action Export deferred payments in English", async () => {
+  it("offers one accountant download and explains the deferred tab's trading dates", async () => {
     setLocale("en-GB");
-    const english = await mount(stubApi(), true);
-    expect(exportButton(english)!.textContent!.trim()).toBe("Export deferred payments (CSV)");
-  });
-
-  it("downloads the range the fields show, named for that range", async () => {
-    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
-    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
-    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-    const { clicked } = catchDownloads();
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    setDate(el, "from-picker", "2030-06-01");
-    setDate(el, "to-picker", "2030-06-15");
-    await flush(el);
-
-    expect(exportButton(el)!.textContent!.trim()).toBe(t("sales.export_deferred"));
-    exportButton(el)!.click();
-    await flush(el);
-
-    expect(downloadDeferredPayments).toHaveBeenCalledWith({ from: "2030-06-01", to: "2030-06-15" });
-    expect(createObjectURL).toHaveBeenCalledWith(FILE);
-    expect(clicked).toHaveLength(1);
-    expect(clicked[0]!.download).toBe("deferred-payments-2030-06-01-2030-06-15.csv");
-    expect(clicked[0]!.href).toBe("blob:deferred");
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:deferred");
-    expect(exportError(el)).toBeNull();
-  });
-
-  it("names the file for the range it asked for, even when the fields change before the answer", async () => {
-    let answer!: (file: Blob) => void;
-    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-    const { clicked } = catchDownloads();
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    setDate(el, "from-picker", "2030-06-01");
-    setDate(el, "to-picker", "2030-06-15");
-    await flush(el);
-    exportButton(el)!.click();
-    await flush(el);
-
-    setDate(el, "to-picker", "2030-06-20");
-    answer(FILE);
-    await flush(el);
-
-    expect(clicked).toHaveLength(1);
-    expect(clicked[0]!.download).toBe("deferred-payments-2030-06-01-2030-06-15.csv");
-  });
-
-  it("shows the action busy while the file is asked for, and sends one request however often it is pressed", async () => {
-    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>(() => {}));
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-
-    exportButton(el)!.click();
-    await flush(el);
-    exportButton(el)!.click();
-    await flush(el);
-
-    expect(exportButton(el)!.loading).toBe(true);
-    expect(downloadDeferredPayments).toHaveBeenCalledOnce();
-  });
-
-  it("shows a refusal under the action, keeps both dates, and asks again when pressed again", async () => {
-    const downloadDeferredPayments = vi
-      .fn()
-      .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    setDate(el, "from-picker", "2030-06-01");
-    setDate(el, "to-picker", "2030-06-15");
-    await flush(el);
-
-    exportButton(el)!.click();
-    await flush(el);
-
-    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
-    expect(fieldValue(el, "from-picker")).toBe("2030-06-01");
-    expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
-    expect(exportButton(el)!.loading).toBe(false);
-    expect(exportButton(el)!.disabled).toBe(false);
-
-    exportButton(el)!.click();
-    await flush(el);
-
-    expect(downloadDeferredPayments).toHaveBeenCalledTimes(2);
-    expect(downloadDeferredPayments).toHaveBeenLastCalledWith({
-      from: "2030-06-01",
-      to: "2030-06-15",
-    });
+    const el = await mount(stubApi(), true);
+    expect(el.shadowRoot!.querySelector("[data-test=export-deferred]")).toBeNull();
+    const action = el.shadowRoot!.querySelector<WtButton>("[data-test=export-accountant]")!;
+    expect(action.textContent!.trim()).toBe("Download for accountant (XLSX)");
+    expect(action.getAttribute("aria-description")).toContain("trading day");
   });
 
   it("is disabled while a date field is cleared, and downloads what the fields show once it holds a date again", async () => {
-    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:deferred");
+    const downloadAccountantExport = vi.fn().mockResolvedValue(new Blob(["workbook"]));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:accountant");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     catchDownloads();
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
+    const el = await mount(stubApi({ downloadAccountantExport }), true);
     setDate(el, "from-picker", "2030-06-01");
     setDate(el, "to-picker", "2030-06-15");
     await flush(el);
@@ -952,18 +862,18 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     await flush(el);
 
     expect(fieldValue(el, "to-picker")).toBe("");
-    expect(exportButton(el)!.disabled).toBe(true);
-    exportButton(el)!.click();
+    expect(button(el)!.disabled).toBe(true);
+    button(el)!.click();
     await flush(el);
-    expect(downloadDeferredPayments).not.toHaveBeenCalled();
+    expect(downloadAccountantExport).not.toHaveBeenCalled();
 
     await userEvent.fill(nativeTo, "2030-06-20");
     await flush(el);
 
-    expect(exportButton(el)!.disabled).toBe(false);
-    exportButton(el)!.click();
+    expect(button(el)!.disabled).toBe(false);
+    button(el)!.click();
     await flush(el);
-    expect(downloadDeferredPayments).toHaveBeenCalledExactlyOnceWith({
+    expect(downloadAccountantExport).toHaveBeenCalledExactlyOnceWith({
       from: "2030-06-01",
       to: "2030-06-20",
     });
@@ -972,90 +882,40 @@ describe("dashboard-sales-screen deferred-payments file", () => {
   it("is enabled again when the business day fills a field cleared before it arrived", async () => {
     let answer!: (value: SalesOverview) => void;
     const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
-    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>(() => {}));
-    const el = await mount(stubApi({ getSalesOverview, downloadDeferredPayments }), true);
+    const downloadAccountantExport = vi.fn(() => new Promise<Blob>(() => {}));
+    const el = await mount(stubApi({ getSalesOverview, downloadAccountantExport }), true);
     setDate(el, "to-picker", "");
     await flush(el);
-    expect(exportButton(el)!.disabled).toBe(true);
+    expect(button(el)!.disabled).toBe(true);
 
     answer(overview("2030-06-15"));
     await flush(el);
 
     expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
-    expect(exportButton(el)!.disabled).toBe(false);
-    exportButton(el)!.click();
+    expect(button(el)!.disabled).toBe(false);
+    button(el)!.click();
     await flush(el);
-    expect(downloadDeferredPayments).toHaveBeenCalledWith({ from: "2030-06-15", to: "2030-06-15" });
-  });
-
-  it("takes a refusal away once the dates change", async () => {
-    const downloadDeferredPayments = vi
-      .fn()
-      .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    exportButton(el)!.click();
-    await flush(el);
-    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
-
-    setDate(el, "to-picker", "2030-06-15");
-    await flush(el);
-
-    expect(exportError(el)).toBeNull();
-  });
-
-  it("shows no refusal for a range the fields no longer hold", async () => {
-    let refuse!: (reason: unknown) => void;
-    const downloadDeferredPayments = vi.fn(() => new Promise<Blob>((_, r) => (refuse = r)));
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    exportButton(el)!.click();
-    await flush(el);
-
-    setDate(el, "to-picker", "2030-06-15");
-    refuse({ code: "authorization.not_permitted" });
-    await flush(el);
-
-    expect(exportError(el)).toBeNull();
-    expect(exportButton(el)!.loading).toBe(false);
+    expect(downloadAccountantExport).toHaveBeenCalledWith({ from: "2030-06-15", to: "2030-06-15" });
   });
 
   it("takes a refusal away once the business day replaces both dates", async () => {
     let answer!: (value: SalesOverview) => void;
     const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
-    const downloadDeferredPayments = vi
+    const downloadAccountantExport = vi
       .fn()
       .mockRejectedValue({ code: "authorization.not_permitted" });
-    const el = await mount(stubApi({ getSalesOverview, downloadDeferredPayments }), true);
-    exportButton(el)!.click();
+    const el = await mount(stubApi({ getSalesOverview, downloadAccountantExport }), true);
+    button(el)!.click();
     await flush(el);
-    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
+    expect(error(el)).toBe(codeMessage("authorization.not_permitted"));
 
     answer(overview("2030-06-15"));
     await flush(el);
 
     expect(fieldValue(el, "from-picker")).toBe("2030-06-15");
     expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
-    expect(exportError(el)).toBeNull();
+    expect(error(el)).toBeNull();
   });
-
-  it("is disabled while the range runs backwards", async () => {
-    const downloadDeferredPayments = vi.fn().mockResolvedValue(FILE);
-    const el = await mount(stubApi({ downloadDeferredPayments }), true);
-    expect(exportButton(el)!.disabled).toBe(false);
-
-    setDate(el, "from-picker", "2030-06-15");
-    setDate(el, "to-picker", "2030-06-01");
-    await flush(el);
-
-    expect(exportButton(el)!.disabled).toBe(true);
-  });
-});
-
-describe("dashboard-sales-screen accountant workbook", () => {
-  const button = (el: SalesScreen) =>
-    el.shadowRoot!.querySelector<WtButton>("[data-test=export-accountant]");
-  const error = (el: SalesScreen) =>
-    el.shadowRoot!.querySelector("[data-test=accountant-error]")?.textContent?.trim() ?? null;
-  afterEach(() => vi.restoreAllMocks());
 
   it("drops a refusal arriving after the dates change", async () => {
     let refuse!: (reason: unknown) => void;

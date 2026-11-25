@@ -453,6 +453,8 @@ it holds about her: she opens _Profile → Download my data_ and gets the ZIP be
 emails asking for everything held about her. An admin opens _Staff → Marta López → Download her
 data_ and gets the same ZIP:
 
+Update 2026-11-25: the [Excel downloads](../plans/2026-11-25-i-accountant-xlsx.md) replace the working-time CSV in the archive with `time-record.xlsx`.
+
 ```text
 marta-lopez-2026-10-05.zip
   README.txt           purposes, recipients, retention, rights, in the venue's language

@@ -121,7 +121,7 @@ Abre **Configuración de la cuenta** desde el menú de cuenta y, en **Tus datos*
 acceso en archivos `.json`. Si el local planifica el personal o registra la jornada en Waitron,
 la copia también puede contener tus datos de contrato, tus turnos, tus ausencias, tus roles de
 personal y las preguntas sobre tus fichajes en archivos `.json`, y tu registro de jornada en PDF y
-en una hoja de cálculo `.csv`. Puede haber también un `actions.json`: las ventas completas ya
+en una hoja de cálculo de Excel (`.xlsx`). Puede haber también un `actions.json`: las ventas completas ya
 registradas cuya anulación autorizaste, las devoluciones que pediste, autorizaste o cuyo resultado
 registraste, y las aperturas del cajón de efectivo que hiciste o autorizaste. También incluye
 el efectivo que añadiste, retiraste o contaste, los cierres de cajón que terminaste, los pagos de

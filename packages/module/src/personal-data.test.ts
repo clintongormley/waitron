@@ -163,7 +163,7 @@ describe("preparePersonalData", () => {
     const build = await preparePersonalData(
       tx,
       [
-        part("a", stub(["one.json", "two.csv"])),
+        part("a", stub(["one.json", "two.csv", "time-record.xlsx"])),
         part("b", stub(["three.pdf"], [{ name: "three.pdf", content: new Uint8Array([1, 2]) }])),
       ],
       subject,
@@ -171,6 +171,7 @@ describe("preparePersonalData", () => {
     expect(await build()).toEqual([
       { name: "one.json", content: "one.json" },
       { name: "two.csv", content: "two.csv" },
+      { name: "time-record.xlsx", content: "time-record.xlsx" },
       { name: "three.pdf", content: new Uint8Array([1, 2]) },
     ]);
   });

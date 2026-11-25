@@ -119,7 +119,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "The record's \"Keep until\" date marks the end of the legal keeping time counted from the end of the period this copy covers, not from each entry's date.",
         ],
       },
-      "time-record.csv": {
+      "time-record.xlsx": {
         holds: "the same working-time record as time-record.pdf, as a spreadsheet file.",
         use: "Kept as the venue's record of the hours you worked.",
       },
@@ -282,7 +282,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "La fecha «Conservar hasta» del registro marca el final del plazo legal de conservación contado desde el final del período que cubre esta copia, no desde la fecha de cada asiento.",
         ],
       },
-      "time-record.csv": {
+      "time-record.xlsx": {
         holds: "el mismo registro de jornada que time-record.pdf, como archivo de hoja de cálculo.",
         use: "Se guarda como el registro del local de las horas que trabajaste.",
       },

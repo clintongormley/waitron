@@ -19,7 +19,7 @@ The final policy and any additional required format remain the advisor's decisio
 ## Payroll export and unused scheduling tables
 
 Ask the gestoría which payroll package and import format it accepts before building a payroll export.
-Keep that separate from the working-time PDF/CSV. Build shift-template and availability features as separate scheduling work.
+Keep that separate from the working-time PDF and Excel exports. Build shift-template and availability features as separate scheduling work.
 
 ## Pay-period changes after closure
 

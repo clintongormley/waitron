@@ -1,3 +1,4 @@
+import { worksheetRows, worksheetText } from "./testing/xlsx-rows.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
@@ -116,13 +117,16 @@ describe("the own personal-data download", () => {
     );
     expect(response.status).toBe(200);
     const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-    expect(Object.hasOwn(files, "time-record.csv")).toBe(true);
+    expect(Object.hasOwn(files, "time-record.xlsx")).toBe(true);
     // 23:30Z at +60 is 00:30 on the next local day: a UTC reading would print 2026-01-02.
-    const csv = strFromU8(files["time-record.csv"]!);
+    const sheet = worksheetText(files["time-record.xlsx"]!);
+    const from = worksheetRows(sheet).find(
+      ([section, key]) => section === "document" && key === "from",
+    );
     expect([
-      csv.includes('"document","from","2026-01-03"'),
-      csv.includes('"2026-01-03T00:30:00+01:00"'),
-      csv.includes("2026-01-02"),
+      from?.[2] === "2026-01-03",
+      sheet.includes(">2026-01-03T00:30:00+01:00<"),
+      sheet.includes("2026-01-02"),
     ]).toEqual([true, true, false]);
   });
 

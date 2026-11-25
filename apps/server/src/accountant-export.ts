@@ -48,6 +48,11 @@ import {
   sumDecimals,
   type Decimal,
 } from "@waitron/shared";
+import {
+  deferredPaymentsSheet,
+  listDeferredPaymentInvoices,
+  type DeferredPaymentInvoice,
+} from "./deferred-payment-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { numeric, renderWorkbook, type Cell } from "./xlsx-workbook.js";
 
@@ -110,6 +115,7 @@ export interface AccountantExport {
   purchases: readonly PurchaseInvoice[];
   outsidePayments: readonly OutsidePayment[];
   refundsWithoutCorrective: readonly RefundWithoutCorrective[];
+  deferredPayments: readonly DeferredPaymentInvoice[];
 }
 
 /**
@@ -417,6 +423,7 @@ export async function renderAccountantWorkbook(
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
     { name: words.refundSheet, rows: [[words.refundNote], words.refundColumns, ...refundRows] },
+    deferredPaymentsSheet(data.deferredPayments, language),
   ]);
 }
 
@@ -585,7 +592,8 @@ export async function listAccountantExport(
   });
   const outsidePayments = await listOutsidePayments(tx, window);
   const refundsWithoutCorrective = await listRefundsWithoutCorrective(tx, window);
-  return { invoices, purchases, outsidePayments, refundsWithoutCorrective };
+  const deferredPayments = await listDeferredPaymentInvoices(tx, range);
+  return { invoices, purchases, outsidePayments, refundsWithoutCorrective, deferredPayments };
 }
 
 /**

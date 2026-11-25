@@ -137,7 +137,7 @@ describe("the personal-data downloads in a real start", () => {
       expect([profile.id, profile.displayName]).toEqual([venue.personId, "Anna"]);
       expect(strFromU8(files["README.txt"]!).split("\n")[0]).toContain("Clock venue SL");
       expect([
-        Object.hasOwn(files, "time-record.csv"),
+        Object.hasOwn(files, "time-record.xlsx"),
         Object.hasOwn(files, "time-record.pdf"),
         Object.hasOwn(files, "staff-roles.json"),
         Object.hasOwn(files, "actions.json"),

@@ -5186,15 +5186,6 @@ export class DashboardApi {
     return `${this.#baseUrl}/management-api/tax-office/month-download/${encodeURIComponent(id)}/file`;
   }
 
-  downloadDeferredPayments(range: { from: string; to: string }): Promise<Blob> {
-    return this.#request<Blob>(
-      `/management-api/reports/deferred-payment-export?from=${range.from}&to=${range.to}`,
-      "POST",
-      undefined,
-      { as: "blob" },
-    );
-  }
-
   downloadAccountantExport(range: { from: string; to: string }): Promise<Blob> {
     return this.#request<Blob>(
       `/management-api/reports/accountant-export?from=${range.from}&to=${range.to}`,

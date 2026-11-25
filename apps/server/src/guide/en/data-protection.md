@@ -298,7 +298,8 @@ working hours the law requires.
   legal representatives and the Labour Inspectorate.
 - How long: four years, which the law sets.
 - Security: Waitron refuses to change or delete an entry once it is written. Each person's copy of
-  their own data includes their working-time record.
+  their own data includes their working-time record as a PDF and an Excel spreadsheet when the
+  Spanish workforce module is enabled.
 
 **Who did what at the till.** Waitron records who rang up sales, who changed orders, who authorised
 voids, who asked for or authorised refunds, and who opened the cash drawer or authorised it.

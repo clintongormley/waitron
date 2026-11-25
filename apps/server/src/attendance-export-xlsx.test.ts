@@ -5,25 +5,8 @@ import {
   longReason,
   longToken,
 } from "../test/attendance-export-fixture.js";
-import { renderAttendanceCsv } from "./attendance-export-csv.js";
-
-// Read quoted RFC 4180 cells, including embedded line endings, independently of the writer.
-function parse(bytes: Uint8Array): string[][] {
-  const text = new TextDecoder().decode(bytes);
-  return Array.from(text.matchAll(/(?:"(?:[^"]|"")*"|[^,\r\n]*)(?:,|\r\n)/g))
-    .reduce<string[][]>(
-      (rows, match) => {
-        const raw = match[0];
-        const end = raw.endsWith("\r\n");
-        const cell = raw.slice(0, end ? -2 : -1);
-        rows.at(-1)!.push(cell.startsWith('"') ? cell.slice(1, -1).replaceAll('""', '"') : cell);
-        if (end) rows.push([]);
-        return rows;
-      },
-      [[]],
-    )
-    .filter((r) => r.length > 0);
-}
+import { renderAttendanceXlsx } from "./attendance-export-xlsx.js";
+import { worksheetRows, worksheetText } from "./testing/xlsx-rows.js";
 
 function document(value: string | number | boolean | null): RecordExportDocument {
   return {
@@ -47,12 +30,11 @@ function document(value: string | number | boolean | null): RecordExportDocument
   };
 }
 
-describe("working-time CSV", () => {
-  it("round-trips all selected columns and rows with a BOM and CRLF", () => {
-    const input = attendanceExportFixture();
-    const bytes = renderAttendanceCsv(input);
-    expect([...bytes.slice(0, 3)]).toEqual([239, 187, 191]);
-    const [header, ...rows] = parse(bytes);
+describe("working-time Excel", () => {
+  it("round-trips the selected columns and rows", async () => {
+    const input = { ...attendanceExportFixture(), title: "Registro de jornada" };
+    const xml = worksheetText(await renderAttendanceXlsx(input));
+    const [header, ...rows] = worksheetRows(xml);
     expect(header).toEqual([
       "section",
       "row",
@@ -83,12 +65,14 @@ describe("working-time CSV", () => {
         expect(actual, section.key).toBeDefined();
         for (const { key } of section.columns)
           expect(actual[header!.indexOf(key)], `${section.key}.${key}`).toBe(
-            String(row.cells[key]),
+            key === "text"
+              ? "&lt;script&gt;alert(1)&lt;/script&gt; /OpenAction https://example.test/ � � 😀 TEXT-FINAL"
+              : String(row.cells[key] ?? ""),
           );
       }
     expect(data[1]![header!.indexOf("reason")]).toBe(longReason);
     expect(data[1]![header!.indexOf("token")]).toBe(longToken);
-    expect(new TextDecoder().decode(bytes).endsWith("\r\n")).toBe(true);
+    expect(xml).toMatch(/t="n" s="0"><v>\d+<\/v>/);
   });
 
   it.each([
@@ -101,11 +85,13 @@ describe("working-time CSV", () => {
     "  =1",
     " \tordinary",
     "\n@SUM(1)",
-  ])("neutralizes spreadsheet text %j in names and reasons", (value) => {
-    const [header, ...rows] = parse(renderAttendanceCsv(document(value)));
+  ])("writes formula-looking text %j in literal cells", async (value) => {
+    const xml = worksheetText(await renderAttendanceXlsx(document(value)));
+    const [header, ...rows] = worksheetRows(xml);
     const row = rows.at(-1)!;
-    expect(row[header!.indexOf("personName")]).toBe(`'${value}`);
-    expect(row[header!.indexOf("reason")]).toBe(`'${value}`);
+    expect(row[header!.indexOf("personName")]).toBe(value.replaceAll("\r", "&#13;"));
+    expect(row[header!.indexOf("reason")]).toBe(value.replaceAll("\r", "&#13;"));
+    expect(xml).not.toContain("<f");
   });
 
   it.each([
@@ -118,12 +104,18 @@ describe("working-time CSV", () => {
     true,
     false,
     null,
-  ])("keeps ordinary values %j", (value) => {
-    const [header, ...rows] = parse(renderAttendanceCsv(document(value)));
-    expect(rows.at(-1)![header!.indexOf("personName")]).toBe(String(value));
+  ])("keeps ordinary values %j", async (value) => {
+    const [header, ...rows] = worksheetRows(
+      worksheetText(await renderAttendanceXlsx(document(value))),
+    );
+    expect(rows.at(-1)![header!.indexOf("personName")]).toBe(
+      String(value ?? "")
+        .replaceAll('"', "&quot;")
+        .replaceAll("\r", "&#13;"),
+    );
   });
 
-  it("protects textual metadata, section keys, row keys and column keys", () => {
+  it("keeps textual metadata and keys in literal cells", async () => {
     const input = document("ordinary");
     input.title = "=title";
     input.notes = ["\tNOTE"];
@@ -136,11 +128,13 @@ describe("working-time CSV", () => {
         rows: [{ key: "-row", cells: { "+column": "=value" } }],
       },
     ];
-    const [header, ...rows] = parse(renderAttendanceCsv(input));
-    expect(header!.at(-1)).toBe("'+column");
-    expect(rows[0]![2]).toBe("'=title");
-    expect(rows[3]![2]).toBe("'\tNOTE");
-    expect(rows.at(-1)!.slice(0, 2)).toEqual(["'@section", "'-row"]);
-    expect(rows.at(-1)!.at(-1)).toBe("'=value");
+    const xml = worksheetText(await renderAttendanceXlsx(input));
+    const [header, ...rows] = worksheetRows(xml);
+    expect(header!.at(-1)).toBe("+column");
+    expect(rows[0]![2]).toBe("=title");
+    expect(rows[3]![2]).toBe("\tNOTE");
+    expect(rows.at(-1)!.slice(0, 2)).toEqual(["@section", "-row"]);
+    expect(rows.at(-1)!.at(-1)).toBe("=value");
+    expect(xml).not.toContain("<f");
   });
 });

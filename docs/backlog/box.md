@@ -1851,19 +1851,6 @@ also needs its separately versioned archive contract. Full-history work under th
 resource limits and Cloud's actual isolation, deletion and admission remain joint release checks.
 See [the plan's release gates](../superpowers/plans/2026-10-20-a850-backup-verification.md#exact-remaining-owner-and-release-gates).
 
-## ACCOUNTANT-XLSX. Deferred payments join the accountant's download, and the working-time file is an Excel file
-
-Queued as ACCOUNTANT-XLSX (lane I). The owner, 2026-11-24, on Excel files for both: "yes, and do we have
-the option of making them google sheets as well?" (an Excel file opens in Google Sheets; there is no
-direct connection). The deferred payments become a sheet of the accountant's download and their own file
-goes; the working-time export becomes an Excel file.
-
-Today both files join their cells with `,` in every language (`apps/server/src/deferred-payment-export.ts`,
-`apps/server/src/attendance-export-csv.ts`), so a spreadsheet set to expect `;` may open the Spanish one
-in one column; Excel was never tried. In LibreOffice amounts lose fixed decimals (`12.30` shows as
-`12.3`), and a cell the formula guard protects (`csvCell`) shows its apostrophe (A1088's visual check,
-2026-10-25).
-
 ## A device's or an administrator's time is self-reported.
 
 Whatever their browser sends counts:

@@ -94,7 +94,7 @@
   "src/attendance-edit-group-events.test.ts": 6.5,
   "src/attendance-email.test.ts": 3.4,
   "src/attendance-export-api.test.ts": 3.1,
-  "src/attendance-export-csv.test.ts": 1,
+  "src/attendance-export-xlsx.test.ts": 1,
   "src/attendance-export-pdf.test.ts": 5.1,
   "src/attendance-export-request.test.ts": 0.1,
   "src/attendance-facts.test.ts": 1.5,
