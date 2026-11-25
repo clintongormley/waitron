@@ -165,7 +165,7 @@ describe("the choice", () => {
     expect(badge.getAttribute("mode")).toBe("help-mode");
     expect(badge.getAttribute("aria-label")).toBe("Help: Give money back");
     expect(text(badge)).toBe(
-      "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. Waitron records it the right way.",
+      "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. If you close it before all the money is back, find the receipt in Find a bill under Money back under way; if it is not there, open Give money back on the receipt again on this till.",
     );
     expect(badge.getAttribute("guide-href")).toBe(guideHref("table-service.give-money-back"));
   });
