@@ -9,6 +9,7 @@ import { listAdjustmentReasons } from "@waitron/adjustments";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { listAccountantExport } from "./accountant-export.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
+import { openedCorrection } from "./testing/invoice-correction.js";
 import { inTx, send, statusOf } from "./testing/bill-venue.js";
 import { capturedPending, clockAtIso, filedFor } from "./testing/later-sale-date-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -106,11 +107,9 @@ describe("the rest's invoice of a bill whose card was recovered the next day", (
   it("held by the advance's open correction: Discard the next morning files it as recovery would, 14 March at 10%", async () => {
     const { billId, advanceId } = await billWithStrandedCard();
     const [reason] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue().app,
-      venue().cookie,
-      "POST",
-      `/api/transactions/${advanceId}/corrections`,
+    const correctionId = await openedCorrection(
+      venue(),
+      advanceId,
       {
         submissionId: randomUUID(),
         gross: "30.00",
@@ -119,9 +118,8 @@ describe("the rest's invoice of a bill whose card was recovered the next day", (
         expectedSplit: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
         override: supervisor(),
       },
+      venue().cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
     expect(await recoverNextMorning()).toMatchObject({ received: 1 });
     expect(await statusOf(venue(), billId)).toBe("open");
 

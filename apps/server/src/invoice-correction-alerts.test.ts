@@ -22,11 +22,8 @@ import { recordAttendanceFact } from "./attendance-capture.js";
 import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import {
-  fileInvoiceCorrectionNow,
-  openInvoiceCorrection,
-  parseInvoiceCorrection,
-} from "./invoice-corrections.js";
+import { fileInvoiceCorrectionNow, openInvoiceCorrection } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
 import { refundSettledTender } from "./tender-refunds.js";

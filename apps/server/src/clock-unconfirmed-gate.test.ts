@@ -43,6 +43,10 @@ import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { attestBillCardRefund, attestTenderRefund } from "./tender-refund-sends.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import {
+  openedCorrection as openedCorrectionOn,
+  previewedSplit,
+} from "./testing/invoice-correction.js";
+import {
   fiscalRecordCount,
   groupedTabWith,
   inTx,
@@ -376,18 +380,19 @@ async function openedCorrection(gross: string): Promise<string> {
   const reason = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(
     (row) => row.kind === "void" && !row.noteRequired,
   )!;
-  const preview = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections/preview`, {
-    gross,
-  });
-  const opened = await as(venue.app, "POST", `/api/transactions/${saleId}/corrections`, {
-    submissionId: randomUUID(),
-    gross,
-    reasonId: reason.id,
-    expectedSplit: preview.json.vatBreakdown,
-    override: OVERRIDE(),
-  });
-  expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-  return (opened.json.correction as { id: string }).id;
+  const expectedSplit = await previewedSplit(venue, saleId!, { gross });
+  return openedCorrectionOn(
+    venue,
+    saleId!,
+    {
+      submissionId: randomUUID(),
+      gross,
+      reasonId: reason.id,
+      expectedSplit,
+      override: OVERRIDE(),
+    },
+    venue.cookie,
+  );
 }
 
 function tenderRefund(saleId: string, tenderId: string, cancellationId: string) {

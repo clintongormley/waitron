@@ -29,7 +29,13 @@ import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
 import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { openInvoiceCorrection, parseInvoiceCorrection } from "./invoice-corrections.js";
+import { openInvoiceCorrection } from "./invoice-corrections.js";
+import {
+  openedCorrection,
+  parseInvoiceCorrection,
+  previewCorrection,
+  previewedSplit,
+} from "./testing/invoice-correction.js";
 import { fingerprint } from "./parties.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
@@ -936,21 +942,21 @@ describe("Refund a payment naming no cancels", () => {
     );
   }
 
-  /** Opens a correction of `gross` on the sale, previewed first as Correct invoice does. */
-  async function openCorrection(saleId: string, gross: string) {
-    const manager = (path: string, body: unknown) =>
-      send(venue.app, venue.cookie.manager, "POST", path, body);
-    const split = await manager(`/api/transactions/${saleId}/corrections/preview`, { gross });
-    expect(split.status, JSON.stringify(split.json)).toBe(200);
-    const opened = await manager(`/api/transactions/${saleId}/corrections`, {
-      submissionId: randomUUID(),
-      gross,
-      reasonId: venue.reasonId.houseVoid,
-      note: "Cold",
-      expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
-    });
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    return opened;
+  /** The id of a correction of `gross` opened on the sale, previewed first as a give-back does. */
+  async function correctionOf(saleId: string, gross: string) {
+    const expectedSplit = await previewedSplit(venue, saleId, { gross });
+    return openedCorrection(
+      venue,
+      saleId,
+      {
+        submissionId: randomUUID(),
+        gross,
+        reasonId: venue.reasonId.houseVoid,
+        note: "Cold",
+        expectedSplit,
+      },
+      venue.cookie.manager,
+    );
   }
 
   it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
@@ -967,7 +973,7 @@ describe("Refund a payment naming no cancels", () => {
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       json: [{ plainRefundLimit: "12.00" }],
     });
-    await openCorrection(paid.saleId, "5.00");
+    await correctionOf(paid.saleId, "5.00");
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       status: 200,
       json: [
@@ -1011,16 +1017,7 @@ describe("Refund a payment naming no cancels", () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     await chooseCustomer(b);
     const paid = await pay(b, "37.00");
-    expect(
-      await send(
-        venue.app,
-        venue.cookie.manager,
-        "POST",
-        `/api/transactions/${paid.saleId}/corrections/preview`,
-        { gross: "1.00" },
-      ),
-    ).toMatchObject({
-      status: 409,
+    expect(await previewCorrection(venue, paid.saleId, { gross: "1.00" })).toEqual({
       json: { code: "sale.correction_not_admitted", params: { reason: "not_simplified" } },
     });
     const answer = await refund(paid, refundBody(paid, "10.00"));
@@ -1032,8 +1029,7 @@ describe("Refund a payment naming no cancels", () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await pay(b, "37.00");
     const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
-    const opened = await openCorrection(paid.saleId, "5.00");
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const correctionId = await correctionOf(paid.saleId, "5.00");
     const given = await send(
       venue.app,
       venue.cookie.manager,

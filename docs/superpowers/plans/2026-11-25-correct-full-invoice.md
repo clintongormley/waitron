@@ -1,12 +1,12 @@
 # CORRECT-FULL-INVOICE: giving money back on a full invoice files a corrective full invoice
 
-Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Not
-started; next is PR 0, once Give money back's PR 3 is on `main`, then PR 1. Design:
+Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Give money
+back's PR 3 landed as #4344 (`c19dad836f`); PR 0 is built on `feat/correct-full-invoice-routes`, then PR 1. Design:
 [2026-11-25-correct-full-invoice-design.md](../specs/2026-11-25-correct-full-invoice-design.md), with the
 owner's answers at the end of its section 6. FISCAL: the owner lands every pull request.
 
 **Base.** `main` at `b8b2a4b6ed`, which holds #4300 (`787644b5f5`), **plus Give money back's PR 3**
-(`feat/give-money-back-remove-old` at `da73900607`), still to land: it removes the two old windows, and its
+(read as `feat/give-money-back-remove-old` at `da73900607`; landed as #4344, `c19dad836f`): it removes the two old windows, and its
 Task 15c (`48f6a40bf4`, `08c528338a`, `da73900607`) says "corrective receipt / corrective invoice" in the
 till and everywhere else. Server line numbers are `main`'s; till ones are that branch's. "Run" names its
 command; the rest was read.
@@ -55,7 +55,7 @@ receipts' without looking); Task 2 makes the builder the last word. Printing and
 | 1 | Give money back: cash (`give-back.ts:540`), separate terminal (`give-back-api.ts:160`), reader (`give-back-reader.ts`) | R1 | Task 5 (from an F1), 8 (from an R4) |
 | 2 | Money back under way: cash (`invoice-correction-api.ts:159`), a card leg (`tender-refunds.ts:186`), `/file`, `/close` | R1; ending it files nothing | Task 5 |
 | 3 | The sweep, after a late card answer and at start: `invoice-correction-alerts.ts:101-109` | R1 | Task 8 |
-| 4 | `POST /api/tender-refunds/:id/retry` (`tender-refund-api.ts:231`; the till reaches it from Money back under way, `give-back-under-way.ts:387`): settles a leg, files nothing | the sweep files one R1 | Task 8 |
+| 4 | `POST /api/tender-refunds/:id/retry` (`tender-refund-api.ts:231`; the till reaches it from all three Check agains: the outcome's, `give-back-dialog.ts:636` to `state/give-back.ts:315`; the choices', `give-back-dialog.ts:660` through `checkReceipt` to `state/tender-refund.ts:368`; and Money back under way's, `give-back-under-way.ts:217` to the same line; till lines at `c19dad836f`): settles a leg, files nothing | the sweep files one R1 | Task 8 |
 | 5 | The dashboard's `/payments/tender-refunds/:id/resolve` (`payments-api.ts:2083`): the same | as row 4 | Task 8 |
 | 6 | An open give-back on an invoice another box issued (handover, promotion): `wrong_node` | **Finish** ends it unrecorded, on the accountant's list; as a receipt's today | Task 8 |
 | 7 | The old window's routes, `POST …/corrections`, `…/preview`, `GET …/lines` (`invoice-correction-api.ts:76-133`) | deleted | PR 0 |
@@ -165,8 +165,8 @@ row (`reversedLines`, `cancel-credit.ts`); a replacement names no line. A reprin
 After Give money back's PR 3 (run: `git grep -n /corrections da73900607 -- apps/till/src` finds nothing, and the
 dashboard only its own report). `POST …/corrections`, `…/preview` and `GET …/lines` go, with
 `readInvoiceCorrectionLines`; `parseInvoiceCorrection`, which only tests would then call, moves to
-`src/testing/`. Twelve server test files call the routes: their cases about the routes go, the rest open a
-give-back through the helper. `openInvoiceCorrection` and `previewInvoiceCorrection` stay
+`src/testing/`. Server test files call the routes: their cases about the routes go, the rest open the
+correction through the helper. `openInvoiceCorrection` and `previewInvoiceCorrection` stay
 (`give-back-press.ts:304-305`). **Leaves:** the till as it was.
 
 ## PR 1 — the writer can file an R1 (packages; nothing calls it)
@@ -234,7 +234,8 @@ says so. Sale-path read changed: no.
 
 **Task 6, routing and limits.** `give-back-plan.ts`, `give-back-read.ts` (`lineAvailability`),
 `tender-refund-reservation.ts` (`plainRefundLimit`; `readRefundableTendersWithLimits` `:186-218`, its `owed`
-and catch branch, so the till's limit equals the write's). On a full invoice: `owed` is 0 wherever it caps a
+and catch branch, so the till's limit equals the write's; _since #4344 the till reads neither `plainRefundLimit` nor
+`correctionOpen` from it, so deleting it is the other choice_). On a full invoice: `owed` is 0 wherever it caps a
 plain refund, the corrective names the ticked families for the whole amount, a plain refund is refused (D5),
 both rights are asked (D4). Failing first: a cancelled paella of 18.50 files R1 −18.50; while the filing waits,
 only the extra; the limit on a separate terminal; row 8 of section 2; the PIN after Cancel and refund.

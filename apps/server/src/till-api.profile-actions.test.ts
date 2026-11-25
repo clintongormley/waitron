@@ -748,7 +748,6 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/transactions/:saleId/receipt-print",
       "GET /api/transactions/:saleId/refundable-tenders",
       "GET /api/transactions/:saleId/give-back",
-      "GET /api/transactions/:saleId/corrections/lines",
       "GET /api/unpaid-departure-authorizers",
       "GET /api/working-orders",
       "GET /api/working-orders/:id",
@@ -761,18 +760,10 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "POST /api/dead-ends/draft",
       "POST /api/dead-ends/order",
       "POST /api/dead-ends/sale",
-      "POST /api/transactions/:saleId/corrections/preview",
       "POST /api/working-orders/:id/adjustments/preview",
       "POST /api/working-orders/:id/payments/preview",
       "POST /api/working-orders/:id/item-payments/preview",
     ],
-  },
-  {
-    proof: "matching request (source)",
-    actions: [],
-    basis:
-      'Opening an invoice correction records what is to be corrected and moves no money, so it needs no payment or drawer action; each refund in it checks its own. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, and answers it once the zone is its own"',
-    routes: ["POST /api/transactions/:saleId/corrections"],
   },
   {
     proof: "matching request (source)",

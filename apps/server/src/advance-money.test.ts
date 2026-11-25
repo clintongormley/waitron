@@ -28,6 +28,7 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { createTable } from "./testing/live-table.js";
+import { openedCorrection } from "./testing/invoice-correction.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -44,9 +45,8 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// The money a bill holds once an advance was taken on it, and the cards that paid advances, driven
-// through the till's routes against a venue that files real Veri*Factu records. Each case's bill is
-// at a table of its own.
+// The money a bill holds once an advance was taken on it, and the cards that paid advances,
+// against a venue that files real Veri*Factu records. Each case's bill is at a table of its own.
 let venue: BillVenue;
 let offerFor: (name: string) => string;
 
@@ -163,18 +163,16 @@ async function cardSalesOf(billId: string): Promise<(string | null)[]> {
 
 const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
 
-/** Corrects the advance `saleId` by `gross` at 10% through Correct invoice, giving it back in cash. */
+/** Corrects the advance `saleId` by `gross` at 10%, giving it back in cash. */
 async function correctAdvance(
   saleId: string,
   gross: string,
   split: { base: string; tax: string },
 ): Promise<void> {
   const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-  const opened = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/transactions/${saleId}/corrections`,
+  const correctionId = await openedCorrection(
+    venue,
+    saleId,
     {
       submissionId: randomUUID(),
       gross,
@@ -183,9 +181,8 @@ async function correctAdvance(
       expectedSplit: [{ rate: "10.00", ...split }],
       override: supervisor(),
     },
+    venue.cookie,
   );
-  expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-  const correctionId = (opened.json as { correction: { id: string } }).correction.id;
   const filed = await send(
     venue.app,
     venue.cookie,
@@ -557,14 +554,12 @@ describe("money and cards around an advance", () => {
 });
 
 describe("a card for the rest while the advance has a correction open", () => {
-  /** Opens Correct invoice on the advance `saleId` for its whole €30; the correction's id. */
+  /** Opens a correction of the advance `saleId` for its whole €30; the correction's id. */
   async function openWhole(saleId: string): Promise<string> {
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${saleId}/corrections`,
+    return openedCorrection(
+      venue,
+      saleId,
       {
         submissionId: randomUUID(),
         gross: "30.00",
@@ -573,9 +568,8 @@ describe("a card for the rest while the advance has a correction open", () => {
         expectedSplit: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
         override: supervisor(),
       },
+      venue.cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    return (opened.json as { correction: { id: string } }).correction.id;
   }
 
   it("is refused before the reader when it would pay the bill off", async () => {

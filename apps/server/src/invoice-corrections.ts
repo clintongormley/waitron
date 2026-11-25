@@ -68,14 +68,14 @@ export interface SplitLine {
   tax: string;
 }
 
-export interface InvoiceCorrectionRequest {
+export interface InvoiceCorrectionAsk {
   submissionId: string;
   /** The money back, VAT included. */
-  gross: string;
+  gross: Decimal;
   lineIds?: string[];
   reasonId: string;
-  note?: string | null;
-  /** The split the till showed, positive, as the preview answered it. */
+  note: string | null;
+  /** The split the preview answered, positive. */
   expectedSplit: SplitLine[];
 }
 
@@ -123,28 +123,6 @@ async function checkCorrectionOpenable(
   saleId: SaleId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
-  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => {
-    const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
-    if (compareDecimal(moneyRefundable, preview.gross) < 0)
-      throw new AppError("invoice_correction.money_short", {
-        saleId,
-        moneyLeft: moneyRefundable,
-        gross: preview.gross,
-        advanceInvoiceNumbers: await refundableAdvanceNumbersTakenOffBy(tx, saleId),
-      });
-    return { ...preview, moneyRefundable };
-  });
-}
-
-/** Runs `read` between the checks about the invoice that the preview and Open both make. */
-async function checkInvoiceCorrectable<T>(
-  tx: Transaction,
-  backend: FiscalBackend,
-  cfg: Pick<DeviceRequestConfig, "nodeId">,
-  reading: TrustedReading,
-  saleId: SaleId,
-  read: (moneyRefundable: Decimal) => Promise<T>,
-): Promise<T> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
     .from(saleSettlements)
@@ -159,11 +137,19 @@ async function checkInvoiceCorrectable<T>(
       saleId,
       refundId: pending.pendingRefundId!,
     });
-  const result = await read(appliedRemainingOf(refundable));
+  const moneyRefundable = appliedRemainingOf(refundable);
+  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+  if (compareDecimal(moneyRefundable, preview.gross) < 0)
+    throw new AppError("invoice_correction.money_short", {
+      saleId,
+      moneyLeft: moneyRefundable,
+      gross: preview.gross,
+      advanceInvoiceNumbers: await refundableAdvanceNumbersTakenOffBy(tx, saleId),
+    });
   if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
   await backend.refuseUntilRecordable(tx, reading);
-  return result;
+  return { ...preview, moneyRefundable };
 }
 
 /** Correct invoice's refusals that do not pass by waiting: a refused or held filing, another
@@ -186,7 +172,7 @@ function refusesForGood(error: unknown): boolean {
  * The payment money still on invoice `saleId` (`refundable`, in cents) and how much of it Correct
  * invoice could give back now (`correctable`): what is left of its lines, capped by that money, or
  * 0 where Correct invoice refuses it for good. A refusal Correct invoice only waits out is thrown.
- * Unlike {@link checkInvoiceCorrectable}, the lines are read before the pending-refund check, so a
+ * Unlike {@link checkCorrectionOpenable}, the lines are read before the pending-refund check, so a
  * ticket Correct invoice can never take does not wait on another payment's refund; and the chain
  * and clock checks run only when `stillRefused` says the caller would refuse without them.
  */
@@ -266,21 +252,6 @@ export async function readCorrectableNow(
     return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null };
   await backend.refuseUntilRecordable(tx, reading);
   return { tenders, lines, amounts, waiting: null };
-}
-
-/** The invoice's lines with what is left to correct of each, and the money still refundable on
- * it; refused as the preview refuses the invoice, before any amount is asked. */
-export async function readInvoiceCorrectionLines(
-  tx: Transaction,
-  backend: FiscalBackend,
-  cfg: Pick<DeviceRequestConfig, "nodeId">,
-  reading: TrustedReading,
-  saleId: SaleId,
-): Promise<{ lines: CorrectableLine[]; moneyRefundable: Decimal }> {
-  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => ({
-    lines: await readCorrectableLines(tx, backend, saleId, cfg.nodeId),
-    moneyRefundable,
-  }));
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */
@@ -684,7 +655,7 @@ function splitOf(preview: Pick<CorrectionPreview, "vatBreakdown">) {
 
 /**
  * Refuses `invoice_correction.split_changed`, with the fresh split and the money still refundable
- * (read here unless handed in), when `preview` splits other than the till showed.
+ * (read here unless handed in), when `preview` splits other than `expectedSplit`.
  */
 async function refuseChangedSplit(
   tx: Transaction,
@@ -701,32 +672,6 @@ async function refuseChangedSplit(
     vatBreakdown: split,
     moneyRefundable: moneyRefundable ?? appliedRemainingOf(await readRefundableTenders(tx, saleId)),
   });
-}
-
-/** The line ids a request names, canonical; refused `lineIds` unless absent or a list of ids. */
-export function lineIdsOf(lineIds: unknown): string[] | undefined {
-  if (lineIds === undefined) return undefined;
-  if (!Array.isArray(lineIds) || lineIds.some((id) => typeof id !== "string" || !isUuid(id)))
-    throw invalid("lineIds");
-  return lineIds.map((id: string) => canonicaliseUuid(id)!);
-}
-
-export type InvoiceCorrectionAsk = ReturnType<typeof parseInvoiceCorrection>;
-
-export function parseInvoiceCorrection(request: InvoiceCorrectionRequest) {
-  const submissionId = uuidOf(request.submissionId, "submissionId");
-  const reasonId = uuidOf(request.reasonId, "reasonId");
-  const lineIds = lineIdsOf(request.lineIds);
-  const note = request.note ?? null;
-  if (note !== null && typeof note !== "string") throw invalid("note");
-  return {
-    submissionId,
-    gross: moneyOf(request.gross, "gross"),
-    ...(lineIds === undefined ? {} : { lineIds }),
-    reasonId,
-    note: note === null || note.trim() === "" ? null : note.trim(),
-    expectedSplit: expectedSplitOf(request.expectedSplit),
-  };
 }
 
 /** A request's id, canonical; refused by `field` unless it is one. */
@@ -749,7 +694,7 @@ export function expectedSplitOf(split: unknown): SplitLine[] {
   return (split as SplitLine[]).map(({ rate, base, tax }) => ({ rate, base, tax }));
 }
 
-/** The split compared by value, in rate order, whatever order or spelling the till sent. */
+/** The split compared by value, in rate order, whatever its order or spelling. */
 function splitKey(split: readonly SplitLine[]): string {
   return split
     .map((line) => [line.rate, line.base, line.tax].map((v) => decimalToCents(decimal(v))))

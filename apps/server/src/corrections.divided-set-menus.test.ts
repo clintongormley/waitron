@@ -36,11 +36,8 @@ import { enqueueReceiptCopy } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import {
-  openInvoiceCorrection,
-  parseInvoiceCorrection,
-  previewInvoiceCorrection,
-} from "./invoice-corrections.js";
+import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import {

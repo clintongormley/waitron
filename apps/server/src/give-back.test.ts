@@ -68,6 +68,7 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { REASONS } from "./testing/adjustment-venue.js";
+import { openedCorrection } from "./testing/invoice-correction.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -139,6 +140,21 @@ vi.mock("./invoice-correction-alerts.js", async (importOriginal) => {
   };
 });
 
+/** Run once, after the next reader press is planned and before its first part. */
+const beforeReader = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined }));
+vi.mock("./give-back-reader.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./give-back-reader.js")>();
+  return {
+    ...real,
+    giveBackOnReader: async (...args: Parameters<typeof real.giveBackOnReader>) => {
+      const run = beforeReader.run;
+      beforeReader.run = undefined;
+      await run?.();
+      return real.giveBackOnReader(...args);
+    },
+  };
+});
+
 /** Armed, the next `closeInvoiceCorrection` is refused, as a stepdown refusing the write. */
 const discardFault = vi.hoisted(() => ({ armed: false }));
 vi.mock("./invoice-corrections.js", async (importOriginal) => {
@@ -173,7 +189,7 @@ let offers: ZoneOffers;
 let productIds: Map<string, string>;
 let voidReasonId: string;
 let compReasonId: string;
-/** The reason a correction is opened with, as `invoice-correction-api.test.ts` opens one. */
+/** The reason a correction is opened with. */
 let correctionReasonId: string;
 /** The first till's device, whose profile takes cash, hand-keyed and reader cards. */
 let till: DeviceBinding;
@@ -700,26 +716,28 @@ describe("readGiveBack: the ways", () => {
   });
 });
 
+/** The id of a €5.00 correction opened on `saleId` for the till's person, no money given back. */
+function openCorrectionOn(saleId: string) {
+  return openedCorrection(
+    venue,
+    saleId,
+    {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: correctionReasonId,
+      note: "Cold",
+      expectedSplit: [{ rate: "10.00", base: "4.55", tax: "0.45" }],
+      override: supervisor(),
+    },
+    venue.cookie,
+  );
+}
+
 describe("readGiveBack: what can be used now (O1)", () => {
   it("shows the open correction under way, and every choice unavailable", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${saleId}/corrections`,
-      {
-        submissionId: randomUUID(),
-        gross: "5.00",
-        reasonId: correctionReasonId,
-        note: "Cold",
-        expectedSplit: [{ rate: "10.00", base: "4.55", tax: "0.45" }],
-        override: supervisor(),
-      },
-    );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const correctionId = await openCorrectionOn(saleId);
     const view = await read(saleId);
     expect(view.underWay).toMatchObject({ id: correctionId, state: "open", gross: "5.00" });
     const reason = {
@@ -1187,21 +1205,7 @@ describe("planGiveBack: waits answer what the read shows", () => {
   it("every choice waits while a correction is open", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }], "2.00");
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${saleId}/corrections`,
-      {
-        submissionId: randomUUID(),
-        gross: "5.00",
-        reasonId: correctionReasonId,
-        note: "Cold",
-        expectedSplit: [{ rate: "10.00", base: "4.55", tax: "0.45" }],
-        override: supervisor(),
-      },
-    );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    await openCorrectionOn(saleId);
     const view = await read(saleId);
     const reason = view.choices.dishes.reason!;
     expect(reason.code).toBe("invoice_correction.already_open");
@@ -1407,6 +1411,12 @@ async function giveBody(saleId: string, request: GiveBackRequest) {
 
 const give = (saleId: string, body: unknown, cookie = adminCookie, app = venue.app) =>
   send(app, cookie, "POST", `/api/transactions/${saleId}/give-back`, body);
+
+/** Presses `request` on `saleId` in cash, which must go through. */
+async function gaveCash(saleId: string, request: GiveBackRequest): Promise<void> {
+  const answer = await give(saleId, await giveBody(saleId, request));
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+}
 
 /** Expects `answer` to be the refusal `code`, with nothing written since `before`. */
 function expectRefusedUnwritten(
@@ -1620,6 +1630,9 @@ describe("POST …/give-back in cash", () => {
     const [part] = body.expected;
     for (const [change, field] of [
       [{ note: 1 }, "note"],
+      [{ reasonId: undefined }, "reasonId"],
+      [{ override: null }, "override"],
+      [{ submissionIds: { ...body.submissionIds, correction: 1 } }, "submissionIds"],
       [{ submissionIds: null }, "submissionIds"],
       [
         { submissionIds: { ...body.submissionIds, extra: body.submissionIds.refund } },
@@ -2440,7 +2453,7 @@ describe("POST …/give-back on a card reader", () => {
     expect((await give(saleId, body, allowed.cookie)).status).toBe(200);
   });
 
-  it("refuses a missing required note before giving any of the reader's money back", async () => {
+  it("refuses a missing required note before giving any of the reader's money back, and takes one", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
     const reader = await tenderOf(saleId, "card");
@@ -2461,7 +2474,68 @@ describe("POST …/give-back on a card reader", () => {
 
     expectRefusedUnwritten(answer, "adjustment.note_required", before);
     expect(cardCallsSince(calls)).toEqual({ refunds: [], lookups: 0 });
+
+    const noted = await give(saleId, { ...body, reasonId: reason.id, note: "Wrong table" });
+    expect(noted.status, JSON.stringify(noted.json)).toBe(200);
   });
+
+  it.each<[string, (b: Tab, saleId: string) => Promise<void>]>([
+    [
+      "invoice_correction.money_short",
+      async (b, saleId) => {
+        await cancel(b, "Paella", "1", true);
+        await gaveCash(saleId, ask("goodwill", "18.50"));
+      },
+    ],
+    [
+      "sale.correction_amount_invalid",
+      async (_b, saleId) => {
+        const lineIds = [lineOf(await read(saleId), "Cheesecake").id];
+        await gaveCash(saleId, ask("dishes", "6.50", { lineIds }));
+      },
+    ],
+    [
+      "invoice_correction.chain_unsound",
+      async () => {
+        const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+        onTestFinished(() => unsound.mockRestore());
+      },
+    ],
+  ])(
+    "answers %s with 409 when that became so after the reader's press was planned",
+    async (code, meanwhile) => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ reader: "15.50" }, { cash: "18.50" }]);
+      const reader = await tenderOf(saleId, "card");
+      const view = await read(saleId);
+      const body = await giveBody(
+        saleId,
+        code === "sale.correction_amount_invalid"
+          ? ask("dishes", "6.50", { way: reader, lineIds: [lineOf(view, "Cheesecake").id] })
+          : ask("goodwill", "30.00", { way: reader }),
+      );
+      const calls = cardCallsNow();
+      let before = effects();
+      beforeReader.run = async () => {
+        await meanwhile(b, saleId);
+        before = effects();
+      };
+      onTestFinished(() => {
+        beforeReader.run = undefined;
+      });
+
+      const answer = await give(saleId, body);
+
+      expect(beforeReader.run).toBeUndefined();
+      expectRefusedUnwritten(answer, code, before);
+      expect(answer.status).toBe(409);
+      expect(cardCallsSince(calls)).toEqual({ refunds: [], lookups: 0 });
+    },
+  );
 
   it("refuses the first reader part if the clock becomes unconfirmed after the plan is read", async () => {
     const b = await tab(FIVE);

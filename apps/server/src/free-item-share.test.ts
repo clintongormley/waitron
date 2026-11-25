@@ -13,11 +13,8 @@ import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import {
-  openInvoiceCorrection,
-  parseInvoiceCorrection,
-  previewInvoiceCorrection,
-} from "./invoice-corrections.js";
+import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {

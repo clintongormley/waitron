@@ -1,4 +1,5 @@
 import { billRefundFields } from "./testing/bill-payment-fixture.js";
+import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
 import { addFixtureExtra } from "./testing/portion-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
@@ -431,23 +432,22 @@ describe("Find Bills SQL paging", () => {
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
     );
-    const transaction = `/api/transactions/${sale!.id}/corrections`;
-    const previewed = await send(venue.app, venue.cookie, "POST", `${transaction}/preview`, {
-      gross: "5.00",
-    });
-    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    const expectedSplit = await previewedSplit(venue, sale!.id, { gross: "5.00" });
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
     const supervisor = { personId: venue.adminId, pin: "1234" };
-    const opened = await send(venue.app, venue.cookie, "POST", transaction, {
-      submissionId: randomUUID(),
-      gross: "5.00",
-      reasonId: reason!.id,
-      note: "Cold",
-      expectedSplit: (previewed.json as { vatBreakdown: unknown }).vatBreakdown,
-      override: supervisor,
-    });
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const correctionId = await openedCorrection(
+      venue,
+      sale!.id,
+      {
+        submissionId: randomUUID(),
+        gross: "5.00",
+        reasonId: reason!.id,
+        note: "Cold",
+        expectedSplit,
+        override: supervisor,
+      },
+      venue.cookie,
+    );
     const given = await send(
       venue.app,
       venue.cookie,

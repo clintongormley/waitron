@@ -7,6 +7,8 @@ PRs 2 and 3 not started.
 (2026-11-25: PRs 1 (#4257) and 2 (#4300) landed. PR 3 changes two things written below: Check again
 also has the box ask the card company about a refund that still waits (the watcher, 15:34), and
 D17's document names became **Corrective receipt** and **Replacement corrective receipt** (owner, 10:35).)
+(2026-11-25, later: all three PRs landed, #4257, #4300 and #4344. D16's `…/corrections` route is deleted by PR 0 of
+[2026-11-25-correct-full-invoice.md](2026-11-25-correct-full-invoice.md).)
 Every `file:line` below was read on this branch; every result marked "run" came from the command
 named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part. Cleared by the
 watcher 2026-11-24 12:28 with every default; the owner said yes to O2's words (12:36, "yes to 1
