@@ -1401,7 +1401,8 @@ describe("sending", () => {
     await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledOnce());
     el.remove();
     release();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Check again marks the first refund back as its last step before it would send the rest.
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("is back on card ···4242."));
     expect(api.giveBack).toHaveBeenCalledOnce();
   });
 
@@ -1423,7 +1424,7 @@ describe("sending", () => {
     await vi.waitFor(() => expect(api.listApprovers).toHaveBeenCalledOnce());
     el.remove();
     release();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await api.listApprovers.mock.results[0]!.value;
     await el.updateComplete;
     expect(approval(el)).toBeNull();
     expect(api.giveBack).toHaveBeenCalledOnce();
@@ -1437,7 +1438,6 @@ describe("sending", () => {
     await vi.waitFor(() =>
       expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open", "en")),
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.giveBack).toHaveBeenCalledOnce();
     expect(root(el).querySelector("[data-outcome]")).toBeNull();
   });
@@ -1576,7 +1576,6 @@ describe("sending", () => {
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
     );
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.giveBack).toHaveBeenCalledTimes(2);
   });
 
@@ -1910,14 +1909,12 @@ describe("pressing Give back", () => {
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     return { el, api };
   }
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
   it("gives back once when it is pressed twice before the window shows it busy", async () => {
     const { el, api } = await ready();
     submit(el).click();
     submit(el).click();
     await vi.waitFor(() => expect(root(el).querySelector("[data-outcome]")).not.toBeNull());
-    await settle();
     expect(api.giveBack).toHaveBeenCalledOnce();
   });
 
@@ -1944,7 +1941,12 @@ describe("pressing Give back", () => {
     await vi.waitFor(() => expect(api.previewGiveBack).toHaveBeenCalledTimes(2));
     el.remove();
     release();
-    await settle();
+    // Give back stops showing busy once the press has ended, or the window has left the form.
+    await vi.waitFor(() =>
+      expect(
+        root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-submit]")?.loading,
+      ).not.toBe(true),
+    );
     expect(api.giveBack).not.toHaveBeenCalled();
   });
 });

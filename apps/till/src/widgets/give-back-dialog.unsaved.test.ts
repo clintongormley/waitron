@@ -344,7 +344,11 @@ it("a give-back discarded while its preview is asked again gives nothing back", 
   (await question(app)).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await closed;
   release();
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await vi.waitFor(() =>
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-submit]")?.loading,
+    ).not.toBe(true),
+  );
   expect(app.closes).toBe(1);
   expect(app.api.giveBack).not.toHaveBeenCalled();
 });
