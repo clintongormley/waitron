@@ -161,15 +161,9 @@ describe("listDeferredPaymentInvoices", () => {
     expect(await list(`${year}-01-01`, `${year}-01-02`)).toEqual([
       expect.objectContaining({ issueDate: `${year}-01-02`, closedOn: `${year}-01-01` }),
     ]);
-    const response = await accountantDownload(`${year}-01-01`);
-    expect(response.status).toBe(200);
-    const sheet = sheetNamed(
-      unzipSync(new Uint8Array(await response.arrayBuffer())),
-      DEFERRED_PAYMENT_EXPORT_WORDS.es.sheet,
-    );
-    expect(sheet).toBeDefined();
-    expect(row(sheet!, 3).slice(2, 4)).toEqual([`${year}-01-02`, `${year}-01-01`]);
-    expect(row(sheet!, 4)).toEqual([]);
+    const sheet = await deferredSheet(await accountantDownload(`${year}-01-01`));
+    expect(row(sheet, 3).slice(2, 4)).toEqual([`${year}-01-02`, `${year}-01-01`]);
+    expect(row(sheet, 4)).toEqual([]);
   });
   it("names a replaced invoice's replacement apart, and totals only the corrections of the two", async () => {
     const bill = await t.counterOrder("placed", true);
@@ -243,12 +237,8 @@ it("includes signed credit amounts as numbers in the accountant attachment", asy
   expect(response.headers.get("content-disposition")).toBe(
     `attachment; filename="accountant-${day}-${day}.xlsx"`,
   );
-  const sheet = sheetNamed(
-    unzipSync(new Uint8Array(await response.arrayBuffer())),
-    DEFERRED_PAYMENT_EXPORT_WORDS.es.sheet,
-  );
-  expect(sheet).toBeDefined();
-  expect(row(sheet!, 3)).toEqual([
+  const sheet = await deferredSheet(response);
+  expect(row(sheet, 3)).toEqual([
     "A/1",
     "F2",
     days.issued,
@@ -263,5 +253,5 @@ it("includes signed credit amounts as numbers in the accountant attachment", asy
     "",
   ]);
   expect(sheet).toContain('<c r="K3" t="n" s="1"><v>-1.10</v></c>');
-  expect(row(sheet!, 4)).toEqual([]);
+  expect(row(sheet, 4)).toEqual([]);
 });

@@ -120,7 +120,7 @@ describe("accountant workbook", () => {
     const sheet = sheetNamed(files, "Deferred payments");
     expect(sheet).toBeDefined();
     expect(row(sheet!, 1)).toEqual([
-      "An invoice can also appear on the Issued invoices sheet. Count each invoice once.",
+      "An invoice can also appear on the Issued invoices sheet. Count each invoice once. The correctives total is for reference.",
     ]);
     expect(row(sheet!, 2)).toEqual([
       "Invoice number",

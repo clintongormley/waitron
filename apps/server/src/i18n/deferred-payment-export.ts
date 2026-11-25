@@ -1,7 +1,7 @@
 export const DEFERRED_PAYMENT_EXPORT_WORDS = {
   en: {
     sheet: "Deferred payments",
-    note: "An invoice can also appear on the Issued invoices sheet. Count each invoice once.",
+    note: "An invoice can also appear on the Issued invoices sheet. Count each invoice once. The correctives total is for reference.",
     invoiceNumber: "Invoice number",
     invoiceType: "Type",
     issueDate: "Issue date",
@@ -17,7 +17,7 @@ export const DEFERRED_PAYMENT_EXPORT_WORDS = {
   },
   es: {
     sheet: "Pagos aplazados",
-    note: "Una factura también puede aparecer en la hoja Facturas emitidas. Cuenta cada factura una sola vez.",
+    note: "Una factura también puede aparecer en la hoja Facturas emitidas. Cuenta cada factura una sola vez. El total rectificado es informativo.",
     invoiceNumber: "Número de factura",
     invoiceType: "Tipo",
     issueDate: "Fecha de expedición",

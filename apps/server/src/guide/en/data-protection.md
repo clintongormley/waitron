@@ -326,7 +326,8 @@ details, and Waitron can email them the invoice.
   the invoice as a PDF with the customer's name, tax number and address; and your accountant, when
   you share the workbook from **Download for accountant (XLSX)** in **Sales & takings**. Its
   issued-invoices sheet includes the recorded customer name, tax number and address. The deferred
-  payments sheet includes the name and tax number. Share the workbook only with the intended recipient.
+  payments and refunds sheets can include the name and tax number. Share the workbook only with
+  the intended recipient.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
   keeps every receipt and ticket it sends to a receipt or station printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4

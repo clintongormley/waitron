@@ -75,6 +75,7 @@ describe("working-time Excel", () => {
     expect(xml.includes('<c r="C7"')).toBe(false);
     expect(xml).toContain('<c r="E7" t="n" s="0"><v>480</v></c>');
     expect(xml.includes('<c r="I8"')).toBe(false);
+    expect(xml.includes('<c r="C9"')).toBe(false);
   });
 
   it.each([

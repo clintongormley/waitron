@@ -3222,7 +3222,7 @@ export const en = {
   "sales.print_categories": "Print category sales",
   "sales.export_accountant": "Download for accountant (XLSX)",
   "sales.accountant_dates":
-    "Issued invoices and recorded purchases use calendar dates, including From and To. Invoices issued later are listed under the sale date. Deferred payments use the trading day the bill was closed.",
+    "From and To include both dates. Deferred payments use the trading day the bill was closed. The other sheets use calendar dates. Invoices issued later are listed under the sale date.",
   "sales.drawer_history": "Drawer close history",
   "sales.drawer_filter": "Drawer",
   "sales.drawer_all": "All drawers",
@@ -8076,7 +8076,7 @@ export const es: Record<StringKey, string> = {
   "sales.print_categories": "Imprimir ventas por categoría",
   "sales.export_accountant": "Descargar para tu gestor (XLSX)",
   "sales.accountant_dates":
-    "Las facturas emitidas y las compras registradas usan fechas del calendario, incluidas Desde y Hasta. Si la factura se expidió más tarde, se usa la fecha de la venta. Los pagos aplazados usan la jornada en que se cerró la cuenta.",
+    "Desde y Hasta incluyen ambas fechas. Los pagos aplazados usan la jornada en que se cerró la cuenta. Las demás hojas usan fechas del calendario. Si la factura se expidió más tarde, se usa la fecha de la venta.",
   "sales.drawer_history": "Historial de cierres de caja",
   "sales.drawer_filter": "Cajón",
   "sales.drawer_all": "Todos los cajones",

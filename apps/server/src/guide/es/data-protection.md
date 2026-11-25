@@ -349,8 +349,9 @@ datos, y Waitron puede enviarle la factura por correo.
   del cliente, pero no su dirección; tu proveedor de correo, por cada factura que envías por correo,
   que lleva la factura en PDF con el nombre, el NIF y la dirección del cliente; y tu gestor, cuando
   compartes el archivo de **Descargar para tu gestor (XLSX)** en **Ventas y recaudación**. La
-  hoja de facturas emitidas incluye el nombre, el NIF y la dirección registrados. La hoja de pagos
-  aplazados incluye el nombre y el NIF. Comparte el archivo solo con su destinatario.
+  hoja de facturas emitidas incluye el nombre, el NIF y la dirección registrados. Las hojas de
+  pagos aplazados y devoluciones pueden incluir el nombre y el NIF. Comparte el archivo solo con
+  su destinatario.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una factura emitida.
   También guarda cada recibo y cada comanda que envía a una impresora de recibos o de estación y no
   borra ninguno, así que los datos del cliente de una factura impresa en la caja también quedan en

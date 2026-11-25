@@ -316,6 +316,11 @@ describe("authenticated working-time downloads", () => {
           await loading.destroy();
         }
       } else {
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(response.headers.get("content-disposition")).toBe(
+          'attachment; filename="time-record-2026-01-01-2026-02-01-representatives.xlsx"',
+        );
         const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
         const sheet = sheetNamed(files, "Registro de jornada");
         expect(sheet).toBeDefined();
