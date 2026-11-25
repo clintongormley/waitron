@@ -1,7 +1,13 @@
-import { eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import { payPeriodSettings } from "./schema/pay-period-settings.js";
+import { AppError, businessDayBoundaryAt, type BusinessDayClock } from "@waitron/shared";
+import {
+  DEFAULT_CLOSE_GRACE_DAYS,
+  MAX_CLOSE_GRACE_DAYS,
+  payPeriodSettings,
+} from "./schema/pay-period-settings.js";
+import { payPeriodClosures } from "./schema/pay-period-closures.js";
+import { timeEntries } from "./schema/time-entries.js";
 import { isRecordDate } from "./record-dates.js";
 import type { Period } from "./projection.js";
 import "./errors.js";
@@ -70,4 +76,66 @@ export async function setPayPeriodSettings(
     .insert(payPeriodSettings)
     .values({ id: 1, ...settings })
     .onConflictDoUpdate({ target: payPeriodSettings.id, set: settings });
+}
+
+export async function readPayPeriodCloseGraceDays(tx: Database | Transaction): Promise<number> {
+  const [row] = await tx
+    .select({ days: payPeriodSettings.closeGraceDays })
+    .from(payPeriodSettings)
+    .where(eq(payPeriodSettings.id, 1));
+  return row?.days ?? DEFAULT_CLOSE_GRACE_DAYS;
+}
+
+export async function setPayPeriodCloseGraceDays(tx: Transaction, value: unknown): Promise<void> {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_CLOSE_GRACE_DAYS
+  )
+    invalidPeriod("closeGraceDays");
+  const patch = { closeGraceDays: value };
+  await tx
+    .insert(payPeriodSettings)
+    .values({ id: 1, ...patch })
+    .onConflictDoUpdate({ target: payPeriodSettings.id, set: patch });
+}
+
+export async function payPeriodCloseBoundary(
+  clock: BusinessDayClock,
+  periodEnd: string,
+  graceDays: number,
+  isHoliday: (date: string) => Promise<boolean>,
+): Promise<string> {
+  const date = new Date(`${periodEnd}T00:00:00Z`);
+  while (graceDays > 0) {
+    const weekday = date.getUTCDay();
+    if (weekday > 0 && weekday < 6 && !(await isHoliday(date.toISOString().slice(0, 10)))) {
+      graceDays--;
+    }
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return businessDayBoundaryAt(clock, date.toISOString().slice(0, 10));
+}
+
+export async function readNextMonthlyPayPeriod(tx: Transaction): Promise<Period | null> {
+  const settings = await readPayPeriodSettings(tx);
+  if (settings.frequency !== "monthly") return null;
+  const [last] = await tx
+    .select({ end: payPeriodClosures.periodEnd })
+    .from(payPeriodClosures)
+    .orderBy(desc(payPeriodClosures.periodEnd))
+    .limit(1);
+  if (last !== undefined) return resolvePayPeriod(settings, last.end);
+  const [first] = await tx
+    .select({
+      date: sql<
+        string | null
+      >`min(date(${timeEntries.eventAt}, printf('%+d minutes', ${timeEntries.eventOffsetMinutes})))`,
+    })
+    .from(timeEntries).where(sql`${timeEntries.entryKind} = 'in' or (
+      ${timeEntries.entryKind} = 'correction' and ${timeEntries.correctionStatus} = 'approved'
+      and ${timeEntries.missingEntryKind} = 'in'
+    )`);
+  return first?.date ? resolvePayPeriod(settings, first.date) : null;
 }

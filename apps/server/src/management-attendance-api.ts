@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { asc } from "drizzle-orm";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
+import { authorizeManager, holds, persons, resolveManagementSession } from "@waitron/identity";
 import { AppError, jobOrigin } from "@waitron/shared";
 import {
   createErrorBoundary,
@@ -19,6 +19,11 @@ import {
   readAttendanceInbox,
   readPersonHours,
   readManagerHours,
+  readPayPeriodCloseGraceDays,
+  readPayPeriodClosures,
+  readPayPeriodSettings,
+  resolvePayPeriod,
+  setPayPeriodCloseGraceDays,
 } from "@waitron/workforce";
 import type { AttendanceLookups } from "@waitron/workforce/attendance-contract";
 import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
@@ -26,6 +31,7 @@ import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { parseHoursQuery, parseOwnAttendanceCommand } from "./hours-request.js";
+import { monthlyHoursCloseSchedule } from "./monthly-hours-close.js";
 export interface ManagementAttendanceApiDeps {
   db: Database;
   cfg: { nodeId: string };
@@ -45,6 +51,7 @@ const run = createErrorBoundary(
     "correction.not_pending": 409,
     "attendance.already_open": 409,
     "attendance.no_open_entry": 409,
+    "pay_period.invalid": 400,
   },
   "workforce.failed",
 );
@@ -150,17 +157,50 @@ export function mountManagementAttendanceApi(
       const token = requireManagementSession(c);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await authorize(tx, token);
+          const { authority } = await authorize(tx, token);
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "manager");
           const now = deps.now();
           const clock = await readVenueClock(tx);
-          return readManagerHours(
+          const hours = await readManagerHours(
             tx,
             { ...scope, clock, now },
             (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
           );
+          const settings = await readPayPeriodSettings(tx);
+          if (settings.frequency !== "monthly") return hours;
+          const period = resolvePayPeriod(settings, hours.period.start);
+          if (period.start !== hours.period.start || period.end !== hours.period.end) return hours;
+          const graceDays = await readPayPeriodCloseGraceDays(tx);
+          const [closed] = await readPayPeriodClosures(tx, { period });
+          const schedule = closed
+            ? { scheduledCloseAt: closed.scheduledCloseAt, holidayCoverageComplete: true }
+            : await monthlyHoursCloseSchedule(tx, clock, period.end, graceDays);
+          return {
+            ...hours,
+            monthClose: {
+              ...schedule,
+              graceDays,
+              canEdit: holds(authority, "system.manage"),
+              closedAt: closed?.closedAt ?? null,
+              timeZone: closed?.clock.timeZone ?? clock.timeZone,
+            },
+          };
         }),
       );
+    }),
+  );
+  app.post("/management-api/attendance/month-close", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const auth = { managementSessionId, permission: "system.manage" } as const;
+      await withTransaction(deps.db, (tx) => authorizeManager(tx, { ...auth, touch: false }));
+      noQuery(c);
+      const body = await readRawJsonBody<{ graceDays?: unknown } | null>(c);
+      await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, auth);
+        await setPayPeriodCloseGraceDays(tx, body?.graceDays);
+      });
+      return c.body(null, 204);
     }),
   );
   app.get("/management-api/attendance/lookups", (c) =>

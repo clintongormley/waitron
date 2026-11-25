@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import type { BusinessDayClock, Origin } from "@waitron/shared";
 import type { Period, PeriodSummary, TimeEntryRecord, WorkSession } from "./projection.js";
 
@@ -28,6 +29,7 @@ export interface PayPeriodSnapshot {
   entries: ProjectedRecordEntry[];
   summaries: { personId: string; summary: PeriodSummary | null }[];
   markedAutomaticEntryIds: string[];
+  paidBreakPolicy?: PaidBreakPolicy;
 }
 export interface PayPeriodClosure {
   id: string;

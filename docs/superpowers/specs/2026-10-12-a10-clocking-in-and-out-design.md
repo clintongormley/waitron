@@ -102,6 +102,9 @@ The final text may differ: a revised draft exists that the research could not ob
 10. **The pay period is monthly by default**, set per venue, and closes on its own at the venue's
     day-change time (`dayCutover`) after its last day.
 
+    **25 November 2026.** For monthly hours the owner chose “3 working days of grace, adjustable.”
+    The [monthly close plan](../plans/2026-11-25-month-close.md) records the new timing.
+
 ## What the record gains (library)
 
 These change how the legal record is written, so the land takes the owner's sign-off (as

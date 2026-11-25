@@ -119,6 +119,7 @@ it("separates open break, worker acknowledgement, frozen month and later impact"
   expect(root.textContent).toContain("Corrected");
   expect(root.querySelector("[data-closure]")!.textContent).toContain("2026-01-31");
   expect(root.querySelector("[data-closure]")!.textContent).toContain("8 h 00 min");
+  expect(root.querySelector("[data-closure] time")!.textContent).toContain("1 Feb 2026, 05:00");
   expect(root.querySelector("[data-impact]")!.textContent).toContain("+1 h 00 min");
 });
 it("does not describe a replaced automatic finish as still counted", async () => {

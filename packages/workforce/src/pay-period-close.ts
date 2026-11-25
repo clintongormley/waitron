@@ -1,5 +1,5 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { newId, type Database, type Transaction } from "@waitron/db";
 import {
   AppError,
@@ -47,7 +47,8 @@ export async function closePayPeriod(
     period: Period;
     clock: BusinessDayClock;
     now: string;
-    ruleset: WorkSummaryRuleset;
+    scheduledCloseAt?: string;
+    ruleset: WorkSummaryRuleset | null;
     paidBreakPolicy: PaidBreakPolicy | null;
     origin: JobOrigin;
   },
@@ -73,51 +74,50 @@ export async function closePayPeriod(
   const nowMs = typeof input.now === "string" ? Date.parse(input.now) : NaN;
   if (!Number.isFinite(nowMs)) invalidPeriod("now");
   const closedAt = new Date(nowMs).toISOString();
-  const scheduledCloseAt = businessDayBoundaryAt(input.clock, input.period.end);
+  const scheduledCloseAt =
+    input.scheduledCloseAt ?? businessDayBoundaryAt(input.clock, input.period.end);
   if (closedAt < scheduledCloseAt)
     throw new AppError("pay_period.not_due", { closeAt: scheduledCloseAt });
   const entries = await readPeriodEntries(tx, { period: input.period });
   const closureId = newId();
-  const unmarked = automaticEntryIdsWithoutMarker(entries);
-  const candidates = entries.filter((e) => unmarked.has(e.entryId));
-  const virtual = candidates.map((e) => ({
-    ...e,
-    entryId: `count:${e.entryId}`,
-    entryKind: "confirmation" as const,
-    extension: {
-      authorKind: "automatic" as const,
-      direction: null,
-      missingEntryKind: null,
-      respondsToEntryId: e.entryId,
-      payPeriodClosureId: closureId,
-    },
-  }));
-  const counted = recordInPeriod(
-    projectTimeRecord([...entries, ...virtual], [], input.paidBreakPolicy),
-    input.period,
-  );
-  const eligible = candidates.filter((e) =>
-    counted.sessions.some((s) => s.personId === e.personId && s.endedAt === e.eventAt),
-  );
-  const eligibleIds = new Set(eligible.map((e) => e.entryId));
-  const markers = virtual.filter((e) => eligibleIds.has(e.extension.respondsToEntryId));
   const record = recordInPeriod(
-    projectTimeRecord([...entries, ...markers], [], input.paidBreakPolicy),
+    projectTimeRecord(entries, [], input.paidBreakPolicy),
     input.period,
   );
-  const markerIds = new Set(markers.map((e) => e.entryId));
+  const unmarked = automaticEntryIdsWithoutMarker(entries);
   const snapshot: PayPeriodClosure["snapshot"] = {
     sessions: record.sessions,
-    entries: record.entries.filter((e) => !markerIds.has(e.entry.entryId)),
+    entries: record.entries,
     summaries: [],
-    markedAutomaticEntryIds: eligible.map((e) => e.entryId).sort(),
+    markedAutomaticEntryIds: entries
+      .filter(
+        (entry) =>
+          unmarked.has(entry.entryId) &&
+          record.sessions.some(
+            (session) => session.personId === entry.personId && session.endedAt === entry.eventAt,
+          ),
+      )
+      .map((entry) => entry.entryId)
+      .sort(),
+    ...(input.paidBreakPolicy === null ? {} : { paidBreakPolicy: input.paidBreakPolicy }),
   };
   const people = [...new Set(snapshot.entries.map((e) => e.entry.personId))].sort();
+  const { ruleset } = input;
   for (const personId of people) {
+    if (ruleset === null) {
+      snapshot.summaries.push({ personId, summary: null });
+      continue;
+    }
     const [employment] = await tx
       .select()
       .from(employments)
-      .where(eq(employments.personId, personId))
+      .where(
+        and(
+          eq(employments.personId, personId),
+          lt(employments.startDate, input.period.end),
+          or(isNull(employments.endDate), gte(employments.endDate, input.period.start)),
+        ),
+      )
       .orderBy(desc(employments.startDate))
       .limit(1);
     snapshot.summaries.push({
@@ -136,13 +136,13 @@ export async function closePayPeriod(
                     7,
                 ),
                 dailyTargetMinutes:
-                  input.ruleset.dailyTargetMinutes ??
+                  ruleset.dailyTargetMinutes ??
                   dailyContractedTargetMinutes(
                     employment.contractedMinutesPerWeek,
-                    input.ruleset.workingDaysPerWeek,
+                    ruleset.workingDaysPerWeek,
                   ),
               },
-              input.ruleset.overtimeModel,
+              ruleset.overtimeModel,
             ),
     });
   }

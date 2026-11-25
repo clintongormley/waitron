@@ -139,8 +139,10 @@ CREATE TABLE `pay_period_settings` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`frequency` text DEFAULT 'monthly' NOT NULL,
 	`anchor_date` text,
+	`close_grace_days` integer DEFAULT 3 NOT NULL,
 	CONSTRAINT "pay_period_settings_singleton_ck" CHECK("pay_period_settings"."id" = 1),
 	CONSTRAINT "pay_period_settings_frequency_ck" CHECK("pay_period_settings"."frequency" in ('monthly', 'weekly', 'fortnightly')),
+	CONSTRAINT "pay_period_settings_close_grace_ck" CHECK(typeof("pay_period_settings"."close_grace_days") = 'integer' and "pay_period_settings"."close_grace_days" between 0 and 10),
 	CONSTRAINT "pay_period_settings_anchor_ck" CHECK(("pay_period_settings"."frequency" <> 'fortnightly' and "pay_period_settings"."anchor_date" is null)
     or ("pay_period_settings"."frequency" = 'fortnightly' and "pay_period_settings"."anchor_date" is not null
       and date("pay_period_settings"."anchor_date", '+0 days') is not null

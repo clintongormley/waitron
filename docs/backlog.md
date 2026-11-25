@@ -930,9 +930,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends, adjustable** — queued
-  (lane I). Owner, 2026-11-24: "3 working days of grace, adjustable". The bundle also keeps the rule a
-  cadence change needs after a close. [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
+- **MONTH-CLOSE. Remind managers before close and carry later corrections into the next export.**
+  The reminder and saved adjustments remain in this bundle with the cadence rule.
+  [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.

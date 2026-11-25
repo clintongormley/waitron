@@ -91,22 +91,13 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
-## MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends
+## MONTH-CLOSE. Reminder and adjustments after a month closes
 
-Queued as MONTH-CLOSE (lane I). The owner, 2026-11-24: "my guess is automatically a few days after month
-end", then, on closing by itself and adjustable, "3 working days of grace, adjustable". Working days are
-Monday to Friday, skipping the public holidays in the venue's calendar (the watcher's default, told to
-the owner). The rest is the research design
-(`~/waitron-campaign-shared/desk/month-close-research.md`), not the owner's words: totals are frozen,
-not the record; nothing blocks; corrections are shown beside the closed total and carried as an
-adjustment; nobody reopens a month; an email goes the day before only when something is open.
-
-Found by A793's design, read: the workforce
-module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
-files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
-scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one.
-Also decide how a later paid-break policy change affects the comparison with a saved closure; keep the saved totals intact.
-When closing is built, an old main box's return of working hours (`packages/workforce/src/handover-return.ts`) must also carry its closures, which today's batches do not; until then a returned entry naming a closure the new main box lacks is refused (`attendance.return_entry_invalid`) and stops the return of working hours.
+Send one reminder the day before closure if there are unresolved hours in the month. At each
+close, save earlier months’ changes that have yet to be included and show them in the next
+working-time export. First agree which period owns an adjustment, then plan the reminder and
+adjustments together (watcher, 2026-11-25 at 06:37). The reminder and adjustment are PR 2 in
+[the monthly close plan](../superpowers/plans/2026-11-25-month-close.md).
 
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
 
@@ -137,15 +128,21 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends, adjustable** (owner,
-  2026-11-24). Queued in lane I. A793's slice 6 (tips frozen with the pay period) waits for it.
-  [Detail](workforce.md#month-close-a-months-hours-close-by-themselves-3-working-days-after-it-ends).
+- **MONTH-CLOSE. Send a reminder before close and include later adjustments in the next export.**
+  [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
   in the backlog until then.
   [Receipt and next step](workforce.md#pay-period-changes-after-closure).
 
 ## Decisions and deliberate limits
+
+- Monthly hours close after three working days by default. The grace period is adjustable (owner,
+  2026-11-24), and working days skip weekends and the venue calendar's public holidays (watcher,
+  2026-11-24). The close freezes totals. The serving box can close a period after promotion,
+  and hours later returned from the former primary can appear as changes against that snapshot
+  (watcher, 2026-11-25). A snapshot that never reached the spare can be lost with the former box.
+  [Implementation plan](../superpowers/plans/2026-11-25-month-close.md#pr-1-settings-automatic-close-and-hours).
 
 - Hours keeps the full history for a person with a correction awaiting a decision, to check
   whether it can still be applied. Open shifts, disputed corrections, unanswered questions

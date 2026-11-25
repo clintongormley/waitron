@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { QueryController, type DashboardRequest, type LiveData } from "@waitron/dashboard-kit";
+import {
+  QueryController,
+  dateTimeFormat,
+  type DashboardRequest,
+  type LiveData,
+} from "@waitron/dashboard-kit";
 import type {
   AttendanceExportOptions,
   AttendanceChange,
@@ -11,19 +16,29 @@ import type {
   CorrectionItem,
   ManagerHours,
 } from "@waitron/dashboard-modules";
-import { baseStyles, pageTitleStyles } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  pageTitleStyles,
+  saveActionState,
+  submitOnEnter,
+  type DraftScope,
+} from "@waitron/ui";
 import { AttendanceExportApi } from "../api/attendance-export.js";
 import "../widgets/attendance-export-dialog.js";
 import { HoursApi } from "../api/hours.js";
 import "../widgets/hours-record.js";
 import { AttendanceApi } from "../api/attendance.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "../widgets/attendance-proposal-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
+
+const validCloseGrace = (value: string) => /^(?:[0-9]|10)$/.test(value);
 
 type Entry = AttendanceDayView["record"]["entries"][number]["entry"];
 function storedTime(at: string, offset: number): string {
@@ -88,6 +103,11 @@ export class AttendanceCorrectionsScreen extends LitElement {
       .selectors {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-form-max-width)), 1fr));
       }
+      .close-grace {
+        display: grid;
+        max-width: var(--wt-form-max-width);
+        gap: var(--wt-space-2);
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -123,6 +143,10 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @state() private personId = "";
   @state() private date = "";
   @state() private hours: ManagerHours | null = null;
+  @state() private closeGraceDraft: string | null = null;
+  @state() private closeGraceError = "";
+  @state() private savingCloseGrace = false;
+  #closeGraceScope?: DraftScope<string>;
   @state() private periodDate = "";
   @state() private hoursReading = false;
   @state() private exportOptions: AttendanceExportOptions | null = null;
@@ -166,6 +190,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   override disconnectedCallback(): void {
     this.#generation++;
     this.#exportRead++;
+    this.#resetCloseGrace();
     this.exportOpen = false;
     this.exportOptions = null;
     this.#actionWait?.abort();
@@ -211,6 +236,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   async #start(): Promise<void> {
     this.#initialized = true;
     this.#generation++;
+    this.#resetCloseGrace();
     void this.#loadExportOptions();
     this.#actionWait?.abort();
     for (const slot of ["lookups", "queue", "day", "hours"]) this.#queries.release(slot);
@@ -307,6 +333,159 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.selectedItemId = null;
     void this.#watchHours().catch(() => undefined);
   }
+  #resetCloseGrace(): void {
+    this.#closeGraceScope?.dispose();
+    this.#closeGraceScope = undefined;
+    this.closeGraceDraft = null;
+    this.closeGraceError = "";
+    this.savingCloseGrace = false;
+  }
+  #editCloseGrace(value: string, saved: number): void {
+    if (this.closeGraceDraft === null) {
+      this.#closeGraceScope?.dispose();
+      const initial = String(saved);
+      this.#closeGraceScope = draftScopeFor(this, {
+        id: this,
+        current: () => this.closeGraceDraft ?? initial,
+        snapshot: (draft) => draft,
+        equal: (a, b) => a === b,
+        restore: () => {
+          this.closeGraceDraft = null;
+          this.closeGraceError = "";
+        },
+      }).scope;
+    }
+    this.closeGraceDraft = value;
+    this.closeGraceError = "";
+    this.#closeGraceScope?.changed();
+  }
+  async #saveCloseGrace(): Promise<void> {
+    const draft = this.closeGraceDraft;
+    const hours = this.hours;
+    if (
+      !hours?.monthClose?.canEdit ||
+      this.#blocked ||
+      this.editorOpen ||
+      this.savingCloseGrace ||
+      draft === null ||
+      !validCloseGrace(draft) ||
+      saveActionState(this.#closeGraceScope).unchanged
+    )
+      return;
+    const api = this.#hoursApi!;
+    const generation = this.#generation;
+    const graceDays = Number(draft);
+    this.savingCloseGrace = true;
+    this.closeGraceError = "";
+    try {
+      await api.saveCloseGraceDays(graceDays);
+    } catch (error) {
+      if (generation === this.#generation) {
+        this.closeGraceError = codeMessage(codeOf(error));
+        this.savingCloseGrace = false;
+      }
+      return;
+    }
+    if (generation !== this.#generation) return;
+    this.#closeGraceScope?.commit(draft);
+    if (this.hours?.monthClose)
+      this.hours = { ...this.hours, monthClose: { ...this.hours.monthClose, graceDays } };
+    this.#resetCloseGrace();
+    await this.#watchHours().catch(() => undefined);
+  }
+  #monthIssues(hours: ManagerHours) {
+    const { start, end } = hours.period;
+    const during = (date: string) => date >= start && date < end;
+    const rows = hours.people.flatMap(({ displayName, hours: person }) => [
+      ...person.pending.prompts
+        .filter(
+          (prompt) =>
+            prompt.kind === "missing-times" &&
+            prompt.missingKinds.includes("out") &&
+            prompt.businessDay !== null &&
+            during(prompt.businessDay),
+        )
+        .map(
+          (prompt) =>
+            html`<li>${displayName} · ${prompt.businessDay} · ${t("hours.missing_clock_out")}</li>`,
+        ),
+      ...person.pending.items
+        .filter(
+          (item) =>
+            item.changes.some((entry) =>
+              during(storedTime(entry.at, entry.offsetMinutes).slice(0, 10)),
+            ) ||
+            item.history.some((entry) =>
+              during(storedTime(entry.eventAt, entry.offsetMinutes).slice(0, 10)),
+            ),
+        )
+        .map(
+          (item) => html`<li>${displayName} · ${statusLabel(item.status)} · ${item.reason}</li>`,
+        ),
+    ]);
+    return rows.length
+      ? html`<section data-month-issues>
+          <h2>${t("hours.month_issues")}</h2>
+          <ul>
+            ${rows}
+          </ul>
+        </section>`
+      : nothing;
+  }
+  #monthlyClose(disabled: boolean) {
+    const hours = this.hours;
+    const close = hours?.monthClose;
+    if (!close) return nothing;
+    const at = dateTimeFormat(currentLocale(), {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: close.timeZone,
+    }).format(new Date(close.closedAt ?? close.scheduledCloseAt));
+    const grace = this.closeGraceDraft ?? String(close.graceDays);
+    const error = validCloseGrace(grace) ? "" : t("hours.close_grace_invalid");
+    const action = saveActionState(this.#closeGraceScope);
+    return html`<section data-month-close aria-label=${t("hours.month_close")}>
+      <p>${fill(close.closedAt ? "hours.closed_at" : "hours.closes_at", { at })}</p>
+      ${close.holidayCoverageComplete ? nothing : html`<p>${t("hours.close_holiday_coverage")}</p>`}
+      ${
+        !close.canEdit
+          ? nothing
+          : html`<div
+              class="close-grace"
+              @keydown=${(event: KeyboardEvent) =>
+                submitOnEnter(
+                  event,
+                  this.renderRoot.querySelector<HTMLElement>("[data-save-close-grace]"),
+                )}
+            >
+              <wt-input
+                name="closeGraceDays"
+                type="number"
+                required
+                .label=${t("hours.close_grace")}
+                .value=${grace}
+                .error=${error}
+                .disabled=${disabled || this.savingCloseGrace}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  this.#editCloseGrace(event.detail.value, close.graceDays);
+                }}
+              ></wt-input>
+              <wt-form-actions .error=${error ? t("form.fix_fields") : this.closeGraceError}>
+                <wt-button
+                  data-save-close-grace
+                  variant=${action.variant}
+                  .disabled=${disabled || this.savingCloseGrace || action.unchanged || !!error}
+                  .loading=${this.savingCloseGrace}
+                  @click=${() => void this.#saveCloseGrace()}
+                  >${t("action.save")}</wt-button
+                >
+              </wt-form-actions>
+            </div>`
+      }
+      ${this.#monthIssues(hours)}
+    </section>`;
+  }
   #periodControls(disabled: boolean) {
     return html`<div class="selectors">
         <wt-input
@@ -321,6 +500,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
           }}
         ></wt-input>
       </div>
+      ${this.#monthlyClose(disabled)}
       <div class="actions">
         ${
           this.exportOptions?.available && this.exportOptions.canExportAll

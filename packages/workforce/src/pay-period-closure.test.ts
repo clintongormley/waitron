@@ -539,6 +539,28 @@ it.each([null, "bad"])("refuses a malformed closure instant %j", async (bad) => 
   await expect(close({ now: bad as string })).rejects.toMatchObject({ code: "pay_period.invalid" });
 });
 
+it("uses the employment that overlaps the period instead of a newer one", async () => {
+  await automatic();
+  await suite.db.insert(api.employments).values({
+    personId: worker,
+    startDate: "2026-11-01",
+    contractedMinutesPerWeek: 3000,
+    contractType: "full_time",
+    payRate: 1500,
+  });
+  const { snapshot } = await close();
+  expect(snapshot.summaries).toMatchObject([
+    { personId: worker, summary: { contractedMinutes: 10629, workedMinutes: 480 } },
+  ]);
+});
+
+it("freezes completed hours when no work-time rules are configured", async () => {
+  await automatic();
+  const { snapshot } = await close({ ruleset: null });
+  expect(snapshot.sessions).toMatchObject([{ personId: worker, workedMinutes: 480 }]);
+  expect(snapshot.summaries).toEqual([{ personId: worker, summary: null }]);
+});
+
 it("freezes explicit paid-break totals and replays the saved closure unchanged", async () => {
   for (const [kind, at] of [
     ["clockIn", "09:00"],
@@ -554,5 +576,8 @@ it("freezes explicit paid-break totals and replays the saved closure unchanged",
   expect(
     saved.snapshot.summaries.find((row) => row.personId === worker)!.summary!.workedMinutes,
   ).toBe(400);
+  const record = await run((tx) => backend.timeRecord(tx, { period, personId: worker }, null));
+  expect(record.sessions[0]).toMatchObject({ workedMinutes: 380, breakMinutes: 20 });
+  expect(record.closedPeriodImpacts).toEqual([]);
   expect(await close({ paidBreakPolicy: null })).toEqual(saved);
 });

@@ -1,7 +1,8 @@
-import { resolvePaidBreakPolicy } from "./convenio.js";
+import { resolvePaidBreakPolicy, resolveWorkTimeRuleset } from "./convenio.js";
 import { inArray } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import type {
   RecordExportAudience,
   RecordExportDocument,
@@ -230,6 +231,14 @@ export async function prepareTimeRecordExport(
 export const WORKFORCE_ES_RECORD_EXPORT = {
   prepare: prepareTimeRecordExport,
   paidBreakPolicy: resolvePaidBreakPolicy,
+  async workSummaryRules(tx: Transaction) {
+    try {
+      return await resolveWorkTimeRuleset(tx);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "convenio.not_found") return null;
+      throw error;
+    }
+  },
 };
 
 export function formatTimeRecordExport(

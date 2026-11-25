@@ -111,6 +111,13 @@ function canonicalSnapshot(snapshot: PayPeriodSnapshot) {
       }))
       .sort((a, b) => compare(a.personId, b.personId)),
     markedAutomaticEntryIds: [...snapshot.markedAutomaticEntryIds].sort(compare),
+    ...(snapshot.paidBreakPolicy && {
+      paidBreakPolicy: {
+        thresholdMinutes: snapshot.paidBreakPolicy.thresholdMinutes,
+        allowanceMinutes: snapshot.paidBreakPolicy.allowanceMinutes,
+        splitGapMinutes: snapshot.paidBreakPolicy.splitGapMinutes,
+      },
+    }),
   };
 }
 

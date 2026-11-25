@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { dateTimeFormat } from "@waitron/dashboard-kit";
 import type { PersonHours } from "@waitron/dashboard-modules";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { attendanceHistory, attendanceStatus, storedAttendanceTime } from "./attendance-history.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -192,7 +193,13 @@ export class HoursRecord extends LitElement {
             <p>${closure.period.start} · ${dateAfter(closure.period.end, -1)}</p>
             <p>${duration(closure.frozenWorkedMinutes)}</p>
             <p>${closure.clock.timeZone} · ${closure.clock.dayCutover}</p>
-            <time datetime=${closure.closedAt}>${closure.closedAt}</time>
+            <time datetime=${closure.closedAt}
+              >${dateTimeFormat(currentLocale(), {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: closure.clock.timeZone,
+              }).format(new Date(closure.closedAt))}</time
+            >
           </section>`,
       )}
       ${view.record.closedPeriodImpacts.map(

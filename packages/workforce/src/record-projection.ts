@@ -1,6 +1,6 @@
 import type { PaidBreakPolicy } from "./ruleset.js";
 import { AppError } from "@waitron/shared";
-import { projectWorkSessions, type TimeEntryRecord } from "./projection.js";
+import { projectWorkSessions, type TimeEntryRecord, type WorkSession } from "./projection.js";
 import { compareRecording, effectiveClockEntries, sameSubject } from "./effective-entries.js";
 import type { EntryAuthor, TimeRecord, PayPeriodClosure } from "./record-types.js";
 import { recordInPeriod } from "./record-period.js";
@@ -45,10 +45,25 @@ export function projectTimeRecord(
     groups.set(root, rows);
   }
   const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
-  const record: TimeRecord = {
-    sessions: projectWorkSessions(entries, policy).sort(
+  const sessionsByPolicy = new Map<string, WorkSession[]>();
+  const sessionsWith = (breakPolicy: PaidBreakPolicy | null) => {
+    const key = JSON.stringify(
+      breakPolicy && [
+        breakPolicy.thresholdMinutes,
+        breakPolicy.allowanceMinutes,
+        breakPolicy.splitGapMinutes,
+      ],
+    );
+    const cached = sessionsByPolicy.get(key);
+    if (cached !== undefined) return cached;
+    const sessions = projectWorkSessions(entries, breakPolicy).sort(
       (a, b) => a.personId.localeCompare(b.personId) || a.startedAt.localeCompare(b.startedAt),
-    ),
+    );
+    sessionsByPolicy.set(key, sessions);
+    return sessions;
+  };
+  const record: TimeRecord = {
+    sessions: sessionsWith(policy),
     entries: [...entries].sort(compareRecording).map((entry) => {
       const group = groups.get(recordRoot(entry, byId).entryId)!;
       const corrected = group.some(
@@ -81,7 +96,10 @@ export function projectTimeRecord(
       closureHash: closure.closureHash,
       snapshot: structuredClone(closure.snapshot),
     });
-    const current = recordInPeriod(record, closure.period);
+    const current = recordInPeriod(
+      { ...record, sessions: sessionsWith(closure.snapshot.paidBreakPolicy ?? null) },
+      closure.period,
+    );
     const frozenEntries = closure.snapshot.entries;
     const frozenById = new Map(frozenEntries.map((e) => [e.entry.entryId, e.entry]));
     const roots = new Set([

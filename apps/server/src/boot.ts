@@ -3093,6 +3093,7 @@ async function bootServer(
     jobRunner.add(
       attendanceJob({
         db,
+        exporter: timeRecordExporter,
         nodeId: tradingContext.nodeId,
         now,
         isPrimary: () => holders.singletonRole.current === "primary",

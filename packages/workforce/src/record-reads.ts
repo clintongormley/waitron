@@ -58,6 +58,7 @@ function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSna
   const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
   const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
   return {
+    ...snapshot,
     sessions: snapshot.sessions.filter((s) => s.personId === personId),
     entries: ownEntries,
     summaries: snapshot.summaries.filter((s) => s.personId === personId),

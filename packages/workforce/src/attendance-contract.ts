@@ -145,6 +145,14 @@ export interface ManagerHours {
   businessDay: string;
   asOf: string;
   people: { personId: string; displayName: string; hours: PersonHours }[];
+  monthClose?: {
+    graceDays: number;
+    canEdit: boolean;
+    scheduledCloseAt: string;
+    closedAt: string | null;
+    holidayCoverageComplete: boolean;
+    timeZone: string;
+  };
 }
 
 export interface AttendanceExportSelection {

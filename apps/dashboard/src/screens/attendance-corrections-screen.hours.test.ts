@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, streamsOver } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { attendanceEntry } from "../../test/attendance-fixtures.js";
+import { attendanceEntry, attendanceItem } from "../../test/attendance-fixtures.js";
 import {
   change,
   click,
@@ -40,6 +40,76 @@ it("opens the configured pay period, counted automatic hours and retained worker
   await openDay(m.root);
   expect(m.root.querySelector("[data-day]")!.textContent).toContain("Retained worker");
   expect(m.root.querySelector("[data-add-shift]")).toBeTruthy();
+});
+
+it("shows the monthly close date and saves a changed whole number of working days", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: true,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+      closedAt: null,
+      holidayCoverageComplete: false,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")?.textContent).toContain("5 Feb 2026");
+  const save = () => m.root.querySelector("[data-save-close-grace]")!;
+  expect(save()).toHaveProperty("disabled", true);
+  await change(m.root, "closeGraceDays", "1.5");
+  await m.el.updateComplete;
+  expect(save()).toHaveProperty("disabled", true);
+  await change(m.root, "closeGraceDays", "0");
+  await m.el.updateComplete;
+  expect(save()).toHaveProperty("disabled", false);
+  await click(m.root, "[data-save-close-grace]");
+  await expect.poll(() => m.graceWrites).toEqual([0]);
+  await expect.poll(() => save()).toHaveProperty("disabled", true);
+});
+
+it("lists only the selected month's unresolved hours, excluding recorded automatic ends", async () => {
+  const m = await mountManagerHours({
+    live: true,
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+      closedAt: null,
+      holidayCoverageComplete: true,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  const pending = m.data.hours.people[0]!.hours.pending;
+  pending.items.push(
+    attendanceItem({
+      id: "old-dispute",
+      personId: "worker",
+      status: "disputed",
+      reason: "An older dispute",
+      changes: [{ target: { entryId: "old" }, at: "2025-12-31T17:00:00.000Z", offsetMinutes: 60 }],
+    }),
+  );
+  pending.prompts.push({
+    id: "missing-out",
+    personId: "worker",
+    questionId: null,
+    itemId: null,
+    businessDay: "2026-01-05",
+    day: null,
+    kind: "missing-times",
+    automaticEntryId: null,
+    missingKinds: ["out"],
+    timeZone: "Europe/Madrid",
+    history: [],
+  });
+  m.liveData!.invalidate([{ type: "time_entries" }]);
+  const issues = () => m.root.querySelector("[data-month-issues]")?.textContent ?? "";
+  await expect.poll(issues).toContain("Missing clock-out");
+  expect(issues()).toContain("Old pending hours");
+  expect(issues()).not.toContain("An older dispute");
+  expect(issues()).not.toContain("acknowledgement");
+  expect(m.root.querySelector("[data-save-close-grace]")).toBeNull();
 });
 
 it.each(["approve", "decline"])(
