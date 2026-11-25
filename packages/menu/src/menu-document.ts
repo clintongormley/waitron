@@ -1180,9 +1180,8 @@ function variantPriceAttribution(
   decision: CombinedOffer | undefined,
   prev: Shape,
   next: Shape,
-): Pick<MenuChangeBody, "source" | "includedMenu"> | null {
+): Pick<MenuChangeBody, "source" | "includedMenu"> {
   const setting = decision?.variants.find((candidate) => candidate.variantId === variant.id)?.price;
-  if (setting?.state === "clash") return null;
   if (previous.menuPrice !== variant.menuPrice) return { source: "this_menu" };
   const source = setting?.state === "decided" ? setting.source : undefined;
   const ownProductPriceChanged = was.grossPrice !== offer.grossPrice;
@@ -1438,10 +1437,7 @@ export function diffEntries(
       );
     }
     const decision = combined.get(productId);
-    if (
-      decision?.price.state !== "clash" &&
-      (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice)
-    ) {
+    if (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice) {
       const price = decision?.price;
       const origin = changedPriceOrigin(productId, offer.placements, prev, next);
       const includedMenu =
@@ -1483,7 +1479,6 @@ export function diffEntries(
         prev,
         next,
       );
-      if (attribution === null) continue;
       push({
         kind: "price_changed",
         productId,

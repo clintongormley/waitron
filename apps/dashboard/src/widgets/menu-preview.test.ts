@@ -1091,6 +1091,13 @@ it("lists unresolved clashes in Changes and disables publishing", async () => {
   expect(text(q(el, '[data-test="clash-count"]'))).toBe(
     "1 price has a clash. Resolve it before publishing this menu.",
   );
+  const tree = documentView(el);
+  expect(await topNames(tree)).toContain("Burger para clientes");
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  const burger = [...table.shadowRoot!.querySelectorAll('[data-test="name"]')].find(
+    (name) => text(name) === "Burger para clientes",
+  )!;
+  expect(burger.closest('[part~="preview-row"]')!.querySelector('[data-test="price"]')).toBeNull();
   const heard = vi.fn();
   el.addEventListener("wt-menu-publish", heard);
   publish.dispatchEvent(new MouseEvent("click"));
@@ -1553,13 +1560,23 @@ it("links each set menu with problems to its set menu tab, counting one problem 
 
 it("closes the publish warning confirmation on Cancel and publishes nothing", async () => {
   const el = await mount({
-    preview: preview([], [{ kind: "shortcut_missing", name: "Lemonade" }]),
+    preview: preview(
+      [],
+      [
+        {
+          kind: "allergens_unreviewed",
+          products: [{ id: "p-burger", name: "Burger", parentName: null }],
+        },
+      ],
+    ),
   });
   const published = vi.fn();
   el.addEventListener("wt-menu-publish", published);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).not.toBeNull();
+  const confirmation = text(q(el, '[data-test="publish-confirmation"]'));
+  expect(confirmation).toContain("Allergens not yet reviewed");
+  expect(confirmation).toContain("Burger");
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish-cancel"]')!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).toBeNull();

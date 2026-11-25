@@ -911,16 +911,17 @@ describe("a live version published before the Device Home Page", () => {
     });
   });
 
-  it("refuses a format-2 including menu when comparing an included menu's changes", async () => {
+  it("keeps a local edit usable when an including menu has an unsupported live format", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.drinksMenu);
     await publish(f.lunch);
     await liveInFormat2(f.dinner);
     await app((tx) => updateSection(tx, f.beer, { internalName: "Beers" }));
-    await expect(app((tx) => previewMenu(tx, f.drinksMenu))).rejects.toMatchObject({
-      code: "menu.reset_required",
-      params: { menuId: f.dinner },
-    });
+    const preview = await app((tx) => previewMenu(tx, f.drinksMenu));
+    expect(preview.status.state).toBe("changed");
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({ name: "Beers", source: "this_menu" }),
+    );
   });
   it("keeps an unrelated current-format menu usable when another menu has an unsupported live format", async () => {
     const f = await menusFixture(fx.db);
@@ -2430,6 +2431,62 @@ describe("a published menu serves each variant as sellable as it is itself", () 
 });
 
 describe("combined menu publication", () => {
+  it("reports clearing a dish price when its sellable size still has an agreed price", async () => {
+    const f = await menusFixture(fx.db);
+    const price = (menu: string, grossPrice: string | null) =>
+      app(async (tx) =>
+        updateMenuItem(tx, menu, await offerOf(tx, menu, f.lemonade), { grossPrice }),
+      );
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+    await price(f.drinksMenu, "2.60");
+    await price(f.lunch, "2.80");
+    await publish(f.lunch);
+    await price(f.lunch, null);
+
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.clashes).toEqual([]);
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({
+        kind: "price_changed",
+        productId: f.lemonade,
+        from: "2.80",
+        to: "3.00",
+        source: "this_menu",
+      }),
+    );
+    await publish(f.lunch);
+  });
+
+  it("names the other menu affected by a shared price change even when that menu has a clash", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await removeMember(tx, f.lunchRoot, await sectionMemberOf(f.lunchRoot, f.drinks));
+      await addMember(tx, f.lunchRoot, product(f.lager));
+      await addMember(tx, f.dinnerRoot, product(f.lager));
+      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
+        grossPrice: "4.00",
+      });
+    });
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) => updateProduct(tx, f.lager, { unitPrice: "4.50" }));
+
+    const dinner = await app((tx) => previewMenu(tx, f.dinner));
+    expect(dinner.clashes).toMatchObject([{ productId: f.lager, variantId: null, field: "price" }]);
+    expect(dinner.changes).toEqual([]);
+    const lunch = await app((tx) => previewMenu(tx, f.lunch));
+    expect(lunch.changes).toContainEqual(
+      expect.objectContaining({
+        kind: "price_changed",
+        productId: f.lager,
+        from: "4.00",
+        to: "4.50",
+        source: "shared_product",
+        alsoOn: ["Dinner Menu"],
+      }),
+    );
+  });
+
   it("refuses to publish a variant price clash, writing nothing", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
@@ -2599,7 +2656,7 @@ it("attributes a product an included menu takes out of its structure to that men
     }),
   );
 });
-it("lists direct and indirect parents beside an included menu's own price edit even when masked", async () => {
+it("leaves parent menus out of a local price edit", async () => {
   const f = await menusFixture(fx.db);
   const outer = await app(async (tx) => {
     await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), {
@@ -2617,14 +2674,15 @@ it("lists direct and indirect parents beside an included menu's own price edit e
       grossPrice: "5.00",
     }),
   );
-  expect((await app((tx) => previewMenu(tx, f.drinksMenu))).changes).toContainEqual(
-    expect.objectContaining({
-      kind: "price_changed",
-      productId: f.lager,
-      source: "this_menu",
-      alsoOn: ["Dinner Menu", "Outer"],
-    }),
-  );
+  const { changes } = await app((tx) => previewMenu(tx, f.drinksMenu));
+  expect(changes).toHaveLength(1);
+  expect(changes[0]).toMatchObject({
+    kind: "price_changed",
+    productId: f.lager,
+    source: "this_menu",
+  });
+  expect(changes[0]).not.toHaveProperty("alsoOn");
+  expect((await app((tx) => menuStatus(tx, [f.dinner, outer]))).get(outer)?.state).toBe("changed");
 });
 
 describe("the management prices read", () => {

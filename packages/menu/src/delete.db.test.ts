@@ -189,9 +189,7 @@ it("excludes inactive parents from the draft structure and publication advice", 
   await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
   await publish(f.lunch);
   await publish(f.dinner);
-  await app(async (tx) =>
-    updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "9.00" }),
-  );
+  await app((tx) => updateProduct(tx, f.soup, { unitPrice: "9.00" }));
   const alsoOn = async () => (await app((tx) => previewMenu(tx, f.lunch))).changes[0]?.alsoOn;
   const parents = (await read()).includedBy;
   expect([parents, await alsoOn()]).toEqual([
