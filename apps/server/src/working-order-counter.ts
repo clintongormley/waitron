@@ -52,7 +52,12 @@ import {
   paysAfterSending,
 } from "./working-order-context.js";
 import { refusePaymentInFlight, refusePendingPartPayment } from "./working-order-edit-state.js";
-import { unsentDishLines, assertSendable, fireLines } from "./working-order-kitchen-fire.js";
+import {
+  unsentDishLines,
+  assertSendable,
+  fireLines,
+  routingOnce,
+} from "./working-order-kitchen-fire.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
 import { optional } from "./working-order-station-queue.js";
 
@@ -96,7 +101,8 @@ export async function placeOrder(
           tx,
           lines.map((line) => line.id),
         );
-        await lateUnsentDishes(tx, id, lines, { ask: lateSend });
+        const routing = routingOnce(tx, new Date());
+        await lateUnsentDishes(tx, id, lines, { ask: lateSend }, routing);
         // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
         const stamped = await tx
           .update(workingOrderLines)
@@ -114,7 +120,7 @@ export async function placeOrder(
           await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
         }
 
-        await fireLines(tx, cfg, id, lines);
+        await fireLines(tx, cfg, id, lines, { routing });
 
         return { id, status: "placed" as const };
       },

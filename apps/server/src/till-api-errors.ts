@@ -37,6 +37,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "product.not_sold_separately": 409,
   // A confirmation from the kitchen settles it, so it is a conflict rather than a bad request.
   "menu_period.ended": 409,
+  "menu_period.last_orders": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
   "sale.tender_shortfall": 400,

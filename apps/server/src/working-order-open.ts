@@ -48,7 +48,11 @@ import {
   type OrderAttendance,
   captureOrderEdit,
 } from "./working-order-context.js";
-import { type FireableLine, fireableLineColumns } from "./working-order-kitchen-fire.js";
+import {
+  type FireableLine,
+  fireableLineColumns,
+  routingOnce,
+} from "./working-order-kitchen-fire.js";
 import {
   type LineExtras,
   type WorkingOrderLineInsert,
@@ -452,6 +456,7 @@ export async function priceTabRound(
   lines: TabRoundLine[],
   bill: "check" | "checked" = "check",
   lateSend?: LateSendConfirmation,
+  routing = routingOnce(tx, new Date()),
 ): Promise<PricedTabRound> {
   if (bill === "check") await assertPartyBillOpen(tx, tabId);
   if (lines.length === 0) {
@@ -472,6 +477,8 @@ export async function priceTabRound(
     "refuse",
     "added",
     lateSend,
+    undefined,
+    routing,
   );
   return {
     tabId,

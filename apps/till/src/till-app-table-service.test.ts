@@ -3104,6 +3104,18 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
 
+  it("asks the waiter to keep the original quantity after last orders", async () => {
+    const { el, screen } = await openBurgerTab({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "menu_period.last_orders", status: 409 }),
+    });
+
+    emit(screen, "change-line", { ...change, patch: { quantity: "2" } });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("menu_period.last_orders"));
+    expect(tableOrder(el)!.lines[0]!.quantity).toBe(burgerLine.quantity);
+  });
+
   it("says a raise adding too many of one dish is refused in its own words, not the generic table error", async () => {
     const { el, screen } = await openBurgerTab({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "tab.portions_too_many", status: 400 }),

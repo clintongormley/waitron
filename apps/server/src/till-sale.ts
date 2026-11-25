@@ -28,7 +28,7 @@ import type { SettleSaleTender } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { refusePendingPartPayment, refuseRefundInProgress } from "./working-order-edit-state.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
-import { fireLines, unsentDishLines } from "./working-order-kitchen-fire.js";
+import { fireLines, unsentDishLines, routingOnce } from "./working-order-kitchen-fire.js";
 import { readStoredOrder, toVatBreakdown } from "./stored-order-lines.js";
 import { paysAfterSending } from "./working-order-context.js";
 import type {
@@ -432,8 +432,12 @@ export async function fireDishesAtPayment(
     if (party !== null) return null;
   }
   const unsent = await unsentDishLines(tx, workingOrderId);
-  await lateUnsentDishes(tx, workingOrderId, unsent, "mark");
-  const unrouted = await fireLines(tx, cfg, workingOrderId, unsent, { unroutable: "skip" });
+  const routing = routingOnce(tx, new Date());
+  await lateUnsentDishes(tx, workingOrderId, unsent, "mark", routing);
+  const unrouted = await fireLines(tx, cfg, workingOrderId, unsent, {
+    unroutable: "skip",
+    routing,
+  });
   await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
   return unrouted.length === 0 ? null : { productIds: unrouted.map((line) => line.productId!) };
 }

@@ -195,11 +195,17 @@ export async function departmentDay(
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
       staffMenuIds: menuPeriods.staffMenuIds,
+      lastOrders: menuPeriods.lastOrders,
     })
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const periods = rows.map(({ id, name, menuId }) => ({ id, name, menuId }));
+  const periods = rows.map(({ id, name, menuId, lastOrders }) => ({
+    id,
+    name,
+    menuId,
+    lastOrders,
+  }));
   const staff = rows
     .flatMap((row) =>
       row.staffMenuIds.map((menuId, position) => ({
@@ -311,8 +317,26 @@ export async function resolveDepartmentService(
     for (const menuId of menusOf(range.periodId))
       endedPeriod.set(menuId, { periodId: range.periodId, periodName });
   }
+  const lastOrders = periods.some(({ lastOrders }) => lastOrders.length > 0)
+    ? {
+        minute: moment.minute,
+        runs: runs.map((run) => {
+          const period = periods.find(({ id }) => id === run.periodId)!;
+          const span = rangeSpanInDay(run, context);
+          return {
+            periodId: period.id,
+            periodName: period.name,
+            menuIds: menusOf(period.id),
+            start: span.start,
+            end: Math.min(span.end, context.endMinute),
+            offsets: period.lastOrders,
+          };
+        }),
+      }
+    : undefined;
   return {
     departmentId,
+    ...(lastOrders === undefined ? {} : { lastOrders }),
     open: period !== undefined,
     periodId: period?.id ?? null,
     periodOccurrenceKey:

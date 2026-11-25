@@ -76,6 +76,7 @@ declare module "@waitron/shared" {
     "menu_period.not_found": { periodId: string };
     "menu_period.delete_replacement": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
+    "menu_period.last_orders": { menuItemId: string };
     /**
      * New dishes, or stored ones being sent, whose period ended earlier today, sent with no
      * confirmation covering them; a send of stored dishes names their lines.

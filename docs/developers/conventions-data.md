@@ -764,7 +764,14 @@ department's season week for that weekday; paint replaces the stretches it cover
 period closing that stretch. A date Closed all day closes every department. See "Special days"
 below.
 
-A period's menus can be picked and sent from its start until its end, one window for both: for
+When a period has station last orders, order entry, stored sends and dispatch use the same
+[routing rule](../superpowers/specs/2026-11-24-last-orders-per-station-design.md#2-is-this-dish-on-sale).
+A station can stop before the period ends. Another station can take over at the original menu
+price. A sent dish's new extras use the station holding that dish. A stopped quantity increase
+asks the till to keep the original quantity. Until the agreed station is stored, a confirmed dish
+routes by its recorded period as described below.
+
+Without station adjustments, a period's menus can be picked and sent from its start until its end: for
 Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepartmentService`,
 `packages/venue-service/src/menu-timetable.ts`). A dish line whose period has ended is refused
 `menu_period.not_running` (`apps/server/src/working-order-pricing.ts`); increasing a line already sent to
