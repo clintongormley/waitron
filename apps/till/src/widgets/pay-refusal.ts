@@ -24,8 +24,7 @@ export interface PayRefusal {
   reason?: string;
   /** The ticket a payment on account was issued on, which gives it back. */
   invoiceNumber?: string;
-  /** An `advance.taken_off_final_invoice`'s: what Correct invoice on the table's receipt can still
-   * give back. */
+  /** An `advance.taken_off_final_invoice`'s: what the table's receipt can still give back. */
   finalMoneyLeft?: string;
   /** An `advance.taken_off_final_invoice`'s: the table's receipt is still being paid, so
    * `finalMoneyLeft` is what was paid on it so far. */
