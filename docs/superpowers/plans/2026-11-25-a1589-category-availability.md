@@ -49,3 +49,8 @@ Expect 75–105 production and 85–125 test lines. Tell the watcher before pass
 or 160 test lines. Use the existing endpoint and its explicit-ID request. Category membership
 comes from the browser’s snapshot when staff press the button. Send the watcher one picture each
 at 390 and 1180 px.
+
+**Watcher clearance, 22:30.** Select all in Products Tree ticks only rendered matches. Categories
+shown for a matching product keep their individual boxes. A category matching by name is included.
+Opt in through `wt-data-table` so availability, Move and Delete share the same ticks. Test a
+column filter, a deliberate category tick under that filter and a category-name search.

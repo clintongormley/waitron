@@ -9417,6 +9417,19 @@ test("A461 select all changes only rendered selectable rows", async () => {
   expect(el.selected).toEqual(["hidden", "coffee", "ice", "espresso", "ginger", "cake"]);
 });
 
+test("Select all can pick search matches while context rows keep their checkboxes", async () => {
+  const el = await a461Table({ selectable: true, rowSelectAll: () => true });
+  const selection = vi.fn();
+  el.addEventListener("wt-selection-change", selection);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  root.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  expect(selection.mock.calls[0]![0].detail.selected).toEqual(["coffee", "iced", "cake"]);
+  root.querySelector<HTMLInputElement>('[data-test="select-ginger"]')!.click();
+  expect(selection.mock.calls[1]![0].detail.selected).toEqual(["ginger"]);
+});
+
 test("A461 retaining selection never admits a newly ticked domain-ineligible row", async () => {
   const el = await a461Table({
     selectable: true,

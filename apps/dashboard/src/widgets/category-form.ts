@@ -37,10 +37,10 @@ export function categoryPath(
 }
 
 export function categoryWithDescendants(
-  id: string,
+  roots: string | readonly string[],
   categories: readonly CategorySummary[],
 ): Set<string> {
-  const ids = new Set([id]);
+  const ids = new Set(typeof roots === "string" ? [roots] : roots);
   let grew = true;
   while (grew) {
     grew = false;
@@ -59,9 +59,7 @@ export function activeProductIdsInCategories(
   categories: readonly CategorySummary[],
 ): string[] {
   if (!categoryIds.length) return [];
-  const subtree = new Set(
-    categoryIds.flatMap((id) => [...categoryWithDescendants(id, categories)]),
-  );
+  const subtree = categoryWithDescendants(categoryIds, categories);
   return products
     .filter(
       ({ active, primaryCategoryId }) =>

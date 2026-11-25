@@ -2276,6 +2276,37 @@ it("marks products inside hidden category ticks once and announces the count aft
   expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
 });
 
+it.each(["all", "folder:d"])("honours a %s tick in filtered Tree", async (selection) => {
+  const api = bulkApi();
+  const el = await mountBrowser({
+    api: api as unknown as DashboardApi,
+    products: [
+      { ...PRODUCTS[0]!, modifiers: [{ kind: "extras", id: "ex-1" }] },
+      product("water", "Water", "d"),
+      product("stout", "Stout", "b"),
+    ],
+  });
+  await chooseFilter(el, "modifiers", "has");
+  expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
+  await selectKeys(el, []);
+  const tick = async (key: string) => {
+    const { shadowRoot } = await tableOf(el);
+    await userEvent.click(shadowRoot!.querySelector(`[data-test="select-${key}"]`)!);
+  };
+  await tick(selection);
+  await userEvent.click(bulkButton(el, "unavailable")!);
+  expect(api.setProductsAvailability).toHaveBeenCalledExactlyOnceWith(
+    selection === "all" ? ["cola"] : ["cola", "water", "stout"],
+    false,
+  );
+  if (selection !== "all") return;
+  await chooseFilter(el, "modifiers", "");
+  await typeSearch(el, "Drinks");
+  await tick("all");
+  await userEvent.click(bulkButton(el, "available")!);
+  expect(api.setProductsAvailability).toHaveBeenLastCalledWith(["cola", "water", "stout"], true);
+});
+
 it.each([
   ["en-GB", 334],
   ["en-GB", 390],
@@ -2421,17 +2452,20 @@ it.each(["Done", "view switch"])(
   },
 );
 
-it("keeps an unrelated switch refusal when marking a category available", async () => {
+it.each(["bread", "cola"])("keeps only unrelated switch refusals for %s", async (id) => {
   const api = bulkApi();
   api.setProductAvailability.mockRejectedValueOnce({ code: "authorization.not_permitted" });
   const el = await mountBrowser({ api: api as unknown as DashboardApi });
-  await userEvent.click(await availabilitySwitch(el, "bread"));
-  const refusal = () => el.shadowRoot!.querySelector(".availability-error")?.textContent;
-  await vi.waitFor(() => expect(refusal()).toContain("Bread"));
+  await toggleCategory(el, "d");
+  await userEvent.click(await availabilitySwitch(el, id));
+  const refusal = () => el.shadowRoot!.querySelector(".availability-error");
+  const name = id === "bread" ? "Bread" : "Cola";
+  await vi.waitFor(() => expect(refusal()?.textContent).toContain(name));
   await selectKeys(el, ["folder:d"]);
   await userEvent.click(bulkButton(el, "available")!);
   await vi.waitFor(() => expect(batchRefusal(el)?.message).toBe("Marked 1 product available."));
-  expect(refusal()).toContain("Bread");
+  if (id === "bread") expect(refusal()?.textContent).toContain(name);
+  else expect(refusal()).toBeNull();
 });
 
 it.each(["cola", "folder:d"])("refreshes a deleted product from %s", async (selected) => {

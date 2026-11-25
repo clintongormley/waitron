@@ -22,7 +22,7 @@ export type ProductBatchAvailabilityNotice =
 export class ProductAvailabilityActions {
   pending: ReadonlyMap<string, boolean> = new Map();
   batch: boolean | null = null;
-  refusal: ProductAvailabilityRefusal | null = null;
+  refusal: (ProductAvailabilityRefusal & { id: string }) | null = null;
   batchNotice: ProductBatchAvailabilityNotice | null = null;
 
   constructor(private readonly host: AvailabilityHost) {}
@@ -40,7 +40,7 @@ export class ProductAvailabilityActions {
       [id],
       available,
       () => this.host.api.setProductAvailability(id, available),
-      (error) => (this.refusal = { batch: false, name, error }),
+      (error) => (this.refusal = { batch: false, id, name, error }),
     );
   }
 
@@ -72,6 +72,7 @@ export class ProductAvailabilityActions {
           };
         },
       );
+      if (saved && this.refusal && selected.has(this.refusal.id)) this.refusal = null;
       if (saved && hasCategories) this.batchNotice = { count: ids.length, available };
       return saved;
     } finally {

@@ -2564,6 +2564,8 @@ when search or filters hide them. The selected count says how many ticks search 
 At phone width, put the count and Done on the first line and the four action buttons below it.
 Keep Customise after Search in the toolbar. A successful category batch briefly shows its product
 count at the bottom. A refusal there stays until Close, Done or another availability change.
+In Tree, Select all ticks rendered rows that match search and filters. A category drawn to show
+a matching product keeps its individual checkbox so you can choose the category itself.
 The All products row has a named chevron: closing it closes every category and product branch;
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays
 closed on reload; an explicit category or product reveal opens only its ancestor path.
