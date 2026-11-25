@@ -353,8 +353,7 @@ async function earlierItemsBill(
 interface ItemsSource {
   fromBillId: string;
   picks: readonly ItemPick[];
-  partyId?: string;
-  expectedPartyRevision?: number;
+  party: { partyId?: string; expectedPartyRevision?: number };
   expectedEdits: BillEditExpected[];
 }
 
@@ -381,13 +380,7 @@ async function reopenIfPrinted(
   await guardPathParty(
     tx,
     sent.fromBillId,
-    {
-      operatorId: operator.personId,
-      ...(sent.partyId === undefined ? {} : { partyId: sent.partyId }),
-      ...(sent.expectedPartyRevision === undefined
-        ? {}
-        : { expectedPartyRevision: sent.expectedPartyRevision }),
-    },
+    { operatorId: operator.personId, ...sent.party },
     { bump: false },
   );
   await requireBillEditors(tx, [sent.fromBillId], operator.personId, sent.expectedEdits);
@@ -402,8 +395,7 @@ async function reopenIfPrinted(
   return {
     fromBillId: billId,
     picks,
-    partyId: party.id,
-    expectedPartyRevision: party.revision,
+    party: { partyId: party.id, expectedPartyRevision: party.revision },
     expectedEdits: [await readBillEditState(tx, billId)],
   };
 }
@@ -422,7 +414,7 @@ export async function payForItems(
   fromBillId: string,
   req: PayForItemsRequest,
   operator: { personId: string; sessionId: string },
-  device: DeviceBinding | null = null,
+  device: DeviceBinding | null,
 ): Promise<{ billId: string; payment: BillPaymentResult }> {
   if (req.entry === "reader" && !("provider" in deps)) throw invalid("entry");
   if (req.method === "cash" ? req.tendered === undefined : req.tendered !== undefined)
@@ -455,10 +447,12 @@ export async function payForItems(
       {
         fromBillId,
         picks: req.picks,
-        ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
-        ...(req.expectedPartyRevision === undefined
-          ? {}
-          : { expectedPartyRevision: req.expectedPartyRevision }),
+        party: {
+          ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
+          ...(req.expectedPartyRevision === undefined
+            ? {}
+            : { expectedPartyRevision: req.expectedPartyRevision }),
+        },
         expectedEdits: req.expectedEdits,
       },
       operator,
@@ -471,10 +465,7 @@ export async function payForItems(
       source.picks,
       {
         operatorId: operator.personId,
-        ...(source.partyId === undefined ? {} : { partyId: source.partyId }),
-        ...(source.expectedPartyRevision === undefined
-          ? {}
-          : { expectedPartyRevision: source.expectedPartyRevision }),
+        ...source.party,
         expectedEdits: source.expectedEdits,
         admission: deps.admission,
       },

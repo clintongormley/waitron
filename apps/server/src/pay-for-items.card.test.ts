@@ -1213,6 +1213,7 @@ describe("A1515 pay for items on the card reader", () => {
       sourceId,
       body,
       { personId: venue.operatorId, sessionId: session!.id },
+      null,
     ).finally(() => warn.mockRestore());
 
     await expect(paid).rejects.toMatchObject({ code: "storage.disk_full" });

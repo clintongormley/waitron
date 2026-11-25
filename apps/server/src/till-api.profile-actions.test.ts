@@ -42,10 +42,14 @@ import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { printOrderForTest } from "./testing/issue-order.js";
+import { serveLine } from "./testing/serve-line.js";
 import {
+  OPERATOR,
   counterOrder,
   order,
   placeByHand,
+  revisionOf,
   seat,
   setupPartyVenue,
   type PartyVenue,
@@ -1163,6 +1167,14 @@ describe("the person's permission and the profile's action are both needed", () 
       .limit(1);
     const picks = [{ lineId: line!.id }];
     const expectedEdits = [await withTransaction(suite.db, (tx) => readBillEditState(tx, billId))];
+    const [bill] = await suite.db
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    const party =
+      bill!.partyId === null
+        ? {}
+        : { partyId: bill!.partyId, expectedPartyRevision: await revisionOf(v, bill!.partyId) };
     return send(
       sessions.get("take-orders")!,
       "POST",
@@ -1171,6 +1183,7 @@ describe("the person's permission and the profile's action are both needed", () 
         ? {
             submissionId: randomUUID(),
             picks,
+            ...party,
             expectedEdits,
             method: "cash",
             tendered: "3.00",
@@ -1194,9 +1207,26 @@ describe("the person's permission and the profile's action are both needed", () 
     return bill!.status;
   }
 
+  /** A table's bill of a Caña and a Flan, served, its ticket printed and unpaid: Reopen to split
+   * takes it. */
+  async function printedTableBill(): Promise<string> {
+    const { tabId } = await seat(v, await v.table(`Printed ${randomUUID().slice(0, 8)}`));
+    await order(v, tabId, "Caña", "Flan");
+    await withTransaction(suite.db, async (tx) => {
+      await serveLine(tx, v.cfg, tabId, 1);
+      await serveLine(tx, v.cfg, tabId, 2);
+    });
+    await printOrderForTest(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      tabId,
+      OPERATOR,
+    );
+    return tabId;
+  }
+
   it("refuses Pay for items on a printed bill on a till without take-orders, reopening nothing", async () => {
-    const billId = await counterOrder(v, "Caña", "Flan");
-    await placeByHand(v, billId);
+    const billId = await printedTableBill();
     const before = filed();
 
     const paid = await payFirstDishWithoutTakeOrders(billId);
@@ -1207,8 +1237,7 @@ describe("the person's permission and the profile's action are both needed", () 
   });
 
   it("refuses its preview the same way", async () => {
-    const billId = await counterOrder(v, "Caña", "Flan");
-    await placeByHand(v, billId);
+    const billId = await printedTableBill();
 
     const previewed = await payFirstDishWithoutTakeOrders(billId, "item-payments/preview");
 

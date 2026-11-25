@@ -399,6 +399,47 @@ describe("Pay for items on a printed bill", () => {
     expect(await reopenedFrom(party.tabId)).toEqual([]);
   });
 
+  it("a stale edit state on the printed bill is refused before the reopen", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const body = await itemsBody(
+      party,
+      [{ lineId: await lineOf(party.tabId, "hake") }],
+      cashFor("15.00"),
+    );
+    const [edit] = body.expectedEdits;
+
+    await fixture.expectRefused(
+      venue,
+      party.tabId,
+      () =>
+        payItems(party.tabId, {
+          ...body,
+          expectedEdits: [{ ...edit!, editorVersion: edit!.editorVersion + 1 }],
+        }),
+      { status: 409, code: "draft.out_of_date" },
+    );
+    expect(await reopenedFrom(party.tabId)).toEqual([]);
+  });
+
+  it("a pick naming a line not on the printed bill reopens nothing", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const other = await printed(await seated("hake"));
+    const original = await fixture.invoiceOf(venue, party.tabId);
+    const body = await itemsBody(
+      party,
+      [{ lineId: await lineOf(other.tabId, "hake") }],
+      cashFor("15.00"),
+    );
+
+    await fixture.expectRefused(venue, party.tabId, () => payItems(party.tabId, body), {
+      status: 400,
+      code: "tab.line_not_found",
+    });
+    expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
+    expect(await reopenedFrom(party.tabId)).toEqual([]);
+    expect(await statusOf(venue, other.tabId)).toBe("placed");
+  });
+
   it("part of a line on a printed bill", async () => {
     const party = await printed(await threeBeersOnOneLine());
 
