@@ -235,6 +235,60 @@ export async function counterItemsEdit(
   return counterBillEdit(await api.getFindBill(billId, options), billId);
 }
 
+/** The edit state `expectedEdit` the Pay window's preview of `choice` holds, refused as out of
+ * date when unknown, or when there is none for a table bill or an items choice; except that Pay for
+ * items on a Counter order not from Find a bill, holding none, reads the bill's (`readCounterEdit`). */
+export function previewEdit(
+  expectedEdit: BillEditExpected | null | undefined,
+  open: { surface: "table" | "counter"; found?: unknown },
+  choice: PayChoice,
+): { expectedEdit: BillEditExpected | null; readCounterEdit: boolean } {
+  const readCounterEdit =
+    expectedEdit === null &&
+    open.found === undefined &&
+    open.surface === "counter" &&
+    choice.kind === "items";
+  if (
+    expectedEdit === undefined ||
+    (expectedEdit === null &&
+      !readCounterEdit &&
+      (open.surface === "table" || choice.kind === "items"))
+  )
+    throw { code: "draft.out_of_date" };
+  return { expectedEdit, readCounterEdit };
+}
+
+/** The edit state Pay for items sends from Counter window `open`: on its confirmation, the one
+ * that confirmation's preview was asked with; otherwise the bill's, read within the time limit. */
+export async function counterItemsEditFor(
+  api: TillApi,
+  open: {
+    billId: string;
+    preview: AllocationPreview | null;
+    expectedEdit: BillEditExpected | null;
+  },
+): Promise<BillEditExpected> {
+  if (open.preview !== null && open.expectedEdit?.billId === open.billId) return open.expectedEdit;
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  try {
+    return await counterItemsEdit(api, open.billId, { signal: limit.signal });
+  } finally {
+    limit.done();
+  }
+}
+
+/** What a Counter order's banner saying to take the rest as a bill payment shows once `balance` is
+ * read for order `billId`: the balance's outstanding while that banner is up and the balance is
+ * the order's; otherwise undefined, leaving the banner as it is. */
+export function billPaymentsBannerOutstanding(
+  said: string | object | undefined,
+  balance: BillBalance | undefined,
+  billId: string,
+): string | undefined {
+  if (typeof said !== "object" || !("billPayments" in said)) return undefined;
+  return balance?.workingOrderId === billId ? balance.outstanding : undefined;
+}
+
 /** Takes the payment: with an items part through Pay for items, answering the new bill as
  * `paidOn` and the bill the items came from as `sourceBalance`; otherwise through today's bill
  * payment. */

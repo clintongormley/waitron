@@ -25,3 +25,14 @@ export function counterBillEdit(
     throw { code: "draft.out_of_date" };
   return expectedEditOf(bill.edit);
 }
+
+/** The edit state a Find bill row was read with, as a write on it expects: null for a bill at no
+ * table, undefined for a table bill whose row carried none. */
+export function foundBillEdit(row: {
+  partyId: string | null;
+  edit?: BillEditState | null;
+}): BillEditExpected | null | undefined {
+  if (row.partyId === null) return null;
+  if (row.edit === undefined || row.edit === null) return undefined;
+  return expectedEditOf(row.edit);
+}

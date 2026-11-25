@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { BillEditState } from "../api/client.js";
-import { counterBillEdit, expectedEditOf } from "./bill-edit.js";
+import { counterBillEdit, expectedEditOf, foundBillEdit } from "./bill-edit.js";
 
 const edit: BillEditState = {
   billId: "wo-1",
@@ -35,4 +35,11 @@ it.each([
   expect(() => counterBillEdit(bill, "wo-1")).toThrow(
     expect.objectContaining({ code: "draft.out_of_date" }),
   );
+});
+
+it("gives a Find bill row's edit state, null at no table and undefined when the row has none", () => {
+  expect(foundBillEdit({ partyId: "v1", edit })).toEqual(expected);
+  expect(foundBillEdit({ partyId: null, edit })).toBeNull();
+  expect(foundBillEdit({ partyId: "v1", edit: null })).toBeUndefined();
+  expect(foundBillEdit({ partyId: "v1" })).toBeUndefined();
 });

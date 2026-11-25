@@ -288,7 +288,7 @@ import {
   billEditConflictRows,
   type BillEditConflict,
 } from "./state/bill-edit-conflicts.js";
-import { counterBillEdit, expectedEditOf } from "./state/bill-edit.js";
+import { counterBillEdit, expectedEditOf, foundBillEdit } from "./state/bill-edit.js";
 import "./widgets/bill-edit-conflicts-dialog.js";
 import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
@@ -321,11 +321,13 @@ import {
 } from "./state/bill-payment.js";
 import { CounterOverpaidRead } from "./state/counter-overpaid.js";
 import {
-  counterItemsEdit,
+  billPaymentsBannerOutstanding,
+  counterItemsEditFor,
   itemsAllocatedFrom,
   itemsBarredReason,
   itemsRefusal,
   paysOnNewBill,
+  previewEdit,
   previewPayment,
   takePayment,
   withItems,
@@ -1696,17 +1698,6 @@ interface DeferredClosing {
   reread: boolean;
   /** Every submission id this window has sent. */
   sent: string[];
-}
-
-/** The edit state a Find bill row was read with, as a write on it expects: null for a bill at no
- * table, undefined for a table bill whose row carried none. */
-function foundBillEdit(row: {
-  partyId: string | null;
-  edit?: BillEditState | null;
-}): BillEditExpected | null | undefined {
-  if (row.partyId === null) return null;
-  if (row.edit === undefined || row.edit === null) return undefined;
-  return expectedEditOf(row.edit);
 }
 
 /** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
@@ -22497,14 +22488,9 @@ export class TillApp extends LitElement {
       if (!this.#hasLeftCounterOrder(open.billId, open.visit)) {
         await this.#reloadCounterOrder(open.billId, open.visit);
         this.#refreshOpenPayLines(open.billId);
-        const said = this.errorKey;
-        if (
-          typeof said === "object" &&
-          "billPayments" in said &&
-          balance?.workingOrderId === open.billId &&
-          !this.#hasLeftCounterOrder(open.billId, open.visit)
-        )
-          this.#sayBillPayments(balance.outstanding);
+        const outstanding = billPaymentsBannerOutstanding(this.errorKey, balance, open.billId);
+        if (outstanding !== undefined && !this.#hasLeftCounterOrder(open.billId, open.visit))
+          this.#sayBillPayments(outstanding);
       }
     } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
       await this.#rereadAmounts(open.billId, open.visit, balance);
@@ -22947,24 +22933,15 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false, refusal: this.#saidInDialog() };
         return;
       }
-      const expectedEdit =
+      const { expectedEdit, readCounterEdit } = previewEdit(
         open.found !== undefined
           ? open.found.expectedEdit
           : open.surface === "counter"
             ? this.#counterExpectedEdit(open.billId)
-            : this.#draftSync?.expectedEditFor(open.billId);
-      const readCounterEdit =
-        expectedEdit === null &&
-        open.found === undefined &&
-        open.surface === "counter" &&
-        asked.choice.kind === "items";
-      if (
-        expectedEdit === undefined ||
-        (expectedEdit === null &&
-          !readCounterEdit &&
-          (open.surface === "table" || asked.choice.kind === "items"))
-      )
-        throw { code: "draft.out_of_date" };
+            : this.#draftSync?.expectedEditFor(open.billId),
+        open,
+        asked.choice,
+      );
       const api = this.api;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
@@ -22982,7 +22959,7 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const paidEdit = readCounterEdit ? await this.#counterItemsEditFor(open, api) : expectedEdit;
+      const paidEdit = readCounterEdit ? await counterItemsEditFor(api, open) : expectedEdit;
       if (readCounterEdit && !current()) {
         const now = this.#billPayingNow(open.id);
         if (now !== null) this.billPaying = { ...now, busy: false };
@@ -22994,19 +22971,6 @@ export class TillApp extends LitElement {
         this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
-    }
-  }
-
-  /** The edit state Pay for items sends from Counter window `open`: on its confirmation, the one
-   * that confirmation's preview was asked with; otherwise the bill's, read within the time limit. */
-  async #counterItemsEditFor(open: BillPaying, api: TillApi): Promise<BillEditExpected> {
-    if (open.preview !== null && open.expectedEdit?.billId === open.billId)
-      return open.expectedEdit;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    try {
-      return await counterItemsEdit(api, open.billId, { signal: limit.signal });
-    } finally {
-      limit.done();
     }
   }
 
