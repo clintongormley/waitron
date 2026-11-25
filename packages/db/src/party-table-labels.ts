@@ -22,9 +22,8 @@ function readShownNames(tx: Transaction, where: SQL | undefined) {
     .where(where);
 }
 
-/** A party's active table, with the names {@link partyTableLabels} and {@link tableNames} read. */
+/** The names used for a party's active table. */
 interface ActiveTable {
-  id: string;
   label: string;
   name: string | null;
   joinId: string | null;
@@ -41,7 +40,6 @@ async function readActiveTables(
   const rows = await tx
     .select({
       partyId: partyTables.partyId,
-      id: partyTables.tableId,
       label: diningTables.label,
       name: diningTables.todayName,
       joinId: tableMerges.id,
@@ -68,10 +66,6 @@ function shownLabels(tables: readonly ActiveTable[]): string[] {
     labels.push(shown(table));
   }
   return labels;
-}
-
-function namesOf(table: ActiveTable): TableNames {
-  return { id: table.id, name: table.name ?? table.label, shown: shown(table) };
 }
 
 function mapValues<T, U>(map: ReadonlyMap<string, T>, to: (value: T) => U): Map<string, U> {
@@ -166,18 +160,17 @@ export async function partyFamilies(
 
 /**
  * The tables each party's bill is at: its active tables, or, once it holds none, those of the party
- * at the end of its merges as `survivorOf` gives it (else as {@link partySurvivors} reads it);
+ * at the end of its merges;
  * empty when that party holds none either, or when the chain has no end.
  */
 async function billActiveTables(
   tx: Transaction,
   partyIds: readonly string[],
-  survivorOf?: ReadonlyMap<string, string>,
 ): Promise<Map<string, ActiveTable[]>> {
   const tables = await readActiveTables(tx, partyIds);
   const seatless = partyIds.filter((id) => tables.get(id)!.length === 0);
   if (seatless.length === 0) return tables;
-  const ends = survivorOf ?? (await partySurvivors(tx, seatless));
+  const ends = await partySurvivors(tx, seatless);
   const unread = [...new Set(seatless.flatMap((id) => ends.get(id) ?? []))].filter(
     (id) => !tables.has(id),
   );
@@ -200,48 +193,6 @@ export async function billPartyTableLabels(
   partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {
   return mapValues(await billActiveTables(tx, partyIds), shownLabels);
-}
-
-/**
- * The tables a party's bill is at, keyed by each party asked about, as {@link billPartyTableLabels}
- * chooses them — the party's active tables, else those of the party at the end of its merges — each
- * by {@link tableNames}; empty under the same conditions.
- */
-export async function billPartyTables(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, TableNames[]>> {
-  return mapValues(await billActiveTables(tx, partyIds), (tables) => tables.map(namesOf));
-}
-
-/**
- * Where a party's bill is: {@link billPartyTables}, {@link billPartyTableLabels}, and its survivor.
- */
-export interface BillParty {
-  tables: TableNames[];
-  labels: string[];
-  /** The party at the end of its merges ({@link partySurvivors}); undefined when there is none. */
-  survivor: { id: string; name: string | null } | undefined;
-}
-
-/** {@link BillParty} for each of `partyIds`, keyed by party. */
-export async function billParties(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, BillParty>> {
-  if (partyIds.length === 0) return new Map();
-  const survivors = await partySurvivorNames(tx, partyIds);
-  const tables = await billActiveTables(
-    tx,
-    partyIds,
-    mapValues(survivors, (end) => end.id),
-  );
-  return new Map(
-    [...tables].map(([id, held]) => [
-      id,
-      { tables: held.map(namesOf), labels: shownLabels(held), survivor: survivors.get(id) },
-    ]),
-  );
 }
 
 /** What {@link orderTableLabels} reads of an order. */

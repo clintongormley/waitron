@@ -1,22 +1,29 @@
 import { and, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
-import { correctivesOf, readVenueClock, type Transaction, workingOrderLines } from "@waitron/db";
+import {
+  correctivesOf,
+  orderPlaceFactsSql,
+  readPlacedOrders,
+  readVenueClock,
+  type OrderPlaceFacts,
+  type Transaction,
+  workingOrderLines,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, businessDayAt, businessDayBounds, rawCentsToDecimal } from "@waitron/shared";
 import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readPartyTables } from "./orders-list.js";
 import type { OrderZoneCondition } from "./zone-access.js";
+import { recordedTableNamesSql } from "./orders-list-places.js";
 import "./errors.js";
 
 type RawBill = {
   id: string;
   opened_at: string;
   order_number: number;
-  label: string | null;
   party_id: string | null;
-  party_name: string | null;
-  party_table_names: string | null;
-  delivery_label: string | null;
+  bill_name: string | null;
+  departed_tables: string | null;
+  place?: string | null;
   zone_id: string | null;
   zone_name: string | null;
   item_count: number;
@@ -38,9 +45,12 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
   const takenOff = sql`(select coalesce(-sum(dl.line_gross), 0) from sale_lines dl
        where dl.sale_id = s.id and dl.deducts_sale_id is not null)`;
   return sql`with facts as (
-    select wo.id, wo.opened_at, wo.order_number, wo.label, wo.party_id,
-      wo.status as order_status, p.name as party_name, p.table_names as party_table_names,
-      coalesce(dt.label, wo.delivery_table_label) as delivery_label,
+    select wo.id, wo.opened_at, wo.order_number, wo.party_id,
+      case when ud.id is null then wo.bill_name else coalesce(wo.bill_name, wo.label) end as bill_name,
+      wo.delivery_table_id,
+      case when ud.id is not null then
+        coalesce(p.table_names, ${recordedTableNamesSql(sql`wo.party_id`)}) end as departed_tables,
+      wo.status as order_status,
       ${zone} as zone_id,
       s.id as sale_id, case when s.id is null then null else sr.code || '/' || s.invoice_number end as invoice_number,
       ud.recorded_at as departed_at,
@@ -64,10 +74,6 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
       else (select coalesce(sum(bp.applied - coalesce((select sum(br.applied_amount) from refunds br
         where br.bill_payment_id = bp.id and br.state = 'completed'),0)),0)
         from bill_payments bp where bp.working_order_id = wo.id and bp.state = 'received') end as paid_cents,
-      coalesce(
-        (select group_concat(n.value, ' ') from json_each(p.table_names) n),
-        (select group_concat(d.label, ' ') from party_tables pt join dining_tables d on d.id = pt.table_id where pt.party_id = wo.party_id),
-        dt.label, wo.delivery_table_label) as table_text,
       (select group_concat(names.name, ' ') from
         (select distinct coalesce(person.display_name, l.credited_to) as name
           from working_order_lines l left join persons person on person.id = l.credited_to
@@ -78,11 +84,10 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
         then case when ud.id is null then 'waiting_for_payment' else 'left_without_paying' end
         else null end as collection_candidate
     from working_orders wo
-    left join parties p on p.id = wo.party_id
-    left join dining_tables dt on dt.id = wo.delivery_table_id
     left join sales s on s.working_order_id = wo.id
     left join invoice_series sr on sr.id = s.series_id
     left join unpaid_departures ud on ud.working_order_id = wo.id
+    left join parties p on p.id = wo.party_id
     where (${inZones?.(sql`wo.id`) ?? sql`1`})
       and (wo.status in ('open','placed') or (wo.status = 'settled' and wo.party_id is null
         and wo.collected_at is null and exists(select 1 from working_order_lines wl join ticket_items ti on ti.working_order_line_id = wl.id where wl.working_order_id = wo.id)
@@ -92,7 +97,6 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
       case when f.total_cents + f.corrections > 0
         and not exists(select 1 from bill_payments bp where bp.working_order_id = f.id and bp.state in ('pending','received'))
         then f.collection_candidate else null end as collection_status,
-      coalesce(nullif(f.label,''), f.party_name, f.table_text) as table_key,
       max(0, f.total_cents + f.corrections - f.paid_cents) as owing_cents,
       case when f.order_status = 'settled' then 'paid-not-handed-over'
         when f.paid_cents > 0 then 'part-paid'
@@ -121,19 +125,16 @@ const sorts: Readonly<Record<string, SQL>> = {
   paid: sql`r.paid_cents`,
   state: sql`r.state`,
 };
-const selection = sql`r.id, r.opened_at, r.order_number, r.label, r.party_id, r.party_name,
-  r.party_table_names, r.delivery_label, r.zone_id, r.zone_name, r.item_count,
+const selection = sql`r.id, r.opened_at, r.order_number, r.party_id, r.bill_name, r.zone_id, r.zone_name, r.item_count,
   cast(r.total_cents as text) as total_cents, cast(r.paid_cents as text) as paid_cents,
   cast(r.owing_cents as text) as owing_cents, r.state, r.invoice_number, r.departed_at,
-  r.order_status, r.collection_status`;
+  r.order_status, r.collection_status, r.departed_tables`;
 
 async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]> {
   if (raw.length === 0) return [];
-  const tables = await readPartyTables(
+  const places = await readPlacedOrders(
     tx,
-    raw.flatMap((row) =>
-      row.party_id === null || row.party_table_names !== null ? [] : [row.party_id],
-    ),
+    raw.flatMap((row) => (row.place == null ? [row.id] : [])),
   );
   const staff = await tx
     .selectDistinct({
@@ -155,37 +156,36 @@ async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]>
     .orderBy(persons.displayName, workingOrderLines.creditedTo);
   const clock = await readVenueClock(tx);
   const dayStart = businessDayBounds(clock, businessDayAt(clock, new Date())).startAt;
-  return raw.map((row) => ({
-    workingOrderId: row.id,
-    openedAt: row.opened_at,
-    orderNumber: row.order_number,
-    label: row.label,
-    partyId: row.party_id,
-    partyName: row.party_name,
-    tables:
-      row.party_id === null
-        ? row.delivery_label === null
-          ? []
-          : [row.delivery_label]
-        : row.party_table_names === null
-          ? (tables.get(row.party_id) ?? [])
-          : (JSON.parse(row.party_table_names) as string[]),
-    zoneId: row.zone_id,
-    zoneName: row.zone_name,
-    staff: staff
-      .filter((person) => person.bill === row.id)
-      .map((person) => ({ id: person.id!, name: person.name })),
-    itemCount: row.item_count,
-    total: rawCentsToDecimal(row.total_cents),
-    paid: rawCentsToDecimal(row.paid_cents),
-    stillOwed: rawCentsToDecimal(row.owing_cents),
-    state: row.state,
-    earlierDay: row.opened_at < dayStart,
-    invoiceNumber: row.invoice_number,
-    departedAt: row.departed_at,
-    orderStatus: row.order_status,
-    collectionStatus: row.collection_status,
-  }));
+  return raw.map((row) => {
+    const { names, sittingWith } =
+      row.place == null
+        ? { names: places.get(row.id)!.places.names, sittingWith: places.get(row.id)!.sittingWith }
+        : (JSON.parse(row.place) as OrderPlaceFacts);
+    return {
+      workingOrderId: row.id,
+      openedAt: row.opened_at,
+      orderNumber: row.order_number,
+      label: row.bill_name,
+      partyId: row.party_id,
+      partyName: sittingWith,
+      tables: row.departed_tables === null ? names : (JSON.parse(row.departed_tables) as string[]),
+      zoneId: row.zone_id,
+      zoneName: row.zone_name,
+      staff: staff
+        .filter((person) => person.bill === row.id)
+        .map((person) => ({ id: person.id!, name: person.name })),
+      itemCount: row.item_count,
+      total: rawCentsToDecimal(row.total_cents),
+      paid: rawCentsToDecimal(row.paid_cents),
+      stillOwed: rawCentsToDecimal(row.owing_cents),
+      state: row.state,
+      earlierDay: row.opened_at < dayStart,
+      invoiceNumber: row.invoice_number,
+      departedAt: row.departed_at,
+      orderStatus: row.order_status,
+      collectionStatus: row.collection_status,
+    };
+  });
 }
 
 export async function readFindBills(
@@ -194,16 +194,28 @@ export async function readFindBills(
   inZones?: OrderZoneCondition,
 ): Promise<FindBillPage<BillRow>> {
   const relation = findBillsRelation(inZones);
-  const ranked = sql`${relation}, ranked as materialized (
-    select r.*, ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q}, r.label, r.party_name, r.table_text, cast(r.order_number as text), r.invoice_number)`} as search_rank from bills r
-  )`;
+  const place =
+    query.q === "" && query.sort.key !== "tableName"
+      ? sql`null`
+      : orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`, {
+          searchable: query.q !== "",
+        });
+  const tableText = sql`(select group_concat(value, ' ') from json_each(coalesce(r.departed_tables, r.place -> '$.names')))`;
+  const searchTables = sql`(select group_concat(value, ' ') from json_each(coalesce(r.departed_tables, r.place -> '$.searchNames')))`;
+  const partyName = sql`r.place ->> '$.sittingWith'`;
+  const ranked = sql`${relation}, named as materialized (select r.*, ${place} as place from bills r),
+    ranked as materialized (
+      select r.*, coalesce(${tableText}, r.bill_name, ${partyName}) as table_key,
+        ${query.q === "" ? sql`0` : sql`waitron_search_rank(${query.q}, r.bill_name, ${partyName}, ${searchTables}, cast(r.order_number as text), r.invoice_number)`} as search_rank
+      from named r
+    )`;
   const where = filtered(query);
   const { rows: counts } = await tx.execute<{ total: number; open_count: number }>(sql`${ranked}
     select (select count(*) from ranked r where ${where}) as total, (select count(*) from bills) as open_count`);
   const key = sorts[query.sort.key] ?? sorts.openedAt!;
   const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;
   const { rows: raw } = await tx.execute<RawBill>(sql`${ranked}
-    select ${selection} from ranked r where ${where}
+    select ${selection}, r.place from ranked r where ${where}
     order by r.search_rank, ${key} is null, ${key} ${direction}, r.id desc limit ${50} offset ${query.page * 50}`);
   return {
     rows: await projectBills(tx, raw),

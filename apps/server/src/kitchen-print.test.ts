@@ -27,7 +27,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { enqueueCorrectionSlips } from "./kitchen-ticket-corrections.js";
 import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
-import { orderTableLabel } from "./kitchen-ticket-items.js";
+import { readOrderHeader } from "./kitchen-ticket-items.js";
 import { deleteCourse } from "./course-delete.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
@@ -480,7 +480,9 @@ describe("the table a slip names (spec decision 9)", () => {
     await join(v, partyId, table4);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, tabId))).toBe("Table 5, 4");
+    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, tabId)).tableLabel)).toBe(
+      "Table 5, 4",
+    );
   });
 
   it("names the party's tables on a bill split from the tab, not the label it was split with", async () => {
@@ -493,7 +495,9 @@ describe("the table a slip names (spec decision 9)", () => {
     await join(v, partyId, table5);
 
     expect((await billRow(v, checkId)).label).toBe("Table 4");
-    expect(await inTx(v, (tx) => orderTableLabel(tx, checkId))).toBe("Table 4, 5");
+    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, checkId)).tableLabel)).toBe(
+      "Table 4, 5",
+    );
   });
 
   it("copies the party's tables, not its name, as a split bill's own label", async () => {
@@ -510,7 +514,7 @@ describe("the table a slip names (spec decision 9)", () => {
     expect((await billRow(v, checkId)).label).toBe("Table 4, 5");
   });
 
-  it("names a bill by its own label once its party holds no table", async () => {
+  it("leaves out a bill's old table once its party holds no table", async () => {
     const v = await setupPartyVenue(db);
     const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
@@ -524,20 +528,26 @@ describe("the table a slip names (spec decision 9)", () => {
       await tx.update(workingOrders).set({ label: "Ana" }).where(eq(workingOrders.id, checkId));
     });
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, checkId))).toBe("Ana");
+    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, checkId)).tableLabel)).toBeNull();
   });
 
-  it("names a counter order's delivery table, and an unlabelled walk-up nothing", async () => {
+  it("names a delivered counter order and its table, and an unlabelled walk-up nothing", async () => {
     const v = await setupPartyVenue(db);
     const terraceTable = await v.table("Terrace 2");
     const [delivered, walkUp] = [randomUUID(), randomUUID()];
     await inTx(v, async (tx) => {
-      await createOpenOrder(tx, v.cfg, delivered, [], null, { deliveryTableId: terraceTable });
+      await createOpenOrder(tx, v.cfg, delivered, [], "Riley", {
+        deliveryTableId: terraceTable,
+        billName: "Riley",
+      });
       await createOpenOrder(tx, v.cfg, walkUp, [], null);
     });
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, delivered))).toBe("Terrace 2");
-    expect(await inTx(v, (tx) => orderTableLabel(tx, walkUp))).toBeNull();
+    expect(await inTx(v, (tx) => readOrderHeader(tx, delivered))).toMatchObject({
+      tableLabel: "Terrace 2",
+      partyName: "Riley",
+    });
+    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, walkUp)).tableLabel)).toBeNull();
   });
 });
 

@@ -89,7 +89,10 @@ describe("departmental tab transfers", () => {
   it("A765 omits the table name for a table-free transfer while keeping its bill label", async () => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(workingOrders).set({ label: "Alex" }).where(eq(workingOrders.id, v.tab));
+      await tx
+        .update(workingOrders)
+        .set({ label: "Former patio", billName: "Alex", deliveryTableLabel: "Former patio" })
+        .where(eq(workingOrders.id, v.tab));
       const incoming = await service.listIncomingDepartmentTransfers(tx, receiver(v));
       const detail = await service.readIncomingDepartmentTransfer(tx, v.request.id, receiver(v));
       const sent = await service.listSentDepartmentTransfers(tx, v.tab, {
@@ -102,6 +105,7 @@ describe("departmental tab transfers", () => {
       });
       for (const row of [incoming![0], detail, sent[0], history[0]]) {
         expect(row?.summary?.tabLabel).toBe("Alex");
+        expect(row?.summary?.counter).toBe(true);
         expect(row?.summary).not.toHaveProperty("tableLabel");
       }
     });
@@ -122,7 +126,7 @@ describe("departmental tab transfers", () => {
           .where(eq(diningTables.id, table!.id));
         await tx
           .update(workingOrders)
-          .set({ deliveryTableId: table!.id, label: "Alex" })
+          .set({ deliveryTableId: table!.id, label: "Former patio", billName: "Alex" })
           .where(eq(workingOrders.id, v.tab));
         const incoming = await service.listIncomingDepartmentTransfers(tx, receiver(v));
         const detail = await service.readIncomingDepartmentTransfer(tx, v.request.id, receiver(v));

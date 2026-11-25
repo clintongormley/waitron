@@ -6,14 +6,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import {
-  billParties,
   billPartyTableLabels,
   orderTableLabels,
   partyFamilies,
   partySurvivorNames,
   partySurvivors,
   partyTableLabels,
-  billPartyTables,
   tableNames,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
@@ -266,139 +264,6 @@ describe("party table labels", () => {
 
     it("answers no party with an empty map, without reading the database", async () => {
       expect(await partySurvivorNames({} as Transaction, [])).toEqual(new Map());
-    });
-  });
-
-  describe("billPartyTables", () => {
-    const names = (tables: Map<string, { name: string }[]>) =>
-      new Map([...tables].map(([id, list]) => [id, list.map((table) => table.name)]));
-
-    it("lists a party's own active tables in join order, by id and name", async () => {
-      const a = "00000000-0000-4000-8000-0000000000b1";
-      const b = "ffffffff-0000-4000-8000-0000000000b1";
-      const id = await party([
-        { id: a, label: "Bt A", joinedAt: "2026-09-29T20:02:00.000Z" },
-        { id: b, label: "Bt B", joinedAt: "2026-09-29T20:00:00.000Z" },
-        { label: "Bt C", ...LEFT },
-      ]);
-      expect(await inTx((tx) => billPartyTables(tx, [id]))).toEqual(
-        new Map([
-          [
-            id,
-            [
-              { id: b, name: "Bt B", shown: "Bt B" },
-              { id: a, name: "Bt A", shown: "Bt A" },
-            ],
-          ],
-        ]),
-      );
-    });
-
-    it("lists a party that holds no table at the tables of the party at the end of its merges", async () => {
-      const survivor = await party([
-        { label: "Bt 7", joinedAt: "2026-09-29T20:20:00.000Z" },
-        { label: "Bt 8", joinedAt: "2026-09-29T20:21:00.000Z" },
-      ]);
-      const middle = await party([{ label: "Bt 6", ...LEFT }]);
-      const first = await party([{ label: "Bt 4", ...LEFT }]);
-      const seated = await party([{ label: "Bt 2", joinedAt: "2026-09-29T20:00:00.000Z" }]);
-      await merge(middle, survivor);
-      await merge(first, middle);
-      await merge(seated, survivor);
-      expect(names(await inTx((tx) => billPartyTables(tx, [first, seated, survivor])))).toEqual(
-        new Map([
-          [first, ["Bt 7", "Bt 8"]],
-          [seated, ["Bt 2"]],
-          [survivor, ["Bt 7", "Bt 8"]],
-        ]),
-      );
-      expect(names(await inTx((tx) => billPartyTables(tx, [first])))).toEqual(
-        new Map([[first, ["Bt 7", "Bt 8"]]]),
-      );
-    });
-
-    it("lists no table for a party whose merges form a cycle, or that does not exist", async () => {
-      const first = await party([{ label: "Bt 10", ...LEFT }]);
-      const second = await party([{ label: "Bt 11", ...LEFT }]);
-      await merge(first, second);
-      await merge(second, first);
-      const missing = "cccccccc-9999-4000-8000-0000000000b1";
-      expect(await inTx((tx) => billPartyTables(tx, [first, second, missing]))).toEqual(
-        new Map([
-          [first, []],
-          [second, []],
-          [missing, []],
-        ]),
-      );
-      expect(await inTx((tx) => billPartyTables(tx, []))).toEqual(new Map());
-    });
-  });
-
-  describe("billParties", () => {
-    it("gives each party the tables and labels of billPartyTables and billPartyTableLabels, and the party at the end of its merges", async () => {
-      const survivor = await party([
-        { label: "Bp 7", joinedAt: "2026-09-29T20:20:00.000Z" },
-        { label: "Bp 8", joinedAt: "2026-09-29T20:21:00.000Z" },
-      ]);
-      const middle = await party([{ label: "Bp 6", ...LEFT }]);
-      const first = await party([{ label: "Bp 4", ...LEFT }]);
-      const seated = await party([{ label: "Bp 2", joinedAt: "2026-09-29T20:00:00.000Z" }]);
-      const alone = await party([{ label: "Bp 3", ...LEFT }]);
-      const cycleA = await party([{ label: "Bp 10", ...LEFT }]);
-      const cycleB = await party([{ label: "Bp 11", ...LEFT }]);
-      await merge(middle, survivor);
-      await merge(first, middle);
-      await merge(seated, survivor);
-      await merge(cycleA, cycleB);
-      await merge(cycleB, cycleA);
-      await nameParty(survivor, "Anna");
-      await nameParty(seated, "Lewis");
-      const missing = "cccccccc-9999-4000-8000-0000000000c1";
-      const asked = [first, seated, alone, survivor, cycleA, missing];
-
-      const got = await inTx((tx) => billParties(tx, asked));
-      const tables = await inTx((tx) => billPartyTables(tx, asked));
-      const labels = await inTx((tx) => billPartyTableLabels(tx, asked));
-      expect([...got.keys()]).toEqual(asked);
-      for (const id of asked) {
-        expect(got.get(id)!.tables).toEqual(tables.get(id));
-        expect(got.get(id)!.labels).toEqual(labels.get(id));
-      }
-      expect(got.get(first)!.labels).toEqual(["Bp 7", "Bp 8"]);
-      expect(got.get(seated)!.labels).toEqual(["Bp 2"]);
-      expect(new Map([...got].map(([id, bill]) => [id, bill.survivor]))).toEqual(
-        new Map([
-          [first, { id: survivor, name: "Anna" }],
-          [seated, { id: survivor, name: "Anna" }],
-          [alone, { id: alone, name: null }],
-          [survivor, { id: survivor, name: "Anna" }],
-          [cycleA, undefined],
-          [missing, undefined],
-        ]),
-      );
-
-      const firstAlone = await inTx((tx) => billParties(tx, [first]));
-      expect(firstAlone.get(first)!.tables.map((table) => table.name)).toEqual(["Bp 7", "Bp 8"]);
-    });
-
-    it("lists a named group once among the labels, and each of its tables", async () => {
-      const a = randomUUID();
-      const b = randomUUID();
-      const id = await party([
-        { id: a, label: "Bg A", joinedAt: "2026-09-29T20:00:00.000Z" },
-        { id: b, label: "Bg B", joinedAt: "2026-09-29T20:01:00.000Z" },
-      ]);
-      await group([a, b], "Birthday");
-      const got = (await inTx((tx) => billParties(tx, [id]))).get(id)!;
-      expect(got.labels).toEqual(["Birthday"]);
-      expect(got.tables).toEqual([
-        { id: a, name: "Bg A", shown: "Birthday" },
-        { id: b, name: "Bg B", shown: "Birthday" },
-      ]);
-    });
-
-    it("answers an empty map when asked about no party", async () => {
-      expect(await inTx((tx) => billParties(tx, []))).toEqual(new Map());
     });
   });
 

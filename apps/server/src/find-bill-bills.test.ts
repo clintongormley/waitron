@@ -19,6 +19,8 @@ import {
   tenders,
   saleSettlements,
   lineServiceCancellations,
+  diningTables,
+  partyTables,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -52,6 +54,7 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import { listOrders } from "./orders-list.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -64,7 +67,7 @@ const list = (values: Record<string, string> = {}) =>
 async function named(label: string, ...names: string[]) {
   const id = await parked(venue, ...(names.length ? names : ["Small beer"]));
   await inTx(venue, (tx) =>
-    tx.update(workingOrders).set({ label }).where(eq(workingOrders.id, id)),
+    tx.update(workingOrders).set({ label, billName: label }).where(eq(workingOrders.id, id)),
   );
   return id;
 }
@@ -90,6 +93,45 @@ async function contribute(
 }
 
 describe("Find Bills SQL paging", () => {
+  it("finds the same live table by its own label or its name for today", async () => {
+    const { tableId, tabId } = await seatedWith(venue, "Tarta");
+    const [table] = await venue.db
+      .update(diningTables)
+      .set({ todayName: "Window" })
+      .where(eq(diningTables.id, tableId))
+      .returning({ label: diningTables.label });
+    const orders = {
+      status: "open",
+      dates: "any",
+      credited: false,
+      limit: 50,
+      scope: "all",
+    } as const;
+    for (const name of [table!.label, "Window"]) {
+      expect((await list({ q: name })).rows.map((row) => row.workingOrderId)).toEqual([tabId]);
+      for (const key of ["table", "search"] as const)
+        expect(
+          (await inTx(venue, (tx) => listOrders(tx, { ...orders, [key]: name }))).rows.map(
+            (row) => row.id,
+          ),
+        ).toEqual([tabId]);
+    }
+  });
+
+  it("finds a moved order by its typed name and drops its former table from search", async () => {
+    const id = await named("Old terrace");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ billName: "Riley", deliveryTableLabel: "Old terrace" })
+        .where(eq(workingOrders.id, id)),
+    );
+    expect((await list({ q: "Old terrace" })).rows).toEqual([]);
+    expect((await list({ q: "Riley" })).rows).toMatchObject([
+      { workingOrderId: id, label: "Riley", tables: [] },
+    ]);
+  });
+
   it("counts whole portions and ignores extras and cancelled portions", async () => {
     const id = await named("Counted dishes", "Small beer");
     let parentId!: string;
@@ -589,6 +631,14 @@ describe("Find Bills SQL paging", () => {
   it("finds a selected bill’s debt while its table stays open for another bill", async () => {
     const first = await seatedWith(venue, "Small beer");
     const second = await seatedWith(venue, "Tarta");
+    await inTx(venue, async (tx) => {
+      await VENUE_SERVICE.setBillName(tx, first.tabId, "Riley");
+      await tx.insert(partyTables).values({
+        partyId: first.partyId,
+        tableId: first.tableId,
+        leftAt: "2026-10-01T00:00:00Z",
+      });
+    });
     await inTx(venue, (tx) =>
       combineParties(tx, venue.cfg, {
         from: second.partyId,
@@ -618,6 +668,10 @@ describe("Find Bills SQL paging", () => {
       collectionStatus: "left_without_paying",
     });
     expect(debt.departedAt).not.toBeNull();
+    expect.soft(debt.tables).toHaveLength(2);
+    expect
+      .soft((await list({ q: "Riley" })).rows)
+      .toMatchObject([{ workingOrderId: first.tabId, label: "Riley" }]);
     expect((await list()).rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ workingOrderId: first.tabId, stillOwed: "3.00" }),
@@ -711,7 +765,7 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
-        .set({ label: "Birthday", openedAt: "2026-10-01T02:00:00.000Z" })
+        .set({ label: "Former table", billName: "Birthday", openedAt: "2026-10-01T02:00:00.000Z" })
         .where(eq(workingOrders.id, party.tabId));
       const [line] = await tx
         .select({ id: workingOrderLines.id })
@@ -887,11 +941,11 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
-        .set({ label: "Zulu", openedAt: "2026-10-12T12:00:00.000Z" })
+        .set({ label: "Alpha", billName: "Zulu", openedAt: "2026-10-12T12:00:00.000Z" })
         .where(eq(workingOrders.id, first));
       await tx
         .update(workingOrders)
-        .set({ label: "Alpha", openedAt: "2026-10-13T12:00:00.000Z" })
+        .set({ label: "Zulu", billName: "Alpha", openedAt: "2026-10-13T12:00:00.000Z" })
         .where(eq(workingOrders.id, second));
       // A placed order's label and opened time cannot be rewritten. Its real opening is newest.
       await tx

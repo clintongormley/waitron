@@ -7,7 +7,7 @@ import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js"
 import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
 import { readSentWork } from "./kitchen-ticket-paper.js";
 import { moveKitchenPrintLinks } from "./kitchen-ticket-links.js";
-import { orderTableLabel } from "./kitchen-ticket-items.js";
+import { readSplitOrderLabel } from "./receipt-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";
@@ -328,7 +328,7 @@ export async function moveDishes(
   let destinationId = toBillId;
   if (destinationId === null) {
     destinationId = newId();
-    await createOpenOrder(tx, cfg, destinationId, [], await orderTableLabel(tx, fromBillId), {
+    await createOpenOrder(tx, cfg, destinationId, [], await readSplitOrderLabel(tx, fromBillId), {
       partyId: path.partyId,
       existingService: true,
       copyServiceContextFrom: fromBillId,
@@ -343,6 +343,7 @@ export async function moveDishes(
       );
       const [delivery] = await tx
         .select({
+          billName: workingOrders.billName,
           deliveryTableId: workingOrders.deliveryTableId,
           deliveryTableLabel: workingOrders.deliveryTableLabel,
         })

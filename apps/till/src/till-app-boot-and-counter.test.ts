@@ -4246,6 +4246,34 @@ describe("department transfers across operator lifetimes", () => {
     await vi.waitFor(() => expect(transferRoot(el)?.querySelector("wt-dialog")).not.toBeNull());
   }
 
+  const namedCounterTab = (billName: string) =>
+    vi.fn().mockResolvedValue({
+      id: "counter-tab",
+      orderNumber: 12,
+      revision: 7,
+      label: "Former table",
+      billName,
+      expectedEdit: null,
+      zoneId: null,
+      serviceMode: "prepay",
+      invoiceType: "F2",
+      dining: "eat_in",
+      diningChoice: "none",
+      lines: [],
+      kitchenNote: {
+        scope: { workingOrderId: "counter-tab" },
+        note: null,
+        revision: 0,
+        ownerRevision: 7,
+      },
+    });
+  async function openNamedCounter(el: TillApp) {
+    const c = counter(el)!;
+    emit(c, "retrieve-order", { id: "counter-tab" });
+    await vi.waitFor(() => expect(c.store.id).toBe("counter-tab"));
+    return c;
+  }
+
   it("dismisses a notice without removing its durable pending request or accepting it", async () => {
     const desk = transfers();
     const accept = vi.fn();
@@ -4972,16 +5000,10 @@ describe("department transfers across operator lifetimes", () => {
         destinations: [{ id: "restaurant", name: "Restaurant" }],
       })),
       requestDepartmentTransfer: send,
+      retrieveWorkingOrder: namedCounterTab("Pablo's lunch"),
     });
     await signIn(el);
-    const c = counter(el)!;
-    c.store.loadFrom(
-      "counter-tab",
-      [{ product: c.products[0]!, quantity: "2" }],
-      "Pablo's lunch",
-      7,
-    );
-    await flush(el);
+    const c = await openNamedCounter(el);
     await openTransfers(el);
     expect(transferRoot(el)?.textContent).toContain("Pablo's lunch");
     const button = transferRoot(el)?.querySelector<HTMLElement>("[data-request-transfer]");
@@ -4999,12 +5021,17 @@ describe("department transfers across operator lifetimes", () => {
     await flush(el);
     transferRoot(el)!.querySelector<HTMLElement>("[data-save-transfer]")!.click();
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith("counter-tab", "restaurant"));
+    c.store.kitchenNote = "Pack separately";
+    expect(c.store.dirty).toBe(false);
     accepted = true;
     desk.refresh();
     await vi.waitFor(() => expect(c.store.persisted).toBe(false));
     expect(c.store.lines).toEqual([]);
     expect(c.store.id).not.toBe("counter-tab");
     expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-transfer-local-copy]")?.textContent).toContain(
+      "Pablo's lunch",
+    );
   });
 
   it("retires an open source basket after sign-in even when its acceptance is outside recent department history", async () => {
@@ -5091,6 +5118,7 @@ describe("department transfers across operator lifetimes", () => {
       let accepted = false;
       const { el, host } = await mountApp({
         ...desk.calls,
+        retrieveWorkingOrder: namedCounterTab("Lunch"),
         listDepartmentSentTransfers: vi.fn(async () => ({
           requests: [
             {
@@ -5109,23 +5137,18 @@ describe("department transfers across operator lifetimes", () => {
       await page.viewport(width, 900);
       host.style.width = `${width}px`;
       await flush(el);
-      const c = counter(el)!;
-      c.store.loadFrom(
-        "counter-tab",
-        [
-          {
-            product: {
-              ...c.products[0]!,
-              id: "beans",
-              name: "Coffee beans",
-              pricingUnit: "weight",
-            },
-            quantity: "2.500",
+      const c = await openNamedCounter(el);
+      c.store.appendLines([
+        {
+          product: {
+            ...c.products[0]!,
+            id: "beans",
+            name: "Coffee beans",
+            pricingUnit: "weight",
           },
-        ],
-        "Lunch",
-        7,
-      );
+          quantity: "2.500",
+        },
+      ]);
       c.store.addProduct(c.products[0]!, "1", {
         note: "No sugar",
         extras: [
@@ -5186,11 +5209,12 @@ describe("department transfers across operator lifetimes", () => {
     },
   );
 
-  it("retains an unsaved label and its recorded extras in the transferred local copy", async () => {
+  it("keeps the typed name and recorded extras in the transferred local copy", async () => {
     const desk = transfers();
     let accepted = false;
     const { el } = await mountApp({
       ...desk.calls,
+      retrieveWorkingOrder: namedCounterTab("Lunch for Ana"),
       listDepartmentSentTransfers: vi.fn(async () => ({
         requests: [
           {
@@ -5204,37 +5228,30 @@ describe("department transfers across operator lifetimes", () => {
       })),
     });
     await signIn(el);
-    const c = counter(el)!;
-    c.store.loadFrom(
-      "counter-tab",
-      [
-        {
-          product: c.products[0]!,
-          quantity: "2",
-          notOfferedExtras: [
-            {
-              productId: "cream",
-              listId: "list-cream",
-              name: "Retired cream",
-              price: "0.50",
-              quantity: 1,
-            },
-          ],
-        },
-      ],
-      "Lunch",
-      7,
-    );
-    await flush(el);
-    c.store.label = "Lunch for Ana";
-    await flush(el);
-    expect(c.store.dirty).toBe(false);
+    const c = await openNamedCounter(el);
+    c.store.appendLines([
+      {
+        product: c.products[0]!,
+        quantity: "2",
+        notOfferedExtras: [
+          {
+            productId: "cream",
+            listId: "list-cream",
+            name: "Retired cream",
+            price: "0.50",
+            quantity: 1,
+          },
+        ],
+      },
+    ]);
+    expect(c.store.dirty).toBe(true);
     accepted = true;
     desk.refresh();
     await vi.waitFor(() => expect(c.store.persisted).toBe(false));
     const copy = el.shadowRoot!.querySelector("[data-transfer-local-copy]");
     expect(copy).not.toBeNull();
     expect(copy?.textContent).toContain("Lunch for Ana");
+    expect(copy?.textContent).not.toContain("Former table");
     expect(copy?.textContent).toContain("Retired cream");
   });
 
@@ -7377,15 +7394,29 @@ describe("A1208 a retrieved counter order's portions", () => {
     },
   );
 
-  it("parks an unchanged row without saving it", async () => {
-    const { el, c, updateWorkingOrder } = await retrieved();
-    emit(c, "park-order", { label: undefined });
+  it.each([undefined, "Later"])("parks without saving lines when the name is %s", async (label) => {
+    const rename = vi.fn().mockResolvedValue({ revision: 5 });
+    const { el, c, updateWorkingOrder } = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValue({ ...held(), label: "Later", billName: "Riley" }),
+      setWorkingOrderLabel: rename,
+    });
+    emit(c, "park-order", { label });
     await flush(el);
     expect(updateWorkingOrder).not.toHaveBeenCalled();
+    expect(rename).toHaveBeenCalledTimes(label === undefined ? 0 : 1);
   });
 
   it("saves a row raised to four as its three portions, the last carrying the added dish", async () => {
-    const { el, c, updateWorkingOrder } = await retrieved();
+    const rename = vi.fn().mockResolvedValue({ revision: 6 });
+    const { el, c, updateWorkingOrder } = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce({ ...held(), label: "Later", billName: "Riley" })
+        .mockResolvedValue({ ...held(5), label: "Later", billName: "Riley" }),
+      setWorkingOrderLabel: rename,
+    });
     c.store.setLineQuantity(0, "4");
     emit(c, "park-order", { label: "Later" });
     await flush(el);
@@ -7394,6 +7425,11 @@ describe("A1208 a retrieved counter order's portions", () => {
       ["l2", "1"],
       ["l3", "2"],
     ]);
+    expect(rename).toHaveBeenCalledWith("wo-1", {
+      expectedEdit: null,
+      label: "Later",
+      revision: 5,
+    });
   });
 
   it("saves a row lowered to two as its first two portions, leaving the last out", async () => {

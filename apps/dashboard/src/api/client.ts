@@ -1635,6 +1635,7 @@ export interface OverdueOrder {
   orderId: string;
   orderNumber: number;
   tableLabel: string | null;
+  counter?: true;
   stationName: string;
   ageMinutes: number;
   band: TimingBand;

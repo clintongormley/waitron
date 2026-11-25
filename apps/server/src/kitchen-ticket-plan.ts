@@ -21,7 +21,6 @@ import {
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { readPartyNames } from "./order-places.js";
 import { readWholePortionLines } from "./order-portions.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import type { TradingContext } from "./trading-context.js";
@@ -159,7 +158,7 @@ export async function planKitchenTickets(
       ? await readStations(tx, stationIds)
       : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
   const order = await readOrderHeader(tx, orderId);
-  const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
+  const partyName = order.partyName;
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
   const itemsByStation = new Map<

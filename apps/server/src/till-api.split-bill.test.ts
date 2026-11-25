@@ -550,7 +550,8 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const { billId: checkId } = (await split.json()) as { billId: string };
 
     expect((await heldOrders(app, cookie)).find((order) => order.id === checkId)).toMatchObject({
-      label: "Table 5",
+      label: null,
+      tableLabel: "Table 5",
     });
 
     const pay = await cashPayment({ db: venueSuite.db, app }, cookie, checkId, "5.00");

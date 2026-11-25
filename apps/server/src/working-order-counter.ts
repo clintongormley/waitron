@@ -8,12 +8,12 @@ import {
   type Transaction,
   appendOrderAmendment,
   ticketItems,
-  orderTableLabels,
+  readOrderPlaces,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { type PinAttempts, type Override, authorize } from "@waitron/identity";
 import type { ServiceMode } from "@waitron/module";
-import { AppError, rawCentsToDecimal } from "@waitron/shared";
+import { AppError, partyTablesName, rawCentsToDecimal } from "@waitron/shared";
 import { eq, and, isNull, sql, isNotNull, gt, or, inArray } from "drizzle-orm";
 import { type AttendanceRecorder, captureKitchenActivity } from "./attendance-capture.js";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
@@ -403,6 +403,7 @@ export interface CounterWaitingOrder {
   orderNumber: number;
   label: string | null;
   tableLabel?: string;
+  counter?: true;
   status: "placed" | "settled";
   openedAt: string;
   settledAt: string | null;
@@ -440,14 +441,10 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
       .select({
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
-        label: workingOrders.label,
         status: workingOrders.status,
         openedAt: workingOrders.openedAt,
         settledAt: workingOrders.settledAt,
         collectedAt: workingOrders.collectedAt,
-        partyId: workingOrders.partyId,
-        deliveryTableId: workingOrders.deliveryTableId,
-        deliveryTableLabel: workingOrders.deliveryTableLabel,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
@@ -471,9 +468,9 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
       )
       .groupBy(workingOrders.id)
       .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
-    const tableLabels = await orderTableLabels(
+    const places = await readOrderPlaces(
       tx,
-      rows.map((row) => ({ ...row, label: null })),
+      rows.map((row) => row.id),
     );
     const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
     const modes = await VENUE_SERVICE.findOrderModes(tx, placedIds);
@@ -529,6 +526,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
     const waiting: CounterWaitingOrder[] = [];
     for (const row of rows) {
       const placed = row.status === "placed";
+      const place = places.get(row.id)!;
       const sale = issued.get(row.id);
       const eligible =
         Boolean(row.fired) &&
@@ -539,8 +537,12 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         counts: counts.get(row.id)!,
         id: row.id,
         orderNumber: row.orderNumber,
-        label: row.label,
-        ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
+        label: place.billName,
+        ...optional(
+          "tableLabel",
+          place.names.length === 0 ? undefined : partyTablesName(place.names),
+        ),
+        ...(place.counter ? { counter: true as const } : {}),
         status: row.status as CounterWaitingOrder["status"],
         openedAt: row.openedAt,
         settledAt: row.settledAt,

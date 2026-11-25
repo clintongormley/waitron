@@ -24,6 +24,7 @@ import {
   type Dining,
   type BillSetMenuState,
   AppError,
+  normalisePartyName,
 } from "@waitron/shared";
 import { eq, and, sql } from "drizzle-orm";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
@@ -115,6 +116,7 @@ export async function createOpenOrder(
     deliveryTableId?: string | null;
     zoneId?: string;
     partyId?: string | null;
+    billName?: string | null;
     existingService?: boolean;
     copyServiceContextFrom?: string;
     receiptLocale?: string;
@@ -235,6 +237,7 @@ export async function createOpenOrder(
     nodeId: cfg.nodeId,
     orderNumber,
     label,
+    billName: placement.billName ?? null,
     status: "open",
     openedAt,
     // Read under the write lock, which the close-of-day job's release stamp also takes.
@@ -290,6 +293,7 @@ export async function parkOrder(
   try {
     return await withTransaction(deps.db, async (tx) => {
       const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
+        billName: normalisePartyName(req.label),
         kitchenNote: req.kitchenNote,
         zoneId: req.zoneId,
         creditedTo: req.operatorId,

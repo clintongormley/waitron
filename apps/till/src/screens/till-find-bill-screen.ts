@@ -430,8 +430,15 @@ export class TillFindBillScreen extends LitElement {
           "tableName",
           cell(
             (row) =>
-              [row.tables.join(", "), row.partyName ?? row.label].filter(Boolean).join(" · ") ||
-              `#${row.orderNumber}`,
+              [
+                ...new Set(
+                  [
+                    row.tables.join(", ") || (row.partyId === null ? t("station.counter") : ""),
+                    row.partyName,
+                    row.label,
+                  ].filter(Boolean),
+                ),
+              ].join(" · ") || `#${row.orderNumber}`,
           ),
         ),
         column(

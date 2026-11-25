@@ -6,8 +6,7 @@ import {
   products,
   parties,
   orderGroups,
-  billPartyTables,
-  diningTables,
+  readOrderPlaces,
   workingOrders,
   kitchenCourses,
 } from "@waitron/db";
@@ -178,9 +177,7 @@ export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
   label: string | null;
-  /** The short names, else labels, of the tables the bill is at: its party's, as
-   *  {@link billPartyTables} chooses them, or a counter order's delivery table, or the name kept
-   *  once that delivery table was let go; absent when none. */
+  /** The short names of the order’s current tables, when it has any. */
   tableShortNames?: string[];
   dining: Dining;
   queuedAt: string;
@@ -404,55 +401,6 @@ export async function listStationQueue(
 ): Promise<StationQueueGroup[]> {
   return (await listStationQueues(tx, [stationId])).get(stationId)!;
 }
-/** {@link StationQueueGroup.tableShortNames} for each bill that is at a table, or whose delivery
- *  table was let go, keyed by bill. */
-export async function readBillTableShortNames(
-  tx: Transaction,
-  bills: readonly {
-    orderId: string;
-    partyId: string | null;
-    deliveryTableId: string | null;
-    deliveryTableLabel: string | null;
-  }[],
-): Promise<Map<string, string[]>> {
-  const byParty = await billPartyTables(tx, [
-    ...new Set(bills.flatMap((bill) => bill.partyId ?? [])),
-  ]);
-  const tableIdsOf = new Map<string, string[]>();
-  const names = new Map<string, string[]>();
-  for (const bill of bills) {
-    if (bill.partyId !== null) {
-      const ids = byParty.get(bill.partyId)!.map((table) => table.id);
-      if (ids.length > 0) tableIdsOf.set(bill.orderId, ids);
-    } else if (bill.deliveryTableId !== null) {
-      tableIdsOf.set(bill.orderId, [bill.deliveryTableId]);
-    } else if (bill.deliveryTableLabel !== null) {
-      // Its delivery table was let go (`releaseDeliveries`), keeping the table's name.
-      names.set(bill.orderId, [bill.deliveryTableLabel]);
-    }
-  }
-  const tableIds = [...new Set([...tableIdsOf.values()].flat())];
-  const shortNames = new Map(
-    tableIds.length === 0
-      ? []
-      : (
-          await tx
-            .select({
-              id: diningTables.id,
-              label: diningTables.label,
-              shortName: diningTables.shortName,
-            })
-            .from(diningTables)
-            .where(inArray(diningTables.id, tableIds))
-        ).map((table) => [table.id, table.shortName ?? table.label]),
-  );
-  for (const [orderId, ids] of tableIdsOf)
-    names.set(
-      orderId,
-      ids.map((id) => shortNames.get(id)!),
-    );
-  return names;
-}
 /** The ticket items {@link listStationQueues} lists, at `stationIds`. */
 function onStationQueues(stationIds: readonly string[]): SQL | undefined {
   return and(
@@ -522,11 +470,8 @@ export async function listStationQueues(
       note: ticketItems.note,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      label: workingOrders.label,
       status: workingOrders.status,
       dining: workingOrders.dining,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
       ...queueGroupColumns,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
@@ -595,7 +540,7 @@ export async function listStationQueues(
     new Date(nowMs),
   );
   const former = await readFormerNumbers(tx, orderIds);
-  const tableShortNames = await readBillTableShortNames(tx, rows);
+  const places = await readOrderPlaces(tx, orderIds, { withShortNames: true });
   // Each Map keeps insertion order, so groups come out oldest-first.
   const groupsAt = new Map(stationIds.map((id) => [id, new Map<string, StationQueueGroup>()]));
   for (const row of rows) {
@@ -608,12 +553,13 @@ export async function listStationQueues(
     };
     let group = groups.get(row.orderId);
     if (group === undefined) {
+      const place = places.get(row.orderId)!;
       group = {
         orderId: row.orderId,
         kitchenNote: kitchenNotes.get(row.orderId)!.note,
         orderNumber: row.orderNumber,
-        label: row.label,
-        ...optional("tableShortNames", tableShortNames.get(row.orderId)),
+        label: row.partyId === null ? place.billName : null,
+        ...optional("tableShortNames", place.tableShortNames),
         dining: row.dining,
         queuedAt: row.queuedAt,
         status: row.status,

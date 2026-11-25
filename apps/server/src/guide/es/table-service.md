@@ -325,6 +325,9 @@ En **Pedidos aparcados**, elige **Pasar a mesa** y selecciona una mesa. Si un pe
 esa mesa bloquea el traslado, elige **Tomar el pedido** en cada cuenta indicada. Cierra el aviso
 y vuelve a elegir la mesa.
 
+Si das un nombre al pedido al aparcarlo, usa hasta 40 caracteres. Tras moverlo, busca el mismo
+nombre junto a su nueva mesa o el mostrador en **Pedidos aparcados**.
+
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
 Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la estación deje de
@@ -377,7 +380,8 @@ mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación
 devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
 tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
 cierra. El pedido espera en **Pedidos pendientes**, en la pantalla **Mostrador**, marcado
-**Pagado, sin entregar**, y aparece en **Buscar cuenta**; elige **Entregar** cuando lo recojan.
+**Pagado, sin entregar**, y aparece en **Buscar cuenta**. Busca **Mostrador** en el pase y en
+**Pedidos pendientes**. Elige **Entregar** cuando lo recojan.
 
 ## Devolver un pago desde el recibo {#refund-receipt}
 

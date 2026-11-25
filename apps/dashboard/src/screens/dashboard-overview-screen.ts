@@ -304,7 +304,13 @@ export class OverviewScreen extends LitElement {
           ${orders.map(
             (order, i) => html`
               <tr data-test=${`overdue-row-${i}`}>
-                <td>${order.tableLabel ?? "—"}</td>
+                <td>
+                  ${
+                    order.counter
+                      ? [t("orders.counter"), order.tableLabel].filter(Boolean).join(" · ")
+                      : (order.tableLabel ?? "—")
+                  }
+                </td>
                 <td>${order.stationName}</td>
                 <td class="num">${order.ageMinutes}</td>
                 <td data-test="overdue-band">${this.#bandLabel(order.band)}</td>

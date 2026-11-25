@@ -80,6 +80,7 @@ async function food(
       ...v.cfg.origin,
       nodeId: v.cfg.nodeId,
       label: "Table 8",
+      billName: "Table 8",
       status: "open",
       settledAt: null,
       collectedAt: flags.collected ? at : null,
@@ -719,13 +720,14 @@ describe("permanent station deletion", () => {
     expect(before.kitchen_print_jobs).toHaveLength(4);
     expect(before.print_jobs).toHaveLength(4);
   });
-  it("names seated and joined-table preparation by the tables' full names (orderTableLabels)", async () => {
+  it("names preparation by its current tables or the name typed for the counter", async () => {
     const { v, id } = await fixture();
     const single = await seat(v, await v.table("Mesa 4"));
     const multi = await seat(v, await v.table("Mesa 5"));
     await join(v, multi.partyId, await v.table("Mesa 6"));
     const first = await food(v, id);
     const second = await food(v, id);
+    const released = await food(v, id);
     await inTx(v, async (tx) => {
       await tx
         .update(workingOrders)
@@ -735,14 +737,19 @@ describe("permanent station deletion", () => {
         .update(workingOrders)
         .set({ partyId: multi.partyId, label: null })
         .where(eq(workingOrders.id, second.order.id));
+      await tx
+        .update(workingOrders)
+        .set({ billName: "Riley", label: "Former table", deliveryTableLabel: "Former table" })
+        .where(eq(workingOrders.id, released.order.id));
     });
     expect((await inTx(v, (tx) => readStationDeleteImpact(tx, id))).refusals).toEqual([
       {
         code: "station.work_in_progress",
-        params: { stationId: id, count: 2 },
+        params: { stationId: id, count: 3 },
         targets: [
           { id: first.order.id, name: "Mesa 4" },
           { id: second.order.id, name: "Mesa 5, 6" },
+          { id: released.order.id, name: "Riley" },
         ],
       },
     ]);

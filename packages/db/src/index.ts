@@ -286,16 +286,21 @@ export { allocateInvoiceNumber, nextInvoiceNumberOf } from "./allocate-number.js
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { insertInChunks, statementChunks } from "./insert-in-chunks.js";
 export {
-  billParties,
+  orderPlaceFactsSql,
+  readOrderPlaces,
+  readPlacedOrders,
+  type OrderPlaceFacts,
+  type OrderPlaces,
+  type PlacedOrder,
+} from "./order-places.js";
+export {
   billPartyTableLabels,
-  billPartyTables,
   orderTableLabels,
   partyFamilies,
   partySurvivorNames,
   partySurvivors,
   partyTableLabels,
   tableNames,
-  type BillParty,
   type TableNames,
 } from "./party-table-labels.js";
 export { withNodeTransaction, withTransaction, withVenueAndNodeTransaction } from "./tenancy.js";

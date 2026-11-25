@@ -12,7 +12,7 @@ import { eq, and, inArray, or, isNotNull, isNull } from "drizzle-orm";
 import { foodOnItsWay } from "./delivery-release.js";
 import { inIds } from "./in-ids.js";
 import { heldPaperStations } from "./order-group-hold-paper.js";
-import { type OrderPlaces, readOrderPlaces } from "./order-places.js";
+import { type OrderPlaces, readOrderPlaces } from "@waitron/db";
 import { holdersOf } from "./parties.js";
 
 /** The kitchen work an order has on paper, and its places. */

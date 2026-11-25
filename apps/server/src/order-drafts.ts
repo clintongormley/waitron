@@ -68,7 +68,7 @@ import {
   type SetMenuOfferLookup,
 } from "./set-menu-offers.js";
 import "./errors.js";
-import { orderTableLabel } from "./kitchen-ticket-items.js";
+import { readSplitOrderLabel } from "./receipt-order.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
@@ -175,7 +175,7 @@ export async function splitDraft(
       if (selected.length !== lineIds.length) throw invalid("lineIds");
       const revision = await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
       const newBillId = newId();
-      await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, billId), {
+      await createOpenOrder(tx, cfg, newBillId, [], await readSplitOrderLabel(tx, billId), {
         partyId,
         existingService: true,
         copyServiceContextFrom: billId,

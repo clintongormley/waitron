@@ -4,6 +4,7 @@ import type { PassBoard, PassCard, PassCardItem, TicketState } from "../api/clie
 import { t } from "../i18n/t.js";
 import type { ColumnKey } from "./kitchen-columns.js";
 import { dishThousandths, type OverviewDish } from "./kitchen-overview.js";
+import { orderLabel } from "../widgets/order-label.js";
 
 export type PassMode = "pass" | "monitor" | "all_stations";
 export type ItemCaption =
@@ -121,7 +122,14 @@ function cardView(
 /** Where a card's bill is, as its heading and refusals name it: its tables by their short names,
  *  as the kitchen card names them, else its label. */
 export function passOrderPlace(order: PassCard["orders"][number]): string | undefined {
-  return order.tableShortNames === undefined ? order.tableLabel : mergeLabel(order.tableShortNames);
+  return (
+    orderLabel({
+      counter: order.counter,
+      tableLabel:
+        order.tableShortNames === undefined ? order.tableLabel : mergeLabel(order.tableShortNames),
+      label: order.billName ?? null,
+    }) ?? undefined
+  );
 }
 
 /** The server sorted each column; the view keeps its order. */

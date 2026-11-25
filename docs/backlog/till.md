@@ -556,18 +556,6 @@ bar's map draws its tables as three 10-pixel dots in a map 29 pixels tall
 (`e13-next-signin-390-light-en.png`).
 
 
-## A1235. Parked orders, Waiting and department transfers can still name a table bill by an old table (left open by A803 slice 2).
-
-Parked orders now shows a table bill's stored number and
-name, but builds it on `orderLabel` (`apps/till/src/widgets/held-orders.ts`), which joins the
-table with the bill's own label. A split bill is labelled with its table when it is made
-(`orderTableLabel`, `apps/server/src/bill-actions.ts`) and a move to another table does not
-change that label, so by reading, Sam's split bill moved from table 2 to table 4 is listed as
-"4 · 2 · Bill 1 · Sam" where the table screen says "Bill 1 · Sam" (not run). A765 keeps a party
-bill's own label on purpose (`apps/till/src/widgets/order-table-names.test.ts`); the owner's answer of
-2026-11-24 drops that. The counter's Waiting list and department transfers (`counter-waiting.ts`,
-`department-transfers.ts`) show no bill number or name at all.
-
 ## A1031. Food a finished table sent to the counter keeps the table's zone (left open by A758-7).
 
 The order keeps its table's zone, so a till or pass limited to the counter's zone does not show it.
@@ -877,30 +865,6 @@ here is asked or built before that. They were separate entries, many of them que
   text at 130%, the bill's scrolling area is 48–64 px tall, less than one bill line, against 110 px
   for Waitron's look at 100% (2026-10-27, A841 slice 11b's look check,
   `~/waitron-campaign/a841-11b-shots/look-report-11b.md`).
-
-## Bundle: One answer to "where is this order"
-
-4 entries. Queued as MOVED-ORDER-PLACE (lane E). The owner picked, 2026-11-24, "Yes, where it is now
-(Recommended)": every screen and slip names, and lists, an order only by where it is now; a name
-someone typed stays. This drops A765's choice to keep a bill's first table in its label.
-
-- **A1235. Parked orders, Waiting and department transfers can still name a table bill by an old
-  table (left open by A803 slice 2).** Parked orders now shows a table bill's stored number and
-  name, but builds it on `orderLabel` (`apps/till/src/widgets/held-orders.ts`), which joins the
-  table with the bill's own label.
-  [Detail](till.md#a1235-parked-orders-waiting-and-department-transfers-can-still-name-a-table-bill-by-an-old-table-left-open-by-a803-slice-2)
-- **A1032. Nothing on the pass says an order waits at the counter (left open by A758-7).** A paid
-  order a finished table sent to the counter is named on the pass and in Waiting orders by its
-  number and the table it was paid at ("#12 Mesa 4"), as Move this bill → The counter names one
-  today; only the MOVED slip and the station notice say "counter".
-- **A1031. Food a finished table will collect at the counter keeps the table's zone (left open by
-  A758-7)**, so a till or pass limited to the counter's zone does not show it.
-  [Detail](till.md#a1031-food-a-finished-table-sent-to-the-counter-keeps-the-tables-zone-left-open-by-a758-7)
-- **A678 — Two readers answer "where is this order".** `readOrderPlaces`
-  (used by MOVED slips) reads a counter order whose delivery table was released as the counter,
-  while `orderTableLabels` (used by tickets and correction slips) names it by its kept
-  `delivery_table_label`. One reader in `packages/db` replaces both. Left open by A650 Part 1.
-  [Detail](till.md#a678-two-readers-answer-where-is-this-order)
 
 ## Bundle: Add a device: loose ends from A268
 
@@ -2256,13 +2220,6 @@ columns. The kitchen's tabs keep
 the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
 
 
-## A678. Two readers answer "where is this order"
-
-- **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
-  (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
-  table was released as the counter, a known edge A650 Part 1 deferred, while `orderTableLabels` (`packages/db/src/party-table-labels.ts`, used by
-  tickets and correction slips) names it by its kept `delivery_table_label`. The owner's answer of 2026-11-24 settles the edge: by where it is now, through one reader in `packages/db`. Left open by A650 Part 1.
-
 ## A550. Making a booked table part of a joined table is not refused
 
 The floor
@@ -2277,7 +2234,7 @@ redesign of the table screens: whether the save refuses it, as a delete is refus
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
 ticket/receipt grouping, has landed. What it leaves open is A1195 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
+landed. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single

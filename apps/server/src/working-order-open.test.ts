@@ -384,6 +384,7 @@ describe("parkOrder", () => {
     expect(wo).toMatchObject({
       status: "open",
       label: "John",
+      billName: "John",
       orderNumber: 1,
       nodeId: cfg.nodeId,
       source: "device",
@@ -418,6 +419,17 @@ describe("parkOrder", () => {
         category: "ES drinks",
       });
     }
+  });
+
+  it("refuses a Park name longer than forty characters", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    await expect(
+      parkProducts(cfg, {
+        id: randomUUID(),
+        label: "A".repeat(41),
+        lines: [{ productId: coffeeId, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "name" } });
   });
 
   it("stores a quantity as whole thousandths", async () => {

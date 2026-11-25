@@ -41,7 +41,8 @@ describe("A765 table names in order lists", () => {
           nodeId: venue.cfg.nodeId,
           orderNumber: 204,
           status,
-          label: "Alex",
+          label: "Former table",
+          billName: "Alex",
         }),
       );
       const rows = await (status === "open"
@@ -78,7 +79,8 @@ describe("A765 table names in order lists", () => {
         nodeId: venue.cfg.nodeId,
         orderNumber: 201,
         partyId: party!.id,
-        label: "Birthday bill",
+        label: "Old table",
+        billName: "Birthday bill",
       });
     });
     const response = await venue.app.request("/api/working-orders", {
@@ -91,13 +93,14 @@ describe("A765 table names in order lists", () => {
       tableLabel?: string;
     }[];
     expect(rows.find((row) => row.id === id)).toMatchObject({
-      label: "Birthday bill",
+      label: null,
       tableLabel: "Garden party",
+      billName: "Birthday bill",
     });
   });
 
   it.each(["open", "placed"] as const)(
-    "names today's delivery table on an %s counter order and retains the released name",
+    "names today's delivery table on an %s counter order and drops the released place",
     async (status) => {
       const id = randomUUID();
       await withTransaction(venue.db, async (tx) => {
@@ -118,7 +121,8 @@ describe("A765 table names in order lists", () => {
           status,
           deliveryTableId: table.id,
           deliveryTableLabel: "Released terrace",
-          label: "Alex",
+          label: "Released terrace",
+          billName: "Alex",
         });
       });
       const read = () =>
@@ -130,10 +134,9 @@ describe("A765 table names in order lists", () => {
       await withTransaction(venue.db, (tx) =>
         tx.update(workingOrders).set({ deliveryTableId: null }).where(eq(workingOrders.id, id)),
       );
-      expect((await read()).find((row) => row.id === id)).toMatchObject({
-        label: "Alex",
-        tableLabel: "Released terrace",
-      });
+      const released = (await read()).find((row) => row.id === id);
+      expect(released).toMatchObject({ label: "Alex", counter: true });
+      expect(released).not.toHaveProperty("tableLabel");
     },
   );
 });

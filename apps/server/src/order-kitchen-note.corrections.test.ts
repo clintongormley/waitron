@@ -9,9 +9,11 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
+  diningTables,
   orderGroups,
   printJobs,
   ticketItems,
+  todaySet,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -184,7 +186,7 @@ it("A1378 lists only each printer's affected bills on a party note change", asyn
     (await inTx(v, (tx) => listStationNotices(tx, stationId)))
       .filter((notice) => notice.orderNoteChange !== undefined)
       .map((notice) => notice.orderLabel),
-  ).toEqual([`#${numbers.get(p.tabId)}`]);
+  ).toEqual([`#${numbers.get(p.tabId)} · Table 3`]);
   expect(
     (await inTx(v, (tx) => listStationNotices(tx, bar.id)))
       .filter((notice) => notice.orderNoteChange !== undefined)
@@ -766,9 +768,10 @@ it.each([true, false])(
   },
 );
 
-it("F4 keeps a settled bill's copied table label in the party notice", async () => {
+it("a party notice names the current place even for a paid bill with a recorded label", async () => {
   await printer();
-  const p = await seat(v, await v.table("Table 21"));
+  const tableId = await v.table("Table 21");
+  const p = await seat(v, tableId);
   await order(v, p.tabId, "Burger", "Burger");
   const second = await split(v, p.partyId, p.tabId, [2]);
   await pay(v, second, "12.00");
@@ -778,16 +781,22 @@ it("F4 keeps a settled bill's copied table label in the party notice", async () 
     .where(inArray(workingOrders.id, [p.tabId, second]));
   const paid = bills.find((bill) => bill.id === second)!;
   expect(paid.label).toBe("Table 21");
+  await inTx(v, (tx) =>
+    tx
+      .update(diningTables)
+      .set(todaySet({ name: "Garden" }))
+      .where(eq(diningTables.id, tableId)),
+  );
   await set({ partyId: p.partyId }, "Together");
   const notes = (await inTx(v, (tx) => listStationNotices(tx, stationId))).filter(
     (notice) => notice.orderNoteChange !== undefined,
   );
   expect(notes).toHaveLength(1);
   expect(notes[0]!.orderLabel).toBe(
-    bills
+    `${bills
       .sort((a, b) => a.orderNumber - b.orderNumber)
-      .map((bill) => `#${bill.orderNumber}${bill.label === null ? "" : ` · ${bill.label}`}`)
-      .join(", "),
+      .map((bill) => `#${bill.orderNumber}`)
+      .join(", ")} · Garden`,
   );
 });
 

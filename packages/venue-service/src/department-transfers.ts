@@ -8,7 +8,7 @@ import {
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,
-  orderTableLabels,
+  readOrderPlaces,
   tableInService,
   billPayments,
   refunds,
@@ -19,7 +19,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { alias } from "drizzle-orm/sqlite-core";
-import { AppError } from "@waitron/shared";
+import { AppError, partyTablesName } from "@waitron/shared";
 import {
   assertDepartment,
   getOrderServiceContext,
@@ -460,11 +460,7 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
       id: departmentTransferRequests.id,
       currentDepartmentId: workingOrders.departmentId,
       orderNumber: workingOrders.orderNumber,
-      tabLabel: workingOrders.label,
       orderId: workingOrders.id,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
       sourceDepartmentName: source.name,
       destinationDepartmentName: destination.name,
     })
@@ -481,29 +477,24 @@ async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
         isNotNull(workingOrders.departmentId),
       ),
     );
-  const labels = await orderTableLabels(
+  const places = await readOrderPlaces(
     tx,
-    identities.map((row) => ({
-      id: row.orderId,
-      partyId: row.partyId,
-      deliveryTableId: row.deliveryTableId,
-      deliveryTableLabel: row.deliveryTableLabel,
-      label: null,
-    })),
+    identities.map((row) => row.orderId),
   );
   const byId = new Map(
     identities.map((row) => {
-      const tableLabel = labels.get(row.orderId) ?? null;
+      const place = places.get(row.orderId)!;
       return [
         row.id,
         {
           currentDepartmentId: row.currentDepartmentId!,
           summary: {
             orderNumber: row.orderNumber,
-            tabLabel: row.tabLabel,
+            tabLabel: place.billName,
             sourceDepartmentName: row.sourceDepartmentName,
             destinationDepartmentName: row.destinationDepartmentName,
-            ...(tableLabel === null ? {} : { tableLabel }),
+            ...(place.names.length === 0 ? {} : { tableLabel: partyTablesName(place.names) }),
+            ...(place.counter ? { counter: true as const } : {}),
           },
         },
       ];

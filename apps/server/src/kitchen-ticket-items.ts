@@ -5,8 +5,7 @@ import {
   kitchenStations,
   kitchenCourses,
   orderGroups,
-  workingOrders,
-  orderTableLabels,
+  readPlacedOrders,
 } from "@waitron/db";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/menu";
 import type { LateSendMark } from "@waitron/module";
@@ -15,6 +14,7 @@ import {
   contentLanguageCode,
   type Decimal,
   perDishOptionQuantity,
+  partyTablesName,
   type TicketGrouping,
 } from "@waitron/shared";
 import { eq, inArray } from "drizzle-orm";
@@ -350,51 +350,35 @@ export async function readStations(
     ]),
   );
 }
-/** The order's table, as {@link orderTableLabels} names it. */
-export async function orderTableLabel(tx: Transaction, orderId: string): Promise<string | null> {
-  return (await readOrderHeader(tx, orderId)).tableLabel;
-}
 /** What a kitchen paper for an order is headed with. */
 export interface OrderHeader {
   orderNumber: string;
   tableLabel: string | null;
-  billLabel: string | null;
-  id: string;
   partyId: string | null;
-  deliveryTableId: string | null;
+  partyName: string | null;
   takeAway: boolean;
 }
-/** Each order's number and table ({@link orderTableLabels}), keyed by order. */
+/** Each order's kitchen heading, keyed by order. */
 export async function readOrderHeaders(
   tx: Transaction,
   orderIds: readonly string[],
 ): Promise<Map<string, OrderHeader>> {
-  const orders = await tx
-    .select({
-      id: workingOrders.id,
-      orderNumber: workingOrders.orderNumber,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
-      label: workingOrders.label,
-      dining: workingOrders.dining,
-    })
-    .from(workingOrders)
-    .where(inArray(workingOrders.id, [...orderIds]));
-  const labels = await orderTableLabels(tx, orders);
+  const orders = await readPlacedOrders(tx, orderIds);
   return new Map(
-    orders.map((order) => [
-      order.id,
-      {
-        id: order.id,
-        partyId: order.partyId,
-        deliveryTableId: order.deliveryTableId,
-        orderNumber: String(order.orderNumber),
-        billLabel: order.label,
-        tableLabel: labels.get(order.id)!,
-        takeAway: order.dining === "takeaway",
-      },
-    ]),
+    [...orders].map(([id, order]) => {
+      const { places, partyId, sittingWith, takeAway } = order;
+      const billLabel = partyId === null ? places.billName : null;
+      return [
+        id,
+        {
+          orderNumber: String(places.orderNumber),
+          tableLabel: places.names.length === 0 ? billLabel : partyTablesName(places.names),
+          partyId,
+          partyName: places.names.length === 0 ? sittingWith : (sittingWith ?? billLabel),
+          takeAway,
+        },
+      ];
+    }),
   );
 }
 export async function readOrderHeader(tx: Transaction, orderId: string): Promise<OrderHeader> {

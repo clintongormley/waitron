@@ -2899,7 +2899,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         [
           `*** ${words.fire} ***`,
           t.grill.name,
-          t.label,
+          "",
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
           "1 x TARTA",
@@ -2940,7 +2940,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         [
           `*** ${words.fire} ***`,
           t.grill.name,
-          t.label,
+          "",
           await orderNumberOf(t.bill2),
           expect.stringMatching(/^\d\d:\d\d$/),
           "1 x TARTA",

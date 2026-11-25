@@ -307,6 +307,9 @@ In **Parked orders**, choose **Move to table** and pick a table. If an unsent or
 blocks the move, choose **Take over draft** for each bill listed. Close the message, then choose
 the table again.
 
+Use up to 40 characters if you name an order when you park it. After moving it, look for the same
+name beside its new table or counter in **Parked orders**.
+
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
 When a table has paid for a dish that is not coming, cancel it so the station stops making it and
@@ -357,7 +360,8 @@ counter** instead. It is offered when at least one of the dishes has a station t
 cancelled or refunded. Dishes held back go to the station now, each bill whose food still to come
 has a station ticket becomes a paid order waiting at the counter, and the table finishes. The order
 waits under **Waiting orders** on the **Counter** screen, marked **Paid, not handed over**, and
-**Find a bill** lists it; choose **Hand over** when the guests collect it.
+**Find a bill** lists it. Look for **Counter** on the pass and in **Waiting orders**. Choose
+**Hand over** when the guests collect it.
 
 ## Refund a payment on a receipt {#refund-receipt}
 

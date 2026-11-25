@@ -561,6 +561,7 @@ export interface DepartmentTransfer {
     orderNumber: number;
     tabLabel: string | null;
     tableLabel?: string;
+    counter?: true;
     sourceDepartmentName: string;
     destinationDepartmentName: string;
   };

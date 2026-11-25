@@ -469,7 +469,11 @@ export class TillDepartmentTransfers extends LitElement {
     const label =
       row.summary === undefined
         ? null
-        : orderLabel({ label: row.summary.tabLabel, tableLabel: row.summary.tableLabel });
+        : orderLabel({
+            label: row.summary.tabLabel,
+            tableLabel: row.summary.tableLabel,
+            counter: row.summary.counter,
+          });
     return html`<div class="description">
       <p>${incoming ? t("department_transfer.incoming_notice") : t(statusKeys[row.status])}</p>
       ${
@@ -491,10 +495,15 @@ export class TillDepartmentTransfers extends LitElement {
   #currentTab() {
     if (this.selected === undefined) return nothing;
     const detail = this.detail;
+    const summary = detail?.request.summary;
     const label =
       detail === undefined
         ? null
-        : orderLabel({ label: detail.tab.label, tableLabel: detail.request.summary?.tableLabel });
+        : orderLabel({
+            label: summary === undefined ? detail.tab.label : summary.tabLabel,
+            tableLabel: summary?.tableLabel,
+            counter: summary?.counter,
+          });
     return html`<section>
       ${this.loading ? html`<p role="status">${t("login.loading")}</p>` : nothing}
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}

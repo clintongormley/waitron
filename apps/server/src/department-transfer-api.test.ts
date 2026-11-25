@@ -1757,13 +1757,14 @@ describe("human transfer identities", () => {
       await tx.update(departments).set({ name: "Restaurant desk" }).where(eq(departments.id, f.b));
       await tx
         .update(workingOrders)
-        .set({ label: "Ana's lunch", orderNumber: 80123 })
+        .set({ label: "Former table", billName: "Ana's lunch", orderNumber: 80123 })
         .where(eq(workingOrders.id, f.tab));
     });
     const id = await pending(f);
     const summary = {
       orderNumber: 80123,
       tabLabel: "Ana's lunch",
+      counter: true,
       sourceDepartmentName: "Deli counter",
       destinationDepartmentName: "Restaurant desk",
     };

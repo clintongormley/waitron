@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { OverviewFact, PassCard, PassCardItem } from "../api/client.js";
 import { es } from "../i18n/strings.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   PASS_NOW,
   minutesAgo,
@@ -420,5 +420,11 @@ describe("A797 a pass card names a bill's place", () => {
 
   it("names nothing for a bill at no table and with no label", () => {
     expect(passOrderPlace(order({}))).toBeUndefined();
+  });
+
+  it("shows the counter with the order's typed name", () => {
+    expect(passOrderPlace(order({ counter: true, billName: "Riley" }))).toBe(
+      `${t("station.counter")} · Riley`,
+    );
   });
 });

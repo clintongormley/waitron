@@ -186,7 +186,7 @@ describe("the station read names each bill's tables by their short names", () =>
 });
 
 describe("a delivered counter order whose table was let go", () => {
-  it("names the table by the name kept when it was let go", async () => {
+  it("shows the counter once the delivery table was let go", async () => {
     const billId = await counterBurger();
     await inTx(v, (tx) =>
       tx
@@ -195,7 +195,10 @@ describe("a delivered counter order whose table was let go", () => {
         .where(eq(workingOrders.id, billId)),
     );
 
-    expect((await queued(billId)).tableShortNames).toEqual(["Garden 9"]);
+    const order = await queued(billId);
+    expect(order.label).toBeNull();
+    expect(order).not.toHaveProperty("party");
+    expect(order).not.toHaveProperty("tableShortNames");
   });
 });
 
