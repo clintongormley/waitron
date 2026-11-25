@@ -3342,6 +3342,33 @@ describe("menu-screen", () => {
     });
   });
 
+  it("reports a refused save after Back closes the editor on Products", async () => {
+    history.replaceState(null, "", "/products");
+    let refuse!: (error: unknown) => void;
+    const reply = new Promise<ProductEditorValue>((_resolve, reject) => {
+      refuse = reject;
+    });
+    const update = vi.fn().mockReturnValue(reply);
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
+      api: stubApi({ updateProductEditor: update }),
+    });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await vi.waitFor(() => expect(editor(el).open).toBe(true));
+    await editKitchenName(el);
+    editor(el).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    expect(update).toHaveBeenCalledOnce();
+    history.replaceState(null, "", "/products");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(editor(el).open).toBe(false));
+    refuse({ code: "connection.failed" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+  });
+
   it("ignores a late product response after the editor is cancelled", async () => {
     let resolve!: (value: ProductEditorValue) => void;
     const api = stubApi({
@@ -3353,6 +3380,8 @@ describe("menu-screen", () => {
     emit(editor(el), "wt-cancel", {});
     resolve(value);
     await flush(el);
+    el.requestUpdate();
+    await el.updateComplete;
     expect(editor(el).open).toBe(false);
   });
 

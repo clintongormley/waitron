@@ -196,10 +196,8 @@ export class ProductsScreen extends LitElement {
     choices: () => this.#editorChoices(),
     clearError: () => this.#showError(null),
     readError: (error) => this.#showReadError(error),
-    refused: (error) => {
-      this.#showError(codeOf(error));
-      this.refusalParams = (error as { params?: unknown }).params;
-    },
+    refused: (error) => this.#showSaveRefusal(error),
+    lateRefused: (_product, error) => this.#showSaveRefusal(error),
     opened: (id) => this.#writeProductWord(id),
     closed: () => {
       this.#linkedProduct = null;
@@ -230,6 +228,11 @@ export class ProductsScreen extends LitElement {
       }
     },
   });
+
+  #showSaveRefusal(error: unknown): void {
+    this.#showError(codeOf(error));
+    this.refusalParams = (error as { params?: unknown }).params;
+  }
 
   #editorChoices(): ProductEditorChoices {
     return {

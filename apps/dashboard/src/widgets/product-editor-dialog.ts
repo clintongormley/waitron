@@ -54,8 +54,7 @@ interface Effects {
   closed?(alreadyClosed: boolean): void;
   afterClose?(): void;
   saved(product: ProductEditorValue, created: boolean, current: () => boolean): Promise<void>;
-  scope?(): string | null;
-  lateRefused?(product: ProductEditorValue, error: unknown): void;
+  lateRefused?(product: ProductEditorValue | null, error: unknown): void;
   changeChoices(kind: ProductChildKind, current: () => boolean): Promise<void>;
 }
 
@@ -166,7 +165,6 @@ export class ProductEditorDialog implements ReactiveController {
     this.#fieldErrors = {};
     this.host.requestUpdate();
     const editing = this.value;
-    const scope = this.effects.scope?.();
     let generation = this.#editorGeneration;
     let saved: ProductEditorValue;
     try {
@@ -185,7 +183,7 @@ export class ProductEditorDialog implements ReactiveController {
         }
         this.busy = false;
         this.host.requestUpdate();
-      } else if (editing && this.host.isConnected && scope !== this.effects.scope?.()) {
+      } else if (this.host.isConnected) {
         this.effects.lateRefused?.(editing, error);
       }
       return;

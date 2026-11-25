@@ -14,7 +14,6 @@ type Lookups = Pick<ProductEditorChoices, "units" | "courses" | "extraLists" | "
 
 interface Effects {
   api(): DashboardApi;
-  menu(): string | null;
   products(): Product[];
   categories(): CategorySummary[];
   settings(): MenuSettingsAnswer | null;
@@ -51,8 +50,9 @@ export class MenuStructureProductEditor {
       },
       afterClose: () => this.#afterClose(),
       saved: effects.refreshProducts,
-      scope: effects.menu,
-      lateRefused: (product, error) => effects.reportRefusal(product.name, error),
+      lateRefused: (product, error) => {
+        if (product !== null) effects.reportRefusal(product.name, error);
+      },
       changeChoices: async (kind, current) => {
         const api = this.#background();
         if (kind === "unit") {
@@ -101,6 +101,14 @@ export class MenuStructureProductEditor {
       ]);
       if (current()) this.#lookup = { units, courses, extraLists, optionLists };
     });
+  }
+
+  get saving(): boolean {
+    return this.#dialog.busy;
+  }
+
+  cancelRead(): void {
+    if (this.#dialog.reading) this.close();
   }
 
   close(): void {

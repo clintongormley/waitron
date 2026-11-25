@@ -1932,9 +1932,9 @@ rows and no toolbar, so its empty box says
 is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
 of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
 section from whichever place it was chosen, and makes that row the current one, whose name is drawn
-bold and underlined with `aria-current="true"`. A product's ⋮ holds Edit product, a link to the
-product's page, then "Remove from <list>", naming the
-list that holds it. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
+bold and underlined with `aria-current="true"`. A product's ⋮ holds Edit product and "Remove
+from <list>", naming the list that holds it. Edit product opens over Structure for people who can
+open Products. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
 "Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
 tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
 "Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
@@ -1947,9 +1947,8 @@ In Select mode, put every grip in one leading column before the tree arrow and i
 Reserve that column on read-only rows. Keep the arrow and media slot inside
 the indented name column, so names at one level and the Name heading stay aligned. The media slot
 holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Menu
-screen, which opens with its photo field focused; on an included menu's row, or for a product the
-library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
+colour, then to the venue's default. On an owned row the product slot opens the editor at the photo
+control. On an included menu's row or for a product the library no longer holds, the slot is display only. Section squares still open their colour picker directly. Hide
 media in both trees when the tree's box is at most 440px wide. In the Products list the product
 editor remains available through the row's Actions menu, and a Menus Structure product row's
 Actions menu offers Edit product at every width.
@@ -4151,7 +4150,7 @@ somebody actually changes most days get lost in it. Fold the optional detail awa
 frequently-edited fields always visible and put the rest inside a `wt-disclosure`.
 
 In Menu Structure, **Edit product** opens the same editor used in Products. The photo opens it at
-the image control. Save updates the product immediately; closing the editor returns focus to the
+the image control. Save updates the product immediately. Closing the editor returns focus to the
 Structure row’s actions or photo.
 
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is three cards (see "Lay out a

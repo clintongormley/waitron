@@ -969,7 +969,9 @@ export class MenuStructureTable extends LitElement {
     (
       root.querySelector<HTMLElement>(
         `tr[data-row-key="${ROOT_KEY}"] [data-test="actions-root"]`,
-      ) ?? this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]')
+      ) ??
+      this.renderRoot.querySelector<HTMLElement>('[data-test$="-empty"]') ??
+      this.querySelector<HTMLElement>('[slot="toolbar-search"]')
     )?.focus();
   }
 
@@ -1418,6 +1420,7 @@ export class MenuStructureTable extends LitElement {
     const inputs = [
       currentLocale(),
       this.busy,
+      this.editProductsInPlace,
       this.current,
       this.defaultColor,
       this.#productById,

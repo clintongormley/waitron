@@ -12,7 +12,7 @@ import "./widgets/menu-prices-table.js";
 import type { MenuStructureTable } from "./widgets/menu-structure-table.js";
 import "./widgets/menu-structure-table.js";
 import { MenuPublicationsPanel } from "./widgets/menu-publications.js";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { ProductEditor } from "./widgets/product-editor.js";
 import { productMedia } from "./widgets/product-media.js";
 import {
@@ -1355,21 +1355,20 @@ describe("a Structure tab product row's Edit product link under the app's link r
       });
       const address = "/menus/menu/menu-one/view/structure";
       const guard = navigationGuardFor(window)!;
+      const menus = () => app.shadowRoot!.querySelector("dashboard-menus-screen")?.shadowRoot;
+      const editor = () => menus()?.querySelector<ProductEditor>("dashboard-product-editor");
       await guard.write("/menus");
+      if (allowed) {
+        await userEvent.click(page.getByRole("button", { name: "Actions: Lunch" }));
+        await userEvent.click(page.getByRole("button", { name: "Rename…" }));
+        const rename = () => menus()?.querySelector("dashboard-section-details-form")?.open;
+        await expect.poll(rename).toBe(true);
+        await userEvent.keyboard("{Escape}");
+        await expect.poll(rename).toBe(false);
+      }
       await guard.write(address);
-      const menus = () => app.shadowRoot!.querySelector("dashboard-menus-screen");
-      const action = () =>
-        menus()
-          ?.shadowRoot?.querySelector("dashboard-menu-structure-table")
-          ?.shadowRoot?.querySelector("wt-data-table")
-          ?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-            '[data-test="actions-m-burger"]',
-          );
-      await expect.poll(action).toBeTruthy();
-      action()!.show();
-      const link = action()!.querySelector<HTMLAnchorElement>(
-        '[data-test="edit-product-m-burger"]',
-      )!;
+      await userEvent.click(page.getByRole("button", { name: "Actions: Burger" }));
+      const link = page.getByRole("link", { name: "Edit product" });
       expect(location.pathname).toBe(address);
       const push = vi.spyOn(history, "pushState");
       const replace = vi.spyOn(history, "replaceState");
@@ -1378,24 +1377,14 @@ describe("a Structure tab product row's Edit product link under the app's link r
         expect(location.pathname).toBe(address);
         expect(push).not.toHaveBeenCalled();
         expect(replace).not.toHaveBeenCalled();
-        await expect
-          .poll(
-            () =>
-              menus()?.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor")?.open,
-          )
-          .toBe(true);
+        await expect.poll(() => editor()?.open).toBe(true);
         history.back();
         await expect.poll(() => location.pathname).toBe("/menus");
-        await expect
-          .poll(() => menus()?.shadowRoot?.querySelector("dashboard-product-editor"))
-          .toBeNull();
+        await expect.poll(editor).toBeNull();
       } else {
         expect(location.pathname).toBe("/menus");
         expect(productApi.getProductEditor).not.toHaveBeenCalled();
-        expect(
-          menus()?.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor")?.open ??
-            false,
-        ).toBe(false);
+        expect(editor()?.open ?? false).toBe(false);
       }
     },
   );

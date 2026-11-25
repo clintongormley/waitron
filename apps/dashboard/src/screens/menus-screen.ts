@@ -665,7 +665,6 @@ export class MenusScreen extends LitElement {
 
   readonly #productEditor = new MenuStructureProductEditor(this, {
     api: () => this.api,
-    menu: () => this.menuId,
     products: () => this.products,
     categories: () => this.categories,
     settings: () => this.menuSettings,
@@ -674,10 +673,15 @@ export class MenusScreen extends LitElement {
       this.structureWriteError = message;
     },
     reportRefusal: (name, error) => this.#reportRefused(name, error),
-    refreshProducts: () => this.#watchLibraryProducts(),
+    // The query reports a failed refresh through the screen's load state.
+    refreshProducts: () => this.#watchLibraryProducts().catch(() => undefined),
     returnFocusTo: (path, photo) => this.#returnFocusTo(path, false, photo),
     windowClosed: () => this.#windowClosed(),
   });
+
+  get #canOpenProduct(): boolean {
+    return this.canEditProducts && this.contentLanguages !== null && this.menuSettings !== null;
+  }
 
   #watchLibraryProducts(): Promise<void> {
     return this.#queries.watch("listLibraryProducts", [], (products) => {
@@ -799,8 +803,9 @@ export class MenusScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     this.#followUsage();
+    if (this.busy || changed.has("structureSelecting")) this.#productEditor.cancelRead();
     if (
-      !this.canEditProducts ||
+      !this.#canOpenProduct ||
       this.view !== "structure" ||
       this.creatingSection ||
       this.editingSection ||
@@ -810,8 +815,7 @@ export class MenusScreen extends LitElement {
       this.addingProducts ||
       this.movingSelected ||
       this.removingSelected ||
-      this.deletingSelected ||
-      this.menuPresentation
+      this.deletingSelected
     )
       this.#productEditor.close();
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
@@ -1713,7 +1717,7 @@ export class MenusScreen extends LitElement {
   /** Waits for the write out to be read back: the row whose ⋮ had focus may be gone after it. */
   #returnFocus(): void {
     const target = this.#focusReturn;
-    if (!target || !this.#windowShut || this.busy) return;
+    if (!target || !this.#windowShut || this.busy || this.#productEditor.saving) return;
     if ("shortcuts" in target && target.shortcuts.length > 0 && this.#homeRemoveDisabled) return;
     this.#focusReturn = null;
     if (target.menuId !== this.menuId) return;
@@ -2700,7 +2704,7 @@ export class MenusScreen extends LitElement {
       }
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
-        .editProductsInPlace=${this.canEditProducts}
+        .editProductsInPlace=${this.#canOpenProduct}
         .menus=${this.menus}
         .placeableSetMenus=${structure.placeableSetMenus ?? []}
         .products=${this.products}
@@ -2738,7 +2742,7 @@ export class MenusScreen extends LitElement {
           this.#openAdd(event.detail.action, event.detail.path);
         }}
         @wt-edit-product=${(event: CustomEvent<StructureProductEdit>) => {
-          if (!this.canEditProducts || this.view !== "structure") return;
+          if (!this.#canOpenProduct || this.view !== "structure") return;
           event.stopPropagation();
           this.#productEditor.open(event.detail);
         }}

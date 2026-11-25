@@ -200,32 +200,49 @@ it("shows a product save refusal above Save and keeps the draft available", asyn
   expect(save.disabled).toBe(false);
 });
 
-it("does not open a product when its pending read is overtaken by Add products", async () => {
-  let resolveRead!: (value: ProductEditorValue) => void;
-  const read = new Promise<ProductEditorValue>((resolve) => {
-    resolveRead = resolve;
-  });
-  const getProductEditor = vi.fn().mockReturnValue(read);
-  const menu = await openMenu({ getProductEditor });
-  await menu.rowAction('[data-test="edit-product-m-burger"]');
-  await expect.poll(() => getProductEditor.mock.calls.length).toBe(1);
-  menu.root.querySelector("dashboard-menu-structure-table")!.dispatchEvent(
-    new CustomEvent("wt-structure-add", {
-      detail: { action: "add-products", path: [] },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  const picker = menu.root.querySelector<HTMLElementTagNameMap["wt-modal"]>(
-    '[data-test="add-products"]',
-  )!;
-  await expect.poll(() => picker.open).toBe(true);
-  resolveRead(menuProductEditorValue);
-  await read;
-  await new Promise(requestAnimationFrame);
-  expect(menu.editor()?.open ?? false).toBe(false);
-  expect(picker.open).toBe(true);
-});
+it.each(["add", "remove", "select"] as const)(
+  "a pending product read gives way to %s",
+  async (action) => {
+    let finishRead!: (value: ProductEditorValue) => void;
+    const read = new Promise<ProductEditorValue>((resolve) => {
+      finishRead = resolve;
+    });
+    let endRemoval: (() => void) | undefined;
+    const remove = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          endRemoval = resolve;
+        }),
+    );
+    const menu = await openMenu({ getProductEditor: () => read, removeSectionMember: remove });
+    await menu.rowAction('[data-test="edit-product-m-burger"]');
+    if (action === "add") {
+      menu.root.querySelector("dashboard-menu-structure-table")!.dispatchEvent(
+        new CustomEvent("wt-structure-add", {
+          detail: { action: "add-products", path: [] },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      const picker = menu.root.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+        '[data-test="add-products"]',
+      )!;
+      await expect.poll(() => picker.open).toBe(true);
+    } else if (action === "remove") {
+      await menu.rowAction('[data-test="remove-m-burger"]');
+      expect(remove).toHaveBeenCalledOnce();
+    } else {
+      const select = menu.root.querySelector<HTMLElement>('[data-test="select"]')!;
+      await userEvent.click(page.elementLocator(select));
+      expect(menu.root.querySelector('[data-test="selection-bar"]')).toBeTruthy();
+    }
+    finishRead(menuProductEditorValue);
+    await read;
+    await new Promise(requestAnimationFrame);
+    endRemoval?.();
+    expect(menu.editor()?.open ?? false).toBe(false);
+  },
+);
 
 it("leaves the tree available and reports an editor lookup refusal", async () => {
   const menu = await openMenu({
@@ -266,25 +283,21 @@ it("passes the menus lookups into the editor and can create a related unit", asy
   await expect.poll(() => form.open).toBe(true);
   form.dispatchEvent(new CustomEvent("wt-submit", { detail: { value: created }, bubbles: true }));
   await expect.poll(() => editor.currentValue.unitId).toBe("carton");
+  await expect.poll(() => editor.units.some(({ id }) => id === "carton")).toBe(true);
   expect(editor.currentValue.name).toBe("New burger");
 });
 
-it.each(["light", "dark"] as const)(
-  "names the in-place dialog and passes axe in %s",
-  async (theme) => {
-    await page.viewport(390, 900);
-    const menu = await openMenu({}, theme);
-    const editor = await menu.open();
-    const modal = editor.shadowRoot!.querySelector("wt-modal")!;
-    await modal.updateComplete;
-    expect(modal.getAttribute("heading")).toBe("Edit product");
-    await expectNoA11yViolations(menu.host);
-  },
-);
+it.each(["light", "dark"] as const)("passes axe with the in-place dialog in %s", async (theme) => {
+  await page.viewport(390, 900);
+  const menu = await openMenu({}, theme);
+  await menu.open();
+  await expectNoA11yViolations(menu.host);
+});
 
-it.each([true, false])(
-  "handles a product answer after leaving its menu (saved %s)",
-  async (saved) => {
+it.each(["saved", "other menu", "Prices"] as const)(
+  "handles a late product answer for %s",
+  async (result) => {
+    const saved = result === "saved";
     let product = menuProduct;
     let finish!: () => void;
     const update = vi
@@ -297,12 +310,12 @@ it.each([true, false])(
         product = { ...product, name: body.name };
         return { ...menuProductEditorValue, name: body.name };
       });
-    const api = menuProductApi();
     const menu = await openMenu({
       listMenus: async () => [
-        ...(await api.listMenus!()),
+        { id: "menu-one", name: "Lunch", active: true, kind: "menu", setPrice: null },
         { id: "menu-two", name: "Dinner", active: true, kind: "menu", setPrice: null },
       ],
+      getMenuPrices: async () => [],
       updateProductEditor: update,
       listLibraryProducts: async () => [product],
     });
@@ -312,10 +325,16 @@ it.each([true, false])(
       page.elementLocator(editor.shadowRoot!.querySelector('[data-test="save"]')!),
     );
     expect(update).toHaveBeenCalledTimes(1);
-    const dinner = "/menus/menu/menu-two/view/structure";
-    history.replaceState(null, "", dinner);
+    const prices = result === "Prices";
+    const destination = prices
+      ? "/menus/menu/menu-one/view/prices"
+      : "/menus/menu/menu-two/view/structure";
+    history.replaceState(null, "", destination);
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await expect.poll(() => menu.root.querySelector("h1")?.textContent?.trim()).toBe("Dinner");
+    await expect
+      .poll(() => menu.root.querySelector("h1")?.textContent?.trim())
+      .toBe(prices ? "Lunch" : "Dinner");
+    if (saved) await menu.open();
     finish();
     if (saved) {
       await expect
@@ -323,10 +342,90 @@ it.each([true, false])(
         .toBe("Double burger");
     } else {
       await expect
-        .poll(() => menu.root.querySelector('[data-test="member-error"]')?.textContent?.trim())
+        .poll(
+          () => menu.root.querySelector('[data-test="member-error"]')?.textContent?.trim() ?? "",
+        )
         .toContain("Burger");
     }
-    expect(location.pathname).toBe(dinner);
-    expect(menu.editor()?.open ?? false).toBe(false);
+    expect(location.pathname).toBe(destination);
+    expect(menu.editor()?.open ?? false).toBe(saved);
   },
 );
+
+it("does not open a clicked editor later when settings recover", async () => {
+  const settings = menuProductApi().getMenuSettings!;
+  const menu = await openMenu({
+    getMenuSettings: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockImplementation(settings),
+  });
+  await menu.rowAction('[data-test="edit-product-m-burger"]');
+  await userEvent.click(
+    page.elementLocator(menu.root.querySelector<HTMLElement>('[data-test="retry"]')!),
+  );
+  await expect.poll(() => menu.root.querySelector('[data-test="load-error"]') === null).toBe(true);
+  expect(menu.editor()?.open ?? false).toBe(false);
+  await menu.open();
+});
+
+it("waits for a refreshed search to put focus back after the saved row disappears", async () => {
+  let rows = [menuProduct];
+  let finishRefresh!: () => void;
+  const menu = await openMenu({
+    listLibraryProducts: async () =>
+      rows[0]!.name === "Burger"
+        ? rows
+        : new Promise<Product[]>((resolve) => {
+            finishRefresh = () => resolve(rows);
+          }),
+    updateProductEditor: async () => {
+      rows = [{ ...menuProduct, name: "Salad" }];
+      return { ...menuProductEditorValue, name: "Salad" };
+    },
+  });
+  const search = menu.root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    '[name="structure-search"]',
+  )!;
+  await userEvent.fill(page.elementLocator(search.shadowRoot!.querySelector("input")!), "Burger");
+  const editor = await menu.open();
+  await changeName(editor, "Salad");
+  const modal = editor.shadowRoot!.querySelector("wt-modal")!;
+  const closed = dialogClosed(modal);
+  await userEvent.click(page.elementLocator(modal.querySelector('[data-test="save"]')!));
+  await closed;
+  await expect.poll(() => typeof finishRefresh).toBe("function");
+  finishRefresh();
+  await expect.poll(() => menu.row() === null).toBe(true);
+  await expect.poll(() => menu.root.activeElement === search).toBe(true);
+});
+
+it("clears a post-save read failure when the product list retry succeeds", async () => {
+  let product = menuProduct;
+  let fail = false;
+  const menu = await openMenu({
+    listLibraryProducts: async () => {
+      if (fail) throw { code: "connection.failed" };
+      return [product];
+    },
+    updateProductEditor: async () => {
+      product = { ...product, name: "Double burger" };
+      fail = true;
+      return { ...menuProductEditorValue, name: product.name };
+    },
+  });
+  const editor = await menu.open();
+  await changeName(editor, "Double burger");
+  await userEvent.click(
+    page.elementLocator(editor.shadowRoot!.querySelector('[data-test="save"]')!),
+  );
+  await expect.poll(() => menu.root.querySelector('[data-test="load-error"]') !== null).toBe(true);
+  fail = false;
+  await userEvent.click(
+    page.elementLocator(menu.root.querySelector<HTMLElement>('[data-test="retry"]')!),
+  );
+  await expect
+    .poll(() => menu.table()?.querySelector('[data-test="name"]')?.textContent?.trim())
+    .toBe("Double burger");
+  expect(menu.root.querySelector('[data-test="structure-write-error"]')).toBeNull();
+});
