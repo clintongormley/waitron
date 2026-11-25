@@ -117,6 +117,40 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on the separate card terminal's step, before and after a missed confirmation", async () => {
+    const api = fakeGiveBackApi();
+    api.previewGiveBack.mockResolvedValue({
+      parts: [{ kind: "refund", amount: "5.00", way: "card-1" }],
+      leftUnderWay: "0.00",
+      needs: [],
+      manual: true,
+    });
+    const { el, host } = await mount(api);
+    await choose(el, "goodwill");
+    el.shadowRoot!.querySelector<HTMLInputElement>('input[name=way][value="card-1"]')!.click();
+    el.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "complaint" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const field = el
+      .shadowRoot!.querySelector("wt-price-input[name=amount]")!
+      .shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(field), "5");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-summary]")).not.toBeNull());
+    el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-terminal]")).not.toBeNull());
+    await expectNoA11yViolations(host);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-record]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-terminal-error]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the extra's form", async () => {
     const { el, host } = await mount();
     await choose(el, "extra");
