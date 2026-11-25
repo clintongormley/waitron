@@ -342,11 +342,15 @@ describe("ServerRouter", () => {
   it("keeps the last round's silence while one probe is still pending", async () => {
     const table: Record<string, Answer> = {};
     const answering = probeFetch(table);
-    let spareReply: Promise<Response> | undefined;
+    let spareAnswers = false;
+    let answerSpare!: (response: Response) => void;
+    const spareReply = new Promise<Response>((resolve) => {
+      answerSpare = resolve;
+    });
     const router = new ServerRouter({
       origin: BOX,
       fetchImpl: (input) =>
-        String(input).startsWith(CLOUD) && spareReply ? spareReply : answering(input),
+        String(input).startsWith(CLOUD) && spareAnswers ? spareReply : answering(input),
       storage: memoryStorage(),
     });
     router.setServers([{ url: BOX }, { url: CLOUD, standing: "serving-secondary" }]);
@@ -354,10 +358,7 @@ describe("ServerRouter", () => {
     expect(router.noBoxAnswering).toBe(true);
 
     table[BOX] = { acceptingSales: true, term: 2 };
-    let answerSpare!: (response: Response) => void;
-    spareReply = new Promise((resolve) => {
-      answerSpare = resolve;
-    });
+    spareAnswers = true;
     const round = router.probeNow();
     try {
       await vi.waitFor(() => expect(router.statuses()[0]!.state).toBe("primary"));
