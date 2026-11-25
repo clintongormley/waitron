@@ -189,7 +189,7 @@ export function createFirstSetupCommandDelivery(options: {
         context,
         seat.inspect(context, state.inputs[module]),
         {
-          key: staged.key,
+          key: { nodeId: staged.stage.nodeId, name: staged.stage.masterKeyName },
           masterKey: { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName },
           identity: {
             taxpayerName: state.frozen.request.legalName,

@@ -24,7 +24,7 @@ export async function keepHourRecoveryDocument(
     taxpayerName: state.frozen.request.legalName,
     venueName: state.frozen.request.name,
     createdAt: new Date().toISOString(),
-    nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.masterKeyName },
   };
   const ref = {
     module,

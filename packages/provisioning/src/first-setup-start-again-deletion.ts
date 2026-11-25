@@ -443,7 +443,7 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
 
 /**
  * The most rows a first setup attempt may leave in each node.db table, each of them the attempt's
- * own node's: its recovery-key check (`installStagedNodeKey`) and its signing key (publication).
+ * own node's: its signing key (publication).
  */
 const NODE_TABLES: readonly (readonly [SQLiteTable, number])[] = [
   [box, 1],

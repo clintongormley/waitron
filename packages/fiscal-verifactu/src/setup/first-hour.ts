@@ -437,7 +437,7 @@ export class FirstSetupHour extends LitElement {
           taxpayerName: context.venue.legalName,
           venueName: context.venue.name,
           createdAt: new Date().toISOString(),
-          nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+          nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
         },
         { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName },
         this.locale,

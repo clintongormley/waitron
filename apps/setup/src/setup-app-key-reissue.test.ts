@@ -128,11 +128,6 @@ async function reachSeries(
             nodeId: initial.nodeId,
             name: `Key ${replacement}`,
           },
-          key: {
-            nodeId: initial.nodeId,
-            name: `Key ${replacement}`,
-            secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-          },
           masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
           masterKeyName: "2026-11-23 · QZJV",
         });
@@ -185,7 +180,6 @@ const lostKey = () =>
 const heldKey = () =>
   Response.json({
     stage: { stageId: "stage", nodeId: initial.nodeId, name: "Held key" },
-    key: { nodeId: initial.nodeId, name: "Held key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     masterKeyName: "2026-11-23 · QZJV",
   });

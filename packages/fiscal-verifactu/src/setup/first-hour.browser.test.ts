@@ -1087,7 +1087,6 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
     kept: unknown[] = [];
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-    key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     masterKeyName: "2026-11-23 · QZJV",
   });
@@ -1167,7 +1166,6 @@ it.each([
     const { el, api } = await mount({ locale });
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
       masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
       masterKeyName: "2026-11-23 · QZJV",
     });
@@ -1452,7 +1450,6 @@ it.each(["stage", "register", "input digest", "PDF ready"])(
     const registrations: unknown[] = [];
     const staged = {
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
       masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
       masterKeyName: "2026-11-23 · QZJV",
     };
@@ -1518,7 +1515,6 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   const { el, api } = await mount();
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-    key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     masterKeyName: "2026-11-23 · QZJV",
   });

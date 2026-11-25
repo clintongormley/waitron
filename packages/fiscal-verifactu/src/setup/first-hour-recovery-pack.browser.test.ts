@@ -74,7 +74,6 @@ function captureHandovers() {
 
 const staged = (masterKey = KEY): InitialSetupNodeKey => ({
   stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-  key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
   masterKey,
   masterKeyName: "2026-11-23 · QZJV",
 });

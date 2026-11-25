@@ -44,26 +44,17 @@ const input = {
 const pair = (
   name: string,
   stageId: string,
-  secret: string,
   masterKey: string,
   masterKeyName: string,
 ): InitialSetupNodeKey => ({
   stage: { stageId, nodeId: "node", name },
-  key: { nodeId: "node", name, secret },
   masterKey,
   masterKeyName,
 });
-const old = pair(
-  "Old key",
-  "old",
-  "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-  "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
-  "2026-11-23 · QZJV",
-);
+const old = pair("Old key", "old", "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5", "2026-11-23 · QZJV");
 const replacement = pair(
   "New key",
   "replacement",
-  "012345AbCdEfGhIjKlMnOpQrStUvWxYz",
   "2SZ5 ZYJ9 UN95 RXKV NF7B N8VU GYU4",
   "2026-11-23 · RKMB",
 );

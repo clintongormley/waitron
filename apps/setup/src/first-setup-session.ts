@@ -427,12 +427,7 @@ export class FirstSetupSession {
       current();
       const result = await this.#api.firstSetupNodeKey(owner, reconfirmation);
       current();
-      if (
-        result.stage.nodeId !== this.#state!.nodeId ||
-        result.key.nodeId !== result.stage.nodeId ||
-        result.key.name !== result.stage.name
-      )
-        failure("setup.attempt_conflict");
+      if (result.stage.nodeId !== this.#state!.nodeId) failure("setup.attempt_conflict");
       return result;
     });
   }
@@ -441,12 +436,7 @@ export class FirstSetupSession {
       this.#module(module);
       const result = await this.#api.reissueFirstSetupNodeKey(this.#owner(), password);
       current();
-      if (
-        result.stage.nodeId !== this.#state!.nodeId ||
-        result.key.nodeId !== result.stage.nodeId ||
-        result.key.name !== result.stage.name
-      )
-        failure("setup.attempt_conflict");
+      if (result.stage.nodeId !== this.#state!.nodeId) failure("setup.attempt_conflict");
       return result;
     });
   }

@@ -1,6 +1,6 @@
 export interface InitialSetupNodeKey {
+  /** `name` is the master key's name. */
   stage: { stageId: string; nodeId: string; name: string };
-  key: { nodeId: string; name: string; secret: string };
   /** The venue's new master key as printed, and its name; the pack shows them once. */
   masterKey: string;
   masterKeyName: string;

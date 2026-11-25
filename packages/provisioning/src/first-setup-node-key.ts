@@ -2,20 +2,17 @@ import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isCalendarDate } from "@waitron/shared";
-import { hashSecretAsync } from "@waitron/identity";
 import { masterKeyName } from "@waitron/credentials";
 import {
   insertMasterKey,
   insertRecoveryPack,
   markRecoveryPackReceived,
+  readCurrentMasterKey,
   readRecoveryPack,
-  withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
-import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
-import { generatePassword } from "./identifiers.js";
+import type { VenueAndNodeHandles } from "@waitron/node-db";
 import { makeNewMasterKey, type MadeMasterKey } from "./new-master-key.js";
-import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import type {
   FirstSetupCoordinator,
@@ -31,8 +28,6 @@ export interface StagedNodeKey {
   readonly attemptId: string;
   readonly nodeId: string;
   readonly frozenDigest: string;
-  readonly name: string;
-  readonly verifier: string;
   readonly masterKeyName: string;
   /** Lower-case hex; the master key itself is never staged. */
   readonly masterKeyCheckValue: string;
@@ -82,8 +77,6 @@ export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState):
     "attemptId",
     "nodeId",
     "frozenDigest",
-    "name",
-    "verifier",
     "masterKeyName",
     "masterKeyCheckValue",
     "masterKeyPublicKey",
@@ -97,24 +90,13 @@ export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState):
     v.attemptId !== state.frozen.attemptId ||
     v.nodeId !== state.frozen.nodeId ||
     v.frozenDigest !== firstSetupFrozenDigest(state) ||
-    typeof v.name !== "string" ||
-    !/^\d{4}-\d\d-\d\d · [34679ACDEFHJKMNPQRTUVWXY]{4}$/.test(v.name) ||
-    typeof v.verifier !== "string" ||
-    !/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(v.verifier) ||
     !masterKeyFactsValid(v.masterKeyName, v.masterKeyCheckValue, v.masterKeyPublicKey)
   )
     invalid();
   return Object.freeze({ ...v }) as unknown as StagedNodeKey;
 }
 export function createFirstSetupNodeKeys(options: Options) {
-  let transient:
-    | {
-        stage: StagedNodeKey;
-        key: { nodeId: string; name: string; secret: string };
-        made: MadeMasterKey;
-        ownerGeneration: number;
-      }
-    | undefined;
+  let transient: { stage: StagedNodeKey; made: MadeMasterKey; ownerGeneration: number } | undefined;
   const inside = <T>(
     hold: FirstSetupHold | undefined,
     run: (held: FirstSetupHold) => Promise<T>,
@@ -127,31 +109,21 @@ export function createFirstSetupNodeKeys(options: Options) {
     if (data !== undefined && Buffer.byteLength(JSON.stringify(data)) > 4096) invalid();
     return data === undefined ? null : readFirstSetupStagedKey(data, state);
   };
-  const generate = async (state: FirstSetupState, prior?: StagedNodeKey) => {
-    const secret = generatePassword();
-    const day = new Date().toISOString().slice(0, 10);
-    const name = newBreakGlassKeyName(day, new Set(prior === undefined ? [] : [prior.name]));
-    const masterKey = makeNewMasterKey(day);
+  const generate = async (state: FirstSetupState) => {
+    const masterKey = makeNewMasterKey(new Date().toISOString().slice(0, 10));
     const stage: StagedNodeKey = {
       version: 1,
       stageId: randomUUID(),
       attemptId: state.frozen.attemptId,
       nodeId: state.frozen.nodeId,
       frozenDigest: firstSetupFrozenDigest(state),
-      name,
-      verifier: await hashSecretAsync(secret),
       masterKeyName: masterKey.made.masterKeyName,
       masterKeyCheckValue: masterKey.checkValue,
       masterKeyPublicKey: masterKey.publicKey.toString("base64"),
     };
     await updateSetupFlowSection(options.stateDir, "nodeKey", () => stage);
-    transient = {
-      stage,
-      key: { nodeId: stage.nodeId, name, secret },
-      made: masterKey.made,
-      ownerGeneration: state.ownerGeneration,
-    };
-    return structuredClone({ stage, key: transient.key, ...transient.made });
+    transient = { stage, made: masterKey.made, ownerGeneration: state.ownerGeneration };
+    return structuredClone({ stage, ...transient.made });
   };
   return {
     stageInitialNodeKey(
@@ -172,11 +144,7 @@ export function createFirstSetupNodeKeys(options: Options) {
             !isDeepStrictEqual(prior, transient.stage)
           )
             throw new AppError("setup.attempt_conflict", {});
-          return structuredClone({
-            stage: transient.stage,
-            key: transient.key,
-            ...transient.made,
-          });
+          return structuredClone({ stage: transient.stage, ...transient.made });
         }
         return generate(state);
       });
@@ -191,8 +159,8 @@ export function createFirstSetupNodeKeys(options: Options) {
         await options.owner.consumeReconfirmation(owner, reconfirmation, "node-key-reissue", held);
         if (!["claimed", "consumption-intent"].includes(state.status))
           throw new AppError("setup.attempt_conflict", {});
-        const prior = (await read(state)) ?? invalid();
-        return generate(state, prior);
+        if ((await read(state)) === null) invalid();
+        return generate(state);
       });
     },
     readStage(owner: FirstSetupOwnerAttempt, hold?: FirstSetupHold) {
@@ -220,45 +188,33 @@ export function createFirstSetupNodeKeys(options: Options) {
           !isDeepStrictEqual(stage, await read(state))
         )
           uncertain();
-        // Installation follows the checked fiscal commit; publication retries must keep the delivered pair.
-        // Pack 1 is saved in venue.db first and the key in node.db after it, so an interruption
-        // between them leaves pack 1 with no key, which the next run finishes.
-        await withNodeTransaction(db.node, async (nodeTx) => {
-          const key = await readRecoveryKey(nodeTx, stage.nodeId);
-          const keyStaged = key?.verifier === stage.verifier && key.keyName === stage.name;
-          if (key !== null && !keyStaged) uncertain();
-          await withTransaction(db.venue, async (tx) => {
-            const pack = await readRecoveryPack(tx, stage.nodeId, 1);
-            if (pack !== null) {
-              const named = pack.parts.find((part) => part.part === "server-key")?.keyName;
-              if (named !== stage.name) uncertain();
-              return;
-            }
-            if (keyStaged) uncertain();
-            const at = new Date();
-            await insertRecoveryPack(tx, {
-              nodeId: stage.nodeId,
-              number: 1,
-              madeAt: at,
-              madeBy: null,
-              parts: [
-                { part: "bucket", state: "not-set-up" },
-                { part: "archives", state: "not-set-up" },
-                { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
-              ],
-            });
-            // The first-hour step's Continue confirmed this pack reached the person.
-            await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
-            await insertMasterKey(tx, {
-              name: stage.masterKeyName,
-              checkValue: stage.masterKeyCheckValue,
-              publicKey: Buffer.from(stage.masterKeyPublicKey, "base64"),
-              madeAt: at,
-              madeBy: null,
-            });
+        // Pack 1 and the master key are written in one venue.db transaction, so a publication
+        // retry that finds pack 1 finds this stage's master key with it and writes nothing.
+        await withTransaction(db.venue, async (tx) => {
+          if ((await readRecoveryPack(tx, stage.nodeId, 1)) !== null) {
+            if ((await readCurrentMasterKey(tx))?.name !== stage.masterKeyName) uncertain();
+            return;
+          }
+          const at = new Date();
+          await insertRecoveryPack(tx, {
+            nodeId: stage.nodeId,
+            number: 1,
+            madeAt: at,
+            madeBy: null,
+            parts: [
+              { part: "bucket", state: "not-set-up" },
+              { part: "archives", state: "not-set-up" },
+            ],
           });
-          if (!keyStaged)
-            await setRecoveryKeyTx(nodeTx, stage.nodeId, stage.verifier, stage.name, null);
+          // The first-hour step's Continue confirmed this pack reached the person.
+          await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
+          await insertMasterKey(tx, {
+            name: stage.masterKeyName,
+            checkValue: stage.masterKeyCheckValue,
+            publicKey: Buffer.from(stage.masterKeyPublicKey, "base64"),
+            madeAt: at,
+            madeBy: null,
+          });
         });
       });
     },

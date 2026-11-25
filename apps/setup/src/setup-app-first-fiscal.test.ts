@@ -557,11 +557,6 @@ it("reads back a completed activation after a lost response and offers no second
       if (path.endsWith("/node-key"))
         return Response.json({
           stage: { stageId: "stage", nodeId: initial.nodeId, name: "Olivo key" },
-          key: {
-            nodeId: initial.nodeId,
-            name: "Olivo key",
-            secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-          },
           masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
           masterKeyName: "2026-11-23 · QZJV",
         });

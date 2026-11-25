@@ -4,7 +4,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, expect, it } from "vitest";
-import { verifySecretAsync } from "@waitron/identity";
 import { declaredFirstFiscalFixture } from "../test/declared-first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
@@ -65,17 +64,15 @@ it("reissues through the authenticated setup route while retaining the same froz
   const result = await response.json();
   const stage = await f.host.keys.readStage(f.ownerAttempt);
   expect(result).toEqual({
-    stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
-    key: { nodeId: stage.nodeId, name: stage.name, secret: expect.any(String) },
+    stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.masterKeyName },
     masterKey: expect.stringMatching(/^(?:\S{4} ){6}\S{4}$/),
     masterKeyName: stage.masterKeyName,
   });
   expect(stage.stageId).not.toBe(f.staged.stage.stageId);
-  expect(await verifySecretAsync(result.key.secret, stage.verifier)).toBe(true);
-  expect(await verifySecretAsync(f.staged.key.secret, stage.verifier)).toBe(false);
+  expect(result.masterKey).not.toBe(f.staged.masterKey);
   expect(await f.host.store.read()).toEqual(state);
   expect(JSON.stringify(result)).not.toContain("scrypt$");
-  expect(await readFile(f.keyPath, "utf8")).not.toContain(result.key.secret);
+  expect(await readFile(f.keyPath, "utf8")).not.toContain(result.masterKey);
 });
 it.each([
   "plain HTTP",

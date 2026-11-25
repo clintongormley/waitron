@@ -2,7 +2,7 @@ import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.j
 import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
-import { verifySecretAsync } from "@waitron/identity";
+import { readCurrentMasterKey } from "@waitron/db";
 import { loadKeyRing } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -98,9 +98,8 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
         "https://test.example",
       ),
     persistTrading: async () => {
-      const verifier = await readRecoveryKeyVerifier(suite.node, staged.key.nodeId);
-      expect(verifier).not.toBeNull();
-      expect(await verifySecretAsync(staged.key.secret, verifier!)).toBe(true);
+      expect(await readRecoveryKeyVerifier(suite.node, staged.stage.nodeId)).toBeNull();
+      expect(await readCurrentMasterKey(suite.db)).toMatchObject({ name: staged.masterKeyName });
       publications++;
     },
   };
@@ -126,10 +125,10 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
     counts: () => ({ activations, publications }),
   };
 }
-it("installs the staged named verifier after exact fiscal commit and before trading", async () => {
+it("installs the staged master key and no box key after exact fiscal commit and before trading", async () => {
   const f = await fixture();
   const result = await f.activate();
-  expect(result.nodeId).toBe(f.staged.key.nodeId);
+  expect(result.nodeId).toBe(f.staged.stage.nodeId);
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
   expect(await allocationRows(suite.db)).toHaveLength(1);
 });

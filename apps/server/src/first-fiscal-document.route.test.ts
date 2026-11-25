@@ -85,12 +85,11 @@ describe("hour recovery document route", () => {
     const response = await post("node-key", { reconfirmation });
     expect(response.status).toBe(200);
     const staged = await response.json();
-    expect(staged.key.nodeId).toBe(f.context.binding.targetNodeId);
-    expect(staged.key.secret).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(staged).not.toHaveProperty("key");
     expect(staged.stage).toEqual({
       stageId: expect.any(String),
       nodeId: f.context.binding.targetNodeId,
-      name: staged.key.name,
+      name: staged.masterKeyName,
     });
     expect(JSON.stringify(staged)).not.toContain("scrypt$");
     const reference = {

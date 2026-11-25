@@ -159,7 +159,7 @@ function readManifest(
     !equal(
       contribution.recoveryDocument!(context, contribution.inspect(context, state.inputs[module]), {
         ...manifest,
-        stage: { nodeId: manifest.stage.nodeId, name: manifest.stage.name },
+        stage: { nodeId: manifest.stage.nodeId, name: manifest.stage.masterKeyName },
         identity: {
           taxpayerName: state.frozen.request.legalName,
           venueName: state.frozen.request.name,
@@ -244,7 +244,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
           contribution.inspect(context, state.inputs[supplied.module]),
           {
             ...supplied,
-            stage: { nodeId: stage.nodeId, name: stage.name },
+            stage: { nodeId: stage.nodeId, name: stage.masterKeyName },
             identity: {
               taxpayerName: state.frozen.request.legalName,
               venueName: state.frozen.request.name,

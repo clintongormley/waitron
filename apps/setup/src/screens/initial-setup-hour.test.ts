@@ -26,7 +26,6 @@ async function mount(waiting = false, intercept?: (path: string) => Promise<Resp
       if (path.endsWith("/node-key"))
         return Response.json({
           stage: { stageId: "stage", nodeId: initial.nodeId, name: "key" },
-          key: { nodeId: initial.nodeId, name: "key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
         });
       if (path.endsWith("/reconfirm")) return Response.json({ reconfirmation: "proof" });
       if (path.endsWith("/candidates"))

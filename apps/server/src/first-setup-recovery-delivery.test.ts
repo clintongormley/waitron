@@ -10,7 +10,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
-import { verifySecretAsync } from "@waitron/identity";
+import { readCurrentMasterKey } from "@waitron/db";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -199,7 +199,7 @@ async function documentFixture() {
     taxpayerName: request.legalName,
     venueName: request.name,
     createdAt: "2026-10-16T11:40:00.000Z",
-    nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.masterKeyName },
   };
   const ref = {
     module: MODULE,
@@ -244,7 +244,7 @@ it.each(["scope", "node", "key-name", "taxpayer-name", "venue-name", "secret"])(
     else if (field === "key-name") statement.nodeKey.name = "another-key";
     else if (field === "taxpayer-name") statement.taxpayerName = "Another taxpayer";
     else if (field === "venue-name") statement.venueName = "Another venue";
-    else Object.assign(statement.nodeKey, { secret: f.staged.key.secret });
+    else Object.assign(statement.nodeKey, { secret: f.staged.masterKey });
     await expect(
       f.register({ ...f.ref, bindingDigest: firstFiscalPublicDigest(statement), statement }),
     ).rejects.toMatchObject({
@@ -256,15 +256,14 @@ it.each(["scope", "node", "key-name", "taxpayer-name", "venue-name", "secret"])(
   },
 );
 
-it("kept confirmation installs the delivered verifier once, with only public metadata persisted", async () => {
+it("kept confirmation installs the staged master key and no box key, with only public metadata persisted", async () => {
   const f = await documentFixture();
   await f.register();
   await f.kept();
   await f.activate();
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
-  const verifier = await readRecoveryKeyVerifier(suite.node, f.staged.key.nodeId);
-  expect(verifier).toBe(f.staged.stage.verifier);
-  expect(await verifySecretAsync(f.staged.key.secret, verifier!)).toBe(true);
+  expect(await readRecoveryKeyVerifier(suite.node, f.staged.stage.nodeId)).toBeNull();
+  expect(await readCurrentMasterKey(suite.db)).toMatchObject({ name: f.staged.masterKeyName });
   const database = join(f.venueDir, "venue.db");
   await suite.db.archiveTo(database);
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
@@ -279,7 +278,7 @@ it("kept confirmation installs the delivered verifier once, with only public met
     contents.push(await readFile(join(f.venueDir, "venue.db-wal")));
   for (const bytes of contents) {
     const text = bytes.toString();
-    expect(text).not.toContain(f.staged.key.secret);
+    expect(text).not.toContain(f.staged.masterKey);
     expect(text).not.toContain(PASSWORD);
     expect(text).not.toContain("%PDF-");
   }
@@ -297,7 +296,7 @@ it("the backup state collector carries neither the delivery binding nor a saved 
   await mkdir(join(f.stateDir, "tls"), { recursive: true });
   for (const name of ["secrets.env", "trading.env", "tls/ca.crt", "tls/ca.key", "tls/server.pem"])
     await writeFile(join(f.stateDir, name), `synthetic ${name}`);
-  await writeFile(join(f.stateDir, "saved-recovery.pdf"), `%PDF-1.7\n${f.staged.key.secret}`);
+  await writeFile(join(f.stateDir, "saved-recovery.pdf"), `%PDF-1.7\n${f.staged.masterKey}`);
   const files = await collectStateSecrets(f.stateDir);
   expect(Object.keys(files).sort()).toEqual([
     "secrets.env",
@@ -306,7 +305,7 @@ it("the backup state collector carries neither the delivery binding nor a saved 
     "tls/server.pem",
     "trading.env",
   ]);
-  expect(JSON.stringify(files)).not.toContain(f.staged.key.secret);
+  expect(JSON.stringify(files)).not.toContain(f.staged.masterKey);
   expect(JSON.stringify(files)).not.toContain("%PDF-");
   expect(JSON.stringify(files)).not.toContain("recovery-key-delivery");
 });
@@ -320,7 +319,7 @@ it("a refused secret-bearing API document logs no raw key, password or PDF", asy
   });
   const statement = {
     ...f.statement,
-    nodeKey: { ...f.statement.nodeKey, secret: f.staged.key.secret },
+    nodeKey: { ...f.statement.nodeKey, secret: f.staged.masterKey },
   };
   const response = await app.request("/setup-api/first-setup/recovery-document", {
     method: "POST",
@@ -342,7 +341,7 @@ it("a refused secret-bearing API document logs no raw key, password or PDF", asy
   expect(body).toMatchObject({
     error: { code: "sif.allocation_invalid", params: { reason: "outside_confirmation_missing" } },
   });
-  for (const secret of [f.staged.key.secret, PASSWORD, f.owner.capability, "%PDF-"]) {
+  for (const secret of [f.staged.masterKey, PASSWORD, f.owner.capability, "%PDF-"]) {
     expect(JSON.stringify(events)).not.toContain(secret);
     expect(JSON.stringify(body)).not.toContain(secret);
   }
@@ -536,7 +535,7 @@ it("reissues an unfinished key without another hour selection and requires a new
   );
   const statement = {
     ...f.statement,
-    nodeKey: { nodeId: replacement.key.nodeId, name: replacement.key.name },
+    nodeKey: { nodeId: replacement.stage.nodeId, name: replacement.masterKeyName },
   };
   const reference = {
     ...f.ref,

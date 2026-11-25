@@ -532,20 +532,13 @@ async function publicationFixture() {
   return { ...f, steps, publication, publish, state, checked };
 }
 
-it("publishes only an exact checked commit and installs its retained verifier", async () => {
+it("publishes only an exact checked commit and installs no box key", async () => {
   const f = await publicationFixture();
-  const stage = await f.runtime.keys.readStage(f.owner);
   expect(await venue.node.select().from(box)).toEqual([]);
   await expect(f.publish(f.state, f.checked)).resolves.toEqual(f.checked.venue);
   expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear"]);
   expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect(await venue.node.select().from(box)).toMatchObject([
-    {
-      nodeId: f.checked.venue.nodeId,
-      recoveryKeyVerifier: stage.verifier,
-      recoveryKeyName: stage.name,
-    },
-  ]);
+  expect(await venue.node.select().from(box)).toEqual([]);
 });
 
 it.each(["selection", "identity", "settings", "trading", "clear"])(
@@ -696,7 +689,6 @@ it("retains the caller's legacy key adapter for a module without the recovery-do
 
 it("publication records recovery pack 1, received, for the node it sets up", async () => {
   const f = await publicationFixture();
-  const stage = await f.runtime.keys.readStage(f.owner);
   await f.publish(f.state, f.checked);
   expect(await readRecoveryPacks(venue.db, f.checked.venue.nodeId)).toMatchObject([
     {
@@ -706,7 +698,6 @@ it("publication records recovery pack 1, received, for the node it sets up", asy
       parts: [
         { part: "bucket", state: "not-set-up" },
         { part: "archives", state: "not-set-up" },
-        { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
       ],
     },
   ]);

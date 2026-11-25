@@ -91,7 +91,7 @@ it("requires registration and explicit kept confirmation before issuing one boun
       files.map((p) => readFile(join(f.stateDir, "flows/setup/documents", p), "utf8")),
     )
   ).join("");
-  expect(data).not.toContain(f.staged.key.secret);
+  expect(data).not.toContain(f.staged.masterKey);
   expect(data).not.toContain(f.ownerAttempt.capability);
   expect(data).not.toContain(f.password);
   expect(data).not.toContain("%PDF");
@@ -368,7 +368,7 @@ it.each(["secret", "privateKey", "nodeKeys"])(
     const { createHash } = await import("node:crypto");
     const bytes = Buffer.from(
       JSON.stringify({
-        payload: { [field]: f.staged.key.secret },
+        payload: { [field]: f.staged.masterKey },
         keyId: "a".repeat(64),
         signature: "A".repeat(86),
       }),

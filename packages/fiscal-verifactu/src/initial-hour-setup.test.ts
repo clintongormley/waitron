@@ -90,7 +90,6 @@ it.each(["en", "es"] as const)(
       key: {
         nodeId: "node",
         name: "2026-10-16 · ACRY",
-        secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
       },
       identity: {
         taxpayerName: "Olivo Restauración SL",
@@ -221,7 +220,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
   const saved = fixture();
   vi.setSystemTime(new Date("2026-10-17T12:30:00Z"));
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
-    key: { nodeId: "node", name: "2026-10-17 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    key: { nodeId: "node", name: "2026-10-17 · ACRY" },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     masterKey: made,
     locale: "en",
