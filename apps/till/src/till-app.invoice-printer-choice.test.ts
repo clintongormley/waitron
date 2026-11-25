@@ -286,11 +286,17 @@ it("retries the bill's office print from Transactions and follows its outcome of
 });
 
 it("keeps one invoice print action across the document and printer choices in Bills", async () => {
+  let selected: EquipmentItem | null = null;
+  const confirmation = pending<InvoiceDeliveryStatus>();
   const reads = vi.fn().mockResolvedValue(uncertainA4(null));
   const { el, api } = await findFullInvoice("bills", {
+    getDeviceEquipment: vi.fn(async () => equipment(selected)),
     getInvoiceDeliveries: reads,
     setDeviceEquipment: vi.fn(async () => {
-      reads.mockResolvedValue(uncertainA4(bar));
+      selected = bar;
+      reads
+        .mockRejectedValueOnce(new Error("offer read failed"))
+        .mockReturnValue(confirmation.promise);
       return equipment(bar);
     }),
   });
@@ -301,7 +307,9 @@ it("keeps one invoice print action across the document and printer choices in Bi
   await userEvent.click(part(el, "document-receipt")!);
   expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering");
   expect(part(el, "print-invoice")).toBeNull();
+  const equipmentReads = vi.mocked(api.getDeviceEquipment).mock.calls.length;
   await userEvent.click(part(el, "document-print-toggle")!);
+  expect(api.getDeviceEquipment).toHaveBeenCalledTimes(equipmentReads + 1);
   expect(part(el, "invoice-printer-toggle")?.textContent).toContain("Office · A4");
   expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print it again");
   await userEvent.click(part(el, "document-print-toggle")!);
@@ -312,6 +320,11 @@ it("keeps one invoice print action across the document and printer choices in Bi
   await userEvent.click(part(el, "document-back")!);
   expect(ticket(el).shadowRoot!.querySelector("wt-combobox")).toBeNull();
   await choose(el, bar.id);
+  expect(part(el, "print-invoice")?.hasAttribute("disabled") ?? true).toBe(true);
+  await userEvent.click(part(el, "document-receipt")!);
+  await userEvent.click(part(el, "document-print-toggle")!);
+  expect(part(el, "print-invoice")?.hasAttribute("disabled") ?? true).toBe(true);
+  confirmation.resolve(uncertainA4(bar));
   await vi.waitFor(() =>
     expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print on Bar"),
   );

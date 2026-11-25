@@ -565,12 +565,8 @@ export class TillTicketView extends LitElement {
   }
 
   get #showBillA4Printer(): boolean {
-    if (
-      !this.autoRefreshBillDelivery ||
-      !this.invoicePrintersEnabled ||
-      !this.canPrintReceipt ||
-      this.printDocument === "receipt"
-    )
+    const canPrint = this.invoicePrintersEnabled && this.canPrintReceipt;
+    if (!this.autoRefreshBillDelivery || !canPrint || this.printDocument === "receipt")
       return false;
     const attempt = this.deliveries?.current;
     return (
@@ -616,7 +612,7 @@ export class TillTicketView extends LitElement {
     return html`<wt-button
       variant="secondary"
       data-test="print-invoice"
-      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked}
+      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked || (this.autoRefreshBillDelivery && this.useDeviceInvoicePrinter && printer.id !== this.invoiceEquipment?.resolved?.id)}
       @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
       >${label}</wt-button
     >`;
@@ -1008,9 +1004,10 @@ export class TillTicketView extends LitElement {
     const warning =
       !delivered &&
       !this.#handoverConfirmed &&
-      (uncertain ||
-        failedReceipt ||
+      (this.#mayHaveArrived ||
+        (failedReceipt && !failedButSuperseded) ||
         attempt?.status === "failed" ||
+        attempt?.status === "unknown" ||
         attempt?.printerHold != null ||
         this.originalReceiptReadFailed ||
         this.deliveriesReadFailed ||

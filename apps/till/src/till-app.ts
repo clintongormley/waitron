@@ -10877,8 +10877,6 @@ export class TillApp extends LitElement {
           status != null &&
           (offered === undefined || offered.id === this.invoiceEquipment?.resolved?.id);
         this.invoicePrinterBlocked = !confirmed;
-        if (confirmed && this.#invoicePrinterChoice?.role === "invoice")
-          this.useDeviceInvoicePrinter = this.invoiceEquipment?.resolved != null;
         this.invoicePrinterError = confirmed ? "" : t("invoice.delivery_read_failed");
       }
     } catch {
@@ -10979,7 +10977,10 @@ export class TillApp extends LitElement {
     this.#invoicePrinterSaved = true;
     this.invoicePrinterValue = undefined;
     if (change.role === "receipt") this.invoicePrinterBlocked = false;
-    else await this.#readInvoiceDeliveries(target, session, visit);
+    else {
+      this.useDeviceInvoicePrinter = this.invoiceEquipment?.resolved != null;
+      await this.#readInvoiceDeliveries(target, session, visit);
+    }
     return stored;
   }
 
@@ -11009,6 +11010,7 @@ export class TillApp extends LitElement {
     const printer = invoicePrintDestination(
       this.invoiceDeliveries,
       this.#billFullInvoice && !this.useDeviceInvoicePrinter,
+      this.useDeviceInvoicePrinter ? this.invoiceEquipment?.resolved?.id : undefined,
     );
     if (target === undefined || printer === undefined) return;
     await this.#deliveryAction(target, (requestKey) =>

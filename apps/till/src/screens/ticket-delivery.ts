@@ -49,10 +49,11 @@ export function readTicketInvoiceDelivery(
 export function invoicePrintDestination(
   status: InvoiceDeliveryStatus | null | undefined,
   preferSavedA4: boolean,
+  chosenPrinterId?: string,
 ) {
-  return (
-    (preferSavedA4 ? status?.actions.retryA4 : undefined) ?? status?.actions.print?.printers[0]
-  );
+  const printer =
+    (preferSavedA4 ? status?.actions.retryA4 : undefined) ?? status?.actions.print?.printers[0];
+  return chosenPrinterId === undefined || printer?.id === chosenPrinterId ? printer : undefined;
 }
 
 export function shouldRereadDelivery(

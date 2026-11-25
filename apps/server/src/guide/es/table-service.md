@@ -207,8 +207,8 @@ El ticket se muestra en el idioma en que se emitió. Para una copia en papel, el
 simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
 
-Si una factura completa abierta desde **Cuentas** o **Transacciones** puede haberse impreso,
-revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa **Volver a imprimir**.
+Si una factura completa ligada a una cuenta puede haberse impreso, ábrela desde **Cuentas** o
+**Transacciones** y revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa **Volver a imprimir**.
 La ventana te muestra el resultado. Para enviarla a otra impresora, elige **Impresora de facturas**.
 
 En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
