@@ -558,6 +558,21 @@ test.each(["light", "dark"])(
   },
 );
 
+test("draws the password eye's slash only while the password is shown", async () => {
+  const { field } = await mountPassword();
+  const paths = () => [...field.shadowRoot!.querySelectorAll("wt-button svg path")];
+  expect(paths()).toHaveLength(1);
+
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  await vi.waitFor(() => expect(paths()).toHaveLength(2));
+  const slash = paths()[1]!;
+  expect.soft(slash.namespaceURI).toBe("http://www.w3.org/2000/svg");
+  expect.soft(slash.getBoundingClientRect().width).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Hide password", exact: true }).click();
+  await vi.waitFor(() => expect(paths()).toHaveLength(1));
+});
+
 test("select() selects the whole value of the native input", async () => {
   const el = (await mount(
     '<wt-input value="Bar printer"></wt-input>',
