@@ -364,7 +364,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "config_preview.reconnect_heading": "Qué reconectar después de la configuración",
   "config_preview.no_reconnect": "No hay ningún hardware que reconectar.",
   "config_preview.module.core":
-    "Cartas, productos, cursos, estaciones de preparación, planos de sala, impresoras, perfiles de dispositivo y apariencia",
+    "Cartas, productos, orden de platos, estaciones de preparación, planos de sala, impresoras, perfiles de dispositivo y apariencia",
   "config_preview.module.menu": "Secciones, modificadores y unidades",
   "config_preview.module.venue-service": "Departamentos y zonas, calendario y horario de cartas",
   "config_preview.module.media": "Biblioteca de imágenes",

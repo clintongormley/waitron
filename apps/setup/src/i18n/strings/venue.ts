@@ -360,7 +360,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.staff_language.en": "Inglés",
   "venue.staff_language.es": "Español",
   "venue.staff_language.help":
-    "Los nombres del menú inicial, los pases y los demás elementos iniciales se crean en este idioma. En la demostración, también se usa para los nombres de platos del personal y de las estaciones. Los recibos mantienen su propio idioma.",
+    "Los nombres del menú inicial, los órdenes de plato y los demás elementos iniciales se crean en este idioma. En la demostración, también se usa para los nombres de platos del personal y de las estaciones. Los recibos mantienen su propio idioma.",
   "venue.error.staff_language": "Elige inglés o español.",
   "review.staff_language": "Idioma de trabajo",
   "venue.label.address_line1": "Dirección (línea 1)",
