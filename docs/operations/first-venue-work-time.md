@@ -76,7 +76,7 @@ form one continuous stretch. These warnings do not prevent publishing a rota.
 
 Working-time PDF summaries call the calculated amounts minutes above their daily or period target.
 These figures do not decide whether the excess is overtime or complementary hours. Existing record
-keys and recorded amounts stay the same, including the raw CSV column keys.
+keys and recorded amounts stay the same, including the column keys in the Excel file.
 
 The additive migration was rehearsed on one populated agreement row with `node:sqlite`: its
 original fields survived and the four new fields were null before configuration. No table was

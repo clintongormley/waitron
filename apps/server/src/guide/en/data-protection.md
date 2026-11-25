@@ -298,7 +298,8 @@ working hours the law requires.
   legal representatives and the Labour Inspectorate.
 - How long: four years, which the law sets.
 - Security: Waitron refuses to change or delete an entry once it is written. Each person's copy of
-  their own data includes their working-time record.
+  their own data includes their working-time record as a PDF and an Excel spreadsheet when the
+  Spanish workforce module is enabled.
 
 **Who did what at the till.** Waitron records who rang up sales, who changed orders, who authorised
 voids, who asked for or authorised refunds, and who opened the cash drawer or authorised it.
@@ -323,9 +324,10 @@ details, and Waitron can email them the invoice.
 - Who receives it: the Tax Agency, which receives the customer's name and tax number, but not the
   address, with each invoice record; your email provider, for each invoice you email, which carries
   the invoice as a PDF with the customer's name, tax number and address; and your accountant, when
-  you give them the file of deferred payments from **Sales & takings**, which lists each such
-  invoice's customer name and tax number. **Download for accountant (XLSX)** on the same screen
-  also includes the recorded customer address. Share these files only with the intended recipient.
+  you share the workbook from **Download for accountant (XLSX)** in **Sales & takings**. Its
+  issued-invoices sheet includes the recorded customer name, tax number and address. The deferred
+  payments and refunds sheets can include the name and tax number. Share the workbook only with
+  the intended recipient.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
   keeps every receipt and ticket it sends to a receipt or station printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4

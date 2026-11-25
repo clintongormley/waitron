@@ -257,8 +257,6 @@ export class SalesScreen extends LitElement {
   @state() private printSentTo: string | null = null;
   @state() private printErrorKey: string | null = null;
   @state() private printersErrorKey: string | null = null;
-  @state() private exporting = false;
-  @state() private exportErrorKey: string | null = null;
   @state() private accountantExporting = false;
   @state() private accountantErrorKey: string | null = null;
   @state() private incompleteDates: Readonly<Record<"from" | "to", boolean>> = {
@@ -308,7 +306,6 @@ export class SalesScreen extends LitElement {
         this.to = businessDay;
         this.incompleteDates = { from: false, to: false };
         this.#exportGeneration += 1;
-        this.exportErrorKey = null;
         this.accountantErrorKey = null;
         void this.#load();
         void this.#loadCategories();
@@ -382,28 +379,6 @@ export class SalesScreen extends LitElement {
     }
   }
 
-  async #exportDeferred(): Promise<void> {
-    if (this.exporting || this.#exportBlocked()) return;
-    // The fields stay editable while the file is asked for.
-    const sent = { from: this.from, to: this.to };
-    this.exporting = true;
-    this.exportErrorKey = null;
-    const generation = this.#exportGeneration;
-    try {
-      const file = await this.api.downloadDeferredPayments(sent);
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `deferred-payments-${sent.from}-${sent.to}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      if (generation === this.#exportGeneration) this.exportErrorKey = codeOf(error);
-    } finally {
-      this.exporting = false;
-    }
-  }
-
   async #exportAccountant(): Promise<void> {
     if (!this.canExport || this.accountantExporting || this.#exportBlocked()) return;
     const sent = { from: this.from, to: this.to };
@@ -459,7 +434,6 @@ export class SalesScreen extends LitElement {
     this.#rangeChosen = true;
     this[field] = value;
     this.#exportGeneration += 1;
-    this.exportErrorKey = null;
     this.accountantErrorKey = null;
     void this.#load();
     void this.#loadCategories();
@@ -529,23 +503,6 @@ export class SalesScreen extends LitElement {
           this.accountantErrorKey
             ? html`<p class="error" role="alert" data-test="accountant-error">
                 ${codeMessage(this.accountantErrorKey)}
-              </p>`
-            : nothing
-        }
-      </div>
-      <div class="export">
-        <wt-button
-          variant="secondary"
-          data-test="export-deferred"
-          ?disabled=${this.#exportBlocked()}
-          ?loading=${this.exporting}
-          @click=${() => void this.#exportDeferred()}
-          >${t("sales.export_deferred")}</wt-button
-        >
-        ${
-          this.exportErrorKey
-            ? html`<p class="error" role="alert" data-test="export-error">
-                ${codeMessage(this.exportErrorKey)}
               </p>`
             : nothing
         }

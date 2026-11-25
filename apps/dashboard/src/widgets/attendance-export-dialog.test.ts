@@ -90,7 +90,7 @@ it("uses a detached range and own PDF defaults, sends no roster and revokes the 
   ]);
   expect(revoked).toHaveBeenCalledExactlyOnceWith("blob:record-1");
 });
-it("offers manager Everyone or one person and representatives CSV", async () => {
+it("offers manager Everyone or one person and representatives XLSX", async () => {
   const { el, request, clicked } = await fixture({
     mode: "manager",
     people: [
@@ -102,13 +102,13 @@ it("offers manager Everyone or one person and representatives CSV", async () => 
   expect(field(el, "exportPerson").value).toBe("two");
   await change(el, "exportPerson", "");
   await change(el, "exportAudience", "representatives");
-  await change(el, "exportFormat", "csv");
+  await change(el, "exportFormat", "xlsx");
   await send(el);
   await expect.poll(() => clicked).toHaveLength(1);
   expect(request.mock.calls[1]![0]).toBe(
-    "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
+    "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=xlsx&audience=representatives&locale=en",
   );
-  expect(clicked).toEqual(["time-record-2026-01-01-2026-02-01-representatives.csv"]);
+  expect(clicked).toEqual(["time-record-2026-01-01-2026-02-01-representatives.xlsx"]);
 });
 it("marks every invalid field only after submission and focuses the first, then allows correction", async () => {
   const { el, clicked } = await fixture();
@@ -199,7 +199,7 @@ it.each([
               ? "2027-01-01"
               : kind.includes("Audience")
                 ? "representatives"
-                : "csv",
+                : "xlsx",
         },
         bubbles: true,
         composed: true,

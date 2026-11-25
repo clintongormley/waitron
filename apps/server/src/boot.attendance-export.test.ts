@@ -16,6 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { worksheetRows, worksheetText } from "./testing/xlsx-rows.js";
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
@@ -133,7 +134,7 @@ for (const state of ["provider", "workforce-only"] as const) {
               ...tls?.via,
               headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, "x-waitron-live": "1" },
             });
-          const selection = `from=2020-01-01&before=2026-02-01&format=csv&audience=standard&locale=en`;
+          const selection = `from=2020-01-01&before=2026-02-01&format=xlsx&audience=standard&locale=en`;
           const own = `/management-api/me/attendance/export?${selection}`;
           const manager = `/management-api/attendance/export?${selection}`;
           const optionsPath = "/management-api/me/attendance/export-options";
@@ -147,8 +148,11 @@ for (const state of ["provider", "workforce-only"] as const) {
             const response = await get(own);
             expect(response.status).toBe(state === "provider" ? 200 : 404);
             if (state === "provider") {
-              expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
-              expect(await response.text()).toContain('"totals"');
+              expect(response.headers.get("content-type")).toBe(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              );
+              const sheet = worksheetText(new Uint8Array(await response.arrayBuffer()));
+              expect(worksheetRows(sheet).map(([section]) => section)).toContain("totals");
             } else
               expect(await response.json()).toMatchObject({
                 error: { code: "attendance.invalid", params: { reason: "export_unavailable" } },

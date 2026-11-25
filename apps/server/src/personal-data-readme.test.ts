@@ -337,7 +337,7 @@ Contact $& Bar to ask. Its privacy notice: https://examplebar.example/privacy
     "attendance.json",
     "staff-roles.json",
     "time-record.pdf",
-    "time-record.csv",
+    "time-record.xlsx",
   ];
 
   it("writes every section in English with the workforce and time-record files", () => {
@@ -352,7 +352,7 @@ ${SIGN_IN_LINE}
 - attendance.json: the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, if the box prepared one, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them. Used to keep your working-time record complete.
 - staff-roles.json: the staff roles you can fill, and the area and staff role of each of your shifts that has been given one. Used to plan who covers each area.
 - time-record.pdf: your working-time record at this venue: when you started and finished work, your breaks, every correction and decision, and the closed periods, as the working-time export shows it. Kept as the venue's record of the hours you worked.
-- time-record.csv: the same working-time record as time-record.pdf, as a spreadsheet file. Kept as the venue's record of the hours you worked.
+- time-record.xlsx: the same working-time record as time-record.pdf, as a spreadsheet file. Kept as the venue's record of the hours you worked.
 ${MACHINE}
 
 ${ORIGIN}
@@ -401,7 +401,7 @@ ${ASK}
   it("prints the time record's shared lines once when both its files are present", () => {
     const lines = personalDataReadme({
       ...base,
-      files: ["time-record.pdf", "time-record.csv"],
+      files: ["time-record.pdf", "time-record.xlsx"],
     }).split("\n");
     expect(
       lines.filter((line) =>

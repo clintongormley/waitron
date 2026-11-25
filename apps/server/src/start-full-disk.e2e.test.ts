@@ -827,7 +827,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/zip");
     expect(
-      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.csv"),
+      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.xlsx"),
     ).toBe(true);
     expect(lastSeen()).toBe(before);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs3'`)).toEqual([
@@ -863,7 +863,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("application/zip");
     expect(
-      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.csv"),
+      Object.hasOwn(unzipSync(new Uint8Array(await res.arrayBuffer())), "time-record.xlsx"),
     ).toBe(true);
     expect(lastSeenOf(admin.token)).toBe(at);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs4'`)).toEqual([

@@ -4,9 +4,7 @@ import type { Database } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { civilDateOf } from "@waitron/reporting";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import { decimal } from "@waitron/shared";
-import { csvCell } from "./attendance-export-csv.js";
-import { amountCell } from "./deferred-payment-export.js";
+import { decimal, toScale, type Decimal } from "@waitron/shared";
 import { TAX_OFFICE_EXPORT_WORDS } from "./i18n/tax-office-export.js";
 import { uniquePdfPath } from "./invoice-customer-data.js";
 import { copyOfSale, rememberedReceiptPrinters, type SaleCopy } from "./orders-invoice-pdf.js";
@@ -37,10 +35,18 @@ export interface TaxOfficeExportDeps {
   log: Logger;
 }
 
+function csvCell(value: string): string {
+  // Quoting protects CSV structure; the apostrophe also keeps leading text out of spreadsheet formulas.
+  const text = /^\s*[=+\-@]/u.test(value) || /^\s*[\t\r]/u.test(value) ? `'${value}` : value;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function amountCell(value: Decimal, language: "en" | "es"): string {
+  return rateCell(toScale(value, 2), language);
+}
+
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
-/** A rate as `amountCell` writes an amount, at its own scale; anything that is not a plain decimal
- * goes through the shared cell's formula guard. */
 function rateCell(text: string, language: "en" | "es"): string {
   if (!DECIMAL.test(text)) return csvCell(text);
   return `"${language === "es" ? text.replace(".", ",") : text}"`;

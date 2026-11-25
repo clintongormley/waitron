@@ -31,7 +31,7 @@ interface Draft {
   before: string;
   personId: string;
   audience: "standard" | "representatives";
-  format: "pdf" | "csv";
+  format: AttendanceExportSelection["format"];
 }
 function validDate(value: string): boolean {
   const instant = Date.parse(`${value}T00:00:00Z`);
@@ -224,7 +224,7 @@ export class AttendanceExportDialog extends LitElement {
       errors.personId = t("attendance_export.invalid_person");
     if (this.draft.audience !== "standard" && this.draft.audience !== "representatives")
       errors.audience = t("attendance_export.invalid_choice");
-    if (this.draft.format !== "pdf" && this.draft.format !== "csv")
+    if (this.draft.format !== "pdf" && this.draft.format !== "xlsx")
       errors.format = t("attendance_export.invalid_choice");
     return errors;
   }
@@ -377,7 +377,7 @@ export class AttendanceExportDialog extends LitElement {
                 .value=${this.draft.format}
                 .options=${[
                   { value: "pdf", label: "PDF" },
-                  { value: "csv", label: "CSV" },
+                  { value: "xlsx", label: "Excel (XLSX)" },
                 ]}
                 .error=${errors.format ?? ""}
                 ?disabled=${this.busy}

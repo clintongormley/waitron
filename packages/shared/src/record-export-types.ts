@@ -1,6 +1,6 @@
 export type RecordExportValue = string | number | boolean | null;
 export type RecordExportAudience = "standard" | "representatives";
-export type RecordExportFormat = "pdf" | "csv";
+export type RecordExportFormat = "pdf" | "xlsx";
 export interface RecordExportInput {
   personId?: string;
   period: { start: string; end: string };

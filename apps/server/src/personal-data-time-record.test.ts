@@ -1,6 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { unzipSync } from "fflate";
+import { worksheetText } from "./testing/xlsx-rows.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -111,8 +112,8 @@ function named(list: readonly PersonalDataFile[], name: string) {
   if (file === undefined) throw new Error(`no ${name}`);
   return file.content;
 }
-const csvBytes = (list: readonly PersonalDataFile[]) => {
-  const content = named(list, "time-record.csv");
+const xlsxBytes = (list: readonly PersonalDataFile[]) => {
+  const content = named(list, "time-record.xlsx");
   return typeof content === "string" ? new TextEncoder().encode(content) : new Uint8Array(content);
 };
 const text = (content: string | Uint8Array) =>
@@ -127,7 +128,7 @@ async function existingExport(from: string, before: string, locale: "en" | "es")
   const query = new URLSearchParams({
     from,
     before,
-    format: "csv",
+    format: "xlsx",
     audience: "standard",
     locale,
   });
@@ -157,18 +158,18 @@ async function pdfText(content: string | Uint8Array) {
 
 describe("the server's working-time part", () => {
   it("declares the two time-record files under the owner server", () => {
-    expect(TIME_RECORD_FILES).toEqual(["time-record.pdf", "time-record.csv"]);
+    expect(TIME_RECORD_FILES).toEqual(["time-record.pdf", "time-record.xlsx"]);
     const parts = timeRecordPersonalData(ALL_MODULES);
     expect(parts.map((p) => [p.owner, p.part.files])).toEqual([["server", TIME_RECORD_FILES]]);
   });
 
-  it("gives the same bytes as the existing own export, in either language", async () => {
+  it("gives the same workbook parts as the existing own export, in either language", async () => {
     for (const language of ["en", "es"] as const) {
       const built = await files({ language });
-      expect(built.map((f) => f.name)).toEqual(["time-record.pdf", "time-record.csv"]);
-      const csv = csvBytes(built);
-      expect(csv.subarray(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));
-      expect(csv).toEqual(await existingExport(START, END, language));
+      expect(built.map((f) => f.name)).toEqual(["time-record.pdf", "time-record.xlsx"]);
+      const xlsx = xlsxBytes(built);
+      expect(worksheetText(xlsx)).toContain("Martha Lewis");
+      expect(unzipSync(xlsx)).toEqual(unzipSync(await existingExport(START, END, language)));
       const pdf = named(built, "time-record.pdf");
       expect(pdf).toBeInstanceOf(Uint8Array);
       expect(text(pdf).startsWith("%PDF-")).toBe(true);
@@ -176,26 +177,27 @@ describe("the server's working-time part", () => {
   });
 
   it("starts at her first local day and ends the day after her last entry", async () => {
-    const csv = csvBytes(await files());
-    expect(csv).toEqual(await existingExport("2026-01-01", END, "en"));
-    expect(csv).not.toEqual(await existingExport("2026-01-02", END, "en"));
-    expect(csv).not.toEqual(await existingExport(START, "2026-03-20", "en"));
-    expect(csv).not.toEqual(await existingExport("2025-12-15", END, "en"));
-    expect(text(csv)).toContain("2026-03-20");
+    const xlsx = unzipSync(xlsxBytes(await files()));
+    expect(xlsx).toEqual(unzipSync(await existingExport("2026-01-01", END, "en")));
+    expect(xlsx).not.toEqual(unzipSync(await existingExport("2026-01-02", END, "en")));
+    expect(xlsx).not.toEqual(unzipSync(await existingExport(START, "2026-03-20", "en")));
+    expect(xlsx).not.toEqual(unzipSync(await existingExport("2025-12-15", END, "en")));
+    expect(text(xlsx["xl/worksheets/sheet1.xml"]!)).toContain("2026-03-20");
   });
 
   it("runs to the day after the venue's date when that is later than her last entry", async () => {
-    const csv = csvBytes(await files({ at: new Date("2026-05-01T12:00:00Z") }));
-    expect(csv).toEqual(await existingExport(START, "2026-05-02", "en"));
-    expect(csv).not.toEqual(await existingExport(START, END, "en"));
+    const xlsx = unzipSync(xlsxBytes(await files({ at: new Date("2026-05-01T12:00:00Z") })));
+    expect(xlsx).toEqual(unzipSync(await existingExport(START, "2026-05-02", "en")));
+    expect(xlsx).not.toEqual(unzipSync(await existingExport(START, END, "en")));
   });
 
   it("holds only her record", async () => {
     const built = await files();
-    const csv = text(named(built, "time-record.csv"));
+    const sheet = worksheetText(xlsxBytes(built));
+    expect(sheet).toContain("Martha Lewis");
     const pdf = await pdfText(named(built, "time-record.pdf"));
     expect(pdf).toContain("Martha Lewis");
-    for (const content of [csv, pdf]) {
+    for (const content of [sheet, pdf]) {
       expect(content).not.toContain(COLLEAGUE_NAME);
       expect(content).not.toContain(colleagueId);
       expect(content).not.toContain("10:07");
@@ -262,7 +264,7 @@ it.each([false, true])(
     });
     expect(response.status).toBe(200);
     const archive = unzipSync(new Uint8Array(await response.arrayBuffer()));
-    expect(!!archive["time-record.csv"]).toBe(enabled);
+    expect(!!archive["time-record.xlsx"]).toBe(enabled);
     const payload = text(archive["clock-entries.json"]!);
     const { entries } = JSON.parse(payload);
     expect(entries).toHaveLength(7);

@@ -25,7 +25,7 @@ export function parseAttendanceExportQuery(
     before = requirePeriod(query.get("before"), "before");
   if (from >= before) invalid("range");
   const format = query.get("format");
-  if (format !== "csv" && format !== "pdf") invalid("format");
+  if (format !== "xlsx" && format !== "pdf") invalid("format");
   const audience = query.get("audience");
   if (audience !== "standard" && audience !== "representatives") invalid("audience");
   const locale = query.get("locale");

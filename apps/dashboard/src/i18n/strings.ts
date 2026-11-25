@@ -3220,10 +3220,9 @@ export const en = {
     "Gross total incomplete: 1 line recorded before classification began",
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
-  "sales.export_deferred": "Export deferred payments (CSV)",
   "sales.export_accountant": "Download for accountant (XLSX)",
   "sales.accountant_dates":
-    "Issued invoices and recorded purchases for your accountant. From and To include both calendar dates, regardless of the trading-day cut-off. An invoice issued after its sale day is listed under that day.",
+    "From and To include both dates. Deferred payments use the trading day the bill was closed. The other sheets use calendar dates. Invoices issued later are listed under the sale date.",
   "sales.drawer_history": "Drawer close history",
   "sales.drawer_filter": "Drawer",
   "sales.drawer_all": "All drawers",
@@ -8075,10 +8074,9 @@ export const es: Record<StringKey, string> = {
     "Total bruto incompleto: 1 línea registrada antes de que empezara la clasificación",
   "sales.printer": "Impresora",
   "sales.print_categories": "Imprimir ventas por categoría",
-  "sales.export_deferred": "Exportar pagos aplazados (CSV)",
   "sales.export_accountant": "Descargar para tu gestor (XLSX)",
   "sales.accountant_dates":
-    "Facturas emitidas y compras registradas para tu gestor. Desde y Hasta incluyen ambas fechas naturales, independientemente de la hora de cierre del día de trabajo. Una factura expedida después del día de la operación figura en ese día.",
+    "Desde y Hasta incluyen ambas fechas. Los pagos aplazados usan la jornada en que se cerró la cuenta. Las demás hojas usan fechas del calendario. Si la factura se expidió más tarde, se usa la fecha de la venta.",
   "sales.drawer_history": "Historial de cierres de caja",
   "sales.drawer_filter": "Cajón",
   "sales.drawer_all": "Todos los cajones",

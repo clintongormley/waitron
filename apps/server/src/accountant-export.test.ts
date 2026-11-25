@@ -55,7 +55,7 @@ import {
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
-import { row } from "./testing/xlsx-rows.js";
+import { row, sheetNamed } from "./testing/xlsx-rows.js";
 import type { Cell } from "./xlsx-workbook.js";
 
 const invoice = {
@@ -108,6 +108,36 @@ const purchase = {
 };
 
 describe("accountant workbook", () => {
+  it("includes the deferred-payment headings in an empty period", async () => {
+    const data = {
+      invoices: [],
+      purchases: [],
+      outsidePayments: [],
+      refundsWithoutCorrective: [],
+      deferredPayments: [],
+    };
+    const files = unzipSync(await renderAccountantWorkbook(data, "en"));
+    const sheet = sheetNamed(files, "Deferred payments");
+    expect(sheet).toBeDefined();
+    expect(row(sheet!, 1)).toEqual([
+      "An invoice can also appear on the Issued invoices sheet. Count each invoice once. The correctives total is for reference.",
+    ]);
+    expect(row(sheet!, 2)).toEqual([
+      "Invoice number",
+      "Type",
+      "Issue date",
+      "Closed on",
+      "Customer",
+      "Customer tax number",
+      "Base (EUR)",
+      "VAT (EUR)",
+      "Total (EUR)",
+      "Corrected by",
+      "Correctives total (EUR)",
+      "Replaced by",
+    ]);
+    expect(row(sheet!, 3)).toEqual([]);
+  });
   it.each([
     ["en", "other", "Paid outside Waitron"],
     ["es", "other", "Cobrado fuera de Waitron"],
@@ -138,6 +168,7 @@ describe("accountant workbook", () => {
                 state: "partially_refunded",
               },
             ],
+            deferredPayments: [],
             refundsWithoutCorrective: [],
           },
           language,
@@ -181,6 +212,7 @@ describe("accountant workbook", () => {
           invoices: Array.from({ length: 10_000 }, () => invoice),
           purchases: [],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [],
         },
         "en",
@@ -200,6 +232,7 @@ describe("accountant workbook", () => {
           invoices: [{ ...invoice, vatBreakdown: [], total: decimal("0.00") }],
           purchases: [],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [],
         },
         "en",
@@ -210,16 +243,22 @@ describe("accountant workbook", () => {
     expect(cells.slice(11, 15)).toEqual(["", "", "", "0.00"]);
   });
   it.each(["en", "es"] as const)(
-    "opens four header-only sheets when the period is empty (%s)",
+    "opens five sheets with headings when the period is empty (%s)",
     async (language) => {
       const bytes = await renderAccountantWorkbook(
-        { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+        {
+          invoices: [],
+          purchases: [],
+          outsidePayments: [],
+          refundsWithoutCorrective: [],
+          deferredPayments: [],
+        },
         language,
       );
       expect([...bytes.subarray(0, 4)]).toEqual([80, 75, 3, 4]);
       const files = unzipSync(bytes);
       const workbook = strFromU8(files["xl/workbook.xml"]!);
-      expect(workbook.match(/<sheet /g)).toHaveLength(4);
+      expect(workbook.match(/<sheet /g)).toHaveLength(5);
       expect(workbook).toContain(
         language === "en"
           ? 'name="Issued invoices"'
@@ -247,7 +286,13 @@ describe("accountant workbook", () => {
       const workbook = strFromU8(
         unzipSync(
           await renderAccountantWorkbook(
-            { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+            {
+              invoices: [],
+              purchases: [],
+              outsidePayments: [],
+              refundsWithoutCorrective: [],
+              deferredPayments: [],
+            },
             language,
           ),
         )["xl/workbook.xml"]!,
@@ -260,7 +305,7 @@ describe("accountant workbook", () => {
           .replaceAll("&apos;", "'")
           .replaceAll("&amp;", "&"),
       );
-      expect(names).toHaveLength(4);
+      expect(names).toHaveLength(5);
       for (const name of names) expect(name.length, name).toBeLessThanOrEqual(31);
     },
   );
@@ -271,7 +316,13 @@ describe("accountant workbook", () => {
         strFromU8(
           unzipSync(
             await renderAccountantWorkbook(
-              { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+              {
+                invoices: [],
+                purchases: [],
+                outsidePayments: [],
+                refundsWithoutCorrective: [],
+                deferredPayments: [],
+              },
               language,
             ),
           )["xl/worksheets/sheet1.xml"]!,
@@ -357,6 +408,7 @@ describe("accountant workbook", () => {
           ],
           purchases: [],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [],
         },
         "en",
@@ -456,6 +508,7 @@ describe("accountant workbook", () => {
             ],
             purchases: [],
             outsidePayments: [],
+            deferredPayments: [],
             refundsWithoutCorrective: [],
           },
           language,
@@ -511,6 +564,7 @@ describe("accountant workbook", () => {
             ],
             purchases: [],
             outsidePayments: [],
+            deferredPayments: [],
             refundsWithoutCorrective: [],
           },
           language,
@@ -527,6 +581,7 @@ describe("accountant workbook", () => {
         {
           invoices: [],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [],
           purchases: [
             purchase,
@@ -584,6 +639,7 @@ describe("accountant workbook", () => {
             },
           ],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [],
           purchases: [
             {
@@ -780,6 +836,7 @@ describe("accountant period selection", () => {
       invoices: [],
       purchases: [],
       outsidePayments: [],
+      deferredPayments: [],
       refundsWithoutCorrective: [],
     });
   });
@@ -1483,6 +1540,7 @@ describe("refunds without a corrective invoice", () => {
           invoices: [],
           purchases: [],
           outsidePayments: [],
+          deferredPayments: [],
           refundsWithoutCorrective: [
             { ...refund, id: "refund-1", vat: [] },
             {
@@ -1688,6 +1746,7 @@ describe("refunds without a corrective invoice", () => {
             invoices: [],
             purchases: [],
             outsidePayments: [],
+            deferredPayments: [],
             refundsWithoutCorrective: [
               {
                 id: "refund-1",

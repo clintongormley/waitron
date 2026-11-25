@@ -62,13 +62,20 @@ describe("renderWorkbook", () => {
       await renderWorkbook([
         {
           name: "Numbers",
-          rows: [[{ number: decimal("0.125"), places: 3 }, { number: decimal("1.50") }]],
+          rows: [
+            [
+              { number: decimal("0.125"), places: 3 },
+              { number: decimal("1.50") },
+              { number: decimal("60"), places: 0 },
+            ],
+          ],
         },
       ]),
     );
     const sheet = strFromU8(files["xl/worksheets/sheet1.xml"]!);
     expect(sheet).toContain('<c r="A1" t="n" s="2"><v>0.125</v></c>');
     expect(sheet).toContain('<c r="B1" t="n" s="1"><v>1.50</v></c>');
+    expect(sheet).toContain('<c r="C1" t="n" s="0"><v>60</v></c>');
     const styles = strFromU8(files["xl/styles.xml"]!);
     expect(styles).toContain('<numFmt numFmtId="164" formatCode="0.000"/>');
     const formats = [...styles.matchAll(/<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/g)][0]!;

@@ -9,16 +9,8 @@ import {
 } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { centsToDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
-import { csvCell } from "./attendance-export-csv.js";
+import { numeric, type WorkbookSheet } from "./xlsx-workbook.js";
 import { DEFERRED_PAYMENT_EXPORT_WORDS } from "./i18n/deferred-payment-export.js";
-
-/** Written without the shared cell's formula guard, and with the decimal mark of the file's
- * language, so a negative amount stays a number in a spreadsheet set to that language; the text is
- * digits, a sign and a decimal mark, so it needs no escaping. */
-export function amountCell(value: Decimal, language: "en" | "es"): string {
-  const text = toScale(value, 2);
-  return `"${language === "es" ? text.replace(".", ",") : text}"`;
-}
 
 export interface DeferredPaymentInvoice {
   invoiceNumber: string;
@@ -129,51 +121,30 @@ export async function listDeferredPaymentInvoices(
   });
 }
 
-function dayCell(isoDay: string): string {
-  const [year, month, day] = isoDay.split("-");
-  return csvCell(`${day}/${month}/${year}`);
-}
-
-export function renderDeferredPaymentCsv(
+export function deferredPaymentsSheet(
   rows: readonly DeferredPaymentInvoice[],
   language: "en" | "es",
-): Uint8Array<ArrayBuffer> {
-  const w = DEFERRED_PAYMENT_EXPORT_WORDS[language];
-  const lines = [
-    [
-      w.invoiceNumber,
-      w.invoiceType,
-      w.issueDate,
-      w.closedOn,
-      w.recipientName,
-      w.recipientTaxId,
-      w.base,
-      w.vat,
-      w.total,
-      w.correctedBy,
-      w.correctionsTotal,
-      w.replacedBy,
-    ]
-      .map(csvCell)
-      .join(","),
-  ];
-  for (const row of rows) {
-    lines.push(
-      [
-        csvCell(row.invoiceNumber),
-        csvCell(row.invoiceType),
-        dayCell(row.issueDate),
-        dayCell(row.closedOn),
-        csvCell(row.recipientName ?? ""),
-        csvCell(row.recipientTaxId ?? ""),
-        amountCell(row.base, language),
-        amountCell(row.vat, language),
-        amountCell(row.total, language),
-        csvCell(row.correctedBy.join(" ")),
-        amountCell(row.correctionsTotal, language),
-        csvCell(row.replacedBy ?? ""),
-      ].join(","),
-    );
-  }
-  return new TextEncoder().encode(`\uFEFF${lines.join("\r\n")}\r\n`);
+): WorkbookSheet {
+  const { sheet, note, ...columns } = DEFERRED_PAYMENT_EXPORT_WORDS[language];
+  return {
+    name: sheet,
+    rows: [
+      [note],
+      Object.values(columns),
+      ...rows.map((row) => [
+        row.invoiceNumber,
+        row.invoiceType,
+        row.issueDate,
+        row.closedOn,
+        row.recipientName,
+        row.recipientTaxId,
+        numeric(row.base),
+        numeric(row.vat),
+        numeric(row.total),
+        row.correctedBy.join(" "),
+        numeric(row.correctionsTotal),
+        row.replacedBy,
+      ]),
+    ],
+  };
 }

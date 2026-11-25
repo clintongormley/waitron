@@ -19,7 +19,7 @@ The final policy and any additional required format remain the advisor's decisio
 ## Payroll export and unused scheduling tables
 
 Ask the gestoría which payroll package and import format it accepts before building a payroll export.
-Keep that separate from the working-time PDF/CSV. Build shift-template and availability features as separate scheduling work.
+Keep that separate from the working-time PDF and Excel exports. Build shift-template and availability features as separate scheduling work.
 
 ## Pay-period changes after closure
 
@@ -257,7 +257,7 @@ A manager's proposed time takes effect after worker acceptance; a disagreement k
 Pay periods default to monthly, and a closed period keeps its frozen record alongside later changes.
 
 You can download your own record from My Schedule → Hours. Team → Hours offers a manager PDF or
-CSV for Everyone or one person when you hold `report.export`. The displayed period supplies the
+Excel for Everyone or one person when you hold `report.export`. The displayed period supplies the
 initial dates; From is included and Before is excluded, and you can choose another valid range.
 PDF and the standard version are the defaults. Export uses the enabled provider; it neither closes
 a period nor appends attendance entries. The snapshot captures complete scoped history before

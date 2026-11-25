@@ -83,7 +83,7 @@ const FILES = [
   "clock-entries.json",
   "staff-roles.json",
   "time-record.pdf",
-  "time-record.csv",
+  "time-record.xlsx",
   "actions.json",
   "staff-actions.json",
 ];
@@ -156,7 +156,7 @@ const MARTHA_VALUES: [file: string, value: string][] = [
   ["staff-roles.json", '"name": "Bartender"'],
   ["staff-roles.json", '"staffRole": "Barback"'],
   ["staff-roles.json", "Rooftop bar"],
-  ["time-record.csv", "2026-03-03T00:30:00+01:00"],
+  ["time-record.xlsx", "2026-03-03T00:30:00+01:00"],
   ["actions.json", `"sale": "TA/41"`],
   ["actions.json", '"amount": "24.68"'],
   ["actions.json", MARTHA_ACTIONS.voidedAt],
@@ -716,7 +716,7 @@ async function existingExport(locale: "en" | "es"): Promise<Uint8Array> {
   const query = new URLSearchParams({
     from: FIRST_DAY,
     before: BEFORE,
-    format: "csv",
+    format: "xlsx",
     audience: "standard",
     locale,
   });
@@ -744,12 +744,18 @@ async function pdfText(data: Uint8Array): Promise<string> {
   }
 }
 
-/** Each file as text; the PDF as its raw bytes and the text a reader extracts from it. */
+/** Each file as text; also unpack the PDF and workbook. */
 async function readable(files: Record<string, Uint8Array>): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const [name, data] of Object.entries(files)) {
     const raw = new TextDecoder().decode(data);
-    out[name] = name.endsWith(".pdf") ? `${raw}\n${await pdfText(data)}` : raw;
+    if (name.endsWith(".xlsx")) {
+      out[name] = Object.values(unzipSync(data))
+        .map((part) => new TextDecoder().decode(part))
+        .join("\n");
+    } else {
+      out[name] = name.endsWith(".pdf") ? `${raw}\n${await pdfText(data)}` : raw;
+    }
   }
   return out;
 }
@@ -891,7 +897,7 @@ describe("a staff member's whole personal-data download", () => {
     ]);
 
     expect(text["README.txt"]).toBe(readme("en"));
-    expect(files["time-record.csv"]).toEqual(await existingExport("en"));
+    expect(unzipSync(files["time-record.xlsx"]!)).toEqual(unzipSync(await existingExport("en")));
   });
 
   it("carries no secret anywhere in the download", async () => {
@@ -975,7 +981,7 @@ describe("a staff member's whole personal-data download", () => {
     const files = await download();
     expect(new TextDecoder().decode(files["README.txt"])).toBe(readme("es"));
     const spanish = await existingExport("es");
-    expect(files["time-record.csv"]).toEqual(spanish);
-    expect(spanish).not.toEqual(await existingExport("en"));
+    expect(unzipSync(files["time-record.xlsx"]!)).toEqual(unzipSync(spanish));
+    expect(unzipSync(spanish)).not.toEqual(unzipSync(await existingExport("en")));
   });
 });

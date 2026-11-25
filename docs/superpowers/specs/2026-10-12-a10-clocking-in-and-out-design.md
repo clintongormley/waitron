@@ -141,6 +141,8 @@ person with no email address sees only the till question.
 
 ## Export and access
 
+Update 2026-11-25: the [Excel downloads](../plans/2026-11-25-i-accountant-xlsx.md) replace the CSV format below.
+
 - The dashboard exports any date range, for everyone or one person, as a readable PDF and a CSV, with
   the fields the record needs (from `exportTimeRecord`, `packages/workforce-es/src/registro-jornada.ts`)
   and, per entry, who made it and whether it is automatic, confirmed by the worker, self-approved, corrected or disputed.

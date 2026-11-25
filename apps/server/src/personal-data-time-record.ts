@@ -8,10 +8,10 @@ import {
 import { civilDateOf } from "@waitron/reporting";
 import { addDays } from "@waitron/venue-service";
 import { timeEntries } from "@waitron/workforce";
-import { renderAttendanceCsv } from "./attendance-export-csv.js";
+import { renderAttendanceXlsx } from "./attendance-export-xlsx.js";
 import { renderAttendancePdf } from "./attendance-export-pdf.js";
 
-export const TIME_RECORD_FILES = ["time-record.pdf", "time-record.csv"] as const;
+export const TIME_RECORD_FILES = ["time-record.pdf", "time-record.xlsx"] as const;
 
 /** The person's working-time record at the venue, through the same export seat and the
  * same call the own-export route makes. Empty unless `workforce` (whose tables the exporter reads)
@@ -42,7 +42,7 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
         const document = await format();
         return [
           { name: "time-record.pdf", content: await renderAttendancePdf(document) },
-          { name: "time-record.csv", content: renderAttendanceCsv(document) },
+          { name: "time-record.xlsx", content: await renderAttendanceXlsx(document) },
         ];
       };
     },
