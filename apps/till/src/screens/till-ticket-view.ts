@@ -161,10 +161,11 @@ export class TillTicketView extends LitElement {
     css`
       :host {
         display: block;
-        padding-inline: max(
-          var(--wt-space-4),
-          (min(100%, var(--wt-modal-compact-width)) - var(--wt-till-ticket-column-width)) / 2
-        );
+      }
+      @media (max-width: 480px) {
+        :host([auto-refresh-bill-delivery]) {
+          padding-inline: max(var(--wt-space-4), (100% - var(--wt-till-ticket-column-width)) / 2);
+        }
       }
 
       .ticket {
@@ -361,7 +362,8 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) simulatedCardPayment = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
-  @property({ type: Boolean }) autoRefreshBillDelivery = false;
+  @property({ type: Boolean, attribute: "auto-refresh-bill-delivery", reflect: true })
+  autoRefreshBillDelivery = false;
   @property({ type: Boolean }) useDeviceInvoicePrinter = false;
   @property({ type: Boolean }) receiptCopiesOnly = false;
   @property({ type: Boolean }) refundable = false;
@@ -596,6 +598,7 @@ export class TillTicketView extends LitElement {
       ? invoicePrintDestination(status, saved !== undefined)
       : undefined;
     if (!printer) return nothing;
+    const chosen = this.useDeviceInvoicePrinter ? this.invoiceEquipment?.resolved?.id : undefined;
     const label = saved
       ? t("invoice.print_it_again")
       : fill(
@@ -612,7 +615,7 @@ export class TillTicketView extends LitElement {
     return html`<wt-button
       variant="secondary"
       data-test="print-invoice"
-      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked || (this.autoRefreshBillDelivery && this.useDeviceInvoicePrinter && printer.id !== this.invoiceEquipment?.resolved?.id)}
+      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked || (chosen !== undefined && printer.id !== chosen)}
       @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
       >${label}</wt-button
     >`;

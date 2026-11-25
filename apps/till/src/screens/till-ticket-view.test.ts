@@ -881,6 +881,11 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     el.requestUpdate();
     await el.updateComplete;
     expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
+    el.invoicePrinterBlocked = false;
+    el.useDeviceInvoicePrinter = true;
+    el.invoiceEquipment = roleOf("invoice", equipmentItem("bar", "Bar", { kind: "receipt" }), []);
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
   });
 
   it.each([

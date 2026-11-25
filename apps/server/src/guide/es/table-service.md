@@ -208,8 +208,8 @@ simplificada muestra directamente sus impresoras de recibos. Ambas versiones de 
 completa conservan los datos del cliente registrados.
 
 Si una factura completa ligada a una cuenta puede haberse impreso, ábrela desde **Cuentas** o
-**Transacciones** y revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa **Volver a imprimir**.
-La ventana te muestra el resultado. Para enviarla a otra impresora, elige **Impresora de facturas**.
+**Transacciones** y revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa
+**Volver a imprimir**. La ventana te muestra el resultado. Para enviarla a otra impresora, elige **Impresora de facturas**.
 
 En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
 reenviar una factura completa.
