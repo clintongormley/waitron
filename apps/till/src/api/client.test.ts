@@ -1008,8 +1008,7 @@ describe("TillApi", () => {
         structure: { members: [] },
         home: {
           shortcuts: [],
-          handheld: { columns: 3, tiles: "colours" as const, order: "home_first" as const },
-          till: { columns: 6, tiles: "colours" as const, order: "home_first" as const },
+          order: "home_first",
         },
       })),
       offers: [

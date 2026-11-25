@@ -10,12 +10,7 @@ export async function storedMenuParts(tx: Database | Transaction, menuId?: strin
       menuId: menus.id,
       rootSectionId: root.id,
       homeSectionId: home.id,
-      handheldColumns: menus.handheldColumns,
-      handheldTiles: menus.handheldTiles,
-      handheldOrder: menus.handheldOrder,
-      tillColumns: menus.tillColumns,
-      tillTiles: menus.tillTiles,
-      tillOrder: menus.tillOrder,
+      homeOrder: menus.homeOrder,
     })
     .from(menus)
     .innerJoin(root, and(eq(root.ownerMenuId, menus.id), eq(root.role, "menu_root")))

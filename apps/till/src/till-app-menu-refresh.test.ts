@@ -33,7 +33,7 @@ import type {
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).
@@ -183,8 +183,7 @@ function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
         },
         home: {
           shortcuts: [],
-          handheld: HOME_DISPLAY_DEFAULTS.handheld,
-          till: HOME_DISPLAY_DEFAULTS.till,
+          order: DEFAULT_HOME_ORDER,
         },
       },
     ],

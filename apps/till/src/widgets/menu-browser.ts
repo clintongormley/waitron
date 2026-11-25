@@ -37,7 +37,6 @@ import {
   searchFor,
   type NameSearch,
   HOME_GRID_COLUMNS,
-  HOME_DISPLAY_DEFAULTS,
   arrangeHome,
   indexDocument,
   openedSection,
@@ -49,7 +48,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
-import type { DocumentMember, DocumentTile, HomeDisplay } from "@waitron/shared";
+import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -282,10 +281,6 @@ export class TillMenuBrowser extends LitElement {
         grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
       }
 
-      .grid[data-device="handheld"] {
-        --home-tile-min: calc(var(--wt-tap-min) * 1.5);
-      }
-
       .section-kind {
         ${visuallyHiddenStyles}
       }
@@ -481,9 +476,6 @@ export class TillMenuBrowser extends LitElement {
 
   /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
   @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
-
-  /** Whether it shows the menu's Handheld display rather than its Till one. */
-  @property({ type: Boolean }) handheld = false;
 
   /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
    * pay widget does not take the dish. */
@@ -879,18 +871,8 @@ export class TillMenuBrowser extends LitElement {
     return descriptionFor(section.names, section.internalName);
   }
 
-  #display(menu: TillZoneMenu): HomeDisplay {
-    return menu.home[this.handheld ? "handheld" : "till"];
-  }
-
-  #grid(content: unknown, display: HomeDisplay): TemplateResult {
-    return html`<div
-      class="grid"
-      data-device=${this.handheld ? "handheld" : "till"}
-      style=${`--columns: ${display.columns};`}
-    >
-      ${content}
-    </div>`;
+  #grid(content: unknown): TemplateResult {
+    return html`<div class="grid">${content}</div>`;
   }
 
   #productMatches(index: MenuIndex, search: NameSearch): TillProduct[] {
@@ -1106,7 +1088,7 @@ export class TillMenuBrowser extends LitElement {
     return list.map((member, place) => this.#tile(member, opens[place]!, index));
   }
 
-  #home(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
+  #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
     const shortcuts = menu.home.shortcuts.map((tile) =>
       this.#tile(
         tile,
@@ -1121,7 +1103,7 @@ export class TillMenuBrowser extends LitElement {
     );
     if (this.#heldMenuFolders().length > 0) members.push(this.#setMenuTile(undefined, true));
     const { blocks, divider } = arrangeHome(
-      display.order,
+      menu.home.order,
       shortcuts.some((cell) => cell !== nothing),
       members.some((cell) => cell !== nothing),
     );
@@ -1137,15 +1119,13 @@ export class TillMenuBrowser extends LitElement {
       return place === 1 && divider
         ? html`<section data-region=${region} aria-labelledby=${`${region}-divider`}>
             <h2 class="divider" id=${`${region}-divider`}><span>${label}</span></h2>
-            ${this.#grid(cells, display)}
+            ${this.#grid(cells)}
           </section>`
-        : html`<section data-region=${region} aria-label=${label}>
-            ${this.#grid(cells, display)}
-          </section>`;
+        : html`<section data-region=${region} aria-label=${label}>${this.#grid(cells)}</section>`;
     })}`;
   }
 
-  #sectionView(trail: SectionNode[], index: MenuIndex, display: HomeDisplay): TemplateResult {
+  #sectionView(trail: SectionNode[], index: MenuIndex): TemplateResult {
     const current = trail.at(-1)!;
     return html`<section data-region="section">
       <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
@@ -1174,7 +1154,6 @@ export class TillMenuBrowser extends LitElement {
           this.path,
           index,
         ),
-        display,
       )}
     </section>`;
   }
@@ -1226,7 +1205,7 @@ export class TillMenuBrowser extends LitElement {
     this.setMenuError = "";
   }
 
-  #setMenuView(row: OrderingCopy | undefined, display: HomeDisplay): TemplateResult {
+  #setMenuView(row: OrderingCopy | undefined): TemplateResult {
     return html`<section data-region="section">
       <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
         <wt-button
@@ -1241,10 +1220,7 @@ export class TillMenuBrowser extends LitElement {
       </nav>
       ${
         row === undefined
-          ? this.#grid(
-              this.#heldMenuFolders().map((held) => this.#setMenuTile(held, true)),
-              display,
-            )
+          ? this.#grid(this.#heldMenuFolders().map((held) => this.#setMenuTile(held, true)))
           : html`<till-set-menu-folder
               .copy=${row.copy}
               .versionId=${row.versionId}
@@ -1259,7 +1235,7 @@ export class TillMenuBrowser extends LitElement {
 
   /** A menu's group carries no accessible name: two menus may share one, and two same-named
    * regions fail axe's landmark-unique. */
-  #results(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
+  #results(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
     const search = searchFor(this.query);
     const found = this.#matches(menu, index, this.#unfilteredIndex(menu), search);
     const otherMenus = orderableMenus(this.menus).filter((other) => other.id !== menu.id);
@@ -1275,10 +1251,7 @@ export class TillMenuBrowser extends LitElement {
       }))
       .filter((other) => other.found.length > 0);
     const tiles = (results: SearchResult[], menuId: string) =>
-      this.#grid(
-        results.map((result) => this.#resultTile(result, menuId)),
-        display,
-      );
+      this.#grid(results.map((result) => this.#resultTile(result, menuId)));
     const empty = (text: string) => html`<p class="empty">${text}</p>`;
     let body: TemplateResult;
     if (otherMenus.length === 0)
@@ -1305,24 +1278,20 @@ export class TillMenuBrowser extends LitElement {
   override render() {
     const menu = this.menu;
     const folder = this.setMenuCopies.find(({ copy }) => copy.menuId === this.setMenuFolder?.id);
-    const display =
-      menu === undefined
-        ? HOME_DISPLAY_DEFAULTS[this.handheld ? "handheld" : "till"]
-        : this.#display(menu);
     let view: TemplateResult | typeof nothing = nothing;
-    if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder, display);
+    if (this.setMenuFolder !== undefined) view = this.#setMenuView(folder);
     else if (menu !== undefined) {
       const index = this.#index(menu);
       const trail = this.#trailShown;
       view =
         this.query.trim() !== ""
-          ? this.#results(menu, index, display)
+          ? this.#results(menu, index)
           : trail.length > 0
-            ? this.#sectionView(trail, index, display)
-            : this.#home(menu, index, display);
+            ? this.#sectionView(trail, index)
+            : this.#home(menu, index);
     } else if (this.#heldMenuFolders().length > 0) {
       view = html`<section data-region="structure">
-        ${this.#grid([this.#setMenuTile(undefined, true)], display)}
+        ${this.#grid([this.#setMenuTile(undefined, true)])}
       </section>`;
     }
     const showContent = view !== nothing || this.placeRequest !== undefined;

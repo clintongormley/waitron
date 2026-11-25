@@ -285,43 +285,13 @@ describe("validateMenuConfiguration: each menu's root and Home sections", () => 
   });
 });
 
-describe("validateMenuConfiguration: menu display settings", () => {
-  it.each([
-    ["handheld_columns", 4],
-    ["till_columns", 3],
-    ["till_columns", "8"],
-    ["handheld_tiles", "pictures"],
-    ["till_order", "first"],
-  ])("refuses a menus row whose %s is %j", (column, value) => {
-    expect(() =>
-      validateMenuConfiguration({ menus: [{ id: "m1", [column]: value }] }),
-    ).toThrowError(
-      expect.objectContaining({
-        code: "setup.request_invalid",
-        params: { field: `menus.${column}` },
-      }),
-    );
-  });
-
-  it("accepts a row holding all six at their defaults, and a row with none of them", () => {
-    expect(() =>
-      validateMenuConfiguration({
-        menus: [
-          {
-            id: "m1",
-            handheld_columns: 3,
-            handheld_tiles: "colours",
-            handheld_order: "home_first",
-            till_columns: 6,
-            till_tiles: "colours",
-            till_order: "home_first",
-          },
-          { id: "m2" },
-        ],
-        sections: menuShells(["m1", "m2"]),
-      }),
-    ).not.toThrow();
-  });
+it("accepts a menu order or leaves an omitted order to use the default", () => {
+  expect(() =>
+    validateMenuConfiguration({
+      menus: [{ id: "m1", home_order: "menu_first" }, { id: "m2" }],
+      sections: menuShells(["m1", "m2"]),
+    }),
+  ).not.toThrow();
 });
 
 describe("validateMenuConfiguration: many siblings", () => {

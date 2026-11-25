@@ -1,7 +1,7 @@
 import { en, es } from "./strings.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { codeMessage, codeOf, fieldOf } from "./codes.js";
-import { currentLocale, setLocale, t } from "./t.js";
+import { currentLocale, setLocale } from "./t.js";
 
 let previousLocale: string;
 beforeEach(() => {
@@ -442,22 +442,18 @@ it("has English and Spanish copy for each theme code", () => {
 });
 
 it("has English and Spanish copy for each Device Home Page code", () => {
-  for (const code of ["menu.shortcut_unreachable", "menu.home_display_invalid"]) {
+  for (const code of ["menu.shortcut_unreachable"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
 
-it.each(["en", "es"])(
-  "names the Device Home Page in a refused shortcut as the Home page tab's order choice does (%s)",
-  (language) => {
-    setLocale(language);
-    const name = language === "en" ? "device home page" : "página de inicio del dispositivo";
-    expect(t("home.order_home_first").toLowerCase()).toContain(name);
-    expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(name);
-  },
-);
+it.each(["en", "es"])("names the Device Home Page in a refused shortcut (%s)", (language) => {
+  setLocale(language);
+  const name = language === "en" ? "device home page" : "página de inicio del dispositivo";
+  expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(name);
+});
 
 it("has English and Spanish copy for each menu publication code", () => {
   for (const code of [

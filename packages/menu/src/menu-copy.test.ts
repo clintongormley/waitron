@@ -121,16 +121,7 @@ async function fixture(): Promise<Fixture> {
     await addShortcut(tx, lunch, { kind: "section", sectionId: temporary });
     await deleteSection(tx, temporary);
 
-    await setHomeDisplay(tx, lunch, "handheld", {
-      columns: 2,
-      tiles: "thumbnails",
-      order: "menu_first",
-    });
-    await setHomeDisplay(tx, lunch, "till", {
-      columns: 8,
-      tiles: "thumbnails",
-      order: "menu_first",
-    });
+    await setHomeDisplay(tx, lunch, "menu_first");
 
     const burgerItem = await itemOf(tx, lunch, burger);
     await updateMenuItem(tx, lunch, burgerItem, { grossPrice: "11.50" });
@@ -327,14 +318,7 @@ describe("duplicateMenu", () => {
       rootSectionId: undefined,
       homeSectionId: undefined,
     }).toEqual(display);
-    expect(display).toEqual({
-      handheldColumns: 2,
-      handheldTiles: "thumbnails",
-      handheldOrder: "menu_first",
-      tillColumns: 8,
-      tillTiles: "thumbnails",
-      tillOrder: "menu_first",
-    });
+    expect(display).toEqual({ homeOrder: "menu_first" });
     expect(copyLabels.get(copyRoot)).toBe("menu_root");
     expect(copyLabels.get(copyHome)).toBe("home_layout");
     expect(sourceLabels.get(sourceRoot)).toBe("menu_root");

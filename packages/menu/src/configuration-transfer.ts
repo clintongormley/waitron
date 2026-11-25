@@ -3,9 +3,8 @@ import {
   type ContentLanguages,
   stringToBasisPoints,
   colorOrNull,
-  HOME_DEVICES,
+  HOME_ORDERS,
   MAX_SET_MENU_AMOUNT_CENTS,
-  homeDisplayProblem,
   isCalendarDate,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
@@ -49,18 +48,13 @@ function checkColors(rows: Rows | undefined, table: string, column = "color"): v
       });
 }
 
-/** A display setting a save would refuse is refused on import too: the till draws it. */
-function checkHomeDisplays(rows: Rows | undefined): void {
+function checkHomeOrders(rows: Rows | undefined): void {
   for (const row of rows ?? [])
-    for (const device of HOME_DEVICES) {
-      const field = homeDisplayProblem(device, {
-        columns: row[`${device}_columns`],
-        tiles: row[`${device}_tiles`],
-        order: row[`${device}_order`],
-      });
-      if (field !== null)
-        throw new AppError("setup.request_invalid", { field: `menus.${device}_${field}` });
-    }
+    if (
+      row.home_order !== undefined &&
+      !(HOME_ORDERS as readonly unknown[]).includes(row.home_order)
+    )
+      throw new AppError("setup.request_invalid", { field: "menus.home_order" });
 }
 
 /** An Inactive product sits in no menu list or Device Home Page shortcut, and an Inactive variant
@@ -268,7 +262,7 @@ export function validateMenuConfiguration(
       throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });
     defaults.add(row.list_id);
   }
-  checkHomeDisplays(tables.menus);
+  checkHomeOrders(tables.menus);
   checkSetMenus(tables);
   checkColors(tables.products, "products");
   checkTakeawayVatRates(tables);

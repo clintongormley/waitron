@@ -1,15 +1,8 @@
 import { eq, inArray } from "drizzle-orm";
 import { menus, products, sectionMembers, type Transaction } from "@waitron/db";
-import { AppError, homeDisplayProblem } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import type {
-  HomeDevice,
-  HomeDisplay,
-  MemberRef,
-  MenuHome,
-  SectionMember,
-  TileRef,
-} from "@waitron/shared";
+import type { HomeOrder, MemberRef, MenuHome, SectionMember, TileRef } from "@waitron/shared";
 import {
   loadSectionGraph,
   reachableFrom,
@@ -34,24 +27,10 @@ import "./errors.js";
 interface HomeRow {
   rootSectionId: string;
   homeSectionId: string;
-  handheld: HomeDisplay;
-  till: HomeDisplay;
+  order: HomeOrder;
 }
 
-type HomeDisplayColumns = Pick<
-  typeof menus.$inferSelect,
-  "handheldColumns" | "handheldTiles" | "handheldOrder" | "tillColumns" | "tillTiles" | "tillOrder"
->;
-
-/** A menu's display settings, one per device. */
-export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, HomeDisplay> {
-  return {
-    handheld: { columns: row.handheldColumns, tiles: row.handheldTiles, order: row.handheldOrder },
-    till: { columns: row.tillColumns, tiles: row.tillTiles, order: row.tillOrder },
-  };
-}
-
-/** The menu's root, its Device Home Page section and both display settings. */
+/** The menu's root, its Device Home Page section and display order. */
 async function requireMenuHome(tx: Transaction, menuId: string, writing = false): Promise<HomeRow> {
   const [row] = await tx.select().from(menus).where(eq(menus.id, menuId));
   if (row === undefined) throw new AppError("menu.not_found", { menuId: menuId });
@@ -59,7 +38,7 @@ async function requireMenuHome(tx: Transaction, menuId: string, writing = false)
   return {
     rootSectionId: await requireMenuRoot(tx, menuId),
     homeSectionId: (await menuHome(tx, menuId))!,
-    ...homeDisplaysOf(row),
+    order: row.homeOrder,
   };
 }
 
@@ -75,7 +54,7 @@ function structuralReach(graph: SectionGraph, rootSectionId: string): (ref: Tile
 }
 
 /** The menu's working Device Home Page: every shortcut in order, the ones its structure no longer
- * reaches included and marked, and how each device presents it. */
+ * reaches included and marked, and which block appears first. */
 export async function readMenuHome(tx: Transaction, menuId: string): Promise<MenuHome> {
   const home = await requireMenuHome(tx, menuId);
   const graph = await loadSectionGraph(tx);
@@ -112,29 +91,17 @@ export async function readMenuHome(tx: Transaction, menuId: string): Promise<Men
             : name,
       };
     }),
-    handheld: home.handheld,
-    till: home.till,
+    order: home.order,
   };
 }
 
 export async function setHomeDisplay(
   tx: Transaction,
   menuId: string,
-  device: HomeDevice,
-  patch: { columns?: unknown; tiles?: unknown; order?: unknown },
+  order: HomeOrder,
 ): Promise<void> {
   await requireMenuHome(tx, menuId, true);
-  const field = homeDisplayProblem(device, patch);
-  if (field !== null) throw new AppError("menu.home_display_invalid", { device, field });
-  // homeDisplayProblem answering null proves each present value is one the device takes.
-  const { columns, tiles, order } = patch as Partial<HomeDisplay>;
-  // Drizzle leaves an undefined key out of the update, and refuses an update with nothing to set.
-  const set =
-    device === "handheld"
-      ? { handheldColumns: columns, handheldTiles: tiles, handheldOrder: order }
-      : { tillColumns: columns, tillTiles: tiles, tillOrder: order };
-  if (Object.values(set).some((value) => value !== undefined))
-    await tx.update(menus).set(set).where(eq(menus.id, menuId));
+  await tx.update(menus).set({ homeOrder: order }).where(eq(menus.id, menuId));
 }
 
 /** Appends a shortcut to a target the menu reaches structurally, or inserts at `position`. */

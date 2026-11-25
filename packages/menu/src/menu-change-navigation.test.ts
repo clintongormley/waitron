@@ -28,9 +28,7 @@ function navigateMenuChanges(
           continue;
         }
         if (target.kind === "home") {
-          expect(doc.home[target.device]).toHaveProperty(
-            target.field === "shortcuts" ? "columns" : target.field,
-          );
+          expect(doc.home).toHaveProperty(target.field);
           continue;
         }
         let members = doc.root.members;
@@ -141,8 +139,7 @@ function document(): MenuDocument {
     offers: { "mi-soup": offer() },
     home: {
       shortcuts: [],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 4, tiles: "thumbnails", order: "menu_first" },
+      order: "menu_first",
     },
   };
 }
@@ -207,8 +204,7 @@ describe("navigateMenuChanges", () => {
   it("addresses exact section paths, every repeated order list, root order, Home subfields and title", () => {
     const live = document(),
       proposed = document();
-    proposed.home.handheld.columns = 5;
-    proposed.home.handheld.order = "menu_first";
+    proposed.home.order = "menu_first";
     const bodies = [
       change({
         kind: "section_added",
@@ -227,17 +223,14 @@ describe("navigateMenuChanges", () => {
       change({ kind: "order_changed", listSectionId: "drinks", list: [] }),
       change({ kind: "order_changed", listSectionId: null, list: [] }),
       change({ kind: "home_shortcuts_changed" }),
-      change({ kind: "home_display_changed", device: "handheld" }),
+      change({ kind: "home_display_changed" }),
       change({ kind: "menu_renamed", from: "Old", to: "New" }),
     ];
     const lists: MenuTarget[] = [
       { kind: "list", sectionIds: ["drinks"] },
       { kind: "list", sectionIds: ["favourites", "drinks"] },
     ];
-    const home: MenuTarget[] = [
-      { kind: "home", device: "handheld", field: "shortcuts" },
-      { kind: "home", device: "till", field: "shortcuts" },
-    ];
+    const home: MenuTarget[] = [{ kind: "home", field: "shortcuts" }];
     expect(navigateMenuChanges(live, proposed, bodies).map((c) => c.targets)).toEqual([
       {
         before: [],
@@ -253,14 +246,8 @@ describe("navigateMenuChanges", () => {
       { before: [{ kind: "list", sectionIds: [] }], after: [{ kind: "list", sectionIds: [] }] },
       { before: home, after: home },
       {
-        before: [
-          { kind: "home", device: "handheld", field: "columns" },
-          { kind: "home", device: "handheld", field: "order" },
-        ],
-        after: [
-          { kind: "home", device: "handheld", field: "columns" },
-          { kind: "home", device: "handheld", field: "order" },
-        ],
+        before: [{ kind: "home", field: "order" }],
+        after: [{ kind: "home", field: "order" }],
       },
       { before: [{ kind: "title", menuId: "lunch" }], after: [{ kind: "title", menuId: "lunch" }] },
     ]);
@@ -779,7 +766,6 @@ describe("public diff navigation", () => {
       "this_menu",
       null,
       "soup",
-      null,
       null,
       null,
       null,

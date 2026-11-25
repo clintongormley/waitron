@@ -478,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 59,
+  version: 60,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1602,8 +1602,6 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
-  /** A source venue with one menu whose `till_columns` is 8 and `handheld_order` `menu_first`,
-   * set with raw SQL, and the bundle exported from it. */
   async function bundleWithHomeDisplay(taxId: string) {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
@@ -1611,9 +1609,7 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Displayed menu" });
-      await tx.execute(
-        sql`update menus set till_columns = 8, handheld_order = 'menu_first' where id = ${menu.id}`,
-      );
+      await tx.execute(sql`update menus set home_order = 'menu_first' where id = ${menu.id}`);
     });
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -1631,22 +1627,14 @@ describe("configuration transfer database path", () => {
 
   const homeDisplayOf = (db: typeof suite.db) =>
     db.execute<Record<string, unknown>>(sql`
-      select d.handheld_columns, d.handheld_tiles, d.handheld_order,
-             d.till_columns, d.till_tiles, d.till_order
+      select d.home_order
       from menus d
       where d.name = 'Displayed menu'
     `);
 
-  it("carries a menu's home display settings", async () => {
+  it("carries a menu's home order", async () => {
     const { transferred, versions } = await bundleWithHomeDisplay("B44556601");
-    const expected = {
-      handheld_columns: 3,
-      handheld_tiles: "colours",
-      handheld_order: "menu_first",
-      till_columns: 8,
-      till_tiles: "colours",
-      till_order: "home_first",
-    };
+    const expected = { home_order: "menu_first" };
     expect((await homeDisplayOf(suite.db)).rows).toEqual([expected]);
     await applyVenue(planVenue(venue("B44556602"), ALL_MODULES), {
       db: targetSuite.db,
@@ -1659,17 +1647,19 @@ describe("configuration transfer database path", () => {
   it("refuses a bundle whose display setting a save would refuse", async () => {
     const { transferred, versions } = await bundleWithHomeDisplay("B44556603");
     const details = transferred.tables.menus!;
-    expect(details.filter((row) => row.till_columns === 8)).toHaveLength(1);
+    expect(details.filter((row) => row.home_order === "menu_first")).toHaveLength(1);
     const malformed: ConfigurationBundle = {
       ...transferred,
       tables: {
         ...transferred.tables,
-        menus: details.map((row) => (row.till_columns === 8 ? { ...row, till_columns: 11 } : row)),
+        menus: details.map((row) =>
+          row.home_order === "menu_first" ? { ...row, home_order: ["home_first"] } : row,
+        ),
       },
     };
     const refusal = {
       code: "setup.request_invalid",
-      params: { field: "menus.till_columns" },
+      params: { field: "menus.home_order" },
     };
     const target = venue("B44556604");
     await expect(
@@ -6307,7 +6297,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(59);
+  expect(exported.version).toBe(60);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

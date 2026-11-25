@@ -47,8 +47,7 @@ import type { DocumentTile } from "@waitron/shared";
 import type {
   DocumentMember,
   FrozenOffer,
-  HomeDevice,
-  HomeDisplay,
+  HomeOrder,
   HomeTile,
   MenuDocument,
 } from "../api/client.js";
@@ -106,8 +105,8 @@ function tilePaint(color: string): string {
 }
 
 /**
- * A menu's Device Home Page as a handheld or a till draws it, from a published-menu document:
- * search, then the shortcuts and the menu's own structure in the order the device's display sets,
+ * A menu's Device Home Page from a published-menu document:
+ * search, then the shortcuts and the menu's own structure in the order the menu sets,
  * with the same columns and tile fill. Sections open behind a breadcrumb; products do nothing.
  * Search finds this document's products only, where a device may also find other menus' products.
  *
@@ -130,67 +129,18 @@ export class DeviceHomePreview extends LitElement {
       :host {
         display: block;
         min-width: 0;
-        container: home-preview / inline-size;
       }
 
       .frame {
         display: grid;
         gap: var(--wt-space-4);
         align-content: start;
-        width: 100%;
-        padding: var(--wt-space-3) calc(var(--wt-space-5) + var(--wt-space-4));
+        inline-size: 100%;
+        max-inline-size: 792px;
+        padding: var(--wt-space-3) 0;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);
-      }
-
-      .frame[data-device="handheld"] {
-        max-width: calc(var(--wt-tap-min) * 9);
-        padding-inline: var(--wt-space-4);
-        --home-tile-min: calc(var(--wt-tap-min) * 1.5);
-      }
-
-      .frame[data-device="till"] {
-        max-width: calc(var(--wt-tap-min) * 29);
-        padding: var(--wt-space-4);
-      }
-
-      .preview-menu {
-        display: grid;
-        gap: var(--wt-space-4);
-        min-width: 0;
-        align-content: start;
-      }
-
-      .preview-order {
-        display: none;
-        min-width: 0;
-      }
-
-      @container home-preview (max-width: 640px) {
-        .frame[data-device="till"] {
-          padding-inline: 0;
-        }
-      }
-
-      @container home-preview (min-width: 720px) {
-        .frame[data-device="till"] .preview-layout {
-          display: flex;
-          align-items: flex-start;
-          gap: var(--wt-space-4);
-        }
-
-        .frame[data-device="till"] .preview-menu {
-          flex: 3 1 0;
-        }
-
-        .frame[data-device="till"] .preview-order {
-          display: block;
-          flex: 2 1 0;
-          padding-inline-start: var(--wt-space-4);
-          border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
-          background: var(--wt-color-surface);
-        }
       }
 
       section,
@@ -204,7 +154,6 @@ export class DeviceHomePreview extends LitElement {
         margin: 0;
       }
 
-      .note,
       .empty,
       .price,
       .kind {
@@ -423,8 +372,8 @@ export class DeviceHomePreview extends LitElement {
   /** The draft as a publish would make it live; nothing renders while it is null. */
   @property({ attribute: false }) document: MenuDocument | null = null;
 
-  /** Which device's display it draws. */
-  @property() device: HomeDevice = "handheld";
+  /** An editor can show its working order before publication. */
+  @property({ attribute: false }) order?: HomeOrder;
 
   /** The working shortcuts, in order, to edit on the home view; null draws the document's own,
    * read-only. */
@@ -782,14 +731,8 @@ export class DeviceHomePreview extends LitElement {
     return localizedName(section.names) || section.internalName;
   }
 
-  #grid(content: unknown, display: HomeDisplay, editing = false): TemplateResult {
-    return html`<div
-      class="grid"
-      ?data-editing=${editing}
-      style=${`--columns: ${display.columns};`}
-    >
-      ${content}
-    </div>`;
+  #grid(content: unknown, editing = false): TemplateResult {
+    return html`<div class="grid" ?data-editing=${editing}>${content}</div>`;
   }
 
   #productTile(offer: FrozenOffer): TemplateResult {
@@ -861,12 +804,7 @@ export class DeviceHomePreview extends LitElement {
     return list.map((member, place) => this.#tile(member, opens[place]!, index));
   }
 
-  #home(
-    document: MenuDocument,
-    index: PreviewIndex,
-    placed: Placed,
-    display: HomeDisplay,
-  ): TemplateResult {
+  #home(document: MenuDocument, index: PreviewIndex, placed: Placed): TemplateResult {
     const shortcuts = document.home.shortcuts.map((tile) =>
       this.#tile(
         tile,
@@ -877,7 +815,7 @@ export class DeviceHomePreview extends LitElement {
     const members = this.#listTiles(index.home, [], index);
     const editing = this.shortcuts;
     const { blocks, divider } = arrangeHome(
-      display.order,
+      this.order ?? document.home.order,
       editing !== null || shortcuts.some((cell) => cell !== nothing),
       members.some((cell) => cell !== nothing),
     );
@@ -895,15 +833,15 @@ export class DeviceHomePreview extends LitElement {
       return place === 1 && divider
         ? html`<section data-region=${region} aria-labelledby=${`${region}-divider`}>
             <h2 class="divider" id=${`${region}-divider`}><span>${label}</span></h2>
-            ${this.#grid(cells, display, shortcutBlock && editing !== null)}
+            ${this.#grid(cells, shortcutBlock && editing !== null)}
           </section>`
         : html`<section data-region=${region} aria-label=${label}>
-            ${this.#grid(cells, display, shortcutBlock && editing !== null)}
+            ${this.#grid(cells, shortcutBlock && editing !== null)}
           </section>`;
     })}`;
   }
 
-  #sectionView(trail: SectionNode[], index: PreviewIndex, display: HomeDisplay): TemplateResult {
+  #sectionView(trail: SectionNode[], index: PreviewIndex): TemplateResult {
     const current = trail.at(-1)!;
     return html`<section data-region="section">
       <nav class="breadcrumb" aria-label=${t("home.breadcrumb")}>
@@ -934,21 +872,18 @@ export class DeviceHomePreview extends LitElement {
           <li><span aria-current="location">${this.#sectionName(current)}</span></li>
         </ol>
       </nav>
-      ${this.#grid(this.#listTiles(shownMembers(current.members), this.path, index), display)}
+      ${this.#grid(this.#listTiles(shownMembers(current.members), this.path, index))}
     </section>`;
   }
 
-  #results(names: [FrozenOffer, string][], display: HomeDisplay): TemplateResult {
+  #results(names: [FrozenOffer, string][]): TemplateResult {
     const found = searchFor(this.query)(names);
     return html`<section data-region="results" aria-labelledby="results-heading">
       <h2 id="results-heading">${t("home.results")}</h2>
       ${
         found.length === 0
           ? html`<p class="empty">${t("home.no_results")}</p>`
-          : this.#grid(
-              found.map((offer) => this.#productTile(offer)),
-              display,
-            )
+          : this.#grid(found.map((offer) => this.#productTile(offer)))
       }
     </section>`;
   }
@@ -957,38 +892,25 @@ export class DeviceHomePreview extends LitElement {
     const document = this.document;
     if (document === null) return nothing;
     const { index, names, placed } = this.#index(document);
-    const display = document.home[this.device];
     const trail = this.#trailShown;
     let view: TemplateResult;
-    if (this.query.trim() !== "") view = this.#results(names, display);
-    else if (trail.length > 0) view = this.#sectionView(trail, index, display);
-    else view = this.#home(document, index, placed, display);
-    return html`<div class="frame" data-device=${this.device}>
-      ${
-        this.device === "till"
-          ? html`<p class="note">${t("home.table_preview")}</p>
-              <p class="note">${t("home.table_preview_width")}</p>`
-          : nothing
-      }
-      <div class="preview-layout">
-        <div class="preview-menu">
-          <div data-region="search">
-            <p class="note" data-test="search-note">${t("home.search_note")}</p>
-            <wt-input
-              type="search"
-              name="home-preview-search"
-              label=${t("home.search")}
-              .value=${this.query}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.query = event.detail.value;
-              }}
-            ></wt-input>
-          </div>
-          ${view}
-        </div>
-        ${this.device === "till" ? html`<div class="preview-order"><p>${t("home.preview_order")}</p></div>` : nothing}
+    if (this.query.trim() !== "") view = this.#results(names);
+    else if (trail.length > 0) view = this.#sectionView(trail, index);
+    else view = this.#home(document, index, placed);
+    return html`<div class="frame">
+      <div data-region="search">
+        <wt-input
+          type="search"
+          name="home-preview-search"
+          label=${t("home.search")}
+          .value=${this.query}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.query = event.detail.value;
+          }}
+        ></wt-input>
       </div>
+      ${view}
       ${
         this.shortcuts === null
           ? nothing

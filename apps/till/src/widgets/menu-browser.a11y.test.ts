@@ -7,7 +7,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 
 function product(key: string, name: string, available = true): TillProduct {
@@ -99,8 +99,7 @@ const menu: TillZoneMenu = {
       { kind: "product", productId: "p-burger" },
       { kind: "section", sectionId: "sec-drinks" },
     ],
-    handheld: HOME_DISPLAY_DEFAULTS.handheld,
-    till: HOME_DISPLAY_DEFAULTS.till,
+    order: DEFAULT_HOME_ORDER,
   },
 };
 
@@ -301,8 +300,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
           { kind: "section", sectionId: "sec-empty" },
           { kind: "product", productId: "p-burger" },
         ],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     };
     el.products = products.map((each) =>
@@ -354,22 +352,17 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
 
   it("Menu first, with the divider naming the shortcuts, has no violations", async () => {
     const { el, host } = await mount(theme, {
-      menu: { ...menu, home: { ...menu.home, till: { ...menu.home.till, order: "menu_first" } } },
+      menu: { ...menu, home: { ...menu.home, order: "menu_first" } },
     });
     expect(el.shadowRoot!.querySelector("h2.divider")!.textContent!.trim()).toBe("Shortcuts");
     await expectNoA11yViolations(host);
   });
 
-  it("a handheld at 3 columns has no violations", async () => {
-    const { el, host } = await mount(theme, {
-      handheld: true,
-      menu: { ...menu, home: { ...menu.home, handheld: { ...menu.home.handheld, columns: 3 } } },
-    });
-    expect(
-      getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(".grid")!)
-        .getPropertyValue("--columns")
-        .trim(),
-    ).toBe("3");
+  it("three columns on a phone have no violations", async () => {
+    const { el, host } = await mount(theme);
+    host.style.width = "360px";
+    const columns = getComputedStyle(el.shadowRoot!.querySelector(".grid")!).gridTemplateColumns;
+    expect(columns.split(" ")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 

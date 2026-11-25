@@ -231,6 +231,16 @@ function lineCount(button: HTMLButtonElement): number {
   return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
 }
 
+test("fills the available width with equal segments when requested", async () => {
+  const el = await setupNarrow(320, ["Accesos directos", "Carta completa"]);
+  el.setAttribute("equal-width", "");
+  await el.updateComplete;
+  const widths = buttons(el).map((button) => button.getBoundingClientRect().width);
+  expect(widths[0]).toBeCloseTo(widths[1]!, 1);
+  expect(group(el).getBoundingClientRect().width).toBe(320);
+  expectInsideControl(el);
+});
+
 test("a control too narrow for its labels on one line wraps them between words, never inside one", async () => {
   const el = await setupNarrow(300, ["Usar la configuración del perfil", "Mostrar", "Ocultar"]);
   const [profile, show, hide] = buttons(el);

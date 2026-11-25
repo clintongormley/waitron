@@ -63,12 +63,7 @@ export async function duplicateMenu(
   await tx
     .update(menus)
     .set({
-      handheldColumns: details.handheldColumns,
-      handheldTiles: details.handheldTiles,
-      handheldOrder: details.handheldOrder,
-      tillColumns: details.tillColumns,
-      tillTiles: details.tillTiles,
-      tillOrder: details.tillOrder,
+      homeOrder: details.homeOrder,
     })
     .where(eq(menus.id, copy.id));
   for (const batch of batches(items))

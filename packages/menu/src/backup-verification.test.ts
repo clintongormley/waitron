@@ -46,9 +46,8 @@ const image = "a".repeat(64) + ".webp";
 const documentText = JSON.stringify({
   format: 5,
   home: {
-    handheld: { columns: 2, order: "home_first", tiles: "colours" },
+    order: "home_first",
     shortcuts: [],
-    till: { columns: 3, order: "home_first", tiles: "colours" },
   },
   menuId: menu,
   menuName: "Lunch",

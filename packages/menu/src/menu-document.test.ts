@@ -24,8 +24,8 @@ import {
 import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   decimal,
+  DEFAULT_HOME_ORDER,
   expandDietaryDeclarations,
-  HOME_DISPLAY_DEFAULTS,
   shownMembers,
 } from "@waitron/shared";
 import { previewMenu, publishMenu } from "./menu-publication.js";
@@ -238,8 +238,7 @@ describe("buildMenuDocument", () => {
       menuName: "Lunch Menu",
       home: {
         shortcuts: [],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     });
     expect(document.root).toEqual({
@@ -1929,29 +1928,29 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names the menu's renaming, a shortcut change and a display change for the device it changed", async () => {
+  it("names the menu's renaming, a shortcut change and a change in what is shown first", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
     await addTile(await homeSection(f.lunch), { productId: f.soup });
-    await app((tx) => setHomeDisplay(tx, f.lunch, "handheld", { tiles: "thumbnails" }));
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
     await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
     expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
       { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "handheld", source: "this_menu" },
+      { kind: "home_display_changed", source: "this_menu" },
     ]);
   });
 
   it("a first publish names its shortcuts and a display that differs from the default, and says nothing of a default display", async () => {
     const f = await menusFixture(fx.db);
     await addTile(await homeSection(f.lunch), { productId: f.soup });
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { order: "menu_first" }));
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
     const home = diffMenuDocuments(null, await build(f.lunch)).filter(({ kind }) =>
       kind.startsWith("home_"),
     );
     expect(changeBodies(home)).toEqual([
       { kind: "home_shortcuts_changed", source: "this_menu" },
-      { kind: "home_display_changed", device: "till", source: "this_menu" },
+      { kind: "home_display_changed", source: "this_menu" },
     ]);
   });
 });

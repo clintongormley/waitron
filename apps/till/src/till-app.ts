@@ -24723,7 +24723,6 @@ export class TillApp extends LitElement {
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
         .asksGuests=${this.invoiceChoice?.orderId !== this.#store.id}
         .receiptGuests=${null}
-        .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
         .nutritionLines=${this.counterLines}
         .stationMoveLines=${this.capabilities.includes("take-orders") ? this.counterLines : null}

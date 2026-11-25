@@ -66,7 +66,7 @@ import {
   removeMembers,
   type MemberAt,
   replaceMember,
-  HOME_DEVICES,
+  HOME_ORDERS,
   readMenuHome,
   setHomeDisplay,
   addShortcut,
@@ -391,7 +391,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "time_zone.unreadable": 500,
   "menu.reset_required": 500,
   "menu.shortcut_unreachable": 400,
-  "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
   "course.not_found": 400,
   "allergen.invalid_code": 400,
@@ -765,15 +764,9 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      const body = await readJsonBody<{
-        device?: unknown;
-        columns?: unknown;
-        tiles?: unknown;
-        order?: unknown;
-      }>(c);
-      const device = requireEnum(body.device, "device", HOME_DEVICES);
-      const { columns, tiles, order } = body;
-      await gated(c, session, (tx) => setHomeDisplay(tx, menu, device, { columns, tiles, order }));
+      const body = await readJsonBody<{ order?: unknown }>(c);
+      const order = requireEnum(body.order, "order", HOME_ORDERS);
+      await gated(c, session, (tx) => setHomeDisplay(tx, menu, order));
       return c.body(null, 204);
     }),
   );

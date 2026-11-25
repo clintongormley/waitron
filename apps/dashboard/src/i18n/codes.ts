@@ -309,10 +309,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Only products and sections that are on this menu can be shortcuts on its Device Home Page.",
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio del dispositivo.",
   },
-  "menu.home_display_invalid": {
-    en: "That home page setting is not available for this device. Refresh the page and try again.",
-    es: "Ese ajuste de la página de inicio no está disponible para este dispositivo. Actualiza la página e inténtalo de nuevo.",
-  },
   "menu.clashes_unresolved": {
     en: "Resolve the price clashes before publishing this menu.",
     es: "Resuelve los conflictos de precio antes de publicar esta carta.",

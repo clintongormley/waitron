@@ -283,8 +283,7 @@ describe("media backup evidence", () => {
         offers: {},
         home: {
           shortcuts: [],
-          handheld: { columns: 2, tiles: "colours", order: "home_first" },
-          till: { columns: 3, tiles: "colours", order: "home_first" },
+          order: "home_first",
         },
       };
       for (const suite of [original, restored]) {

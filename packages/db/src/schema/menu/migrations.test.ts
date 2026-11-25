@@ -319,25 +319,18 @@ it("has no per-menu extras tables", async () => {
   expect(rows.rows).toEqual([]);
 });
 
-it("gives menus six required display settings with their defaults", async () => {
+it("gives menus one required home order with shortcuts first by default", async () => {
   const columns = (
     await db.execute<{ name: string; type: string; notnull: number; dflt_value: string | null }>(
       sql`pragma table_info('menus')`,
     )
   ).rows
-    .filter((column) => /^(handheld|till)_/.test(column.name))
+    .filter((column) => /^(handheld_|till_|home_order$)/.test(column.name))
     .map(
       ({ name, type, notnull, dflt_value }) =>
         `${name} ${type.toLowerCase()} ${notnull} ${dflt_value}`,
     );
-  expect(columns).toEqual([
-    "handheld_columns integer 1 3",
-    "handheld_tiles text 1 'colours'",
-    "handheld_order text 1 'home_first'",
-    "till_columns integer 1 6",
-    "till_tiles text 1 'colours'",
-    "till_order text 1 'home_first'",
-  ]);
+  expect(columns).toEqual(["home_order text 1 'home_first'"]);
 });
 
 describe("the menu tables carry no taxpayer column", () => {
@@ -470,12 +463,7 @@ describe("the menu tables carry no taxpayer column", () => {
     });
 
     expect(checks).toEqual({
-      menus_handheld_columns_ck: `"menus"."handheld_columns" between 2 and 3`,
-      menus_till_columns_ck: `"menus"."till_columns" between 4 and 10`,
-      menus_handheld_tiles_ck: `"menus"."handheld_tiles" in ('colours', 'thumbnails')`,
-      menus_till_tiles_ck: `"menus"."till_tiles" in ('colours', 'thumbnails')`,
-      menus_handheld_order_ck: `"menus"."handheld_order" in ('home_first', 'menu_first')`,
-      menus_till_order_ck: `"menus"."till_order" in ('home_first', 'menu_first')`,
+      menus_home_order_ck: `"menus"."home_order" in ('home_first', 'menu_first')`,
       menus_kind_ck: `"menus"."kind" in ('menu', 'set_menu')`,
       menus_set_not_default_ck: `"menus"."kind" = 'menu' or "menus"."is_default" = 0`,
       menus_set_price_ck: `"menus"."set_price" is null or "menus"."set_price" >= 0`,

@@ -4,13 +4,7 @@ import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import type {
-  DocumentMember,
-  HomeDevice,
-  HomeDisplay,
-  HomeTile,
-  MenuDocument,
-} from "../api/client.js";
+import type { DocumentMember, HomeTile, MenuDocument } from "../api/client.js";
 import type { DocumentTile } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
@@ -34,19 +28,28 @@ const KILO = {
   hardwareUnit: "kg" as const,
 };
 
-it.each([360, 390].flatMap((width) => [2, 3].map((columns) => ({ width, columns }))))(
-  "fits $columns preview columns at $width px",
-  async ({ width, columns }) => {
+it.each(
+  [
+    { width: 360, columns: 3 },
+    { width: 390, columns: 3 },
+    { width: 792, columns: 6 },
+  ].flatMap((size) => [100, 130].map((scale) => ({ ...size, scale }))),
+)(
+  "fits $columns automatic preview columns at $width px and $scale% text",
+  async ({ width, columns, scale }) => {
     const document = lunch(
       [],
       [drinks(), documentProduct("mi-lemonade", "p-lemonade"), documentProduct("mi-ham", "p-ham")],
     );
     document.offers["mi-lemonade"]!.name = "Extraordinariamenteextralargapalabra";
     document.offers["mi-ham"]!.name = "Pollo asado con patatas y verduras";
-    const { el, host } = await mount({
-      document: display("handheld", { columns }, document),
-    });
-    await widen(host, width);
+    const { el, host } = await mount({ document });
+    const styles = getComputedStyle(host);
+    for (const size of ["sm", "md"]) {
+      const token = `--wt-font-size-${size}`;
+      host.style.setProperty(token, `calc(${styles.getPropertyValue(token)} * ${scale / 100})`);
+    }
+    await widen(host, width === 792 ? width : width - 34);
     const grid = root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
     expect(tracks(grid)).toBe(columns);
     expect(tiles(el, "structure")).toHaveLength(3);
@@ -63,12 +66,6 @@ it.each([360, 390].flatMap((width) => [2, 3].map((columns) => ({ width, columns 
     }
   },
 );
-
-it.each([360, 390])("shows three preview columns inside a %s px dashboard", async (width) => {
-  const { el, host } = await mount({ document: display("handheld", { columns: 3 }) });
-  await widen(host, width - 80);
-  for (const grid of grids(el)) expect(tracks(grid)).toBe(3);
-});
 
 function drinks(extra: Partial<Extract<DocumentMember, { kind: "section" }>> = {}): DocumentMember {
   return {
@@ -122,18 +119,6 @@ function lunch(
   if (offer("mi-ham")) Object.assign(offer("mi-ham")!, { unit: KILO, color: "#b12525" });
   if (offer("mi-chips")) offer("mi-chips")!.ordering = "not_sold_separately";
   return { ...document, home: { ...document.home, shortcuts } };
-}
-
-/** `document` with `device`'s display settings changed to `values`. */
-function display(
-  device: HomeDevice,
-  values: Partial<HomeDisplay>,
-  document: MenuDocument = lunch(),
-): MenuDocument {
-  return {
-    ...document,
-    home: { ...document.home, [device]: { ...document.home[device], ...values } },
-  };
 }
 
 async function mount(
@@ -254,29 +239,13 @@ describe("dashboard-device-home-preview", () => {
     expect(regions(el)).toEqual([]);
   });
 
-  it("draws search, then the Device Home Page and the full menu, divided, for Handheld", async () => {
-    const document = display(
-      "till",
-      { columns: 7, order: "menu_first" },
-      display("handheld", {
-        columns: 2,
-      }),
-    );
-    const { el } = await mount({ document });
-    expect(el.device).toBe("handheld");
+  it("draws search, then shortcuts and the full menu, divided", async () => {
+    const { el } = await mount();
     expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
-    const shortcuts = root(el).querySelector('[data-region="shortcuts"]')!;
-    expect(shortcuts.querySelector("h2")).toBeNull();
+    expect(root(el).querySelector('[data-region="shortcuts"] h2')).toBeNull();
     expect(regionName(el, "shortcuts")).toBe("Shortcuts");
     expect(divider(el)).toBe("Full menu");
     expect(regionName(el, "structure")).toBe("Full menu");
-    expect(grids(el)).toHaveLength(2);
-    for (const grid of grids(el)) expect(grid.style.getPropertyValue("--columns").trim()).toBe("2");
-
-    el.device = "till";
-    await el.updateComplete;
-    expect(regions(el)).toEqual(["search", "structure", "shortcuts"]);
-    for (const grid of grids(el)) expect(grid.style.getPropertyValue("--columns").trim()).toBe("7");
   });
 
   it("swaps the whole blocks for Menu first, keeping each block's own order", async () => {
@@ -285,7 +254,9 @@ describe("dashboard-device-home-preview", () => {
     const structureNames = names(tiles(homeFirst.el, "structure"));
     expect(shortcutNames).toEqual(["Lemonade", "Drinks para clientes"]);
     expect(structureNames).toEqual(["Drinks para clientes", "Lemonade", "Ham", "Water"]);
-    const { el } = await mount({ document: display("handheld", { order: "menu_first" }) });
+    const { el } = await mount({
+      document: { ...lunch(), home: { ...lunch().home, order: "menu_first" } },
+    });
     expect(regions(el)).toEqual(["search", "structure", "shortcuts"]);
     expect(divider(el)).toBe("Shortcuts");
     expect(regionName(el, "shortcuts")).toBe("Shortcuts");
@@ -314,81 +285,16 @@ describe("dashboard-device-home-preview", () => {
     });
   });
 
-  it("shows fewer columns on a narrow screen, in the same reading order", async () => {
-    const handheld = await mount({ document: display("handheld", { columns: 3 }) });
-    await widen(handheld.host, 150);
-    const structureGrid = (el: DeviceHomePreview) =>
-      root(el).querySelector<HTMLElement>('[data-region="structure"] .grid')!;
-    expect(tracks(structureGrid(handheld.el))).toBeLessThan(3);
-    expect(readingOrder(handheld.el, "structure")).toEqual(names(tiles(handheld.el, "structure")));
-
-    const till = await mount({ document: display("till", { columns: 10 }), device: "till" });
-    await widen(till.host, 1280);
-    expect(tracks(structureGrid(till.el))).toBe(6);
-    const wide = readingOrder(till.el, "structure");
-    await widen(till.host, 390);
-    expect(tracks(structureGrid(till.el))).toBeLessThan(10);
-    for (const cell of tiles(till.el, "structure"))
-      expect(cell.getBoundingClientRect().width).toBeGreaterThanOrEqual(104);
-    expect(readingOrder(till.el, "structure")).toEqual(wide);
-  });
-
-  it("draws as many columns as a 390 px phone's till does, three, at the Handheld slider's most", async () => {
-    const handheld = await mount({ document: display("handheld", { columns: 3 }) });
-    await widen(handheld.host, 1600);
-    for (const grid of grids(handheld.el)) expect(tracks(grid)).toBe(3);
-  });
-
-  it("sizes the frame to a phone for Handheld and to a till for Till, never wider than the screen", async () => {
-    const handheld = await mount();
-    const till = await mount({ device: "till" });
-    const tap = parseFloat(getComputedStyle(frame(handheld.el)).getPropertyValue("--wt-tap-min"));
-    expect(tap).toBeGreaterThan(0);
-    expect(frame(handheld.el).dataset.device).toBe("handheld");
-    expect(frame(till.el).dataset.device).toBe("till");
-    await widen(handheld.host, 1600);
-    await widen(till.host, 1600);
-    expect(frame(handheld.el).getBoundingClientRect().width).toBe(tap * 9);
-    expect(frame(till.el).getBoundingClientRect().width).toBe(tap * 29);
-    await widen(handheld.host, 390);
-    await widen(till.host, 390);
-    expect(frame(handheld.el).getBoundingClientRect().width).toBe(390);
-    expect(frame(till.el).getBoundingClientRect().width).toBe(390);
-  });
-
-  it.each([
-    { width: 1280, columns: 6, split: true },
-    { width: 720, columns: 3, split: true },
-    { width: 719, columns: 6, split: false },
-    { width: 390, columns: 3, split: false },
-  ])("reserves order space at a $width px till width", async ({ width, columns, split }) => {
-    const { el, host } = await mount({
-      device: "till",
-      document: display("till", { columns: 10 }),
-    });
-    await widen(host, width);
-    const menu = root(el).querySelector<HTMLElement>(".preview-menu")!;
-    const order = root(el).querySelector<HTMLElement>(".preview-order")!;
-    expect(order).not.toBeNull();
-    expect(order.getBoundingClientRect().width > 0).toBe(split);
-    if (width === 390)
-      expect(menu.getBoundingClientRect().width).toBe(frame(el).getBoundingClientRect().width - 2);
-    if (split) {
-      const style = getComputedStyle(order);
-      const orderContent =
-        order.getBoundingClientRect().width -
-        parseFloat(style.paddingLeft) -
-        parseFloat(style.borderLeftWidth);
-      expect(menu.getBoundingClientRect().width / orderContent).toBeCloseTo(1.5, 1);
-      expect(menu.getBoundingClientRect().right).toBeLessThan(order.getBoundingClientRect().left);
-    }
-    for (const grid of grids(el)) expect(tracks(grid)).toBe(columns);
-    const menuWidth = menu.getBoundingClientRect().width;
-    await search(el, "water");
-    expect(root(el).querySelector('[data-region="results"]')!.getBoundingClientRect().width).toBe(
-      menuWidth,
-    );
-    expect(frame(el).textContent).toContain("Table order preview");
+  it("caps the preview at the counter menu width and keeps the tile order as it shrinks", async () => {
+    const { el, host } = await mount();
+    await widen(host, 1600);
+    expect(frame(el).getBoundingClientRect().width).toBe(792);
+    expect(tracks(grids(el)[0]!)).toBe(6);
+    const order = readingOrder(el, "structure");
+    await widen(host, 150);
+    expect(tracks(grids(el)[0]!)).toBe(1);
+    expect(readingOrder(el, "structure")).toEqual(order);
+    expect(order).toEqual(names(tiles(el, "structure")));
   });
 
   it("shows a product's staff name and a unit only when the price needs one", async () => {
@@ -455,7 +361,7 @@ describe("dashboard-device-home-preview", () => {
     });
 
     it("uses colour and the folder even with stored Thumbnails and photos", async () => {
-      const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
+      const { el } = await mount({ document: lunch() });
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
       expect(fillOf(lemonade)).toBe("rgb(37, 107, 177)");
@@ -465,7 +371,7 @@ describe("dashboard-device-home-preview", () => {
     });
 
     it("draws an uncoloured product with its name and price", async () => {
-      const { el } = await mount({ document: display("handheld", { tiles: "thumbnails" }) });
+      const { el } = await mount({ document: lunch() });
       const water = tile(el, "structure", "Water");
       expect(image(water)).toBeNull();
       expect(water.hasAttribute("data-painted")).toBe(false);
@@ -496,7 +402,9 @@ describe("dashboard-device-home-preview", () => {
   });
 
   it("returns from a section opened under Menu first to the arranged home", async () => {
-    const { el } = await mount({ document: display("handheld", { order: "menu_first" }) });
+    const { el } = await mount({
+      document: { ...lunch(), home: { ...lunch().home, order: "menu_first" } },
+    });
     await click(el, tile(el, "structure", "Drinks para clientes"));
     await click(el, home(el));
     expect(regions(el)).toEqual(["search", "structure", "shortcuts"]);
@@ -535,17 +443,12 @@ describe("dashboard-device-home-preview", () => {
     },
   );
 
-  it("searches this menu's products only, and says a device may show more", async () => {
+  it("searches this menu's products only", async () => {
     const { el } = await mount();
-    const note = () => root(el).querySelector('[data-test="search-note"]');
-    expect(note()!.textContent!.trim()).toBe(
-      "This preview searches this menu only. A device may also show results from other menus available to it.",
-    );
     await search(el, "LÉMO");
     expect(regions(el)).toEqual(["search", "results"]);
     expect(regionName(el, "results")).toBe("Search results");
     expect(names(tiles(el, "results"))).toEqual(["Lemonade"]);
-    expect(note()).not.toBeNull();
 
     await search(el, "chips");
     expect(tiles(el, "results")).toEqual([]);
@@ -1251,8 +1154,9 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(breadcrumb(el)).toBe("Home › Drinks para clientes");
   });
 
-  it.each(["handheld", "till"] as const)("edits on the %s's home page", async (device) => {
-    const { el, host } = await mount({ shortcuts: LIST, device });
+  it("keeps shortcut controls within their tiles on a phone", async () => {
+    const { el, host } = await mount({ shortcuts: LIST });
+    await widen(host, 326);
     const events = heard(host);
     expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
     expect(add(el, "section")).not.toBeNull();

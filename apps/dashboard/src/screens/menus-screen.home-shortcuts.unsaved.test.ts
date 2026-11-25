@@ -32,8 +32,7 @@ customElements.define("home-shortcuts-leave-test-app", HomeShortcutsLeaveApp);
 const home: MenuHome = {
   homeSectionId: "home",
   shortcuts: [],
-  handheld: { columns: 3, tiles: "colours", order: "home_first" },
-  till: { columns: 6, tiles: "colours", order: "home_first" },
+  order: "home_first",
 };
 
 /** A menu holding Lager and Burger, with an empty Device Home Page. `afterAdd` answers every read

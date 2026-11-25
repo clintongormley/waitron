@@ -836,19 +836,7 @@ for (const locale of ["en", "es"] as const) {
     }
     for (const [side, parent, key, fields] of [
       ["category_details", "categories", "category_id", ["parent_id", "color"]],
-      [
-        "menu_details",
-        "catalogues",
-        "menu_id",
-        [
-          "handheld_columns",
-          "handheld_tiles",
-          "handheld_order",
-          "till_columns",
-          "till_tiles",
-          "till_order",
-        ],
-      ],
+      ["menu_details", "catalogues", "menu_id", ["home_order"]],
     ] as const) {
       const target = historicalSeeded.tables[parent]!;
       const rows: Record<string, Record<string, unknown>> = {};
@@ -859,6 +847,16 @@ for (const locale of ["en", "es"] as const) {
           delete row[field];
         }
         if (side === "menu_details") {
+          expect(detail.home_order).toBe("home_first");
+          delete detail.home_order;
+          Object.assign(detail, {
+            handheld_columns: 3,
+            handheld_order: "home_first",
+            handheld_tiles: "colours",
+            till_columns: 6,
+            till_order: "home_first",
+            till_tiles: "colours",
+          });
           const owned = Object.values(historicalSeeded.tables.sections!.rows).filter(
             (section) => section.owner_menu_id === row.id,
           );
@@ -1751,6 +1749,9 @@ for (const locale of ["en", "es"] as const) {
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {
           format: number;
+          home:
+            | { shortcuts: unknown[]; handheld: { order: string }; till: { order: string } }
+            | { shortcuts: unknown[]; order: string };
           offers: Record<
             string,
             Classed & {
@@ -1760,7 +1761,11 @@ for (const locale of ["en", "es"] as const) {
             }
           >;
         };
-        document.format = 4;
+        document.format = 5;
+        if ("handheld" in document.home) {
+          expect(document.home.handheld.order).toBe(document.home.till.order);
+          document.home = { shortcuts: document.home.shortcuts, order: document.home.till.order };
+        }
         for (const offer of Object.values(document.offers)) {
           delete offer.dietDerivation;
           for (const variant of offer.variants) delete variant.dietDerivation;
@@ -3162,12 +3167,7 @@ for (const locale of ["en", "es"] as const) {
           into: "menus",
           match: { from: "menu_id", into: "id" },
           columns: {
-            handheld_columns: "handheld_columns",
-            handheld_tiles: "handheld_tiles",
-            handheld_order: "handheld_order",
-            till_columns: "till_columns",
-            till_tiles: "till_tiles",
-            till_order: "till_order",
+            till_order: "home_order",
           },
         },
         {
@@ -3179,6 +3179,7 @@ for (const locale of ["en", "es"] as const) {
       ]);
       expected[phase] = madridWithDroppedColumns(expected[phase], { menus: ["version"] });
       const menus = expected[phase].tables.menus!;
+      menus.columns.find((column) => column.name === "home_order")!.dflt_value = "'home_first'";
       menus.columns.push(
         { name: "kind", type: "TEXT", notnull: 1, dflt_value: "'menu'", pk: 0 },
         { name: "set_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },

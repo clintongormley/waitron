@@ -42,6 +42,15 @@ export class WtSegmentedControl extends LitElement {
         display: inline-flex;
         max-width: 100%;
       }
+      :host([equal-width]) [role="radiogroup"] {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(var(--wt-tap-min), 1fr);
+      }
+      :host([equal-width]) button {
+        min-inline-size: 0;
+        overflow-wrap: anywhere;
+      }
       [role="radiogroup"][data-measuring] {
         width: min-content;
         max-width: none;
@@ -102,6 +111,7 @@ export class WtSegmentedControl extends LitElement {
   @property() label = "";
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property() value = "";
+  @property({ type: Boolean, attribute: "equal-width", reflect: true }) equalWidth = false;
   @property({ attribute: false }) options: readonly SegmentedOption[] = [];
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() error = "";
@@ -126,7 +136,7 @@ export class WtSegmentedControl extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has("options")) this.#fit();
+    if (changed.has("options") || changed.has("equalWidth")) this.#fit();
   }
 
   #group(): HTMLElement {
@@ -146,6 +156,10 @@ export class WtSegmentedControl extends LitElement {
    */
   #fit(): void {
     const group = this.#group();
+    if (this.equalWidth) {
+      group.removeAttribute("data-squeezed");
+      return;
+    }
     group.toggleAttribute("data-squeezed", true);
     const space = this.getBoundingClientRect().width;
     group.toggleAttribute("data-squeezed", false);

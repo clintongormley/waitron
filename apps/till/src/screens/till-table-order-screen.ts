@@ -3094,7 +3094,6 @@ export class TillTableOrderScreen extends LitElement {
       )}
       .store=${store}
       .inOrder=${this.wide ? undefined : this.#inOrder(store)}
-      .handheld=${this.handheld}
       weighs
     >
       ${

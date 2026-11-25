@@ -6146,8 +6146,7 @@ describe("mountMenuApi — Device Home Page", () => {
   interface Home {
     homeSectionId: string;
     shortcuts: Tile[];
-    handheld: { columns: number; tiles: string; order: string };
-    till: { columns: number; tiles: string; order: string };
+    order: string;
   }
   const json = async <T>(response: Response, status: number): Promise<T> => {
     expect(response.status).toBe(status);
@@ -6158,36 +6157,6 @@ describe("mountMenuApi — Device Home Page", () => {
   const homeOf = (menuId: string) => `/management-api/menus/${menuId}/home`;
   const displayOf = (menuId: string) => `/management-api/menus/${menuId}/home-display`;
   const shortcutsOf = (menuId: string) => `/management-api/menus/${menuId}/home/shortcuts`;
-  const handheld = { columns: 3, tiles: "colours", order: "home_first" };
-  const till = { columns: 6, tiles: "colours", order: "home_first" };
-
-  it.each([
-    { device: "handheld", min: 2, max: 3 },
-    { device: "till", min: 4, max: 10 },
-  ] as const)(
-    "saves both $device column endpoints and refuses adjacent values without changing the saved display",
-    async ({ device, min, max }) => {
-      const app = mountApp();
-      const menuId = await createMenuVia(app, `Columns ${crypto.randomUUID()}`);
-      for (const columns of [min, max]) {
-        expect(
-          (await send(app, "PATCH", displayOf(menuId), { body: { device, columns } })).status,
-        ).toBe(204);
-        expect(
-          (await json<Home>(await send(app, "GET", homeOf(menuId)), 200))[device].columns,
-        ).toBe(columns);
-      }
-      const before = await json<Home>(await send(app, "GET", homeOf(menuId)), 200);
-      for (const columns of [min - 1, max + 1]) {
-        const refused = await send(app, "PATCH", displayOf(menuId), { body: { device, columns } });
-        expect(refused.status).toBe(400);
-        expect(await refused.json()).toMatchObject({
-          error: { code: "menu.home_display_invalid", params: { device, field: "columns" } },
-        });
-        expect(await json<Home>(await send(app, "GET", homeOf(menuId)), 200)).toEqual(before);
-      }
-    },
-  );
 
   async function menuWithTargets(app: Hono) {
     const menuId = await createMenuVia(app, `Home ${crypto.randomUUID()}`);
@@ -6227,8 +6196,7 @@ describe("mountMenuApi — Device Home Page", () => {
     expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
       homeSectionId: m.homeSectionId,
       shortcuts: [],
-      handheld,
-      till,
+      order: "home_first",
     });
   });
 
@@ -6337,33 +6305,22 @@ describe("mountMenuApi — Device Home Page", () => {
     ).toEqual([section(m.drinks)]);
   });
 
-  it("saves each display setting for its device, and refuses one it cannot take", async () => {
+  it("saves one home order and refuses an invalid or missing order", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
     const saved = await send(app, "PATCH", displayOf(m.menuId), {
-      body: { device: "till", columns: 8 },
+      body: { order: "menu_first" },
     });
     expect(saved.status).toBe(204);
-    const read = await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200);
-    expect(read.till).toEqual({ ...till, columns: 8 });
-    expect(read.handheld).toEqual(handheld);
-    const refused = await send(app, "PATCH", displayOf(m.menuId), {
-      body: { device: "till", columns: 11 },
-    });
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "menu.home_display_invalid", params: { device: "till", field: "columns" } },
-    });
-    for (const body of [{ device: "kiosk" }, {}]) {
+    for (const body of [{ order: "first" }, { order: ["home_first"] }, { order: null }, {}]) {
       const response = await send(app, "PATCH", displayOf(m.menuId), { body });
       expect(response.status, JSON.stringify(body)).toBe(400);
       expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "device" } },
+        error: { code: "management.request_invalid", params: { field: "order" } },
       });
     }
-    expect((await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).till).toEqual({
-      ...till,
-      columns: 8,
+    expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toMatchObject({
+      order: "menu_first",
     });
   });
 
@@ -6374,7 +6331,7 @@ describe("mountMenuApi — Device Home Page", () => {
     const member = crypto.randomUUID();
     for (const [method, path, body] of [
       ["GET", homeOf(unknown), undefined],
-      ["PATCH", displayOf(unknown), { device: "till", columns: 8 }],
+      ["PATCH", displayOf(unknown), { order: "menu_first" }],
       ["POST", shortcutsOf(unknown), { ref: product(m.soup) }],
       ["POST", `${shortcutsOf(unknown)}/${member}/replace`, { ref: product(m.soup) }],
       ["DELETE", `${shortcutsOf(unknown)}/${member}`, undefined],
@@ -6424,7 +6381,7 @@ describe("mountMenuApi — Device Home Page", () => {
         ["POST", shortcuts, { ref: product(m.soup), position: "0" }, "position"],
         ["POST", `${shortcuts}/${member}/replace`, {}, "ref"],
         ["PUT", `${shortcuts}/${member}/position`, {}, "to"],
-        ["PATCH", displayOf(m.menuId), { columns: 8 }, "device"],
+        ["PATCH", displayOf(m.menuId), { columns: 8 }, "order"],
       ];
     for (const [method, path, body, field] of cases) {
       const response = await send(app, method, path, { body });
@@ -6439,7 +6396,7 @@ describe("mountMenuApi — Device Home Page", () => {
       body?: unknown,
     ][] = [
       ["GET", homeOf("nope")],
-      ["PATCH", displayOf("nope"), { device: "till", columns: 8 }],
+      ["PATCH", displayOf("nope"), { order: "menu_first" }],
       ["POST", shortcutsOf("nope"), { ref: product(m.soup) }],
       ["POST", `${shortcuts}/nope/replace`, { ref: product(m.soup) }],
       ["DELETE", `${shortcuts}/nope`],
@@ -6466,7 +6423,7 @@ describe("mountMenuApi — Device Home Page", () => {
       body?: unknown,
     ][] = [
       ["GET", homeOf(m.menuId)],
-      ["PATCH", displayOf(m.menuId), { device: "till", columns: 8 }],
+      ["PATCH", displayOf(m.menuId), { order: "menu_first" }],
       ["POST", shortcuts, { ref: product(m.soup) }],
       ["POST", `${shortcuts}/${member}/replace`, { ref: product(m.soup) }],
       ["DELETE", `${shortcuts}/${member}`],
@@ -6484,8 +6441,7 @@ describe("mountMenuApi — Device Home Page", () => {
     expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
       homeSectionId: m.homeSectionId,
       shortcuts: [],
-      handheld,
-      till,
+      order: "home_first",
     });
   });
 
@@ -6758,14 +6714,14 @@ describe("shared menu reads", () => {
     expect(
       (
         await send(app, "PATCH", `${path}/home-display`, {
-          body: { device: "handheld", columns: 2 },
+          body: { order: "menu_first" },
         })
       ).status,
     ).toBe(204);
     const response = await send(app, "GET", `${path}/read?part=home&part=status`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      home: { status: 200, body: { handheld: { columns: 2 } } },
+      home: { status: 200, body: { order: "menu_first" } },
       status: { status: 200, body: { state: "unpublished", clashes: 0 } },
     });
   });
@@ -6876,7 +6832,7 @@ it("marks shared snapshots with the menu write revision they include", async () 
   const old = await before.json();
   expect(old.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
   const write = await send(app, "PATCH", `${path}/home-display`, {
-    body: { device: "handheld", columns: 2 },
+    body: { order: "menu_first" },
   });
   expect(write.status).toBe(204);
   const committed = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
@@ -6885,10 +6841,10 @@ it("marks shared snapshots with the menu write revision they include", async () 
   const after = await send(app, "GET", `${path}/read?part=home`);
   expect(await after.json()).toMatchObject({
     revision: committed,
-    home: { status: 200, body: { handheld: { columns: 2 } } },
+    home: { status: 200, body: { order: "menu_first" } },
   });
   const refused = await send(app, "PATCH", `${path}/home-display`, {
-    body: { device: "handheld", columns: 0 },
+    body: { order: null },
   });
   expect(refused.status).toBe(400);
   expect(refused.headers.get("x-waitron-menu-revision")).toBeNull();
@@ -6909,7 +6865,7 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     if (intervene) {
       intervene = false;
       const write = await send(app, "PATCH", `${path}/home-display`, {
-        body: { device: "handheld", columns: 2 },
+        body: { order: "menu_first" },
       });
       expect(write.status).toBe(204);
       savedRevision = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
@@ -6921,7 +6877,7 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       revision: before.revision,
-      home: { status: 200, body: { handheld: { columns: 3 } } },
+      home: { status: 200, body: { order: "home_first" } },
     });
     expect(savedRevision).toEqual({
       epoch: before.revision.epoch,
@@ -6930,7 +6886,7 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     const after = await send(app, "GET", `${path}/read?part=home`);
     expect(await after.json()).toMatchObject({
       revision: savedRevision,
-      home: { status: 200, body: { handheld: { columns: 2 } } },
+      home: { status: 200, body: { order: "menu_first" } },
     });
   } finally {
     boundary.mockRestore();

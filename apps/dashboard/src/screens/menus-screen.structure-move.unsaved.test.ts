@@ -57,8 +57,7 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
     home: async () => ({
       homeSectionId: "home",
       shortcuts: [],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 6, tiles: "colours", order: "home_first" },
+      order: "home_first",
     }),
     status: async () => ({ state: "unpublished", clashes: 0 }),
     preview: async () => ({

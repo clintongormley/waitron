@@ -5377,33 +5377,6 @@ describe("till-table-order-screen", () => {
       expect(source.unfilteredServedProducts).toEqual([veganFood, meatDrink]);
     });
 
-    it("hands the browser the device kind and keeps the menu's displays", async () => {
-      const menu = {
-        ...foodMenu,
-        home: {
-          ...foodMenu.home,
-          till: { ...foodMenu.home.till, columns: 8 },
-          handheld: { ...foodMenu.home.handheld, columns: 2 },
-        },
-      };
-      const { el } = await mount({
-        ...bothMenus,
-        menus: [menu, drinksMenu],
-        selectedMenuId: menu.id,
-      });
-      const columns = () =>
-        getComputedStyle(grid(el).shadowRoot!.querySelector(".grid")!)
-          .getPropertyValue("--columns")
-          .trim();
-      expect(columns()).toBe("8");
-      expect(grid(el).handheld).toBe(false);
-      el.handheld = true;
-      await el.updateComplete;
-      await grid(el).updateComplete;
-      expect(columns()).toBe("2");
-      expect(grid(el).handheld).toBe(true);
-    });
-
     it("hands the browser the selected menu's products before the diet lens as well as after", async () => {
       const veganBeer: TillProduct = {
         ...beerProduct,

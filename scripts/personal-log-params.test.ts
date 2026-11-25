@@ -49,7 +49,6 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
     "FacturaParams",
     "an invoice as AEAT names it: idEmisorFactura, which is on the list, number and date",
   ],
-  ["HomeDevice", "an enum: handheld or till"],
   ["JoinLimit", "an enum of which join limit was reached: address, network, listed or recent"],
   [
     "LineaParams",

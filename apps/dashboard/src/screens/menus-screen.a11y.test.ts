@@ -252,8 +252,7 @@ function api(state: State): DashboardApi {
           reachable: false,
         },
       ],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 6, tiles: "colours", order: "home_first" },
+      order: "home_first",
     } satisfies MenuHome),
     getMenuPrices: vi.fn().mockResolvedValue([
       {
@@ -550,7 +549,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const mounted = await mount("populated", theme, "/menus/menu/menu-lunch/view/home");
     await vi.waitFor(() => {
       const root = mounted.el.shadowRoot!;
-      if (!root.querySelector('wt-slider[name="home-columns"]')) throw new Error("home");
+      if (!root.querySelector('wt-segmented-control[name="home-order"]')) throw new Error("home");
       if (!root.querySelector("dashboard-device-home-preview")) throw new Error("preview");
     });
     return mounted;
@@ -565,9 +564,8 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       };
       await preview.updateComplete;
       expect(preview.shadowRoot!.querySelector(".frame")).not.toBeNull();
-      expect(q(el, '[data-test="columns-note"]').textContent!.trim()).toBe(
-        t("home.columns_note_handheld"),
-      );
+      const choice = q(el, 'wt-segmented-control[name="home-order"]');
+      expect(choice.getAttribute("label")).toBe(t("home.order"));
       await expectNoA11yViolations(host);
     },
   );

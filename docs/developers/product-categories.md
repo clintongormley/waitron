@@ -332,28 +332,22 @@ section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks 
 Publishing keeps an empty slot for a target the document leaves out, so later shortcuts keep their
 positions.
 
-`handheld` and `till` are the two displays, each `{ columns, tiles, order }`. `columns` is a whole
-number from 2 to 3 for a handheld and from 4 to 10 for a till. The stored `tiles` field accepts
-`colours` or `thumbnails`. Both client renderers use colour, independent of that field. `order` is
-`home_first` (the shortcuts, then the menu) or `menu_first`. A new menu starts with
-3 columns on a handheld and 6 on a till, both `colours` and `home_first` (`HOME_DISPLAY_DEFAULTS`,
-`packages/shared/src/menu-document/device-home.ts`).
+The same `order` applies to every device. A new menu uses `home_first` and shows its shortcuts
+first. Choose `menu_first` to show the full menu first.
 
 | Route | Body and success | Refusals |
 | --- | --- | --- |
 | `GET /management-api/menus/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `menu.not_found` |
-| `PATCH /management-api/menus/:id/home-display` | `{ device, columns?, tiles?, order? }`, `device` being `handheld` or `till`; 204, changing only the fields given | `menu.not_found`, `management.request_invalid`, `menu.home_display_invalid` |
+| `PATCH /management-api/menus/:id/home-display` | `{ order }`, 204 | `menu.not_found`, `menu.deleted`, `management.request_invalid` |
 | `POST /management-api/menus/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
 | `POST /management-api/menus/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
 | `DELETE /management-api/menus/:id/home/shortcuts/:memberId` | 204 | `menu.not_found`, `menu_section.not_found` |
 | `PUT /management-api/menus/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `menu.not_found`, `menu_section.not_found`, `menu_section.invalid` |
 
-Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.request_invalid`
-(400); on the display route that includes a `device` other than `handheld` or `till`
-(`field: "device"`). An unknown menu answers `menu.not_found` (404).
-`menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
-`field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
-order. `menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
+Malformed ids answer `shared.invalid_id` (400) and malformed bodies answer
+`management.request_invalid` (400). A missing or unrecognised display order names `field: "order"`.
+An unknown menu answers `menu.not_found` (404).
+`menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
 including the menu's own root, and a deleted product, which no list holds. A shortcut to a product
 deleted later becomes a missing tile in its place, which publishes as an empty slot with a
 `shortcut_missing` warning. `menu_section.wrong_role` (400, `sectionId`, `role`) refuses a Device Home Page section,
@@ -363,27 +357,22 @@ section, 404 otherwise; a product target must be a stored top-level
 product or it answers `menu_section.membership_invalid` (400). A repeated target answers
 `menu_section.member_duplicate` (409), and a negative or fractional position answers
 `menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts, and edits
-the displays, on a menu's Home page tab; it does not call the replace route.
-
-No device profile chooses anything here. A device uses `handheld` when its profile's form factor is
-a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` otherwise.
+the order, on a menu's Home page tab; it does not call the replace route.
 
 **Storage.** Find the menu's Home section through `sections.owner_menu_id` and
-`role = 'home_layout'`; its root has `role = 'menu_root'`. A partial unique index permits one of
-each per menu. The six display columns live on `menus`: `handheld_columns`, `handheld_tiles`,
-`handheld_order`, `till_columns`, `till_tiles` and `till_order`. They have required defaults and
-CHECKs for their ranges and choices. A save checks them with `homeDisplayProblem` first so it can
-name the field. A configuration import refuses an invalid value with `setup.request_invalid`
-and a field such as `menus.till_columns`. It also refuses a menu that does not own exactly one root section
+`role = 'home_layout'`. Its root has `role = 'menu_root'`. A partial unique index permits one of
+each per menu. `menus.home_order` is required and checked against the two choices. A configuration
+import refuses an invalid value with `setup.request_invalid` and the field `menus.home_order`.
+It also refuses a menu that does not own exactly one root section
 and one Home section, with the field `sections.owner_menu_id`.
 
 **What a till is served.** A till reads the Device Home Page from each menu's live version, not
 from the working state. Both offers routes (`GET /api/default-service-zone/offers` and
 `GET /api/service-zones/:zoneId/offers`) give each menu its `structure` and its `home`, the live
-document's `{ shortcuts, handheld, till }`, where a shortcut is `{ kind: "product", productId }`,
+document's `{ shortcuts, order }`, where a shortcut is `{ kind: "product", productId }`,
 `{ kind: "section", sectionId }` or `{ kind: "empty" }`. `GET /api/menu-state` gives each menu
 `{ menuId, versionId }` beside `unavailable`. The served `home` is the live document's, the same
-whichever device asks; the till picks the display its form factor names. A shortcut or display changed since the last publish
+whichever device asks. A shortcut or order changed since the last publish
 reaches no device until the menu is published again (the case "a draft shortcut or display change
 reaches no device until the menu is published" in `apps/server/src/till-api.sell-published.test.ts`).
 

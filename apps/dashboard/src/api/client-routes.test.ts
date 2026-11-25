@@ -1312,8 +1312,7 @@ describe("DashboardApi routes", () => {
           reachable: true,
         },
       ],
-      handheld: { columns: 3, tiles: "colours" as const, order: "home_first" as const },
-      till: { columns: 6, tiles: "colours" as const, order: "home_first" as const },
+      order: "home_first",
     };
     const ref = { kind: "section" as const, sectionId: "s1" };
     const shortcut = { id: "t2", position: 1, ref };
@@ -1330,20 +1329,14 @@ describe("DashboardApi routes", () => {
     await expect(api.addHomeShortcut("c1", ref)).resolves.toEqual(shortcut);
     await expect(api.removeHomeShortcut("c1", "t1")).resolves.toBeUndefined();
     await expect(api.moveHomeShortcut("c1", "t2", 0)).resolves.toEqual([shortcut]);
-    await expect(
-      api.setHomeDisplay("c1", "till", { columns: 8, order: "menu_first" }),
-    ).resolves.toBeUndefined();
+    await expect(api.setHomeDisplay("c1", "menu_first")).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/menus/c1/home", "GET", undefined],
       ["/management-api/menus/c1/home/shortcuts", "POST", { ref }],
       ["/management-api/menus/c1/home/shortcuts/t1", "DELETE", undefined],
       ["/management-api/menus/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
-      [
-        "/management-api/menus/c1/home-display",
-        "PATCH",
-        { device: "till", columns: 8, order: "menu_first" },
-      ],
+      ["/management-api/menus/c1/home-display", "PATCH", { order: "menu_first" }],
     ]);
   });
 

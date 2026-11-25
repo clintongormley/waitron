@@ -5,7 +5,7 @@ import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  HOME_DISPLAY_DEFAULTS,
+  DEFAULT_HOME_ORDER,
   addShortcut,
   buildMenuDocument,
   createMenu,
@@ -3011,8 +3011,7 @@ describe("each served menu's structure and Device Home Page", () => {
             { kind: "section", sectionId: venue.drinks },
             { kind: "product", productId: venue.burger },
           ],
-          handheld: HOME_DISPLAY_DEFAULTS.handheld,
-          till: HOME_DISPLAY_DEFAULTS.till,
+          order: DEFAULT_HOME_ORDER,
         },
       });
       expect((await menuState(tx, venue.diningZone)).menus).toEqual([

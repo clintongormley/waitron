@@ -42,8 +42,7 @@ function document(dish: DeclarationOffer = offer): DeclarationDocument {
     includedMenuHashes: { secret: "hash" },
     home: {
       shortcuts: [],
-      handheld: { columns: 2, tiles: "colours", order: "home_first" },
-      till: { columns: 4, tiles: "colours", order: "menu_first" },
+      order: "menu_first",
     },
     root: { members: [{ kind: "product", menuItemId: "item", productId: "private-product" }] },
     offers: { item: dish },

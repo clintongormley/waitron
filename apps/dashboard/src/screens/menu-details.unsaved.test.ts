@@ -167,8 +167,7 @@ for (const succeeds of [true, false]) {
       getMenuHome: async () => ({
         id: "home",
         shortcuts: [],
-        handheld: { columns: 3, tiles: "colours", order: "home_first" },
-        till: { columns: 5, tiles: "colours", order: "home_first" },
+        order: "home_first",
       }),
       getMenuPreview: async () => {
         throw { code: "connection.failed" };
@@ -176,11 +175,7 @@ for (const succeeds of [true, false]) {
       getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
       setHomeDisplay: async (...args: unknown[]) => {
         writes.push(args);
-        if (!succeeds)
-          throw {
-            code: "menu.home_display_invalid",
-            params: { device: "handheld", field: "order" },
-          };
+        if (!succeeds) throw { code: "server.internal" };
       },
     } as unknown as DashboardApi;
     Object.defineProperty(client, "background", { get: () => client });
@@ -188,26 +183,25 @@ for (const succeeds of [true, false]) {
       api: client,
     });
     const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
-    await expect
-      .poll(() => screen.shadowRoot!.querySelector('input[name="home-order"][value="menu_first"]'))
-      .not.toBeNull();
-    screen
-      .shadowRoot!.querySelector<HTMLInputElement>('input[name="home-order"][value="menu_first"]')!
-      .click();
-    await expect.poll(() => writes).toEqual([["menu", "handheld", { order: "menu_first" }]]);
+    const control = () =>
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+        'wt-segmented-control[name="home-order"]',
+      );
+    await expect.poll(control).not.toBeNull();
+    await control()!.updateComplete;
+    control()!.shadowRoot!.querySelectorAll("button")[1]!.click();
+    await expect.poll(() => writes).toEqual([["menu", "menu_first"]]);
     await screen.updateComplete;
     expect(app.leave.coordinator.isDirty()).toBe(false);
     const event = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-    if (!succeeds)
+    if (!succeeds) {
       await expect
-        .poll(() =>
-          screen
-            .shadowRoot!.querySelector('input[name="home-order"][value="home_first"]')!
-            .getAttribute("aria-invalid"),
-        )
-        .toBe("true");
+        .poll(() => screen.shadowRoot!.querySelector('[data-test="home-error"]'))
+        .not.toBeNull();
+      expect(control()!.value).toBe("home_first");
+    }
   });
 }

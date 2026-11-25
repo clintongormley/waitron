@@ -27,7 +27,7 @@ import type {
   TillMenuOffer,
   ZoneOffers,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { setLocale, t } from "./i18n/t.js";
@@ -118,8 +118,7 @@ function menu(
         },
         home: {
           shortcuts: [],
-          handheld: HOME_DISPLAY_DEFAULTS.handheld,
-          till: HOME_DISPLAY_DEFAULTS.till,
+          order: DEFAULT_HOME_ORDER,
         },
       },
     ],

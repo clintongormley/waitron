@@ -665,8 +665,7 @@ class ModifierStoreApp extends ModifierLeaveApp {
     structure: { members: [{ kind: "product", menuItemId: "offer-dish", productId: "dish" }] },
     home: {
       shortcuts: [],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 5, tiles: "colours", order: "home_first" },
+      order: "home_first",
     },
   };
   override render() {

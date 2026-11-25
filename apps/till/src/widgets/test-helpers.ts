@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
-import { normaliseDraftLines, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { normaliseDraftLines, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { SESSION_PERSON_REFUSAL } from "../api/client.js";
 import type {
   AdjustmentReason,
@@ -377,8 +377,7 @@ export function servedMenus<M extends { id: string }>(
         shortcuts: shortcuts
           ? own.map((offer) => ({ kind: "product" as const, productId: offer.productId }))
           : [],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     };
   });

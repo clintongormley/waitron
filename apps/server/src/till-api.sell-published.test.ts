@@ -1151,8 +1151,6 @@ describe("GET /api/menu-state", () => {
 
 describe("the Device Home Page each menu serves", () => {
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-  const handheld = { columns: 3, tiles: "colours", order: "home_first" };
-  const till = { columns: 6, tiles: "colours", order: "home_first" };
   const zonePathOf = (v: Lunch) => `/api/service-zones/${v.zoneId}/offers`;
   const served = async (v: Lunch, path: string, cookie = v.cookie) => {
     const response = await v.app.request(path, { headers: { cookie } });
@@ -1172,7 +1170,7 @@ describe("the Device Home Page each menu serves", () => {
     const v = await setupLunch();
     await app((tx) => updateSection(tx, v.dessertsId, { names: { es: "Para terminar" } }));
     await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
-    await app((tx) => setHomeDisplay(tx, v.menuId, "till", { columns: 8, order: "menu_first" }));
+    await app((tx) => setHomeDisplay(tx, v.menuId, "menu_first"));
     const versionId = await publish(v.menuId);
     const zonePath = zonePathOf(v);
     const flanOffer = (await served(v, zonePath)).offers.find(
@@ -1203,8 +1201,7 @@ describe("the Device Home Page each menu serves", () => {
       },
       home: {
         shortcuts: [{ kind: "section", sectionId: v.dessertsId }],
-        handheld,
-        till: { columns: 8, tiles: "colours", order: "menu_first" },
+        order: "menu_first",
       },
     };
     for (const path of [zonePath, "/api/default-service-zone/offers"])
@@ -1220,9 +1217,9 @@ describe("the Device Home Page each menu serves", () => {
   it("a draft shortcut or display change reaches no device until the menu is published", async () => {
     const v = await setupLunch();
     const published = await publish(v.menuId);
-    const before = { shortcuts: [], handheld, till };
+    const before = { shortcuts: [], order: "home_first" };
     await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
-    await app((tx) => setHomeDisplay(tx, v.menuId, "handheld", { columns: 2 }));
+    await app((tx) => setHomeDisplay(tx, v.menuId, "menu_first"));
     for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
       const [menu] = (await served(v, path)).menus;
       expect(menu).toMatchObject({ versionId: published, home: before });
@@ -1234,8 +1231,7 @@ describe("the Device Home Page each menu serves", () => {
     expect(republished).not.toBe(published);
     const after = {
       shortcuts: [{ kind: "section", sectionId: v.dessertsId }],
-      handheld: { ...handheld, columns: 2 },
-      till,
+      order: "menu_first",
     };
     for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
       const [menu] = (await served(v, path)).menus;

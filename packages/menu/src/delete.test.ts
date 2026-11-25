@@ -4,8 +4,7 @@ import type { MenuDocument } from "@waitron/shared";
 
 const home: MenuDocument["home"] = {
   shortcuts: [],
-  handheld: { columns: 3, tiles: "colours", order: "home_first" },
-  till: { columns: 6, tiles: "colours", order: "home_first" },
+  order: "home_first",
 };
 const doc = (partial: Partial<MenuDocument>): MenuDocument =>
   ({

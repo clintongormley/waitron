@@ -1,12 +1,6 @@
 import { BUILT_IN_ROLE_NAMES, PERSON_STATUS_NAMES } from "@waitron/shared";
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
-import type {
-  AccessRole,
-  AllergenDeclaration,
-  HomeDevice,
-  PersonRole,
-  Printer,
-} from "../api/client.js";
+import type { AccessRole, AllergenDeclaration, PersonRole, Printer } from "../api/client.js";
 import { fill, t } from "./t.js";
 
 const UNIT_NAMES: NameTable = {
@@ -172,10 +166,6 @@ export function swapDirectionName(direction: string, locale: string = currentLoc
 
 export function statusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PERSON_STATUS_NAMES, value, locale);
-}
-
-export function homeDeviceName(device: HomeDevice): string {
-  return t(device === "handheld" ? "home.device_handheld" : "home.device_till");
 }
 
 /** A rate ("7.50") as the person's locale writes a number, "7.5" or "7,5". */

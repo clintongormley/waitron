@@ -47,7 +47,6 @@ export type {
   OrderServiceContext,
   ServiceZoneSummary,
   ZoneDeviceHome,
-  ZoneHomeDisplay,
   ZoneMenu,
   ZoneMenuMember,
   ZoneMenuOffer,

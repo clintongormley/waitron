@@ -21,7 +21,7 @@ import type {
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import type { AllergySendTarget } from "@waitron/module";
 import {
   addDish as addSteak,
@@ -140,8 +140,7 @@ function menu(
       },
       home: {
         shortcuts: [],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     })),
     offers: [BREAKFAST_MENU, LUNCH].flatMap((menu) => menu.products.map((p) => offer(menu, p))),

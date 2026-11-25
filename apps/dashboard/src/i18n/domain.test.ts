@@ -5,7 +5,6 @@ import {
   allergenName,
   allergenStateName,
   breachKindName,
-  homeDeviceName,
   jobStatusName,
   regimeName,
   roleName,
@@ -25,13 +24,6 @@ beforeEach(() => {
   setLocale("es-ES");
 });
 afterEach(() => setLocale(previousLocale));
-
-it("names each Home device in the screen's language", () => {
-  expect(homeDeviceName("handheld")).toBe("Terminal de mano");
-  setLocale("en-GB");
-  expect(homeDeviceName("handheld")).toBe("Handheld");
-  expect(homeDeviceName("till")).toBe("Till");
-});
 
 it("resolves a role token to Spanish, to English, and passes an unknown value through raw", () => {
   expect(roleName("manager", "es")).toBe("Encargado");

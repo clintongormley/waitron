@@ -558,17 +558,14 @@ never as a shortcut around a `--wt-color-*` token.
 set of rules (`packages/shared/src/menu-document/device-home.ts`): the till in its menu browser
 (`apps/till/src/widgets/menu-browser.ts`) and the dashboard in a menu's Home page tab
 (`apps/dashboard/src/widgets/device-home-preview.ts`). Under search come two blocks, the shortcuts
-and the menu's own structure, in the order the menu sets for that kind of device. The first block
+and the menu's own structure, in the order the menu sets for every device. The first block
 has no visible heading, only an accessible name. Between the two sits a divider: the second
 block's name ("Full menu" or "Shortcuts") in `--wt-font-size-sm` and `--wt-color-text-muted`,
 between two 1px `--wt-color-border` lines, as that block's heading. A block with nothing to show is
-not drawn, and then there is no divider. Every grid has up to the menu's column count of tracks,
-fewer where a tile would be narrower than its minimum (`HOME_GRID_COLUMNS`). Handheld tiles use
-`--wt-tap-min * 1.5`; till tiles keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
-offer 2–3 columns and till settings 4–10. The handheld grid and its preview show three columns at
-360px and 390px. The handheld preview uses `--wt-space-4` side insets to fit inside the dashboard's
-own phone-width padding; narrower grids keep the same reading order. The till and preview use
-painted or neutral tiles with centred names. The owner removed tile photos and the nutrition mark
+not drawn, and then there is no divider. The grid fits its available width (`HOME_GRID_COLUMNS`).
+Each tile takes at least 15% of the grid within a 100–160px range, and the grid has up to seven
+columns. Empty tracks preserve the width of each tile when the last row is short. The till and
+preview use painted or neutral tiles with centred names. The owner removed tile photos and the nutrition mark
 on 24 November (“i think we drop the photos, and the icon”). You can still use the till's filter or
 long-press a product for its information. A folder identifies a section and the accessible name
 includes "Section". A section emptied by a diet filter keeps its notice. A product tile shows its
@@ -576,16 +573,11 @@ menu price or the range of its variant prices, including sold-out variants, with
 the prices are equal. It appends the unit once for units other than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
-The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the
-left, the device choice and display settings on the right. In the preview's home view each shortcut
-tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove shortcut:
-<name>", greyed while a shortcut is being added or removed) (owner, 2026-10-17, A815).
-The bin also stays greyed during a reorder or display save, while grips remain usable during a
-reorder (watcher, 2026-11-14, MENU-HOME-TAB).
-The Till frame labels itself **Table order preview** and represents a till as wide as the frame:
-from 720px it reserves the table order's 3:2 menu/order share, gap and order inset; below that the
-menu uses the full width. This is a representative table layout, not a fixed-size till screenshot
-(watcher, 2026-11-14, MENU-HOME-TAB).
+**Shown first** sits above a single preview with two equal choices, **Shortcuts** and **Full
+menu**. On a phone the control fills the available width. The preview is at most 792px wide. Each
+shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove
+shortcut: <name>"). The bin is disabled while a shortcut is added, removed or reordered and
+while an order change saves. The grips stay usable during a reorder.
 On the grip,
 the arrow keys move the shortcut one position, Up and Down included, and a drag moves it among the
 shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu no longer
@@ -875,7 +867,8 @@ this floor — removing the `min-width` regresses that guard.
 
 `wt-segmented-control` shows a short single-choice list as joined buttons. Give it `name`,
 `label`, `options` (`{ value, label }`), and `value`. Use `hide-label` in a labelled table column;
-the group keeps its accessible name. Each choice exposes the `button` part for spacing adjustments.
+the group keeps its accessible name. Set `equal-width` to fill the available row with equal
+segments. Each choice exposes the `button` part for spacing adjustments.
 The chosen button uses the primary colour;
 `disabled`, `hint` and `error` carry the group state. A different choice emits `wt-change` with
 `{ value }`. Tab reaches the selected choice, arrow keys move and select, and Home/End select

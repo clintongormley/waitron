@@ -1,4 +1,4 @@
-import type { HomeDisplay } from "./menu-document-types.js";
+import type { HomeOrder } from "./menu-document-types.js";
 
 /** Every section belongs to one menu. */
 export type SectionRole = "section" | "menu_root" | "home_layout";
@@ -73,10 +73,9 @@ export interface HomeTile {
   reachable: boolean;
 }
 
-/** A menu's working Device Home Page: its shortcuts in order, and how each device presents it. */
+/** A menu's working Device Home Page: its shortcuts in order, and which block appears first. */
 export interface MenuHome {
   homeSectionId: string;
   shortcuts: HomeTile[];
-  handheld: HomeDisplay;
-  till: HomeDisplay;
+  order: HomeOrder;
 }

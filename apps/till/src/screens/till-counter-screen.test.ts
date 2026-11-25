@@ -152,7 +152,6 @@ it("keeps the first counter menu choice focused in one handheld row", async () =
     );
     const { el } = await mount({
       menus,
-      handheld: true,
       menuSelectionRequired: true,
       service: {
         open: true,
@@ -473,7 +472,7 @@ describe("till-counter-screen", () => {
     expect(browser.products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
-  it("passes menus, selected menu, diet lens and device kind to their rendered controls", async () => {
+  it("passes menus, selected menu and diet lens to their rendered controls", async () => {
     const menus: TillZoneMenu[] = servedMenus(
       [{ id: "lunch", name: "Lunch", isDefault: true, versionId: "v1" }],
       [],
@@ -482,7 +481,6 @@ describe("till-counter-screen", () => {
       menus,
       selectedMenuId: "lunch",
       selectedFilters: { diets: ["vegan"], exclude: {} },
-      handheld: true,
     });
     expect(menuBrowser(el).menus).toBe(menus);
     expect(menuBrowser(el).menu!.id).toBe("lunch");
@@ -491,7 +489,6 @@ describe("till-counter-screen", () => {
       exclude: {},
     });
     expect(menuBrowser(el).products).toEqual([]);
-    expect(menuBrowser(el).handheld).toBe(true);
   });
 
   it("keeps the sale body without a retired Allergens control", async () => {

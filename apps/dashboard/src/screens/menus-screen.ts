@@ -42,7 +42,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-slider.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { foldName } from "@waitron/menu/src/name-uniqueness.js";
 import { memberName } from "../widgets/member-names.js";
@@ -75,8 +75,7 @@ import type {
   MenuSummary,
   CategorySummary,
   DashboardApi,
-  HomeDevice,
-  HomeDisplay,
+  HomeOrder,
   IncludeFolderInput,
   MenuHome,
   MenuReadModels,
@@ -95,13 +94,12 @@ import type {
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { HOME_COLUMN_RANGE, HOME_DEVICES, HOME_ORDERS } from "@waitron/shared";
+import { HOME_ORDERS } from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { MenuListLayout, menuListStyles, type ListLayout } from "./menu-list-layout.js";
 import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
-import { homeDeviceName } from "../i18n/domain.js";
 import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
@@ -194,8 +192,6 @@ const SHORTCUT_TARGET_REFUSALS = new Set([
   "menu_section.not_found",
   "menu_section.wrong_role",
 ]);
-
-const HOME_DISPLAY_FIELDS: readonly string[] = ["columns", "order"];
 
 /** Every product and section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
@@ -362,9 +358,6 @@ export class MenusScreen extends LitElement {
     menuListStyles,
     menuEditorHeadingStyles,
     css`
-      .field-error {
-        color: var(--wt-color-danger);
-      }
       [data-test="included-by"] a {
         display: inline-flex;
         align-items: center;
@@ -421,71 +414,8 @@ export class MenusScreen extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
-      .home fieldset {
-        display: grid;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        margin: 0;
-        padding: 0;
-        border: 0;
-      }
-      .home fieldset > .field-error {
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
-      }
-      .home legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-1);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .choices {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--wt-space-4);
-      }
-      .choices label {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-      }
-      .choices input[type="radio"] {
-        margin: 0;
-        accent-color: var(--wt-color-primary);
-      }
-      .choices input[type="radio"]:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      .home {
-        container-type: inline-size;
-      }
-      .home-columns,
-      .home-settings,
-      .home-preview {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--wt-space-3);
-        min-width: 0;
-      }
-      .home-columns {
-        gap: var(--wt-space-5);
-      }
-      /* The Preview tab's breakpoint, so both tabs go to two columns at the same width. */
-      /* A handheld's column is no wider than its frame (.frame[data-device="handheld"] in
-         device-home-preview.ts), so the settings sit beside the phone; a till's takes the rest. */
-      @container (min-width: 800px) {
-        .home-columns {
-          grid-template-columns: minmax(0, 1fr) calc(var(--wt-tap-min) * 7);
-          align-items: start;
-        }
-        .home-columns[data-device="handheld"] {
-          grid-template-columns: minmax(0, calc(var(--wt-tap-min) * 9)) calc(var(--wt-tap-min) * 7);
-        }
-      }
-      .home h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-lg);
+      .home-settings {
+        max-inline-size: var(--wt-form-max-width);
       }
       .status-line {
         margin: calc(var(--wt-space-3) * -1) 0 var(--wt-space-4);
@@ -706,14 +636,7 @@ export class MenusScreen extends LitElement {
   /** Why a display setting was refused when the refusal names no control on screen, or why a
    * shortcut's remove or move was refused. */
   @state() private homeError: string | null = null;
-  @state() private homeDevice: HomeDevice = "handheld";
-  /** The setting whose save is out, shown over the saved one until the save is answered. */
-  @state() private homePending: {
-    menuId: string;
-    device: HomeDevice;
-    patch: Partial<HomeDisplay>;
-  } | null = null;
-  @state() private homeFieldErrors: Partial<Record<keyof HomeDisplay, string>> = {};
+  @state() private homePending: { menuId: string; order: HomeOrder } | null = null;
   /** The shortcut picker while it is open. */
   @state() private addingShortcut: "product" | "section" | null = null;
   /** A refusal about the chosen target, shown under the picker. */
@@ -1230,7 +1153,6 @@ export class MenusScreen extends LitElement {
     this.menuHome = null;
     this.homeLoadError = false;
     this.homeError = null;
-    this.homeFieldErrors = {};
   }
 
   /** Also forgets the rows, so the tab shows loading rather than old rows until the next read. */
@@ -1311,7 +1233,6 @@ export class MenusScreen extends LitElement {
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
-    this.homeDevice = "handheld";
     this.addingShortcut = null;
     // An open menu's state waits for `#showView`, which each caller opening a menu runs next and
     // which knows whether the preview carries it, so no query starts only to be released.
@@ -2129,43 +2050,21 @@ export class MenusScreen extends LitElement {
     void this.#writes.idle.then(() => this.requestUpdate());
   }
 
-  /** Saves one display setting of the device shown. A refusal naming a control of that device goes
-   * under it; any other is said above the controls. A saved value is kept in the home shown, so it
-   * still shows when the read that follows fails. */
-  async #saveDisplay(patch: Partial<HomeDisplay>): Promise<void> {
+  async #saveDisplay(order: HomeOrder): Promise<void> {
     const menuId = this.menuId;
-    if (menuId === null || this.homePending !== null) return;
-    const device = this.homeDevice;
-    const fields = Object.keys(patch) as (keyof HomeDisplay)[];
-    this.homePending = { menuId, device, patch };
+    if (menuId === null || this.homePending !== null || this.menuHome?.order === order) return;
+    this.homePending = { menuId, order };
     this.homeError = null;
-    this.homeFieldErrors = Object.fromEntries(
-      Object.entries(this.homeFieldErrors).filter(
-        ([key]) => !fields.includes(key as keyof HomeDisplay),
-      ),
-    );
     try {
-      await this.api.setHomeDisplay(menuId, device, patch);
+      await this.api.setHomeDisplay(menuId, order);
     } catch (error) {
       this.homePending = null;
-      if (this.menuId !== menuId) return;
-      const code = codeOf(error);
-      const params = (error as { params?: { device?: unknown; field?: unknown } } | undefined)
-        ?.params;
-      const field = params?.field;
-      if (
-        code === "menu.home_display_invalid" &&
-        params?.device === this.homeDevice &&
-        typeof field === "string" &&
-        HOME_DISPLAY_FIELDS.includes(field)
-      )
-        this.homeFieldErrors = { ...this.homeFieldErrors, [field]: codeMessage(code) };
-      else this.homeError = codeMessage(code);
+      if (this.menuId === menuId) this.homeError = codeMessage(codeOf(error));
       return;
     }
     this.homePending = null;
     if (this.menuId === menuId && this.menuHome !== null)
-      this.menuHome = { ...this.menuHome, [device]: { ...this.menuHome[device], ...patch } };
+      this.menuHome = { ...this.menuHome, order };
     await this.#rereadHome(menuId, true);
   }
 
@@ -3330,110 +3229,34 @@ export class MenusScreen extends LitElement {
           ? nothing
           : html`<p role="status" data-test="home-loading">${t("home.loading")}</p>`
       }`;
-    const device = this.homeDevice;
     const pending = this.homePending;
-    const display =
-      pending?.menuId === this.menuId && pending.device === device
-        ? { ...home[device], ...pending.patch }
-        : home[device];
-    const range = HOME_COLUMN_RANGE[device];
+    const order = pending?.menuId === this.menuId ? pending.order : home.order;
     return html`${error}${loadError}
-      <div class="home-columns" data-device=${device}>
-        <section
-          class="home-preview"
-          data-test="home-preview-pane"
-          aria-labelledby="home-preview-heading"
-        >
-          <h2 id="home-preview-heading">${t("home.preview_heading")}</h2>
-          ${this.#renderHomePreview(device, home)}
-        </section>
-        <div class="home-settings" data-test="home-settings">
-          ${this.#renderHomeSettings(device, display, range)}
-        </div>
-      </div>`;
-  }
-
-  // Live values restore the saved controls after a refused change.
-  #renderHomeSettings(
-    device: HomeDevice,
-    display: HomeDisplay,
-    range: (typeof HOME_COLUMN_RANGE)[HomeDevice],
-  ) {
-    return html`<fieldset>
-        <legend>${t("home.device")}</legend>
-        <div class="choices">
-          ${HOME_DEVICES.map(
-            (each) =>
-              html`<label
-                ><input
-                  type="radio"
-                  name="home-device"
-                  value=${each}
-                  .checked=${each === device}
-                  @change=${() => {
-                    this.homeDevice = each;
-                    this.homeFieldErrors = {};
-                  }}
-                />${homeDeviceName(each)}</label
-              >`,
-          )}
-        </div>
-      </fieldset>
-      <wt-slider
-        name="home-columns"
-        label=${t("home.columns")}
-        .min=${range.min}
-        .max=${range.max}
-        .value=${live(display.columns)}
-        .disabled=${this.homePending !== null}
-        error=${this.homeFieldErrors.columns ?? ""}
-        @wt-change=${(event: CustomEvent<{ value: number }>) => {
+      <wt-segmented-control
+        class="home-settings"
+        data-test="home-settings"
+        name="home-order"
+        label=${t("home.order")}
+        .value=${live(order)}
+        .options=${HOME_ORDERS.map((value) => ({
+          value,
+          label: t(value === "home_first" ? "home.block_shortcuts" : "home.block_menu"),
+        }))}
+        ?disabled=${pending !== null}
+        equal-width
+        @wt-change=${(event: CustomEvent<{ value: HomeOrder }>) => {
           event.stopPropagation();
-          void this.#saveDisplay({ columns: event.detail.value });
+          void this.#saveDisplay(event.detail.value);
         }}
-      ></wt-slider>
-      <p class="help" data-test="columns-note">
-        ${t(device === "handheld" ? "home.columns_note_handheld" : "home.columns_note_till")}
-      </p>
-      ${this.#homeOrder(display.order)}`;
+      ></wt-segmented-control>
+      ${this.#renderHomePreview(home, order)}`;
   }
 
-  #homeOrder(value: HomeDisplay["order"]) {
-    const error = this.homeFieldErrors.order;
-    const errorId = "home-order-error";
-    return html`<fieldset aria-describedby=${ifDefined(error ? errorId : undefined)}>
-      <legend>${t("home.order")}</legend>
-      <div class="choices">
-        ${HOME_ORDERS.map(
-          (order) =>
-            html`<label
-              ><input
-                type="radio"
-                name="home-order"
-                value=${order}
-                .checked=${live(order === value)}
-                .disabled=${this.homePending !== null}
-                aria-invalid=${ifDefined(error ? "true" : undefined)}
-                @change=${() => void this.#saveDisplay({ order })}
-              />${t(order === "home_first" ? "home.order_home_first" : "home.order_menu_first")}</label
-            >`,
-        )}
-      </div>
-      ${
-        error
-          ? html`<p class="field-error" role="alert" id=${errorId} data-test=${errorId}>
-              ${error}
-            </p>`
-          : nothing
-      }
-    </fieldset>`;
-  }
-
-  #renderHomePreview(device: HomeDevice, home: MenuHome) {
+  #renderHomePreview(home: MenuHome, order: HomeOrder) {
     if (this.preview !== null)
       return html`<dashboard-device-home-preview
         .document=${this.preview.document}
-        device=${device}
+        .order=${order}
         .shortcuts=${home.shortcuts}
         .busy=${this.busy}
         .removeDisabled=${this.#homeRemoveDisabled}

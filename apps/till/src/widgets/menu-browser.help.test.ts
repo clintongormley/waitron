@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "lit";
 import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
 import { helpEn, helpEs } from "../i18n/help-strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -44,8 +44,7 @@ const menu: TillZoneMenu = {
   structure: { members: [{ kind: "product", productId: "dish", menuItemId: "offer" }] },
   home: {
     shortcuts: [],
-    till: HOME_DISPLAY_DEFAULTS.till,
-    handheld: HOME_DISPLAY_DEFAULTS.handheld,
+    order: DEFAULT_HOME_ORDER,
   },
 };
 

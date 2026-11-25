@@ -330,8 +330,7 @@ export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget };
 import type {
   DocumentMember,
   FrozenOffer,
-  HomeDevice,
-  HomeDisplay,
+  HomeOrder,
   LocalTime,
   MenuChange,
   MenuDocument,
@@ -347,8 +346,7 @@ import type {
 export type {
   DocumentMember,
   FrozenOffer,
-  HomeDevice,
-  HomeDisplay,
+  HomeOrder,
   LocalTime,
   MenuChange,
   MenuDocument,
@@ -3765,12 +3763,8 @@ export class DashboardApi {
     );
   }
 
-  /** A value outside the device's range is refused `menu.home_display_invalid`. */
-  setHomeDisplay(menuId: string, device: HomeDevice, patch: Partial<HomeDisplay>): Promise<void> {
-    return this.#request<void>(`/management-api/menus/${menuId}/home-display`, "PATCH", {
-      device,
-      ...patch,
-    });
+  setHomeDisplay(menuId: string, order: HomeOrder): Promise<void> {
+    return this.#request<void>(`/management-api/menus/${menuId}/home-display`, "PATCH", { order });
   }
 
   /** `expectedHash` is the preview's; a menu edited since is refused `menu.changed_since_preview`. */

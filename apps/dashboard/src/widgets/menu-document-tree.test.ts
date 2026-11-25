@@ -445,7 +445,7 @@ it("refuses stale paths, another product in the same slot and targets outside th
     { kind: "section", sectionIds: ["missing"], field: { kind: "summary" } },
     { kind: "section", sectionIds: [], field: { kind: "summary" } },
     { kind: "title", menuId: "other-menu" },
-    { kind: "home", device: "till", field: "columns" },
+    { kind: "home", field: "order" },
   ] as MenuTarget[])
     expect(await el.reveal(target)).toBe(false);
   expect(shown(el)).toEqual(["root", "drinks", "juice"]);

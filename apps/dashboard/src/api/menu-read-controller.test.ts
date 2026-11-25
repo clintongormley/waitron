@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { DashboardApi, type HomeDisplay, type MenuReadResult } from "./client.js";
+import { DashboardApi, type HomeOrder, type MenuReadResult } from "./client.js";
 import { MenuReadController } from "./menu-read-controller.js";
 
 const controllers: MenuReadController[] = [];
@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function setup() {
-  let handheld: Partial<HomeDisplay> = { columns: 3 };
+  let order: HomeOrder = "home_first";
   let refusal = false;
   const requests: Array<{ path: string; passive: boolean }> = [];
   const values: MenuReadResult[] = [];
@@ -18,7 +18,7 @@ function setup() {
   const api = new DashboardApi("", async (path, init) => {
     requests.push({ path, passive: new Headers(init.headers).get("x-waitron-live") === "1" });
     if (refusal) throw new Error("network offline");
-    return Response.json({ home: { status: 200, body: { handheld } } });
+    return Response.json({ home: { status: 200, body: { order } } });
   });
   const hosts: ReactiveController[] = [];
   const host = {
@@ -38,8 +38,8 @@ function setup() {
     requests,
     values,
     errors,
-    handheld: (value: Partial<HomeDisplay>) => {
-      handheld = value;
+    order: (value: HomeOrder) => {
+      order = value;
     },
     refusal: (value: boolean) => {
       refusal = value;
@@ -61,7 +61,7 @@ it("keeps one shared menu watch when its tabs ask for the same selected parts", 
       passive: false,
     },
   ]);
-  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 3 } } } });
+  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "home_first" } } });
 });
 
 it("shares the save refresh with an arriving notification, but still reads later remote changes", async () => {
@@ -70,7 +70,7 @@ it("shares the save refresh with an arriving notification, but still reads later
   const initial = s.controller.watch("lunch", ["home"], (value) => s.values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   const refresh = s.controller.refresh();
   await vi.advanceTimersByTimeAsync(50);
   expect(s.requests).toHaveLength(1);
@@ -80,14 +80,14 @@ it("shares the save refresh with an arriving notification, but still reads later
   await vi.advanceTimersByTimeAsync(1000);
   expect(s.requests).toHaveLength(2);
   expect(s.requests[1]!.passive).toBe(true);
-  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } });
-  s.handheld({ columns: 2, tiles: "thumbnails" });
+  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } });
+  s.order("menu_first");
   s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.advanceTimersByTimeAsync(0);
   expect(s.requests).toHaveLength(3);
   await vi.waitFor(() =>
     expect(s.values.at(-1)).toEqual({
-      home: { status: 200, body: { handheld: { columns: 2, tiles: "thumbnails" } } },
+      home: { status: 200, body: { order: "menu_first" } },
     }),
   );
 });
@@ -98,13 +98,13 @@ it("reads back a successful save when the stream is silent", async () => {
   const initial = s.controller.watch("lunch", ["home"], (value) => s.values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   const refresh = s.controller.refresh();
   await vi.advanceTimersByTimeAsync(100);
   await refresh;
   expect(s.requests).toHaveLength(2);
   expect(s.requests[1]!.passive).toBe(true);
-  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } });
+  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } });
 });
 
 it("settles a refused refresh and recovers when a later read succeeds", async () => {
@@ -118,12 +118,12 @@ it("settles a refused refresh and recovers when a later read succeeds", async ()
   await vi.advanceTimersByTimeAsync(100);
   await refresh;
   expect(s.errors).toEqual([{ code: "connection.failed" }]);
-  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 3 } } } });
+  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "home_first" } } });
   s.refusal(false);
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.waitFor(() =>
-    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } }),
+    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } }),
   );
 });
 
@@ -184,14 +184,14 @@ it("does not count a read already in flight as the save's refresh", async () => 
   const refresh = controller.refresh().then(() => {
     refreshed = true;
   });
-  answers[0]!(Response.json({ home: { status: 200, body: { handheld: { columns: 3 } } } }));
+  answers[0]!(Response.json({ home: { status: 200, body: { order: "home_first" } } }));
   await initial;
   expect(refreshed).toBe(false);
   await vi.advanceTimersByTimeAsync(100);
   expect(answers).toHaveLength(2);
-  answers[1]!(Response.json({ home: { status: 200, body: { handheld: { columns: 2 } } } }));
+  answers[1]!(Response.json({ home: { status: 200, body: { order: "menu_first" } } }));
   await refresh;
-  expect(values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } });
+  expect(values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } });
 });
 
 it("retains an invalidation arriving during the refresh's read", async () => {
@@ -207,7 +207,7 @@ it("retains an invalidation arriving during the refresh's read", async () => {
     return Response.json({
       home: {
         status: 200,
-        body: { handheld: reads === 1 ? { columns: 3 } : { columns: 2, tiles: "thumbnails" } },
+        body: { order: reads === 1 ? "home_first" : "menu_first" },
       },
     });
   });
@@ -231,11 +231,11 @@ it("retains an invalidation arriving during the refresh's read", async () => {
   api.liveData.invalidate([{ type: "menus" }]);
   await vi.advanceTimersByTimeAsync(0);
   expect(reads).toBe(2);
-  second(Response.json({ home: { status: 200, body: { handheld: { columns: 2 } } } }));
+  second(Response.json({ home: { status: 200, body: { order: "menu_first" } } }));
   await refresh;
   await vi.waitFor(() =>
     expect(values.at(-1)).toEqual({
-      home: { status: 200, body: { handheld: { columns: 2, tiles: "thumbnails" } } },
+      home: { status: 200, body: { order: "menu_first" } },
     }),
   );
   expect(reads).toBe(3);
@@ -270,9 +270,9 @@ it("keeps waiting for a refresh requested after an earlier read started and then
   expect(errors).toEqual([{ code: "menu.reset_required", status: 500 }]);
   expect(refreshed).toBe(false);
   await vi.advanceTimersByTimeAsync(100);
-  answers[1]!(Response.json({ home: { status: 200, body: { handheld: { columns: 2 } } } }));
+  answers[1]!(Response.json({ home: { status: 200, body: { order: "menu_first" } } }));
   await refresh;
-  expect(values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } });
+  expect(values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } });
 });
 
 it("settles a failed refresh for a second observer sharing the first observer's read", async () => {
@@ -303,18 +303,18 @@ it("settles a failed refresh for a second observer sharing the first observer's 
   await vi.advanceTimersByTimeAsync(100);
   await vi.waitFor(() => expect(errors).toEqual([{ code: "connection.failed" }]));
   expect(settled).toBe(true);
-  expect(otherValues.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 3 } } } });
+  expect(otherValues.at(-1)).toEqual({ home: { status: 200, body: { order: "home_first" } } });
 });
 
 it("reads back without a live-data connection", async () => {
   const s = setup();
   Object.defineProperty(s.api, "liveData", { value: undefined });
   await s.controller.watch("lunch", ["home"], (value) => s.values.push(value));
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   await s.controller.refresh();
   expect(s.requests).toHaveLength(2);
   expect(s.requests[1]!.passive).toBe(true);
-  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } });
+  expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } });
   s.refusal(true);
   await s.controller.refresh();
   expect(s.errors).toEqual([{ code: "connection.failed" }]);
@@ -336,10 +336,10 @@ it("replaces the subscription when the selected tab's parts change", async () =>
     "/management-api/menus/lunch/read?part=structure",
     "/management-api/menus/lunch/read?part=structure&part=home&part=preview",
   ]);
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   s.api.liveData.invalidate([{ type: "products" }]);
   await vi.waitFor(() =>
-    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } }),
+    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } }),
   );
   expect(s.requests.map(({ path }) => path).slice(2)).toEqual([
     "/management-api/menus/lunch/read?part=structure&part=home&part=preview",
@@ -366,16 +366,14 @@ it("drops an old menu's late response after a new menu is opened", async () => {
   await vi.waitFor(() => expect(answers).toHaveLength(2));
   answers[1]!(
     Response.json({
-      home: { status: 200, body: { handheld: { columns: 2, tiles: "thumbnails" } } },
+      home: { status: 200, body: { order: "menu_first" } },
     }),
   );
   await next;
-  answers[0]!(Response.json({ home: { status: 200, body: { handheld: { columns: 3 } } } }));
+  answers[0]!(Response.json({ home: { status: 200, body: { order: "home_first" } } }));
   await initial;
   await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(values).toEqual([
-    { home: { status: 200, body: { handheld: { columns: 2, tiles: "thumbnails" } } } },
-  ]);
+  expect(values).toEqual([{ home: { status: 200, body: { order: "menu_first" } } }]);
 });
 
 it("does not replay an initial refusal when a shared watch has since recovered", async () => {
@@ -385,10 +383,10 @@ it("does not replay an initial refusal when a shared watch has since recovered",
     s.controller.watch("lunch", ["home"], (value) => s.values.push(value)),
   ).rejects.toEqual({ code: "connection.failed" });
   s.refusal(false);
-  s.handheld({ columns: 2 });
+  s.order("menu_first");
   s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.waitFor(() =>
-    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 2 } } } }),
+    expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { order: "menu_first" } } }),
   );
   await expect(
     s.controller.watch("lunch", ["home"], (value) => s.values.push(value)),
@@ -417,7 +415,7 @@ it.each([
       paths.push(path);
       return Response.json({
         revision: { epoch, sequence },
-        home: { status: 200, body: { handheld: { columns: sequence === 0 ? 3 : 2 } } },
+        home: { status: 200, body: { order: sequence === 0 ? "home_first" : "menu_first" } },
       });
     });
     const values: MenuReadResult[] = [];
@@ -434,7 +432,7 @@ it.each([
     const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
     await vi.advanceTimersByTimeAsync(0);
     await initial;
-    const write = api.setHomeDisplay("lunch", "handheld", { columns: 2 });
+    const write = api.setHomeDisplay("lunch", "menu_first");
     sequence = snapshotSequence;
     epoch = snapshotEpoch;
     api.liveData.invalidate([{ type: "menus" }]);
@@ -454,7 +452,7 @@ it.each([
     await refresh;
     expect(paths).toHaveLength(wantReads);
     expect(values.at(-1)).toMatchObject({
-      home: { status: 200, body: { handheld: { columns: 2 } } },
+      home: { status: 200, body: { order: "menu_first" } },
     });
     sequence = 2;
     api.liveData.invalidate([{ type: "menus" }]);
@@ -468,7 +466,7 @@ it.each([
 
 it("forces a manual refresh even when its snapshot includes the latest successful write", async () => {
   vi.useFakeTimers();
-  let handheld: Partial<HomeDisplay> = { columns: 3 };
+  let order: HomeOrder = "home_first";
   const values: MenuReadResult[] = [];
   const reads: string[] = [];
   const api = new DashboardApi("", async (path, init) => {
@@ -481,7 +479,7 @@ it("forces a manual refresh even when its snapshot includes the latest successfu
     reads.push(path);
     return Response.json({
       revision,
-      home: { status: 200, body: { handheld } },
+      home: { status: 200, body: { order } },
     });
   });
   const host = {
@@ -497,15 +495,15 @@ it("forces a manual refresh even when its snapshot includes the latest successfu
   const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  await api.setHomeDisplay("lunch", "handheld", { columns: 3 });
+  await api.setHomeDisplay("lunch", "home_first");
   await controller.refresh(true);
   expect(reads).toHaveLength(1);
-  handheld = { columns: 2 };
+  order = "menu_first";
   const forced = controller.refresh(false);
   await vi.advanceTimersByTimeAsync(100);
   await forced;
   expect(reads).toHaveLength(2);
-  expect(values.at(-1)).toMatchObject({ home: { body: { handheld: { columns: 2 } } } });
+  expect(values.at(-1)).toMatchObject({ home: { body: { order: "menu_first" } } });
 });
 
 it("reads the newer save back when an older save response arrives last", async () => {
@@ -519,7 +517,7 @@ it("reads the newer save back when an older save response arrives last", async (
     reads.push(path);
     return Response.json({
       revision: { epoch: "server", sequence },
-      home: { status: 200, body: { handheld: { columns: sequence === 5 ? 3 : 2 } } },
+      home: { status: 200, body: { order: sequence === 5 ? "home_first" : "menu_first" } },
     });
   });
   const host = {
@@ -535,8 +533,8 @@ it("reads the newer save back when an older save response arrives last", async (
   const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  const older = api.setHomeDisplay("lunch", "handheld", { columns: 3 });
-  const newer = api.setHomeDisplay("lunch", "handheld", { columns: 2 });
+  const older = api.setHomeDisplay("lunch", "home_first");
+  const newer = api.setHomeDisplay("lunch", "menu_first");
   expect(answers).toHaveLength(2);
   answers[1]!(
     new Response(null, {
@@ -557,5 +555,5 @@ it("reads the newer save back when an older save response arrives last", async (
   await vi.advanceTimersByTimeAsync(100);
   await refreshed;
   expect(reads).toHaveLength(2);
-  expect(values.at(-1)).toMatchObject({ home: { body: { handheld: { columns: 2 } } } });
+  expect(values.at(-1)).toMatchObject({ home: { body: { order: "menu_first" } } });
 });

@@ -83,14 +83,17 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
     });
   });
 
-  it.each(["handheld", "till"] as const)("renders %s accessibly", async (device) => {
-    const { host } = await mountWidget<DeviceHomePreview>(
-      "dashboard-device-home-preview",
-      { document: lunch(), device },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
+  it.each(["home_first", "menu_first"] as const)(
+    "renders the %s order accessibly",
+    async (order) => {
+      const { host } = await mountWidget<DeviceHomePreview>(
+        "dashboard-device-home-preview",
+        { document: lunch(), order },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders an open section accessibly", async () => {
     const { el, host } = await mountWidget<DeviceHomePreview>(
@@ -118,9 +121,9 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  it.each(["handheld", "till"] as const)(
-    "renders editing the %s's shortcuts accessibly, missing and unshown ones included",
-    async (device) => {
+  it.each(["home_first", "menu_first"] as const)(
+    "renders editing shortcuts in the %s order accessibly",
+    async (order) => {
       const shortcut = (memberId: string, ref: HomeTile["ref"], name: string): HomeTile => ({
         memberId,
         position: 0,
@@ -133,7 +136,7 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
         "dashboard-device-home-preview",
         {
           document: lunch(),
-          device,
+          order,
           shortcuts: [
             shortcut("sc-lemonade", { kind: "product", productId: "p-lemonade" }, "Lemonade"),
             shortcut("sc-drinks", { kind: "section", sectionId: "s-drinks" }, "Drinks"),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./zone-menu-memory.js";
 import type { TillZoneMenu } from "../api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 const identity: ZoneMenuIdentity = {
   origin: "https://venue.example",
@@ -19,7 +19,7 @@ const menu = (id: string, orderable = true): TillZoneMenu => ({
   audience: "customer",
   versionId: "v1",
   structure: { members: [] },
-  home: { shortcuts: [], ...HOME_DISPLAY_DEFAULTS },
+  home: { shortcuts: [], order: DEFAULT_HOME_ORDER },
 });
 const menus = [menu("lunch"), menu("drinks")];
 
