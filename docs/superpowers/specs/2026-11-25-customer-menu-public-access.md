@@ -1,45 +1,24 @@
 # Customer menu public access
 
-Draft for Lane K, Lane G and the watcher. The finish line is that a customer can open, share or
-embed a venue’s published menu at its public HTTPS address. The address also follows the serving
-box through a takeover. Cloud checks the venue’s Connected or Hosted entitlement, including an
-active trial. The root lists online menus or opens the only one. An off, deleted or unpublished
-menu returns 404. A temporarily unreachable box gives a plain “Try again shortly” page. The
-manager’s Online tab explains when the link and QR code are unavailable. [Customer menu design](2026-11-24-customer-menu-design.md#2-online)
+Proposal for Lane K, Lane G and the watcher. Customers can open, share or embed a published menu at
+one venue HTTPS address that follows the serving box. Cloud checks Connected or Hosted eligibility,
+including trials. The work starts on test installations. Waitron’s tunnel configuration and staff
+listener currently exclude production. [Product design](2026-11-24-customer-menu-design.md#delivery), [box configuration](../../../apps/server/src/cloud-tunnel.ts), [listener startup](../../../apps/server/src/boot.ts)
 
-**From Cloud to the box.** Cloud terminates public TLS. Use the existing gateway route authority
-for the venue’s current confirmed primary, and a dedicated Waitron listener over verified HTTPS
-through the scoped tunnel or private hosted path. Today the gate forwards availability to staff
-HTTPS, and the box’s tunnel forwards port 443 to `staff.sock`. Give the customer listener its own
-forwarding destination. Only a serving primary answers it. On takeover, Cloud withdraws the old
-target, then serves the new confirmed primary under the same public host. The box checks its
-serving state independently. [Public gate](https://github.com/waitron-io/waitron-cloud/blob/a11928c75b101bbca7b7b7eaa4b7da06c75388a1/packages/remote-access/src/public-gate.ts#L72-L110), [gateway wiring](https://github.com/waitron-io/waitron-cloud/blob/a11928c75b101bbca7b7b7eaa4b7da06c75388a1/packages/remote-access/src/gateway-cli.ts#L89-L95), [box tunnel](../../../deploy/tunnel/peer.sh)
+| Decision | Proposed contract and who settles it |
+| --- | --- |
+| Serving box | **G + K.** Reuse Cloud’s signed, expiring gateway routes to publish the winner of the confirmed handover. The handover must name the venue and source and successor installations. Remove the old route and its cached replies before opening the successor’s route, even if the old box still considers itself primary. Agree which signed handover result Cloud can use for local and hosted replacements, and how the successor gets its own registration, peer and certificate. The customer sees “Try again shortly” during the gap. Current route authority can last ten minutes during a Cloud management outage. Measure successor readiness separately. |
+| HTTPS and tunnel | **K + G.** Use the staff certificate on a second socket. Cloud checks that certificate with the staff hostname as TLS server name and upstream Host. It terminates public TLS on the assigned or custom host, which the box reads from the authenticated service configuration for links. Agree an optional customer destination and capability without changing the staff destination. A mixed pair serves staff and keeps the customer route closed until both ends support it. Cap customer connections before the tunnel forks its forwarder. Check that a customer forwarder failure leaves staff access working and that public traffic within the caps leaves room for staff. |
+| Reads and preview | **K + G.** Pin exact GET and HEAD paths and query rules from piece 3. The box independently checks serving state and admits only the published view’s pages, data, exact photo renditions and listed fonts and app files. Prepare the view per language and refresh it on publication or relevant settings changes. Photo reads stay off the venue write lock and away from the till’s rendition queue. Preview and its assets stay on the signed-in staff listener. |
+| Online status | **K + G.** Make the existing tunnel switch’s effect visible on the Online tab and warn before turning it off. Use the service view to distinguish ineligible, disconnected and ready for customers. The manager gets the reason and a next step when the tab withholds the link and QR code. |
+| Cache and framing | **G + K.** Cloud follows the box’s headers and passes cache age on. Cache menu pages and data for about one minute total, keyed by venue, current route and language-bearing URL. Off or missing returns 404. Cache neither refusals nor the temporary 503 page. Use one-year content-named assets and verify assets named by a fresh cached page across upgrade and takeover. A visitor’s cache can still hold previously public assets after removal. Allow framing on menu pages at both ends. |
+| Limits and privacy | **G + K.** Cloud limits visitors and bounds forwards, time and bytes, including photos. Keep short-lived source counters in memory and IP addresses out of logs. Count aggregate customer traffic separately from staff traffic and trial-extension usage. Use rate refusals as the default under load. Any alternative challenge has to preserve cookie-free menus, ordinary opens, embeds and link previews. K caps total box work. |
+| Hosted retirement | **G, then K.** Waitron stopped sending in #4266. G retires the old reader, stored publications, portal controls and plan check on copy publishing and refuses old sends. G updates the Cloud backlog and keeps or replaces Waitron staff’s ability to block a venue’s public pages. Both remove the three signed copy actions once Cloud has retired them. Managers switch off individual live menus in Waitron. |
 
-**What a customer can read.** Pin the exact paths and query rules against piece 3 before building.
-Both sides allow GET and specified HEAD requests for published pages, their data, referenced media
-and required app files. The signed-in dashboard serves preview and its assets, including over
-remote staff access. The box keeps a prepared view per language and updates it when publication,
-address, availability, languages or style changes. The public photo read checks that an online
-publication references the photo and reads it without taking the venue write lock. [Serving design](2026-11-24-customer-menu-design.md#6-serving-it-and-protecting-the-till)
+Before implementation, agree the serving-box signal, tunnel and Online status fields, exact routes
+and bounds, and the Cloud staff block. K tests listener isolation, preview and media admission. G tests
+entitlement, routing, caching, embedding, limits, accounting and copy retirement. Qualify the pair
+over real HTTPS with warm caches through publish, disable, republish, takeover and outage. Flood the customer path while timing sales and
+loading till images. Production enablement follows the existing remote-access gates.
 
-**Freshness and load.** Cloud follows the box’s cache headers. Budget about one minute total
-freshness for page and menu data across caches, including after an address change or switch-off.
-Scope cached replies by venue host and the request’s language and content keys. Keep content-named
-assets cacheable for a year, with published asset admission enforced at the box. Once the gateway
-learns of a route or entitlement withdrawal, stop using that route’s cached responses. Cloud limits
-visitors and bounds upstream work, time and bytes, with room for photos. The box caps overall
-requests and concurrent work. Normal opens, embeds and link previews work without a browser
-challenge. Measure customer traffic separately and exclude it from trial-extension usage. Lane G
-and the watcher settle limits and any challenge under attack. [Cloud design](2026-11-24-customer-menu-design.md#7-cloud-in-waitron-cloud-its-own-plan)
-
-**Retire the hosted copy.** Waitron #4266 removed the sender. Lane G retires Cloud’s signed copy
-writes and reader, removes stored publications and retires the portal’s hosted-copy controls.
-Check that old links and late sends cannot bring old content back. Managers turn each live menu
-off in Waitron. Lane G and the watcher will settle whether the portal needs to block the venue’s
-live public menu independently and which existing route control can do it. [Removal](https://github.com/clintongormley/waitron/pull/4266), [Cloud’s hosted-copy backlog](https://github.com/waitron-io/waitron-cloud/blob/a11928c75b101bbca7b7b7eaa4b7da06c75388a1/docs/backlog/guest-menu.md)
-
-**Prove it together.** Waitron tests listener isolation, private media, signed-in preview and
-serving-state transitions. Cloud tests entitlement, routing, caching, embed and HEAD, limits,
-accounting and retirement. Qualify both over HTTPS with warm caches through publish, switch-off,
-republish, takeover and lost connectivity. Compare sale times on a busy till with and without a
-public request flood. Production enablement follows the existing remote-access gates. [Delivery](2026-11-24-customer-menu-design.md#delivery)
+[Box tunnel](../../../deploy/tunnel/peer.sh) · [Gateway authority lifetime](../../developers/cloud-connection.md#local-remote-access-integration) · [Handover confirmation proposal](../plans/2026-11-17-a1188-part4-declaration-contract.md) · [Cloud public gate](https://github.com/waitron-io/waitron-cloud/blob/a11928c75b101bbca7b7b7eaa4b7da06c75388a1/packages/remote-access/src/public-gate.ts#L72-L110) · [Retired sender](https://github.com/clintongormley/waitron/pull/4266) · [Cloud hosted-copy backlog](https://github.com/waitron-io/waitron-cloud/blob/a11928c75b101bbca7b7b7eaa4b7da06c75388a1/docs/backlog/guest-menu.md)
