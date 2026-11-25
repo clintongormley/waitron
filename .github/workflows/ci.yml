@@ -403,7 +403,7 @@ jobs:
             {"id":"test-workforce","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.workforce == 'true' }}},
             {"id":"test-light-a","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.light_a == 'true' }}},
             {"id":"test-light-b","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.light_b == 'true' }}},
-            {"id":"mutation-shared","count":4,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.shared == 'true' }}},
+            {"id":"mutation-shared","count":7,"matrix":true,"enabled":${{ steps.classify.outputs.code == 'true' && steps.gates.outputs.shared == 'true' }}},
             {"id":"bundle-smoke","count":1,"matrix":false,"enabled":${{ steps.classify.outputs.code == 'true' }}}
             ]
         run: |
@@ -4079,7 +4079,7 @@ jobs:
           node scripts/run-with-deadline.mjs 424 --diagnostics -- pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
-  # The first two jobs score separate grouping ranges. The aggregate enforces the package floor.
+  # Grouping ranges have their own jobs. The aggregate enforces the package floor.
   mutation-shared:
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
@@ -4088,7 +4088,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     steps:
       - id: checkout
         name: Check out the code
@@ -4246,7 +4246,7 @@ jobs:
           path: mutation-reports
 
       - name: Score the package
-        run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 7 --break 90
 
   server-queue-watchdog:
     timeout-minutes: 22

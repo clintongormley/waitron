@@ -3294,10 +3294,10 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
 });
 
 describe("the test shards", () => {
-  it("splits shared mutation work into four shards and gates their complete combined score at 90", () => {
+  it("splits shared mutation work into seven shards and gates their complete combined score at 90", () => {
     const shard = job("mutation-shared").body.join("\n");
     expect(job("mutation-shared").body).toContain("    timeout-minutes: 10");
-    expect(shard).toContain("shard: [1, 2, 3, 4]");
+    expect(shard).toContain("shard: [1, 2, 3, 4, 5, 6, 7]");
     expect(shard).toContain("fail-fast: false");
     expect(shard).toContain('FILES=$(node scripts/mutation-shard.mjs shared "$SHARD" "$TOTAL")');
     expect(shard).toContain('if [ -z "$FILES" ]; then');
@@ -3320,7 +3320,7 @@ describe("the test shards", () => {
     expect(aggregate).toContain("pattern: mutation-report-shared-shard-*");
     expect(aggregate).not.toContain("merge-multiple: true");
     expect(aggregate).toContain(
-      "run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90",
+      "run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 7 --break 90",
     );
     expect(job("ci").body).toContain("      - mutation-shared-aggregate");
   });
