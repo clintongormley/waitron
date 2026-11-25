@@ -95,11 +95,10 @@ it("typed PIN never protects page departure or unload", async () => {
 });
 it("successful PIN submission signs in once without asking", async () => {
   const { app, screen, login } = await mount();
-  await digit(screen, "0");
-  await digit(screen, "1");
+  for (const key of "0123") await digit(screen, key);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await expect.poll(() => app.logins).toBe(1);
-  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "01");
+  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "0123");
   expect(asked(app)).toBe(false);
   expect(unload()).toBe(false);
 });
@@ -109,17 +108,17 @@ it("refused PIN is cleared and a throttled PIN leaves at once without changing t
     .mockRejectedValueOnce({ code: "pin.invalid" })
     .mockRejectedValueOnce({ code: "pin.throttled", retryAfterSeconds: 30 });
   const { app, screen } = await mount(login);
-  await digit(screen, "1");
+  for (const key of "1234") await digit(screen, key);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await expect
     .poll(() => screen.shadowRoot!.querySelector(".error")?.textContent)
     .toContain(t("pin.invalid"));
   expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("");
   expect(unload()).toBe(false);
-  await digit(screen, "2");
+  for (const key of "2345") await digit(screen, key);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector(".throttle")).not.toBeNull();
-  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
+  await expect.poll(() => screen.shadowRoot!.querySelector(".pad-wrap[inert]")).not.toBeNull();
+  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●●●●");
   expect(unload()).toBe(false);
   screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
   await screen.updateComplete;
@@ -147,9 +146,9 @@ it("a departed login reply cannot sign in the reconnected screen", async () => {
       }),
   );
   const { app, screen } = await mount(login);
-  await digit(screen, "1");
+  for (const key of "1234") await digit(screen, key);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
-  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "1");
+  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "1234");
   expect(unload()).toBe(false);
   expect(
     await app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} }),
@@ -172,17 +171,17 @@ it("digits entered while a login is pending are not protected and Cancel leaves 
     () => new Promise<{ personId: string; permissions: string[]; locale: null }>(() => {}),
   );
   const { app, screen } = await mount(login);
-  await digit(screen, "1");
+  for (const key of "1234") await digit(screen, key);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await digit(screen, "2");
-  expect(screen.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("12");
+  expect(screen.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("12342");
   expect(unload()).toBe(false);
   screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
   await screen.updateComplete;
   expect(screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
   await settle(app);
   expect(asked(app)).toBe(false);
-  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "1");
+  expect(login).toHaveBeenCalledExactlyOnceWith("ana", "1234");
 });
 for (const locale of ["en", "es"] as const)
   for (const theme of ["light", "dark"] as const)

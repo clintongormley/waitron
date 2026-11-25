@@ -117,6 +117,8 @@
 
   /* Till views. */
   --wt-till-form-column-width: 24rem;
+  --wt-till-keypad-row-height: clamp(62px, 9dvh, 88px);
+  --wt-till-pin-status-height: 3lh;
   --wt-till-chooser-width: 32rem;
   --wt-till-chooser-dialog-width: 40rem;
   --wt-till-enrol-number-size: 4rem;

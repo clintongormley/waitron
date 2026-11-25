@@ -1,7 +1,7 @@
 import { hashSecret, hashSecretAsync, verifySecretAsync } from "./secret-hash.js";
-import { AppError } from "@waitron/shared";
+import { AppError, MIN_PIN_LENGTH } from "@waitron/shared";
 
-export const MIN_PIN_LENGTH = 4;
+export { MIN_PIN_LENGTH };
 
 export function assertPinLength(pin: string): void {
   if (pin.length < MIN_PIN_LENGTH) throw new AppError("pin.too_short", { min: MIN_PIN_LENGTH });

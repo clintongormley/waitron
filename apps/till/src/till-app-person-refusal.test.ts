@@ -370,8 +370,10 @@ async function keyIn(el: TillApp, person: typeof ANA, pin: string): Promise<void
   const lock = () => lockScreen(el)!.shadowRoot!;
   const operator = `wt-button.operator-button[data-person="${person.personId}"]`;
   // After a sign-out the lock screen keeps the last person chosen.
-  await vi.waitFor(() => expect(lock().querySelector(`${operator}, .operator`)).not.toBeNull());
-  const chosen = lock().querySelector(".operator")?.textContent?.trim();
+  await vi.waitFor(() =>
+    expect(lock().querySelector(`${operator}, h1.pin-heading`)).not.toBeNull(),
+  );
+  const chosen = lock().querySelector("h1.pin-heading")?.textContent?.trim();
   if (chosen !== undefined && chosen !== person.displayName) {
     lock().querySelector<HTMLElement>(".cancel")!.click();
     await vi.waitFor(() => expect(lock().querySelector(operator)).not.toBeNull());

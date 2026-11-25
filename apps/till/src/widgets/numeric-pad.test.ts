@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
 
@@ -99,6 +99,22 @@ describe("till-numeric-pad", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-numeric-pad")).toBe(TillNumericPad);
   });
+
+  it.each(["pin", "decimal"] as const)(
+    "gives %s keys a finger-sized native button",
+    async (mode) => {
+      await pageAt(363, 735);
+      try {
+        const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { mode });
+        const key = el
+          .shadowRoot!.querySelector('[data-key="1"]')!
+          .shadowRoot!.querySelector("button")!;
+        expect(key.getBoundingClientRect().height).toBeCloseTo(66.15, 0);
+      } finally {
+        await resetPage();
+      }
+    },
+  );
 
   it("renders keys in phone-dialpad order (1-2-3 on top) in pin mode", async () => {
     const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {

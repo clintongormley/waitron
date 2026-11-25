@@ -26,6 +26,11 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  loadPhoneFont,
+  PHONE_FONT,
+  textRects,
+  pageAt,
+  resetPage,
   servedMenus,
 } from "./widgets/test-helpers.js";
 import indexHtml from "../index.html?raw";
@@ -1556,6 +1561,133 @@ describe("till-app session activity", () => {
     expect(lock(el)!.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
     expect(sa.noteInteraction).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    { logo: false, scale: 100 },
+    { logo: true, scale: 100 },
+    { logo: true, scale: 130 },
+  ])(
+    "keeps the phone PIN pad in place through five states (logo $logo, text $scale%)",
+    async ({ logo, scale }) => {
+      let refuse!: (reason: unknown) => void;
+      const response = new Promise<never>((_resolve, reject) => {
+        refuse = reject;
+      });
+      const login = vi
+        .fn()
+        .mockReturnValueOnce(response)
+        .mockRejectedValueOnce({ code: "storage.disk_full" })
+        .mockRejectedValue({ code: "pin.throttled", retryAfterSeconds: 30 });
+      if (logo) {
+        const answer = { ...FIXTURE_ANSWER, logo: { light: png(120, 40), dark: null } };
+        localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
+        startVenueTheme(document.documentElement, {
+          fetchImpl: () => new Promise<Response>(() => {}),
+        });
+      }
+      const hadPageTokens = document.documentElement.hasAttribute("data-wt-theme-root");
+      let font: FontFace | undefined;
+      try {
+        applyTokens(document.documentElement);
+        await pageAt(363, 735, scale);
+        font = await loadPhoneFont();
+        const { el, host } = await mountApp({
+          login,
+          listStaff: vi.fn().mockResolvedValue([
+            { personId: "p1", displayName: "Ana Martin Soto" },
+            { personId: "p2", displayName: "Ben" },
+          ]),
+        });
+        host.style.height = "100%";
+        host.style.setProperty("--wt-font-family", PHONE_FONT);
+        await flush(el);
+        const screen = lock(el)!;
+        const root = screen.shadowRoot!;
+        if (logo)
+          await root.querySelector("wt-venue-logo")!.shadowRoot!.querySelector("img")!.decode();
+        const [firstPerson, secondPerson] = root.querySelectorAll<HTMLElement>(".operator-button");
+        expect
+          .soft(firstPerson!.getBoundingClientRect().top)
+          .toBe(secondPerson!.getBoundingClientRect().top);
+        firstPerson!.click();
+        await screen.updateComplete;
+        const pad = root.querySelector("till-numeric-pad")!;
+        await pad.updateComplete;
+        const key = pad.shadowRoot!.querySelector('[data-key="1"]')!;
+        const submit = root.querySelector<HTMLElement>(".submit")!;
+        const status = root.querySelector(".pin-status")!;
+        const top = () => key.getBoundingClientRect().top;
+        const restingTop = top();
+        const fitsStatus = () => {
+          const line = status.getBoundingClientRect();
+          for (const rect of textRects(status)) {
+            expect(rect.bottom).toBeLessThanOrEqual(line.bottom);
+            expect(rect.right).toBeLessThanOrEqual(line.right);
+          }
+        };
+        const cancel = root.querySelector(".cancel")!.shadowRoot!.querySelector("button")!;
+        const logIn = submit.shadowRoot!.querySelector("button")!;
+        expect(logIn.getBoundingClientRect().height).toBe(cancel.getBoundingClientRect().height);
+        const bottomGap = innerHeight - submit.getBoundingClientRect().bottom;
+        if (scale === 100) expect(bottomGap).toBeGreaterThanOrEqual(0);
+        expect(bottomGap).toBeLessThan(65);
+        await userEvent.keyboard("1234");
+        await screen.updateComplete;
+        expect(top()).toBe(restingTop);
+        screen.serverWaiting = true;
+        screen.loggedOutByOther = true;
+        await screen.updateComplete;
+        const notices = root.querySelector<HTMLElement>('[role="region"][tabindex="0"]')!;
+        const retry = notices.querySelector<HTMLElement>("[data-check-again]")!;
+        expect(notices.clientHeight).toBeGreaterThan(0);
+        notices.scrollTop = retry.offsetTop;
+        expect(retry.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          notices.getBoundingClientRect().bottom + 1,
+        );
+        expect.soft(top()).toBe(restingTop);
+        submit.click();
+        await flush(el);
+        expect(login).toHaveBeenCalledExactlyOnceWith("p1", "1234");
+        expect(top()).toBe(restingTop);
+        refuse({ code: "pin.invalid" });
+        await flush(el);
+        expect(status.textContent).toContain(t("pin.invalid"));
+        expect(top()).toBe(restingTop);
+        await userEvent.keyboard("1234");
+        await screen.updateComplete;
+        submit.click();
+        await flush(el);
+        expect(status.textContent).toContain(codeMessage("storage.disk_full"));
+        expect(top()).toBe(restingTop);
+        fitsStatus();
+        await userEvent.keyboard("1234");
+        await screen.updateComplete;
+        submit.click();
+        await flush(el);
+        expect(root.querySelector(".pad-wrap")!.hasAttribute("inert")).toBe(true);
+        expect(top()).toBe(restingTop);
+        fitsStatus();
+        if (scale === 130) {
+          await page.viewport(320, 420);
+          fitsStatus();
+          const actions = root.querySelector(".actions")!;
+          actions.scrollIntoView({ block: "end" });
+          expect(actions.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight);
+          expect(scrollY).toBeGreaterThan(0);
+        }
+      } finally {
+        if (font) document.fonts.delete(font);
+        await resetPage();
+        if (!hadPageTokens) document.documentElement.removeAttribute("data-wt-theme-root");
+        if (logo) {
+          localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+          startVenueTheme(document.documentElement, {
+            fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+          });
+        }
+      }
+    },
+  );
 
   it("stops hearing key presses once the app leaves the page", async () => {
     const sa = fakeSessionActivity();
@@ -6470,13 +6602,13 @@ it("says the till is loading while the first read after a sign-in waits", async 
   await screen.updateComplete;
   const pad = screen.shadowRoot!.querySelector("till-numeric-pad")!;
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  pad.shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!.click();
+  await userEvent.keyboard("1234");
   await screen.updateComplete;
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await flush(el);
   expect(lock(el)).toBe(screen);
   expect(screen.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()).toBe(
-    t("login.loading"),
+    t("login.signing_in"),
   );
   answer(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"));
   await flush(el);
@@ -6582,16 +6714,22 @@ it("signs in and out on a kitchen display without replacing its station board", 
   await screen!.updateComplete;
   const pad = screen!.shadowRoot!.querySelector("till-numeric-pad")!;
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  pad.shadowRoot!.querySelector<HTMLElement>('[data-key="1"]')!.click();
+  await userEvent.keyboard("1234");
   await screen!.updateComplete;
   const submit = screen!.shadowRoot!.querySelector<HTMLElement>(".submit")!;
   const panel = screen!.shadowRoot!.querySelector<HTMLElement>(".compact")!;
+  const firstKey = pad
+    .shadowRoot!.querySelector('[data-key="1"]')!
+    .shadowRoot!.querySelector("button")!;
+  expect(firstKey.getBoundingClientRect().height).toBe(44);
+  expect(submit.getAttribute("size")).toBe("md");
+  expect(getComputedStyle(submit.parentElement!).position).toBe("sticky");
   expect(submit.getBoundingClientRect().bottom).toBeLessThanOrEqual(
     panel.getBoundingClientRect().bottom,
   );
   submit.click();
   await flush(el);
-  expect(api.login).toHaveBeenCalledWith("p1", "1");
+  expect(api.login).toHaveBeenCalledWith("p1", "1234");
   expect(screen!.shadowRoot!.querySelector("[data-kitchen-operator]")?.textContent?.trim()).toBe(
     "Ana",
   );

@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { MIN_PIN_LENGTH } from "@waitron/shared";
 import {
   ThemeChoiceController,
   VenueLogoController,
@@ -69,13 +70,48 @@ export class TillLockScreen extends LitElement {
         display: block;
       }
 
+      :host(:not([compact])) {
+        display: flex;
+        flex-direction: column;
+      }
+
       /* Cap the login form and centre it — a wide till never stretches the roster or pad edge to edge. */
       .screen {
+        inline-size: 100%;
         max-width: var(--wt-till-form-column-width);
         margin-inline: auto;
       }
 
+      .pin-screen {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+      }
+
+      /* A live notice scrolls within its own space so it cannot move keys under a finger. */
+      .pin-notices {
+        flex: 1;
+        min-block-size: var(--wt-tap-min);
+        overflow: auto;
+        contain: size;
+      }
+
+      .pin-screen .switch-device {
+        align-self: start;
+        margin-block-start: var(--wt-space-3);
+      }
+
+      .pin-notices > :first-child {
+        margin-block-start: 0;
+      }
+
+      .pin-notices:focus-visible {
+        outline-offset: calc(-2 * var(--wt-focus-offset));
+      }
+
       .compact {
+        --wt-till-pin-status-height: 2lh;
+        --wt-till-keypad-row-height: var(--wt-tap-min);
         max-block-size: 45dvh;
         overflow: auto;
         padding: var(--wt-space-2) var(--wt-space-4);
@@ -128,7 +164,23 @@ export class TillLockScreen extends LitElement {
       }
 
       .pin-status {
-        margin: 0 0 var(--wt-space-3);
+        block-size: var(--wt-till-pin-status-height);
+        flex: none;
+        margin-block-end: var(--wt-space-3);
+        line-height: 1.35;
+        color: var(--wt-color-text-muted);
+      }
+
+      .pin-status .error {
+        color: var(--wt-color-danger);
+      }
+
+      .pin-screen .pin-heading {
+        margin-block-end: var(--wt-space-3);
+      }
+
+      .pin-screen .pin-status {
+        margin-block-end: 0;
       }
 
       .servers,
@@ -172,16 +224,15 @@ export class TillLockScreen extends LitElement {
         width: 100%;
       }
 
-      .operator {
-        margin: 0 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
-        font-weight: var(--wt-font-weight-bold);
+      .pin-heading,
+      .actions .cancel::part(button) {
+        overflow-wrap: anywhere;
       }
 
       .pin-display {
-        min-height: var(--wt-space-6);
-        margin-bottom: var(--wt-space-3);
+        color: var(--wt-color-text);
         font-size: var(--wt-font-size-xl);
+        line-height: 1;
         letter-spacing: var(--wt-space-2);
       }
 
@@ -191,16 +242,7 @@ export class TillLockScreen extends LitElement {
         opacity: 0.5;
       }
 
-      .error {
-        margin: 0 0 var(--wt-space-3);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-danger);
-        color: var(--wt-color-on-danger);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .throttle {
+      .status.error {
         margin: 0 0 var(--wt-space-3);
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
@@ -217,6 +259,11 @@ export class TillLockScreen extends LitElement {
 
       .actions wt-button {
         flex: 1;
+        min-inline-size: 0;
+      }
+
+      .pin-screen .actions wt-button::part(button) {
+        block-size: 100%;
       }
     `,
   ];
@@ -370,12 +417,14 @@ export class TillLockScreen extends LitElement {
     this.errorKey = undefined;
   }
 
-  /** Guarded so an empty PIN or a throttled screen never calls the API, even if Log in is force-clicked
-   * past its disabled state. Only a still-connected screen remembers the operator and announces
-   * `logged-in`: those are side effects, not state writes. */
   async #submit(): Promise<void> {
     const person = this.selected;
-    if (person === undefined || this.pin === "" || this.#throttle.remaining > 0 || this.signingIn)
+    if (
+      person === undefined ||
+      this.pin.length < MIN_PIN_LENGTH ||
+      this.#throttle.remaining > 0 ||
+      this.signingIn
+    )
       return;
     const connection = this.#connection;
     const submission = ++this.#submission;
@@ -403,7 +452,8 @@ export class TillLockScreen extends LitElement {
         this.#cancel();
       }
     } catch (error) {
-      if (!this.isConnected || connection !== this.#connection) return;
+      if (!this.isConnected || connection !== this.#connection || submission !== this.#submission)
+        return;
       this.signingIn = false;
       const code = (error as { code?: string }).code ?? "server.internal";
       if (code === "pin.throttled") {
@@ -440,6 +490,7 @@ export class TillLockScreen extends LitElement {
   override render() {
     if (this.compact) return this.#renderCompact();
     if (this.mainServerSilent) return this.#renderMainServer();
+    const pinScreen = this.selected !== undefined && !this.kitchenUnavailable;
     return html`
       <div class="language-corner">
         <till-about-button></till-about-button>
@@ -449,7 +500,7 @@ export class TillLockScreen extends LitElement {
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></wt-language-chooser>
       </div>
-      <div class="screen">
+      <div class=${pinScreen ? "screen pin-screen" : "screen"}>
         ${this.#renderLogo()}
         ${
           this.kitchenUnavailable
@@ -464,31 +515,7 @@ export class TillLockScreen extends LitElement {
               ? this.#renderPin(this.selected)
               : this.#renderList()
         }
-        ${this.notices.map(
-          (notice) =>
-            html`<div
-              class="clock"
-              role="status"
-              ?data-storage-notice=${notice.owner === "box"}
-              ?data-office-invoice-notice=${notice.owner === "office-invoices"}
-            >
-              ${noticeLine(notice)}
-            </div>`,
-        )}
-        ${
-          this.loggedOutByOther
-            ? html`<p class="clock status" role="status" data-logged-out-by-other>
-                ${t("login.logged_out_by_other")}
-              </p>`
-            : nothing
-        }
-        ${
-          this.clockNotice === undefined
-            ? nothing
-            : html`<div class="clock" role="status" data-clock-notice>
-                ${noticeLine(this.clockNotice, { hint: false })}
-              </div>`
-        }
+        ${pinScreen ? nothing : this.#renderNotices()}
         ${
           this.canChooseDevice
             ? html`<wt-button
@@ -503,7 +530,37 @@ export class TillLockScreen extends LitElement {
         }
         ${this.#renderPoweredBy()}
       </div>
-      ${this.#renderServers()}
+      ${pinScreen ? nothing : this.#renderServers()}
+    `;
+  }
+
+  #renderNotices() {
+    return html`
+      ${this.notices.map(
+        (notice) =>
+          html`<div
+            class="clock"
+            role="status"
+            ?data-storage-notice=${notice.owner === "box"}
+            ?data-office-invoice-notice=${notice.owner === "office-invoices"}
+          >
+            ${noticeLine(notice)}
+          </div>`,
+      )}
+      ${
+        this.loggedOutByOther
+          ? html`<p class="clock status" role="status" data-logged-out-by-other>
+              ${t("login.logged_out_by_other")}
+            </p>`
+          : nothing
+      }
+      ${
+        this.clockNotice === undefined
+          ? nothing
+          : html`<div class="clock" role="status" data-clock-notice>
+              ${noticeLine(this.clockNotice, { hint: false })}
+            </div>`
+      }
     `;
   }
 
@@ -652,22 +709,38 @@ export class TillLockScreen extends LitElement {
 
   #renderPin(person: StaffMember) {
     const throttled = this.#throttle.remaining > 0;
+    const error = this.errorKey;
+    const hasNotices =
+      this.serverWaiting ||
+      this.notices.length > 0 ||
+      this.loggedOutByOther ||
+      this.clockNotice !== undefined;
+    let status = "";
+    if (throttled) status = t("pin.throttled");
+    else if (this.signingIn) status = t("login.signing_in");
+    else if (error === "storage.disk_full") status = codeMessage(error);
+    else if (error) status = t(error);
+    else if (this.pin === "") status = t("login.enter_pin");
     return html`
-      ${this.#renderHeading("login.enter_pin")}
-      <p class="operator">${person.displayName}</p>
-      <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
+      <h1 class="heading pin-heading">${person.displayName}</h1>
+      <div class="pin-status">
+        <span role="status" class=${error || throttled ? "error" : nothing}>${status}</span>
+        <span class="pin-display" aria-hidden="true" ?hidden=${status !== ""}
+          >${"●".repeat(this.pin.length)}</span
+        >
+        ${throttled ? html`<span class="pin-countdown" aria-hidden="true">${t("login.throttled").replace("{n}", String(this.#throttle.remaining))}</span>` : nothing}
+      </div>
       ${
-        throttled
-          ? html`<p class="throttle" role="alert">
-              ${t("login.throttled").replace("{n}", String(this.#throttle.remaining))}
-            </p>`
-          : this.signingIn
-            ? html`<p class="status pin-status" role="status">${t("login.loading")}</p>`
-            : this.errorKey
-              ? html`<p class="error" role="alert">
-                  ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
-                </p>`
-              : nothing
+        this.compact
+          ? nothing
+          : html`<div
+              class="pin-notices"
+              role=${hasNotices ? "region" : nothing}
+              aria-label=${hasNotices ? t("staff_notice.list") : nothing}
+              tabindex=${hasNotices ? 0 : nothing}
+            >
+              ${this.#renderServers()}${this.#renderNotices()}
+            </div>`
       }
       <div class="pad-wrap" ?inert=${throttled}>
         <till-numeric-pad
@@ -681,16 +754,18 @@ export class TillLockScreen extends LitElement {
       <div class="actions">
         <wt-button
           class="cancel"
+          size=${this.compact ? "md" : "lg"}
           variant="secondary"
           ?disabled=${this.compact && this.signingIn}
           @click=${() => this.#cancel()}
         >
-          ${t("action.cancel")}
+          ${this.compact ? t("action.cancel") : t("login.not_person").replace("{name}", () => person.displayName)}
         </wt-button>
         <wt-button
           class="submit"
+          size=${this.compact ? "md" : "lg"}
           variant="primary"
-          ?disabled=${this.pin === "" || throttled}
+          ?disabled=${this.pin.length < MIN_PIN_LENGTH || throttled}
           .loading=${this.signingIn}
           @click=${() => void this.#submit()}
         >
