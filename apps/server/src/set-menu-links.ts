@@ -105,7 +105,13 @@ export async function linkSetMenusFor(
   const recorded = new Set((await readBillSetMenuVersions(tx, billId)).map(({ menuId }) => menuId));
   const linked: SetMenuCopy[] = [];
   for (const [source, batch] of bySource) {
-    const when = source === undefined ? selling : { menuIds: source, orderableMenuIds: source };
+    const when =
+      source === undefined || selling instanceof Date
+        ? selling
+        : {
+            menuIds: [...new Set([...selling.menuIds, ...source])],
+            orderableMenuIds: [...new Set([...selling.orderableMenuIds, ...source])],
+          };
     const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, when));
     for (const copy of listingAny(onSale, batch)) {
       if (recorded.has(copy.setMenuId)) continue;

@@ -10,6 +10,7 @@ import {
   removeMember,
   requireMenuRoot,
   saveSetMenuDishCourse,
+  saveSetMenuLines,
   updateMenuDetails,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -528,14 +529,19 @@ it("fires a held a la carte dish the grouping put in a set menu without a questi
   expect((await fire()).status).toBe(200);
 });
 
-it("links the Daily when the first Flan is sent from the ended Lunch menu", async () => {
-  at("13:00");
+it.each([
+  [400, 450],
+  [450, 400],
+])("uses the cheaper set menu when Lunch costs %d and Dinner costs %d", async (lunch, dinner) => {
+  at("14:30");
   await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, daily.menuId, { setPrice: "4.00" });
+    await updateMenuDetails(tx, daily.menuId, { setPrice: (lunch / 100).toFixed(2) });
     await publishWorkingMenu(tx, daily.fullMenuId);
+    await saveSetMenuLines(tx, evening.menuId, [{ count: 1, courseIds: [daily.courseId] }]);
+    await saveSetMenuDishCourse(tx, evening.menuId, evening.menuItemId, daily.courseId);
+    await updateMenuDetails(tx, evening.menuId, { setPrice: (dinner / 100).toFixed(2) });
+    await publishWorkingMenu(tx, evening.fullMenuId);
   });
-  const lunch = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  expect((await orderFlan(lunch.tabId)).setMenus).toHaveLength(1);
   const late = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   const draft = await saveSetMenuDraft(venue, late, {
     menuItemId: venue.item("Flan"),
@@ -550,6 +556,12 @@ it("links the Daily when the first Flan is sent from the ended Lunch menu", asyn
     latePeriodName: null,
   });
   const grouped = await inTx(venue, (tx) => readBillSetMenus(tx, late.tabId));
-  expect(grouped.copies).toMatchObject([{ setMenuId: daily.menuId, priceCents: 400 }]);
-  expect(grouped.setMenus).toHaveLength(1);
+  expect(new Map(grouped.copies.map((copy) => [copy.setMenuId, copy.priceCents]))).toEqual(
+    new Map([
+      [daily.menuId, lunch],
+      [evening.menuId, dinner],
+    ]),
+  );
+  const cheapest = grouped.copies.find((copy) => copy.priceCents === 400)!;
+  expect(grouped.setMenus).toMatchObject([{ copyId: cheapest.id }]);
 });
