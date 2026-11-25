@@ -25,4 +25,6 @@ The watcher recorded the owner's answer at 22:01 in Lane I's `questions.md`, und
 5. Show an extra's declared allergens before it is added, without adding missing-information warnings.
 6. Show sent-order and history declarations as they were when sent, using the chosen product's effective current declaration at sending. Kitchen screens, kitchen tickets and guest-clash checks keep using current declarations.
 
+2026-11-25: "live" and "current" declarations in decisions 3 and 6 now mean the published menu's ([customer menu design](2026-11-24-customer-menu-design.md), section 8).
+
 These are accepted product choices, not completed features. The watcher will queue their implementation separately; this proposal item changes no product behavior. The estimates above remain estimates, and A670 still needs a design before its build can be sized reliably.

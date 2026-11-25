@@ -488,8 +488,9 @@ its own extras. **Comp** and **Void** work on the row and let you choose how man
 count. To reduce the count, use **Void…**, which opens **Cancel item**. Choose **Fire now** in
 a held row's details to send every dish in that row, with its extras.
 
-Allergens and diet labels come from the published menu. A dish already sent keeps, on the till, what
-it was sent with; the kitchen screens show any correction published since.
+Allergens and diet labels come from the published menu. A sent dish's details on the till keep what
+it was sent with; the kitchen screens and the table's allergy check show any correction published
+since.
 
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
 sent**. A dish on hold shows what is published now until you release it.

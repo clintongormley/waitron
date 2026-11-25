@@ -1060,11 +1060,9 @@ extra in the live version of the line's menu, whether or not that menu is sold n
 published after the dish was sent reaches the kitchen. Where the live version does not hold that
 exact item, the newest earlier version that was once live and does hold it answers, going back no
 further than the line's own version; a published correction therefore survives the dish leaving the
-menu. This replaces the spec's "what it was ordered with" (asked of the watcher, 2026-11-25). A
-bill's recorded set-menu copies take their dishes' declarations from the live version the same way
-and keep their own when it lacks that dish. Station and pass screens subscribe to `menu_versions`
-and `menu_releases`, so a published correction refreshes them (`KITCHEN_TYPES`,
-`apps/till/src/api/live-connection.ts`).
+menu. A bill's recorded set-menu copies take their dishes' declarations through the same reader.
+Station and pass screens subscribe to `menu_versions` and `menu_releases`, so a published correction
+refreshes them (`KITCHEN_TYPES`, `apps/till/src/api/live-connection.ts`).
 
 In an open till view, the existing menu-state poll reads the menu again when the published version
 moves and refreshes declarations in open lines and choices,
@@ -1077,8 +1075,7 @@ that menu's version, as a price refresh makes it. A table takes a bill's recorde
 read of its bills, and the counter reads an open order's recorded copies again after it refreshes its
 offers, asking again at the next poll if that read fails for any reason but the order being gone. A
 dish, variant or extra none of these holds keeps its last open-view declaration until retrieval or
-reload. The watcher cleared that limit for A1150 PR 2 on 15 November 2026 at 21:52, then worded as a
-product absent from every offer. A line rebuilt from a saved draft is not reviewed where the menu no
+reload. A line rebuilt from a saved draft is not reviewed where the menu no
 longer holds its variant, or, for a set-menu dish, where the till cannot tell which full menu its
 version belongs to or that menu no longer holds the dish.
 

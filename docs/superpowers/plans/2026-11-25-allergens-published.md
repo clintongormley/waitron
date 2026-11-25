@@ -472,6 +472,17 @@ Focus 1.
 - [ ] **Step 2–4:** run, implement, run (`pnpm --filter @waitron/till exec vitest run src/api/live-connection.test.ts`,
   the root guard, `src/guide-content.test.ts`). Commit `-s`.
 
+As built (2026-11-25): `readPublishedDeclarations` is one walk, newest first, over
+`onceLiveVersionsAfter` and then the line's own version; it calls neither `readLiveDocuments` nor
+`menusOfVersions`.
+`readProductDeclarationValues` is left for PR 3a, with its first caller. Recorded set-menu copies
+(Task 2.3) take their declarations from `readPublishedDeclarations`. Every draft line of the party's
+allergy screen that names a menu version reads the same way, a set-menu dish among them, which had
+no name and no allergens there before. The till matches an open line by menu item and an extra by
+list and product; a set-menu line follows its own version's copy or its own full menu's live copy;
+the counter reads an open order's recorded copies again after a publish. Order details in the
+dashboard expand a dish's diet labels, since an extra's arrive expanded.
+
 ---
 
 ## PR 3a — Patch live menu can put the product's current allergens and diets live

@@ -516,9 +516,9 @@ detalles de la fila, cambia todos los platos de la fila y permite aumentar la ca
 Para reducirla, usa **Cancelar…**. Elige **Marchar ya** en los detalles de una fila en espera
 para enviar todos sus platos con sus extras.
 
-Los alérgenos y las etiquetas dietéticas vienen de la carta publicada. Un plato ya enviado conserva,
-en la caja, los que tenía al enviarlo; las pantallas de cocina muestran cualquier corrección publicada
-desde entonces.
+Los alérgenos y las etiquetas dietéticas vienen de la carta publicada. Los detalles de un plato
+enviado conservan, en la caja, los que tenía al enviarlo; las pantallas de cocina y la comprobación
+de alergias de la mesa muestran cualquier corrección publicada desde entonces.
 
 Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
 lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo
