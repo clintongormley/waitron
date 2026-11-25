@@ -9,8 +9,6 @@ import {
 import { AppError } from "@waitron/shared";
 import { eq, and, isNull, sql, inArray, ne, or, asc } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
-import { dishKitchenItems } from "./dish-kitchen.js";
-import type { LateSendConfirmation } from "./late-send.js";
 import { readLineCancellations } from "./line-service-state.js";
 import {
   printedHeldGroups,
@@ -39,46 +37,8 @@ import type { OriginConfig } from "./trading-context.js";
 import type { OrderAttendance } from "./working-order-context.js";
 import { routingOnce } from "./working-order-kitchen-fire.js";
 import { fireOrderLines } from "./working-order-kitchen-service.js";
-import { lateUnsentDishesOf } from "./working-order-late-send.js";
 import { clearGroups } from "./working-order-transfer.js";
 
-async function judgeHeldSetMenuDishes(
-  tx: Transaction,
-  lines: readonly {
-    id: string;
-    workingOrderId: string;
-    setMenuId: string | null;
-    sentAt: string | null;
-  }[],
-  lateSend: LateSendConfirmation | undefined,
-  routing: ReturnType<typeof routingOnce>,
-): Promise<void> {
-  // Ordered from a set-menu folder, whatever the grouping made of it.
-  const dishes = lines.filter(({ setMenuId }) => setMenuId !== null);
-  if (dishes.length === 0) return;
-  const kitchen = await dishKitchenItems(
-    tx,
-    dishes.map(({ id }) => id),
-  );
-  const bills = new Map<string, { id: string; parentLineId: null }[]>();
-  for (const { id, workingOrderId, sentAt } of dishes) {
-    const items = kitchen.get(id);
-    const held =
-      items === undefined
-        ? sentAt === null
-        : items.some(({ requestedAt, firedAt }) => requestedAt === null && firedAt === null);
-    if (!held) continue;
-    const bill = bills.get(workingOrderId) ?? [];
-    bill.push({ id, parentLineId: null });
-    bills.set(workingOrderId, bill);
-  }
-  await lateUnsentDishesOf(
-    tx,
-    [...bills].map(([orderId, lines]) => ({ orderId, lines })),
-    { ask: lateSend, periodOnly: true },
-    routing,
-  );
-}
 /**
  * Release a held group: its lines are released bill by bill, in the order the bills were opened,
  * as {@link fireOrderLines} releases them.
@@ -127,8 +87,6 @@ export async function fireGroup(
         attendance === undefined || "deviceId" in firer
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
-        undefined,
-        { ask: args.lateSend },
       );
       return { revision };
     },
@@ -169,8 +127,6 @@ export async function fireHeldLine(
           id: workingOrderLines.id,
           groupId: workingOrderLines.groupId,
           quantity: workingOrderLines.quantity,
-          setMenuId: workingOrderLines.setMenuId,
-          sentAt: workingOrderLines.sentAt,
           workingOrderId: workingOrderLines.workingOrderId,
           billStatus: workingOrders.status,
           departureId: unpaidDepartures.id,
@@ -215,7 +171,6 @@ export async function fireHeldLine(
         args.allergy,
         args.operatorId,
       );
-      await judgeHeldSetMenuDishes(tx, lines, args.lateSend, routing);
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
       const heldPaper = (await heldPaperStations(tx, [source])).get(source) ?? new Set<string>();
@@ -368,12 +323,10 @@ async function releaseGroup(
   routing = routingOnce(tx, new Date()),
   attendance?: { recorder: AttendanceRecorder; at: string },
   active?: Awaited<ReturnType<typeof activeGroupLines>>,
-  late?: { ask: LateSendConfirmation | undefined },
 ): Promise<void> {
   active ??= await activeGroupLines(tx, groupId);
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   await assertPartyAllergyAnswered(tx, partyId);
-  if (late !== undefined) await judgeHeldSetMenuDishes(tx, active, late.ask, routing);
   const byOrder = new Map<string, string[]>();
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);

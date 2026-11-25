@@ -345,6 +345,42 @@ it("asks at Bar's cutoff for a Lunch dish it took over", async () => {
   });
 });
 
+it.each([false, true])(
+  "sends an agreed dessert to Bar or its stand-in (closed: %s)",
+  async (closed) => {
+    at("16:00");
+    const v = await venueWithLastOrders();
+    const { lateSend } = confirming([v.menus.setLunch]);
+    const id = randomUUID();
+    await open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }], id, lateSend);
+    const destination = closed
+      ? await withTransaction(suite.db, async (tx) => {
+          const standIn = await createStation(tx, { name: "Terrace bar" });
+          await setStationToday(
+            tx,
+            v.stations.bar,
+            "closed",
+            new Date(),
+            await seedActivityActor(tx),
+            standIn.id,
+          );
+          return standIn.id;
+        })
+      : v.stations.bar;
+    at("16:15");
+    expect(await sendAsTill(v, "POST", `/api/working-orders/${id}/place`)).toMatchObject({
+      status: 200,
+    });
+    const [line] = await linesOf(id);
+    expect(
+      await suite.db
+        .select({ stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, line!.id)),
+    ).toEqual([{ stationId: destination }]);
+  },
+);
+
 it("names the period that stopped last when only Lunch has offsets", async () => {
   at("23:10");
   const v = await venueWithLastOrders();

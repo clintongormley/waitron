@@ -92,6 +92,7 @@ export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
 }
 
 export const lastOrderLineColumns = {
+  lateStationId: workingOrderLines.lateStationId,
   menuId: workingOrderLines.menuId,
   offerDepartmentId: workingOrderLines.offerDepartmentId,
 };
@@ -103,16 +104,33 @@ export async function makersByLine(
     id: string;
     productId: string | null;
     latePeriodId: string | null;
+    lateStationId: string | null;
     menuId: string | null;
     offerDepartmentId: string | null;
   }[],
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
   const outcomes = new Map<string, MakerOutcome>();
+  if (lines.some(({ lateStationId }) => lateStationId !== null)) {
+    const stations = await resolver.stations();
+    for (const { id, lateStationId } of lines) {
+      if (lateStationId === null) continue;
+      const station = stations.get(lateStationId);
+      if (station === undefined) continue;
+      const stationId = station.open ? lateStationId : station.sendsTo;
+      outcomes.set(
+        id,
+        stationId === null
+          ? { kind: "no_replacement", stationId: lateStationId }
+          : { kind: "made", route: { kind: "station", stationId } },
+      );
+    }
+  }
   if (zoneId !== null) {
     const byDepartment = new Map<string, { key: string; menuId: string; productId: string }[]>();
     for (const { id, productId, latePeriodId, menuId, offerDepartmentId } of lines) {
       if (
         productId === null ||
+        outcomes.has(id) ||
         latePeriodId !== null ||
         menuId === null ||
         offerDepartmentId === null

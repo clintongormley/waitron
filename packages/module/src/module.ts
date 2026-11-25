@@ -777,8 +777,13 @@ export interface LineContextInput {
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
   };
-  /** The period of a late dish, and who confirmed it when confirmation was required. */
-  late?: { periodId: string | null; periodName: string; confirmedBy: string | null };
+  /** The period of a late dish and, when agreed, the station and person who confirmed it. */
+  late?: {
+    periodId: string | null;
+    periodName: string;
+    stationId?: string;
+    confirmedBy: string | null;
+  };
 }
 
 export type LineContextColumns = Pick<
@@ -793,6 +798,7 @@ export type LineContextColumns = Pick<
   | "soldInEach"
   | "hardwareUnit"
   | "latePeriodId"
+  | "lateStationId"
   | "latePeriodName"
   | "lateConfirmedBy"
   | "sentNutrition"
@@ -903,19 +909,25 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
-    endedMenus: readonly { menuId: string; periodId: string; periodName: string }[];
+    endedMenus: readonly {
+      menuId: string;
+      periodId: string;
+      periodName: string;
+      sourceMenuIds: readonly string[];
+    }[];
     lastOrders?: LastOrderService;
   }>;
   /**
    * `${productId}:${variantId ?? ""}` for each item that the live version of some listed menu of
    * the zone offers (a variant: an offer of its product listing it); a listed menu that is not one
-   * of the zone's is left out.
+   * of the zone's is left out. Last orders can also count offers inside set menus.
    */
   productsOfferedIn(
     tx: Transaction,
     zoneId: string,
     menuIds: readonly string[],
     items: readonly { productId: string; variantId: string | null }[],
+    options?: { includeSetMenus: true },
   ): Promise<ReadonlySet<string>>;
   /**
    * Whether a dish sent after its period ended in this department needs someone holding

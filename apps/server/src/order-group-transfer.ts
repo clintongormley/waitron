@@ -299,8 +299,6 @@ export async function activeGroupLines(tx: Transaction, groupId: string) {
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
       quantity: workingOrderLines.quantity,
-      setMenuId: workingOrderLines.setMenuId,
-      sentAt: workingOrderLines.sentAt,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))

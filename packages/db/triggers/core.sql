@@ -453,6 +453,7 @@ BEGIN
       AND new.hardware_unit IS old.hardware_unit
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
+      AND new.late_station_id IS old.late_station_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name
@@ -529,6 +530,7 @@ BEGIN
         (
           new.late_period_name IS old.late_period_name
           AND new.late_period_id IS old.late_period_id
+          AND new.late_station_id IS old.late_station_id
           AND new.late_confirmed_by IS old.late_confirmed_by
         )
         OR (
@@ -537,6 +539,7 @@ BEGIN
           AND old.sent_at IS NULL
           AND old.late_period_name IS NULL
           AND old.late_period_id IS NULL
+          AND old.late_station_id IS NULL
           AND old.late_confirmed_by IS NULL
           AND new.late_period_name IS NOT NULL
         )
@@ -617,6 +620,7 @@ BEGIN
       AND new.hardware_unit IS old.hardware_unit
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
+      AND new.late_station_id IS old.late_station_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name

@@ -42,7 +42,12 @@ export interface DepartmentService {
   periodName: string | null;
   customerMenuId: string | null;
   orderableMenuIds: readonly string[];
-  endedMenus: readonly { menuId: string; periodId: string; periodName: string }[];
+  endedMenus: readonly {
+    menuId: string;
+    periodId: string;
+    periodName: string;
+    sourceMenuIds: readonly string[];
+  }[];
   lastOrders?: LastOrderService;
   readonly keepOpen: {
     periodId: string;

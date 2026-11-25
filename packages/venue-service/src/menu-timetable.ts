@@ -311,11 +311,12 @@ export async function resolveDepartmentService(
       }),
     ),
   ];
-  const endedPeriod = new Map<string, { periodId: string; periodName: string }>();
+  const endedPeriod = new Map<string, Omit<DepartmentService["endedMenus"][number], "menuId">>();
   for (const range of runs.filter((run) => rangeSpanInDay(run, context).end <= moment.minute)) {
     const periodName = periods.find((entry) => entry.id === range.periodId)!.name;
-    for (const menuId of menusOf(range.periodId))
-      endedPeriod.set(menuId, { periodId: range.periodId, periodName });
+    const sourceMenuIds = menusOf(range.periodId);
+    for (const menuId of sourceMenuIds)
+      endedPeriod.set(menuId, { periodId: range.periodId, periodName, sourceMenuIds });
   }
   const lastOrders = periods.some(({ lastOrders }) => lastOrders.length > 0)
     ? {

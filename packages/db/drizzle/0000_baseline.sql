@@ -115,6 +115,7 @@ CREATE TABLE `working_order_lines` (
 	`hardware_unit` text,
 	`late_period_name` text,
 	`late_period_id` text,
+	`late_station_id` text,
 	`late_confirmed_by` text,
 	`sent_nutrition` text,
 	`offer_unit_name` text,
@@ -137,6 +138,7 @@ CREATE TABLE `working_order_lines` (
 	FOREIGN KEY (`parent_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`late_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`late_confirmed_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`credited_to`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
@@ -3337,6 +3339,7 @@ BEGIN
       AND new.hardware_unit IS old.hardware_unit
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
+      AND new.late_station_id IS old.late_station_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name
@@ -3413,6 +3416,7 @@ BEGIN
         (
           new.late_period_name IS old.late_period_name
           AND new.late_period_id IS old.late_period_id
+          AND new.late_station_id IS old.late_station_id
           AND new.late_confirmed_by IS old.late_confirmed_by
         )
         OR (
@@ -3421,6 +3425,7 @@ BEGIN
           AND old.sent_at IS NULL
           AND old.late_period_name IS NULL
           AND old.late_period_id IS NULL
+          AND old.late_station_id IS NULL
           AND old.late_confirmed_by IS NULL
           AND new.late_period_name IS NOT NULL
         )
@@ -3501,6 +3506,7 @@ BEGIN
       AND new.hardware_unit IS old.hardware_unit
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
+      AND new.late_station_id IS old.late_station_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name
