@@ -906,11 +906,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ type: Boolean }) collapseDescendants = false;
   @property({ attribute: false }) rowInitiallyExpanded: (row: Row) => boolean = () => false;
   @property({ attribute: "aria-label" }) override ariaLabel = "";
-  /** When set, a leading column of checkboxes (plus a select-all header box) lets the caller pick
-   * rows. Selection is controlled: the caller passes `selected` and updates it on wt-selection-change.
-   * Works in both flat and tree mode; rowSelectable can leave individual rows without a box. */
+  /** Adds row and header checkboxes. The caller updates `selected` on `wt-selection-change`. */
   @property({ type: Boolean }) selectable = false;
   @property({ attribute: false }) rowSelectable: (row: Row) => boolean = () => true;
+  /** Limits the tree header to matching rows that pass this check, independently of row boxes. */
+  @property({ attribute: false }) rowSelectAll?: (row: Row, filtered: boolean) => boolean;
   /** Domain eligibility for retained ticks; rowSelectable still controls visible checkboxes. */
   @property({ attribute: false }) rowSelectionAllowed?: (row: Row) => boolean;
   /** Copies may share a selection identity while retaining their own row paths. */
@@ -2705,6 +2705,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                             type="checkbox"
                             data-test="select-all"
                             aria-label=${this.selectAllLabel}
+                            ?disabled=${this.rowSelectAll !== undefined && visibleKeys.length === 0}
                             .checked=${allSelected}
                             .indeterminate=${someSelected && !allSelected}
                             @change=${(event: Event) => {
@@ -3239,7 +3240,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const message = html`<p class="message error" role="alert">${this.errorMessage}</p>`;
       return this.serverPaging === undefined ? message : this.#withToolbar(message);
     }
-    const { visible, ranks: searchRanks, filterMatches } = this.#searched();
+    const { visible, ranks: searchRanks, filterMatches, hasFilters } = this.#searched();
     if (this.rows.length === 0) {
       const empty = tableMessage(this.emptyMessage, "empty-action");
       return this.keepToolbarWhenEmpty ||
@@ -3338,8 +3339,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const entries = this.#treeShown().entries ?? this.#treeRows(treeRows, heldOpen, sortColumn);
     const unpinned = shown.filter((column) => column.pinned !== "end");
     const spanningColumns = [shown[0]!, ...shown.slice(unpinned.length)];
+    const matching =
+      this.rowSelectAll &&
+      new Set(visible.filter((row) => this.rowSelectAll!(row, hasFilters === true)));
     const visibleKeys = entries
-      .filter(({ row }) => this.rowSelectable(row))
+      .filter(({ row }) => this.rowSelectable(row) && (!matching || matching.has(row)))
       .map(({ row, key }) => this.#selectionKey(row, key));
     return this.#withToolbar(
       html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>

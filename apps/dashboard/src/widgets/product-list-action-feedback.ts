@@ -3,7 +3,11 @@ import "@waitron/ui/src/components/wt-toast.js";
 import { codeOf } from "../i18n/codes.js";
 import { refusalText } from "./delete-refusal.js";
 import { fill, t } from "../i18n/t.js";
-import type { ProductAvailabilityRefusal } from "./product-availability-actions.js";
+import { countOf } from "./count-text.js";
+import type {
+  ProductAvailabilityRefusal,
+  ProductBatchAvailabilityNotice,
+} from "./product-availability-actions.js";
 
 export function productListActionFeedback(message: string, announce: boolean) {
   return message
@@ -35,7 +39,7 @@ export const productAvailabilityFeedbackStyles = css`
     color: var(--wt-color-danger);
     overflow-wrap: anywhere;
   }
-  .batch-availability-refusal {
+  .batch-availability-notice {
     position: fixed;
     z-index: 10;
     inset: auto var(--wt-space-3) calc(var(--wt-space-3) + env(safe-area-inset-bottom));
@@ -48,7 +52,7 @@ export const productAvailabilityFeedbackStyles = css`
     background: transparent;
     overflow-wrap: anywhere;
   }
-  .batch-availability-refusal:not([open]) {
+  .batch-availability-notice:not([open]) {
     display: none;
   }
 `;
@@ -75,17 +79,27 @@ export function productAvailabilityFeedback(refusal: ProductAvailabilityRefusal 
 }
 
 export function productBatchAvailabilityNotice(
-  refusal: ProductAvailabilityRefusal | null,
+  notice: ProductBatchAvailabilityNotice | null,
   dismiss: (event: Event) => void,
 ) {
+  const result = notice !== null && !("error" in notice);
+  const message = result
+    ? countOf(
+        notice.available ? "product.marked_available" : "product.marked_unavailable",
+        notice.count,
+      )
+    : notice === null
+      ? ""
+      : availabilityRefusalText(notice);
   return html`<wt-toast
-    class="batch-availability-refusal"
-    data-test="batch-availability-refusal"
+    class="batch-availability-notice"
+    data-test="batch-availability-notice"
     popover="manual"
-    tone="error"
-    .duration=${0}
-    .open=${refusal !== null}
-    .message=${refusal === null ? "" : availabilityRefusalText(refusal)}
+    tone=${result ? "info" : "error"}
+    .duration=${result ? 8000 : 0}
+    .held=${result}
+    .open=${notice !== null}
+    .message=${message}
     close-label=${t("action.close")}
     @wt-close=${dismiss}
   ></wt-toast>`;

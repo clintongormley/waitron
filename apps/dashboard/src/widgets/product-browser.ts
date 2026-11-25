@@ -27,7 +27,11 @@ import type {
   FolderSummary,
 } from "../api/catalog-api.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
-import { categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
+import {
+  activeProductIdsInCategories,
+  categoryRefusalErrors,
+  categoryWithDescendants,
+} from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -272,7 +276,7 @@ export class ProductBrowser extends LitElement {
       this.selecting &&
       !changed.has("view") &&
       this.shadowRoot?.activeElement?.matches('wt-button[data-test^="mark-"]') &&
-      !this.#availabilitySelection.length
+      !this.#availabilityIds().length
     )
       this.#doneButton?.focus();
     if (
@@ -306,15 +310,18 @@ export class ProductBrowser extends LitElement {
 
   override updated(changed: PropertyValues): void {
     const notice = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-toast"]>(
-      '[data-test="batch-availability-refusal"]',
+      '[data-test="batch-availability-notice"]',
     );
     if (
       notice?.isConnected &&
       notice.showPopover &&
       notice.open !== notice.matches(":popover-open")
     ) {
-      if (notice.open) notice.showPopover();
-      else notice.hidePopover();
+      if (notice.open) {
+        notice.showPopover();
+        if (notice.held)
+          requestAnimationFrame(() => requestAnimationFrame(() => (notice.held = false)));
+      } else notice.hidePopover();
     }
     if (this.tableHidden) return;
     if (["selected", "search", "products", "categories"].some((key) => changed.has(key)))
@@ -582,13 +589,12 @@ export class ProductBrowser extends LitElement {
       this.operationSelection.productIds.filter((id) => activeIds.has(id)),
     );
     if (deleting && this.#contentsChoice() === "delete") {
-      const subtree = new Set(
-        this.operationSelection.categoryIds.flatMap((id) => [
-          ...categoryWithDescendants(id, this.categories),
-        ]),
-      );
-      for (const { id, primaryCategoryId } of active)
-        if (primaryCategoryId !== null && subtree.has(primaryCategoryId)) productIds.add(id);
+      for (const id of activeProductIdsInCategories(
+        this.operationSelection.categoryIds,
+        active,
+        this.categories,
+      ))
+        productIds.add(id);
     }
     if (
       productIds.size === this.#productsToDelete.length &&
@@ -976,7 +982,7 @@ export class ProductBrowser extends LitElement {
       : fill("folders.color_heading", { name });
   }
   #resetSelection(): void {
-    this.#availability.dismissBatchRefusal();
+    this.#availability.dismissBatchNotice();
     this.selected = [];
     this.hiddenSelected = 0;
     this.#selectionVersion++;
@@ -993,10 +999,10 @@ export class ProductBrowser extends LitElement {
   get #doneButton(): HTMLElement | null {
     return this.renderRoot.querySelector('[data-test="cancel-selection"]');
   }
-  readonly #dismissBatchRefusal = (event: Event): void => {
+  readonly #dismissBatchNotice = (event: Event): void => {
     event.stopPropagation();
     if ((event.currentTarget as HTMLElement).matches(":focus-within")) this.#doneButton?.focus();
-    this.#availability.dismissBatchRefusal();
+    this.#availability.dismissBatchNotice();
   };
 
   readonly #changeAvailability = (event: CustomEvent<ProductAvailabilityChange>): void => {
@@ -1004,21 +1010,30 @@ export class ProductBrowser extends LitElement {
     void this.#availability.changeOne(event.detail);
   };
 
-  get #availabilitySelection(): string[] {
-    const { productIds, categoryIds } = this.#selection();
-    return categoryIds.length ? [] : productIds;
+  #availabilityIds({ productIds, categoryIds } = this.#selection()): string[] {
+    return [
+      ...new Set([
+        ...productIds,
+        ...activeProductIdsInCategories(categoryIds, this.products, this.categories),
+      ]),
+    ];
   }
 
   readonly #markAvailability = async (available: boolean): Promise<void> => {
-    const ids = this.#availabilitySelection;
+    const submitted = new Set(this.selected);
+    const selection = this.#selection();
+    const ids = this.#availabilityIds(selection);
     if (!this.selecting || !ids.length || this.summaryLoading || this.operationBusy) return;
 
     const selectionVersion = this.#selectionVersion;
     if (this.#availability.batch === null) this.#availabilitySelectionVersion = selectionVersion;
-    const saved = await this.#availability.changeSelected(ids, available);
+    const saved = await this.#availability.changeSelected(
+      ids,
+      available,
+      selection.categoryIds.length > 0,
+    );
     if (!saved || !this.isConnected || selectionVersion !== this.#selectionVersion) return;
 
-    const submitted = new Set(ids);
     this.selected = this.selected.filter((id) => !submitted.has(id));
   };
 
@@ -1034,18 +1049,16 @@ export class ProductBrowser extends LitElement {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     const emptyTree = !this.tableHidden && this.view === "tree" && this.#emptyProducts;
-    const availability = this.#availabilitySelection;
-    const refusal = this.#availability.refusal;
-    const batchRefusal =
+    const availability = this.#availabilityIds();
+    const batchNotice =
       !this.tableHidden &&
       this.selecting &&
-      this.#availabilitySelectionVersion === this.#selectionVersion &&
-      refusal?.batch
-        ? refusal
+      this.#availabilitySelectionVersion === this.#selectionVersion
+        ? this.#availability.batchNotice
         : null;
-    return html`${productAvailabilityFeedback(refusal?.batch ? null : refusal)}${productBatchAvailabilityNotice(
-        batchRefusal,
-        this.#dismissBatchRefusal,
+    return html`${productAvailabilityFeedback(this.#availability.refusal)}${productBatchAvailabilityNotice(
+        batchNotice,
+        this.#dismissBatchNotice,
       )}<dashboard-product-list
         .view=${this.view}
         .availabilityPending=${this.#availability.pending}

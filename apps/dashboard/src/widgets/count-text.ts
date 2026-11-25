@@ -12,6 +12,8 @@ export function countOf(
     | "menus.delete_sections_heading"
     | "menus.delete_sections_note"
     | "product.variant_count"
+    | "product.marked_available"
+    | "product.marked_unavailable"
     | "product.unavailable_count"
     | "modifiers.delete_warning_products"
     | "kitchen.delete_course_products"

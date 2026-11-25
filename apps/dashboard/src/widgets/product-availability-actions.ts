@@ -16,30 +16,39 @@ export interface ProductAvailabilityRefusal {
   error: unknown;
 }
 
+export type ProductBatchAvailabilityNotice =
+  ProductAvailabilityRefusal | { count: number; available: boolean };
+
 export class ProductAvailabilityActions {
   pending: ReadonlyMap<string, boolean> = new Map();
   batch: boolean | null = null;
-  refusal: ProductAvailabilityRefusal | null = null;
+  refusal: (ProductAvailabilityRefusal & { id: string }) | null = null;
+  batchNotice: ProductBatchAvailabilityNotice | null = null;
 
   constructor(private readonly host: AvailabilityHost) {}
 
-  dismissBatchRefusal(): void {
-    if (!this.refusal?.batch) return;
-    this.refusal = null;
+  dismissBatchNotice(): void {
+    if (!this.batchNotice) return;
+    this.batchNotice = null;
     this.host.requestUpdate();
   }
 
   async changeOne({ id, name, available }: ProductAvailabilityChange): Promise<void> {
     if (this.pending.has(id)) return;
+    this.refusal = null;
     await this.#save(
       [id],
       available,
       () => this.host.api.setProductAvailability(id, available),
-      (error) => ({ batch: false, name, error }),
+      (error) => (this.refusal = { batch: false, id, name, error }),
     );
   }
 
-  async changeSelected(ids: string[], available: boolean): Promise<boolean> {
+  async changeSelected(
+    ids: string[],
+    available: boolean,
+    hasCategories: boolean,
+  ): Promise<boolean> {
     if (this.batch !== null || ids.some((id) => this.pending.has(id))) return false;
     const selected = new Set(ids);
     const names = new Map(
@@ -47,7 +56,7 @@ export class ProductAvailabilityActions {
     );
     this.batch = available;
     try {
-      return await this.#save(
+      const saved = await this.#save(
         ids,
         available,
         () => this.host.api.setProductsAvailability(ids, available),
@@ -56,13 +65,16 @@ export class ProductAvailabilityActions {
           if (code === "product.deleted" || code === "product.not_found")
             this.host.api.liveData?.invalidate([{ type: "products" }]);
           const productId = (error as { params?: { productId?: string } })?.params?.productId;
-          return {
+          this.batchNotice = {
             batch: true,
             name: productId === undefined ? undefined : names.get(productId),
             error,
           };
         },
       );
+      if (saved && this.refusal && selected.has(this.refusal.id)) this.refusal = null;
+      if (saved && hasCategories) this.batchNotice = { count: ids.length, available };
+      return saved;
     } finally {
       this.batch = null;
       this.host.requestUpdate();
@@ -73,19 +85,19 @@ export class ProductAvailabilityActions {
     ids: readonly string[],
     available: boolean,
     write: () => Promise<void>,
-    refusal: (error: unknown) => ProductAvailabilityRefusal,
+    refuse: (error: unknown) => void,
   ): Promise<boolean> {
     const pending = new Map(this.pending);
     for (const id of ids) pending.set(id, available);
     this.pending = pending;
-    this.refusal = null;
+    this.batchNotice = null;
     this.host.requestUpdate();
     try {
       await write();
       if (this.host.isConnected) this.host.availabilitySaved?.(ids, available);
       return true;
     } catch (error) {
-      if (this.host.isConnected) this.refusal = refusal(error);
+      if (this.host.isConnected) refuse(error);
       return false;
     } finally {
       const remaining = new Map(this.pending);
