@@ -77,6 +77,7 @@ const CONTROLS = [
   "WT_SDP_RESPONSE",
   "WT_SDP_EXIT",
   "WT_SDP_HANG",
+  "WT_SDP_DELAY",
 ] as const;
 
 let bin: string;
@@ -102,6 +103,7 @@ beforeAll(async () => {
       "#!/bin/sh",
       'printf \'%s\\n\' "$*" >> "$WT_RFCOMM_OUT/sdp-args"',
       'if [ -n "$WT_SDP_HANG" ]; then echo $$ > "$WT_RFCOMM_OUT/sdp-pid"; exec sleep 30; fi',
+      'if [ -n "$WT_SDP_DELAY" ]; then sleep "$WT_SDP_DELAY"; fi',
       "printf '%s\\n' \"$WT_SDP_RESPONSE\"",
       'exit "${WT_SDP_EXIT:-0}"',
       "",
@@ -157,6 +159,37 @@ describe("RfcommTransport", () => {
     expect(await readFile(join(out, "sdp-args"), "utf8")).toBe(`search --bdaddr ${ADDRESS} SP\n`);
   });
 
+  it("remembers a separate channel for each Bluetooth address", async () => {
+    const otherAddress = "5A:4A:45:D4:FB:BC";
+    const transport = new RfcommTransport({ python: stub });
+    const bytes = new Uint8Array([65]);
+    process.env.WT_SDP_RESPONSE = "Channel: 7";
+    await transport.send(target(), bytes);
+    process.env.WT_SDP_RESPONSE = "Channel: 12";
+    await transport.send(target({ id: "p2", devicePath: otherAddress }), bytes);
+    expect((await argv())[2]).toBe("12");
+    await transport.send(target(), bytes);
+    expect((await argv())[2]).toBe("7");
+    expect(await readFile(join(out, "sdp-args"), "utf8")).toBe(
+      `search --bdaddr ${ADDRESS} SP\nsearch --bdaddr ${otherAddress} SP\n`,
+    );
+  });
+
+  it(
+    "uses the advertised channel when discovery takes 3.3 seconds",
+    { timeout: 12_000 },
+    async () => {
+      process.env.WT_SDP_DELAY = "3.3";
+      process.env.WT_SDP_RESPONSE = "Channel: 7";
+      const transport = new RfcommTransport({ python: stub });
+      await transport.send(target(), new Uint8Array([65]));
+      const firstChannel = (await argv())[2];
+      await transport.send(target(), new Uint8Array([66]));
+      expect([firstChannel, (await argv())[2]]).toEqual(["7", "7"]);
+      expect(await readFile(join(out, "sdp-args"), "utf8")).toBe(`search --bdaddr ${ADDRESS} SP\n`);
+    },
+  );
+
   it.each(["", "Channel: 3\nChannel: 7", "Channel: 0\nChannel: 31"])(
     "caches channel 1 after a successful inconclusive lookup (%s)",
     async (response) => {
@@ -169,23 +202,27 @@ describe("RfcommTransport", () => {
     },
   );
 
-  it("does not cache a failed lookup, and rediscovers after a failed send without sending twice", async () => {
+  it("remembers a fallback that sent successfully and rediscovers after a failed send", async () => {
     const transport = new RfcommTransport({ python: stub });
     process.env.WT_SDP_EXIT = "1";
     await transport.send(target(), new Uint8Array([65]));
+    const firstChannel = (await argv())[2];
     delete process.env.WT_SDP_EXIT;
     process.env.WT_SDP_RESPONSE = "Channel: 7";
     process.env.WT_RFCOMM_EXIT = "1";
-    await expect(transport.send(target(), new Uint8Array([66]))).rejects.toThrow();
+    await expect(transport.send(target(), new Uint8Array([66]))).rejects.toThrow(
+      "bluetooth printer p1: the Bluetooth helper exited with 1",
+    );
+    const failedChannel = (await argv())[2];
     delete process.env.WT_RFCOMM_EXIT;
     process.env.WT_SDP_RESPONSE = "Channel: 9";
     await transport.send(target(), new Uint8Array([67]));
-    expect((await argv())[2]).toBe("9");
-    expect((await readFile(join(out, "sdp-args"), "utf8")).trim().split("\n")).toHaveLength(3);
+    expect([firstChannel, failedChannel, (await argv())[2]]).toEqual(["1", "1", "9"]);
+    expect((await readFile(join(out, "sdp-args"), "utf8")).trim().split("\n")).toHaveLength(2);
     expect((await readFile(join(out, "helper-calls"), "utf8")).trim().split("\n")).toHaveLength(3);
   });
 
-  it("bounds a stalled channel lookup, falling back without caching and killing that child", async () => {
+  it("kills a stalled lookup and remembers the fallback after a successful send", async () => {
     process.env.WT_SDP_HANG = "1";
     const transport = new RfcommTransport({ python: stub, lookupTimeoutMs: 50 });
     await transport.send(target(), new Uint8Array([65]));
@@ -194,8 +231,9 @@ describe("RfcommTransport", () => {
     await expect.poll(() => isAlive(pid), { timeout: 2000 }).toBe(false);
     delete process.env.WT_SDP_HANG;
     process.env.WT_SDP_RESPONSE = "Channel: 8";
-    await transport.send(target(), new Uint8Array([65]));
-    expect((await argv())[2]).toBe("8");
+    await transport.send(target(), new Uint8Array([66]));
+    expect((await argv())[2]).toBe("1");
+    expect(await readFile(join(out, "sdp-args"), "utf8")).toBe(`search --bdaddr ${ADDRESS} SP\n`);
   });
 
   it("uses channel 1 when sdptool is missing", async () => {
@@ -268,18 +306,24 @@ describe("RfcommTransport", () => {
     await expect(sent).rejects.toThrow(/ENOENT/);
   });
 
-  it("kills a helper that has not exited by twice the timeout plus the grace period, and rejects", async () => {
+  it("kills a helper past twice the timeout plus the grace period and forgets its channel", async () => {
+    const transport = new RfcommTransport({ python: stub, timeoutMs: 200, graceMs: 200 });
+    const bytes = new Uint8Array([0x41]);
+    process.env.WT_SDP_RESPONSE = "Channel: 7";
+    await transport.send(target(), bytes);
+    await rm(join(out, "pid"));
     process.env.WT_RFCOMM_HANG = "1";
     const started = Date.now();
-    await expect(
-      new RfcommTransport({ python: stub, timeoutMs: 200, graceMs: 200 }).send(
-        target(),
-        new Uint8Array([0x41]),
-      ),
-    ).rejects.toThrow(new Error("bluetooth printer p1 timed out after 600ms"));
+    await expect(transport.send(target(), bytes)).rejects.toThrow(
+      new Error("bluetooth printer p1 timed out after 600ms"),
+    );
     expect(Date.now() - started).toBeGreaterThanOrEqual(595);
     const pid = Number(await readFile(join(out, "pid"), "utf8"));
     await expect.poll(() => isAlive(pid), { timeout: 2000 }).toBe(false);
+    delete process.env.WT_RFCOMM_HANG;
+    process.env.WT_SDP_RESPONSE = "Channel: 9";
+    await transport.send(target(), bytes);
+    expect((await argv())[2]).toBe("9");
   });
 
   // The helper's timeout bounds its connect and, again, its send, so a healthy job can take up to
