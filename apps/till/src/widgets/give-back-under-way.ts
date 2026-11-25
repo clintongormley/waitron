@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
@@ -63,7 +63,8 @@ const positive = (value: string) => compareDecimal(decimal(value), decimal("0"))
 const least = (a: string, b: string) => (compareDecimal(decimal(a), decimal(b)) < 0 ? a : b);
 
 /** A give-back still under way (D12): what is back, what is left, and the steps that finish it.
- * Closing the window it sits in ends nothing. */
+ * Closing the window it sits in ends nothing. `give-back-busy` says when a step starts and ends,
+ * so the window is not closed before a step's answer is shown. */
 @customElement("till-give-back-under-way")
 export class TillGiveBackUnderWay extends LitElement {
   static override styles = [baseStyles, giveBackStyles];
@@ -96,7 +97,15 @@ export class TillGiveBackUnderWay extends LitElement {
     super.disconnectedCallback();
     this.#abandonCard();
   }
-  override updated(): void {
+  override updated(changed: PropertyValues): void {
+    if (changed.has("busy"))
+      this.dispatchEvent(
+        new CustomEvent("give-back-busy", {
+          detail: { busy: this.busy },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     if (this.#focused) return;
     const first = this.shadowRoot!.querySelector<LitElement>("[data-choice]");
     if (first === null) return;

@@ -6,6 +6,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { SCOPE, UNDER_WAY, VIEW, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
+import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
@@ -18,11 +19,14 @@ class GiveBackLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = fakeGiveBackApi(GiveBackLeaveApp.view);
   readonly session = new GiveBackSession(SCOPE, this.api);
+  readonly corrections = new InvoiceCorrectionSession(SCOPE, this.api);
   closes = 0;
   override render() {
     return html`<till-give-back-dialog
         .api=${this.api}
         .session=${this.session}
+        .corrections=${this.corrections}
+        .capabilities=${["take-cash"]}
         .saleId=${"s1"}
         .invoiceNumber=${"A/1042"}
         .namesLocale=${"en"}
@@ -205,4 +209,76 @@ it("a window filled in after a cancel closes without asking, and asks once a dis
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
+});
+
+it("Escape and Cancel cannot close the window while Give back is sending, and the outcome then shows", async () => {
+  const { app, form } = await mount();
+  let release!: () => void;
+  const answer = app.api.giveBack.getMockImplementation()!;
+  app.api.giveBack.mockImplementationOnce(
+    (...args) => new Promise((resolve) => (release = () => resolve(answer(...args)))),
+  );
+  await choose(form, "goodwill");
+  await type(form, "5");
+  form.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "complaint" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-summary]")).not.toBeNull());
+  form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  await vi.waitFor(() => expect(app.api.giveBack).toHaveBeenCalledOnce());
+
+  const dialog = form.shadowRoot!.querySelector("wt-dialog")!;
+  expect(await dialog.requestClose("escape")).toBe(false);
+  expect(await dialog.requestClose("cancel")).toBe(false);
+  await userEvent.keyboard("{Escape}");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
+  expect(app.closes).toBe(0);
+
+  release();
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-outcome]")).not.toBeNull());
+  expect(await dialog.requestClose("escape")).toBe(true);
+  await expect.poll(() => app.closes).toBe(1);
+});
+
+it("Escape cannot close the window while Money back under way gives cash back, and the cash to hand over then shows", async () => {
+  GiveBackLeaveApp.view = { ...VIEW, underWay: UNDER_WAY };
+  const { app, form } = await mount();
+  let release!: () => void;
+  app.api.giveInvoiceCorrectionCash.mockImplementationOnce(
+    async () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            correction: { ...UNDER_WAY, state: "open", moneyBack: "6.00", left: "0.00" },
+            refunds: [],
+            replayed: false,
+          });
+      }),
+  );
+  const view = form.shadowRoot!.querySelector("till-give-back-under-way")!;
+  await vi.waitFor(() =>
+    expect(view.shadowRoot!.querySelector("[data-choice=cash]")).not.toBeNull(),
+  );
+  view.shadowRoot!.querySelector<HTMLElement>("[data-choice=cash]")!.click();
+  await vi.waitFor(() => expect(app.api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
+
+  const dialog = form.shadowRoot!.querySelector("wt-dialog")!;
+  expect(await dialog.requestClose("escape")).toBe(false);
+  expect(await dialog.requestClose("backdrop")).toBe(false);
+  await userEvent.keyboard("{Escape}");
+  expect(app.closes).toBe(0);
+
+  release();
+  await vi.waitFor(() =>
+    expect(view.shadowRoot!.querySelector("[data-cash-given]")?.textContent).toContain(
+      t("give_back.uw_cash_given").replace("{amount}", "€4.00"),
+    ),
+  );
+  expect(await dialog.requestClose("escape")).toBe(true);
+  await expect.poll(() => app.closes).toBe(1);
 });

@@ -142,6 +142,7 @@ export class TillGiveBackDialog extends LitElement {
   @state() private changedWhileChecking = false;
   @state() private step: Step | null = null;
   @state() private sending = false;
+  @state() private underWayBusy = false;
   @state() private sendRefusal: Refusal | null = null;
   @state() private approvers: StaffMember[] | null = null;
   @state() private pinError: ApproverRefusal | null = null;
@@ -154,7 +155,12 @@ export class TillGiveBackDialog extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason) =>
+    !this.#writing() &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+  /** A write in flight keeps the window open until its answer can be shown. */
+  #writing(): boolean {
+    return this.sending || this.underWayBusy;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -903,6 +909,10 @@ export class TillGiveBackDialog extends LitElement {
       .refunds=${this.refunds}
       .capabilities=${this.capabilities}
       .close=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+      @give-back-busy=${(event: CustomEvent<{ busy: boolean }>) => {
+        event.stopPropagation();
+        this.underWayBusy = event.detail.busy;
+      }}
     ></till-give-back-under-way>`;
   }
   #body() {
@@ -930,6 +940,7 @@ export class TillGiveBackDialog extends LitElement {
         ${trackDialog()}
         .open=${this.active}
         .heading=${t(this.#underWayOf(this.step) === null ? "give_back.title" : "give_back.under_way")}
+        .dismissible=${!this.#writing()}
         .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @wt-close=${(event: Event) => this.#closed(event)}
       >
