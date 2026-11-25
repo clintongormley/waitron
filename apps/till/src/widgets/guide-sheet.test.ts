@@ -422,7 +422,10 @@ describe("the guide sheet and the lock", () => {
     await signIn();
     setHelpMode(true);
     const badge = await vi.waitFor(() => {
-      const found = deepFind<WtHelpTooltip>(el.shadowRoot!, "wt-help-tooltip[guide-href]");
+      const found = deepFind<WtHelpTooltip>(
+        el.shadowRoot!,
+        'wt-help-tooltip[guide-href]:not([guide-href=""])',
+      );
       expect(found).not.toBeNull();
       return found!;
     });
@@ -477,7 +480,10 @@ describe("reading the guide and the idle logout", () => {
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
       setHelpMode(true);
       const badge = await vi.waitFor(() => {
-        const found = deepFind<WtHelpTooltip>(el.shadowRoot!, "wt-help-tooltip[guide-href]");
+        const found = deepFind<WtHelpTooltip>(
+          el.shadowRoot!,
+          'wt-help-tooltip[guide-href]:not([guide-href=""])',
+        );
         expect(found).not.toBeNull();
         return found!;
       });
