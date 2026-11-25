@@ -125,7 +125,7 @@ it("keeps other menus off a change made only here", async () => {
   expect(text(q(el, '[data-change-row="rename-here"]'))).toBe("Menu renamed from Lunch to Midday");
 });
 
-it("keeps the source of an edit to a modifier list neutral", async () => {
+it.each(["extras", "unit"] as const)("keeps the source of a %s change neutral", async (field) => {
   const el = await mount({
     preview: preview([
       {
@@ -133,13 +133,13 @@ it("keeps the source of an edit to a modifier list neutral", async () => {
         kind: "product_changed",
         productId: "p-burger",
         name: "Burger",
-        fields: ["extras"],
+        fields: [field],
         source: "shared_product",
         targets: { before: [], after: [] },
       },
     ]),
   });
-  expect(text(q(el, '[data-change-row="modifiers"]'))).toBe("Burger: extras shared product");
+  expect(text(q(el, '[data-change-row="modifiers"]'))).toBe(`Burger: ${field} shared product`);
 });
 
 it("keeps counted warning details folded until opened and keeps the product link", async () => {
@@ -495,7 +495,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: Ham unit changed from g (0 decimal places) to kg (3 decimal places) changed in Products",
+      "Extras: Ham unit changed from g (0 decimal places) to kg (3 decimal places) shared product",
     ].sort(),
   );
 
@@ -504,7 +504,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: la unidad de Ham ha cambiado de g (0 decimales) a kg (3 decimales) cambio en Productos",
+      "Extras: la unidad de Ham ha cambiado de g (0 decimales) a kg (3 decimales) producto compartido",
     ].sort(),
   );
 });

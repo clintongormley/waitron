@@ -135,15 +135,16 @@ export function changeWords(change: MenuChange, subject: (name: string) => unkno
 
 export function changeSource(change: MenuChange): string {
   if (change.source === "this_menu") return "";
-  const modifierTerms =
-    change.kind === "product_changed" &&
-    change.fields.some((field) => field === "extras" || field === "options");
+  const hasNeutralSource =
+    change.kind === "extra_unit_changed" ||
+    (change.kind === "product_changed" &&
+      change.fields.some((field) => field === "extras" || field === "options" || field === "unit"));
   let source = change.includedMenu?.name ?? "";
   if (change.kind === "extra_portion_changed" || change.kind === "extra_max_quantity_changed")
     source = t("menu_preview.changed_in_modifiers");
   else if (change.source === "shared_product")
     source = t(
-      modifierTerms ? "menu_preview.source_shared_product" : "menu_preview.changed_in_products",
+      hasNeutralSource ? "menu_preview.source_shared_product" : "menu_preview.changed_in_products",
     );
   else if (change.source === "included_menu" && source === "")
     source = t("menu_preview.source_included_menu");

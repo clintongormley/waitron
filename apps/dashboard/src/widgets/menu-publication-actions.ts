@@ -36,8 +36,8 @@ export function publishAction(
   menu: string,
   publish: (event: Event) => void,
 ) {
+  if (previewLiveVersion(preview) !== null) return nothing;
   const blocked = publicationBlockerCount(preview) > 0;
-  if (!blocked && previewLiveVersion(preview) !== null) return nothing;
   return html`<wt-button
     variant=${publishing || !blocked ? "primary" : "secondary"}
     data-test="publish"

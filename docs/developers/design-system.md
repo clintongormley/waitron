@@ -1687,8 +1687,8 @@ Cancelled and activated editions stay in the API response but have no row or Sta
 The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
 reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
-and a time; it is offered only when the preview has loaded with no clashes and the draft
-differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+and a time when the preview has loaded and the draft differs from the version it would follow.
+If Preview has blockers, the button is visible and disabled. Each scheduled row has a row menu, pinned at the end,
 with two separate actions: "Change time", which opens the same form starting at that version's date
 and time, and "Cancel this version", which asks first. A request that would put a newer version live
 before an older one is refused with a sentence naming each version in the way and its time, under

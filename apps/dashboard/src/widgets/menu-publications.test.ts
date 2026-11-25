@@ -1838,9 +1838,19 @@ describe("changing a queued version's time", () => {
     },
   );
 
-  it("moves a version without a preview, closes, and reads the list again", async () => {
+  it.each([
+    ["no preview", null],
+    [
+      "set-menu problems",
+      draftPreview({
+        setMenuProblems: [
+          { menuId: "daily", name: "Daily menu", problems: [{ kind: "no_lines" }] },
+        ],
+      }),
+    ],
+  ])("moves a saved version with %s and reads the list again", async (_, preview) => {
     const api = stubApi();
-    const el = await mount(api);
+    const el = await mount(api, { preview });
     await openMove(el, "v-lunch-2");
     await enter(el, "time", "09:00");
     await submit(el);

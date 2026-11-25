@@ -203,7 +203,7 @@ it("views a renamed menu at its frozen title", async () => {
   expect(destination(view)!.textContent?.trim()).toBe("Frozen title");
 });
 
-it("ignores an old View link after its snapshot has been replaced", async () => {
+it("ignores an old name link after its snapshot has been replaced", async () => {
   const el = await mount([change()]);
   const old = viewLink(el)!;
   el.preview = {
