@@ -1,4 +1,5 @@
 import { expect, test, afterEach, onTestFinished } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { stringToCents } from "@waitron/shared";
 import { WtInput } from "@waitron/ui-core/components/wt-input";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
@@ -422,20 +423,48 @@ test.each(["en-GB", "es-ES"])(
     );
     el.inherited = { value: "12.50", suffix: "inherited" };
     const unit = el.shadowRoot!.querySelector("span.unit")!;
-    for (const value of ["", "1234.50", ""]) {
+    for (const value of ["", "5", "1234.50", ""]) {
       el.value = value;
       await el.updateComplete;
       await settled();
       const price = typedTextBox(input, input.value || input.placeholder);
-      const priceRight = Math.max(price.right, currency!.getBoundingClientRect().right);
-      const unitLeft =
-        unit.getBoundingClientRect().left + parseFloat(getComputedStyle(unit).paddingLeft);
-      const gap = unitLeft - priceRight;
+      const content = contentBox(input);
+      expect(price.left).toBeGreaterThanOrEqual(content.left - 1);
+      expect(price.right).toBeLessThanOrEqual(content.right + 1);
+      const sign = currency!.getBoundingClientRect();
+      const unitText = document.createRange();
+      unitText.selectNodeContents(unit);
+      const gap = unitText.getBoundingClientRect().left - Math.max(price.right, sign.right);
       expect(gap).toBeGreaterThanOrEqual(0);
-      expect(gap).toBeLessThanOrEqual(8);
+      expect(gap).toBeLessThanOrEqual(7);
     }
   },
 );
+
+test.each(["5", "10"])(
+  "a fixed percent sign sits next to %s and clicking it focuses the amount",
+  async (value) => {
+    const { el, input } = await mountPrice(
+      `<wt-price-input label="Maximum discount" value="${value}" unit="%" fixed-unit></wt-price-input>`,
+    );
+    const unit = el.shadowRoot!.querySelector("span.unit")!;
+    const drawn = document.createRange();
+    drawn.selectNodeContents(unit);
+    const gap = drawn.getBoundingClientRect().left - typedTextBox(input).right;
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThanOrEqual(8);
+    await userEvent.click(page.elementLocator(unit));
+    expect(el.shadowRoot!.activeElement).toBe(input);
+  },
+);
+
+test("a long price with a fixed unit stays within the configured amount width", async () => {
+  const { input } = await mountPrice(
+    '<wt-price-input label="Price" value="123456789012.50" unit="kg" fixed-unit></wt-price-input>',
+  );
+  host.style.setProperty("--wt-price-field-width", "91px");
+  expect(input.getBoundingClientRect().width).toBe(91);
+});
 
 function expectInsideField(currency: HTMLElement, input: HTMLInputElement) {
   const sign = currency.getBoundingClientRect();

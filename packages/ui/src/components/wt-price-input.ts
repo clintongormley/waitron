@@ -40,6 +40,7 @@ export class WtPriceInput extends WtInput {
       /* Beside a unit button the label sits in the amount box, so a long one stops at the button
          rather than under it; beside a fixed unit it sits in the field box and spans past it. */
       .amount-box {
+        --amount-end-inset: var(--wt-space-3);
         position: relative;
         display: flex;
         flex: 1;
@@ -60,6 +61,7 @@ export class WtPriceInput extends WtInput {
         --amount-width: var(--wt-price-field-width);
         width: var(--amount-width);
         min-width: var(--wt-tap-min);
+        padding-inline-end: var(--amount-end-inset);
       }
 
       /* Text padding and field-width growth use separate measurements so width growth can
@@ -79,7 +81,7 @@ export class WtPriceInput extends WtInput {
 
       .after .field-control {
         padding-inline-end: calc(
-          var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1)
+          var(--amount-end-inset) + var(--currency-width, 0px) + var(--wt-space-1)
         );
         text-align: end;
       }
@@ -99,7 +101,7 @@ export class WtPriceInput extends WtInput {
 
       .after .inherit-cue {
         inset-inline: var(--wt-space-3)
-          calc(var(--wt-space-3) + var(--currency-width, 0px) + var(--wt-space-1));
+          calc(var(--amount-end-inset) + var(--currency-width, 0px) + var(--wt-space-1));
         justify-content: flex-end;
         font-size: var(--wt-text-control-font-size);
         overflow: hidden;
@@ -143,7 +145,7 @@ export class WtPriceInput extends WtInput {
       }
 
       .after .currency {
-        inset-inline-end: var(--wt-space-3);
+        inset-inline-end: var(--amount-end-inset);
       }
 
       span.unit {
@@ -155,19 +157,15 @@ export class WtPriceInput extends WtInput {
 
       /* Compact cells keep the same amount width across rows, including when the unit wraps. */
       @supports (field-sizing: content) {
+        .fixed[data-label="float"]:not([data-compact]) .amount-box {
+          --amount-end-inset: 0px;
+        }
+
         .fixed[data-label="float"]:not([data-compact]) .field-control {
           field-sizing: content;
           width: auto;
+          min-width: 0;
           max-width: var(--amount-width);
-          padding-inline-end: 0;
-        }
-
-        .fixed[data-label="float"]:not([data-compact]) .after .field-control {
-          padding-inline-end: calc(var(--currency-width, 0px) + var(--wt-space-1));
-        }
-
-        .fixed[data-label="float"]:not([data-compact]) .after .currency {
-          inset-inline-end: 0;
         }
 
         .fixed[data-label="float"]:not([data-compact]) span.unit {
