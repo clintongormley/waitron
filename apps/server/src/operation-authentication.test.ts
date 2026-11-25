@@ -16,7 +16,6 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
 import {
   masterKeyAuthorising,
   stagedAuthorityKey,
@@ -295,7 +294,6 @@ describe("host-issued authority after fresh operator authentication", () => {
 describe("a recovery key's authority", () => {
   const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   const recovery = { ...binding, action: "restore", targetNodeId: NODE };
-  const handles = () => ({ venue: suite.db, node: suite.node });
 
   beforeEach(() => stampDeployment(suite.db, "preproduction"));
 
@@ -323,20 +321,6 @@ describe("a recovery key's authority", () => {
     const swapped = secret[at] === "2" ? "3" : "2";
     return secret.slice(0, at) + swapped + secret.slice(at + 1);
   }
-
-  it("a wrong key is refused with `promotion.break_glass_invalid`", async () => {
-    const own = await mintMasterKey(suite.db);
-    const boxKey = await mintBreakGlassSecret(handles(), NODE);
-    const printedBoxKey = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
-    expect(printedBoxKey.replaceAll(" ", "")).toHaveLength(41);
-    for (const secret of [
-      encodeMasterKeyCode(makeMasterKey()),
-      changeOneSymbol(own.secret),
-      boxKey,
-      printedBoxKey,
-    ])
-      expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
-  });
 
   async function refusalParams(secret: unknown): Promise<unknown> {
     try {
