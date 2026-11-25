@@ -9,11 +9,8 @@ import { recordAttendanceFact } from "./attendance-capture.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import {
-  openInvoiceCorrection,
-  parseInvoiceCorrection,
-  previewInvoiceCorrection,
-} from "./invoice-corrections.js";
+import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket } from "./till-sale.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";

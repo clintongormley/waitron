@@ -779,7 +779,7 @@ declare module "@waitron/shared" {
     "invoice_correction.nothing_back": { correctionId: string };
     /** Close refused: money has gone back and the correction can still be filed on this box. */
     "invoice_correction.still_correctable": { correctionId: string };
-    /** The split the till showed is no longer what this correction would file; the fresh one. */
+    /** The split asked with is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;
       gross: string;

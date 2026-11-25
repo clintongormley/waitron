@@ -16,10 +16,10 @@ import {
   closeInvoiceCorrection,
   fileInvoiceCorrectionNow,
   openInvoiceCorrection,
-  parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
 } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import {
   resumeTenderRefund,

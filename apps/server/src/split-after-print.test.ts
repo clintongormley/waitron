@@ -29,6 +29,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
 import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
+import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -466,31 +467,21 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, party.tabId)),
     );
     const override = { personId: venue.adminId, pin: "1234" };
-    const shown = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${advance!.advanceSaleId}/corrections/preview`,
-      { gross: "30.00" },
-    );
-    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    const expectedSplit = await previewedSplit(venue, advance!.advanceSaleId, { gross: "30.00" });
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${advance!.advanceSaleId}/corrections`,
+    const correctionId = await openedCorrection(
+      venue,
+      advance!.advanceSaleId,
       {
         submissionId: randomUUID(),
         gross: "30.00",
         reasonId: reason!.id,
         note: "Given back",
-        expectedSplit: shown.json.vatBreakdown,
+        expectedSplit,
         override,
       },
+      venue.cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json.correction as { id: string }).id;
     const givenBack = await send(
       venue.app,
       venue.cookie,

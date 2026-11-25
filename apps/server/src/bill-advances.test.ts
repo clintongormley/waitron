@@ -45,6 +45,10 @@ import { readBillEditState } from "./bill-editing.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import {
+  openCorrection as openCorrectionOn,
+  openedCorrection,
+} from "./testing/invoice-correction.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { parkOrder } from "./working-order-open.js";
 import { printOrderForTest } from "./testing/issue-order.js";
@@ -685,14 +689,12 @@ describe("an advance in Find a bill (ruling L2)", () => {
 
   const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
 
-  /** Opens a €10.00 correction of the advance `saleId` through the till's correction route. */
+  /** Opens a €10.00 correction of the advance `saleId`. */
   async function openCorrection(saleId: string): Promise<string> {
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${saleId}/corrections`,
+    return openedCorrection(
+      venue,
+      saleId,
       {
         submissionId: randomUUID(),
         gross: "10.00",
@@ -701,9 +703,8 @@ describe("an advance in Find a bill (ruling L2)", () => {
         expectedSplit: [{ rate: "10.00", base: "9.09", tax: "0.91" }],
         override: supervisor(),
       },
+      venue.cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    return (opened.json as { correction: { id: string } }).correction.id;
   }
 
   it("a correction of the advance keeps table 7's zone", async () => {
@@ -795,11 +796,9 @@ describe("an advance in Find a bill (ruling L2)", () => {
     expect(lines.join("\n")).not.toContain(renamed);
     expect(lines.find((line) => line.includes(spanish.order))).toContain(tableLabel);
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const again = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${correction}/corrections`,
+    const again = await openCorrectionOn(
+      venue,
+      correction,
       {
         submissionId: randomUUID(),
         gross: "1.00",
@@ -808,6 +807,7 @@ describe("an advance in Find a bill (ruling L2)", () => {
         expectedSplit: [{ rate: "10.00", base: "0.91", tax: "0.09" }],
         override: supervisor(),
       },
+      venue.cookie,
     );
     expect(again.json).toMatchObject({ code: "invoice_correction.not_settled" });
   });

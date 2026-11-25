@@ -37,6 +37,11 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { createTable } from "./testing/live-table.js";
+import {
+  openedCorrection,
+  previewCorrection,
+  previewedSplit,
+} from "./testing/invoice-correction.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -480,13 +485,7 @@ describe("the rest's invoice takes the advances off", () => {
     };
 
     const unpaid = await refundAdvance();
-    const correction = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${rest!.id}/corrections/preview`,
-      { gross: "30.00" },
-    );
+    const correction = await previewCorrection(venue, rest!.id, { gross: "30.00" });
 
     expect(unpaid.status, JSON.stringify(unpaid.json)).toBe(409);
     expect(unpaid.json).toEqual({
@@ -515,31 +514,21 @@ describe("the rest's invoice takes the advances off", () => {
     expect((await cash(bill.billId, "90.00")).status).toBe(200);
     const rest = await restOf(bill.billId);
     const override = { personId: venue.adminId, pin: "1234" };
-    const split = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${rest!.id}/corrections/preview`,
-      { gross: "90.00" },
-    );
-    expect(split.status, JSON.stringify(split.json)).toBe(200);
+    const expectedSplit = await previewedSplit(venue, rest!.id, { gross: "90.00" });
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${rest!.id}/corrections`,
+    const correctionId = await openedCorrection(
+      venue,
+      rest!.id,
       {
         submissionId: randomUUID(),
         gross: "90.00",
         reasonId: reason!.id,
         note: "Paid too much",
-        expectedSplit: (split.json as { vatBreakdown: unknown }).vatBreakdown,
+        expectedSplit,
         override,
       },
+      venue.cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
     expect(
       await send(venue.app, venue.cookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, {
         submissionId: randomUUID(),
@@ -843,16 +832,14 @@ describe("a bill whose advance has a correction still open", () => {
   const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
   const WHOLE = [{ rate: "10.00", base: "27.27", tax: "2.73" }];
 
-  /** A bill of €120 with a €30 advance on which Correct invoice was opened for the whole €30. */
+  /** A bill of €120 with a €30 advance with a correction open for the whole €30. */
   async function correcting() {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "30.00");
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const opened = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/transactions/${advanceId}/corrections`,
+    const correctionId = await openedCorrection(
+      venue,
+      advanceId,
       {
         submissionId: randomUUID(),
         gross: "30.00",
@@ -861,9 +848,8 @@ describe("a bill whose advance has a correction still open", () => {
         expectedSplit: WHOLE,
         override: supervisor(),
       },
+      venue.cookie,
     );
-    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
-    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
     const refused = {
       code: "advance.correction_open",
       params: {

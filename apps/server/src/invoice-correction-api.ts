@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import { withTransaction, type Transaction } from "@waitron/db";
 import type { AuthzInput, PinThrottle } from "@waitron/identity";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
-import { AppError, isUuid, saleId as brandSaleId } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { withCorrectionAuthorization } from "./invoice-correction-authorization.js";
 import { readCorrectionRow } from "./invoice-correction-legs.js";
@@ -11,21 +11,15 @@ import {
   closeInvoiceCorrection,
   expectedSplitOf,
   fileInvoiceCorrectionNow,
-  lineIdsOf,
   listOpenInvoiceCorrections,
-  openInvoiceCorrection,
-  parseInvoiceCorrection,
-  previewInvoiceCorrection,
   readInvoiceCorrection,
-  readInvoiceCorrectionLines,
   type InvoiceCorrectionEndDeps,
-  type InvoiceCorrectionRequest,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
 import type { Logger } from "./logger.js";
 import { withCheck } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
-import { overrideOf, pathId } from "./tender-refund-api.js";
+import { overrideOf } from "./tender-refund-api.js";
 import { checkAccess } from "./tender-refund-authorization.js";
 import { overridePinAttempts } from "./till-request-fields.js";
 import { STATUS } from "./till-api-errors.js";
@@ -59,9 +53,6 @@ export function mountInvoiceCorrectionApi(
       "sale.correction_scope_invalid": 400,
       "sale.correction_history_unusable": 409,
       "sale.correction_not_admitted": 409,
-      "invoice_correction.not_settled": 409,
-      "invoice_correction.already_open": 409,
-      "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
       "invoice_correction.chain_unsound": 409,
       "invoice_correction.not_open": 409,
@@ -72,65 +63,6 @@ export function mountInvoiceCorrectionApi(
       "invoice_correction.refund_pending": 409,
     },
     "invoice_correction.failed",
-  );
-  app.post("/api/transactions/:saleId/corrections/preview", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session),
-        id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const lineIds = lineIdsOf(body.lineIds);
-      const result = await withTransaction(deps.db, async (tx) => {
-        await checkAccess(tx, session, id);
-        return previewInvoiceCorrection(tx, deps.backend, cfg, deps.clock.now(), id, {
-          gross: body.gross as string,
-          ...(lineIds === undefined ? {} : { lineIds }),
-        });
-      });
-      return c.json(result);
-    }),
-  );
-  app.get("/api/transactions/:saleId/corrections/lines", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { passive: true });
-      const cfg = requestCfg(deps.cfg, session),
-        id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
-      const result = await withTransaction(deps.db, async (tx) => {
-        await checkAccess(tx, session, id);
-        return readInvoiceCorrectionLines(tx, deps.backend, cfg, deps.clock.now(), id);
-      });
-      return c.json(result);
-    }),
-  );
-  app.post("/api/transactions/:saleId/corrections", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      await assertRequestDevice(deps, c, session);
-      const cfg = requestCfg(deps.cfg, session),
-        id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const ask = parseInvoiceCorrection(body as unknown as InvoiceCorrectionRequest);
-      const override = overrideOf(body);
-      const result = await withCorrectionAuthorization(
-        deps.db,
-        id,
-        override,
-        {
-          personId: session.personId,
-          sessionId: session.sessionId,
-          deviceId: session.deviceId,
-          attempts: overridePinAttempts(pinThrottle, session.deviceId),
-        },
-        async (tx, authorization) => {
-          await requireEconomicWrite(tx, cfg, deps.admission);
-          return openInvoiceCorrection(tx, correctionDeps, cfg, id, ask, {
-            personId: session.personId,
-            authorization,
-          });
-        },
-      );
-      return c.json(result);
-    }),
   );
   app.post("/api/invoice-corrections/:id/cash", (c) =>
     run(c, log, async () => {

@@ -55,11 +55,11 @@ import {
   fileCorrectionIn,
   fileInvoiceCorrectionNow,
   openInvoiceCorrection,
-  parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
   correctableNow,
 } from "./invoice-corrections.js";
+import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -480,7 +480,7 @@ describe("openInvoiceCorrection", () => {
     );
   });
 
-  it("accepts the split the till showed in any rate order", async () => {
+  it("accepts the expected split in any rate order", async () => {
     const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"], "0.00", "takeaway");
     const lineIds = (await lineIdsOfSale(saleId)).sort();
     const preview = await inTx(venue, (tx) =>
@@ -1040,7 +1040,7 @@ describe("openInvoiceCorrection refuses", () => {
     ).resolves.toMatchObject({ correction: { gross: "7.00" } });
   });
 
-  it("a split that differs from the one the till showed, answering the fresh one", async () => {
+  it("a split that differs from the expected one, answering the fresh one", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     await refusedWithNothingWritten(
       () =>
