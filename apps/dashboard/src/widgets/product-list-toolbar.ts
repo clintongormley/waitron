@@ -1,6 +1,6 @@
 import { css, html, nothing, type LitElement } from "lit";
 import "@waitron/ui/src/components/wt-segmented-control.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { countOf } from "./count-text.js";
 import type { ProductsView } from "./product-list.js";
 import { PRODUCTS_PHONE_WIDTH } from "./product-list-category.js";
@@ -134,6 +134,10 @@ export function productSelectionBar(options: {
   showSpinner: boolean;
   count: number;
   deleteWaiting: boolean;
+  availabilityCount: number;
+  availabilityWaiting: boolean;
+  availabilityWriting: boolean | null;
+  markAvailability: (available: boolean, button: HTMLElement) => void;
   move: () => void;
   remove: () => void;
   done: () => void;
@@ -159,6 +163,30 @@ export function productSelectionBar(options: {
               @click=${options.move}
               >${t("folders.move")}</wt-button
             >
+            ${
+              options.availabilityCount
+                ? [true, false].map((available) => {
+                    const loading = options.availabilityWriting === available;
+                    const action = available ? "available" : "unavailable";
+                    return html`<wt-button
+                      data-test=${`mark-${action}`}
+                      variant="secondary"
+                      .loading=${loading}
+                      .disabled=${
+                        !loading &&
+                        (options.busy ||
+                          options.availabilityWaiting ||
+                          options.availabilityWriting !== null)
+                      }
+                      @click=${(event: Event) =>
+                        options.markAvailability(available, event.currentTarget as HTMLElement)}
+                      >${fill(available ? "product.mark_available" : "product.mark_unavailable", {
+                        count: String(options.availabilityCount),
+                      })}</wt-button
+                    >`;
+                  })
+                : nothing
+            }
             <wt-button
               data-test="delete"
               variant=${options.deleteWaiting ? "secondary" : "danger"}

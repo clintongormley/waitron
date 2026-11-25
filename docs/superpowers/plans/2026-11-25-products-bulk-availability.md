@@ -14,17 +14,19 @@ already checks menu permission and a refused batch that leaves the valid dish av
 
 **Select.** Add the counted `wt-button` actions between Move and Delete in `widgets/product-list-toolbar.ts`
 with strings in `i18n/strings.ts`. In `widgets/product-browser.ts`, use the full `#selection()` and capture
-its product IDs and names at press time. Share the per-ID write guard with row switches. Disable both
-actions while a selected ID has a row write pending. During a batch keep the pressed button focusable
+its product IDs and names at press time. Put the shared per-ID write guard in
+`widgets/product-availability-actions.ts` to keep the browser's file small. Disable both actions
+while a selected ID has a row write pending. During a batch keep the pressed button focusable
 with loading, disable its opposite and ignore row writes to the batch IDs. Keep unrelated switches usable.
 
 **Result.** Use one `availabilitySaved(ids, available)` callback and one refresh on success. Patch the flags
 together in `widgets/product-tree-availability.ts`, with a line-neutral callback change in
 `screens/products-screen.ts`. Clear only submitted ticks after success. If the focused action disappears,
 focus Done. On refusal, keep the saved flags and show the reason in `product-list-action-feedback.ts`.
-Name the dish when `productId` matches a captured name. For an unnamed refusal say the change could
-not be confirmed. For a deleted or missing dish, invalidate `products` through `api.liveData` so the next
-snapshot drops its stale tick. Clear the old notice when either availability action starts.
+Name the dish when `productId` matches a captured name. Otherwise show the refusal reason alone.
+For a deleted or missing dish, invalidate `products` through `api.liveData?.invalidate` so the next
+snapshot drops its stale tick. Clear the old notice when an availability write starts. A response
+that follows Done or a view switch leaves the new selection and focus alone.
 
 **Test first.** `widgets/product-browser.test.ts` covers product-only, mixed and empty selections, a
 hidden tick, overlapping writes in both directions, keyboard focus through pending and success, and a
@@ -37,7 +39,7 @@ gates are `write-path.e2e.test.ts`, `inmutabilidad.test.ts`, `till-api.sell-publ
 
 **Delivery.** Update the English and Spanish Products guides, `docs/developers/design-system.md`,
 `docs/developers/product-categories.md` and `docs/backlog.md`. Reuse the 7(b) Products screen capture
-fixture at 1440, 1180 and 390 px in both languages and themes. Show the owner the spec states plus
-product-only, mixed and hidden ticks and a refusal before landing. Add the outstanding Move footer
-wording to the same backlog entry as editor Category and browser Back. Expect 90–130 production lines
-and 140–190 test lines. The slice needs no schema change or venue reset.
+fixture at 1440, 1180 and 390 px in both languages and themes. Show the owner the Select states in List and Tree before landing, with product-only and hidden
+ticks, a refusal, and the mixed selection in Tree. Change the Move window's last button to
+Move / Mover and keep Move to… / Mover a… on the toolbar. Expect 90–130 production lines and
+140–190 test lines. The slice needs no schema change or venue reset.

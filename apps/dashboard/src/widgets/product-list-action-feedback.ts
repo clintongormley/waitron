@@ -35,18 +35,21 @@ export const productAvailabilityFeedbackStyles = css`
   }
 `;
 
-export function productAvailabilityFeedback(refusal: { name: string; error: unknown } | null) {
-  return refusal
-    ? html`<p class="availability-error" role="alert">
-        ${fill("product.availability_refused", {
-          name: refusal.name,
-          reason: refusalText(
-            codeOf(refusal.error),
-            (refusal.error as { params?: unknown })?.params,
-          ),
-        })}
-      </p>`
-    : nothing;
+export function productAvailabilityFeedback(
+  refusal: { name: string | undefined; error: unknown } | null,
+) {
+  if (refusal === null) return nothing;
+  const reason = refusalText(
+    codeOf(refusal.error),
+    (refusal.error as { params?: unknown })?.params,
+  );
+  return html`<p class="availability-error" role="alert">
+    ${
+      refusal.name === undefined
+        ? reason
+        : fill("product.availability_refused", { name: refusal.name, reason })
+    }
+  </p>`;
 }
 
 export function clearProductSearch(clear: () => void, slot?: string) {

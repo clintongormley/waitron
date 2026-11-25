@@ -34,16 +34,18 @@ export function productAvailabilitySwitch(
 
 export function productsWithAvailability(
   products: Product[],
-  { id, available }: ProductAvailabilityChange,
+  productIds: readonly string[],
+  available: boolean,
 ): Product[] {
+  const ids = new Set(productIds);
   return products.map((product) =>
-    product.id === id
+    ids.has(product.id)
       ? { ...product, available }
-      : product.variants.some((variant) => variant.id === id)
+      : product.variants.some((variant) => ids.has(variant.id))
         ? {
             ...product,
             variants: product.variants.map((variant) =>
-              variant.id === id ? { ...variant, available } : variant,
+              ids.has(variant.id) ? { ...variant, available } : variant,
             ),
           }
         : product,

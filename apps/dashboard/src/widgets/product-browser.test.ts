@@ -1072,6 +1072,7 @@ it("Move to… with a category and something inside it selected sends the catego
   await selectKeys(el, ["folder:d", "folder:b", "cola", "stout", "bread"]);
   await press(el, "move");
   expect(dialog(el)!.heading).toBe("Move 2 items");
+  expect(dialog(el)!.querySelector("[data-test=confirm]")?.textContent?.trim()).toBe("Move");
   await destination(el, "f");
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -2128,6 +2129,182 @@ export async function selectKeys(el: ProductBrowser, keys: string[]) {
     await el.updateComplete;
   }
 }
+const bulkButton = (el: ProductBrowser, action: "available" | "unavailable") =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="mark-${action}"]`);
+const bulkApi = () =>
+  ({
+    setProductsAvailability: vi.fn().mockResolvedValue(undefined),
+    setProductAvailability: vi.fn().mockResolvedValue(undefined),
+  }) satisfies Partial<DashboardApi>;
+function pendingAvailability() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+const availabilitySwitch = async (el: ProductBrowser, id: string) =>
+  (await tableOf(el)).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    `tr[data-row-key="${id}"] wt-switch`,
+  )!;
+
+it.each(["List", "Tree"] as const)(
+  "marks every selected product, including hidden ticks, in %s",
+  async (view) => {
+    const api = bulkApi();
+    const saved = pendingAvailability();
+    api.setProductsAvailability.mockReturnValue(saved.promise);
+    const el = await mountBrowser({ api: api as unknown as DashboardApi });
+    if (view === "List") await chooseView(el, view);
+    else await toggleCategory(el, "d");
+    await selectKeys(el, ["bread", "cola"]);
+    await typeSearch(el, "Bread");
+    expect(await rowKeys(el)).toEqual(["bread"]);
+    const button = bulkButton(el, "unavailable");
+    expect(button?.textContent?.trim()).toBe("Mark unavailable (2)");
+    expect(bulkButton(el, "available")?.textContent?.trim()).toBe("Mark available (2)");
+    button!.focus();
+    await userEvent.keyboard(" ");
+    expect(api.setProductsAvailability).toHaveBeenCalledExactlyOnceWith(["bread", "cola"], false);
+    expect(button!.loading).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(button);
+    expect(bulkButton(el, "available")?.disabled).toBe(true);
+    saved.resolve();
+    await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+    expect(bulkButton(el, "unavailable")).toBeNull();
+    expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
+  },
+);
+
+it("shows availability actions for product-only ticks on a Spanish phone", async () => {
+  const viewport = [innerWidth, innerHeight] as const;
+  onTestFinished(async () => {
+    setLocale("en-GB");
+    await page.viewport(...viewport);
+  });
+  await page.viewport(390, 844);
+  setLocale("es-ES");
+  const el = await mountBrowser();
+  await selectKeys(el, []);
+  expect(bulkButton(el, "available")).toBeNull();
+  const table = await tableOf(el);
+  const tick = (id: string) =>
+    table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${id}"]`)!.click();
+  tick("bread");
+  await el.updateComplete;
+  for (const [action, label] of [
+    ["available", "Marcar como disponible (1)"],
+    ["unavailable", "Marcar como no disponible (1)"],
+  ] as const) {
+    const button = bulkButton(el, action);
+    expect(button?.textContent?.trim()).toBe(label);
+    expect(button!.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+  }
+  tick("folder:d");
+  await typeSearch(el, "Bread");
+  expect(bulkButton(el, "available")).toBeNull();
+  expect(bulkButton(el, "unavailable")).toBeNull();
+});
+
+it("keeps a new tick and prevents overlapping writes to the same product", async () => {
+  const viewport = [innerWidth, innerHeight] as const;
+  onTestFinished(() => page.viewport(...viewport));
+  await page.viewport(1180, 844);
+  const api = bulkApi();
+  const single = pendingAvailability();
+  const batch = pendingAvailability();
+  api.setProductAvailability.mockReturnValueOnce(single.promise);
+  api.setProductsAvailability.mockReturnValueOnce(batch.promise);
+  const el = await mountBrowser({ api: api as unknown as DashboardApi });
+  await chooseView(el, "List");
+  await selectKeys(el, ["bread"]);
+  const bread = await availabilitySwitch(el, "bread");
+  await userEvent.click(bread);
+  expect(bulkButton(el, "available")?.disabled).toBe(true);
+  expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
+  single.resolve();
+  await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.disabled).toBe(false));
+
+  await userEvent.click(bulkButton(el, "unavailable")!);
+  await tableOf(el);
+  await userEvent.click(bread);
+  await userEvent.click(await availabilitySwitch(el, "burger"));
+  expect(api.setProductAvailability.mock.calls).toEqual([
+    ["bread", false],
+    ["burger", false],
+  ]);
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
+    .click();
+  batch.resolve();
+  await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
+  expect(
+    (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
+      .checked,
+  ).toBe(true);
+});
+
+it.each(["Done", "view switch"])(
+  "a late batch leaves new ticks and focus alone after %s",
+  async (exit) => {
+    const api = bulkApi();
+    const saved = pendingAvailability();
+    api.setProductsAvailability.mockReturnValue(saved.promise);
+    const el = await mountBrowser({ api: api as unknown as DashboardApi });
+    await selectKeys(el, ["bread"]);
+    expect(bulkButton(el, "unavailable")).not.toBeNull();
+    await userEvent.click(bulkButton(el, "unavailable")!);
+    if (exit === "Done") {
+      await press(el, "cancel-selection");
+      await selectKeys(el, ["bread"]);
+    } else {
+      await chooseView(el, "List");
+      (await tableOf(el))
+        .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-bread"]')!
+        .click();
+    }
+    await el.updateComplete;
+    expect(count(el)).toBe("1 selected");
+    const search = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="menu-search"]')!;
+    search.focus();
+    saved.resolve();
+    await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.loading).toBe(false));
+    expect(count(el)).toBe("1 selected");
+    expect(el.shadowRoot!.activeElement).toBe(search);
+  },
+);
+
+it("refreshes a deleted tick and shows the reason alone when a new refusal names no dish", async () => {
+  const viewport = [innerWidth, innerHeight] as const;
+  onTestFinished(() => page.viewport(...viewport));
+  await page.viewport(1180, 844);
+  const api = { ...bulkApi(), liveData: { invalidate: vi.fn() } };
+  api.setProductsAvailability
+    .mockRejectedValueOnce({ code: "product.deleted", params: { productId: "cola" } })
+    .mockRejectedValueOnce({ code: "authorization.not_permitted" });
+  const el = await mountBrowser({ api: api as unknown as DashboardApi });
+  await chooseView(el, "List");
+  await selectKeys(el, ["bread", "cola"]);
+  expect(bulkButton(el, "available")).not.toBeNull();
+  await userEvent.click(bulkButton(el, "available")!);
+  const notice = () => el.shadowRoot!.querySelector(".availability-error[role=alert]");
+  await vi.waitFor(() => expect(notice()?.textContent).toContain("Cola"));
+  expect(api.liveData.invalidate).toHaveBeenCalledExactlyOnceWith([{ type: "products" }]);
+  expect(count(el)).toBe("2 selected");
+  expect((await availabilitySwitch(el, "bread")).checked).toBe(true);
+  el.products = PRODUCTS.filter(({ id }) => id !== "cola");
+  await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
+  await userEvent.click(bulkButton(el, "unavailable")!);
+  await vi.waitFor(() =>
+    expect(notice()?.textContent?.trim()).toBe(codeMessage("authorization.not_permitted")),
+  );
+  expect(api.setProductsAvailability.mock.calls).toEqual([
+    [["bread", "cola"], true],
+    [["bread"], false],
+  ]);
+  expect((await availabilitySwitch(el, "bread")).checked).toBe(true);
+});
+
 export const dialog = (el: ProductBrowser) => el.shadowRoot!.querySelector("wt-modal");
 async function confirmDrop(el: ProductBrowser) {
   await el.updateComplete;

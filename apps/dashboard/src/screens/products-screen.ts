@@ -52,10 +52,7 @@ import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
 import { refusalText } from "../widgets/delete-refusal.js";
-import {
-  productsWithAvailability,
-  type ProductAvailabilityChange,
-} from "../widgets/product-tree-availability.js";
+import { productsWithAvailability } from "../widgets/product-tree-availability.js";
 import { missingChoiceField } from "./product-editor-missing-choice.js";
 import {
   productsListLoadFeedback,
@@ -778,8 +775,8 @@ export class ProductsScreen extends LitElement {
           this.#url.write({ category: this.categoryId }, true);
         }}
         .products=${this.products}
-        .availabilitySaved=${(change: ProductAvailabilityChange) => {
-          this.products = productsWithAvailability(this.products, change);
+        .availabilitySaved=${(ids: readonly string[], available: boolean) => {
+          this.products = productsWithAvailability(this.products, ids, available);
           void this.#reloadProducts();
         }}
         .courses=${this.courses}

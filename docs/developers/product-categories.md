@@ -420,12 +420,14 @@ you can scroll on the rest of the row. You can also use the selection actions wi
 a touch screen.
 
 Searching or changing a filter keeps your ticks, so you can gather rows from several searches.
-The selected count includes hidden ticks; Move includes them too. A drag carries only visible ticks
+The selected count includes hidden ticks. Move and the two availability actions include them too.
+When your selection contains only products, choose **Mark available** or **Mark unavailable** to
+change them together. A drag carries only visible ticks
 and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
 toolbar and returns focus to **Select**, and so does pressing **Select** again. A valid drop opens
-the Move dialog with its destination selected. Choose **Move to…** to save or **Cancel** to close
+the Move dialog with its destination selected. Choose **Move** to save or **Cancel** to close
 the dialog. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
