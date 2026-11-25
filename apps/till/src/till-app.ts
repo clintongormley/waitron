@@ -7056,51 +7056,23 @@ export class TillApp extends LitElement {
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     if (loaded && zoneOffers.context !== undefined)
       this.#store.setDiningStart(zoneOffers.context.dining ?? null);
-    if (loaded) this.#refreshCounterDeclarations();
-    this.#showCounterOffers();
-  }
-
-  #refreshCounterDeclarations(): void {
-    const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
-    const keep = new Set(
-      this.#store.lines.flatMap((line) => {
-        const id = line.workingOrderLineId;
-        return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
-          ? []
-          : [id];
-      }),
-    );
-    this.#store.refreshDeclarations(
-      this.#counterOffers.products(),
-      this.#counterSetMenuLookup(),
-      keep,
-    );
-  }
-
-  /** The recorded copies the open order came with hold the allergens published when it was read. */
-  async #rereadCounterSetMenuCopies(): Promise<void> {
-    const id = this.#currentCounterSetMenuBill?.id;
-    if (id === undefined || this.stage === "collect") return;
-    const visit = this.#store.loadGeneration;
-    const session = this.#operatorSession;
-    const api = this.api;
-    const current = () =>
-      visit === this.#store.loadGeneration && session === this.#operatorSession && api === this.api;
-    try {
-      const { setMenuCopies = [] } = await api.retrieveWorkingOrder(id);
-      const bill = this.#currentCounterSetMenuBill;
-      if (bill === undefined || !current()) return;
-      const read = new Map(setMenuCopies.map((copy) => [copy.key, copy]));
-      this.#counterSetMenuBill = {
-        ...bill,
-        setMenuCopies: bill.setMenuCopies?.map((copy) => read.get(copy.key) ?? copy),
-      };
-      this.#refreshCounterDeclarations();
-      this.requestUpdate();
-    } catch {
-      // The next poll finds the offers moved, and asks again.
-      if (current()) this.#counterOffers.liveFields = undefined;
+    if (loaded) {
+      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+      const keep = new Set(
+        this.#store.lines.flatMap((line) => {
+          const id = line.workingOrderLineId;
+          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+            ? []
+            : [id];
+        }),
+      );
+      this.#store.refreshDeclarations(
+        this.#counterOffers.products(),
+        this.#counterSetMenuLookup(),
+        keep,
+      );
     }
+    this.#showCounterOffers();
   }
 
   #showCounterOffers(): void {
@@ -7604,7 +7576,6 @@ export class TillApp extends LitElement {
         }
         this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
-        void this.#rereadCounterSetMenuCopies();
       } catch {
         return "failed";
       }

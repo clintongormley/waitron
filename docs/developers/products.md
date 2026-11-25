@@ -1071,10 +1071,12 @@ moves and refreshes declarations in open lines and choices,
 without editing saved orders or their prices. Sent details continue to show first-send captures.
 An ordinary line follows its own menu item and never another menu's offer of the same product; an
 extra follows its own list. A set-menu line follows its set menu's copy, found as a price refresh
-finds it: a table takes a bill's recorded copies from each read of its bills, and the counter reads
-an open order's recorded copies again after it refreshes its offers. A dish, variant or extra none of
-these holds keeps its last open-view declaration until retrieval or reload. The watcher cleared that
-limit for A1150 PR 2 on 15 November 2026 at 21:52, then worded as a product absent from every offer.
+finds it: a table takes a bill's recorded copies from each read of its bills, and the counter follows
+the live offer, except that a line of a set menu whose copy the open order has recorded keeps what
+it says, and a saved one shows a correction when the order is next opened. A dish, variant or extra
+none of these holds keeps its last open-view declaration until retrieval or reload. The watcher
+cleared that limit for A1150 PR 2 on 15 November 2026 at 21:52, then worded as a product absent from
+every offer; there is no separate declaration read.
 
 
 ### Regional practice names
