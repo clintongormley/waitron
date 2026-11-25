@@ -35,6 +35,16 @@ import type {
 } from "../api/give-back-types.js";
 import { reasonPicker } from "./reason-picker.js";
 import { dishLines } from "./give-back-lines.js";
+import {
+  AMOUNT_REFUSALS,
+  PURPOSES,
+  blank,
+  positive,
+  startOf,
+  usable,
+  type Draft,
+  type Field,
+} from "./give-back-draft.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
 import type { GiveBackSession } from "../state/give-back.js";
@@ -87,37 +97,6 @@ export interface GiveBackFill {
   cancellationIds: string[];
   reasonId: string;
 }
-
-type Draft = {
-  lineIds: string[];
-  amount: string;
-  extraOn: boolean;
-  way: string;
-  reasonId: string;
-  note: string;
-};
-type Field = "amount" | "reason" | "note";
-const blank = (): Draft => ({
-  lineIds: [],
-  amount: "",
-  extraOn: false,
-  way: "",
-  reasonId: "",
-  note: "",
-});
-const PURPOSES: readonly GiveBackPurpose[] = ["dishes", "goodwill", "extra"];
-const AMOUNT_REFUSALS = new Set([
-  "sale.correction_amount_invalid",
-  "invoice_correction.money_short",
-  "tender.refund_exceeds_payment",
-  "tender.refund_exceeds_cancelled",
-]);
-/** A payment this device's profile does not take is held, as the preview refuses it. */
-const usable = (way: GiveBackWay) => way.reason === null && way.allowedHere;
-const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
-/** What ticking `line` starts the amount at: a cancel's money still owed, otherwise what is left. */
-const startOf = (line: GiveBackLine) =>
-  line.cancelled !== null && positive(line.cancelled.owed) ? line.cancelled.owed : line.left;
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
