@@ -220,6 +220,15 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
         }
       }
       await expectNoA11yViolations(host);
+      if (state === "delete") {
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("wt-disclosure")).not.toBeNull(),
+        );
+        const details = el.shadowRoot!.querySelector("wt-disclosure")!;
+        await userEvent.click(details.shadowRoot!.querySelector<HTMLButtonElement>(".header")!);
+        expect(details.open).toBe(true);
+        await expectNoA11yViolations(host);
+      }
     },
   );
 
