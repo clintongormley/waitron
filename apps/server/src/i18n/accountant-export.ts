@@ -50,6 +50,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
     corrective: { receipt: "Corrective receipt", invoice: "Corrective invoice" },
+    void: { receipt: "Voided", invoice: "Voided" },
     replacement: {
       receipt: "Replacement corrective receipt — do not add (repeats the original)",
       invoice: "Replacement corrective invoice — do not add (repeats the original)",
@@ -91,7 +92,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       voidedAt: "Voided at (UTC)",
     } satisfies Record<InvoiceLineKey, string>,
     invoiceNotesColumn:
-      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted; replacement correctives flagged, not added; an invoice issued after its sale day is listed under that day",
+      "Notes: F3 replacements omitted; original tickets retained; voids listed again as minus rows; replacement correctives flagged, not added; an invoice issued after its sale day is listed under that day",
     purchaseColumns: [
       "Invoice number",
       "Purchase id",
@@ -163,6 +164,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Facturas emitidas",
     purchaseSheet: "Compras registradas",
     corrective: { receipt: "Ticket rectificativo", invoice: "Factura rectificativa" },
+    void: { receipt: "Anulada", invoice: "Anulada" },
     replacement: {
       receipt: "Ticket rectificativo por sustitución — no sumar (repite el original)",
       invoice: "Factura rectificativa por sustitución — no sumar (repite la original)",
@@ -204,7 +206,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       voidedAt: "Anulada el (UTC)",
     } satisfies Record<InvoiceLineKey, string>,
     invoiceNotesColumn:
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; los rectificativos por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones figuran además como filas en negativo; los rectificativos por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
     purchaseColumns: [
       "Número de factura",
       "Id. de compra",

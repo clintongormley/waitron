@@ -44,6 +44,7 @@ import {
   decimalToCents,
   divideDecimal,
   multiplyDecimal,
+  negateDecimal,
   subtractDecimal,
   sumDecimals,
   type Decimal,
@@ -60,7 +61,8 @@ export interface AccountantInvoice {
   id: string;
   nodeId: string;
   invoiceNumber: string;
-  invoiceType: "F1" | "F2" | "F3" | "corrective" | "replacement";
+  /** `void` is a voided invoice's minus row. */
+  invoiceType: "F1" | "F2" | "F3" | "corrective" | "replacement" | "void";
   issueDate: string;
   /** The day the sale happened, present only when it is earlier than `issueDate`. */
   saleDate?: string;
@@ -442,14 +444,31 @@ function saleVatDay(sale: {
   return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 
+/** A voided invoice's minus row: the invoice's own id and number, with the invoice as its original. */
+function minusRow(invoice: AccountantInvoice): AccountantInvoice {
+  return {
+    ...invoice,
+    invoiceType: "void",
+    total: negateDecimal(invoice.total),
+    vatBreakdown: invoice.vatBreakdown.map((vat) => ({
+      rate: vat.rate,
+      base: negateDecimal(decimal(vat.base)),
+      tax: negateDecimal(decimal(vat.tax)),
+    })),
+    correctsSaleId: invoice.id,
+    originalInvoiceNumber: invoice.invoiceNumber,
+  };
+}
+
 /** Which sales {@link readAccountantInvoices} reads. */
 export type InvoiceSelection =
   { range: { from: string; to: string } } | { saleIds: readonly string[] };
 
 /**
  * The invoices of `selection`, with their part payments. A range lists them by the day the
- * workbook lists them under and leaves out substitution (F3) invoices; a list of sale ids reads
- * each named sale that exists, F3 included, in no particular order.
+ * workbook lists them under and leaves out substitution (F3) invoices; last come the minus rows of
+ * the invoices voided in it, F3 and replacement invoices aside, by the void's day in the sale's
+ * offset. A list of sale ids reads each named sale that exists, F3 included, in no particular order.
  */
 export async function readAccountantInvoices(
   tx: Transaction,
@@ -514,11 +533,22 @@ export async function readAccountantInvoices(
       );
   type Row = Awaited<ReturnType<ReturnType<typeof query>["execute"]>>[number];
   let rows: Row[];
-  if ("range" in selection)
+  let voided: Row[] = [];
+  if ("range" in selection) {
+    const { from, to } = selection.range;
     rows = await query()
-      .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
+      .where(and(between(periodDay, from, to), not(substitutes)))
       .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
-  else {
+    voided = await query()
+      .where(
+        and(
+          between(stampDate(saleVoids.voidedAt, sales.issuedOffsetMinutes), from, to),
+          not(sales.replacesOriginal),
+          not(substitutes),
+        ),
+      )
+      .orderBy(asc(saleVoids.voidedAt), asc(sales.id));
+  } else {
     rows = [];
     // Half the limit leaves room for the values the query binds besides the ids.
     const chunk = Math.floor(SQL_VARIABLE_LIMIT / 2);
@@ -528,36 +558,35 @@ export async function readAccountantInvoices(
       ))
         rows.push(row);
   }
-  const invoices: AccountantInvoice[] = rows.map(
-    ({
-      code,
-      number,
-      originalCode,
-      originalNumber,
-      replacesOriginal,
-      substitution,
-      supplyDay,
-      ...row
-    }) => ({
-      ...row,
-      ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
-      invoiceNumber: formatInvoiceNumber(code, number),
-      invoiceType: replacesOriginal
-        ? "replacement"
-        : row.correctsSaleId !== null
-          ? "corrective"
-          : substitution
-            ? "F3"
-            : row.customerTaxId === null
-              ? "F2"
-              : "F1",
-      originalInvoiceNumber:
-        originalCode === null || originalNumber === null
-          ? null
-          : formatInvoiceNumber(originalCode, originalNumber),
-      total: centsToDecimal(row.total),
-    }),
-  );
+  const invoiceOf = ({
+    code,
+    number,
+    originalCode,
+    originalNumber,
+    replacesOriginal,
+    substitution,
+    supplyDay,
+    ...row
+  }: Row): AccountantInvoice => ({
+    ...row,
+    ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
+    invoiceNumber: formatInvoiceNumber(code, number),
+    invoiceType: replacesOriginal
+      ? "replacement"
+      : row.correctsSaleId !== null
+        ? "corrective"
+        : substitution
+          ? "F3"
+          : row.customerTaxId === null
+            ? "F2"
+            : "F1",
+    originalInvoiceNumber:
+      originalCode === null || originalNumber === null
+        ? null
+        : formatInvoiceNumber(originalCode, originalNumber),
+    total: centsToDecimal(row.total),
+  });
+  const invoices = rows.map(invoiceOf);
   const onAccount = await readPaymentsOnAccount(
     tx,
     invoices.map((invoice) => invoice.id),
@@ -568,7 +597,7 @@ export async function readAccountantInvoices(
     const takesOff = onAccount.takesOff.get(invoice.id);
     if (takesOff !== undefined) invoice.takesOff = takesOff;
   }
-  return invoices;
+  return invoices.concat(voided.map((row) => minusRow(invoiceOf(row))));
 }
 
 export async function listAccountantExport(

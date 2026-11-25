@@ -1247,6 +1247,73 @@ describe("accountant period selection", () => {
     ).toBe("6.30");
   });
 
+  it("lists a voided receipt again as a minus row, last, so the period's bases add up to the return's", async () => {
+    const at = (day: string) => `2026-11-${day}T12:00:00.000Z`;
+    const ticket = (invoiceNumber: number, total: string, base: string) =>
+      seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: at("02"),
+        total,
+        lines: [{ vatRate: "21.00", lineTotal: base }],
+      });
+    const voided = await ticket(1, "21.78", "18.00");
+    const kept = await ticket(2, "60.50", "50.00");
+    const fullInvoice = await ticket(3, "60.50", "50.00");
+    await seedSubstitution(suite.db, {
+      substitutionSaleId: fullInvoice,
+      substitutedSaleId: kept,
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 4,
+      issuedAt: at("03"),
+      total: "60.50",
+      correctsSaleId: kept,
+      replacesOriginal: true,
+      lines: [{ vatRate: "21.00", lineTotal: "50.00" }],
+    });
+    for (const saleId of [voided, fullInvoice, replacement])
+      await seedVoid(suite.db, { saleId }, at("05"));
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => row.invoiceType)).toEqual(["F2", "F2", "replacement", "void"]);
+    const minus = rows.at(-1)!;
+    expect(minus).toMatchObject({
+      id: voided,
+      invoiceNumber: "A/1",
+      total: "-21.78",
+      vatBreakdown: [{ rate: "21.00", base: "-18.00", tax: "-3.78" }],
+      correctsSaleId: voided,
+      originalInvoiceNumber: "A/1",
+    });
+    const words = ACCOUNTANT_EXPORT_WORDS.en;
+    expect(invoiceLineCells(minus, words)[0]![3]).toBe("Voided");
+    expect(words.invoiceNotesColumn).toContain("; voids listed again as minus rows;");
+    const bases = rows
+      .filter((row) => row.invoiceType !== "replacement")
+      .flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.base)));
+    const vatReturn = await withTransaction(suite.db, (tx) =>
+      computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 11 } }),
+    );
+    expect([toScale(sumDecimals(bases), 2), vatReturn.baseTotal]).toEqual(["50.00", "50.00"]);
+  });
+
+  it("lists a sale in its own period and its minus row in the one it was voided in, by the day in the sale's offset", async () => {
+    const sale = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-30T12:00:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedVoid(suite.db, { saleId: sale }, "2026-11-30T23:30:00.000Z");
+
+    const types = async (from: string, to: string) =>
+      (await list(from, to)).invoices.map((row) => row.invoiceType);
+    expect(await types("2026-11-01", "2026-11-30")).toEqual(["F2"]);
+    expect(await types("2026-12-01", "2026-12-31")).toEqual(["void"]);
+    expect(await types("2027-01-01", "2027-01-31")).toEqual([]);
+  });
+
   it("shows a sale date only when it is earlier than the issue date", async () => {
     const original = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
