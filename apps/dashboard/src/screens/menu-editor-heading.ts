@@ -1,4 +1,4 @@
-import { css, html, nothing } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
@@ -76,7 +76,7 @@ export const menuEditorHeadingStyles = css`
 export function menuEditorHeading({
   href,
   parent,
-  name,
+  title,
   back,
   help,
   status,
@@ -84,7 +84,7 @@ export function menuEditorHeading({
 }: {
   href: string;
   parent: string;
-  name: string;
+  title: TemplateResult;
   back: () => void;
   help?: unknown;
   status?: unknown;
@@ -104,8 +104,7 @@ export function menuEditorHeading({
           >${parent}</a
         ><span class="sep" aria-hidden="true">›</span>
       </nav>
-      <h1 tabindex="-1">${name}</h1>
-      ${help ?? nothing}
+      ${title} ${help ?? nothing}
     </div>
     ${status ? html`<div class="heading-status">${status}</div>` : nothing}
     ${actions && actions !== nothing ? html`<div class="heading-actions">${actions}</div>` : nothing}

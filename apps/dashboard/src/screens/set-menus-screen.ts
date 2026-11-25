@@ -404,7 +404,7 @@ export class SetMenusScreen extends LitElement {
     return html`${menuEditorHeading({
       href: "/set-menus",
       parent: t("nav.set_menus"),
-      name: menu?.name ?? t("nav.set_menus"),
+      title: html`<h1 tabindex="-1">${menu?.name ?? t("nav.set_menus")}</h1>`,
       back: () => this.#open(null),
       help: menu
         ? html`<wt-help-tooltip

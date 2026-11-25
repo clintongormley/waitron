@@ -3995,7 +3995,7 @@ export class MenusScreen extends LitElement {
     return html`${menuEditorHeading({
       href: "/menus",
       parent: t("menus.title"),
-      name: name || t("menus.title"),
+      title: html`<h1 tabindex="-1">${name || t("menus.title")}</h1>`,
       back: () => this.#backToList(),
       status: this.#renderLiveWords(),
       actions:
