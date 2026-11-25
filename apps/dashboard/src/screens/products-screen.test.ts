@@ -546,44 +546,57 @@ describe("menu-screen", () => {
     },
   );
 
-  it("reveals a deep-linked category when the list first becomes visible", async () => {
-    const before = location.href;
-    onTestFinished(() => history.replaceState(null, "", before));
-    history.replaceState(null, "", "/products/category/child");
-    const pending = deferred<Product[]>();
-    const api = stubApi({
-      listProducts: vi.fn().mockReturnValue(pending.promise),
-      listCategories: vi.fn().mockResolvedValue([
-        ...categories,
-        ...Array.from({ length: 20 }, (_, index) => ({
-          id: `earlier-${index}`,
-          name: `Earlier category ${index}`,
-          parentId: "c1",
-          color: null,
-        })),
-        { id: "child", name: "Zested dishes", parentId: "c1", color: null },
-      ]),
-    });
-    const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-    host.style.setProperty("--wt-table-max", "280px");
-    const table = await productTable(el);
-    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
-    expect(table.checkVisibility()).toBe(false);
-    await new Promise(requestAnimationFrame);
-    pending.resolve(products);
-    await vi.waitFor(() => {
-      const root = table.shadowRoot!;
-      const name = root.querySelector('tr[data-row-key="folder:child"] strong');
-      expect(name?.checkVisibility()).toBe(true);
-      expect(name!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-        root.querySelector("thead th")!.getBoundingClientRect().bottom,
-      );
-      expect(name!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-        root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
-      );
-    });
-    expect(table.isExpanded("folder:child")).toBe(true);
-  });
+  it.each([390, 1180])(
+    "reveals a deep-linked category when the list first becomes visible at %i px",
+    async (width) => {
+      const viewport = [window.innerWidth, window.innerHeight] as const;
+      onTestFinished(() => page.viewport(...viewport));
+      await page.viewport(width, 844);
+      const before = location.href;
+      onTestFinished(() => history.replaceState(null, "", before));
+      history.replaceState(null, "", "/products/category/child");
+      const pending = deferred<Product[]>();
+      const api = stubApi({
+        listProducts: vi.fn().mockReturnValue(pending.promise),
+        listCategories: vi.fn().mockResolvedValue([
+          ...categories,
+          ...Array.from({ length: 20 }, (_, index) => ({
+            id: `earlier-${index}`,
+            name: `Earlier category ${index}`,
+            parentId: "c1",
+            color: null,
+          })),
+          {
+            id: "child",
+            name: "Zested dishes for the summer tasting menu with vegetables from our garden and aged sheep cheese",
+            parentId: "c1",
+            color: null,
+          },
+        ]),
+      });
+      const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      host.style.setProperty("--wt-table-max", "280px");
+      const table = await productTable(el);
+      await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+      expect(table.checkVisibility()).toBe(false);
+      await new Promise(requestAnimationFrame);
+      pending.resolve(products);
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      await vi.waitFor(() => {
+        const root = table.shadowRoot!;
+        const name = root.querySelector('tr[data-row-key="folder:child"] strong');
+        expect(name?.checkVisibility()).toBe(true);
+        expect(name!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          root.querySelector("thead th")!.getBoundingClientRect().bottom,
+        );
+        expect(name!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
+        );
+      });
+      expect(table.isExpanded("folder:child")).toBe(true);
+    },
+  );
 
   it("keeps a saved availability through an older reply and a failed refresh", async () => {
     onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));

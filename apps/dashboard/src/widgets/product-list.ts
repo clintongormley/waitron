@@ -1515,8 +1515,12 @@ export class ProductList extends LitElement {
     const table = this.#table();
     if (!table) return;
     await table.updateComplete;
-    table.setExpanded(`folder:${id}`, true);
-    await table.revealRow(`folder:${id}`);
+    const key = `folder:${id}`;
+    table.setExpanded(key, true);
+    await table.revealRow(key);
+    // Fitting the newly expanded rows can move the linked category below the scroll box.
+    await new Promise(requestAnimationFrame);
+    await table.revealRow(key);
   }
 
   /** Opens every category above a product and scrolls it into view. */
