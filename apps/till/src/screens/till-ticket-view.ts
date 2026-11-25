@@ -812,8 +812,8 @@ export class TillTicketView extends LitElement {
     const lastEmail = this.lastInvoiceEmailAttempt();
     const emailAddress = lastEmail?.invoiceRecipientEmail;
     const emailOutcome =
-      lastEmail !== undefined && (lastEmail.id !== status?.current?.id || doubtAnswered)
-        ? deliveryWords(lastEmail, lastEmail.lateSuccess)
+      lastEmail !== undefined && lastEmail.id !== status?.current?.id
+        ? deliveryWords(lastEmail, false)
         : undefined;
     return html`
       ${words === undefined || doubtAnswered ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}

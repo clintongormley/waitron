@@ -188,12 +188,9 @@ export async function readReceiptEmailDeliveries(
   saleId: string,
   options: InvoiceDeliveryReadOptions,
 ): Promise<InvoiceDeliveryStatus> {
-  const state = (
-    await readStates(tx, [saleId], {
-      emailAvailable: options.emailAvailable,
-      includeSimplifiedEmail: true,
-    })
-  ).get(saleId);
+  const state = (await readStates(tx, [saleId], { ...options, includeSimplifiedEmail: true })).get(
+    saleId,
+  );
   if (state == null) throw new AppError("invoice_delivery.not_found", {});
   return {
     ...state.status,
