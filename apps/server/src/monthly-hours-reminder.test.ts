@@ -1,16 +1,11 @@
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, outgoingMail, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, dayCutoverChanges, outgoingMail, withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { jobOrigin } from "@waitron/shared";
-import {
-  WORKFORCE_MIGRATIONS,
-  WORKFORCE_PERMISSIONS,
-  WorkforceBackend,
-  setPayPeriodCloseGraceDays,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, WORKFORCE_PERMISSIONS, WorkforceBackend } from "@waitron/workforce";
 import { attendanceJob, runAttendancePass } from "./attendance-loop.js";
 import { monthlyHoursReminderMail } from "./monthly-hours-reminder.js";
 
@@ -25,16 +20,17 @@ it.each(["send", "resolved", "moved"])(
     const nodeId = await seedNode(suite.db);
     const [worker, manager, revoked] = await seedPersons(suite.db, [
       { displayName: "Worker" },
-      { displayName: "Manager", role: "manager", email: "manager@example.test", locale: "en-GB" },
+      {
+        displayName: "Manager",
+        role: "supervisor",
+        email: "manager@example.test",
+        locale: "en-GB",
+      },
       { displayName: "Other", role: "manager", email: "other@example.test" },
     ]);
     const backend = new WorkforceBackend();
-    const event = {
-      personId: worker!.id,
-      nodeId,
-      offsetMinutes: 60,
-      origin: jobOrigin("dashboard"),
-    };
+    const origin = jobOrigin("dashboard");
+    const event = { personId: worker!.id, nodeId, offsetMinutes: 60, origin };
     await withTransaction(suite.db, (tx) =>
       backend.clockIn(tx, { ...event, at: "2026-01-05T10:00:00Z" }),
     );
@@ -46,7 +42,10 @@ it.each(["send", "resolved", "moved"])(
     );
     await withTransaction(suite.db, async (tx) => {
       await setBuiltInRoleForTest(tx, revoked!.id, "staff");
-      if (mode === "moved") await setPayPeriodCloseGraceDays(tx, 4);
+      if (mode === "moved")
+        await tx
+          .insert(dayCutoverChanges)
+          .values({ effectiveBusinessDay: "2026-02-05", dayCutover: "01:00:00" });
       if (mode === "resolved") await backend.clockOut(tx, { ...event, at: "2026-01-05T18:00:00Z" });
     });
     if (mode === "resolved") await runAttendancePass(deps);
@@ -69,6 +68,9 @@ it.each(["send", "resolved", "moved"])(
           /1 issue is open[\s\S]*5 February 2026 at 00:00[\s\S]*https:\/\/box\.test\/hours/,
         ),
       });
+      expect((await owner.compose({ ...claim.prepared, language: "es" }, mail)).subject).not.toBe(
+        "Review hours for January 2026",
+      );
     } else {
       expect(claim).toBeNull();
     }

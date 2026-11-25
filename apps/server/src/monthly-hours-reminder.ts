@@ -1,10 +1,4 @@
-import {
-  enqueueMail,
-  MAIL_LIFETIME_MS,
-  readMail,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { enqueueMail, readMail, withTransaction, type Database } from "@waitron/db";
 import { businessDayAt, businessDayBoundaryAt } from "@waitron/shared";
 import { countMonthlyHoursIssues } from "@waitron/workforce";
 import { MONTHLY_HOURS_EMAIL_WORDS } from "./i18n/monthly-hours-email.js";
@@ -53,9 +47,7 @@ export async function queueMonthlyHoursReminder(
         personId,
         params: { periodStart: current.period.start, scheduledCloseAt: current.scheduledCloseAt },
         now: at,
-        notAfter: new Date(
-          Math.min(closeAt, at.getTime() + MAIL_LIFETIME_MS.monthly_hours_reminder),
-        ),
+        notAfter: new Date(closeAt),
       });
     }
   });

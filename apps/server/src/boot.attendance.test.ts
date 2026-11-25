@@ -183,9 +183,9 @@ describe("attendance boot with permanent workforce", () => {
         expect(moduleRows.find((row) => row.id === "workforce")).toBeUndefined();
         expect(loopSpy).toHaveBeenCalledTimes(1);
         expect(mailSpy).toHaveBeenCalledTimes(1);
-        expect(
-          mailSpy.mock.calls[0]![0].owners.some((owner) => owner.kind === "attendance_question"),
-        ).toBe(true);
+        const mailKinds = mailSpy.mock.calls[0]![0].owners.map(({ kind }) => kind);
+        expect(mailKinds).toContain("attendance_question");
+        expect(mailKinds).toContain("monthly_hours_reminder");
         const deviceDeps = deviceSpy.mock.calls[0]![1];
         expect(deviceDeps.attendance).toBe(recordAttendanceFact);
         expect(deviceDeps.attendanceClock).toBeDefined();
