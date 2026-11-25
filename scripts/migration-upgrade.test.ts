@@ -1435,6 +1435,8 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "working_order_lines.descriptions": ['{"es":"a"}'],
   // The walk fills ordinary order lines, which cannot link to a set-menu parent.
   "working_order_lines.set_menu_line_id": [null],
+  // A trigger refuses an insert that links a bill to the one it reopens; only an update sets it.
+  "working_orders.reopened_from": [null],
   // A settlement's trigger wants the sale's tenders to sum to its total; a sale of nothing settles
   // with none, in whichever order the two tables are filled.
   "sales.total": [0n],
