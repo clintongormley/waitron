@@ -169,7 +169,7 @@ export class GiveBackSession {
     const { request, reasonId, note, expected, manualConfirmed, submissionIds } = sent;
     // Once out, the press may be written, so until its answer it is not one to forget.
     if (sent.firstSendRefused)
-      this.#write({ ...saved, sent: { ...sent, firstSendRefused: false } }, saleId);
+      this.#write({ ...saved, sent: { ...sent, firstSendRefused: false, refusal: null } }, saleId);
     let answer: GiveBackOutcome;
     try {
       answer = await this.api.giveBack(saleId, {

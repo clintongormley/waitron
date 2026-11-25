@@ -1717,6 +1717,7 @@ describe("sending", () => {
     });
     await vi.waitFor(() => expect(root(el).querySelector("[data-send-again]")).not.toBeNull());
     expect(choice(el, "goodwill")).toBeNull();
+    expect(text(root(el).querySelector("[data-lost]"))).toBe(t("give_back.lost"));
     answer(sent(api, 1));
     await out;
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
