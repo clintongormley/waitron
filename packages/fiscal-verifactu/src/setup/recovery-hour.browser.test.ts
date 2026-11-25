@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import type { Mock } from "vitest";
@@ -357,6 +357,20 @@ it.each([
     }
   },
 );
+it("Clear hides an empty master key the person chose to show, so the next one typed is hidden", async () => {
+  const { el } = await mount();
+  const input = (await keyInput(el)).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  await page.getByRole("button", { name: "Show key", exact: true }).click();
+  expect(input.type).toBe("text");
+  await userEvent.click(button(el, "clear"));
+  await keyInput(el);
+  expect(input.type).toBe("password");
+  input.focus();
+  await userEvent.keyboard("8");
+  await keyInput(el);
+  expect(input.value).toBe("8");
+  expect(input.type).toBe("password");
+});
 /** The key the box names, which is not the previewed backup's (`2026-10-17 · K7QX`). */
 const REFUSED_NAME = "2026-11-02 · QZJV";
 const REFUSED_KEY = {
@@ -1876,10 +1890,13 @@ it("a Spanish handover start names each new series' use and offers Continuar", a
     return promotionSelected;
   });
   const el = await mountPromotion(prepare);
+  expect(text(el)).not.toContain("invoice series for this box");
   el.locale = "es";
   await el.updateComplete;
   check(el, "recovery-details-confirmed");
   await el.updateComplete;
+  expect(action(el)).toBe("Continuar");
+  expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
   await proceed(el);
   await vi.waitFor(() =>
     expect(seriesRows(el)).toEqual([
