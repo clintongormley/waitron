@@ -188,7 +188,7 @@ describe("server-first workflow routing", () => {
       }
     }
   });
-  it("keeps new work on GitHub while the routing job observes a stalled server", () => {
+  it("keeps new work on GitHub when routing selects hosted without server jobs", () => {
     for (const job of jobs.filter(
       (job) => !["changes", "server-queue-watchdog", "ci", "publish"].includes(job.id),
     )) {

@@ -320,6 +320,7 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
     the one-time split on 20 November. Count this interval in the full-day measurement.
     [Run 45346409984, attempt 1](https://github.com/clintongormley/waitron/actions/runs/45346409984/attempts/1).
   - Historical planner 43278084012: recover that run's contemporaneous admission/recovery logs; a new run cannot establish why its untouched planner waited 32 minutes without running the ratio.
+  - First-batch routing with a stalled job or a changing job count: keep the planner and actual runner assignments from a natural recurrence. The 24 November planners [45505583351](https://github.com/clintongormley/waitron/actions/runs/45505583351) and [45505754894](https://github.com/clintongormley/waitron/actions/runs/45505754894) sent the whole batch to GitHub before the [bounded routing repair](../superpowers/plans/2026-11-25-i-ci-server-pickup.md).
 
 - **A935: setup action-download bound.** One separately cleared, selectively stalled action-transfer run on a single owned runner must retain the successful-download control, actual version/action/source/job limit, listener cancellation and worker-exit logs, with an independent safety stop and cleanup. Keep control traffic reachable. Fast refusal or manual cancellation does not qualify the job limit. The [experiment proposal](../superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is parked until a natural setup-download stall is captured (watcher, 16 November 14:56); build no guest setup hook or two-job lease reuse merely to stage it. [Source trace and limits](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
 
@@ -544,6 +545,10 @@ historical wait cause remains unknown; these observations do not measure a
   **2026-11-18 10:11:** the owner chose the CI-only per-job split. Fill available server slots first and use GitHub for overflow. Simultaneous planners can briefly queue work on the server. **10:36, watcher:** the first batch uses the existing server health and capacity reads and skips the separate hosted count. First-attempt dependent jobs and partial reruns use GitHub. The earlier hosted-count and pressure rules apply to reruns with a fresh planner result. The first batch still uses GitHub when the server inputs cannot be read. [Routing plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-18-ci-batch-slot-routing.md)
 
   **2026-11-20 13:16, owner:** “No, keep today's split”. The owner declined the two-job overflow trial and said “the problem would be if several complete ci runs go straight to one side instead of being spread out, resulting in queues of 30+ minutes on one side with nothing queued on the other”. Report any such imbalance with the run IDs.
+
+  **2026-11-25 00:15, watcher:** keep the first-attempt split when a job has stalled and a current capacity snapshot and complete inventory remain available. The published waiting count uses those slots. Give a job list that changes its count again one delayed full read per route decision. Preserve hosted fallback when the list remains unreadable.
+
+  The implementation limits the delayed read to first-attempt batches so that a rerun keeps its existing fallback.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 
