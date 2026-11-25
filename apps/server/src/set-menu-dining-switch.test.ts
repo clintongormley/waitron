@@ -1,9 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { workingOrders } from "@waitron/db";
+import { departments, floorZones, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProducts, menuItems, requireMenuRoot } from "@waitron/menu";
+import {
+  addMember,
+  addProducts,
+  addSetMenuDishes,
+  createMenu,
+  menuItems,
+  removeMember,
+  requireMenuRoot,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining } from "@waitron/shared";
 import {
@@ -11,10 +19,13 @@ import {
   createServiceZone,
   setDepartmentSalePolicyField,
 } from "@waitron/venue-service";
+import { readBillEditState } from "./bill-editing.js";
 import { switchOrderDining } from "./order-dining.js";
+import { readBillSetMenuVersions } from "./set-menu-bill.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { parkOrder } from "./working-order-open.js";
-import { inTx, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
+import { inTx, OPERATOR, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
+import { addPortionRound } from "./testing/portion-bill.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   setupSetMenuSpecVenue,
@@ -164,4 +175,100 @@ it("groups an eat-in counter order's Soup and Hake into a Daily when it is seate
   );
 
   expect(await shape(id)).toEqual(DAILY());
+});
+
+const SOUP_A_LA_CARTE = () => [{ what: spec.productIds.Soup, role: null, total: 600 }];
+
+/** Runs `act` while a 4.00 set menu listing Soup is on sale on the tables' menu. */
+async function whileLateSoupMenuOnSale(act: () => Promise<void>): Promise<void> {
+  const late = await inTx(venue, async (tx) => {
+    const { id: menuId } = await createMenu(tx, {
+      kind: "set_menu",
+      name: `Late menu ${randomUUID()}`,
+      setPrice: "4.00",
+      setVatClass: "reduced",
+      setTakeawayVatClass: "general",
+    });
+    await addSetMenuDishes(tx, menuId, [
+      { productId: spec.productIds.Soup, excludedVariantIds: [] },
+    ]);
+    const root = await requireMenuRoot(tx, venue.tables.menuId);
+    const member = await addMember(tx, root, { kind: "set_menu", menuId });
+    await publishWorkingMenu(tx, venue.tables.menuId);
+    return { root, member };
+  });
+  try {
+    await act();
+  } finally {
+    await inTx(venue, async (tx) => {
+      await removeMember(tx, late.root, late.member.id);
+      await publishWorkingMenu(tx, venue.tables.menuId);
+    });
+  }
+}
+
+const recordedSetMenus = (id: string) => inTx(venue, (tx) => readBillSetMenuVersions(tx, id));
+
+it("records no set menu that went on sale after a table bill's dishes were ordered when it is switched to takeaway", async () => {
+  const [table] = await venue.db
+    .select({ departmentId: floorZones.departmentId, dining: departments.dining })
+    .from(floorZones)
+    .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+    .where(eq(floorZones.id, venue.tables.zoneId));
+  const { tabId: id } = await seatWithNoAllergies(venue, await venue.table(randomUUID()));
+  await inTx(venue, (tx) =>
+    addPortionRound(tx, venue.cfg, id, [{ menuItemId: ordinary.Soup, quantity: "1" }]),
+  );
+  expect(await shape(id)).toEqual(SOUP_A_LA_CARTE());
+  const recorded = await recordedSetMenus(id);
+  await inTx(venue, (tx) =>
+    setDepartmentSalePolicyField(tx, table!.departmentId, "dining", "till_choice"),
+  );
+  try {
+    await whileLateSoupMenuOnSale(async () => {
+      const { revision } = await order(id);
+      await inTx(venue, async (tx) =>
+        switchOrderDining(tx, id, "takeaway", revision, {
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, id),
+        }),
+      );
+
+      expect(await order(id)).toMatchObject({ dining: "takeaway" });
+      expect(await shape(id)).toEqual(SOUP_A_LA_CARTE());
+      expect(await recordedSetMenus(id)).toEqual(recorded);
+    });
+  } finally {
+    await inTx(venue, (tx) =>
+      setDepartmentSalePolicyField(tx, table!.departmentId, "dining", table!.dining),
+    );
+  }
+});
+
+it("records no set menu that went on sale after a takeaway counter order's dishes were ordered when it is seated at a table", async () => {
+  const id = await counterOrder("takeaway", "Soup");
+  expect(await shape(id)).toEqual(SOUP_A_LA_CARTE());
+  const recorded = await recordedSetMenus(id);
+  const tableId = await venue.table(randomUUID());
+
+  await whileLateSoupMenuOnSale(async () => {
+    await inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        id,
+        { tableId },
+        {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          partyId: null,
+          otherPartyId: null,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        },
+      ),
+    );
+
+    expect(await shape(id)).toEqual(SOUP_A_LA_CARTE());
+    expect(await recordedSetMenus(id)).toEqual(recorded);
+  });
 });

@@ -9,7 +9,7 @@ import { AppError, DININGS, type Dining } from "@waitron/shared";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { captureOrderEdit, type OrderAttendance } from "./working-order-context.js";
-import { hasBillSetMenuLines } from "./set-menu-bill.js";
+import { hasBillSetMenuLines, isSetMenuBillRow } from "./set-menu-bill.js";
 import { linkSetMenusForHeldDishes } from "./set-menu-links.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import "./errors.js";
@@ -92,10 +92,10 @@ export async function storedOrderDining(tx: Transaction, workingOrderId: string)
  * Switch an open order between eaten here and takeaway at `revision`, moving its revision on. The
  * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
  * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
- * keep both their classes. Taken away, the order records the set menus on sale that list its dishes
- * and is grouped into the cheapest set menus the search finds; eaten here at the counter, it may hold none. A request
- * for the way the order already has changes nothing, not even the revision. Answers the order's
- * revision after.
+ * keep both their classes. Taken away, an order that could not hold set menus before (eaten here at
+ * the counter) records the set menus on sale that list its dishes and is grouped into the cheapest
+ * set menus the search finds; eaten here at the counter, it may hold none. A request for the way the
+ * order already has changes nothing, not even the revision. Answers the order's revision after.
  */
 export async function switchOrderDining(
   tx: Transaction,
@@ -137,7 +137,7 @@ export async function switchOrderDining(
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })
     .where(eq(workingOrders.id, workingOrderId));
-  if (dining === "takeaway") {
+  if (dining === "takeaway" && !isSetMenuBillRow(order)) {
     await linkSetMenusForHeldDishes(tx, workingOrderId);
     await regroupBills(tx, [workingOrderId]);
   }

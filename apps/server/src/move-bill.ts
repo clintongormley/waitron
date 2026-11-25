@@ -19,7 +19,7 @@ import { firedQuantity } from "./kitchen-ticket-state.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
 import { storedOrderDining } from "./order-dining.js";
-import { hasBillSetMenuLines, hasDraftSetMenuLines } from "./set-menu-bill.js";
+import { hasBillSetMenuLines, hasDraftSetMenuLines, isSetMenuBill } from "./set-menu-bill.js";
 import { linkSetMenusForHeldDishes } from "./set-menu-links.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import {
@@ -208,6 +208,8 @@ async function moveBillOnce(
         };
 
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
+  // A counter order that could hold set menus recorded those on sale as each dish was ordered.
+  const linksOnSeating = source === null && !(await isSetMenuBill(tx, billId));
   const noteScope = path.partyId === null ? { workingOrderId: billId } : { partyId: path.partyId };
   let firers: ReadonlyMap<string, Firer> = new Map();
   let heldLineIds: string[] = [];
@@ -316,7 +318,7 @@ async function moveBillOnce(
   }
 
   if (source !== null) await ensureFamilyBill(tx, cfg, source.id);
-  else {
+  else if (linksOnSeating) {
     await linkSetMenusForHeldDishes(tx, billId);
     await regroupBills(tx, [billId]);
   }
