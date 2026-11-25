@@ -821,6 +821,11 @@ const MEAL_END_REFUSED_BEFORE_LOOKUP: ReadonlySet<string> = new Set([
   "service_zone.not_allowed",
 ]);
 
+function paidOn(bill: PartyBill): string | null {
+  const paid = subtractDecimal(decimal(bill.total), decimal(bill.outstanding));
+  return compareDecimal(paid, decimal("0")) > 0 ? paid : null;
+}
+
 /** The latest corrective a read of the party's bills shows on bill `billId`. */
 function latestCorrectiveOf(bills: readonly PartyBill[] | null, billId: string): string | null {
   return bills?.find((row) => row.workingOrderId === billId)?.correctives?.at(-1) ?? null;
@@ -1772,6 +1777,7 @@ interface CancelCrediting {
   workingOrderId: string;
   invoiceNumber: string | null;
   amount: string;
+  paid: string | null;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
   /** The party's bills when the dialog opened. A split whose answer was lost shows itself as an
@@ -21669,8 +21675,8 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, or Reopen to split, offered on an invoiced bill nothing is paid on: its
-   * dialog opens. */
+  /** Cancel and credit, offered on an invoiced bill nothing is paid on, or Reopen to split, also
+   * offered on one part paid: its dialog opens. */
   #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
@@ -21683,6 +21689,7 @@ export class TillApp extends LitElement {
       workingOrderId,
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
+      paid: paidOn(bill),
       reason: "",
       billsBefore: this.partyBills.map((row) => row.workingOrderId),
       refusal: null,
@@ -21740,9 +21747,7 @@ export class TillApp extends LitElement {
     let split: { billId: string; correctiveNumber: string } | undefined;
     try {
       if (open.mode === "split")
-        split = await this.api.splitAfterPrint(open.workingOrderId, override, {
-          signal: limit.signal,
-        });
+        split = await this.api.splitAfterPrint(open.workingOrderId, { signal: limit.signal });
       else
         await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
           signal: limit.signal,
@@ -21856,7 +21861,7 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     if (this.#cancelCreditingNow(open.id) === null) return;
     const refusal = refusalOf(error);
-    if (unapproved && refusal.code === "authorization.not_permitted") {
+    if (unapproved && open.mode === "cancel" && refusal.code === "authorization.not_permitted") {
       await this.#askCancelCreditApprover(open.id);
       return;
     }
@@ -21906,6 +21911,7 @@ export class TillApp extends LitElement {
         .canMarkServed=${this.capabilities.includes("hand-over-orders")}
         .invoiceNumber=${open.invoiceNumber}
         .amount=${open.amount}
+        .paid=${open.paid}
         .refusal=${open.refusal}
         .busy=${open.busy}
         .done=${open.done}

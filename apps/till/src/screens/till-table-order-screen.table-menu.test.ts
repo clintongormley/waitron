@@ -284,6 +284,26 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-split-after-print]")).toBeNull();
   });
 
+  it("offers Reopen to split on a printed bill with payments, and Cancel and credit only without", async () => {
+    const part = partyBill("wo-3", 3, "20.00", {
+      status: "placed",
+      total: "54.00",
+      receiptAvailable: true,
+      hasPayments: true,
+    });
+    const el = await mountScreen({ bills: [part], orderId: "wo-3" });
+
+    expect(item(el, "[data-cancel-credit]")).toBeNull();
+    const split = capture(el, "split-after-print-bill");
+    item(el, "[data-split-after-print]")!.click();
+    expect(split).toEqual([{ workingOrderId: "wo-3" }]);
+
+    const unpaid = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const plain = await mountScreen({ bills: [unpaid] });
+    expect(item(plain, "[data-cancel-credit]")).not.toBeNull();
+    expect(item(plain, "[data-split-after-print]")).not.toBeNull();
+  });
+
   it("offers no Reopen to split wherever it offers no Cancel and credit", async () => {
     const named = partyBill("wo-2", 2, "54.00", {
       status: "placed",
@@ -296,14 +316,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         countryCode: "ES",
       },
     });
-    const part = partyBill("wo-3", 3, "20.00", {
-      status: "placed",
-      total: "54.00",
-      receiptAvailable: true,
-      hasPayments: true,
-    });
     const unprinted = partyBill("wo-4", 4, "54.00", { status: "placed", receiptAvailable: false });
-    for (const bill of [named, part, unprinted]) {
+    for (const bill of [named, unprinted]) {
       const el = await mountScreen({ bills: [bill], orderId: bill.workingOrderId });
       expect(item(el, "[data-cancel-credit]")).toBeNull();
       expect(item(el, "[data-split-after-print]")).toBeNull();

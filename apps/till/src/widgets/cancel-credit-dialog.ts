@@ -117,6 +117,8 @@ export class TillCancelCreditDialog extends LitElement {
   @property({ attribute: false }) canMarkServed = false;
   @property({ attribute: false }) invoiceNumber: string | null = null;
   @property({ attribute: false }) amount = "0.00";
+  /** Money already taken on a bill being split, which moves to the new bill; null when none. */
+  @property({ attribute: false }) paid: string | null = null;
   @property({ attribute: false }) refusal: CancelCreditRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
@@ -249,11 +251,15 @@ export class TillCancelCreditDialog extends LitElement {
   #scopeText(): string {
     const amount = formatMoney(this.amount, currentLocale());
     const text = TEXT[this.mode];
-    return this.invoiceNumber === null
-      ? t(text.scopeUnnumbered).replace("{amount}", () => amount)
-      : t(text.scope)
-          .replace("{invoice}", () => this.invoiceNumber!)
-          .replace("{amount}", () => amount);
+    const scope =
+      this.invoiceNumber === null
+        ? t(text.scopeUnnumbered).replace("{amount}", () => amount)
+        : t(text.scope)
+            .replace("{invoice}", () => this.invoiceNumber!)
+            .replace("{amount}", () => amount);
+    if (this.mode !== "split" || this.paid === null) return scope;
+    const paid = formatMoney(this.paid, currentLocale());
+    return `${scope} ${t("split.scope_paid").replace("{paid}", () => paid)}`;
   }
 
   #doneText(done: CancelCreditDone): string {
@@ -346,7 +352,11 @@ export class TillCancelCreditDialog extends LitElement {
       <p data-cancel-credit-scope>${this.#scopeText()}</p>
       ${this.mode === "split" ? nothing : this.#reasonField(fieldError)}
       ${unserved === null ? nothing : this.#unservedBody(unserved)}
-      <p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>
+      ${
+        this.mode === "split"
+          ? nothing
+          : html`<p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>`
+      }
       <wt-form-actions .error=${this.#bottomMessage(fieldError)}
         >${recoveryLink(this.shownRefusal)}
         <wt-button

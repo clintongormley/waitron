@@ -639,10 +639,6 @@ describe("till-app: reopening a printed bill to split it", () => {
   ];
   const dialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog");
-  const approval = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
-      "till-supervisor-override-dialog[data-cancel-credit-approval]",
-    );
   const bottom = (el: TillApp) =>
     dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
       .error;
@@ -719,11 +715,35 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(server.splitAfterPrint.mock.calls).toEqual([
-      ["wo-check", undefined, { signal: expect.any(AbortSignal) }],
+      ["wo-check", { signal: expect.any(AbortSignal) }],
     ]);
     expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
     await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
     expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it("splits a part-paid bill and says what was paid carries over", async () => {
+    const partPaid: PartyBill = {
+      ...invoiced,
+      total: "30.00",
+      outstanding: "20.00",
+      hasPayments: true,
+    };
+    const server = billServer(async () => {}, [tabBill, partPaid]);
+    const { el } = await openSplit(server);
+
+    expect(
+      dialog(el)!
+        .shadowRoot!.querySelector("[data-cancel-credit-scope]")!
+        .textContent!.replace(/\s+/g, " "),
+    ).toContain("€10.00 already paid counts towards the new bill.");
+    await confirmSplit(el);
+
+    expect(server.splitAfterPrint.mock.calls).toEqual([
+      ["wo-check", { signal: expect.any(AbortSignal) }],
+    ]);
+    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
   });
 
   it("when the split got no answer and the bills read again show a new bill, says it split", async () => {
@@ -785,27 +805,44 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
   });
 
-  it("without the permission, asks for an approver's PIN and sends it with the split", async () => {
-    let refused = false;
+  it("a split refused as not permitted opens no PIN prompt", async () => {
+    const listCancelCreditAuthorizers = vi.fn().mockResolvedValue([]);
     const server = billServer(async () => {
-      if (!refused) {
-        refused = true;
-        throw { code: "authorization.not_permitted", status: 403 };
-      }
+      throw { code: "authorization.not_permitted", status: 403 };
+    });
+    const { el } = await openSplit({ ...server, listCancelCreditAuthorizers });
+    await confirmSplit(el);
+
+    expect(bottom(el)).toBe(t("cancel_credit.refused_not_permitted"));
+    expect(dialog(el)!.busy).toBe(false);
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(listCancelCreditAuthorizers).not.toHaveBeenCalled();
+    expect(server.splitAfterPrint).toHaveBeenCalledOnce();
+  });
+
+  it("a bill with an advance says to take the rest by amount or in shares", async () => {
+    const server = billServer(async () => {
+      throw { code: "bill.has_advance", status: 409, workingOrderId: "wo-check" };
     });
     const { el } = await openSplit(server);
     await confirmSplit(el);
 
-    emit(approval(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
-    await flush(el, 8);
+    expect(bottom(el)).toBe(codeMessage("bill.has_advance"));
+    expect(bottom(el)).toContain("by amount or in equal shares");
+    expect(doneText(el)).toBeNull();
+  });
 
-    expect(server.splitAfterPrint.mock.calls[1]).toEqual([
-      "wo-check",
-      { personId: "sup-1", pin: "4321" },
-      { signal: expect.any(AbortSignal) },
-    ]);
-    expect(approval(el)).toBeNull();
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+  it("a bill paid for by item says so", async () => {
+    const server = billServer(async () => {
+      throw { code: "bill.payments_received", status: 409, workingOrderId: "wo-check" };
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+
+    expect(bottom(el)).toBe(
+      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
+    );
+    expect(doneText(el)).toBeNull();
   });
 
   it("lists the dishes not marked served, and Mark served serves them and splits again", async () => {

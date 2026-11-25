@@ -2262,8 +2262,9 @@ export const en = {
   "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
   "split.unconfirmed":
     "Reopen to split got no answer, so it may have been made. Check the table's bills before trying again.",
+  "split.scope_paid": "{paid} already paid counts towards the new bill.",
   "split.refused_payments":
-    "Part of this bill is paid, so it cannot be split this way. The other guests pay the rest of this receipt with Pay.",
+    "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
   "split.refused_left_unpaid":
     "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
   "split.refused_not_at_table": "Only a table's bill can be split this way. Nothing was credited.",
@@ -4716,8 +4717,9 @@ export const es: Record<StringKey, string> = {
   "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
   "split.unconfirmed":
     "Reabrir para dividir no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
+  "split.scope_paid": "Lo ya pagado ({paid}) cuenta para la cuenta nueva.",
   "split.refused_payments":
-    "Parte de esta cuenta ya está pagada, así que no se puede dividir así. Los demás clientes pagan el resto de este ticket con Cobrar.",
+    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales.",
   "split.refused_left_unpaid":
     "Esta cuenta se registró como no pagada: los clientes se han ido y no hay nada que dividir.",
   "split.refused_not_at_table":

@@ -314,6 +314,28 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     );
   });
 
+  it("says what was already paid counts towards the new bill", async () => {
+    const el = await mount({ mode: "split", paid: "10.00" });
+
+    expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
+      `Receipt A/12 (${money("24.50")}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt. ${money("10.00")} already paid counts towards the new bill.`,
+    );
+
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toContain(
+      `Lo ya pagado (${money("10.00")}) cuenta para la cuenta nueva.`,
+    );
+  });
+
+  it("says nothing of an approver's PIN, which a split never asks for", async () => {
+    const el = await mount({ mode: "split" });
+
+    expect(root(el).querySelector("[data-cancel-credit-next]")).toBeNull();
+    expect(text(root(el).querySelector(".body"))).not.toContain("PIN");
+  });
+
   it("continues at once, and closes with nothing to keep", async () => {
     const el = await mount({ mode: "split" });
     const continued = capture(el, "cancel-credit-continue");
@@ -422,7 +444,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   it.each([
     [
       "bill.payments_received",
-      "Part of this bill is paid, so it cannot be split this way. The other guests pay the rest of this receipt with Pay.",
+      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
     ],
     [
       "bill.left_unpaid",
@@ -512,7 +534,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     el.refusal = { code: "bill.payments_received" };
     await el.updateComplete;
     expect(actions(el).error).toBe(
-      "Parte de esta cuenta ya está pagada, así que no se puede dividir así. Los demás clientes pagan el resto de este ticket con Cobrar.",
+      "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales.",
     );
 
     el.done = { corrective: "R/3", creditedElsewhere: true };
