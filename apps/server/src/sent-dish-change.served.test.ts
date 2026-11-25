@@ -199,7 +199,7 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       const edited = [waiting!, started!].map((line) => ({ ...line, note: "no onions" }));
       const lines = {
         "waiting first": [...edited, sent!],
-        "started first": [...edited].reverse().concat(sent!),
+        "started first": [edited[1]!, edited[0]!, sent!],
         "waiting then served then started": [edited[0]!, { ...sent!, note: "a glass" }, edited[1]!],
         "waiting omitted": [edited[1]!, sent!],
         "waiting and started omitted": [],
