@@ -1109,6 +1109,15 @@ it.each([
   expect(alertMessage(code, { count: 2 }, "es")).toContain(es);
 });
 
+it("uses singular wording when one card payment is held", () => {
+  expect(alertMessage("payment.reconcile_held", { count: 1 }, "en")).toContain(
+    "1 card payment for a closed order has a different amount",
+  );
+  expect(alertMessage("payment.reconcile_held", { count: 1 }, "es")).toContain(
+    "1 pago con tarjeta de un pedido cerrado tiene un importe distinto",
+  );
+});
+
 it("names the payment audit without asserting a bank payout", () => {
   expect(alertMessage("job.failing", { job: "payments.reconcile" }, "en")).toContain(
     "checking card provider records",

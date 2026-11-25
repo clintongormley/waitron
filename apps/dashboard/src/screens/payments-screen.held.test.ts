@@ -97,6 +97,10 @@ describe("held card payments on the Payments screen", () => {
   it("lists each held payment's order and time, both amounts and a Record outcome button", async () => {
     const el = await mount();
     const section = q(el, "[data-test=held-payments]")!;
+    expect(section.querySelector("a")?.getAttribute("href")).toBe(
+      "/help/en/modules#resolve-held-payment",
+    );
+    expect(section.querySelector("a")?.target).toBe("_blank");
     expect(section.querySelector("h3")!.textContent!.trim()).toBe(
       "Held: paid out at a different amount",
     );
@@ -150,6 +154,9 @@ describe("held card payments on the Payments screen", () => {
   it("reads the held list in Spanish", async () => {
     setLocale("es");
     const el = await mount();
+    expect(q(el, "[data-test=held-payments] a")?.getAttribute("href")).toBe(
+      "/help/es/modules#resolve-held-payment",
+    );
     expect(q(el, "[data-test=held-payments] h3")!.textContent!.trim()).toBe(
       "Retenidos: liquidados por otro importe",
     );
@@ -164,6 +171,12 @@ describe("held card payments on the Payments screen", () => {
     const el = await mount();
     expect(q(el, "[data-test=bill-recovery]")).not.toBeNull();
     expect(q(el, "[data-test=bill-recovery]")!.classList.contains("pending")).toBe(true);
+    expect(q(el, "[data-test=held-payments] > p")?.textContent).toBe(
+      "Review these payments and record how you resolved each one.",
+    );
+    expect(q(el, "[data-test=bill-recovery]")!.textContent).not.toContain(
+      "Check with the card provider before recording an outcome.",
+    );
     expect(q(el, "[data-test=bill-load-error]")).toBeNull();
   });
 
@@ -200,6 +213,9 @@ describe("held card payments on the Payments screen", () => {
     );
     expect(q(el, "[data-test=bill-recovery]")).not.toBeNull();
     expect(q(el, "[data-test=held-payments]")).toBeNull();
+    expect(q(el, "[data-test=bill-recovery]")!.textContent).toContain(
+      "Check with the card provider before recording an outcome.",
+    );
   });
 
   it("drops a held payment whose outcome is recorded when the live query refreshes", async () => {
@@ -306,14 +322,14 @@ describe("the Record what was done dialog", () => {
   it("names the order's label in the dialog and in the result", async () => {
     const labelled = { ...HELD[0]!, label: "Terrace 4" };
     const listHeldPayments = vi.fn().mockResolvedValueOnce([labelled]).mockResolvedValue([]);
-    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "kept" });
+    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "put_on_bill" });
     const el = await mount(stubApi({ listHeldPayments, recordHeldOutcome }));
     await open(el);
     const line = dialog(el)!.querySelector<HTMLElement>(".stuck-order")!;
     expect(line.textContent!.replace(/\s+/g, " ").trim()).toBe(
       `Order 57 · Terrace 4 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
     );
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     change(el, "pin", "1234");
     await flush(el);
     await submit(el);
@@ -332,13 +348,17 @@ describe("the Record what was done dialog", () => {
     expect(text).toContain(`Order 57 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`);
     expect(text).toContain("Charged here €10.00");
     expect(text).toContain("Stripe paid out €12.50");
+    expect(text).toContain("Refunded. Refund the payment in your card provider’s dashboard.");
+    expect(text).toContain(
+      "Put on a bill. Ring up the dishes again and record the existing charge as taken on another card machine.",
+    );
     expect(field(el, "outcome").label).toBe("Outcome");
     expect(field(el, "outcome").required).toBe(true);
     expect(
       (field(el, "outcome") as unknown as { options: { value: string; label: string }[] }).options,
     ).toEqual([
-      { value: "refunded_at_provider", label: "Refunded in the card provider's dashboard" },
-      { value: "kept", label: "Kept: the money was owed" },
+      { value: "refunded_at_provider", label: "Refunded" },
+      { value: "put_on_bill", label: "Put on a bill" },
     ]);
     expect(field(el, "note").label).toBe("Note");
     expect(field(el, "note").required).toBe(false);
@@ -360,12 +380,18 @@ describe("the Record what was done dialog", () => {
     const text = box.textContent!.replace(/\s+/g, " ");
     expect(text).toContain("Cobrado aquí 10,00 €");
     expect(text).toContain("Stripe liquidó 12,50 €");
+    expect(text).toContain(
+      "Devuelto. Devuelve el pago desde el panel de tu proveedor de tarjetas.",
+    );
+    expect(text).toContain(
+      "Añadido a una cuenta. Vuelve a registrar los platos y anota el cobro ya hecho como pago en otro datáfono.",
+    );
     expect(field(el, "outcome").label).toBe("Resultado");
     expect(
       (field(el, "outcome") as unknown as { options: { label: string }[] }).options.map(
         (option) => option.label,
       ),
-    ).toEqual(["Devuelto en el panel del proveedor de tarjetas", "Conservado: el dinero se debía"]);
+    ).toEqual(["Devuelto", "Añadido a una cuenta"]);
     expect(field(el, "note").label).toBe("Nota");
     expect(record(el).textContent!.trim()).toBe("Registrar");
   });
@@ -391,7 +417,7 @@ describe("the Record what was done dialog", () => {
     const recordHeldOutcome = vi.fn();
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     await flush(el);
     await submit(el);
     expect(recordHeldOutcome).not.toHaveBeenCalled();
@@ -404,7 +430,7 @@ describe("the Record what was done dialog", () => {
       const recordHeldOutcome = vi.fn().mockRejectedValue({ code });
       const el = await mount(stubApi({ recordHeldOutcome }));
       await open(el);
-      await chooseOption(field(el, "outcome"), "kept");
+      await chooseOption(field(el, "outcome"), "put_on_bill");
       change(el, "pin", "9999");
       await flush(el);
       await submit(el);
@@ -428,7 +454,7 @@ describe("the Record what was done dialog", () => {
       .mockRejectedValue({ code: "management.request_invalid", params: { field: "note" } });
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     change(el, "note", "x");
     change(el, "pin", "1234");
     await flush(el);
@@ -439,16 +465,29 @@ describe("the Record what was done dialog", () => {
   });
 
   it("shows any other refusal at the bottom and keeps the dialog open", async () => {
-    const recordHeldOutcome = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+    let refuseRetry!: (reason: unknown) => void;
+    const retry = new Promise<never>((_resolve, reject) => {
+      refuseRetry = reject;
+    });
+    const recordHeldOutcome = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockReturnValueOnce(retry);
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     change(el, "pin", "1234");
     await flush(el);
     await submit(el);
     expect(dialog(el)).not.toBeNull();
     expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
     expect(field(el, "pin").error).toBe("");
+    await submit(el);
+    expect(await bottom(el)).toBe("");
+    refuseRetry({ code: "authorization.not_permitted" });
+    await vi.waitFor(async () =>
+      expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted")),
+    );
   });
 
   it.each([
@@ -476,17 +515,17 @@ describe("the Record what was done dialog", () => {
 
   it("sends the outcome and PIN without a note when the note is blank, then closes and refreshes", async () => {
     const listHeldPayments = vi.fn().mockResolvedValueOnce(HELD).mockResolvedValue([HELD[1]]);
-    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "kept" });
+    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "put_on_bill" });
     const el = await mount(stubApi({ listHeldPayments, recordHeldOutcome }));
     await open(el);
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     change(el, "note", "   ");
     change(el, "pin", "1234");
     await flush(el);
     await submit(el);
     await vi.waitFor(() => expect(dialog(el)).toBeNull());
     expect(recordHeldOutcome).toHaveBeenCalledExactlyOnceWith("h-1", {
-      outcome: "kept",
+      outcome: "put_on_bill",
       pin: "1234",
     });
     const result = q(el, "[data-test=bill-action-result]")!;
@@ -516,10 +555,10 @@ describe("the Record what was done dialog", () => {
   });
 
   it("opens empty again after a record, the PIN cleared", async () => {
-    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "kept" });
+    const recordHeldOutcome = vi.fn().mockResolvedValue({ outcome: "put_on_bill" });
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
-    await chooseOption(field(el, "outcome"), "kept");
+    await chooseOption(field(el, "outcome"), "put_on_bill");
     change(el, "pin", "1234");
     await flush(el);
     await submit(el);

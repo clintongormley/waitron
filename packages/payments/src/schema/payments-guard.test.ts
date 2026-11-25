@@ -186,7 +186,7 @@ const resolution = {
 const hold = { held_at: AT, hold_provider_amount: 1210 };
 const outcome = {
   ...hold,
-  hold_outcome: "kept",
+  hold_outcome: "put_on_bill",
   hold_note: "First decision",
   hold_decided_by: "11111111-1111-4111-8111-111111111111",
   hold_decided_at: AT,

@@ -191,7 +191,7 @@ describe("the reconcile surface", () => {
   });
 
   it("re-exports the hold outcomes a request is checked against", () => {
-    expect(paymentHoldOutcome.enumValues).toEqual(["refunded_at_provider", "kept"]);
+    expect(paymentHoldOutcome.enumValues).toEqual(["refunded_at_provider", "put_on_bill"]);
   });
 
   it("types a PaymentReconciler an adapter can implement against the root barrel", () => {

@@ -76,7 +76,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listStuckBillRefunds: async () => [],
       listAbandonedRefunds: vi.fn().mockResolvedValue([]),
       listHeldPayments: async () => [HELD],
-      recordHeldOutcome: async () => ({ outcome: "kept" }),
+      recordHeldOutcome: async () => ({ outcome: "put_on_bill" }),
       ...overrides,
     } as DashboardApi,
   });
@@ -86,14 +86,14 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   return { app, screen };
 }
 async function fill(screen: PaymentsScreen) {
-  change(screen, "outcome", "kept");
+  change(screen, "outcome", "put_on_bill");
   change(screen, "note", "  Owed by the guest  ");
   change(screen, "pin", "1234");
   await screen.updateComplete;
 }
 
 for (const [field, edited] of [
-  ["outcome", "kept"],
+  ["outcome", "put_on_bill"],
   ["note", "Owed by the guest"],
   ["pin", "1234"],
 ]) {

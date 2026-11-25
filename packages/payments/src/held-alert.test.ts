@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, persons, withTransaction, withFoldedPersonKeys } from "@waitron/db";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
@@ -178,14 +179,24 @@ describe("refreshHeldAlert", () => {
     );
   });
 
-  it("raises again the next UTC day after it was handled", async () => {
-    const held = await aHeldPayment("2026-07-01T01:00:00.000Z");
-    await refresh("2026-07-01T01:05:00.000Z");
-    await handleOpen("2026-07-01T10:00:00.000Z");
-    await refresh("2026-07-02T00:05:00.000Z");
+  it("raises at the venue cutover after staying quiet through local and UTC midnight", async () => {
+    const held = await aHeldPayment("2026-07-01T09:00:00.000Z");
+    await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
+    await refresh("2026-07-01T09:05:00.000Z");
+    await handleOpen("2026-07-01T21:00:00.000Z");
+
+    for (const at of [
+      "2026-07-01T22:00:00.000Z",
+      "2026-07-02T00:00:00.000Z",
+      "2026-07-02T03:59:59.999Z",
+    ]) {
+      expect(await refresh(at), at).toBe(false);
+      expect(openRows(await incidentRows()), at).toEqual([]);
+    }
+    expect(await refresh("2026-07-02T04:00:00.000Z")).toBe(true);
     const rows = await incidentRows();
     expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ detectedAt: "2026-07-02T00:05:00.000Z", acknowledgedAt: null });
+    expect(rows[1]).toMatchObject({ detectedAt: "2026-07-02T04:00:00.000Z", acknowledgedAt: null });
     expect(refsOf(rows[1]!)).toEqual([held.paymentRef]);
   });
 
@@ -204,11 +215,12 @@ describe("refreshHeldAlert", () => {
     await refresh("2026-07-01T00:05:00.000Z");
     await handleOpen("2026-07-02T15:00:00.000Z");
     await refresh("2026-07-02T16:00:00.000Z");
+    expect(await refresh("2026-07-01T18:00:00.000Z")).toBe(false);
     expect(await incidentRows()).toHaveLength(1);
-    await refresh("2026-07-03T00:05:00.000Z");
+    await refresh("2026-07-03T06:05:00.000Z");
     const rows = await incidentRows();
     expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ detectedAt: "2026-07-03T00:05:00.000Z", acknowledgedAt: null });
+    expect(rows[1]).toMatchObject({ detectedAt: "2026-07-03T06:05:00.000Z", acknowledgedAt: null });
     expect(refsOf(rows[1]!)).toEqual([held.paymentRef]);
   });
 
@@ -231,7 +243,7 @@ describe("refreshHeldAlert", () => {
       const [hold] = await listOpenHolds(tx);
       await recordHoldOutcome(tx, {
         paymentId: hold!.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: MANAGER,
         at: new Date("2026-07-01T12:00:00.000Z"),
@@ -283,7 +295,7 @@ describe("refreshHeldAlert", () => {
       const second = holds.find((hold) => hold.paymentRef !== first.paymentRef)!;
       await recordHoldOutcome(tx, {
         paymentId: second.paymentId,
-        outcome: "kept",
+        outcome: "put_on_bill",
         note: null,
         personId: MANAGER,
         at: new Date("2026-07-01T11:00:00.000Z"),

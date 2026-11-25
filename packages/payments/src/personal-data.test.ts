@@ -36,7 +36,7 @@ describe("payment hold decisions in a personal-data download", () => {
           paymentRef: "private-1",
           holdDecidedBy: manager,
           holdDecidedAt: AT,
-          holdOutcome: "kept",
+          holdOutcome: "put_on_bill",
           holdNote: "Manager's private note",
         },
         {
@@ -71,7 +71,7 @@ describe("payment hold decisions in a personal-data download", () => {
     expect(JSON.parse(managerFiles[0]!.content as string)).toEqual({
       entries: [
         { order: 42, decision: "refunded_at_provider", at: EARLIER },
-        { order: 41, decision: "kept", at: AT },
+        { order: 41, decision: "put_on_bill", at: AT },
       ],
     });
     const colleagueFiles = await download(colleague);

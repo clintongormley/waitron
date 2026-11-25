@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cc158b4a-127d-427f-b23f-04692472ea0f",
+  "id": "7892b629-605a-4caf-8824-559faf21bf5a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_readers": {
@@ -691,7 +691,7 @@
         },
         "payments_hold_outcome_ck": {
           "name": "payments_hold_outcome_ck",
-          "value": "\"payments\".\"hold_outcome\" in ('refunded_at_provider', 'kept')"
+          "value": "\"payments\".\"hold_outcome\" in ('refunded_at_provider', 'put_on_bill')"
         },
         "payments_hold_note_ck": {
           "name": "payments_hold_note_ck",

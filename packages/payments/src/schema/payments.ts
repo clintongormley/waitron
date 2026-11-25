@@ -37,7 +37,7 @@ export const paymentState = enumType([
 ]);
 
 export const paymentResolutionOutcome = enumType(["captured", "failed"]);
-export const paymentHoldOutcome = enumType(["refunded_at_provider", "kept"]);
+export const paymentHoldOutcome = enumType(["refunded_at_provider", "put_on_bill"]);
 
 const externalProviderType = enumType(["connected_account", "other"]);
 

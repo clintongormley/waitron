@@ -515,7 +515,7 @@ const HELD = {
 async function openHeld(
   api: DashboardApi = stubApi({
     listHeldPayments: vi.fn().mockResolvedValue([HELD]),
-    recordHeldOutcome: vi.fn().mockResolvedValue({ outcome: "kept" }),
+    recordHeldOutcome: vi.fn().mockResolvedValue({ outcome: "put_on_bill" }),
   }),
 ) {
   const { el } = await mount(api, "checks");
@@ -544,7 +544,7 @@ describe("the held payment's Record", () => {
 
   it("an outcome wakes Record", async () => {
     const { el } = await openHeld();
-    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "kept");
+    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "put_on_bill");
     expect(await state(el, "confirm-held-outcome")).toEqual(ready);
   });
 
@@ -575,12 +575,12 @@ describe("the held payment's Record", () => {
 
   it("a press with an outcome and a PIN records it and closes the dialog", async () => {
     const { el, api } = await openHeld();
-    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "kept");
+    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "put_on_bill");
     await type(el, "held-outcome-pin", "1234");
     await press(el, "confirm-held-outcome");
     await vi.waitFor(() => expect(q(el, "[data-test=held-outcome-dialog]")).toBeNull());
     expect(api.recordHeldOutcome).toHaveBeenCalledExactlyOnceWith("h-1", {
-      outcome: "kept",
+      outcome: "put_on_bill",
       pin: "1234",
     });
   });

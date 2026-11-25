@@ -286,7 +286,7 @@ const SEVERITY = {
  * class (a held payment only in the held alert). Audit-only mode leaves money and holds unchanged.
  * Remediation mode reverses the orphans that pass every gate.
  *
- * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2
+ * T1 reads, the report fetch runs outside every transaction, T2
  * writes incidents and markers, and the reversals run outside every transaction (each is a network
  * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty
  * report is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a
@@ -297,13 +297,7 @@ export async function reconcilePayments(
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
-  // T1 — our rows for the period. The held alert is refreshed here too, so its morning return does
-  // not wait on the settlement report.
-  let heldRaised = 0;
-  const rows = await withTransaction(deps.db, async (tx) => {
-    if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) heldRaised += 1;
-    return listReconcilable(tx, deps.provider, period);
-  });
+  const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
 
   // Widened by the settlement lag: a payment captured at the end of the period settles days after.
   const records = await deps.report.fetch(
@@ -323,7 +317,7 @@ export async function reconcilePayments(
     orphan: [],
     missingLocal: [],
     drift: [],
-    incidentsRaised: heldRaised,
+    incidentsRaised: 0,
     remediated: 0,
     remediationFailures: [],
   };
@@ -459,8 +453,6 @@ export async function reconcilePayments(
 
     result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
-    // The first transaction refreshed the alert at this same `now`, and every other writer of a
-    // hold or an outcome refreshes it in its own transaction.
     if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
       result.incidentsRaised += 1;
     }

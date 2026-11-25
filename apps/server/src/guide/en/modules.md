@@ -72,3 +72,18 @@ A payment taken outside Waitron on the reader stays for you to check.
 
 **Refund confirmed** means SumUp lists the full amount returned. For an unconfirmed payment, use its charge date, reference and amount to check it in SumUp before refunding there, so you do not return the money twice.
 Check this list even if an earlier payment warning is still open in Alerts.
+
+## Resolve a held card payment {#resolve-held-payment}
+
+In Reporting, open **Check card payments** and find the payment under **Held: paid out at a different amount**.
+Check how much the customer was charged and how much you still hold in your card provider's dashboard.
+
+- **Refunded.** Refund the held amount in the provider's dashboard and confirm the refund there.
+- **Put on a bill.** Ring up the dishes again on a new bill. Use a till whose profile allows
+  payments on a separate card terminal. To record the existing charge, choose **Other card machine**,
+  or **Card** on a till without a reader. Choose **Paid outside Waitron** where offered. Apply the amount the
+  provider confirms you still hold, up to the amount due. Leave any unpaid balance due or collect
+  it separately. Check any excess with your provider before recording the outcome. Do not charge the card again.
+
+On the held payment, choose **Record outcome** and select what you did. Add a note if useful,
+enter your manager PIN and choose **Record**.

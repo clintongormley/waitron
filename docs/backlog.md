@@ -811,11 +811,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
 
-- **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
-
-- **A846. A held card payment is Refunded or Put on a bill, never Kept** — queued as HELD-KEPT (lane F).
-  Owner, 2026-11-24: "yes" to removing "Kept: the money was owed"; its reminder follows the venue's business
-  day. [Detail](backlog/payments.md#a846-a-held-card-payment-is-refunded-or-put-on-a-bill)
+- **Stripe adapter upkeep** (bundle of 6, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 
 - **The SumUp Solo experiments.** Physical decline behavior, the statement/fee check and remaining
   connection probes are open. The reported decimal-`0.40` probe refunded the full payment, but its

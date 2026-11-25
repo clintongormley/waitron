@@ -153,7 +153,7 @@ const ROUTES: {
     name: "held outcome",
     path: (id) => `/management-api/payments/held/${id}/outcome`,
     next: { status: 404, code: "payment.hold_not_found" },
-    body: { outcome: "kept", note: "Kept", pin: "1234" },
+    body: { outcome: "put_on_bill", note: "Kept", pin: "1234" },
   },
   {
     name: "bill refund resolve",

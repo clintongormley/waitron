@@ -30,13 +30,8 @@ what happened at the provider; it is not a request to take or refund money.
 
 ## Resolve a held payment with a different amount
 
-Under **Held: paid out at a different amount**, compare the two amounts and establish what
-happened outside Waitron. Choose **Record outcome**, then **Refunded in the card provider's
-dashboard** or **Kept: the money was owed**. Add a note if useful, enter the manager PIN and
-choose **Record**. Recording the outcome does not refund money.
-
-For an ordinary refund, follow [table service](../../apps/server/src/guide/en/table-service.md)
-rather than using an outcome record as a refund action.
+Use [Resolve a held card payment](../../apps/server/src/guide/en/modules.md#resolve-held-payment)
+to check the amount and record **Refunded** or **Put on a bill** with a manager PIN.
 
 ## Print a refund acknowledgment
 

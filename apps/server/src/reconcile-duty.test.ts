@@ -306,7 +306,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
         await withTransaction(suite.db, (tx) =>
           recordHoldOutcome(tx, {
             paymentId: hold!.paymentId,
-            outcome: "kept",
+            outcome: "put_on_bill",
             note: null,
             personId: "22222222-2222-4222-8222-222222222222",
             at: NOW,
@@ -337,6 +337,12 @@ describe("the reconciliation pass follows the payments module's switch", () => {
         },
       ],
       paymentsInstalled: false,
+      refreshHeld: async () => {
+        throw new Error("Payments tables are absent");
+      },
+      onHeldRefreshFailure: (error) => {
+        throw error;
+      },
       credentialProvisioned: () => {
         asked += 1;
         return Promise.resolve(true);
@@ -365,6 +371,10 @@ describe("the reconciliation pass follows the payments module's switch", () => {
         { duty: stripe, credentialPurpose: "payments.stripe" },
         { duty: sumup, credentialPurpose: "payments.sumup" },
       ],
+      refreshHeld: async () => {},
+      onHeldRefreshFailure: (error) => {
+        throw error;
+      },
       credentialProvisioned: async (purpose) => purpose === "payments.sumup" || stripeReady,
       runDue: async (_now, duties) => {
         selected.push((duties ?? []).map((d) => d.name));
@@ -380,8 +390,9 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     ]);
   });
 
-  it("with installed tables and the credential provisioned, runs the duty", async () => {
-    let runs = 0;
+  it("reports a failed held reminder before checking credentials and still runs the duty", async () => {
+    const events: string[] = [];
+    const failure = new Error("held reminder failed");
     const reconcile = reconcilePassFor({
       duties: [
         {
@@ -390,14 +401,26 @@ describe("the reconciliation pass follows the payments module's switch", () => {
         },
       ],
       paymentsInstalled: true,
-      credentialProvisioned: () => Promise.resolve(true),
-      runDue: () => {
-        runs += 1;
-        return Promise.resolve(ran);
+      refreshHeld: async (at: Date) => {
+        expect(at).toBe(NOW);
+        events.push("refresh");
+        throw failure;
+      },
+      onHeldRefreshFailure: (error: unknown) => {
+        expect(error).toBe(failure);
+        events.push("logged");
+      },
+      credentialProvisioned: async () => {
+        events.push("credential");
+        return true;
+      },
+      runDue: async () => {
+        events.push("run");
+        return ran;
       },
     });
     expect(await reconcile(NOW)).toBe(ran);
-    expect(runs).toBe(1);
+    expect(events).toEqual(["refresh", "logged", "credential", "run"]);
   });
 
   it("with installed tables but no credential, runs nothing", async () => {
@@ -410,6 +433,10 @@ describe("the reconciliation pass follows the payments module's switch", () => {
         },
       ],
       paymentsInstalled: true,
+      refreshHeld: async () => {},
+      onHeldRefreshFailure: (error) => {
+        throw error;
+      },
       credentialProvisioned: () => Promise.resolve(false),
       runDue: () => {
         runs += 1;

@@ -1011,7 +1011,7 @@ const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
     const [hold] = venue.db.all<{ id: string }>(
       sql`select id from payments where id = ${payment!.id} and held_at is not null`,
     );
-    const body = { outcome: "kept", note: "Kept", pin: "1234" };
+    const body = { outcome: "put_on_bill", note: "Kept", pin: "1234" };
     return {
       send: (app) => manager(app, `/management-api/payments/held/${hold!.id}/outcome`, body),
       grows: ["holdOutcomes"],

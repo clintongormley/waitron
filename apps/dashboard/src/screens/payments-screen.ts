@@ -8,6 +8,7 @@ import {
   baseStyles,
   pageTitleStyles,
   focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   draftScopeFor,
   leaveCoordinatorFor,
@@ -50,6 +51,7 @@ import type {
   HeldOutcome,
   HeldPaymentRow,
 } from "../api/client.js";
+import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
 import { CARD_PROVIDERS_FROM_READERS_PATH } from "./modules-screen.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -450,9 +452,8 @@ export class PaymentsScreen extends LitElement {
   @state() private heldOutcome = "";
   @state() private heldNote = "";
   @state() private heldPin = "";
-  @state() private heldAttempted = false;
-  @state() private heldRefusal: { code: string; text: string; field: HeldField | null } | null =
-    null;
+  readonly #heldFeedback = new FormFeedback(this);
+  @state() private heldRefusal: { text: string; field: HeldField | null } | null = null;
   readonly #deleteDialog = new HardwareDeleteDialog(this, () => this.api, {
     notFound: ["reader.not_found"],
     // The impact does not follow the provider connection live, so read it again before retrying.
@@ -573,6 +574,8 @@ export class PaymentsScreen extends LitElement {
     this.heldOutcome = "";
     this.heldNote = "";
     this.heldPin = "";
+    this.heldRefusal = null;
+    this.#heldFeedback.reset();
   }
 
   async #requestHeldClose(): Promise<void> {
@@ -1244,8 +1247,6 @@ export class PaymentsScreen extends LitElement {
     if (this.billBusy) return;
     this.#closeHeldAction();
     this.heldAction = row;
-    this.heldAttempted = false;
-    this.heldRefusal = null;
     const { coordinator, scope } = draftScopeFor(this, {
       id: {},
       current: () => this.#heldDraft(),
@@ -1265,10 +1266,9 @@ export class PaymentsScreen extends LitElement {
     const outcome = this.heldOutcome;
     const note = this.heldNote.trim();
     const pin = this.heldPin;
-    this.heldAttempted = true;
-    this.heldRefusal = null;
+    this.#heldFeedback.press("refusal");
     if (!outcome || !pin) {
-      this.#focusFirstInvalid("[data-test=held-outcome-dialog]");
+      this.#focusHeldError();
       return;
     }
     const operation = {};
@@ -1309,7 +1309,8 @@ export class PaymentsScreen extends LitElement {
             : code === "management.request_invalid" && (named === "outcome" || named === "note")
               ? named
               : null;
-        this.heldRefusal = { code, text: codeMessage(code), field };
+        this.heldRefusal = { text: codeMessage(code), field };
+        this.#heldFeedback.newRefusal("refusal");
       }
     } finally {
       if (this.#billOperation === operation) {
@@ -1317,16 +1318,25 @@ export class PaymentsScreen extends LitElement {
         this.billBusy = false;
       }
     }
-    if (this.heldRefusal?.field) this.#focusFirstInvalid("[data-test=held-outcome-dialog]");
+    if (this.#visibleHeldRefusal()?.field) this.#focusHeldError();
+  }
+
+  #visibleHeldRefusal() {
+    return this.#heldFeedback.shows("refusal") ? this.heldRefusal : null;
+  }
+
+  #focusHeldError(): void {
+    const dialog = this.renderRoot.querySelector("[data-test=held-outcome-dialog]");
+    if (dialog) void this.#heldFeedback.focus(dialog);
   }
 
   #heldErrors(): Partial<Record<HeldField, string>> {
     const errors: Partial<Record<HeldField, string>> = {};
-    if (this.heldAttempted) {
+    if (this.#heldFeedback.attempted) {
       if (!this.heldOutcome) errors.outcome = t("payments.held.outcome_required");
       if (!this.heldPin) errors.pin = t("payments.bill.pin_required");
     }
-    const refusal = this.heldRefusal;
+    const refusal = this.#visibleHeldRefusal();
     if (refusal?.field) errors[refusal.field] = refusal.text;
     return errors;
   }
@@ -1492,7 +1502,11 @@ export class PaymentsScreen extends LitElement {
       aria-labelledby="bill-recovery-heading"
     >
       <h2 id="bill-recovery-heading">${t("payments.bill.heading")}</h2>
-      <p>${t("payments.bill.intro")}</p>
+      ${
+        this.billPayments.length || this.billRefunds.length || this.refunds.length
+          ? html`<p>${t("payments.bill.intro")}</p>`
+          : nothing
+      }
       ${this.billResult ? html`<p data-test="bill-action-result" role=${this.billResult.refused ? "alert" : "status"} class=${this.billResult.refused ? "error" : ""}>${this.billResult.text}</p>` : nothing}
       ${errors.length ? html`<p data-test="bill-load-error" role="alert" class="error">${errors.join(" ")}</p>` : nothing}
       <wt-button
@@ -1530,6 +1544,12 @@ export class PaymentsScreen extends LitElement {
         this.heldPayments.length
           ? html`<div data-test="held-payments">
               <h3>${t("payments.held.heading")}</h3>
+              <p>${t("payments.held.intro")}</p>
+              <p>
+                <a href=${guideHref("modules.resolve-held-payment")} target="_blank" rel="noopener"
+                  >${t("payments.held.guide")}</a
+                >
+              </p>
               <ul class="stuck-list">
                 ${this.heldPayments.map((row) => this.#renderHeldRow(row))}
               </ul>
@@ -1587,13 +1607,14 @@ export class PaymentsScreen extends LitElement {
     const row = this.heldAction;
     if (row === null) return nothing;
     const errors = this.#heldErrors();
-    const refusal = this.heldRefusal;
-    const invalid = this.heldAttempted && (!this.heldOutcome || !this.heldPin);
+    const refusal = this.#visibleHeldRefusal();
+    const invalid = this.#heldFeedback.attempted && (!this.heldOutcome || !this.heldPin);
     const record = saveActionState(this.#heldScope);
-    const bottom = [
-      ...(refusal && !refusal.field ? [refusal.text] : []),
-      ...(Object.keys(errors).length > 0 ? [t("form.fix_fields")] : []),
-    ].join(" ");
+    const bottom = this.#heldFeedback.message(
+      { ...errors, refusal: refusal?.field === null ? refusal.text : undefined },
+      new Set(Object.keys(errors)),
+      t("form.fix_fields"),
+    );
     const provider = this.#providerName(row.provider);
     const change = (field: HeldField, value: string) => {
       if (!this.isConnected || this.heldAction !== row) return;
@@ -1601,7 +1622,7 @@ export class PaymentsScreen extends LitElement {
       else if (field === "note") this.heldNote = value;
       else this.heldPin = value;
       this.#heldScope?.changed();
-      if (this.heldRefusal?.field === field) this.heldRefusal = null;
+      if (this.heldRefusal?.field === field) this.#heldFeedback.dismiss("refusal");
     };
     return html`<wt-dialog
       data-test="held-outcome-dialog"
@@ -1621,6 +1642,8 @@ export class PaymentsScreen extends LitElement {
         <dt>${fill("payments.held.provider_paid", { provider })}</dt>
         <dd>${formatMoney(row.providerAmount, currentLocale())}</dd>
       </dl>
+      <p>${t("payments.held.refunded_instruction")}</p>
+      <p>${t("payments.held.put_on_bill_instruction")}</p>
       <wt-combobox
         class="bill-outcome"
         name="outcome"
@@ -1631,7 +1654,7 @@ export class PaymentsScreen extends LitElement {
         placeholder=${t("payments.bill.choose_outcome")}
         .options=${[
           { value: "refunded_at_provider", label: t("payments.held.refunded_option") },
-          { value: "kept", label: t("payments.held.kept_option") },
+          { value: "put_on_bill", label: t("payments.held.put_on_bill_option") },
         ]}
         .value=${this.heldOutcome}
         error=${errors.outcome ?? ""}

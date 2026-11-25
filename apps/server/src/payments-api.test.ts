@@ -459,7 +459,7 @@ it("keeps a malformed manager PIN private and records its reason", async () => {
     `/management-api/payments/held/${randomUUID()}/outcome`,
     {
       cookie: venue.managerCookie,
-      body: { outcome: "kept", note: "Provider confirmed the charge", pin: null },
+      body: { outcome: "put_on_bill", note: "Provider confirmed the charge", pin: null },
     },
   );
   expect(response.status).toBe(401);
@@ -3713,7 +3713,7 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
         ? {
             holdProviderAmount: 1100,
             heldAt: start,
-            holdOutcome: "kept" as const,
+            holdOutcome: "put_on_bill" as const,
             holdDecidedAt: checkedAt,
             holdDecidedBy: manager,
           }
