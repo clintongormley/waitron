@@ -1,6 +1,20 @@
 import { assertMenuWritable } from "./delete.js";
 import { navigateMenuChanges } from "./menu-navigation.js";
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  max,
+  or,
+  sql,
+  type SQLWrapper,
+} from "drizzle-orm";
 import {
   menuReleases,
   menuVersionImages,
@@ -53,8 +67,24 @@ export interface LiveVersion {
   document: MenuDocument | null;
 }
 
+/** The menus named by id, or those the versions belong to, found in the read itself. */
+export type MenusNamed = readonly string[] | { readonly ofVersions: readonly string[] };
+
+/** The named menus, a statement's worth at a time: both its halves name the batch's ids, and the
+ * instant is bound once more. */
+function menuBatches(tx: Transaction, menus: MenusNamed) {
+  const size = BATCH_SIZE / 2 - 1;
+  if (!("ofVersions" in menus)) return batches(menus, size);
+  return batches(menus.ofVersions, size).map((versionIds) =>
+    tx
+      .select({ menuId: menuVersions.menuId })
+      .from(menuVersions)
+      .where(inArray(menuVersions.id, versionIds)),
+  );
+}
+
 /** Every queued edition due at `at`, ranked per menu by number (rank 1 is the highest). */
-function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[]) {
+function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[] | SQLWrapper) {
   return tx
     .select({
       menuId: menuReleases.menuId,
@@ -77,12 +107,12 @@ function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[]) {
 }
 
 /**
- * The named menus' versions live at `at`, or every published menu's when `menuIds` is left out:
+ * The named menus' versions live at `at`, or every published menu's when `menus` is left out:
  * the pointer's, or the highest-numbered queued edition due by then when that number is higher.
  */
 export async function liveVersions(
   tx: Transaction,
-  menuIds: readonly string[] | undefined,
+  menus: MenusNamed | undefined,
   mode: "metadata" | "format" | "document",
   at: Date = now(),
 ): Promise<Map<string, LiveVersion>> {
@@ -96,7 +126,7 @@ export async function liveVersions(
         ? sql<unknown>`json_extract(${menuVersions.document}, '$.format')`
         : sql<null>`null`,
   };
-  const read = (batch?: readonly string[]) => {
+  const read = (batch?: readonly string[] | SQLWrapper) => {
     const due = dueEditions(tx, at, batch);
     return unionAll(
       tx
@@ -121,8 +151,7 @@ export async function liveVersions(
     );
   };
   const rows = [];
-  // Both halves name the batch's ids, and the instant is bound once more.
-  for (const batch of menuIds === undefined ? [undefined] : batches(menuIds, BATCH_SIZE / 2 - 1))
+  for (const batch of menus === undefined ? [undefined] : menuBatches(tx, menus))
     rows.push(...(await read(batch)));
   const chosen = new Map<string, (typeof rows)[number]>();
   for (const row of rows)
@@ -245,16 +274,16 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's version live at this instant and its document. Unsupported formats require
+ * Each named published menu's version live at this instant and its document. Unsupported formats require
  * a venue reset. A version's row is never changed once written (`menu_versions` is `appendOnly()`),
  * so each handle keeps the parsed documents it has read, frozen, and reads a document again only
  * when it is not kept or its row's content hash differs from the kept one.
  */
 export async function readLiveDocuments(
   tx: Transaction,
-  menuIds: readonly string[],
+  menus: MenusNamed,
 ): Promise<Map<string, { versionId: string; document: MenuDocument }>> {
-  const versions = await liveVersions(tx, menuIds, "metadata");
+  const versions = await liveVersions(tx, menus, "metadata");
   let cache = documentCaches.get(tx);
   if (cache === undefined) documentCaches.set(tx, (cache = new Map()));
   const found = new Map<string, MenuDocument>();

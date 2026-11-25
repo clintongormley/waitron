@@ -93,10 +93,12 @@ export async function readPublishedDeclarations(
     line.menuVersionId === null ? [] : [{ line, versionId: line.menuVersionId }],
   );
   if (versioned.length === 0) return found;
-  const menuOf = await menusOfVersions(tx, [
-    ...new Set(versioned.map(({ versionId }) => versionId)),
-  ]);
-  const live = await readLiveDocuments(tx, [...new Set(menuOf.values())]);
+  const versionIds = [...new Set(versioned.map(({ versionId }) => versionId))];
+  const live = await readLiveDocuments(tx, { ofVersions: versionIds });
+  const menuOf = new Map([...live].map(([menuId, { versionId }]) => [versionId, menuId]));
+  const notLive = versionIds.filter((versionId) => !menuOf.has(versionId));
+  for (const [versionId, menuId] of await menusOfVersions(tx, notLive))
+    menuOf.set(versionId, menuId);
   const missed = versioned.filter(({ line, versionId }) => {
     const document = live.get(menuOf.get(versionId) ?? "")?.document;
     const values = document && declarationsInDocument(document, line);

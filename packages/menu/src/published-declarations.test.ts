@@ -461,6 +461,48 @@ it("one read per table however many lines", async () => {
   expect(readRecordedDocuments).not.toHaveBeenCalled();
 });
 
+it("looks up a version's menu only for a version that is not its menu's live one", async () => {
+  await declare(f.soup, "milk");
+  const old = await publish(f.lunch);
+  const stale = await line(f.lunch, old, f.soup);
+  await declare(f.soup, "fish");
+  const lunch = await publish(f.lunch, hoursFromNow(-3));
+  const current = await line(f.lunch, lunch, f.soup);
+  const { versionId: due } = await queue(f.dinner, hoursFromNow(-1), hoursFromNow(-2));
+  const dinner = await line(f.dinner, due, f.lemonade);
+  await publish(f.drinksMenu);
+  const statements = vi.spyOn(
+    (fx.db as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } })
+      .session,
+    "prepareQuery",
+  );
+  const versionReads = () =>
+    statements.mock.calls.filter(([query]) => query.sql.includes("menu_versions")).length;
+  const lookedUp = () =>
+    vi.mocked(menusOfVersions).mock.calls.flatMap(([, versionIds]) => versionIds);
+
+  expect(await read(current, dinner)).toHaveProperty("size", 2);
+  expect(lookedUp()).toEqual([]);
+  const live = await vi.mocked(readLiveDocuments).mock.results[0]!.value;
+  expect(new Set(live.keys())).toEqual(new Set([f.lunch, f.dinner]));
+  // Both documents are read once and kept, so a second read costs the live versions alone.
+  statements.mockClear();
+  await read(current, dinner);
+  expect(versionReads()).toBe(1);
+  statements.mockRestore();
+
+  const unknown = Array.from({ length: 600 }, () => crypto.randomUUID());
+  const found = await read(
+    ...unknown.map((id) => ({ ...current, id, menuVersionId: id })),
+    current,
+    dinner,
+    stale,
+  );
+  expect(new Set(found.keys())).toEqual(new Set([current.id, dinner.id, stale.id]));
+  expect(found.get(stale.id)?.allergens).toEqual({ fish: {} });
+  expect(lookedUp()).toEqual([...unknown, old]);
+});
+
 it("reads older versions one at a time, newest first, for the lines still missing", async () => {
   await declare(f.soup, "milk");
   await declare(f.lager, "milk");
