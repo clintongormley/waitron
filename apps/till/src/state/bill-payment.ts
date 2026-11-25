@@ -383,21 +383,6 @@ export function refundOffered(payment: BillPaymentView, status: BillBalance["sta
   return compareDecimal(moneyPlus(left.applied, left.tip), decimal("0")) > 0;
 }
 
-const paidByBalance = new WeakMap<BillBalance, ReadonlyMap<number, string>>();
-
-/** The quantity paid of each line of `balance` by line number, worked out once per balance read. */
-export function paidQuantities(balance: BillBalance): ReadonlyMap<number, string> {
-  let paid = paidByBalance.get(balance);
-  if (paid === undefined) {
-    const byLineNo = new Map<number, string>();
-    for (const line of balance.paidLines)
-      if (!byLineNo.has(line.lineNo)) byLineNo.set(line.lineNo, line.paidQuantity);
-    paid = byLineNo;
-    paidByBalance.set(balance, paid);
-  }
-  return paid;
-}
-
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.
  * A dish is paid a unit at a time only when sold by the unit, in several units, with no extras; the
  * server refuses part of any other. A set-menu dish whose amount, extras included, is 0.00 is left

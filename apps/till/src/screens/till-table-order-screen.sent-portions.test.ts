@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import type { CurrentOrderRow, PartyBill, TabLine } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
@@ -387,26 +387,6 @@ it("A803 portion grouping: a grouped sheet sends nothing once one of its members
   await el.updateComplete;
   expect(events).toEqual([]);
   expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
-});
-
-it("A803 portion grouping: the sheet of a grouped row says how much of the group is paid", async () => {
-  const el = await openGrouped("held", {
-    orderId: "wo-4",
-    billBalance: {
-      workingOrderId: "wo-4",
-      status: "open",
-      total: "21.00",
-      received: "10.50",
-      reserved: "0.00",
-      outstanding: "10.50",
-      tips: "0.00",
-      payments: [],
-      paidLines: [{ lineId: "s-1", lineNo: 1, paidQuantity: "1.000" }],
-    },
-  });
-  expect(text(q(el, "[data-sent-line-dialog] [data-line-paid]"))).toBe(
-    t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "2"),
-  );
 });
 
 /** Opens the grouped row's how-many dialog for three portions, changes the Current orders read

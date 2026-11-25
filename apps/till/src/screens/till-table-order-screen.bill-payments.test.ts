@@ -397,115 +397,8 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
   });
 });
 
-describe("till-table-order-screen: items already paid for", () => {
-  const paidOf = (el: TillTableOrderScreen) => {
-    const inList = (selector: string) =>
-      [...el.shadowRoot!.querySelectorAll(`${selector} [data-line-paid]`)].map((mark) =>
-        text(mark),
-      );
-    const sent = inList("[data-sent-fallback]");
-    return sent;
-  };
-
-  it.each([
-    ["en", "1 of 3 have a payment", "Has a payment"],
-    ["es", "1 de 3 tienen un pago", "Tiene un pago"],
-  ])("labels reserved item money neutrally in %s", async (locale, partial, whole) => {
-    const previous = currentLocale();
-    try {
-      setLocale(locale);
-      const el = await mountScreen({
-        billBalance: balance({
-          received: "0.00",
-          reserved: "9.00",
-          outstanding: "36.00",
-          paidLines: [
-            { lineId: "line-2", lineNo: 2, paidQuantity: "1.000" },
-            { lineId: "line-3", lineNo: 3, paidQuantity: "1.000" },
-          ],
-        }),
-      });
-      expect(paidOf(el)).toEqual([partial, whole]);
-    } finally {
-      setLocale(previous);
-    }
-  });
-
-  it("marks each line paid for, and how much of a line is", async () => {
-    const el = await mountScreen({
-      bills: [partlyPaid],
-      billBalance: balance({
-        paidLines: [
-          { lineId: "line-2", lineNo: 2, paidQuantity: "1.000" },
-          { lineId: "line-3", lineNo: 3, paidQuantity: "1.000" },
-        ],
-      }),
-    });
-
-    expect(paidOf(el)).toEqual([
-      t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "3"),
-      t("table.pick_payment_stays"),
-    ]);
-  });
-
-  it("A803 portion grouping: groups identical portions only when paid alike, never a part-paid one", async () => {
-    const burger = (lineNo: number) =>
-      line({
-        lineNo,
-        name: "Burger",
-        unitPriceGross: "9.50",
-        priceQuantity: "1.000",
-        portion: true,
-      });
-    const el = await mountScreen({
-      lines: [4, 5, 6, 7, 8, 9].map(burger),
-      bills: [partlyPaid],
-      billBalance: balance({
-        paidLines: [6, 7]
-          .map((lineNo) => ({
-            lineId: `line-${lineNo}`,
-            lineNo,
-            paidQuantity: "1.000",
-          }))
-          .concat(
-            [8, 9].map((lineNo) => ({
-              lineId: `line-${lineNo}`,
-              lineNo,
-              paidQuantity: "0.500",
-            })),
-          ),
-      }),
-    });
-    expect(
-      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((row) => [
-        row.dataset.sentFallbackLine,
-        text(row.querySelector(".sent-fallback-name")!),
-      ]),
-    ).toEqual([
-      ["line-4", "Burger ×2"],
-      ["line-6", `Burger ×2 ${t("table.pick_payment_stays")}`],
-      [
-        "line-8",
-        `Burger ×1 ${t("table.line_payment_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
-      ],
-      [
-        "line-9",
-        `Burger ×1 ${t("table.line_payment_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
-      ],
-    ]);
-  });
-
-  it("marks nothing paid from another bill's balance", async () => {
-    const el = await mountScreen({
-      billBalance: balance({
-        workingOrderId: "wo-other",
-        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
-      }),
-    });
-    expect(paidOf(el)).toEqual([]);
-  });
-
-  it("keeps a paid held dish held in Sent and marked paid in its window", async () => {
+describe("till-table-order-screen: a held dish on a part-paid bill", () => {
+  it("keeps a held dish held in Sent and in its window", async () => {
     const held: OrderGroup = {
       courseIds: [],
       id: "g-2",
@@ -544,14 +437,11 @@ describe("till-table-order-screen: items already paid for", () => {
       bills: [partlyPaid],
       groups: [held],
       currentOrders,
-      billBalance: balance({
-        paidLines: [{ lineId: "line-3", lineNo: 3, paidQuantity: "1.000" }],
-      }),
+      billBalance: balance(),
     });
 
     const dialog = await openSentDish(el, "line-3", "held");
     expect(text(dialog.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
-    expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("table.pick_payment_stays"));
   });
 });
 

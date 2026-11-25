@@ -2,13 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, type WtDialog, type WtRowActions, type WtTextarea } from "@waitron/ui";
-import type {
-  BillBalance,
-  BillEditExpected,
-  CurrentOrders,
-  PartyBill,
-  TabLine,
-} from "../api/client.js";
+import type { BillEditExpected, CurrentOrders, PartyBill, TabLine } from "../api/client.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
@@ -249,58 +243,6 @@ it("offers no Change dish on a paid row", async () => {
   expect(
     await offeredFor({ currentOrders: orders, lines: [line()], bills: [bill("settled")] }),
   ).toBe(false);
-});
-
-const balance = (paidLines: BillBalance["paidLines"]): BillBalance => ({
-  workingOrderId: "wo-4",
-  status: "open",
-  total: "10.00",
-  received: "2.00",
-  reserved: "0.00",
-  outstanding: "8.00",
-  tips: "0.00",
-  payments: [],
-  paidLines,
-});
-
-it("shows a partly paid row read-only, its dish or an extra paid, keeping its other actions", async () => {
-  const cream = line({
-    id: "l-cream",
-    name: "Cream",
-    lineNo: 2,
-    parentLineNo: 1,
-    productId: "cream",
-    menuItemId: null,
-    note: null,
-  });
-  const el = await openRow({
-    lines: [line(), cream],
-    billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "1.000" }]),
-  });
-  expect(offered(el)).toBe(false);
-  expect(q(el, "[data-sent-line-dialog] wt-row-actions")).not.toBeNull();
-  cleanupWidgets();
-  expect(
-    await offeredFor({
-      lines: [line(), cream],
-      billBalance: balance([{ lineId: "l-cream", lineNo: 2, paidQuantity: "1.000" }]),
-    }),
-  ).toBe(false);
-  expect(
-    await offeredFor({
-      lines: [line(), cream],
-      billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "0.000" }]),
-    }),
-  ).toBe(true);
-});
-
-it("withdraws Change dish when a payment for the dish lands while its window is open", async () => {
-  const paid = (paidQuantity: string) => balance([{ lineId: "l-flan", lineNo: 1, paidQuantity }]);
-  const el = await openRow({ lines: [line()], billBalance: paid("0.000") });
-  expect(offered(el)).toBe(true);
-  el.billBalance = paid("1.000");
-  await el.updateComplete;
-  expect(offered(el)).toBe(false);
 });
 
 it("keeps Change dish quiet and disabled until the dish changes, and again once it is put back", async () => {
@@ -1014,10 +956,6 @@ it.each<[string, Partial<TillTableOrderScreen>]>([
   ["its station stops allowing changes", { lines: [line({ changesAfterSending: "never" })] }],
   ["its bill is presented", { bills: [bill("placed")] }],
   ["the till stops having its product", { products: products.filter((each) => each !== flan) }],
-  [
-    "a payment for it lands",
-    { billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "1.000" }]) },
-  ],
 ])(
   "drops a staged change when %s while the window is open, and opens fresh once it can change again",
   async (_, readOnly) => {
@@ -1199,7 +1137,6 @@ it("localises the sent dish, extras and served quantity", async () => {
   setLocale("es-ES");
   const el = await openRow(
     {
-      billBalance: balance([{ lineId: "l-weighed", lineNo: 1, paidQuantity: "0.250" }]),
       currentOrders: current({
         ungrouped: [
           row("l-weighed", "Fish", "0.750", {
@@ -1225,7 +1162,4 @@ it("localises the sent dish, extras and served quantity", async () => {
   expect(q(el, "[data-sent-line-dialog] .move-dish")!.textContent).toContain("×0,75");
   expect(q(el, "[data-sent-extra]")!.textContent).toContain("Sauce ×0,5");
   expect(q(el, "[data-sent-line-served]")!.textContent).toContain("0,25");
-  expect(q(el, "[data-sent-line-dialog] [data-line-paid]")!.textContent).toBe(
-    t("table.line_payment_part").replace("{paid}", "0,25").replace("{quantity}", "0,75"),
-  );
 });

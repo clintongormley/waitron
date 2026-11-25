@@ -303,7 +303,7 @@ export function splitSourcesFrom(
   bills: readonly PartyBill[],
   drafts: readonly Draft[],
   personId: string,
-  keyFor: (lines: readonly TabLine[], balance: BillBalance) => (dish: TabLine) => string | null,
+  keyFor: (lines: readonly TabLine[]) => (dish: TabLine) => string | null,
 ): SplitSource[] {
   const billById = new Map(bills.map((bill) => [bill.workingOrderId, bill]));
   const foreign = new Map<string, Draft>();
@@ -319,7 +319,7 @@ export function splitSourcesFrom(
     return [
       {
         bill,
-        groups: pickGroups(lines, apartInSetMenus(bill.setMenus, keyFor(lines, balance)), balance),
+        groups: pickGroups(lines, apartInSetMenus(bill.setMenus, keyFor(lines)), balance),
         held:
           holder === undefined
             ? null

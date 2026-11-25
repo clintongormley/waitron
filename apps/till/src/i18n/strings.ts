@@ -1721,8 +1721,6 @@ export const en = {
   "table.new_bill": "+ New bill",
   "table.new_bill_menu": "New bill",
   "table.pick_count": "{count} of {total}",
-  "table.pick_payment_stays": "Has a payment",
-  "table.line_payment_part": "{paid} of {quantity} have a payment",
   "table.move_dishes_floor": "Payments keep {amount} on this bill: move fewer dishes",
   "table.move_dishes_none": "No dishes to move",
   // A refusal that names another bill than the one on screen: that bill's label, then its words.
@@ -4130,8 +4128,6 @@ export const es: Record<StringKey, string> = {
   "table.new_bill": "+ Cuenta nueva",
   "table.new_bill_menu": "Cuenta nueva",
   "table.pick_count": "{count} de {total}",
-  "table.pick_payment_stays": "Tiene un pago",
-  "table.line_payment_part": "{paid} de {quantity} tienen un pago",
   "table.move_dishes_floor": "Los pagos retienen {amount} en esta cuenta: mueve menos platos",
   "table.move_dishes_none": "No hay platos para mover",
   "table.refused_on_bill": "{bill}: {message}",

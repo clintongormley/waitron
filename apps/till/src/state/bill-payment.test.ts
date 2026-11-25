@@ -4,7 +4,6 @@ import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import {
   confirmationOf,
   isLatestSend,
-  paidQuantities,
   payLines,
   paymentAsk,
   paymentNotRecorded,
@@ -624,31 +623,6 @@ describe("refusalOf", () => {
     expect(refusalOf(new TypeError("Failed to fetch"), false)).toEqual({
       code: "server.internal",
     });
-  });
-});
-
-describe("paidQuantities", () => {
-  it("gives the quantity paid of each line by its number, the first listed when one is listed twice", () => {
-    const paid = paidQuantities({
-      workingOrderId: "wo-1",
-      status: "open",
-      total: "30.00",
-      received: "15.00",
-      reserved: "0.00",
-      outstanding: "15.00",
-      tips: "0.00",
-      payments: [],
-      paidLines: [
-        { lineId: "line-1", lineNo: 1, paidQuantity: "1.000" },
-        { lineId: "line-3", lineNo: 3, paidQuantity: "2.000" },
-        { lineId: "line-3", lineNo: 3, paidQuantity: "9.000" },
-      ],
-    });
-
-    expect([...paid]).toEqual([
-      [1, "1.000"],
-      [3, "2.000"],
-    ]);
   });
 });
 
