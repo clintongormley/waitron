@@ -211,8 +211,8 @@ export async function previewPayment(
 }
 
 /** The edit state Pay for items sends for a Counter order with no party, whose held read carries
- * none (`working-order-held-read.ts`) while the items route checks one; refused as out of date
- * when the bill read names a party, as that bill's edit state comes with its held read. */
+ * none (`working-order-held-read.ts`) while the items route checks one; refused as
+ * `counterBillEdit` refuses. */
 export async function counterItemsEdit(
   api: TillApi,
   billId: string,

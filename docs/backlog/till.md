@@ -2062,7 +2062,7 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
 - **Paying part of a counter order is new.** Today the counter takes one payment for the whole
   total (`apps/till/src/widgets/tender-pay.ts`), and the bill payments design said partial payment
   at the counter was not asked for (`docs/superpowers/specs/2026-09-26-bill-payments-design.md` §9).
-  Tables already have Pay items, Contribute and Split equally (`apps/till/src/widgets/bill-pay-dialog.ts`);
+  Tables already have Items, An amount and Split equally (`apps/till/src/widgets/bill-pay-dialog.ts`);
   the counter takes the same path. What is printed follows that design: a payment that leaves
   something to pay prints nothing of Waitron's (the reader prints its slip) and the window says
   "Receipt: printed when the bill is fully paid"; the last payment issues one receipt for the whole
