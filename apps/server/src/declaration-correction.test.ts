@@ -23,9 +23,11 @@ import {
   createExtraList,
   createMenu,
   createProduct,
+  listMembers,
   menuItems,
   previewMenu,
   queueMenuPublication,
+  removeMember,
   requireMenuRoot,
   setMenuVariants,
   setProductVariants,
@@ -374,34 +376,49 @@ describe("Update the live menus now", () => {
 });
 
 describe("which product the correction names", () => {
-  it("a product held only as an extra on the dish's list corrects the dish it was picked for", async () => {
-    const side = await inTx(v, async (tx) => {
-      const product = await createProduct(tx, {
-        categoryId: null,
-        name: "Side",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "reduced",
-      });
-      const list = await createExtraList(
-        tx,
+  it("a dish ordered from an older version of the menu that the live version still holds gets the slip", async () => {
+    await sent();
+    await inTx(v, async (tx) => {
+      await updateProduct(tx, v.productId("Flan"), { unitPrice: "6.50" });
+      await publishWorkingMenu(tx, v.tables.menuId);
+    });
+    await declareMilk();
+    const before = await jobs();
+    expect((await correct()).menus).toHaveLength(1);
+    await expectOneSlip(before);
+  });
+
+  it("a variant with no allergens of its own gets the slip when Patch live menu corrects its dish", async () => {
+    await doubleBurgerSent();
+    await declareMilk();
+    const before = await jobs();
+    const response = await patchBurgerDeclarations(mountApp());
+    expect(response.status, await response.clone().text()).toBe(200);
+    await expectOneSlip(before);
+  });
+
+  it("a picked extra gets the slip when Patch live menu corrects the extra", async () => {
+    const side = await burgerWithSideSent();
+    await declareMilk(side.productId);
+    const before = await jobs();
+    const live = await liveVersion();
+    const response = await request(mountApp(), `/management-api/menus/${v.tables.menuId}/patch`, {
+      baseVersionId: live.versionId,
+      changes: [
         {
-          name: "Sides",
-          minPicks: 0,
-          maxPicks: 1,
-          items: [{ productId: product.id, maxQuantity: 1, price: "1.00" }],
+          target: { kind: "extra", listId: side.listId, productId: side.productId },
+          field: "declarations",
+          value: "product",
         },
-        v.cfg.locale,
-      );
-      await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-      await republishMenus(tx);
-      return { productId: product.id, listId: list.id };
+      ],
+      reviewed: live.revision,
     });
-    await sent("ticked", {
-      menuItemId: v.item("Burger"),
-      quantity: "3",
-      extras: [{ listId: side.listId, picks: [{ productId: side.productId, quantity: 1 }] }],
-    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    await expectOneSlip(before);
+  });
+
+  it("a product held only as an extra on the dish's list corrects the dish it was picked for", async () => {
+    const side = await burgerWithSideSent();
     await declareMilk(side.productId);
     const before = await jobs();
     expect((await correct(side.productId)).menus).toHaveLength(1);
@@ -409,27 +426,7 @@ describe("which product the correction names", () => {
   });
 
   it("a variant of the corrected product gets the slip", async () => {
-    const variantId = await inTx(v, async (tx) => {
-      const [double] = await setProductVariants(
-        tx,
-        v.productId("Burger"),
-        [
-          {
-            name: "Double",
-            customerName: null,
-            kitchenName: "DBL",
-            image: null,
-            unitPrice: "14.00",
-            available: true,
-          },
-        ],
-        v.cfg.locale,
-      );
-      await setMenuVariants(tx, v.item("Burger"), [{ variantId: double!.id, price: "14.00" }]);
-      await publishWorkingMenu(tx, v.tables.menuId);
-      return double!.id;
-    });
-    await sent("ticked", { menuItemId: v.item("Burger"), variantId, quantity: "3" });
+    await doubleBurgerSent();
     await declareMilk();
     const before = await jobs();
     expect((await correct()).menus).toHaveLength(1);
@@ -539,9 +536,67 @@ async function liveAfterOrdinaryPublishAndStaleSchedule() {
   });
 }
 
-// Each case leaves the dish's kitchen block behind its menu by an ordinary publish first, which
-// prints nothing; a request that does not change the live version the dish reads must not print
-// that difference either.
+/** Burger ×3 with one Side picked from its extras list, sent ticked; answers the Side. */
+async function burgerWithSideSent() {
+  const side = await inTx(v, async (tx) => {
+    const product = await createProduct(tx, {
+      categoryId: null,
+      name: "Side",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "reduced",
+    });
+    const list = await createExtraList(
+      tx,
+      {
+        name: "Sides",
+        minPicks: 0,
+        maxPicks: 1,
+        items: [{ productId: product.id, maxQuantity: 1, price: "1.00" }],
+      },
+      v.cfg.locale,
+    );
+    await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
+    await republishMenus(tx);
+    return { productId: product.id, listId: list.id };
+  });
+  await sent("ticked", {
+    menuItemId: v.item("Burger"),
+    quantity: "3",
+    extras: [{ listId: side.listId, picks: [{ productId: side.productId, quantity: 1 }] }],
+  });
+  return side;
+}
+
+/** Burger's Double variant, with no allergens of its own, published and sent ticked ×3. */
+async function doubleBurgerSent() {
+  const variantId = await inTx(v, async (tx) => {
+    const [double] = await setProductVariants(
+      tx,
+      v.productId("Burger"),
+      [
+        {
+          name: "Double",
+          customerName: null,
+          kitchenName: "DBL",
+          image: null,
+          unitPrice: "14.00",
+          available: true,
+        },
+      ],
+      v.cfg.locale,
+    );
+    await setMenuVariants(tx, v.item("Burger"), [{ variantId: double!.id, price: "14.00" }]);
+    await publishWorkingMenu(tx, v.tables.menuId);
+    return double!.id;
+  });
+  await sent("ticked", { menuItemId: v.item("Burger"), variantId, quantity: "3" });
+  return variantId;
+}
+
+// The cases that print nothing each leave the dish's kitchen block behind its menu by an ordinary
+// publish first, which prints nothing; a request that does not change what the dish reads must not
+// print that difference either. The last case is the control, with no ordinary publish.
 describe("only a dish whose live menu the request changed is refreshed", () => {
   it("Update now after an ordinary publish already put the change live prints no slip", async () => {
     await sent();
@@ -602,6 +657,38 @@ describe("only a dish whose live menu the request changed is refreshed", () => {
     await inTx(v, (tx) => publishWorkingMenu(tx, v.tables.menuId));
     const response = await patchBurgerDeclarations(mountApp(), second.menuId, second.itemId);
     expect(response.status, await response.clone().text()).toBe(200);
+    await expectNoSlip(before);
+  });
+
+  it("Update now correcting a live version that holds the product only as an extra leaves a dish it no longer holds alone", async () => {
+    await sent();
+    await declareMilk();
+    const before = await jobs();
+    await inTx(v, async (tx) => {
+      await publishWorkingMenu(tx, v.tables.menuId);
+      const root = await requireMenuRoot(tx, v.tables.menuId);
+      const burger = (await listMembers(tx, root)).find(
+        ({ ref }) => ref.kind === "product" && ref.productId === v.productId("Burger"),
+      )!;
+      await removeMember(tx, root, burger.id);
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Burger on the side",
+          minPicks: 0,
+          maxPicks: 1,
+          items: [{ productId: v.productId("Burger"), maxQuantity: 1, price: "6.00" }],
+        },
+        v.cfg.locale,
+      );
+      await writeProductModifiers(tx, v.productId("Paella"), [{ kind: "extras", id: list.id }]);
+      await publishWorkingMenu(tx, v.tables.menuId);
+    });
+    await expectNoSlip(before);
+    await inTx(v, (tx) =>
+      updateProduct(tx, v.productId("Burger"), { allergens: { milk: {}, eggs: {} } }),
+    );
+    expect((await correct()).menus).toHaveLength(1);
     await expectNoSlip(before);
   });
 

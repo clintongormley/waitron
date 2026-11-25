@@ -250,6 +250,7 @@ export type {
 export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 export {
   correctMenuDeclarations,
+  linesReadingChange,
   replacedLiveDeclarations,
   waitingDeclarationMenus,
   type DeclarationMenu,

@@ -13,6 +13,7 @@ import {
   readRecordedDocuments,
 } from "./menu-publication.js";
 import { readProductDeclarationValues } from "./product-declarations.js";
+import { declarationsInDocument, type PublishedLine } from "./published-declarations.js";
 import { listProductVariants } from "./variants.js";
 import "./errors.js";
 
@@ -37,7 +38,7 @@ export interface QueuedDeclarationCorrection {
 export interface DeclarationMenu {
   menuId: string;
   name: string;
-  /** The live version disagrees, so Update now corrects it. */
+  /** The live version disagrees, so the correction route corrects it. */
   live: boolean;
   queued: { versionId: string; activatesAt: string; stillOld: boolean }[];
 }
@@ -194,10 +195,12 @@ export async function waitingDeclarationMenus(
   );
 }
 
-/** A menu whose live version a request replaced, and the products whose copies in it now hold
- * other declarations. */
+/** A menu whose live version a request replaced with `versionId`, and the products whose copies in
+ * it now hold other declarations. */
 export interface LiveDeclarationChange {
   menuId: string;
+  baseVersionId: string;
+  versionId: string;
   productIds: string[];
 }
 
@@ -238,7 +241,29 @@ export async function replacedLiveDeclarations(
     documents.get(baseVersionId)!,
     documents.get(versionId)!,
   );
-  return productIds.length === 0 ? [] : [{ menuId, productIds }];
+  return productIds.length === 0 ? [] : [{ menuId, baseVersionId, versionId, productIds }];
+}
+
+/**
+ * The ids of `lines`, each taken from a version of `change`'s menu, that read other declarations
+ * since the change. Its new version outnumbers every version of the menu ever live, so a line it
+ * holds reads it, and a line it does not hold reads an older version the change left alone.
+ */
+export async function linesReadingChange(
+  tx: Transaction,
+  change: LiveDeclarationChange,
+  lines: readonly PublishedLine[],
+): Promise<string[]> {
+  const documents = await readRecordedDocuments(tx, [change.baseVersionId, change.versionId]);
+  const before = documents.get(change.baseVersionId)!;
+  const after = documents.get(change.versionId)!;
+  return lines.flatMap((line) => {
+    const now = declarationsInDocument(after, line);
+    return now !== undefined &&
+      canonicalJson(now) !== canonicalJson(declarationsInDocument(before, line) ?? null)
+      ? [line.id]
+      : [];
+  });
 }
 
 /**

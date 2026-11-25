@@ -16,6 +16,7 @@ import {
   correctMenuDeclarations,
   declarationChanges,
   findDeclarationDrift,
+  linesReadingChange,
   replacedLiveDeclarations,
   waitingDeclarationMenus,
 } from "./declaration-correction.js";
@@ -344,9 +345,24 @@ describe("correctMenuDeclarations", () => {
       ],
       // Dinner's only change is to a scheduled version, which no kitchen reads yet.
       liveChanges: [
-        { menuId: bar, productIds: [f.extraLemon] },
-        { menuId: f.lunch, productIds: [f.extraLemon] },
-        { menuId: setLunch, productIds: [f.extraLemon] },
+        {
+          menuId: bar,
+          baseVersionId: expect.any(String),
+          versionId: expect.any(String),
+          productIds: [f.extraLemon],
+        },
+        {
+          menuId: f.lunch,
+          baseVersionId: expect.any(String),
+          versionId: expect.any(String),
+          productIds: [f.extraLemon],
+        },
+        {
+          menuId: setLunch,
+          baseVersionId: expect.any(String),
+          versionId: expect.any(String),
+          productIds: [f.extraLemon],
+        },
       ],
     });
 
@@ -474,7 +490,14 @@ describe("correctMenuDeclarations", () => {
     const { jug, scheduled } = await lemonadeWithJugScheduled();
     expect(await corrections(f.lemonade, [scheduled])).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      liveChanges: [{ menuId: f.lunch, productIds: [f.lemonade, f.large] }],
+      liveChanges: [
+        {
+          menuId: f.lunch,
+          baseVersionId: expect.any(String),
+          versionId: expect.any(String),
+          productIds: [f.lemonade, f.large],
+        },
+      ],
     });
     expect(await drift([f.lemonade, f.large, jug], new Map())).toEqual([]);
   });
@@ -483,7 +506,14 @@ describe("correctMenuDeclarations", () => {
     const { jug, hash } = await lemonadeWithJugScheduled();
     expect(await corrections(f.lemonade)).toEqual({
       menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
-      liveChanges: [{ menuId: f.lunch, productIds: [f.lemonade, f.large] }],
+      liveChanges: [
+        {
+          menuId: f.lunch,
+          baseVersionId: expect.any(String),
+          versionId: expect.any(String),
+          productIds: [f.lemonade, f.large],
+        },
+      ],
     });
     const [requeued] = await queuedOf(f.lunch);
     expect((await documentOf(requeued!.versionId)).contentHash).toBe(hash);
@@ -541,7 +571,14 @@ describe("which live versions and products a correction names", () => {
     await declare(f.extraLemon, { celery: {} });
     expect(
       (await app((tx) => correctMenuDeclarations(tx, f.extraLemon, PERSON))).liveChanges,
-    ).toEqual([{ menuId: f.lunch, productIds: [f.extraLemon] }]);
+    ).toEqual([
+      {
+        menuId: f.lunch,
+        baseVersionId: expect.any(String),
+        versionId: expect.any(String),
+        productIds: [f.extraLemon],
+      },
+    ]);
   });
 
   it("names nothing for a live version left as it was, or replaced with the same declarations", async () => {
@@ -553,5 +590,43 @@ describe("which live versions and products a correction names", () => {
     );
     expect(versionId).not.toBe(v1);
     expect(await app((tx) => replacedLiveDeclarations(tx, f.lunch, v1, versionId))).toEqual([]);
+  });
+
+  it("lists the lines whose declarations the new live version changes, and only those it holds", async () => {
+    const v1 = await publish(f.lunch);
+    const line = async (id: string, productId: string) => ({
+      id,
+      menuVersionId: v1,
+      menuItemId: (await offer(f.lunch, productId)).menuItemId,
+      productId,
+      extraListId: null,
+    });
+    const lemonade = await line("lemonade", f.lemonade);
+    const soup = await line("soup", f.soup);
+    const gone = { ...lemonade, id: "gone", menuItemId: "no-such-item" };
+    await declare(f.lemonade, { milk: {} });
+    const [change] = (await app((tx) => correctMenuDeclarations(tx, f.lemonade, PERSON)))
+      .liveChanges;
+    expect(change!.baseVersionId).toBe(v1);
+    expect(
+      await app((tx) =>
+        linesReadingChange(tx, { ...change!, productIds: [] }, [lemonade, soup, gone]),
+      ),
+    ).toEqual(["lemonade"]);
+  });
+
+  it("counts a line the replaced version did not hold as changed", async () => {
+    const v1 = await publish(f.lunch);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
+    const v2 = await publish(f.lunch);
+    const burger = {
+      id: "burger",
+      menuVersionId: v2,
+      menuItemId: (await offer(f.lunch, f.burger)).menuItemId,
+      productId: f.burger,
+      extraListId: null,
+    };
+    const change = { menuId: f.lunch, baseVersionId: v1, versionId: v2, productIds: [f.burger] };
+    expect(await app((tx) => linesReadingChange(tx, change, [burger]))).toEqual(["burger"]);
   });
 });
