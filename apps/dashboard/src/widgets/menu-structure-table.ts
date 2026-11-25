@@ -1357,15 +1357,16 @@ export class MenuStructureTable extends LitElement {
       ])}`;
     }
     const productId = node.ref.productId;
+    const editDisabled = this.editProductsInPlace && this.busy;
     return html`${
       this.#productById.has(productId)
         ? html`<a
             data-test=${`edit-product-${key}`}
             href=${`/products/product/${encodeURIComponent(productId)}`}
             ?data-own-click=${this.editProductsInPlace}
-            aria-disabled=${this.busy ? "true" : nothing}
+            aria-disabled=${editDisabled ? "true" : nothing}
             @click=${(event: MouseEvent) => {
-              if (this.busy) {
+              if (editDisabled) {
                 event.preventDefault();
                 return;
               }
