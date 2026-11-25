@@ -885,7 +885,7 @@ export class TillGiveBackDialog extends LitElement {
           record: () => void this.#record(step),
         },
       );
-    const way = this.view!.ways.find((row) => row.way === step.way);
+    const way = this.view?.ways.find((row) => row.way === step.way);
     const underWay = this.#underWayOf(step);
     return doneStep(
       step,
@@ -916,8 +916,8 @@ export class TillGiveBackDialog extends LitElement {
     ></till-give-back-under-way>`;
   }
   #body() {
-    if (this.step !== null && (this.view !== null || this.step.kind === "lost"))
-      return this.#stepBody(this.step);
+    // A saved step needs no read: the read only names the card it went back to.
+    if (this.step !== null) return this.#stepBody(this.step);
     const underWay = this.#underWayOf(null);
     if (underWay !== null) return this.#underWay(underWay);
     if (this.view !== null)

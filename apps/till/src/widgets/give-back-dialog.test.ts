@@ -1048,6 +1048,35 @@ describe("sending", () => {
     });
   });
 
+  it("shows a saved card refund and its Check again when the receipt cannot be read", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 is waiting for the card company's answer."),
+    );
+    cleanupWidgets();
+    api.readGiveBack.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el: reopened } = await mount(api);
+    await vi.waitFor(() => expect(api.readGiveBack).toHaveBeenCalledTimes(2));
+    await reopened.updateComplete;
+
+    expect(outcomeText(reopened)).toContain("€5.00 is waiting for the card company's answer.");
+    expect(root(reopened).querySelector("[data-reload]")).toBeNull();
+    root(reopened).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(reopened)).toContain(
+        t("give_back.done_card_any").replace("{amount}", "€5.00"),
+      ),
+    );
+    expect(api.getTenderRefund).toHaveBeenLastCalledWith("refund-1", {});
+    expect(root(reopened).querySelector("[data-check-again]")).toBeNull();
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+  });
+
   it("offers Check again for a card refund left waiting, and says once it is back", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
