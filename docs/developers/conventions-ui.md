@@ -19,7 +19,7 @@ installed” do not provide a self-service remedy. The only exception is a state
 can cause: establish that at its site and identify it as a fault in Waitron. No guard enforces this
 rule.
 
-A second exception, the owner's of 2026-10-28 (A1127 Q4): the till and handheld full-disk strip
+A second exception, the owner's of 2026-10-28 (A1127 Q4): the till and handheld full-disk warning
 keeps «Tell a manager». A waiter at a stopped till has no step of their own to take, and the
 in-place sign-in that would have given them one (A1127's slice 4) was declined. It is stated at the
 strip's words, the `storage.disk_full` branch of `staffNoticeText` in `apps/till/src/i18n/staff-notices.ts`. The owner extended it on
@@ -44,9 +44,8 @@ nowhere to go because its printer is disabled, the dialog says only that
 to reenable an inactive printer. presumably it has been disabled for a reason. just say the
 printer is disabled”.
 
-The dashboard's full-disk bar follows the rule: to a person who cannot open Box status it offers
-**Sign in as a manager** in place, saying that this signs them out (`#diskStopBar` in
-`apps/dashboard/src/dashboard-app.ts`).
+The dashboard's full-screen warning opens the manager sign-in in place when the current person
+cannot open Box status (`#diskStopScreen` in `apps/dashboard/src/dashboard-app.ts`).
 
 The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
 administrator or installer. Their passing tests exercised those messages and existing retries;

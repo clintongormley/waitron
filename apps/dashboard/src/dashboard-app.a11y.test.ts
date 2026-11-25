@@ -8,7 +8,7 @@ import { png } from "./testing/venue-logo-fixture.js";
 
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
-import type { WtBanner, WtToast, WtVenueLogo } from "@waitron/ui";
+import type { WtToast, WtVenueLogo } from "@waitron/ui";
 import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
@@ -635,7 +635,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  it("the full-disk bar is accessible under the banner", async () => {
+  it("the full-screen disk warning is accessible", async () => {
     const api = stubApi({
       liveData: new LiveData(),
       getMe: vi.fn().mockResolvedValue({
@@ -645,17 +645,15 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Deli Test SL",
-        permissions: ["system.manage"],
+        permissions: ["venue.view", "system.manage"],
         modules: [],
       }),
-      getDiskStop: vi.fn().mockResolvedValue({
-        stopped: true,
-        deleted: { count: 1, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false },
-      }),
+      getDiskStop: vi.fn().mockResolvedValue({ stopped: true }),
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
-    const bar = () => el.shadowRoot!.querySelector<WtBanner>("[data-test=disk-stop-bar]");
-    await expect.poll(() => bar()?.shadowRoot?.querySelector(".message")?.textContent).toBeTruthy();
+    const modal = () =>
+      el.shadowRoot!.querySelector("wt-stop-screen")?.shadowRoot?.querySelector("dialog:modal");
+    await expect.poll(modal).toBeTruthy();
     await expectNoA11yViolations(host);
   });
 

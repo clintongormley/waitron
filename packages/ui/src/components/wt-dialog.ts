@@ -476,6 +476,13 @@ export class WtDialog extends LitElement {
     this.bodyEl.scrollTop = scrolled;
   }
 
+  protected raiseModal(): void {
+    if (!this.dialog?.matches(":modal")) return;
+    this.openedAt = ++WtDialog.openings;
+    this.showAgain();
+    WtDialog.track(this);
+  }
+
   private rememberBodyScroll(): void {
     if (this.dialog.matches(":modal")) this.lastBodyScrollTop = this.bodyEl.scrollTop;
   }
@@ -501,7 +508,7 @@ export class WtDialog extends LitElement {
   /** The browser hands focus back to what had it at opening, or, once this dialog has been put back
    * on the page, to what had it then. When it could not, or that was the page body, focus is left
    * on the page body or inside this closed dialog. */
-  private refocus(): void {
+  protected refocus(): void {
     const focused = deepActiveElement();
     const options =
       this.returnFocusVisible === false ? ({ focusVisible: false } as FocusOptions) : undefined;

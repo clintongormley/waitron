@@ -1,18 +1,17 @@
 # Till notices
 
-Some problems with the box stop staff from working, and the person at the till is often the first
-to notice. So once someone has signed in, every till and handheld shows a line under its top bar
-when the box needs attention. The sign-in page also warns when the box is running out of disk space or cannot save anything,
-and when payments wait for the box's time. After sign-in, the clock-in and attendance pages show every notice too, without **Open drawer** or **Check the time**: move past those pages to use them.
-The line says what is wrong and what to do. It never covers your work, and you never have to dismiss it.
+When the box needs attention, your till or handheld shows a notice under its top bar. The PIN
+screen also warns about low disk space and payments waiting for the box's time. After sign-in,
+you can read notices on the clock-in and attendance pages. Go back to the till to use
+**Open drawer** or **Check the time**.
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
 
 ## Read the notice line {#notice-line}
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".
-For example, **Nothing can be saved: the box is out of space · Tell a manager**. A red line means
-something cannot be saved, an amber line means something needs attention but work is still saved, and a blue line is for information.
+A red line means something cannot be saved. An amber line means something needs attention and
+you can still save your work. A blue line is for information.
 
 When more than one notice is showing, the line ends with a count such as **+1**. Tap that count to
 open the list of the other notices, most serious first. The list sits under the line and pushes the
@@ -27,11 +26,11 @@ There is no close button for a notice. A prep station display shows no notice li
 power and connection, then use **Open drawer** if you still need it open. If asked, choose someone
 who can authorise opening it and enter their PIN.
 
-**Nothing can be saved: the box is out of space · Tell a manager** is red. The box has no disk
-space left, so orders, payments and other changes cannot be saved. Avoid signing out while space is
-freed: a new sign-in also needs disk space. A manager needs to free space on the box, on the [Box
-status page](box-status.md#free-space). If the box had to use its spare space to start, the
-notice stays, also after a restart, until about 24 MB is free again.
+**Disk full. Waitron cannot operate.** covers the till or handheld, including the PIN screen.
+Follow **Tell a manager** so they can free space on the [Box status page](box-status.md#free-space).
+If a payment is in progress, check its result first. Follow any payment advice the warning shows
+and stay signed in while space is freed.
+On the clock-in and attendance pages, the notice reads **Nothing can be saved: the box is out of space**.
 
 **Sales can't be recorded: the box's clock is wrong · See Box status in the dashboard** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the box also
@@ -60,9 +59,9 @@ Check the time** is red. Devices agreeing with the box do not start payments aga
 time**, and pay once the line has gone. If the line stays, a manager or administrator can restart the box on the [Box status
 page](box-status.md#restart).
 
-While payments wait, or while the box's clock is wrong or its disk is full, a button that starts
-a payment opens **Payments are paused** instead, saying why; the order stays open. Use **Check the
-time** there when it shows, or **Close** it and pay once the red line has gone.
+While payments wait for the box's time, a button that starts a payment opens **Payments are paused**
+instead. The order stays open. Use **Check the time** there when it shows, or **Close** it and pay
+once the red line has gone.
 
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the box's
 clock is in doubt and the box could not confirm it by itself. Tap **Check the time** to open its dialog; when another notice shows first, open the

@@ -31,6 +31,10 @@ export class LeaveController implements ReactiveController {
     host.addController(this);
   }
 
+  get asking(): boolean {
+    return this.question !== undefined;
+  }
+
   get coordinator(): LeaveCoordinator {
     if (!this.current) throw new Error("Leave coordinator requires a connected application");
     return this.current;

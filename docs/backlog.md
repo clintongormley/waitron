@@ -995,7 +995,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   public page offers retry, Check again and Stop; repairing a damaged linked layout remains open.
   [Detail](backlog/box.md#public-tls-repair-refuses-linked-layouts)
 
-- **Full disk: the till read that fails, and the words** (the strip's tint, and DISK-FULL-SCREEN, queued in lane I: a red window over the whole screen; owner, 2026-11-24). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
+- **Full disk: the till read that fails, and the words** (the strip's tint). [Detail](backlog/box.md#bundle-full-disk-the-till-read-that-fails-and-the-words)
 
 - **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,

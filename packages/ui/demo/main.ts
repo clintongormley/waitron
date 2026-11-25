@@ -44,6 +44,7 @@ import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
+import "../src/components/wt-stop-screen.js";
 import "../src/components/wt-master-key-box.js";
 import "../src/components/wt-master-key-input.js";
 import "../src/components/wt-relative-time.js";
@@ -108,7 +109,11 @@ const panel = (theme: "light" | "dark") => `
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
-    <wt-banner tone="error" message="Disk full: the tills cannot save anything." action-label="Open Box status"></wt-banner>
+    <wt-banner tone="error" message="Waitron could not save the changes."></wt-banner>
+    <wt-button class="open-stop-screen">Show disk warning</wt-button>
+    <wt-stop-screen heading="Disk full" description="Waitron cannot operate.">
+      <wt-button>Resume demo</wt-button>
+    </wt-stop-screen>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
     <wt-master-key-box></wt-master-key-box>
     <wt-master-key-input required></wt-master-key-input>
@@ -641,6 +646,13 @@ for (const panel of app.querySelectorAll(".panel")) {
   });
   keyInput.copy = MASTER_KEY_FIELD_WORDS.en;
   keyInput.maxPdfBytes = MAX_PACK_PDF;
+  const stopScreen = panel.querySelector("wt-stop-screen")!;
+  panel.querySelector(".open-stop-screen")!.addEventListener("click", () => {
+    stopScreen.open = true;
+  });
+  stopScreen.querySelector("wt-button")!.addEventListener("click", () => {
+    stopScreen.open = false;
+  });
   const report = panel.querySelector("wt-report-dialog")!;
   report.copy = {
     heading: "Report a problem",

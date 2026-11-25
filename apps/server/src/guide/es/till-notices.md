@@ -1,22 +1,18 @@
 # Avisos del terminal
 
-Algunos problemas del servidor impiden trabajar al personal, y quien está en el terminal suele ser
-el primero en notarlo. Por eso, cuando alguien ha iniciado sesión, cada caja registradora y cada
-terminal de camarero muestran una línea bajo su barra superior si el servidor necesita atención. La
-pantalla de inicio de sesión también avisa si queda poco espacio en el disco del servidor o no se
-puede guardar nada, y si los cobros esperan a la hora del servidor.
-Después de iniciar sesión, las páginas de fichaje y de preguntas de asistencia también muestran todos
-los avisos, sin **Abrir cajón** ni **Comprobar la hora**: sal de esas páginas para usarlos. La línea dice qué ocurre y qué hacer. Nunca
-tapa tu trabajo y nunca tienes que cerrarla.
+Cuando el servidor necesita atención, tu caja o terminal de mano muestra un aviso bajo la barra
+superior. La pantalla del PIN también avisa de que queda poco espacio y de que los cobros
+esperan a que se confirme la hora del servidor. Después de iniciar sesión, puedes leer los avisos
+en las páginas de fichaje y asistencia. Vuelve a la caja para usar **Abrir cajón** o
+**Comprobar la hora**.
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
 
 ## Lee la línea de avisos {#notice-line}
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.
-Por ejemplo, **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado**. Una
-línea roja significa que algo no se puede guardar, una ámbar que algo necesita atención pero el trabajo se sigue guardando y una
-azul que es información.
+Una línea roja significa que algo no se puede guardar. Una ámbar indica que algo necesita
+atención y que puedes seguir guardando tu trabajo. Una azul es informativa.
 
 Cuando hay más de un aviso, la línea termina con un número como **+1**. Toca ese número para abrir
 la lista de los demás avisos, del más grave al menos grave. La lista aparece bajo la línea y
@@ -31,12 +27,12 @@ No hay botón para cerrar un aviso. Una pantalla de estación no muestra la lín
 alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si
 se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 
-**No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
-no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. Evita
-cerrar tu sesión mientras se libera espacio: volver a iniciar sesión también requiere espacio en
-disco. El encargado tiene que liberar espacio en el servidor, en la [página Estado del
-servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de reserva para
-arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres unos 24 MB.
+**Disco lleno. Waitron no puede funcionar.** cubre la caja o el terminal de mano, incluida la
+pantalla del PIN. Sigue **Avisa al encargado** para que libere espacio en la
+[página Estado del servidor](box-status.md#free-space). Si hay un cobro en curso, comprueba primero
+su resultado. Si el aviso indica qué hacer con un cobro, sigue primero esas instrucciones. Mantén
+abierta la sesión mientras se libera espacio. En las páginas de fichaje y
+asistencia, el aviso dice **No se puede guardar nada: el servidor no tiene espacio**.
 
 **No se pueden registrar ventas: la hora del servidor es incorrecta · Consulta Estado del servidor en el panel** es rojo.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
@@ -67,9 +63,8 @@ confirme su hora · Comprobar la hora** es rojo. Que los dispositivos coincidan 
 vuelve a activar los cobros: usa **Comprobar la hora** y cobra cuando desaparezca la línea. Si la línea sigue, un encargado o un administrador puede
 reiniciar el servidor en la [página Estado del servidor](box-status.md#restart).
 
-Mientras los cobros esperan, o mientras la hora del servidor es incorrecta o su disco está lleno,
-un botón que empieza un cobro abre **Los cobros están en pausa** en su lugar, que explica el
-motivo; el pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
+Mientras los cobros esperan por la hora del servidor, un botón que inicia un cobro abre
+**Los cobros están en pausa**. El pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
 y cobra cuando desaparezca la línea roja.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Consulta Estado del servidor en el panel**,

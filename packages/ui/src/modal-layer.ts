@@ -26,11 +26,16 @@ export function onModalChange(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-/** Whether an open modal window that `node` is not drawn inside makes it inert. */
-export function underModal(node: Node): boolean {
+export function topModal(): Element | undefined {
   let top: Element | undefined;
   let topOrder = -Infinity;
   for (const [modal, order] of openModals) if (order > topOrder) [top, topOrder] = [modal, order];
+  return top;
+}
+
+/** Whether an open modal window that `node` is not drawn inside makes it inert. */
+export function underModal(node: Node): boolean {
+  const top = topModal();
   if (top === undefined) return false;
   for (let at: Node | null = node; at; at = renderedParent(at)) if (at === top) return false;
   return true;

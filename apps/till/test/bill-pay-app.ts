@@ -24,6 +24,7 @@ import type {
   BillPaymentView,
   FloorZone,
   PartyBill,
+  StaffNotice,
   TabLine,
   TableParty,
   TableState,
@@ -34,6 +35,23 @@ import type {
 import { deviceZonesFixture } from "./device-zones.js";
 
 export { BAR_PRINTER, SECOND_READER, equipmentItem, roleOf } from "./pay-equipment-fixtures.js";
+
+export const diskFullNotice: StaffNotice = {
+  owner: "box",
+  key: "storage.disk_full",
+  code: "storage.disk_full",
+  severity: "error",
+  params: {},
+};
+
+export async function pollDiskNotice(el: TillApp): Promise<void> {
+  vi.advanceTimersByTime(15_000);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-notice-strip")?.notices).toContainEqual(
+      diskFullNotice,
+    ),
+  );
+}
 
 /** A fresh draft server for each test, holding the bills the payment suites open. */
 export function resetBillPayDrafts(): void {

@@ -4080,7 +4080,7 @@ async function bootServer(
     ),
   });
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
-  mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
+  mountDiskStopApi(app, { db, disk: diskFull }, log);
 
   mountBoxStatusApi(
     app,

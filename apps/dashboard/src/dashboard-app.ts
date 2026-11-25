@@ -51,6 +51,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
+import "@waitron/ui/src/components/wt-stop-screen.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
@@ -153,7 +154,6 @@ import type {
   MonthDownloadDto,
   TradingAdmissionView,
 } from "./api/client.js";
-import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
   clockTime,
   monthName,
@@ -1109,6 +1109,7 @@ export class DashboardApp extends LitElement {
     (error) => diag.record("warn", "alerts.load_failed", { code: codeOf(error) }),
   );
   @state() private diskStop: DiskStopResponse | null = null;
+  @state() private diskStopSignIn = false;
   readonly #diskStopQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -2188,13 +2189,13 @@ export class DashboardApp extends LitElement {
     return html`<wt-dialog
       data-test="permission-sign-in"
       .open=${true}
-      .heading=${t("permission_sign_in.heading")}
+      .heading=${t(this.diskStopSignIn ? "disk_stop.sign_in_as_manager" : "permission_sign_in.heading")}
       @wt-close=${(event: Event) => {
         if (event.target === event.currentTarget && generation === this.sessionGeneration)
           this.#permissionContinuation.stop();
       }}
     >
-      <p>${t("permission_sign_in.explanation")}</p>
+      ${this.diskStopSignIn ? nothing : html`<p>${t("permission_sign_in.explanation")}</p>`}
       <p>${t("permission_sign_in.stop_explanation")}</p>
       <dashboard-login-screen
         .api=${this.api}
@@ -2421,7 +2422,7 @@ export class DashboardApp extends LitElement {
   }
 
   #notices(slot?: string): TemplateResult {
-    return html`${this.#diskStopBar(slot)} ${this.#updateBar(slot)}
+    return html`${this.#diskStopScreen(slot)} ${this.#updateBar(slot)}
       ${
         this.saveRefusal === null
           ? nothing
@@ -2519,26 +2520,40 @@ export class DashboardApp extends LitElement {
         >`;
   }
 
-  #diskStopBar(slot?: string): TemplateResult | typeof nothing {
-    if (this.diskStop?.stopped !== true) return nothing;
-    const canFree = this.#sessionPermissions.includes("system.manage");
+  async #signInForDiskStop(): Promise<void> {
+    this.diskStopSignIn = true;
+    const result = await this.#permissionContinuation.signIn({
+      permission: "system.manage",
+      signal: new AbortController().signal,
+    });
+    this.diskStopSignIn = false;
+    if (result === "signed-in" && this.#canOpenScreen("box-status")) {
+      this.#selectScreen("box-status", () => void this.#focusMain());
+    }
+  }
+
+  #diskStopScreen(slot?: string): TemplateResult {
+    const open =
+      this.diskStop?.stopped === true &&
+      this.screen !== "box-status" &&
+      this.screen !== "check-card-payments" &&
+      !this.#permissionContinuation.open &&
+      !this.leave.asking;
     const canOpenBoxStatus = this.#canOpenScreen("box-status");
-    const actionLabel = !canOpenBoxStatus
-      ? t("disk_stop.sign_in_as_manager")
-      : this.screen === "box-status"
-        ? ""
-        : t("disk_stop.open_box_status");
-    return html`<wt-banner
-      data-test="disk-stop-bar"
+    return html`<wt-stop-screen
+      .open=${open}
+      data-test="disk-stop-screen"
       slot=${slot ?? nothing}
-      tone="error"
-      message=${diskStopMessage(canFree ? this.diskStop.deleted : null, canOpenBoxStatus)}
-      action-label=${actionLabel}
-      @wt-banner-action=${() =>
-        canOpenBoxStatus
-          ? this.#selectScreen("box-status", () => this.#focusMain())
-          : void this.#onLogout("box-status")}
-    ></wt-banner>`;
+      .heading=${t("disk_stop.heading")}
+      .description=${t("disk_stop.description")}
+      ><wt-button
+        @click=${() =>
+          canOpenBoxStatus
+            ? this.#selectScreen("box-status", () => void this.#focusMain())
+            : void this.#signInForDiskStop()}
+        >${t(canOpenBoxStatus ? "disk_stop.open_box_status" : "disk_stop.sign_in_as_manager")}</wt-button
+      ></wt-stop-screen
+    >`;
   }
 
   #updateBar(slot?: string): TemplateResult | typeof nothing {
@@ -2779,7 +2794,9 @@ export class DashboardApp extends LitElement {
   }
 
   /** For a control that its own navigation takes away, which would drop focus to the page. */
-  #focusMain(): void {
+  async #focusMain(): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector("wt-stop-screen")?.updateComplete;
     const main = this.renderRoot.querySelector<HTMLElement>(".main");
     if (main === null) return;
     main.tabIndex = -1;

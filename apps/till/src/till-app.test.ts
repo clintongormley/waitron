@@ -1,5 +1,6 @@
+import { deferred } from "../test/clock-app.js";
 import { liveReadFixture } from "../test/live-connection.js";
-import { balanceOf } from "../test/bill-pay-app.js";
+import { balanceOf, diskFullNotice, pollDiskNotice } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
@@ -17,7 +18,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { formatMoney, HOME_DISPLAY_DEFAULTS, UNDECLARED_DIET } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
@@ -279,6 +280,8 @@ const till = {
 };
 
 const phoneFormFactor: FormFactor = "phone-portrait";
+
+const diskStopEquipment = { roles: [], notices: [diskFullNotice] };
 
 const stationScreen: ResolvedKitchenScreen = {
   kind: "station",
@@ -12036,6 +12039,52 @@ describe("till-app", () => {
       expect(text).not.toContain(codeMessage("storage.disk_full"));
     });
 
+    const charged = { code: "sale.charged_not_recorded", workingOrderId: "wo-1", status: 507 };
+    const recoveryUrl = "/recovery/fiscal-conflict";
+    it.each([
+      ["sale.disk_full", "cash", diskFull],
+      ["sale.disk_full_manual_card", "manual", diskFull],
+      ["sale.unconfirmed", "cash", new TypeError("Failed to fetch")],
+      ["sale.charged_disk_full", "reader", { ...charged, reason: "disk_full" }],
+      ["recovery.charged", "reader", { ...charged, recoveryUrl }],
+    ] as const)(
+      "keeps %s advice for %s visible during the disk stop",
+      async (advice, method, refusal) => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        onTestFinished(() => void vi.useRealTimers());
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const { promise, reject } = deferred<never>();
+        const sentDuringStop = advice === "sale.charged_disk_full";
+        const send = vi
+          .fn()
+          .mockImplementation(() => (sentDuringStop ? promise : Promise.reject(refusal)));
+        const { el } = await mountApp({ recordSale: send, pay: send, getDeviceEquipment });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "2");
+        await el.updateComplete;
+        const detail =
+          method === "cash"
+            ? { method, amount: "5" }
+            : { method: "card", amount: "5", externalRef: "OP-4417" };
+        if (method === "reader") emit(c, "collect-card", {});
+        else emit(c, "confirm-payment", detail);
+        await flush(el);
+        expect(send).toHaveBeenCalledOnce();
+        getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+        await pollDiskNotice(el);
+        if (sentDuringStop) reject(refusal);
+        await vi.waitFor(() => {
+          const warning = el.shadowRoot!.querySelector("wt-stop-screen");
+          expect(warning?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
+          expect(warning?.textContent).toContain(t(advice));
+          if (advice === "recovery.charged")
+            expect(warning?.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+              recoveryUrl,
+            );
+        });
+      },
+    );
+
     it("a reader card pay refused for a full disk says not to take payment", async () => {
       const text = await payReader(diskFull);
       expect(text).toContain(t("sale.disk_full"));
@@ -13155,6 +13204,45 @@ describe("till-app", () => {
       expect(ticket(el)).toBeNull();
       expect(pay).toHaveBeenCalledOnce();
     });
+
+    it.each(["floor", "lock"] as const)(
+      "shows the disk warning on %s after leaving a declined card on the Counter",
+      async (destination) => {
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        onTestFinished(() => void vi.useRealTimers());
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "stripe_terminal",
+            capabilities: ["print-receipt", "integrated-card-payment", "take-orders"],
+          }),
+          getDeviceEquipment,
+          pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "2");
+        await el.updateComplete;
+        emit(c, "collect-card", {});
+        await vi.waitFor(() =>
+          expect(tenderPay(el).shadowRoot!.querySelector(".switch-tender")).toBeTruthy(),
+        );
+
+        getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+        await pollDiskNotice(el);
+        const warning = () => el.shadowRoot!.querySelector("wt-stop-screen");
+        expect(warning()).toBeNull();
+
+        if (destination === "floor") selectTab(el, "floor");
+        else emit(c, "logout");
+        await flush(el);
+        expect(destination === "floor" ? floor(el) : lock(el)).toBeTruthy();
+        if (destination === "lock") vi.advanceTimersByTime(15_000);
+        await vi.waitFor(() =>
+          expect(warning()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy(),
+        );
+      },
+    );
 
     it("threads a declined cardOutcome through to the widget, driving its card_outcome view", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
@@ -14918,11 +15006,15 @@ describe("till-app", () => {
     });
 
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      onTestFinished(() => void vi.useRealTimers());
       const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {}));
+      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         collectOrder,
+        getDeviceEquipment,
       });
       const c = await toCounter(el);
       c.store.addProduct(coffee, "2");
@@ -14937,6 +15029,9 @@ describe("till-app", () => {
       await el.updateComplete;
 
       expect(collectOrder).toHaveBeenCalledOnce();
+      getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+      await pollDiskNotice(el);
+      expect(el.shadowRoot!.querySelector("wt-stop-screen")).toBeNull();
     });
 
     it("new-sale resets the collect stage back to order for the next basket", async () => {

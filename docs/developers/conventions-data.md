@@ -3225,7 +3225,7 @@ show no privacy link, and the sign-in page offers no working Google sign-in. Thi
 page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
 decision 3).
 
-Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
+Since A1127 slice 3, the full-disk warning's read (`GET /management-api/disk-stop`,
 `apps/server/src/disk-stop-api.ts`) resolves the session with `touch: false` and reads in one
 `withWriteLock` turn with no drain. The case is "the disk-stop read answers on a full disk with a
 change waiting, for a cashier and a manager" in `apps/server/src/start-full-disk.e2e.test.ts`.

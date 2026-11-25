@@ -493,6 +493,21 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
     );
   });
 
+  it("covers a signed-in till with the disk warning until space is freed", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([DISK]));
+    const { el } = await mountEquipmentApp({ getDeviceEquipment });
+    await signIn(el);
+    const modal = () =>
+      el.shadowRoot!.querySelector("wt-stop-screen")?.shadowRoot?.querySelector("dialog:modal");
+    await vi.waitFor(() => expect(modal()).toBeTruthy());
+    expect(modal()!.querySelector("h2")?.textContent).toBe("Disk full");
+    expect(modal()!.querySelector(".description")?.textContent).toBe("Waitron cannot operate.");
+    getDeviceEquipment.mockResolvedValue(withNotices([]));
+    await poll(el);
+    expect(modal()).toBeUndefined();
+    expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull();
+  });
+
   it("shows a till's red notice under its top bar", async () => {
     const { el } = await mountEquipmentApp({
       getDeviceIdentity: vi.fn().mockResolvedValue(TILL_IDENTITY),
@@ -735,6 +750,11 @@ describe("a till or handheld at the PIN screen", () => {
             ?.textContent?.replace(/\s+/g, " ")
             .trim();
         const words = locale === "es-ES" ? es : en;
+        const stop = () => el.shadowRoot!.querySelector("wt-stop-screen");
+        expect(stop()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
+        expect(stop()?.heading).toBe(words["disk_stop.heading"]);
+        expect(stop()?.description).toBe(words["disk_stop.description"]);
+        expect(stop()?.textContent?.trim()).toBe(words["staff_notice.tell_manager"]);
         expect(storageLine()).toBe(
           `${words["staff_notice.storage.disk_full"]} · ${words["staff_notice.tell_manager"]}`,
         );
@@ -748,6 +768,7 @@ describe("a till or handheld at the PIN screen", () => {
         getDeviceEquipment.mockResolvedValue(withNotices([UNCONFIRMED]));
         await poll(el);
         expect(storageLine()).toBeUndefined();
+        expect(stop()).toBeNull();
         expect(clockLine(el)).not.toBeNull();
         expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
       } finally {

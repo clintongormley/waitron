@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { incidents, withTransaction, type Database, withFoldedPersonChanges } from "@waitron/db";
+import { withTransaction, type Database, withFoldedPersonChanges } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncidentOnce } from "@waitron/core";
 import {
@@ -16,9 +16,7 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, backupOrigin } from "@waitron/shared";
-import { claimFor, createAlertRegistry, type AlertRegistry } from "./alerts.js";
 import { mountDiskStopApi } from "./disk-stop-api.js";
-import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -27,7 +25,6 @@ const NOW = new Date("2026-10-25T09:00:00.000Z");
 const HOUR = 3_600_000;
 const PATH = "/management-api/disk-stop";
 const DELETED = { count: 3, date: "2026-10-21", lastDate: "2026-10-24", severalDays: true };
-const REGISTRY = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] });
 
 interface Person {
   id: string;
@@ -57,13 +54,9 @@ beforeEach(async () => {
   stoppedSince = null;
 });
 
-function appFor(db: Database = suite.db, registry: AlertRegistry = REGISTRY): Hono {
+function appFor(db: Database = suite.db): Hono {
   const app = new Hono();
-  mountDiskStopApi(
-    app,
-    { db, disk: { since: () => stoppedSince }, registry, now: () => NOW },
-    () => {},
-  );
+  mountDiskStopApi(app, { db, disk: { since: () => stoppedSince } }, () => {});
   return app;
 }
 
@@ -73,7 +66,7 @@ const read = (cookie?: string, app = appFor()) =>
 async function bodyOf(person: Person, app = appFor()) {
   const response = await read(person.cookie, app);
   expect(response.status).toBe(200);
-  return (await response.json()) as { stopped: boolean; deleted: unknown };
+  return (await response.json()) as { stopped: boolean };
 }
 
 async function expectRefused(response: Response, status: number, code: string) {
@@ -81,24 +74,14 @@ async function expectRefused(response: Response, status: number, code: string) {
   expect(((await response.json()) as { error: { code: string } }).error.code).toBe(code);
 }
 
-async function recordDeletion(
-  detectedAt: Date,
-  params: Record<string, unknown> = DELETED,
-  code = "backup.archives_deleted",
-): Promise<void> {
+async function recordDeletion(detectedAt: Date): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     recordIncidentOnce(tx, {
       origin: backupOrigin(),
-      error: new AppError(code as never, params as never),
+      error: new AppError("backup.archives_deleted", DELETED),
       severity: "warning",
       detectedAt,
     }),
-  );
-}
-
-async function handleAll(): Promise<void> {
-  await withTransaction(suite.db, (tx) =>
-    tx.update(incidents).set({ acknowledgedAt: NOW.toISOString() }),
   );
 }
 
@@ -142,7 +125,7 @@ function writeRefusingDb(): Database {
 
 describe("GET /management-api/disk-stop", () => {
   it("answers no stop to a staff session when none is noted", async () => {
-    expect(await bodyOf(staff)).toEqual({ stopped: false, deleted: null });
+    expect(await bodyOf(staff)).toEqual({ stopped: false });
   });
 
   it("refuses a request with no session", async () => {
@@ -167,80 +150,14 @@ describe("GET /management-api/disk-stop", () => {
   it("tells every role the stop holds", async () => {
     stoppedSince = new Date(NOW.getTime() - HOUR);
     for (const person of [staff, supervisor, manager, admin]) {
-      expect(await bodyOf(person)).toEqual({ stopped: true, deleted: null });
+      expect(await bodyOf(person)).toEqual({ stopped: true });
     }
   });
 
-  it("names a recent deletion to managers and admins only", async () => {
+  it("answers with just the stop even after a recent backup deletion", async () => {
     stoppedSince = NOW;
     await recordDeletion(new Date(NOW.getTime() - HOUR));
-    for (const person of [manager, admin]) {
-      expect(await bodyOf(person)).toEqual({ stopped: true, deleted: DELETED });
-    }
-    for (const person of [staff, supervisor]) {
-      expect(await bodyOf(person)).toEqual({ stopped: true, deleted: null });
-    }
-  });
-
-  it("takes the permission from the deletion alert's claim", async () => {
-    const backupPrefix = claimFor(REGISTRY, "backup.archives_deleted").prefix;
-    const adminOnly = createAlertRegistry({
-      claims: ALL_ALERT_CLAIMS.map((claim) =>
-        claim.prefix === backupPrefix ? { ...claim, permission: "node.manage" } : claim,
-      ),
-      sources: [],
-    });
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - HOUR));
-    const app = appFor(suite.db, adminOnly);
-    expect(await bodyOf(manager, app)).toEqual({ stopped: true, deleted: null });
-    expect(await bodyOf(admin, app)).toEqual({ stopped: true, deleted: DELETED });
-  });
-
-  it("leaves out a handled deletion", async () => {
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - HOUR));
-    await handleAll();
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: null });
-  });
-
-  it("names the open deletion, not an older handled one", async () => {
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - 2 * HOUR), {
-      count: 1,
-      date: "2026-10-20",
-      lastDate: "2026-10-20",
-      severalDays: false,
-    });
-    await handleAll();
-    await recordDeletion(new Date(NOW.getTime() - HOUR));
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: DELETED });
-  });
-
-  it("reads no other backup alert", async () => {
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - HOUR), {}, "backup.run_stopped");
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: null });
-  });
-
-  it("names only a deletion detected within the last day", async () => {
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - 25 * HOUR));
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: null });
-    await handleAll();
-    await recordDeletion(new Date(NOW.getTime() - 23 * HOUR));
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: DELETED });
-  });
-
-  it("names a deletion detected exactly a day before the read", async () => {
-    stoppedSince = NOW;
-    await recordDeletion(new Date(NOW.getTime() - 24 * HOUR));
-    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: DELETED });
-  });
-
-  it("names no deletion while no stop is noted", async () => {
-    await recordDeletion(new Date(NOW.getTime() - HOUR));
-    expect(await bodyOf(manager)).toEqual({ stopped: false, deleted: null });
+    expect(await bodyOf(manager)).toEqual({ stopped: true });
   });
 
   it("leaves the session's last-seen time alone", async () => {
@@ -258,7 +175,6 @@ describe("GET /management-api/disk-stop", () => {
     );
     expect(await bodyOf(manager, appFor(writeRefusingDb()))).toEqual({
       stopped: true,
-      deleted: DELETED,
     });
     expect(suite.db.all<{ id: string }>(sql`select id from change_log where id = 'ds1'`)).toEqual([
       { id: "ds1" },

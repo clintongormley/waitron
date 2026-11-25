@@ -58,7 +58,6 @@
   "src/i18n/codes.fiscal-retry.test.ts": 0.5,
   "src/i18n/codes.test.ts": 0.5,
   "src/i18n/delete-dialog-wording.test.ts": 0.6,
-  "src/i18n/disk-stop-words.test.ts": 0.4,
   "src/i18n/domain.test.ts": 0.5,
   "src/i18n/equipment.test.ts": 0.4,
   "src/i18n/fingerprint-refusal.test.ts": 2.6,

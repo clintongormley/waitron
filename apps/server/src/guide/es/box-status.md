@@ -239,16 +239,13 @@ base de datos, la clave del servidor, la clave de cifrado de copias y las copias
 
 ## Cuando el servidor no tiene espacio {#out-of-space}
 
-Cuando el disco está lleno, no se puede guardar nada: los terminales no pueden guardar pedidos,
-pagos ni otros cambios, y muestran **No se puede guardar nada: el servidor no tiene espacio**. En
-esta página, **Ventas** y **Espacio en disco** se ponen en rojo.
+Cuando el disco está lleno, las cajas y los terminales de mano muestran **Disco lleno.
+Waitron no puede funcionar.** En Estado del servidor, **Ventas** y **Espacio en disco** se ponen
+en rojo.
 
-Mientras el disco está lleno, una barra roja arriba de cada página del panel empieza por **Disco
-lleno: las cajas no pueden guardar nada (ventas, pedidos, fichajes).** A los encargados y
-administradores también les nombra las copias de seguridad del aviso de la campana sobre copias
-borradas, mientras ese aviso tenga menos de un día y no se haya marcado como resuelto. Ellos pulsan **Abrir Estado del servidor** en ella; cualquier otra persona pulsa **Iniciar
-sesión como encargado**, que antes cierra su sesión. La barra desaparece en medio minuto, más o
-menos, después de que los terminales vuelvan a guardar.
+Si ves la ventana roja en el panel, pulsa **Abrir Estado del servidor**. Si ves **Iniciar sesión
+como encargado**, úsalo para abrir el inicio de sesión del encargado. Si la caja te da un enlace a
+**Comprobar pagos con tarjeta**, puedes seguirlo durante la parada.
 
 Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, los terminales vuelven a
 poder guardar por sí solos; no hace falta reiniciar nada.
