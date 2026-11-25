@@ -187,8 +187,9 @@ async function refuseUnservedDishes(
 }
 
 /**
- * Stops the unserved dishes that never fired, as a cancel of a sent dish does; abandoning the bill
- * voids every fired quantity still unserved. Answers the dishes the kitchen had started.
+ * Stops the kitchen work of the unserved dishes that never fired, dish or extra, as a cancel of a
+ * sent dish does; abandoning the bill voids every fired quantity still unserved, so each item is
+ * corrected once. Answers the dishes the kitchen had started.
  */
 async function stopHeldDishes(
   tx: Transaction,
@@ -200,17 +201,18 @@ async function stopHeldDishes(
     tx,
     unserved.map(({ lineId }) => lineId),
   );
-  const items = (lineId: string) => work.get(lineId) ?? [];
-  const held = unserved.filter(({ lineId }) =>
-    items(lineId).every((item) => item.firedAt === null),
+  const unfired = new Map(
+    [...work].map(([lineId, items]) => [lineId, items.filter((item) => item.firedAt === null)]),
   );
+  const held = unserved.filter(({ lineId }) => (unfired.get(lineId)?.length ?? 0) > 0);
   if (held.length > 0) {
     const rows = await tx
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, billId));
+    const rowById = new Map(rows.map((row) => [row.id, row]));
     const taken = held.map(({ lineId, quantity }) => ({
-      dish: rows.find((row) => row.id === lineId)!,
+      dish: rowById.get(lineId)!,
       off: stringToThousandths(quantity),
     }));
     const priors = await tx
@@ -231,19 +233,20 @@ async function stopHeldDishes(
           taken.flatMap(({ dish }) => dish.groupId ?? []),
         ),
       );
+    const groupById = new Map(groups.map((group) => [group.id, group]));
     await enqueueServiceCancellation(
       tx,
       cfg,
       billId,
       serviceCancellationFamilies(rows, taken, priors),
-      work,
+      unfired,
       undefined,
-      { groupOf: (dish) => groups.find((group) => group.id === dish.groupId) },
+      { groupOf: (dish) => (dish.groupId === null ? undefined : groupById.get(dish.groupId)) },
     );
   }
   return new Set(
     unserved.flatMap(({ lineId }) =>
-      items(lineId).some((item) => isStarted(item.state)) ? [lineId] : [],
+      (work.get(lineId) ?? []).some((item) => isStarted(item.state)) ? [lineId] : [],
     ),
   );
 }

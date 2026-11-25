@@ -10,6 +10,7 @@ import {
   billPayments,
   insertNodeSeriesTx,
   invoiceSeries,
+  kitchenStations,
   lineServiceCancellations,
   printJobs,
   sales,
@@ -24,14 +25,27 @@ import {
   resolveVenueClock,
 } from "@waitron/reporting";
 import { filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
-import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
+import {
+  clearRoutingCell,
+  readPartyAllergy,
+  setAllergyLineTicks,
+  setRoutingCell,
+  writePartyAllergy,
+} from "@waitron/venue-service";
+import { createPrinter } from "@waitron/printing";
 import { readBillEditState } from "./bill-editing.js";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
+import { createStation } from "./kitchen.js";
+import { fireGroup } from "./order-group-release.js";
+import { attachPrinterToStation } from "./station-printers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 import { servedOrCharged } from "./served-dishes.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
 import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
 import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
 import {
   inTx,
@@ -1281,6 +1295,84 @@ describe("Reopen bill stopping the dishes that never came", () => {
     const reprinted = await printBill(party, newBill);
     expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
     expect(reprinted.json.total).toBe("28.00");
+  });
+
+  it("cancels a held extra at a station waiting for the pass, and voids its fired dish, once each", async () => {
+    const fryer = await inTx(venue, async (tx) => {
+      const stationId = (await createStation(tx, { name: `Fryer ${randomUUID()}` })).id;
+      const printer = await createPrinter(tx, {
+        name: `Fryer ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
+      await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+      const cell = { row: { kind: "product" as const, productId: croquettesId }, zoneId: null };
+      await setRoutingCell(tx, cell, { kind: "station", stationId });
+      await setStationPrinting(tx, { printHeldWork: true }, [stationId]);
+      return { stationId, printerId: printer.id, cell };
+    });
+    const slips = async () =>
+      (
+        await inTx(venue, (tx) =>
+          tx
+            .select({ payload: printJobs.payload })
+            .from(printJobs)
+            .where(eq(printJobs.printerId, fryer.printerId))
+            .orderBy(sql`rowid`),
+        )
+      ).map((job) => printedLines(job.payload)[0]);
+    try {
+      const party = await seatWith(
+        "hold",
+        {
+          name: "Steak",
+          extras: [{ listId: extraListId, picks: [{ productId: croquettesId, quantity: 1 }] }],
+        },
+        "Small beer",
+      );
+      const words = kitchenTicketWords("es");
+      expect(await slips()).toEqual([`*** ${words.hold} ***`]);
+      const [steak] = await dishesOf(party.tabId);
+      await inTx(venue, async (tx) => {
+        await setStationsWaitForPass(tx, true, [fryer.stationId]);
+        await fireGroup(tx, venue.cfg, party.partyId, steak!.groupId!, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revisionOf(party.partyId),
+          operatorId: venue.operatorId,
+        });
+      });
+      const kitchen = venue.db.all<{ name: string; fired: number; requested: number }>(sql`
+        select l.name, t.fired_at is not null as fired, t.requested_at is not null as requested
+        from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+        where l.working_order_id = ${party.tabId} order by l.line_no`);
+      expect(kitchen).toEqual([
+        { name: "Steak", fired: 1, requested: 1 },
+        { name: "Croquettes", fired: 0, requested: 1 },
+        { name: "Small beer", fired: 1, requested: 1 },
+      ]);
+      await serveSome(party, "Small beer", "1");
+      expect((await printBill(party, party.tabId, true)).status).toBe(200);
+      const before = kitchenNotices(party.tabId).length;
+
+      const answer = await stop(party.tabId);
+
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(kitchenNotices(party.tabId).slice(before)).toEqual([
+        { kind: "void", lineName: "CROQ", quantity: 1000 },
+        { kind: "void", lineName: "CHULETA", quantity: 1000 },
+      ]);
+      expect(await slips()).toEqual([`*** ${words.hold} ***`, `*** ${words.holdCancelled} ***`]);
+      const copies = await dishesOf(answer.json.billId as string);
+      expect(copies.map((line) => line.name)).toEqual(["Small beer"]);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await clearRoutingCell(tx, fryer.cell);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, fryer.stationId));
+      });
+    }
   });
 
   it("does not stop the dishes on a bill already part-paid, writing nothing", async () => {
