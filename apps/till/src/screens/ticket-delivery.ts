@@ -63,11 +63,9 @@ export function shouldRereadDelivery(
   stale: boolean,
 ): boolean {
   const status = delivery?.current?.status;
+  if (status === "queued" || status === "sending") return true;
   return (
-    status === "queued" ||
-    status === "sending" ||
-    (billFullInvoice &&
-      (status === "unknown" || stale || (!live && delivery?.originalCompleted !== true)))
+    billFullInvoice && (status === "unknown" || stale || (!live && !delivery?.originalCompleted))
   );
 }
 
