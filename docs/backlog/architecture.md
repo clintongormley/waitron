@@ -912,8 +912,8 @@ connection-scoped pragmas that run on a request path, both `pragma defer_foreign
 each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
 to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
 provisioning transaction's body, and `writeAndRemoveDecoyAction`
-(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
-(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
+(`packages/identity/src/account-action.ts`) inside the password-reset route's `withTransaction` body
+(`apps/server/src/management-account-routes.ts`); the others are test setup issued outside any body, where the
 reader would serve them if a body happened to be running, and none of those suites runs one.
 **Next action:** none needed while that holds; a temporary table, an attachment or a connection
 pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for

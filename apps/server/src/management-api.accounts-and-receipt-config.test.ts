@@ -53,11 +53,8 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import type { MailTransport } from "./mail-sender.js";
 import type { TradingContext } from "./trading-context.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
-import {
-  mountManagementApi,
-  type ManagementApiDeps,
-  type MountedManagementApi,
-} from "./management-api.js";
+import { mountManagementApi, type MountedManagementApi } from "./management-api.js";
+import type { ManagementApiDeps } from "./management-api-deps.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 type MailSink = (message: AccountEmail) => Promise<"sent" | "captured">;
