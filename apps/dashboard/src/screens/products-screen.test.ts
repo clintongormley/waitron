@@ -4635,7 +4635,7 @@ it("tells the product list and editor whether the region charges a takeaway clas
   expect([productList.takeawayVat, editor(el).takeawayVat]).toEqual([true, true]);
 });
 
-it("adds a coloured category from product search without reading courses or saving the product", async () => {
+it("retries creating a coloured category from product search without reading courses or saving the product", async () => {
   const saved: CategorySummary = {
     id: "hot",
     name: "Hot dishes",
@@ -4661,11 +4661,8 @@ it("adds a coloured category from product search without reading courses or savi
   const category = product.shadowRoot!.querySelector<HTMLElement>('[name="primary"]')!;
   category.focus();
   await userEvent.keyboard("Hot dishes{Enter}");
-  const form = el.shadowRoot!.querySelector("dashboard-category-create-form");
-  expect(form).not.toBeNull();
-  const modal = form!.shadowRoot!.querySelector("wt-modal")!;
-  expect(modal.heading).toBe(t("folders.add_category"));
-  const root = form!.shadowRoot!;
+  const root = el.shadowRoot!.querySelector("dashboard-category-create-form")!.shadowRoot!;
+  expect(root.querySelector("wt-modal")!.heading).toBe(t("folders.add_category"));
   const categoryName = root.querySelector("wt-input")!;
   const inside = root.querySelector("wt-combobox")!;
   expect(categoryName.value).toBe("Hot dishes");
@@ -4677,29 +4674,28 @@ it("adds a coloured category from product search without reading courses or savi
   const add = root.querySelector<HTMLElement>('[data-test="add"]')!;
   await userEvent.click(add);
   await expect.poll(() => inside.error).toBe(codeMessage("category.not_found"));
+  expect(categoryName.error).toBe("");
   await userEvent.click(add);
   await expect.poll(() => categoryName.error).toBe(codeMessage("category.name_taken"));
+  expect(inside.error).toBe("");
   await userEvent.click(add);
   await expect.poll(() => product.currentValue.primaryCategoryId).toBe(saved.id);
-  expect(api.createCategory).toHaveBeenLastCalledWith({
-    name: "Hot dishes",
-    parentId: "c1",
-    color: "#a53024",
-  });
+  const request = { name: "Hot dishes", parentId: "c1", color: "#a53024" };
+  expect(vi.mocked(api.createCategory).mock.calls).toEqual([[request], [request], [request]]);
   expect(category.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
     "Appetizers › Hot dishes",
   );
   expect(product.currentValue.name).toBe("Fried croquettes");
   await flush(el);
   expect(api.listCourses).toHaveBeenCalledTimes(courses);
-  vi.mocked(api.listCategories).mockResolvedValue([...categories, saved]);
+  const refreshed = { ...saved, name: "Grilled dishes" };
+  vi.mocked(api.listCategories).mockResolvedValue([...categories, refreshed]);
   liveData.invalidate([{ type: "categories", id: saved.id }]);
-  await expect.poll(() => list(el).categories).toContainEqual(saved);
-  expect(product.categories.filter(({ id }) => id === saved.id)).toHaveLength(1);
+  await expect.poll(() => product.categories).toEqual([...categories, refreshed]);
   await userEvent.click(
     product.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!,
   );
   await expect.poll(() => product.open).toBe(false);
-  expect(list(el).categories).toContainEqual(saved);
+  expect(list(el).categories).toContainEqual(refreshed);
   expect(api.updateProductEditor).not.toHaveBeenCalled();
 });
