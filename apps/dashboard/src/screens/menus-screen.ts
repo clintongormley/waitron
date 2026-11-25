@@ -667,15 +667,8 @@ export class MenusScreen extends LitElement {
     scheduleChanged: (available) => {
       this.scheduleAvailable = available;
     },
-    focusFallback: (fromSchedule) => {
-      if (this.view !== "preview") return null;
-      if (fromSchedule) return this.renderRoot.querySelector<HTMLElement>(".heading h1");
-      return (
-        this.renderRoot.querySelector<HTMLElement>(
-          'wt-button[data-test="publish"]:not([disabled])',
-        ) ?? this.renderRoot.querySelector<HTMLElement>(".heading h1")
-      );
-    },
+    focusFallback: () =>
+      this.view === "preview" ? this.renderRoot.querySelector<HTMLElement>(".heading h1") : null,
   };
 
   /** Null while closed; `id` is null while creating. */

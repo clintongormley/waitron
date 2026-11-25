@@ -9466,7 +9466,7 @@ describe("publishing", () => {
         local: { date: "2030-01-01", time: "12:00", offset: "+01:00", repeated: false },
       };
       const queue = { timeZone: "Europe/Madrid", live: null, editions: [edition] };
-      const preview = lunchPreview();
+      const preview = { ...lunchPreview(), warnings: [] };
       const client = api({
         getMenuPreview: vi.fn().mockResolvedValue({
           ...preview,
@@ -9499,9 +9499,9 @@ describe("publishing", () => {
       )!;
       await userEvent.click(confirm);
       await vi.waitFor(() => expect(cancel()).toBeUndefined());
-      await vi.waitFor(() =>
-        expect(el.shadowRoot!.activeElement).toBe(changed ? inPanel(el, "publish") : q(el, "h1")),
-      );
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
+      await userEvent.keyboard("{Enter}");
+      expect(client.publishMenu).not.toHaveBeenCalled();
     },
   );
 

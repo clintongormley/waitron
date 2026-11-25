@@ -25,7 +25,7 @@ draft, Save and review (2d), replacement table and removal of Price overrides.
    check, warning dialog and preview identity check. `widgets/menu-publications.ts` reports its own
    scheduling eligibility and exposes the current schedule form with the heading button as opener.
    Keep the notes, schedule table and result bodies where they are. When the opener and schedule
-   heading are gone, focus Publish now or the editor's `h1`. Start red for that fallback and for
+   heading are gone, focus the editor's `h1`. Start red for that fallback and for
    actions shown in the heading, absent when up to date, and disabled on a clash. Keep eligibility
    cases in the owning widgets, including failed reads and matching the queued version. Adapt
    dialog, preview hash and focus assertions in `menu-preview*.test.ts`,

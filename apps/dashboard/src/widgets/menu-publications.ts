@@ -440,11 +440,10 @@ export class MenuPublicationsPanel extends LitElement {
     await this.#refreshAfterWrite();
   }
 
-  #returnFocus(opener: HTMLElement | null = null, fromSchedule = false): void {
+  #returnFocus(opener: HTMLElement | null = null): void {
     (opener?.isConnected
       ? opener
-      : (this.renderRoot.querySelector<HTMLElement>("h2") ??
-        this.heading?.focusFallback(fromSchedule))
+      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? this.heading?.focusFallback())
     )?.focus();
   }
 
@@ -524,10 +523,9 @@ export class MenuPublicationsPanel extends LitElement {
     this.scheduleBusy = false;
     this.#disposeDraft();
     this.scheduling = false;
-    const fromSchedule = this.moving === null;
-    const opener = fromSchedule ? this.#scheduleOpener : this.#focusTarget;
+    const opener = this.moving === null ? this.#scheduleOpener : this.#focusTarget;
     this.#scheduleOpener = null;
-    requestAnimationFrame(() => this.#returnFocus(opener, fromSchedule));
+    requestAnimationFrame(() => this.#returnFocus(opener));
   }
 
   #scheduleDialog(): HTMLElementTagNameMap["wt-dialog"] {

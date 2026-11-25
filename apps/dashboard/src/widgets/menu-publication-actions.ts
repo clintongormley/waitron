@@ -4,7 +4,7 @@ import { fill, t } from "../i18n/t.js";
 
 export interface MenuPublicationHeading {
   scheduleChanged: (available: boolean) => void;
-  focusFallback: (fromSchedule: boolean) => HTMLElement | null;
+  focusFallback: () => HTMLElement | null;
 }
 
 export function scheduleAction(open: (event: Event) => void) {
