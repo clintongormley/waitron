@@ -52,6 +52,7 @@ import {
   productRoutingFeedback,
   productAvailabilityFeedback,
   productAvailabilityFeedbackStyles,
+  productBatchAvailabilityNotice,
 } from "./product-list-action-feedback.js";
 import { ProductAvailabilityActions } from "./product-availability-actions.js";
 import type { ProductAvailabilityChange } from "./product-tree-availability.js";
@@ -298,6 +299,17 @@ export class ProductBrowser extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
+    const notice = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-toast"]>(
+      '[data-test="batch-availability-refusal"]',
+    );
+    if (
+      notice?.isConnected &&
+      notice.showPopover &&
+      notice.open !== notice.matches(":popover-open")
+    ) {
+      if (notice.open) notice.showPopover();
+      else notice.hidePopover();
+    }
     if (this.tableHidden) return;
     if (["selected", "search", "products", "categories"].some((key) => changed.has(key)))
       void this.#refreshHiddenSelected();
@@ -958,6 +970,7 @@ export class ProductBrowser extends LitElement {
       : fill("folders.color_heading", { name });
   }
   #resetSelection(): void {
+    this.#availability.dismissBatchRefusal();
     this.selected = [];
     this.hiddenSelected = 0;
     this.#selectionVersion++;
@@ -971,6 +984,13 @@ export class ProductBrowser extends LitElement {
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
+  readonly #dismissBatchRefusal = (event: Event): void => {
+    event.stopPropagation();
+    if ((event.currentTarget as HTMLElement).matches(":focus-within"))
+      this.renderRoot.querySelector<HTMLElement>('[data-test="cancel-selection"]')?.focus();
+    this.#availability.dismissBatchRefusal();
+  };
+
   readonly #changeAvailability = (event: CustomEvent<ProductAvailabilityChange>): void => {
     event.stopPropagation();
     void this.#availability.changeOne(event.detail);
@@ -1007,7 +1027,18 @@ export class ProductBrowser extends LitElement {
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     const emptyTree = !this.tableHidden && this.view === "tree" && this.#emptyProducts;
     const availability = this.#availabilitySelection;
-    return html`${productAvailabilityFeedback(this.#availability.refusal, this.selecting)}<dashboard-product-list
+    const refusal = this.#availability.refusal;
+    const batchRefusal =
+      !this.tableHidden &&
+      this.selecting &&
+      this.#availabilitySelectionVersion === this.#selectionVersion &&
+      refusal?.batch
+        ? refusal
+        : null;
+    return html`${productAvailabilityFeedback(refusal?.batch ? null : refusal)}${productBatchAvailabilityNotice(
+        batchRefusal,
+        this.#dismissBatchRefusal,
+      )}<dashboard-product-list
         .view=${this.view}
         .availabilityPending=${this.#availability.pending}
         @change-availability=${this.#changeAvailability}

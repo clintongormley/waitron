@@ -64,6 +64,12 @@ export const productsToolbarStyles = css`
   .actions-phone > wt-button::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
   }
+  /* Loading replaces this padding with the spinner and the button gap. */
+  .actions wt-button[data-test^="mark-"]:not([loading]) {
+    --wt-button-padding-inline: calc(
+      var(--wt-space-4) + (var(--wt-font-size-sm) + var(--wt-space-2)) / 2
+    );
+  }
   .selection-count > span,
   .selection-count::after {
     grid-area: 1 / 1;
@@ -172,6 +178,7 @@ export function productSelectionBar(options: {
   done: () => void;
 }) {
   if (!options.selecting && !options.busy) return nothing;
+  const spinner = options.showSpinner && options.busy ? html`<wt-spinner></wt-spinner>` : nothing;
   const selected = countOf("folders.selected", options.count);
   const count = html`<span
     class="selection-count"
@@ -202,10 +209,10 @@ export function productSelectionBar(options: {
     role="group"
     aria-label=${t("folders.select")}
   >
-    ${options.showSpinner && options.busy ? html`<wt-spinner></wt-spinner>` : nothing}
+    ${options.selecting && options.phone ? nothing : spinner}
     ${
       options.selecting
-        ? html`${options.phone ? html`<div class="selection-heading">${count}${done}</div>` : count}
+        ? html`${options.phone ? html`<div class="selection-heading">${count}${spinner}${done}</div>` : count}
             <wt-button
               data-test="move"
               variant="secondary"

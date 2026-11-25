@@ -807,8 +807,11 @@ describe("menu-screen", () => {
     expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p29", false);
     refusal.resolve();
     const message = () => list(el).shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
-    await vi.waitFor(() => expect(message()?.textContent).toContain("Dish 39"));
-    expect(message()!.textContent).toContain(codeMessage("authorization.not_permitted"));
+    await vi.waitFor(() =>
+      expect(message()?.textContent?.trim()).toBe(
+        `Could not change availability for Dish 39. ${codeMessage("authorization.not_permitted")}`,
+      ),
+    );
     setLocale("es");
     await vi.waitFor(() =>
       expect(message()?.textContent).toContain(codeMessage("authorization.not_permitted")),

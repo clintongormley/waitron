@@ -2131,6 +2131,10 @@ export async function selectKeys(el: ProductBrowser, keys: string[]) {
 }
 const bulkButton = (el: ProductBrowser, action: "available" | "unavailable") =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="mark-${action}"]`);
+const batchRefusal = (el: ProductBrowser) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-toast"]>(
+    '[data-test="batch-availability-refusal"]',
+  );
 const bulkApi = () =>
   ({
     setProductsAvailability: vi.fn().mockResolvedValue(undefined),
@@ -2215,6 +2219,8 @@ it.each([
   ["en-GB", 390],
   ["es-ES", 390],
   ["es-ES", 434],
+  ["en-GB", 648],
+  ["es-ES", 824],
 ] as const)(
   "keeps the next checkbox under a second tap in %s at %s px",
   async (locale, viewportWidth) => {
@@ -2229,7 +2235,9 @@ it.each([
     api.setProductsAvailability.mockReturnValue(saved.promise);
     const el = await mountBrowser({ api: api as unknown as DashboardApi });
     await selectKeys(el, []);
-    await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
+    await vi.waitFor(() =>
+      expect(viewControl(el).slot).toBe(viewportWidth <= 440 ? "above-table" : "toolbar-search"),
+    );
     const table = await tableOf(el);
     const root = table.shadowRoot!;
     const tick = (id: string) =>
@@ -2255,9 +2263,7 @@ it.each([
     expect(followingTap()).toBe(tick("cola"));
     saved.reject({ code: "authorization.not_permitted" });
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector(".availability-error")?.textContent).toContain(
-        codeMessage("authorization.not_permitted"),
-      ),
+      expect(batchRefusal(el)?.message).toContain(codeMessage("authorization.not_permitted")),
     );
     await tableOf(el);
     expect(followingTap()).toBe(tick("cola"));
@@ -2352,7 +2358,7 @@ it("refreshes a deleted tick and reports a retry refused without a product name"
   await selectKeys(el, ["cola"]);
   bulkButton(el, "available")!.focus();
   await userEvent.keyboard(" ");
-  const notice = () => el.shadowRoot!.querySelector(".availability-error[role=alert]");
+  const notice = () => batchRefusal(el)?.shadowRoot?.querySelector("[role=alert] .message");
   await vi.waitFor(() =>
     expect(notice()?.textContent?.trim()).toBe(
       "Nothing was changed. Cola was deleted and can no longer be changed.",
@@ -2378,6 +2384,95 @@ it("refreshes a deleted tick and reports a retry refused without a product name"
     [["bread"], false],
   ]);
   expect((await availabilitySwitch(el, "bread")).checked).toBe(true);
+});
+
+it.each(["Close", "the next change", "Done", "leaving Products"])(
+  "dismisses the bottom batch refusal on %s",
+  async (dismiss) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(390, 640);
+    const api = bulkApi();
+    const saved = pendingAvailability();
+    api.setProductsAvailability
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockReturnValueOnce(saved.promise);
+    const el = await mountBrowser({ api: api as unknown as DashboardApi });
+    await chooseView(el, "List");
+    await selectKeys(el, ["bread", "cola"]);
+    await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
+    await userEvent.click(bulkButton(el, "unavailable")!);
+    await vi.waitFor(() => expect(batchRefusal(el)?.open).toBe(true));
+    const toast = batchRefusal(el)!;
+    await toast.updateComplete;
+    if (dismiss === "leaving Products") {
+      el.requestUpdate();
+      el.remove();
+      await el.updateComplete;
+      expect(toast.matches(":popover-open")).toBe(false);
+      return;
+    }
+    expect(toast.duration).toBe(0);
+    const bar = el.shadowRoot!.querySelector('[data-test="selection-bar"]')!;
+    expect(toast.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      bar.getBoundingClientRect().bottom,
+    );
+    const inset = parseFloat(getComputedStyle(toast).insetBlockEnd);
+    expect(inset).toBeGreaterThan(0);
+    expect(toast.getBoundingClientRect().bottom).toBeCloseTo(innerHeight - inset, 0);
+    const close = toast.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!;
+    expect(close.getAttribute("aria-label")).toBe("Close");
+    expect(close.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    expect(close.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    if (dismiss === "Close") {
+      close.focus();
+      await userEvent.keyboard(" ");
+      expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
+    } else if (dismiss === "Done") {
+      await userEvent.click(bar.querySelector<HTMLElement>('[data-test="cancel-selection"]')!);
+    } else {
+      await userEvent.click(bulkButton(el, "available")!);
+      expect(api.setProductsAvailability).toHaveBeenCalledTimes(2);
+    }
+    await vi.waitFor(() => expect(batchRefusal(el)?.open).toBe(false));
+    saved.resolve();
+  },
+);
+
+it("leaves no empty refusal strip above the Products table during Select", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  expect(el.shadowRoot!.querySelector(".availability-error")).toBeNull();
+});
+
+it("reports a lost availability reply without saying the box changed nothing", async () => {
+  const api = bulkApi();
+  api.setProductsAvailability.mockRejectedValueOnce({ code: "connection.failed" });
+  const el = await mountBrowser({ api: api as unknown as DashboardApi });
+  await selectKeys(el, ["bread"]);
+  await userEvent.click(bulkButton(el, "unavailable")!);
+  await vi.waitFor(() => expect(batchRefusal(el)?.message).toBe(codeMessage("connection.failed")));
+});
+
+it("keeps the phone action bar in place while Delete reads a category", async () => {
+  const viewport = [innerWidth, innerHeight] as const;
+  onTestFinished(() => page.viewport(...viewport));
+  await page.viewport(390, 640);
+  const el = await mountBrowser();
+  const summary = pendingAvailability();
+  vi.mocked(el.api.summariseFolders).mockImplementationOnce(async () => {
+    await summary.promise;
+    return [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }];
+  });
+  await selectKeys(el, ["folder:d"]);
+  await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
+  const bar = el.shadowRoot!.querySelector('[data-test="selection-bar"]')!;
+  const before = bar.getBoundingClientRect().height;
+  await userEvent.click(bar.querySelector<HTMLElement>('[data-test="delete"]')!);
+  await vi.waitFor(() => expect(bar.querySelector("wt-spinner")).not.toBeNull());
+  expect(bar.getBoundingClientRect().height).toBeCloseTo(before, 0);
+  summary.resolve();
+  await vi.waitFor(() => expect(bar.querySelector("wt-spinner")).toBeNull());
 });
 
 export const dialog = (el: ProductBrowser) => el.shadowRoot!.querySelector("wt-modal");

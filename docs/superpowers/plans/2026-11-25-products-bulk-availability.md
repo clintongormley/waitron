@@ -6,8 +6,10 @@
 Keep both actions visible in Select and enable them for a nonempty selection of products only.
 Send one request and change each product’s own flag. The count lists the total and how many search
 or filters hide. On 25 November at 20:18, after seeing the pictures, the owner chose “All five,
-then land”, as recorded by the watcher at 20:19. This replaces the design's count on each button.
-On a phone, keep the count and Done on the first line, with the four actions below.
+then land”, as recorded by the watcher at 20:19. This replaces the design's button counts and
+conditional visibility. On a phone, keep the count and Done on the first line, with the four
+actions below. At 20:30, the watcher recorded the owner's “bottom” decision. Show the batch
+refusal over the bottom of the screen and clear it on Close, Done or the next availability change.
 
 **Request.** In `apps/dashboard/src/api/client.ts`, add `setProductsAvailability(productIds: string[],
 available: boolean): Promise<void>` and delegate from the existing single-item method. Reuse #4272’s
@@ -25,7 +27,7 @@ with loading, disable its opposite and ignore row writes to the batch IDs. Keep 
 **Result.** Use one `availabilitySaved(ids, available)` callback and one refresh on success. Patch the flags
 together in `widgets/product-tree-availability.ts`, with a line-neutral callback change in
 `screens/products-screen.ts`. Clear only submitted ticks after success. If the focused action becomes unavailable,
-focus Done. On refusal, keep the saved flags and show the reason in `product-list-action-feedback.ts`.
+focus Done. On refusal, keep the saved flags and show the reason in a persistent `wt-toast` placed by `product-list-action-feedback.ts`.
 A batch refusal says nothing changed and gives the reason, naming the dish when the box names it.
 A lost connection reports the connection problem. Single switches keep their own wording.
 For a deleted or missing dish, invalidate `products` through `api.liveData?.invalidate` so the next

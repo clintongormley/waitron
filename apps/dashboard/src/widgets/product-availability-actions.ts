@@ -23,6 +23,12 @@ export class ProductAvailabilityActions {
 
   constructor(private readonly host: AvailabilityHost) {}
 
+  dismissBatchRefusal(): void {
+    if (!this.refusal?.batch) return;
+    this.refusal = null;
+    this.host.requestUpdate();
+  }
+
   async changeOne({ id, name, available }: ProductAvailabilityChange): Promise<void> {
     if (this.pending.has(id)) return;
     await this.#save(
