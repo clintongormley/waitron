@@ -281,11 +281,13 @@ export class SumUpReconciler implements PaymentReconciler {
         report,
         prepareOrphans: async (tx) => {
           if (prepared.size === 0) return { claimed: [] };
-          const admitted = await admit(tx);
+          if (!(await admit(tx))) {
+            retryOrphans = true;
+            return { claimed: [] };
+          }
           // A marked refund cannot be resent, so stepdown can only stop work before claiming it.
           const stopped = signal?.aborted === true;
-          if (!admitted || stopped) retryOrphans = true;
-          if (!admitted && !stopped) return { claimed: [] };
+          if (stopped) retryOrphans = true;
 
           const claimed = [];
           const deferred = new Set<SettlementRecord>();

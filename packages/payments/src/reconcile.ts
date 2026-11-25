@@ -369,7 +369,6 @@ export async function reconcilePayments(
 
     const missing: SettlementRecord[] = [];
     for (const record of classified.unmatched) {
-      if (preparation?.deferred?.has(record)) continue;
       if (record.references.some((reference) => existing.has(reference))) continue;
       missing.push(record);
       result.missingLocal.push(missingLocalMismatch(record));
@@ -461,7 +460,9 @@ export async function reconcilePayments(
     }
 
     result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
-    result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
+    const deferred = preparation?.deferred;
+    const alertable = deferred ? missing.filter((record) => !deferred.has(record)) : missing;
+    result.incidentsRaised += await raiseMissingLocal(tx, deps, alertable, now);
     if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
       result.incidentsRaised += 1;
     }

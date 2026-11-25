@@ -144,11 +144,8 @@ interface CompletedRun {
   nextDueAt: Date | null;
 }
 
-/**
- * Claim one unit, run it outside every transaction, and record what happened. A stopped or lost
- * claim has no outcome to report. A completion that loses its fence to a stale-claim recovery
- * also returns null because the row no longer belongs to this attempt.
- */
+/** Run outside the claim transaction. A stopped or lost claim has no outcome to report.
+ * A stale-claim takeover also fences out the old runner's completion. */
 async function runOne(
   deps: SchedulerDeps,
   duty: PeriodDuty,

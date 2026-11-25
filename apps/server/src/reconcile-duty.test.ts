@@ -80,7 +80,8 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
 
     await runDue({ db: suite.db, duties: [duty], ...DEFAULTS }, NOW, signal);
 
-    expect(received).toEqual([signal]);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(signal);
   });
 
   it("gives SumUp one hour to see cross-midnight rivals before its daily audit", async () => {
