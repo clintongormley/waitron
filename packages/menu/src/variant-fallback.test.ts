@@ -314,15 +314,9 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
 });
 
 describe("listMenuOffers reads a variant's blanks from its parent", () => {
-  // The parent's own price (4.00) and its price on this menu (4.50) differ, so a variant that
-  // inherits its price and is charged 4.00 was priced from the wrong step of the chain.
   it("resolves the effective values of each variant nested under the parent's offer", async () => {
     await run(async (tx) => {
-      await addProductToMenu(tx, {
-        menuId: f.menuId,
-        productId: f.parentId,
-        grossPrice: "4.50",
-      });
+      await addProductToMenu(tx, { menuId: f.menuId, productId: f.parentId });
     });
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
     expect(offers.map((o) => o.productId)).toEqual([f.parentId]);
@@ -332,7 +326,7 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       name: "125 ml",
       customerName: null,
       kitchenName: null,
-      unitPrice: "4.50",
+      unitPrice: "4.00",
       menuPrice: null,
       available: true,
       image: libraryImageName("parent.jpg"),
@@ -380,11 +374,7 @@ describe("a variant's main category is always its parent's", () => {
           variantOrder: 2,
         })
         .returning({ id: products.id });
-      await addProductToMenu(tx, {
-        menuId: f.menuId,
-        productId: f.parentId,
-        grossPrice: "7.00",
-      });
+      await addProductToMenu(tx, { menuId: f.menuId, productId: f.parentId });
       return row!.id;
     });
 

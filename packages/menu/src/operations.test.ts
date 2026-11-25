@@ -1581,7 +1581,7 @@ describe("menu offers nest a product's variants", () => {
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     expect(await nested()).toEqual([
-      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.00", menuPrice: null, available: true },
       { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
     // Variants are only ever nested: the menu lists the parent alone.
@@ -1637,7 +1637,7 @@ describe("menu offers nest a product's variants", () => {
     // 250 ml is left out of this save, so it becomes Inactive.
     await run((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(await nested()).toEqual([
-      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.00", menuPrice: null, available: true },
       { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: false },
     ]);
   });

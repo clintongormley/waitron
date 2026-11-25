@@ -28,7 +28,7 @@ import {
 import { reachableMenuItem } from "./menu-structure.js";
 import { refuseSetMenu } from "./set-menus.js";
 import { batches } from "./batches.js";
-import { dropMenuPrices } from "./menu-removal.js";
+import { dropMenuPrices, dropProductMenuPrices } from "./menu-removal.js";
 import { assertOffPublishedMenus, removeFromExtraLists } from "./delete.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
@@ -313,6 +313,8 @@ async function writeProductVariants(
     await dropMenuPrices(tx, madeInactive);
     await removeFromExtraLists(tx, madeInactive);
   }
+  // An ordinary menu never prices a product sold through its variants (`menu_item.has_variants`).
+  if (firstActive !== -1) await dropProductMenuPrices(tx, [productId]);
   return listProductVariants(tx, productId);
 }
 

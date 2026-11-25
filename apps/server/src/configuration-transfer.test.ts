@@ -1375,14 +1375,14 @@ describe("configuration transfer database path", () => {
           unitPrice: "4",
           vatClass: "general",
         });
-        await tx
-          .insert(products)
-          .values({ id: `${name}-single`, parentId: product.id, name: "Single" });
         const item = await addProductToMenu(tx, {
           menuId: menu.id,
           productId: product.id,
           grossPrice: "5.50",
         });
+        await tx
+          .insert(products)
+          .values({ id: `${name}-single`, parentId: product.id, name: "Single" });
         await tx.execute(sql`
           insert into menu_item_variant_overrides (menu_item_id, product_id, variant_id, price)
           values (${item.id}, ${product.id}, ${`${name}-single`}, 600)

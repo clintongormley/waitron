@@ -1362,35 +1362,28 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names a variant price that follows this menu's price as this menu's change", async () => {
+  it("names a product price change as reaching a variant with no price of its own", async () => {
     const f = await menusFixture(fx.db);
-    await app(async (tx) => {
-      await updateProduct(tx, f.large, { unitPrice: null });
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
-        grossPrice: "2.80",
-      });
-    });
+    await app((tx) => updateProduct(tx, f.large, { unitPrice: null }));
     const live = await build(f.lunch);
-    await app(async (tx) =>
-      updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "2.60" }),
-    );
+    await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "2.60" }));
     expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       {
         kind: "price_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        from: "2.80",
+        from: "3.00",
         to: "2.60",
-        source: "this_menu",
+        source: "shared_product",
       },
       {
         kind: "price_changed",
         productId: f.lemonade,
         name: "Lemonade",
         variant: { id: f.large, name: "Large" },
-        from: "2.80",
+        from: "3.00",
         to: "2.60",
-        source: "this_menu",
+        source: "shared_product",
       },
     ]);
   });

@@ -80,7 +80,11 @@ import {
   touchSetMenu,
 } from "./set-menus.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
-import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
+import {
+  assertNotOfferedAsExtra,
+  menuVariantsOfItems,
+  parentsWithActiveVariants,
+} from "./variants.js";
 import { assertFamilyNamesFree, assertUpdatedNamesFree, readUpdatedName } from "./product-names.js";
 import {
   assignProductUnit,
@@ -463,6 +467,14 @@ async function writeMenuItemSettings(
   const { grossPrice } = patch;
   if (grossPrice === undefined) return;
   const [menu] = await tx.select({ kind: menus.kind }).from(menus).where(eq(menus.id, menuId));
+  if (grossPrice !== null && menu?.kind !== "set_menu") {
+    const [item] = await tx
+      .select({ productId: menuItems.productId })
+      .from(menuItems)
+      .where(eq(menuItems.id, menuItemId));
+    if ((await parentsWithActiveVariants(tx, [item!.productId])).size > 0)
+      throw new AppError("menu_item.has_variants", { menuItemId });
+  }
   const cents =
     grossPrice === null
       ? null

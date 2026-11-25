@@ -19,7 +19,6 @@ import {
   deactivateProduct,
   listMenuOffers,
   menuPrices,
-  updateMenuItem,
   updateProduct,
 } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
@@ -96,7 +95,6 @@ async function removalFixture() {
         [croquette, croquetteHalf],
       ] as const) {
         const offer = await offerOf(tx, menuId, productId);
-        await updateMenuItem(tx, menuId, offer, { grossPrice: "5.00" });
         await setMenuVariantPrice(tx, offer, variantId, "3.00", menuId);
       }
     await addShortcut(tx, tapas, product(croquette));
@@ -165,7 +163,7 @@ async function expectOffEveryMenu(r: Removal, productId: string) {
 async function expectStillOnEveryMenu(r: Removal, productId: string) {
   expect(await memberRowsNaming(productId)).toHaveLength(4);
   for (const menuId of [r.tapas, r.terrace])
-    expect(await offerSettings(menuId, productId)).toEqual({ grossPrice: 500, variantPrices: 1 });
+    expect(await offerSettings(menuId, productId)).toEqual({ grossPrice: null, variantPrices: 1 });
 }
 
 describe("a product made Inactive comes off every menu", () => {

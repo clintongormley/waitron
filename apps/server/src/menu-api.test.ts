@@ -26,6 +26,7 @@ import {
   readTakeawayVatSchedules,
   saveMenuSettings,
   sectionMembers,
+  setProductVariants,
 } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
@@ -5450,6 +5451,38 @@ describe("a menu price outside the product editor's rule is refused at the reque
     expect((await menuPricesVia(app, menuId))[0]).toMatchObject({
       override: stored,
       effectivePrice: stored,
+    });
+  });
+
+  it("the menu-item write refuses a price on a product with variants", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Variant menu price menu");
+    const productId = await createNamedProductVia(app, `Offered ${crypto.randomUUID()}`);
+    const itemId = await offerVia(app, menuId, productId);
+    await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [
+          {
+            name: "Glass",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+
+    const res = await send(app, "PATCH", `/management-api/menus/${menuId}/items/${itemId}`, {
+      body: { grossPrice: "3.00" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "menu_item.has_variants", params: { menuItemId: itemId } },
     });
   });
 

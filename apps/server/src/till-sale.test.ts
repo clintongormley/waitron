@@ -45,6 +45,7 @@ import {
   setMenuVariants,
   setProductVariants,
   updateExtraList,
+  updateMenuItem,
   updateProduct,
   units,
   writeContentLanguages,
@@ -169,6 +170,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   seriesId: ReturnType<typeof brandSeriesId>;
   available: AvailableProduct[];
   zoneId: string;
+  menuId: string;
   waterOfferId: string;
   waterProductId: string;
   variantIds?: { double: string; unavailable: string };
@@ -278,6 +280,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     return {
       available: (await listAvailableProducts(tx)).products,
       zoneId: zone.rows[0]!.id,
+      menuId: cat.id,
       waterOfferId: offer.id,
       waterProductId: water.id,
       variantIds,
@@ -526,11 +529,13 @@ describe("counter basket payment", () => {
 
   // A product with no Active variant sells as itself, at its menu price.
   it("sells a product whose every variant was removed as itself", async () => {
-    const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
+    const { cfg, zoneId, menuId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
     });
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`update products set active = 0 where parent_id = ${waterProductId}`);
+      // Adding the variants took the menu's 2.25 off; with none left the menu may price it again.
+      await updateMenuItem(tx, menuId, waterOfferId, { grossPrice: "2.25" });
       await republishMenus(tx);
     });
     await expect(

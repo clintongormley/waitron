@@ -1,5 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { menuItemVariantOverrides, products, sectionMembers, type Transaction } from "@waitron/db";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import {
+  menuItems,
+  menuItemVariantOverrides,
+  menus,
+  products,
+  sectionMembers,
+  type Transaction,
+} from "@waitron/db";
 import { batches } from "./batches.js";
 import { onStructureChanged } from "./section-structure.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
@@ -14,6 +21,22 @@ export async function dropMenuPrices(
     await tx
       .delete(menuItemVariantOverrides)
       .where(inArray(menuItemVariantOverrides.variantId, batch));
+}
+
+/**
+ * Deletes the products' own prices on every ordinary menu, deleted menus included. A set menu's
+ * price on a dish is a supplement and stays.
+ */
+export async function dropProductMenuPrices(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<void> {
+  const ordinary = tx.select({ id: menus.id }).from(menus).where(ne(menus.kind, "set_menu"));
+  for (const batch of batches(productIds))
+    await tx
+      .update(menuItems)
+      .set({ grossPrice: null })
+      .where(and(inArray(menuItems.productId, batch), inArray(menuItems.menuId, ordinary)));
 }
 
 /**

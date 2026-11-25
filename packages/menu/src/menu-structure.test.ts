@@ -400,9 +400,9 @@ describe("a menu offers what its structure reaches", () => {
 
 describe("a product that leaves a menu starts fresh there", () => {
   /**
-   * Review Focus 4: Lemonade under Favourites and Drinks on Lunch, with a Lunch price, a Lunch
-   * price for its Large variant. The product carries Ice extras. Dinner holds Lemonade at its top
-   * level with a price of its own, which nothing below may touch.
+   * Review Focus 4: Lemonade under Favourites and Drinks on Lunch, with a Lunch price for its
+   * Large variant. The product carries Ice extras. Dinner holds Lemonade at its top level with a
+   * Large price of its own, which nothing below may touch.
    */
   async function lemonadeOnLunch() {
     const f = await fixture();
@@ -415,9 +415,8 @@ describe("a product that leaves a menu starts fresh there", () => {
       await addMember(tx, f.dinnerRoot, product(f.lemonade));
       const lunchItem = (await menuItemRow(tx, f.lunch, f.lemonade))!;
       const dinnerItem = (await menuItemRow(tx, f.dinner, f.lemonade))!;
-      await updateMenuItem(tx, f.lunch, lunchItem.id, { grossPrice: "2.50" });
-      await updateMenuItem(tx, f.dinner, dinnerItem.id, { grossPrice: "3.25" });
       await setMenuVariants(tx, lunchItem.id, [{ variantId: f.large, price: "3.00" }]);
+      await setMenuVariants(tx, dinnerItem.id, [{ variantId: f.large, price: "3.25" }]);
       const ice = await createExtraList(tx, { name: "Ice", items: [{ productId: f.water }] }, "en");
       await writeProductModifiers(tx, f.lemonade, [{ kind: "extras", id: ice.id }]);
 
@@ -427,7 +426,6 @@ describe("a product that leaves a menu starts fresh there", () => {
       };
     });
     expect(settings.lunch).toMatchObject({
-      grossPrice: 250,
       variantOverrides: [{ variantId: f.large, price: 300 }],
     });
     return { f, settings };
@@ -472,7 +470,7 @@ describe("a product that leaves a menu starts fresh there", () => {
     await removeFromFavourites(f);
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toEqual(settings.lunch);
     const [offer] = await app((tx) => listMenuOffers(tx, [f.lunch]));
-    expect(offer).toMatchObject({ productId: f.lemonade, unitPrice: "2.50" });
+    expect(offer).toMatchObject({ productId: f.lemonade, variants: [{ menuPrice: "3.00" }] });
   });
 
   it("resets when it is removed from the last list holding it", async () => {
@@ -562,7 +560,6 @@ describe("a product that leaves a menu starts fresh there", () => {
       await addMember(tx, f.lunchRoot, product(f.burger));
       await addMember(tx, f.lunchRoot, section(f.drinks));
       const item = (await menuItemRow(tx, f.lunch, f.lemonade))!;
-      await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
       await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00" }]);
       return settingsOf(tx, f.lunch, f.lemonade);
     });
@@ -586,7 +583,6 @@ describe("a product that leaves a menu starts fresh there", () => {
       await addMember(tx, f.drinks, product(f.lemonade));
       await addMember(tx, f.lunchRoot, section(f.drinks));
       const item = (await menuItemRow(tx, f.lunch, f.lemonade))!;
-      await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
       await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00" }]);
     });
     const copy = await app(async (tx) => {
@@ -629,19 +625,21 @@ describe("putting a product on a menu's top level", () => {
   it("adds it to the root with an optional menu price, and refuses what cannot be offered", async () => {
     const f = await fixture();
     const item = await app((tx) =>
-      addProductToMenu(tx, { menuId: f.lunch, productId: f.lemonade, grossPrice: "2.50" }),
+      addProductToMenu(tx, { menuId: f.lunch, productId: f.water, grossPrice: "2.50" }),
     );
     expect(item).toEqual({
       id: item.id,
       menuId: f.lunch,
-      productId: f.lemonade,
+      productId: f.water,
       grossPrice: "2.50",
     });
-    const blank = await app((tx) => addProductToMenu(tx, { menuId: f.lunch, productId: f.water }));
+    const blank = await app((tx) =>
+      addProductToMenu(tx, { menuId: f.lunch, productId: f.lemonade }),
+    );
     expect(blank.grossPrice).toBeNull();
     expect(
       (await app((tx) => readMenuStructure(tx, f.lunch))).nodes.map((node) => node.ref),
-    ).toEqual([product(f.lemonade), product(f.water)]);
+    ).toEqual([product(f.water), product(f.lemonade)]);
     for (const [input, code] of [
       [{ menuId: crypto.randomUUID(), productId: f.lemonade }, "menu.not_found"],
       [{ menuId: f.lunch, productId: crypto.randomUUID() }, "product.not_found"],
@@ -833,16 +831,16 @@ describe("a menu's prices", () => {
   it("keeps an override equal to the product's price when that price changes, and a cleared one follows it", async () => {
     const f = await fixture();
     await app(async (tx) => {
-      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      await addMember(tx, f.lunchRoot, product(f.juice));
       await addMember(tx, f.lunchRoot, product(f.water));
     });
-    const lemonadeItem = await itemOf(f.lunch, f.lemonade);
+    const juiceItem = await itemOf(f.lunch, f.juice);
     const waterItem = await itemOf(f.lunch, f.water);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, lemonadeItem, { grossPrice: "3.00" });
+      await updateMenuItem(tx, f.lunch, juiceItem, { grossPrice: "2.75" });
       await updateMenuItem(tx, f.lunch, waterItem, { grossPrice: "1.80" });
       await updateMenuItem(tx, f.lunch, waterItem, { grossPrice: null });
-      await updateProduct(tx, f.lemonade, { unitPrice: "3.40" });
+      await updateProduct(tx, f.juice, { unitPrice: "3.15" });
       await updateProduct(tx, f.water, { unitPrice: "2.20" });
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
@@ -855,16 +853,16 @@ describe("a menu's prices", () => {
       })),
     ).toEqual([
       {
-        productId: f.lemonade,
-        override: "3.00",
-        effectivePrice: "3.00",
+        productId: f.juice,
+        override: "2.75",
+        effectivePrice: "2.75",
         price: {
           state: "decided",
-          value: "3.00",
+          value: "2.75",
           source: { kind: "own" },
           otherwise: {
             state: "decided",
-            value: "3.40",
+            value: "3.15",
             source: { kind: "product" },
             otherwise: null,
           },

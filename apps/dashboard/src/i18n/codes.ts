@@ -598,6 +598,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This item is no longer on the menu. Check the current menu before saving.",
     es: "Este artículo ya no está en la carta. Revisa la carta actual antes de guardar.",
   },
+  "menu_item.has_variants": {
+    en: "A product with variants is priced on its variants. Set the price on each variant instead.",
+    es: "Un producto con variantes se cobra por sus variantes. Pon el precio en cada variante.",
+  },
   "set_menu.not_found": {
     en: "That set menu could not be found. Reload the menu list and choose a set menu.",
     es: "No se ha encontrado ese menú. Recarga la lista y elige un menú.",

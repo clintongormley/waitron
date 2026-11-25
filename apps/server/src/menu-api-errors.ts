@@ -22,6 +22,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.invalid": 400,
   "category.parent_cycle": 409,
   "menu_item.not_found": 404,
+  "menu_item.has_variants": 400,
   "product.not_found": 404,
   "product.invalid": 400,
   "menu_section.not_found": 404,
