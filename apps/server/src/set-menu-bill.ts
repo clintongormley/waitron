@@ -1,6 +1,5 @@
-import { and, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
-  adjustmentLines,
   adjustments,
   billSetMenuCopies,
   lineServiceCancellations,
@@ -22,6 +21,7 @@ import {
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
+import { reducedLineIds } from "./set-menu-freeze.js";
 import "./errors.js";
 
 export function notSetMenuLine() {
@@ -334,47 +334,6 @@ async function versionPublishOrder(
   return new Map(rows.map(({ id }, index) => [id, index]));
 }
 
-/** Which of the dishes `lineIds` carry a comp or discount, on the dish or on one of its extras:
- * such a dish moves only with its set menu. */
-export async function adjustedDishIds(
-  tx: Transaction,
-  lineIds: readonly string[],
-): Promise<Set<string>> {
-  const extras = await tx
-    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
-    .from(workingOrderLines)
-    .where(
-      inArray(
-        workingOrderLines.parentLineId,
-        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-      ),
-    );
-  const reduced = await reducedLineIds(tx, [...lineIds, ...extras.map(({ id }) => id)]);
-  const adjusted = new Set(lineIds.filter((id) => reduced.has(id)));
-  for (const extra of extras) if (reduced.has(extra.id)) adjusted.add(extra.parentLineId!);
-  return adjusted;
-}
-
-/** Which of `lineIds` carry a comp or discount. */
-async function reducedLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>> {
-  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
-  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
-  // made on.
-  const reduced = await tx
-    .select({ lineId: adjustmentLines.lineId })
-    .from(adjustmentLines)
-    .where(
-      and(
-        inArray(
-          adjustmentLines.lineId,
-          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-        ),
-        gt(adjustmentLines.reduction, 0),
-      ),
-    );
-  return new Set(reduced.map(({ lineId }) => lineId));
-}
-
 async function placedSetMenuDishes(
   tx: Transaction,
   placed: {
@@ -395,7 +354,7 @@ async function placedSetMenuDishes(
     .from(adjustments)
     .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
   const fixed = new Set(
-    await adjustedDishIds(
+    await reducedLineIds(
       tx,
       placed.map(({ id }) => id),
     ),

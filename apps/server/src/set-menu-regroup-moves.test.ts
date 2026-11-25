@@ -8,7 +8,7 @@ import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { SetMenuGroupingInput } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { namedFrozenLineIds } from "./set-menu-freeze.js";
+import { frozenLineIdSources } from "./set-menu-freeze.js";
 import { splitHeldLineIntoUnits } from "./order-group-edits.js";
 import { insertPartyBill } from "./parties.js";
 import { payForItems, priceItemPicks, type PayForItemsRequest } from "./pay-for-items.js";
@@ -240,7 +240,7 @@ it("refuses moving alone a dish its own comp froze, changing neither bill (D18)"
   expect(await grouping(target.tabId)).toEqual({ rows: [], total: 0 });
 });
 
-it("refuses moving alone a dish a comp of its row left with only a stamped list price (D18)", async () => {
+it("moves alone a dish a comp of its row left with only a stamped list price (D30)", async () => {
   const source = await seated();
   await send(source, ["Soup", "Soup", "Soup", "Sirloin", "Sirloin", "Sirloin"]);
   const sirloins = await Promise.all([0, 1, 2].map((nth) => idOf(source.tabId, "Sirloin", nth)));
@@ -268,19 +268,38 @@ it("refuses moving alone a dish a comp of its row left with only a stamped list 
     ),
   );
   const middle = sirloins[1]!;
-  expect(await inTx(venue, (tx) => namedFrozenLineIds(tx, [middle]))).toEqual(new Set());
+  expect(await inTx(venue, (tx) => frozenLineIdSources(tx, sirloins))).toEqual({
+    reduced: new Set([sirloins[2]!]),
+    held: new Set(),
+  });
   expect((await specRows(spec, source.tabId)).find(({ id }) => id === middle)).toMatchObject({
     listUnitPriceGross: 500,
   });
   const target = await partyBill(source);
-  const before = await grouping(source.tabId);
 
-  await expect(move(source, target, [middle])).rejects.toMatchObject({
-    code: "set_menu.move_adjusted",
-    params: { dishNames: ["Sirloin"] },
+  await move(source, target, [middle]);
+  expect((await specRows(spec, target.tabId)).find(({ id }) => id === middle)).toMatchObject({
+    listUnitPriceGross: null,
   });
-  expect(await grouping(source.tabId)).toEqual(before);
-  expect(await grouping(target.tabId)).toEqual({ rows: [], total: 0 });
+  expect(await grouping(target.tabId)).toEqual({
+    rows: [
+      { what: "Sirloin", price: 500, in: "Daily menu 1" },
+      { what: "Daily menu 1", price: 1400 },
+    ],
+    total: 1900,
+  });
+  const left = await grouping(source.tabId);
+  expect(left.total).toBe(3900);
+  expect(left.rows.filter(({ what }) => what === "Sirloin")).toEqual([
+    { what: "Sirloin", price: 500, in: expect.any(String) },
+    { what: "Sirloin", price: 0, in: expect.any(String) },
+  ]);
+  expect(
+    left.rows
+      .filter(({ what }) => what === "Soup")
+      .map(({ price }) => price)
+      .sort(),
+  ).toEqual([0, 0, 600]);
 });
 
 it("refuses moving alone a dish whose cancel kept its charge (D18)", async () => {

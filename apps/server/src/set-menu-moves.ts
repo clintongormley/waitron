@@ -6,14 +6,15 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { namedFrozenLineIds } from "./set-menu-freeze.js";
+import { belowListPrice } from "@waitron/orders-sales/set-menu-grouping-plan.js";
+import { frozenLineIdSources } from "./set-menu-freeze.js";
 import "./errors.js";
 
 /**
  * Refuses moving these set-menu dishes away from their set menu when that would unfreeze them
  * (D18): `set_menu.moves_with_set_menu` for a dish whose cancel kept its charge, and
- * `set_menu.move_adjusted` for one frozen by its own comp or discount, or an extra's, or a stamped
- * list price (D15).
+ * `set_menu.move_adjusted` for one a comp or discount of its own lowered, or an extra of its held
+ * (D30, D34).
  */
 export async function refuseMovingFrozenDishes(
   tx: Transaction,
@@ -27,6 +28,7 @@ export async function refuseMovingFrozenDishes(
       name: workingOrderLines.name,
       parentLineId: workingOrderLines.parentLineId,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+      unitPriceGross: workingOrderLines.unitPriceGross,
       cancellationLineId: lineServiceCancellations.lineId,
       keptChargeId: adjustments.id,
     })
@@ -48,14 +50,15 @@ export async function refuseMovingFrozenDishes(
   );
   if (cancelled !== undefined)
     throw new AppError("set_menu.moves_with_set_menu", { dishName: cancelled.name });
-  const named = await namedFrozenLineIds(
+  const { reduced, held } = await frozenLineIdSources(
     tx,
     rows.map(({ id }) => id),
   );
   const frozen = new Set(
-    rows.flatMap(({ id, parentLineId, listUnitPriceGross }) =>
-      named.has(id) || listUnitPriceGross !== null ? [parentLineId ?? id] : [],
-    ),
+    rows.flatMap((row) => {
+      if (held.has(row.id)) return [row.parentLineId ?? row.id];
+      return reduced.has(row.id) || belowListPrice(row) ? [row.id] : [];
+    }),
   );
   const adjusted = dishes.filter(({ id }) => frozen.has(id));
   if (adjusted.length > 0)

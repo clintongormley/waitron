@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { sales } from "@waitron/db";
+import { adjustmentLines, lineServiceCancellations, sales, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createAdjustmentReason } from "@waitron/adjustments";
@@ -274,7 +274,8 @@ it("a discounted set-menu dish moves only with its set menu", async () => {
   expect(await specRows(spec, other)).toEqual(before.to);
 });
 
-it("a dish whose extra is comped moves only with its set menu", async () => {
+/** A Soup with Bread and a Hake in a Daily, and a second bill of the party. */
+async function soupWithBread() {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   await sendSpecDishes(spec, bill, [
     { dish: "Soup", from: spec.daily, extras: [spec.bread] },
@@ -286,15 +287,83 @@ it("a dish whose extra is comped moves only with its set menu", async () => {
   const soup = rows.find(({ name }) => name === "Soup")!;
   expect(soup).toMatchObject({ setMenuRole: "dish", setMenuPlace: 0 });
   const bread = rows.find(({ parentLineId }) => parentLineId === soup.id)!;
-  await adjust(bill.tabId, bread.id, { action: "comp" });
-  const before = { from: await specRows(spec, bill.tabId), to: await specRows(spec, other) };
+  return { bill, other, soup: soup.id, bread: bread.id };
+}
 
-  await expect(moveAlone(bill.partyId, bill.tabId, other, [soup.id])).rejects.toMatchObject({
-    code: "set_menu.move_adjusted",
-    params: { dishNames: ["Soup"] },
-  });
-  expect(await specRows(spec, bill.tabId)).toEqual(before.from);
-  expect(await specRows(spec, other)).toEqual(before.to);
+it("a dish whose extra is comped moves alone, the extra still free (D34)", async () => {
+  const { bill, other, soup, bread } = await soupWithBread();
+  await adjust(bill.tabId, bread, { action: "comp" });
+  const state = await inTx(venue, (tx) => readBillSetMenus(tx, bill.tabId));
+  expect(state!.dishes.find(({ lineId }) => lineId === soup)).toMatchObject({ movable: true });
+
+  await moveAlone(bill.partyId, bill.tabId, other, [soup]);
+  expect(await specRows(spec, bill.tabId)).toMatchObject([
+    { name: "Hake", setMenuRole: "dish", unitPriceGross: 0 },
+    { setMenuRole: "set_menu", lineTotal: 1400 },
+  ]);
+  expect(await specRows(spec, other)).toMatchObject([
+    { id: soup, setMenuRole: null, setMenuLineId: null, lineTotal: 600 },
+    { id: bread, parentLineId: soup, lineTotal: 0, listUnitPriceGross: 150 },
+  ]);
+});
+
+/** Records that the Bread's comp took `reduction` off the Soup too, changing no price. */
+async function recordOnSoup(
+  { bill, soup, bread }: Awaited<ReturnType<typeof soupWithBread>>,
+  reduction: number,
+) {
+  await adjust(bill.tabId, bread, { action: "comp" });
+  const [comped] = await venue.db
+    .select({ adjustmentId: adjustmentLines.adjustmentId })
+    .from(adjustmentLines)
+    .where(eq(adjustmentLines.lineId, bread));
+  await inTx(venue, (tx) =>
+    tx
+      .insert(adjustmentLines)
+      .values({ adjustmentId: comped!.adjustmentId, lineId: soup, reduction, quantity: 1000 }),
+  );
+}
+
+it.each<[string, (made: Awaited<ReturnType<typeof soupWithBread>>) => Promise<unknown>]>([
+  [
+    "its price is below its list price",
+    ({ soup }) =>
+      inTx(venue, (tx) =>
+        tx
+          .update(workingOrderLines)
+          .set({ listUnitPriceGross: 100 })
+          .where(eq(workingOrderLines.id, soup)),
+      ),
+  ],
+  ["a record says something was taken off it", (made) => recordOnSoup(made, 100)],
+  [
+    "its extra carries a service cancellation",
+    ({ bread }) =>
+      inTx(venue, (tx) =>
+        tx.insert(lineServiceCancellations).values({
+          lineId: bread,
+          quantity: 1000,
+          cancelledAt: new Date().toISOString(),
+          wasStarted: false,
+          actorId: venue.operator.personId,
+        }),
+      ),
+  ],
+])("a set-menu dish is refused a move of its own when %s", async (_, fix) => {
+  const made = await soupWithBread();
+  await fix(made);
+  const before = await specRows(spec, made.bill.tabId);
+  await expect(
+    moveAlone(made.bill.partyId, made.bill.tabId, made.other, [made.soup]),
+  ).rejects.toMatchObject({ code: "set_menu.move_adjusted", params: { dishNames: ["Soup"] } });
+  expect(await specRows(spec, made.bill.tabId)).toEqual(before);
+});
+
+it("a set-menu dish a record took nothing off moves alone (D30)", async () => {
+  const made = await soupWithBread();
+  await recordOnSoup(made, 0);
+  await moveAlone(made.bill.partyId, made.bill.tabId, made.other, [made.soup]);
+  expect((await specRows(spec, made.other))[0]).toMatchObject({ id: made.soup, lineTotal: 600 });
 });
 
 it("the same dish moves with its set menu", async () => {

@@ -1,36 +1,33 @@
-import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import {
   adjustmentLines,
   adjustments,
   lineServiceCancellations,
   type Transaction,
 } from "@waitron/db";
+import type { FrozenLineSources } from "@waitron/orders-sales/set-menu-grouping-plan.js";
 
 /**
- * Which of `lineIds` a comp, discount, kept-charge cancel or service cancellation names (D15). By
- * the line, not the bill: a comp stays on its bill while its line moves. A stamped list price, the
- * other source, is read from the line itself by `frozenLinesOf`.
+ * What freezes `lineIds` by name (D30): `reduced`, what a comp or discount took something off;
+ * `held`, what a kept-charge cancel or service cancellation names. By the line, not the bill: a comp
+ * stays on its bill while its line moves. A price below the list price, the other source, is read
+ * from the line itself by `frozenLinesOf`.
  */
-export async function namedFrozenLineIds(
+export async function frozenLineIdSources(
   tx: Transaction,
   lineIds: readonly string[],
-): Promise<Set<string>> {
-  if (lineIds.length === 0) return new Set();
+): Promise<FrozenLineSources> {
+  if (lineIds.length === 0) return { reduced: new Set(), held: new Set() };
   const ids = sql`(select value from json_each(${JSON.stringify(lineIds)}))`;
-  const named = await tx
+  const held = await tx
     .select({ lineId: adjustments.lineId })
     .from(adjustments)
     .where(
       and(
         inArray(adjustments.lineId, ids),
-        or(ne(adjustments.action, "cancel"), eq(adjustments.chargeKept, true)),
+        eq(adjustments.action, "cancel"),
+        eq(adjustments.chargeKept, true),
       ),
-    )
-    .union(
-      tx
-        .select({ lineId: adjustmentLines.lineId })
-        .from(adjustmentLines)
-        .where(inArray(adjustmentLines.lineId, ids)),
     )
     .union(
       tx
@@ -38,5 +35,31 @@ export async function namedFrozenLineIds(
         .from(lineServiceCancellations)
         .where(inArray(lineServiceCancellations.lineId, ids)),
     );
-  return new Set(named.flatMap(({ lineId }) => (lineId === null ? [] : [lineId])));
+  return {
+    reduced: await reducedLineIds(tx, lineIds),
+    held: new Set(held.flatMap(({ lineId }) => (lineId === null ? [] : [lineId]))),
+  };
+}
+
+/** Which of `lineIds` a comp or discount took something off. */
+export async function reducedLineIds(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
+  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
+  // made on.
+  const reduced = await tx
+    .select({ lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      and(
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        gt(adjustmentLines.reduction, 0),
+      ),
+    );
+  return new Set(reduced.map(({ lineId }) => lineId));
 }

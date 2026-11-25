@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
   adjustmentLines,
+  adjustments,
   insertInChunks,
   lineServiceCancellations,
   statementChunks,
@@ -33,7 +34,7 @@ import { readOrderRevision } from "./working-order-context.js";
 import { parkOrder } from "./working-order-open.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { REASONS } from "./testing/adjustment-venue.js";
-import { cancelItemForTest, cancelLine, ensureOperator } from "./testing/cancel-line.js";
+import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 import {
   inTx,
   OPERATOR,
@@ -229,7 +230,12 @@ type Action =
   | { action: "discount_percent"; percentBp: number }
   | { action: "discount_amount"; amount: string };
 
-async function adjust(billId: string, lineId: string | null, action: Action) {
+async function adjust(
+  billId: string,
+  lineId: string | null,
+  action: Action,
+  row: { lineIds: string[]; quantity: string } | null = null,
+) {
   const reason = await inTx(venue, (tx) =>
     createAdjustmentReason(tx, { ...REASONS.house, name: `House ${randomUUID()}` }),
   );
@@ -244,6 +250,7 @@ async function adjust(billId: string, lineId: string | null, action: Action) {
         submissionId: randomUUID(),
         expectedRevision: await readOrderRevision(tx, billId),
         lineId,
+        ...row,
         reasonId: reason.id,
         note: null,
         operatorId: venue.operator.personId,
@@ -253,6 +260,24 @@ async function adjust(billId: string, lineId: string | null, action: Action) {
       },
       venue.cfg.locale,
     ),
+  );
+}
+
+function idOf({ id }: { id: string }) {
+  return id;
+}
+
+async function cancelById(billId: string, lineId: string) {
+  const { lineNo } = (await rows(billId)).find(({ id }) => id === lineId)!;
+  await inTx(venue, (tx) => cancelItemForTest(tx, venue.cfg, billId, lineNo));
+}
+
+function stamp(lineId: string, listUnitPriceGross: number) {
+  return inTx(venue, (tx) =>
+    tx
+      .update(workingOrderLines)
+      .set({ listUnitPriceGross })
+      .where(eq(workingOrderLines.id, lineId)),
   );
 }
 
@@ -479,43 +504,86 @@ it.each([
   },
 );
 
-it("leaves a set menu whose included dish was comped for nothing as it is (D2)", async () => {
-  const { bill, daily, soup, hake } = await groupedSoupAndHake({
-    dish: "Soup",
-    extras: [spec.bread],
-  });
-  await adjust(bill.tabId, soup.id, { action: "comp" });
+it("works out again a dish its row's comp names but took nothing off (D30)", async () => {
+  const bill = await seated();
+  const soupWithBread = { dish: "Soup" as const, extras: [spec.bread] };
+  await send(bill, soupWithBread, soupWithBread, "Hake", "Hake");
+  const soups = (await shape(bill.tabId)).filter(({ what }) => what === "Soup");
+  const hakes = (await shape(bill.tabId)).filter(({ what }) => what === "Hake");
+  expect(menuRows(await shape(bill.tabId))).toHaveLength(2);
+  // A part of a row records the row's first dish and takes the last.
+  await adjust(
+    bill.tabId,
+    soups[0]!.id,
+    { action: "comp" },
+    { lineIds: soups.map(idOf), quantity: "1" },
+  );
   expect(
-    await venue.db.select().from(adjustmentLines).where(eq(adjustmentLines.lineId, soup.id)),
+    await venue.db.select().from(adjustments).where(eq(adjustments.lineId, soups[0]!.id)),
+  ).toHaveLength(1);
+  expect(
+    await venue.db.select().from(adjustmentLines).where(eq(adjustmentLines.lineId, soups[0]!.id)),
   ).toEqual([]);
-  const breadLineNo = (await rows(bill.tabId)).find(
-    ({ parentLineId }) => parentLineId === soup.id,
-  )!.lineNo;
-  await inTx(venue, (tx) => cancelLine(tx, venue.cfg, bill.tabId, breadLineNo));
-  const hakeLineNo = (await rows(bill.tabId)).find(({ id }) => id === hake.id)!.lineNo;
-  await inTx(venue, (tx) => cancelItemForTest(tx, venue.cfg, bill.tabId, hakeLineNo));
-  await regroup(bill.tabId);
+  const taken = (await rows(bill.tabId)).find(({ parentLineId }) => parentLineId === soups[1]!.id)!;
+  expect(taken).toMatchObject({ lineTotal: 0, listUnitPriceGross: 150 });
+  for (const hake of hakes) await cancelById(bill.tabId, hake.id);
   const after = await shape(bill.tabId);
-  expect(after.find(({ id }) => id === daily.id)).toMatchObject({ price: 1400, total: 1400 });
-  expect(after.find(({ id }) => id === soup.id)).toMatchObject({
-    price: 0,
-    total: 0,
-    setMenuLineId: daily.id,
-    place: 0,
+  expect(menuRows(after)).toEqual([]);
+  expect(after.find(({ id }) => id === soups[0]!.id)).toMatchObject({
+    role: null,
+    price: 600,
+    total: 600,
+    setMenuLineId: null,
+    place: null,
   });
-  expect(await total(bill.tabId)).toBe(1400);
 });
 
-it("leaves a set menu whose dish's paid extra was discounted as it is (D2)", async () => {
+it("clears the stamp a part of a row's comp left on the dishes it did not take (D30)", async () => {
+  const bill = await seated();
+  await send(bill, "Soup", "Soup", "Soup", "Sirloin", "Sirloin", "Sirloin");
+  const sirloins = (await shape(bill.tabId)).filter(({ what }) => what === "Sirloin").map(idOf);
+  await adjust(bill.tabId, sirloins[0]!, { action: "comp" }, { lineIds: sirloins, quantity: "1" });
+  await regroup(bill.tabId);
+  const after = new Map((await rows(bill.tabId)).map((row) => [row.id, row]));
+  expect(
+    sirloins.map((id) => ({
+      price: after.get(id)!.unitPriceGross,
+      stamped: after.get(id)!.listUnitPriceGross !== null,
+    })),
+  ).toEqual([
+    { price: 500, stamped: false },
+    { price: 500, stamped: false },
+    { price: 0, stamped: true },
+  ]);
+});
+
+it("works out again a dish whose paid extra was discounted, keeping the extra's discount (D34)", async () => {
   const bill = await seated();
   await send(bill, { dish: "Soup", extras: [spec.bread] }, "Hake");
   await regroup(bill.tabId);
   const bread = (await rows(bill.tabId)).find(({ parentLineId }) => parentLineId !== null)!;
   expect(bread.lineTotal).toBe(150);
   await adjust(bill.tabId, bread.id, { action: "discount_percent", percentBp: 1000 });
-  const frozen = await shape(bill.tabId);
-  expect(menuRows(frozen)).toHaveLength(1);
-  await expectFrozenThenNewPair(bill, frozen);
+  await send(bill, "Soup", "Hake");
+  expect(menuRows(await shape(bill.tabId))).toHaveLength(2);
+  const hake = (await shape(bill.tabId)).find(({ what }) => what === "Hake")!;
+  await cancelById(bill.tabId, hake.id);
+  const after = await shape(bill.tabId);
+  const [daily] = menuRows(after);
+  expect(
+    after.map(({ what, price }) => ({ what, price })).sort((a, b) => a.price - b.price),
+  ).toEqual([
+    { what: "Soup", price: 0 },
+    { what: "Hake", price: 0 },
+    { what: "Soup", price: 600 },
+    { what: "Daily menu", price: 1400 },
+  ]);
+  expect(after.filter(({ setMenuLineId }) => setMenuLineId === daily!.id)).toHaveLength(2);
+  expect((await rows(bill.tabId)).find(({ id }) => id === bread.id)).toMatchObject({
+    lineTotal: 135,
+    listUnitPriceGross: 150,
+  });
+  expect(await total(bill.tabId)).toBe(2135);
 });
 
 it("leaves a comped Daily menu and its dishes as they are (D2)", async () => {
@@ -614,17 +682,27 @@ it("leaves the dishes a whole-bill discount reduced as they are, with their list
   expect(await rows(bill.tabId)).toEqual(before);
 });
 
-it("leaves a dish stamped with a list price and no adjustment naming it as it is (D15)", async () => {
-  const { bill, soup } = await groupedSoupAndHake();
-  await inTx(venue, (tx) =>
-    tx
-      .update(workingOrderLines)
-      .set({ listUnitPriceGross: 0 })
-      .where(eq(workingOrderLines.id, soup.id)),
-  );
-  await expectFrozenThenNewPair(bill, await shape(bill.tabId));
-  const [stamped] = (await rows(bill.tabId)).filter(({ id }) => id === soup.id);
-  expect(stamped!.unitPriceGross).toBe(0);
+it("leaves a dish stamped above its price, with no adjustment naming it, as it is (D30)", async () => {
+  const { bill, daily, soup, hake } = await groupedSoupAndHake();
+  await stamp(soup.id, 600);
+  await cancelById(bill.tabId, hake.id);
+  const after = await shape(bill.tabId);
+  expect(after.map(({ id, price }) => ({ id, price }))).toEqual([
+    { id: soup.id, price: 0 },
+    { id: daily.id, price: 1400 },
+  ]);
+  expect(after[0]).toMatchObject({ role: "dish", setMenuLineId: daily.id, place: 0 });
+  expect((await rows(bill.tabId))[0]!.listUnitPriceGross).toBe(600);
+});
+
+it("works out again a dish stamped at its price, and clears the stamp (D30)", async () => {
+  const { bill, soup, hake } = await groupedSoupAndHake();
+  await stamp(soup.id, 0);
+  await cancelById(bill.tabId, hake.id);
+  expect(await shape(bill.tabId)).toMatchObject([
+    { id: soup.id, role: null, price: 600, total: 600, setMenuLineId: null, place: null },
+  ]);
+  expect((await rows(bill.tabId))[0]!.listUnitPriceGross).toBeNull();
 });
 
 it("saves a grouping the calculation could not prove cheapest, answering exact false", async () => {

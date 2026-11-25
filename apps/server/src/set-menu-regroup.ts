@@ -24,7 +24,7 @@ import {
   readBillSetMenuVersions,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
-import { namedFrozenLineIds } from "./set-menu-freeze.js";
+import { frozenLineIdSources } from "./set-menu-freeze.js";
 
 type Calculate = (input: SetMenuGroupingInput) => SetMenuGrouping;
 
@@ -124,11 +124,11 @@ async function planGrouping(
   copies: readonly GroupingCopy[],
   calculate?: Calculate,
 ): Promise<GroupingPlan> {
-  const named = await namedFrozenLineIds(
+  const sources = await frozenLineIdSources(
     tx,
     lines.map(({ id }) => id),
   );
-  return planBillGrouping(lines, frozenLinesOf(lines, named), copies, newId, calculate);
+  return planBillGrouping(lines, frozenLinesOf(lines, sources), copies, newId, calculate);
 }
 
 /** {@link saveBillGrouping} for a bill whose stored `set_menus_exact` is `wasExact`. */
