@@ -1207,7 +1207,7 @@ describe("the person's permission and the profile's action are both needed", () 
     return bill!.status;
   }
 
-  /** A table's bill of a Caña and a Flan, served, its ticket printed and unpaid: Reopen to split
+  /** A table's bill of a Caña and a Flan, served, its ticket printed and unpaid: Reopen bill
    * takes it. */
   async function printedTableBill(): Promise<string> {
     const { tabId } = await seat(v, await v.table(`Printed ${randomUUID().slice(0, 8)}`));

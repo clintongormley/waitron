@@ -2,19 +2,18 @@ import type { BillBalance, BillEditExpected, BillPaymentResult, PartyBill } from
 import { fill, t } from "../i18n/t.js";
 import { billLabel } from "./bill-state.js";
 
-/** Where a Pay for items answer leaves the table, when not on the bill the Pay window paid from:
+/** The bill a Pay for items answer leaves the table on, when not the bill the Pay window paid from:
  * the reopened bill, which the answer names as the table's bill when the server reopened a printed
- * bill, unless the dishes were {@link keptOnOwnBill} (`kept`). */
+ * bill, unless the dishes were {@link keptOnOwnBill}. */
 export function billAfterItems(
   paidFrom: string,
   result: Pick<BillPaymentResult, "balance"> & { paidOn?: string; sourceBalance?: BillBalance },
   notCharged: boolean,
-): { balance: BillBalance; kept: boolean } | undefined {
+): BillBalance | undefined {
   const reopened = result.sourceBalance;
   if (reopened === undefined || reopened.workingOrderId === paidFrom) return undefined;
   const own = result.balance;
-  const kept = keptOnOwnBill(own, result.paidOn, notCharged);
-  return kept ? { balance: own, kept } : { balance: reopened, kept };
+  return keptOnOwnBill(own, result.paidOn, notCharged) ? own : reopened;
 }
 
 /** The bill the table moved to from `gone` by Pay for items on a printed bill, while the bills
@@ -28,10 +27,10 @@ export function reopenedTo(
   return bills.some((bill) => bill.workingOrderId === to) ? to : undefined;
 }
 
-/** The notice once bill `gone` left the screen for `shown`: its receipt credited when Pay for items
+/** The notice once bill `gone` left the screen for `shown`: its receipt cancelled when Pay for items
  * reopened it, else {@link goneNotice}. */
 export function noticeAfterGone(
-  reopened: { from: string; to: string; kept?: boolean } | undefined,
+  reopened: { from: string; to: string } | undefined,
   gone: string,
   bills: readonly PartyBill[],
   was: BillRef | undefined,
@@ -68,11 +67,9 @@ type BillRef = Pick<PartyBill, "billNumber" | "billName">;
 
 /** A notice above the table's bill, kept as facts and worded only when drawn, so it follows a
  * change of language: the bill on screen left the table (`gone`, null when it had no number), or
- * Pay for items credited a printed bill's receipt (`corrective`, null when the read named none),
- * the bill shown holding the chosen dishes when `kept`. */
+ * Pay for items credited a printed bill's receipt. */
 export type BillNotice =
-  | { kind: "gone"; gone: BillRef | null; shown: BillRef }
-  | { kind: "credited"; corrective: string | null; shown: BillRef; kept?: true };
+  { kind: "gone"; gone: BillRef | null; shown: BillRef } | { kind: "credited"; shown: BillRef };
 
 const refOf = ({ billNumber, billName }: BillRef): BillRef => ({ billNumber, billName });
 
@@ -80,21 +77,14 @@ export function goneNotice(gone: BillRef | undefined, shown: BillRef): BillNotic
   return { kind: "gone", gone: gone === undefined ? null : refOf(gone), shown: refOf(shown) };
 }
 
-/** The notice on `to`, the bill Pay for items left the table on after crediting printed bill
- * `from` ({@link billAfterItems}), naming the corrective the bills read lists on `from`; null while
- * `to` is not listed. */
+/** The notice on `to`, the bill Pay for items left the table on after crediting a printed bill
+ * ({@link billAfterItems}); null while `to` is not listed. */
 export function creditedNotice(
   bills: readonly PartyBill[],
-  reopen: { from: string; to: string; kept?: boolean },
+  reopen: { to: string },
 ): BillNotice | null {
   const shown = bills.find((bill) => bill.workingOrderId === reopen.to);
-  if (shown === undefined) return null;
-  return {
-    kind: "credited",
-    corrective: latestCorrectiveOf(bills, reopen.from),
-    shown: refOf(shown),
-    ...(reopen.kept === true ? { kept: true as const } : {}),
-  };
+  return shown === undefined ? null : { kind: "credited", shown: refOf(shown) };
 }
 
 /** The latest corrective a read of the party's bills shows on bill `billId`. */
@@ -113,11 +103,5 @@ export function billNoticeText(notice: BillNotice | null | undefined): string | 
     return notice.gone === null
       ? fill(t("table.bill_gone_unnumbered"), { shown })
       : fill(t("table.bill_gone"), { gone: billLabel(notice.gone), shown });
-  if (notice.kept === true)
-    return notice.corrective === null
-      ? fill(t("table.bill_credited_kept_unnumbered"), { shown })
-      : fill(t("table.bill_credited_kept"), { number: notice.corrective, shown });
-  return notice.corrective === null
-    ? fill(t("table.bill_credited_unnumbered"), { shown })
-    : fill(t("table.bill_credited"), { number: notice.corrective, shown });
+  return fill(t("table.bill_credited"), { shown });
 }

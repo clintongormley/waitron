@@ -1766,14 +1766,7 @@ export const en = {
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
   "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
   "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
-  "table.bill_credited":
-    "Corrective invoice {number} issued: the printed receipt is credited. Dishes still to pay are on {shown}.",
-  "table.bill_credited_unnumbered":
-    "A corrective invoice was issued: the printed receipt is credited. Dishes still to pay are on {shown}.",
-  "table.bill_credited_kept":
-    "Corrective invoice {number} issued: the printed receipt is credited. The chosen dishes stay on {shown}, to be paid there.",
-  "table.bill_credited_kept_unnumbered":
-    "A corrective invoice was issued: the printed receipt is credited. The chosen dishes stay on {shown}, to be paid there.",
+  "table.bill_credited": "Receipt cancelled. The dishes are on {shown}.",
   "table.bill_count": "{bill} · {count} bills",
   "table.unsent_bill": "{bill} unsent",
   "table.unsent_bills": "{n} bills unsent",
@@ -2156,11 +2149,9 @@ export const en = {
     "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill.",
   "bill_pay.items_own_bill":
     "These items move to a bill of their own, paid now. The rest stays on this bill.",
-  "bill_pay.items_own_bill_printed":
-    "These items move to a bill of their own, paid now. This bill's receipt is credited, and the rest goes onto a new open bill.",
+  "bill_pay.items_own_bill_printed": "This cancels the existing receipt and reopens the bill.",
   "bill_pay.reader": "Card reader",
-  "bill_pay.card_declined":
-    "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.",
+  "bill_pay.card_declined": "The card was declined.",
   "bill_pay.card_unreachable":
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
@@ -2259,42 +2250,33 @@ export const en = {
   "cancel_credit.done": "Corrective invoice {number} issued. The bill is cancelled.",
   "cancel_credit.done_unnumbered": "A corrective invoice was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
-  // Reopen to split: a printed receipt is credited in full and its dishes go onto a new open bill
-  "split.action": "Reopen to split",
-  "split.title": "Reopen to split",
-  "split.scope":
-    "Receipt {invoice} ({amount}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.",
-  "split.scope_unnumbered":
-    "This bill's receipt ({amount}) is credited in full with a corrective invoice, and its dishes go onto a new open bill so each guest can have their own receipt.",
-  "split.confirm": "Reopen to split",
+  // Reopen bill: a printed receipt is credited in full and its dishes go onto a new open bill
+  "split.action": "Reopen bill",
+  "split.title": "Reopen bill",
+  "split.scope": "This cancels the existing receipt and reopens the bill.",
+  "split.confirm": "Reopen bill",
   "split.unserved":
-    "Some dishes on this bill are not marked served, so it cannot be split yet. If the guests have had them, choose Mark served: the receipt is then credited and the dishes go onto a new bill.",
+    "Some dishes on this bill are not marked served, so it cannot be reopened yet. If the guests have had them, choose Mark served.",
   "split.unserved_held":
-    "Some dishes on this bill are not marked served, so it cannot be split yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen to split again.",
+    "Some dishes on this bill are not marked served, so it cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen bill again.",
   "split.unserved_no_mark":
-    "Some dishes on this bill are not marked served, so it cannot be split yet. This device cannot mark dishes served: mark them served on a device that can, then choose Reopen to split again.",
+    "Some dishes on this bill are not marked served, so it cannot be reopened yet. This device cannot mark dishes served: mark them served on a device that can, then choose Reopen bill again.",
   "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
   "split.unconfirmed":
-    "Reopen to split got no answer, so it may have been made. Check the table's bills before trying again.",
-  "split.scope_paid": "{paid} already paid counts towards the new bill.",
+    "Reopen bill got no answer, so it may have been done. Check the table's bills before trying again.",
   "split.refused_payments":
-    "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill with An amount or Split equally.",
-  "split.refused_left_unpaid":
-    "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
-  "split.refused_not_at_table": "Only a table's bill can be split this way. Nothing was credited.",
-  "split.refused_not_issued": "This bill has no receipt yet, so nothing was credited.",
+    "Part of this bill was paid for by item, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
+  "split.refused_left_unpaid": "This bill was recorded as left unpaid, so its guests have gone.",
+  "split.refused_not_at_table": "Only a table's bill can be reopened.",
+  "split.refused_not_issued": "This bill has no receipt yet.",
   "split.refused_advance":
-    "Part of this bill was paid with its own receipt, so it cannot be reopened to split. Nothing was credited. Take the rest of the payment on this bill with An amount or Split equally.",
+    "Part of this bill was paid with its own receipt, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
   "split.refused_payment_in_flight":
-    "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
+    "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
-    "Corrective invoice {number} issued. Move each guest's dishes to their own bill, then print each one.",
-  "split.done_unnumbered":
-    "A corrective invoice was issued. Move each guest's dishes to their own bill, then print each one.",
+    "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.",
   "split.credited_elsewhere":
-    "Corrective invoice {number} was already issued for this bill, perhaps on another device, and no new bill was opened. Nothing more was credited.",
-  "split.credited_elsewhere_unnumbered":
-    "This bill was already credited, perhaps on another device, and no new bill was opened. Nothing more was credited.",
+    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.",
   "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -4244,14 +4226,7 @@ export const es: Record<StringKey, string> = {
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
   "table.bill_gone": "{gone} ya no está en esta mesa. Ahora se muestra {shown}.",
   "table.bill_gone_unnumbered": "Esa cuenta ya no está en esta mesa. Ahora se muestra {shown}.",
-  "table.bill_credited":
-    "Factura rectificativa {number} emitida: el ticket impreso queda abonado. Los platos por pagar están en {shown}.",
-  "table.bill_credited_unnumbered":
-    "Se emitió una factura rectificativa: el ticket impreso queda abonado. Los platos por pagar están en {shown}.",
-  "table.bill_credited_kept":
-    "Factura rectificativa {number} emitida: el ticket impreso queda abonado. Los platos elegidos siguen en {shown}, para pagarlos allí.",
-  "table.bill_credited_kept_unnumbered":
-    "Se emitió una factura rectificativa: el ticket impreso queda abonado. Los platos elegidos siguen en {shown}, para pagarlos allí.",
+  "table.bill_credited": "Ticket anulado. Los platos están en {shown}.",
   "table.bill_count": "{bill} · {count} cuentas",
   "table.unsent_bill": "{bill} sin enviar",
   "table.unsent_bills": "{n} cuentas sin enviar",
@@ -4628,11 +4603,9 @@ export const es: Record<StringKey, string> = {
     "{dishName} forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.",
   "bill_pay.items_own_bill":
     "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
-  "bill_pay.items_own_bill_printed":
-    "Estos artículos pasan a una cuenta propia, que se paga ahora. El ticket de esta cuenta se abona y el resto pasa a una cuenta nueva abierta.",
+  "bill_pay.items_own_bill_printed": "Esto anula el ticket y reabre la cuenta.",
   "bill_pay.reader": "Lector de tarjetas",
-  "bill_pay.card_declined":
-    "La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo con la tarjeta, o vuelve atrás y elige otra forma de pago.",
+  "bill_pay.card_declined": "La tarjeta se ha rechazado.",
   "bill_pay.card_unreachable":
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
@@ -4731,42 +4704,32 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.done_unnumbered":
     "Se emitió la factura rectificativa y la cuenta queda cancelada.",
   "cancel_credit.done_action": "Hecho",
-  "split.action": "Reabrir para dividir",
-  "split.title": "Reabrir para dividir",
-  "split.scope":
-    "El ticket {invoice} ({amount}) se abona por completo con una factura rectificativa y sus platos pasan a una cuenta nueva abierta, para que cada cliente tenga su propio ticket.",
-  "split.scope_unnumbered":
-    "El ticket de esta cuenta ({amount}) se abona por completo con una factura rectificativa y sus platos pasan a una cuenta nueva abierta, para que cada cliente tenga su propio ticket.",
-  "split.confirm": "Reabrir para dividir",
+  "split.action": "Reabrir cuenta",
+  "split.title": "Reabrir cuenta",
+  "split.scope": "Esto anula el ticket y reabre la cuenta.",
+  "split.confirm": "Reabrir cuenta",
   "split.unserved":
-    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Si los clientes ya los han tomado, pulsa Marcar como servidos: después el ticket se abona y los platos pasan a una cuenta nueva.",
+    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Si los clientes ya los han tomado, pulsa Marcar como servidos.",
   "split.unserved_held":
-    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir para dividir.",
+    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir cuenta.",
   "split.unserved_no_mark":
-    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede dividir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir para dividir.",
+    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir cuenta.",
   "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
   "split.unconfirmed":
-    "Reabrir para dividir no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
-  "split.scope_paid": "Lo ya pagado ({paid}) cuenta para la cuenta nueva.",
+    "Reabrir cuenta no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
   "split.refused_payments":
-    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
-  "split.refused_left_unpaid":
-    "Esta cuenta se registró como no pagada: los clientes se han ido y no hay nada que dividir.",
-  "split.refused_not_at_table":
-    "Solo la cuenta de una mesa se puede dividir así. No se ha abonado nada.",
-  "split.refused_not_issued": "Esta cuenta aún no tiene ticket, así que no se ha abonado nada.",
+    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
+  "split.refused_left_unpaid": "Esta cuenta se registró como no pagada: los clientes se han ido.",
+  "split.refused_not_at_table": "Solo se puede reabrir la cuenta de una mesa.",
+  "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",
   "split.refused_advance":
-    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir para dividirla. No se ha abonado nada. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
+    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   "split.refused_payment_in_flight":
-    "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir para dividir.",
+    "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":
-    "Factura rectificativa {number} emitida. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
-  "split.done_unnumbered":
-    "Se emitió la factura rectificativa. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
+    "Ticket anulado. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
   "split.credited_elsewhere":
-    "Ya se había emitido la factura rectificativa {number} para esta cuenta, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva. No se ha abonado nada más.",
-  "split.credited_elsewhere_unnumbered":
-    "Esta cuenta ya estaba abonada, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva. No se ha abonado nada más.",
+    "El ticket de esta cuenta ya estaba anulado, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

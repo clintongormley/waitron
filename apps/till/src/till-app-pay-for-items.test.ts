@@ -110,9 +110,8 @@ const windowCredited = (el: TillApp) => {
   return line === null ? null : text(line);
 };
 
-/** The screen's notice once Pay for items credited wo-4's receipt, the rest on `shown`. */
-const creditedNotice = (shown: string) =>
-  fill(t("table.bill_credited"), { number: "R-1/4", shown });
+/** The screen's notice once Pay for items credited wo-4's receipt, its dishes on `shown`. */
+const creditedNotice = (shown: string) => `Receipt cancelled. The dishes are on ${shown}.`;
 
 /** Pay > Items on wo-4, the dishes on `lineNos` chosen. */
 async function chooseItems(el: TillApp, lineNos: number[]): Promise<void> {
@@ -396,7 +395,9 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await choosePrintedItems(el, [4]);
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
-    expect(text(inDialog(el, "[data-pay-own-bill]"))).toBe(t("bill_pay.items_own_bill_printed"));
+    expect(text(inDialog(el, "[data-pay-own-bill]"))).toBe(
+      "This cancels the existing receipt and reopens the bill.",
+    );
     await press(el, "[data-pay-confirm]");
 
     expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
@@ -777,7 +778,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await press(el, "[data-pay-confirm]");
     await flush(el, 6);
 
-    const kept = fill(t("table.bill_credited_kept"), { number: "R-1/4", shown: "Bill 3" });
+    const kept = creditedNotice("Bill 3");
     expect(formError(el)).toBe(t("bill_pay.card_declined"));
     expect(tableOrder(el).orderId).toBe("wo-9");
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(kept);
@@ -835,7 +836,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     setLocale("es");
     await flush(el);
 
-    const spanish = fill(t("table.bill_credited_unnumbered"), {
+    const spanish = fill(t("table.bill_credited"), {
       shown: billLabel({ billNumber: 1, billName: null }),
     });
     expect(spanish).toContain("Cuenta");
@@ -1019,7 +1020,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await vi.advanceTimersByTimeAsync(5_000);
     await flush(el, 6);
 
-    const kept = fill(t("table.bill_credited_kept"), { number: "R-1/4", shown: "Bill 3" });
+    const kept = creditedNotice("Bill 3");
     expect(tableOrder(el).orderId).toBe("wo-9");
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(kept);
     expect(windowCredited(el)).toBe(kept);

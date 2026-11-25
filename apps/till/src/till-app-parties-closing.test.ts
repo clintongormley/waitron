@@ -648,6 +648,11 @@ describe("till-app: reopening a printed bill to split it", () => {
       ?.textContent?.replace(/\s+/g, " ")
       .trim() ?? null;
 
+  const SPLIT_DONE =
+    "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.";
+  const ALREADY_CANCELLED =
+    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.";
+
   /** The server's side: `splitAfterPrint` cancels the bill and opens `wo-split`, unless it rejects. */
   function billServer(
     refuse: () => Promise<void> = async () => {},
@@ -704,7 +709,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await flush(el, 8);
   }
 
-  it("opens in split mode, splits, names the corrective and opens the new bill", async () => {
+  it("opens in split mode, splits, says the receipt is cancelled and opens the new bill", async () => {
     const server = billServer();
     const cancelOrder = vi.fn();
     const { el } = await openSplit({ ...server, cancelOrder });
@@ -717,12 +722,12 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(server.splitAfterPrint.mock.calls).toEqual([
       ["wo-check", { signal: expect.any(AbortSignal) }],
     ]);
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(SPLIT_DONE);
     await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
     expect(cancelOrder).not.toHaveBeenCalled();
   });
 
-  it("splits a part-paid bill and says what was paid carries over", async () => {
+  it("splits a part-paid bill, saying of it only what it says of any other", async () => {
     const partPaid: PartyBill = {
       ...invoiced,
       total: "30.00",
@@ -735,14 +740,15 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(
       dialog(el)!
         .shadowRoot!.querySelector("[data-cancel-credit-scope]")!
-        .textContent!.replace(/\s+/g, " "),
-    ).toContain("€10.00 already paid counts towards the new bill.");
+        .textContent!.replace(/\s+/g, " ")
+        .trim(),
+    ).toBe("This cancels the existing receipt and reopens the bill.");
     await confirmSplit(el);
 
     expect(server.splitAfterPrint.mock.calls).toEqual([
       ["wo-check", { signal: expect.any(AbortSignal) }],
     ]);
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(SPLIT_DONE);
     await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
   });
 
@@ -757,7 +763,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(server.splitAfterPrint).toHaveBeenCalledOnce();
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(SPLIT_DONE);
   });
 
   it("a second press refused as no longer waiting, once the first split that got no answer has landed, says it split", async () => {
@@ -774,7 +780,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(SPLIT_DONE);
   });
 
   it("a split refused as no longer waiting, because the bill was cancelled and credited elsewhere, does not say it split", async () => {
@@ -788,7 +794,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(doneText(el)).not.toContain("Move each guest");
-    expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
     expect(tableOrder(el)!.orderId).not.toBe("wo-split");
   });
 
@@ -802,7 +808,7 @@ describe("till-app: reopening a printed bill to split it", () => {
 
     await confirmSplit(el);
 
-    expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
   });
 
   it("a split refused as not permitted opens no PIN prompt", async () => {
@@ -840,7 +846,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(bottom(el)).toBe(
-      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill with An amount or Split equally.",
+      "Part of this bill was paid for by item, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
     );
     expect(doneText(el)).toBeNull();
   });
@@ -871,7 +877,7 @@ describe("till-app: reopening a printed bill to split it", () => {
       expectedPartyRevision: expect.any(Number),
     });
     expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
-    expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
+    expect(doneText(el)).toBe(SPLIT_DONE);
   });
 
   it("on a device that does not hand orders over, offers no Mark served and says where to mark them", async () => {

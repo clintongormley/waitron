@@ -1281,10 +1281,18 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
   });
 
-  it("says a declined card took nothing, above the action", async () => {
-    const el = await mount({ refusal: { code: "declined" } });
-    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
-  });
+  it.each([
+    ["en", "The card was declined."],
+    ["es", "La tarjeta se ha rechazado."],
+  ])(
+    "says a declined card was declined, and nothing more, above the action, in %s",
+    async (locale, sentence) => {
+      setLocale(locale);
+      onTestFinished(() => setLocale("en"));
+      const el = await mount({ refusal: { code: "declined" } });
+      expect(actions(el).error).toBe(sentence);
+    },
+  );
 
   it("keeps a declined item chosen when it comes back to the bill under a new line number", async () => {
     const el = await mount();
@@ -3922,19 +3930,32 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     }
   });
 
-  it("on a printed bill says its receipt is credited and the rest goes onto a new open bill", async () => {
+  it("on a printed bill says only that this cancels the receipt and reopens the bill", async () => {
     for (const [status, sentence] of [
-      ["placed", "bill_pay.items_own_bill_printed"],
-      ["open", "bill_pay.items_own_bill"],
+      ["placed", "This cancels the existing receipt and reopens the bill."],
+      ["open", t("bill_pay.items_own_bill")],
     ] as const) {
       const el = await mount({
         balance: balanceOf({ status, outstanding: "120.00" }),
         asked: itemsAsked,
         preview: ownBill("35.00"),
       });
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(t(sentence));
+      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(sentence);
       cleanupWidgets();
     }
+  });
+
+  it("says in Spanish what paying a printed bill's items does", async () => {
+    setLocale("es");
+    onTestFinished(() => setLocale("en"));
+    const el = await mount({
+      balance: balanceOf({ status: "placed", outstanding: "120.00" }),
+      asked: itemsAsked,
+      preview: ownBill("35.00"),
+    });
+    expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+      "Esto anula el ticket y reabre la cuenta.",
+    );
   });
 
   it("on a printed bill, the confirm step is no wider than the step that chooses the items", async () => {
@@ -3969,7 +3990,12 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
         .getBoundingClientRect().width;
     const plain = width(await mount(over));
     cleanupWidgets();
-    const credited = fill(t("table.bill_credited"), { number: "R-0EDGJ/9", shown: "Bill 2" });
+    const credited = fill(t("table.bill_credited"), {
+      shown: "Bill 2 · Company dinner for the visiting architects",
+    });
+    expect(credited).toBe(
+      "Receipt cancelled. The dishes are on Bill 2 · Company dinner for the visiting architects.",
+    );
     const el = await mount({ ...over, credited });
     const line = root(el).querySelector("[data-pay-credited]")!;
     expect(text(line)).toBe(credited);

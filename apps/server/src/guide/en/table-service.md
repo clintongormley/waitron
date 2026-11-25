@@ -601,7 +601,7 @@ Everything else you do at the table is in the **⋮** menu beside the switcher, 
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
 unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Cancel and
-credit** and **Reopen to split**, each when it applies. The second, **Whole table**, acts on everyone at the
+credit** and **Reopen bill**, each when it applies. The second, **Whole table**, acts on everyone at the
 table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
 name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
 more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
@@ -700,10 +700,10 @@ a customer, so on one of those take off any dish that may not come before you pr
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
-If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The receipt
-is credited and its dishes go onto a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
-Money already paid counts towards the new bill. A bill that has had a payment on its own receipt cannot
-be split this way: take the rest with **An amount** or **Split equally**.
+If the guests then want to pay separately, open **⋮** and choose **Reopen bill**. This
+cancels the existing receipt and reopens the bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+Money already paid counts towards it. A bill that has had a payment on its own receipt cannot be
+reopened: take the rest with **An amount** or **Split equally**.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment
@@ -954,9 +954,7 @@ this bill was printed or paid while the card was out, they stay on a bill of the
 there: at a table it is listed in the bill switcher, and at the Counter under **Parked orders**.
 While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
-On a printed bill, **Items** first credits its receipt and puts its dishes on an open bill, then
-pays the chosen ones on a bill of their own. If the card is declined or you choose **Cancel
-payment**, the chosen dishes go back to that open bill in the same way. A Counter order already
+On a printed bill, **Items** cancels the existing receipt and reopens the bill. A Counter order already
 sent to the kitchen, even once moved to a table, is paid with **An amount**, **Split equally** or
 **Whole bill**, not by item; when its bill is presented for collection, choose **Pay in parts** to
 see those choices.

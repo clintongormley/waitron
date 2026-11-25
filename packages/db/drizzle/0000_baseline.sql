@@ -2947,7 +2947,7 @@ BEGIN
   WHERE NOT (
     new.id IS old.id
     AND (new.working_order_id IS old.working_order_id
-      -- Reopen to split carries a received payment to the bill reopened from its abandoned one.
+      -- Reopen bill carries a received payment to the bill reopened from its abandoned one.
       OR (old.state = 'received' AND new.state = 'received'
         AND old.kind <> 'items'
         AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'

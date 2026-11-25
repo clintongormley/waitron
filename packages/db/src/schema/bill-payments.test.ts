@@ -1248,7 +1248,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     /**
      * A printed bill holding one payment, and an open bill: linked to the printed one while it is
      * still placed (unless `linked` is false), after which the printed bill is abandoned (unless
-     * `abandon` is false) — the order Reopen to split takes.
+     * `abandon` is false) — the order Reopen bill takes.
      */
     async function reopened(
       payment: Partial<PaymentValues> = {},

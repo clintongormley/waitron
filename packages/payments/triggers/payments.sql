@@ -6,7 +6,7 @@ BEGIN
   SELECT raise(abort, 'a payment cannot make that change')
   WHERE NOT (
     new.id IS old.id
-    -- A card's row follows its bill payment off an abandoned bill (Reopen to split's carry).
+    -- A card's row follows its bill payment off an abandoned bill (Reopen bill's carry).
     AND (new.working_order_id IS old.working_order_id
       OR (EXISTS (SELECT 1 FROM bill_payments
             WHERE id = old.bill_payment_id AND working_order_id = new.working_order_id)

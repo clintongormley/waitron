@@ -5,7 +5,6 @@ import {
   isZeroDecimal,
   subtractDecimal,
   toScale,
-  type Decimal,
 } from "@waitron/shared";
 import type { BillBalance, PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
@@ -112,22 +111,12 @@ export function stillToPay(
 
 /**
  * What a bill still owes: for a bill whose ticket is issued, its amount due (correctives counted)
- * less what it has received ({@link receivedOf}); else its outstanding.
+ * less what it has received (`total − outstanding`); else its outstanding.
  */
 export function stillOwed(bill: Pick<PartyBill, "total" | "outstanding" | "amountDue">): string {
   if (bill.amountDue === undefined) return bill.outstanding;
-  return toScale(subtractDecimal(decimal(bill.amountDue), receivedOf(bill)), MONEY_SCALE);
-}
-
-/** What a bill has received: its total less its outstanding. */
-export function receivedOf(bill: Pick<PartyBill, "total" | "outstanding">): Decimal {
-  return subtractDecimal(decimal(bill.total), decimal(bill.outstanding));
-}
-
-/** What a bill has received, or null when it has received nothing. */
-export function paidSoFar(bill: Pick<PartyBill, "total" | "outstanding">): string | null {
-  const paid = receivedOf(bill);
-  return compareDecimal(paid, decimal("0")) > 0 ? paid : null;
+  const received = subtractDecimal(decimal(bill.total), decimal(bill.outstanding));
+  return toScale(subtractDecimal(decimal(bill.amountDue), received), MONEY_SCALE);
 }
 
 /** What a held-list row's `outstanding` leaves to pay: the list gives an order paid over its total a

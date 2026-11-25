@@ -39,6 +39,15 @@ describe("the permanent-refusal messages", () => {
   });
 });
 
+describe("the notice that Pay for items cancelled a printed bill's receipt", () => {
+  it.each([
+    ["en-GB", "Receipt cancelled. The dishes are on {shown}."],
+    ["es-ES", "Ticket anulado. Los platos están en {shown}."],
+  ])("says only that and where the dishes are, in %s", (locale, sentence) => {
+    expect(catalogues[locale]?.["table.bill_credited"]).toBe(sentence);
+  });
+});
+
 describe("the Spanish strings call a restaurant menu a carta", () => {
   // «menú» is kept for a set menu (owner, 2026-11-23); every other "menu" the till's catalogue
   // strings mean is a restaurant menu, and no string here calls a popover a menu, which in the

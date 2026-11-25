@@ -65,7 +65,7 @@ export async function splitAfterPrint(
   });
 }
 
-/** Reopen to split's refusals, which write nothing; answers the bill's party and ticket. `read` is
+/** Reopen bill's refusals, which write nothing; answers the bill's party and ticket. `read` is
  * the bill as the caller has read it in this transaction, when it has. */
 export async function refuseReopen(
   tx: Transaction,

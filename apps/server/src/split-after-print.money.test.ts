@@ -48,7 +48,7 @@ type Party = { partyId: string; tabId: string };
 const printed = async (...names: string[]): Promise<Party> =>
   fixture.printed(venue, await seatedWith(venue, ...names));
 
-/** Reopen to split by an operator who does not hold `sale.rectify`. */
+/** Reopen bill by an operator who does not hold `sale.rectify`. */
 const split = (billId: string) => fixture.split(venue, billId, venue.cookie);
 const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
 const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
@@ -105,7 +105,7 @@ async function splitOk(billId: string): Promise<string> {
   return answer.json.billId as string;
 }
 
-describe("Reopen to split on a part-paid printed bill", () => {
+describe("Reopen bill on a part-paid printed bill", () => {
   it("a part-paid printed bill splits, and its cash counts towards the new bill", async () => {
     const party = await printed("Red wine bottle");
     const original = await invoiceOf(party.tabId);
@@ -360,7 +360,7 @@ describe("Reopen to split on a part-paid printed bill", () => {
   });
 });
 
-describe("Reopen to split carries a card's provider row", () => {
+describe("Reopen bill carries a card's provider row", () => {
   it("a card paid before printing is linked to the new ticket", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     expect((await fixture.serve(venue, party, party.tabId)).status).toBe(200);

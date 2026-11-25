@@ -936,11 +936,11 @@ declare module "@waitron/shared" {
      * single-payment routes, placing it, merging it with another bill and moving items between it
      * and another are refused while it has any pending or received bill payment, even one given
      * back in full; abandoning it and finishing its table are refused while it still holds money,
-     * except by Reopen to split, which moves the money to the reopened bill and raises this code
+     * except by Reopen bill, which moves the money to the reopened bill and raises this code
      * only for a received items payment.
      */
     "bill.payments_received": { workingOrderId: string };
-    /** Reopen to split on a printed bill on which an advance was ever taken, even one given back
+    /** Reopen bill on a printed bill on which an advance was ever taken, even one given back
      * in full since: an advance's money is on its own ticket, so it cannot follow the dishes. */
     "bill.has_advance": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
@@ -950,16 +950,16 @@ declare module "@waitron/shared" {
     /** An order named a bill that is not the party's: a bill of another party, or of none. */
     "bill.other_party": { workingOrderId: string };
     /**
-     * Reopen to split refuses a counter order: Mark served, which its unserved refusal offers, is
+     * Reopen bill refuses a counter order: Mark served, which its unserved refusal offers, is
      * per party.
      */
     "bill.not_at_table": { workingOrderId: string };
-    /** Reopen to split refuses a bill its party left without paying: its guests have gone. */
+    /** Reopen bill refuses a bill its party left without paying: its guests have gone. */
     "bill.left_unpaid": { workingOrderId: string };
-    /** Reopen to split found no ticket on the bill to credit. */
+    /** Reopen bill found no ticket on the bill to credit. */
     "bill.not_issued": { workingOrderId: string };
     /**
-     * Reopen to split found dishes neither served in full nor taken off service, printed with Print
+     * Reopen bill found dishes neither served in full nor taken off service, printed with Print
      * anyway; Mark served on `released` ones lets it carry on.
      */
     "bill.unserved_dishes": { workingOrderId: string; dishes: UnservedBillDish[] };

@@ -4,7 +4,7 @@ import { payments } from "./schema/payments.js";
 
 /**
  * Moves the card provider rows of `billPaymentIds` to `toWorkingOrderId`, after their bill payments
- * moved there off an abandoned printed bill (Reopen to split), with no sale: a card part payment on
+ * moved there off an abandoned printed bill (Reopen bill), with no sale: a card part payment on
  * an open bill has none until the bill's own ticket links it.
  */
 export async function carryProviderRows(

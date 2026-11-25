@@ -162,7 +162,7 @@ async function wholeCredit(of: SaleId = ticketId): Promise<Omit<RecordCorrection
     .where(eq(saleLines.saleId, of));
   return {
     origin: deviceOrigin(seed.deviceId),
-    operationDescription: "Reopen to split",
+    operationDescription: "Reopen bill",
     nodeId: seed.nodeId,
     seriesId: correctiveSeriesId,
     correctsSaleId: of,

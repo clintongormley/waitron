@@ -395,7 +395,6 @@ import {
   overpaidOf,
   owing,
   paidInPart,
-  paidSoFar,
   printBillOffered,
   shownBills,
   stillOwed,
@@ -1783,7 +1782,6 @@ interface CancelCrediting {
   workingOrderId: string;
   invoiceNumber: string | null;
   amount: string;
-  paid: string | null;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
   /** The party's bills when the dialog opened. A split whose answer was lost shows itself as an
@@ -3738,7 +3736,7 @@ export class TillApp extends LitElement {
    * this visit. An explicit bill choice ends that wait. */
   #billAfterSplit?: { partyId: string; visit: number; billId?: string };
   /** The printed bill the last Pay for items answer credited, and the bill it reopened as. */
-  #reopenedByItems?: { from: string; to: string; kept: boolean };
+  #reopenedByItems?: { from: string; to: string };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -21674,7 +21672,7 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, offered on an invoiced bill nothing is paid on, or Reopen to split, also
+  /** Cancel and credit, offered on an invoiced bill nothing is paid on, or Reopen bill, also
    * offered on one part paid: its dialog opens. */
   #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
@@ -21688,7 +21686,6 @@ export class TillApp extends LitElement {
       workingOrderId,
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
-      paid: paidSoFar(bill),
       reason: "",
       billsBefore: this.partyBills.map((row) => row.workingOrderId),
       refusal: null,
@@ -21743,7 +21740,7 @@ export class TillApp extends LitElement {
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    let split: { billId: string; correctiveNumber: string } | undefined;
+    let split: { billId: string } | undefined;
     try {
       if (open.mode === "split")
         split = await this.api.splitAfterPrint(open.workingOrderId, { signal: limit.signal });
@@ -21766,21 +21763,16 @@ export class TillApp extends LitElement {
     if (this.#cancelCreditingNow(open.id) === null) return;
     this.#closeCancelCreditApprovers();
     if (split === undefined) await this.#onCancelCredited(open.id, sent);
-    else await this.#onSplitAfterPrint(open.id, sent, split);
+    else await this.#onSplitAfterPrint(open.id, sent, split.billId);
   }
 
-  /** The split's answer names the corrective and the new bill, which the screen then shows. */
-  async #onSplitAfterPrint(
-    id: number,
-    sent: Sent,
-    answer: { billId: string; correctiveNumber: string },
-  ): Promise<void> {
+  /** The split's answer names the new bill, which the screen then shows. */
+  async #onSplitAfterPrint(id: number, sent: Sent, billId: string): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, { corrective: answer.correctiveNumber });
+    this.#showCancelCredited(id, { corrective: null });
     if (this.#hasLeftParty(open.partyId, sent)) return;
-    const shown =
-      this.activeTabId === open.workingOrderId && (await this.#switchToBill(answer.billId));
+    const shown = this.activeTabId === open.workingOrderId && (await this.#switchToBill(billId));
     await this.#loadPartyBills();
     if (shown && !this.#hasLeftParty(open.partyId, sent))
       await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
@@ -21910,7 +21902,6 @@ export class TillApp extends LitElement {
         .canMarkServed=${this.capabilities.includes("hand-over-orders")}
         .invoiceNumber=${open.invoiceNumber}
         .amount=${open.amount}
-        .paid=${open.paid}
         .refusal=${open.refusal}
         .busy=${open.busy}
         .done=${open.done}
@@ -23218,7 +23209,7 @@ export class TillApp extends LitElement {
     if (!ended || reread.billId === undefined || open === null) return;
     const reopen = this.#reopenedByItems;
     if (reopen?.to === open.billId && keptOnOwnBill(balance, reread.billId, notCharged)) {
-      this.#reopenedByItems = { ...reopen, to: balance.workingOrderId, kept: true };
+      this.#reopenedByItems = { ...reopen, to: balance.workingOrderId };
       await this.#moveToReopened(open, balance);
     } else await this.#rereadAfterPaid(open);
   }
@@ -23688,15 +23679,11 @@ export class TillApp extends LitElement {
     const shown = own === undefined ? {} : { balance: own };
     const notCharged = NOT_CHARGED_OUTCOMES.has(result.outcome);
     const to = own === undefined ? billAfterItems(open.billId, result, notCharged) : undefined;
-    this.#reopenedByItems = to && {
-      from: open.billId,
-      to: to.balance.workingOrderId,
-      kept: to.kept,
-    };
+    this.#reopenedByItems = to && { from: open.billId, to: to.workingOrderId };
     const reread = () =>
       to === undefined
         ? this.#rereadAfterPaid(open, own, result.sourceBalance)
-        : this.#moveToReopened(open, to.balance);
+        : this.#moveToReopened(open, to);
     if (this.activeTabId === open.billId && own !== undefined) this.billBalance = own;
     const held = this.#unansweredPayments.get(open.billId);
     if (result.payment.state === "pending" && held?.pendingRefusal !== undefined) {
@@ -23806,7 +23793,7 @@ export class TillApp extends LitElement {
     this.#showCredited(reopened.workingOrderId, open.id);
   }
 
-  /** On bill `to`, once Pay for items reopened a printed bill as it, says its receipt was credited,
+  /** On bill `to`, once Pay for items reopened a printed bill as it, says its receipt was cancelled,
    * on the screen and in a Pay window `id` still open on it. */
   #showCredited(to: string, id?: number): void {
     const reopen = this.#reopenedByItems;

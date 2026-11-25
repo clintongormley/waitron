@@ -18,7 +18,8 @@ import { servableDishes, serveListed, unservedDishText } from "./dish-format.js"
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the corrective issued, or null when no number was read.
+/** A cancelled bill: the number of the corrective issued, or null when no number was read; a split
+ * names no number.
  * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
 export interface CancelCreditDone {
   corrective: string | null;
@@ -41,20 +42,12 @@ const REFUSALS: Record<string, StringKey> = {
 const TEXT = {
   cancel: {
     title: "cancel_credit.title",
-    scope: "cancel_credit.scope",
-    scopeUnnumbered: "cancel_credit.scope_unnumbered",
     confirm: "cancel_credit.confirm",
-    done: "cancel_credit.done",
-    doneUnnumbered: "cancel_credit.done_unnumbered",
     refusals: REFUSALS,
   },
   split: {
     title: "split.title",
-    scope: "split.scope",
-    scopeUnnumbered: "split.scope_unnumbered",
     confirm: "split.confirm",
-    done: "split.done",
-    doneUnnumbered: "split.done_unnumbered",
     refusals: {
       ...REFUSALS,
       network: "split.unconfirmed",
@@ -69,10 +62,7 @@ const TEXT = {
   },
 } satisfies Record<
   CancelCreditMode,
-  Record<
-    "title" | "scope" | "scopeUnnumbered" | "confirm" | "done" | "doneUnnumbered",
-    StringKey
-  > & { refusals: Record<string, StringKey> }
+  Record<"title" | "confirm", StringKey> & { refusals: Record<string, StringKey> }
 >;
 
 @customElement("till-cancel-credit-dialog")
@@ -118,8 +108,6 @@ export class TillCancelCreditDialog extends LitElement {
   @property({ attribute: false }) canMarkServed = false;
   @property({ attribute: false }) invoiceNumber: string | null = null;
   @property({ attribute: false }) amount = "0.00";
-  /** Money already taken on a bill being split, which moves to the new bill; null when none. */
-  @property({ attribute: false }) paid: string | null = null;
   @property({ attribute: false }) refusal: CancelCreditRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
@@ -250,24 +238,19 @@ export class TillCancelCreditDialog extends LitElement {
   }
 
   #scopeText(): string {
+    if (this.mode === "split") return t("split.scope");
     const amount = formatMoney(this.amount, currentLocale());
-    const text = TEXT[this.mode];
-    const scope =
-      this.invoiceNumber === null
-        ? fill(t(text.scopeUnnumbered), { amount })
-        : fill(t(text.scope), { invoice: this.invoiceNumber, amount });
-    if (this.mode !== "split" || this.paid === null) return scope;
-    const paid = formatMoney(this.paid, currentLocale());
-    return `${scope} ${fill(t("split.scope_paid"), { paid })}`;
+    return this.invoiceNumber === null
+      ? fill(t("cancel_credit.scope_unnumbered"), { amount })
+      : fill(t("cancel_credit.scope"), { invoice: this.invoiceNumber, amount });
   }
 
   #doneText(done: CancelCreditDone): string {
-    const [numbered, unnumbered]: [StringKey, StringKey] = done.creditedElsewhere
-      ? ["split.credited_elsewhere", "split.credited_elsewhere_unnumbered"]
-      : [TEXT[this.mode].done, TEXT[this.mode].doneUnnumbered];
+    if (this.mode === "split")
+      return t(done.creditedElsewhere ? "split.credited_elsewhere" : "split.done");
     return done.corrective === null
-      ? t(unnumbered)
-      : t(numbered).replace("{number}", () => done.corrective!);
+      ? t("cancel_credit.done_unnumbered")
+      : fill(t("cancel_credit.done"), { number: done.corrective });
   }
 
   #doneBody(done: CancelCreditDone) {

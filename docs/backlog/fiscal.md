@@ -30,7 +30,7 @@ this entry is the 4 November decision, which this one sets aside.
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "No pre-bill is fine, and saves us
 the hassle of having another system to track. If the bill changes after it is issued then we just
 issue a correction or cancellation." Guests who split a bill after it was printed take the correction:
-see [Reopen to split](#adviser-split-after-print-a-printed-bill-is-split-by-a-whole-credit-note-and-copies-of-its-dishes-watcher-2026-11-20).
+see [Reopen bill](#adviser-split-after-print-a-printed-bill-is-split-by-a-whole-credit-note-and-copies-of-its-dishes-watcher-2026-11-20).
 
 **Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
 cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a
@@ -1209,7 +1209,7 @@ for goodwill money back: the owner's "Add it" (O6, lane L `questions.md`, "WATCH
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 
 The owner's answer of 18 November allows either a correction or a cancellation (question 2 of the
-[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)). **Reopen to split** on a table's
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)). **Reopen bill** on a table's
 printed, unpaid bill files the same whole credit note as **Cancel and credit** and puts copies of
 its dishes on a new open bill of the party; staff then use Move dishes and Print the bill. The copies
 are new dish rows, an exception to A1308's "the order line is the dish", because a printed ticket is
@@ -1222,7 +1222,7 @@ change. `copyBillDishes` (`apps/server/src/split-after-print.ts`) lists the tabl
 line by hand; nothing checks it.
 
 _2026-11-25: the owner's answers of 24 November replace D1 and D3 (A1515 piece 1, pull request 4,
-[plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)). D1: **Reopen to split**
+[plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)). D1: **Reopen bill**
 asks nobody for a PIN; the credit note names the signed-in person, backed by the reopened bill it
 opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to the reopened bill
 ("2 B"); one holding a payment on its own receipt is still refused (owner, "ok", 24 November). As

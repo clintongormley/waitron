@@ -579,7 +579,7 @@ export interface PayForItemsAsk {
 /**
  * What paying for the chosen items would take, writing nothing: their price as
  * {@link priceItemPicks} reads it, allocated as a whole payment of a bill of that total. A printed
- * bill is priced by its own dishes, which a reopen would copy, after Reopen to split's refusals.
+ * bill is priced by its own dishes, which a reopen would copy, after Reopen bill's refusals.
  */
 export async function previewPayForItems(
   deps: { db: Database; admission: TradingAdmission },
