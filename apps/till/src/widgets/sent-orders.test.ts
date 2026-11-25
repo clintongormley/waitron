@@ -5,7 +5,7 @@ import type { BillSetMenuState } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 import "./sent-orders.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
@@ -568,6 +568,11 @@ it("resets expansion when the same panel is connected for another table opening"
   host.appendChild(el);
   await el.updateComplete;
   expect(open(el)).toBe("true");
+});
+
+it("keeps the browser menu off a fired dish during a touch hold", async () => {
+  const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
+  expect(touchContextMenu(find(el, "[data-serve-line=Bravas]"))).toBe(true);
 });
 
 it("opens a held mouse press as information without serving on the following click", async () => {

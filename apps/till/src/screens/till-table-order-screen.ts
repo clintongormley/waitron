@@ -34,6 +34,7 @@ import {
   Gestures,
   inNumberOrder,
   leaveCoordinatorFor,
+  preventTouchContextMenu,
 } from "@waitron/ui";
 import { pointerElementsAt, scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import type { TillBasket } from "../widgets/basket.js";
@@ -4624,6 +4625,7 @@ export class TillTableOrderScreen extends LitElement {
                 class="draft-group-name"
                 data-draft-group-name
                 data-draft-drag-heading=${group.kind === "new" ? group.key : nothing}
+                @contextmenu=${group.kind === "new" ? preventTouchContextMenu : nothing}
                 ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group?.key === group.key}
               >
                 ${
@@ -4745,6 +4747,7 @@ export class TillTableOrderScreen extends LitElement {
         type="button"
         class="option draft-select"
         data-draft-select=${index}
+        @contextmenu=${preventTouchContextMenu}
         ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group === undefined && this.#draftPress?.chosen.includes(line)}
         aria-pressed=${selected}
         ?disabled=${store.editsLocked || store.sending}

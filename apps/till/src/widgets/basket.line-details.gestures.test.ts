@@ -4,7 +4,7 @@ import type { TillProduct } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TillBasket } from "./basket.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 import "./basket.js";
 
 const dish: TillProduct = {
@@ -36,6 +36,21 @@ async function hold(el: TillBasket, selector: string) {
   }
   await el.updateComplete;
 }
+
+it("keeps the browser menu off a basket line during a touch hold", async () => {
+  const { el } = await opening();
+  expect(touchContextMenu(el.shadowRoot!.querySelector<HTMLElement>(".name")!)).toBe(true);
+});
+
+it("lets the browser offer Paste in the basket's quantity field", async () => {
+  const { el, line } = await opening();
+  el.openLineDetails(line);
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  await picker.updateComplete;
+  const quantity = picker.shadowRoot!.querySelector("[name=quantity]")!;
+  expect(touchContextMenu(quantity.shadowRoot!.querySelector("input")!)).toBe(false);
+});
 
 it("A738 a held line opens one window without changing quantity or removing the dish", async () => {
   const { el, store, line } = await opening();

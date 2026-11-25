@@ -6,7 +6,7 @@ import type { TillProduct } from "../api/client.js";
 import { TillLastAdded } from "./last-added.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 
 const dish: TillProduct = {
   id: "soup",
@@ -34,6 +34,11 @@ const step = (el: TillLastAdded, by: number) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-last-added-step="${by}"]`)!;
 const detail = (el: TillLastAdded) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-last-added-detail]")!;
+
+it("keeps the browser menu off the last-added dish during a touch hold", async () => {
+  const { el } = await mount();
+  expect(touchContextMenu(detail(el))).toBe(true);
+});
 
 it("A738 last-added steps exactly its saved line and removes it at one", async () => {
   const { el, store } = await mount();

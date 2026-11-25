@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, ContentLanguageController, formatDecimalInput, Gestures } from "@waitron/ui";
+import {
+  baseStyles,
+  ContentLanguageController,
+  formatDecimalInput,
+  Gestures,
+  preventTouchContextMenu,
+} from "@waitron/ui";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
@@ -33,6 +39,8 @@ export class TillLastAdded extends LitElement {
         background: var(--wt-color-surface);
       }
       .detail {
+        -webkit-user-select: none;
+        user-select: none;
         flex: 1;
         min-width: 0;
         min-height: var(--wt-tap-min);
@@ -156,6 +164,7 @@ export class TillLastAdded extends LitElement {
         type="button"
         class="detail"
         data-last-added-detail
+        @contextmenu=${preventTouchContextMenu}
         ?disabled=${this.#blocked()}
         @click=${(event: MouseEvent) => {
           if (!this.#held || event.detail === 0) this.#open(line);

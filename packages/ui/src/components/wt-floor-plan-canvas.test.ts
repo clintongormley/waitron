@@ -68,6 +68,23 @@ function selects(target: EventTarget): CustomEvent<TableSelect>[] {
   return seen;
 }
 
+it("keeps the browser menu off the floor plan during a touch hold", async () => {
+  const el = await canvas([table("t1", "T1")]);
+  const init = {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    pointerType: "touch",
+    pointerId: 1,
+  };
+  const target = button(el, "t1");
+  target.dispatchEvent(new PointerEvent("pointerdown", init));
+  const menu = new PointerEvent("contextmenu", init);
+  target.dispatchEvent(menu);
+  window.dispatchEvent(new PointerEvent("pointercancel", init));
+  expect(menu.defaultPrevented).toBe(true);
+});
+
 it("draws each table at its grid place and size", async () => {
   const el = await canvas([table("t1", "T1", { x: 2, y: 3, width: 8, height: 4 })]);
   const grid = part(el, "grid").getBoundingClientRect();

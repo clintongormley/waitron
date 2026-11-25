@@ -6,6 +6,7 @@ import {
   Gestures,
   LONG_PRESS_MS,
   SLOP_PX,
+  preventTouchContextMenu,
   type GestureHandlers,
 } from "./gestures.js";
 
@@ -96,6 +97,15 @@ afterEach(() => {
   gestures.disconnect();
   vi.useRealTimers();
   cleanup();
+});
+
+it.each([
+  ["touch", true],
+  ["mouse", false],
+  ["", false],
+] as const)("cancels the browser context menu only for touch (%j)", (pointerType, cancelled) => {
+  b.addEventListener("contextmenu", preventTouchContextMenu);
+  expect(dispatch(b, "contextmenu", 1, 10, 10, { pointerType }).defaultPrevented).toBe(cancelled);
 });
 
 describe("Gestures", () => {

@@ -4,7 +4,7 @@ import type { WtRowActions } from "@waitron/ui";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { cleanupWidgets, touchContextMenu } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { beer, flan, mount, resized, showView } from "./till-table-order-screen.test-helpers.js";
@@ -109,6 +109,14 @@ it("Move creates a group after its joined held group beyond existing new slots",
     ["Cake", "1"],
   ]);
 });
+
+it.each(['[data-draft-select="0"]', '[data-draft-drag-heading="new:1"]'])(
+  "keeps the browser menu off the draft hold target %s",
+  async (selector) => {
+    const { el } = await open();
+    expect(touchContextMenu(q(el, selector))).toBe(true);
+  },
+);
 
 it("a held row shows that it is ready to drag before moving", async () => {
   const { el } = await open();
