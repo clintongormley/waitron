@@ -1336,6 +1336,77 @@ describe("Check again while a card refund waits for the card company", () => {
     await vi.waitFor(() => expect(shown(el, "card")).toBe(true));
   });
 
+  it("does not say the card company has not answered once it has, though the payments cannot be read after it", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+    api.getRefundableTenders
+      .mockResolvedValueOnce([CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }])
+      .mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+    expect(status(el)).toBe("");
+  });
+
+  it("says the card company did not make it, and not that it has not answered, when nothing can be read after its answer", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockResolvedValueOnce(settled({ state: "failed" }));
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockRejectedValue(lost());
+    api.getRefundableTenders
+      .mockResolvedValueOnce([CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }])
+      .mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_failed")));
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(status(el)).toBe("");
+  });
+
+  it("does not say so either when this till's own saved refund is found settled and the payments cannot be read", async () => {
+    const api = waitingApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    const refunds = new TenderRefundSession(SCOPE, api);
+    await refunds.submit("sale-1", {
+      tenderId: "card-1",
+      appliedAmount: "6.05",
+      tipAmount: "0.00",
+      reason: "Overcharged",
+      invoiceCorrectionId: "correction-1",
+    });
+    const { el } = await mount(WAITING, api, ["take-cash"], refunds);
+    api.getTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValue(BACK);
+    api.getRefundableTenders.mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(status(el)).toBe("");
+  });
+
+  it("still says the card company has not answered about another refund it has not settled", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockReset().mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(settled())
+      .mockResolvedValueOnce(settled({ id: "refund-2", tenderId: "card-2", state: "pending" }));
+    press(el, "check");
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(api.retryTenderRefund).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     ["lost", () => lost(), "give_back.uw_unknown"],
     ["refused on a full disk", () => refused("storage.disk_full"), "storage.disk_full"],

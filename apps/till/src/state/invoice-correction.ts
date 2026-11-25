@@ -6,6 +6,7 @@ import type {
 import {
   fail,
   scopePrefix,
+  stillSaved,
   tenderRefundAmount,
   withJournalStorage,
   writeVerified,
@@ -54,18 +55,8 @@ export class InvoiceCorrectionSession {
     });
   }
 
-  /**
-   * Removes the entry at `key` only while it still holds `submissionId`'s request. An unreadable
-   * entry is left: keeping it costs a replay under the same id, never a second payment.
-   */
   #forget(key: string, submissionId: string): void {
-    let held: string | undefined;
-    try {
-      held = this.#read(key)?.submissionId;
-    } catch {
-      return;
-    }
-    if (held === submissionId)
+    if (stillSaved(() => this.#read(key)?.submissionId, submissionId))
       withJournalStorage(this.storage, (storage) => storage.removeItem(key));
   }
 

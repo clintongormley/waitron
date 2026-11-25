@@ -106,6 +106,8 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private unanswered = false;
   /** The step out may have had the box ask the card company. */
   #asked = false;
+  /** The refunds the card company has answered about here; null stands for no refund. */
+  readonly #settledRefunds = new Set<string | null>([null]);
   #override?: Override;
   #retry?: Retry;
   #lastHeld = false;
@@ -219,7 +221,7 @@ export class TillGiveBackUnderWay extends LitElement {
     const answers = await this.refunds.askAgain(this.tenders, this.capabilities, this.#override);
     for (const answer of answers) this.#cardDone(answer);
     if (answers.length > 0) await this.#refreshAfter();
-    this.unanswered = this.tenders.some((row) => row.pendingRefundId !== null);
+    this.unanswered = this.tenders.some((row) => !this.#settledRefunds.has(row.pendingRefundId));
   }
   /** Runs `step`, asking for an approver when the person signed in may not, and running it again
    * with their PIN; the PIN lasts for that one step. */
@@ -379,6 +381,7 @@ export class TillGiveBackUnderWay extends LitElement {
     this.lostCard = this.#lostCard();
     this.terminal = null;
     this.cardAnswered = true;
+    if (result.state !== "pending") this.#settledRefunds.add(result.id);
     if (result.state === "failed")
       this.message =
         result.refusalReason === "provider_balance_unavailable"

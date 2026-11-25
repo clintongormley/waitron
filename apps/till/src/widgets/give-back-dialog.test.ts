@@ -1921,6 +1921,19 @@ describe("sending", () => {
       expect(again(el).disabled).toBe(false);
     });
 
+    it("says it could not find out, asking nothing, when this device's storage cannot be read", async () => {
+      const { el, api } = await waiting();
+      const reading = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("Storage blocked");
+      });
+      onTestFinished(() => reading.mockRestore());
+      again(el).click();
+      await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.uw_unknown")));
+      expect(outcomeText(el)).not.toContain("Nothing has been given back");
+      expect(api.getTenderRefund).not.toHaveBeenCalled();
+      expect(again(el).disabled).toBe(false);
+    });
+
     it("tells the till the sign-in ended when the asking is refused for it", async () => {
       const { el, api } = await waiting();
       api.retryTenderRefund.mockRejectedValueOnce({ code: "session.required", status: 401 });

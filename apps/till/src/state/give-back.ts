@@ -14,6 +14,7 @@ import {
   TenderRefundAttemptError,
   fail,
   scopePrefix,
+  stillSaved,
   withJournalStorage,
   writeVerified,
   type TenderRefundScope,
@@ -188,27 +189,30 @@ export class GiveBackSession {
       });
     } catch (error) {
       const refusal = refusalOf(error);
-      if (refusal !== null && PROVES_NOTHING.has(refusal.code)) {
-        this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
-        this.#settled.set(saleId, { ids: submissionIds, error });
-      } else if (refusal !== null) {
-        const proves = firstSend && FIRST_SEND_REFUSALS.has(refusal.code);
-        this.#write({ ...saved, sent: { ...sent, firstSendRefused: proves, refusal } }, saleId);
-      } else if (sent.firstSendRefused || sent.refusal !== null)
-        this.#write(
-          { ...saved, sent: { ...sent, firstSendRefused: false, refusal: null } },
-          saleId,
-        );
+      const code = refusal?.code ?? "";
+      const proves = PROVES_NOTHING.has(code);
+      const firstSendRefused = firstSend && FIRST_SEND_REFUSALS.has(code);
+      const left = { ...saved, sent: proves ? null : { ...sent, firstSendRefused, refusal } };
+      this.#settle(saleId, submissionIds.refund, proves && saved.rest === null ? null : left);
+      if (proves) this.#settled.set(saleId, { ids: submissionIds, error });
       throw error;
     }
     this.#settled.set(saleId, { ids: submissionIds, answer });
-    try {
-      this.#keep(saleId, sent, answer);
-    } catch (error) {
-      // The money's outcome is what staff must see; the press stays saved and is sent again.
-      if (!(error instanceof TenderRefundAttemptError && error.kind === "storage")) throw error;
-    }
+    this.#keep(saleId, sent, answer);
     return answer;
+  }
+
+  /** Saves what an answer leaves, while the press or rest saved is still the one `id` names. The
+   * answer is what staff must see: one that cannot be saved leaves the entry to be asked again. */
+  #settle(saleId: string, id: string | undefined, left: SavedGiveBack | null): void {
+    const idOf = (saved: SavedGiveBack | null) =>
+      saved?.sent?.submissionIds.refund ?? saved?.rest?.waitFor;
+    if (!stillSaved(() => idOf(this.read(saleId)), id)) return;
+    try {
+      this.#write(left, saleId);
+    } catch {
+      // The entry stays.
+    }
   }
 
   /** What to keep once the server answered: a card refund still waiting, a rest, or a press whose
@@ -224,7 +228,9 @@ export class GiveBackSession {
       (part) => part.state === "pending" && waitingKinds.has(part.kind),
     );
     const waitFor = waiting.find((part) => part.refundId !== undefined)?.refundId;
-    this.#write(
+    this.#settle(
+      saleId,
+      sent.submissionIds.refund,
       answer.refusal !== null || (waitFor === undefined && answer.rest === null)
         ? null
         : {
@@ -239,7 +245,6 @@ export class GiveBackSession {
               way: sent.request.way,
             },
           },
-      saleId,
     );
   }
 
@@ -303,18 +308,6 @@ export class GiveBackSession {
     return known.state === "pending" ? this.api.retryTenderRefund(refundId, override) : known;
   }
 
-  /** Forgets `rest`, unless what is saved is no longer it: the device may have locked meanwhile. */
-  #forgetRest(saleId: string, rest: GiveBackRest): void {
-    try {
-      const saved = this.read(saleId);
-      if (!saved?.rest || saved.rest.waitFor !== rest.waitFor) return;
-      this.#write(saved.sent === null ? null : { ...saved, rest: null }, saleId);
-    } catch (error) {
-      // The refund's outcome is what staff must see; what stays saved is only checked again.
-      if (!(error instanceof TenderRefundAttemptError)) throw error;
-    }
-  }
-
   /** Whether the waiting card refund, if any, is done, asking the card company again while it is
    * not, and, once it is, what any rest would do. A settled refund with nothing to follow is
    * forgotten. */
@@ -326,9 +319,8 @@ export class GiveBackSession {
           ? { state: "completed" }
           : await this.#askAgain(rest.waitFor, override);
       if (state === "pending") return { state };
-      if (state === "failed" || rest.request === null) this.#forgetRest(saleId, rest);
-      if (state === "failed")
-        return { state, ...(refusalReason === undefined ? {} : { refusalReason }) };
+      if (state === "failed" || rest.request === null) this.#settle(saleId, rest.waitFor, null);
+      if (state === "failed") return { state, refusalReason };
       return {
         state: "completed",
         preview:

@@ -79,6 +79,17 @@ export function writeVerified(storage: Storage, key: string, value: string): voi
   if (storage.getItem(key) !== value) fail("storage");
 }
 
+/** Whether what is saved is still the request `id` names, whose answer came: signing out may have
+ * cleared it since, and a newer press saved its own. An unreadable entry is left: keeping it costs
+ * a replay under the same id, never a second payment. */
+export function stillSaved(savedId: () => string | undefined, id: string | undefined): boolean {
+  try {
+    return savedId() === id;
+  } catch {
+    return false;
+  }
+}
+
 function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   if (typeof ask.tenderId !== "string" || ask.tenderId === "") return fail("invalid");
   if (typeof ask.reason !== "string" || ask.reason.trim() === "" || ask.reason.length > REASON_MAX)
