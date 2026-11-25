@@ -110,8 +110,8 @@ existente.
 
 ## Lee el encabezado de un grupo en el papel de estación {#group-headings}
 
-En el papel de estación, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
-el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
+En el papel de estación, el encabezado de un grupo indica qué órdenes de plato aparecen debajo, en
+la secuencia de servicio: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
 al reimprimir.
 
 ## Reimprime el original y comprueba sus avisos {#reprints}
@@ -324,7 +324,7 @@ atenuados. Usa **Columnas** en el pase para elegir y ordenar sus columnas.
 
 En cada tarjeta en **En curso**, toca **Listo** para marcar como listos sus platos enviados en todas
 las estaciones, también los que oculta este pase. El botón cubre toda la tarjeta, incluidos los
-pedidos de mostrador y los platos sin curso. Los platos en espera o esperando al pase se quedan
+pedidos de mostrador y los platos sin orden de plato. Los platos en espera o esperando al pase se quedan
 como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
 En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
@@ -404,14 +404,14 @@ Un plato enviado sin preguntar a nadie, por ejemplo al cobrar una cuenta guardad
 pasar una cuenta a una mesa, lleva la marca sin «aceptado»: `** TRAS ALMUERZO **` y **Tras Almuerzo**.
 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
-con **PIN de encargado para enviar tras acabar el periodo** en **Cursos y estaciones**, en su pestaña
+con **PIN de encargado para enviar tras acabar el periodo** en **Orden de platos y estaciones**, en su pestaña
 **Servicio** del panel. Desactivado, quien puede enviar lo confirma con la estación. Si está activado y
 quien envía no es encargado, el terminal pide el PIN de un encargado tras **La estación acepta**.
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
 En un local nuevo en España, Pica pica y Entradas empiezan sin espera; Platos principales y
-Postres quedan en espera para más tarde. Elige el curso de cada producto y organiza los platos de
+Postres quedan en espera para más tarde. Elige el orden de plato de cada producto y organiza los platos de
 la mesa en **Nuevo pedido** antes de enviarlos. En el mostrador, el envío marcha todos los platos juntos.
 El paso **¿Postre?** te recuerda visitar la mesa; puedes marchar los postres ya pedidos
 sin marcar ese paso como hecho.
@@ -435,9 +435,9 @@ preparación. En una estación o en el pase, lee la copia que acompaña a cada p
 no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.
 
 Un grupo en espera vence unos minutos después de que se hayan servido los platos marchados antes
-que él. Fija el tiempo de cada curso en la pestaña **Mesas** del departamento en el panel,
+que él. Fija el tiempo de cada recordatorio en la pestaña **Mesas** del departamento en el panel,
 bajo **Dejar para después**. Elige **Al momento** para recibir el aviso en cuanto se hayan servido
-esos platos, o **Deshabilitado** para desactivar el recordatorio de ese curso. El aviso nunca marcha
+esos platos, o **Deshabilitado** para desactivar ese recordatorio. El aviso nunca marcha
 los platos por ti.
 
 ## Haz que una estación espere al pase {#station-waits}

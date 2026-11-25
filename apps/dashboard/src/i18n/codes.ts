@@ -608,7 +608,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "set_menu.dishes_only": {
     en: "A set menu lists dishes only. Add products to it. To group them, set each product's course.",
-    es: "Un menú solo admite platos. Añade productos y asigna un curso a cada uno para agruparlos.",
+    es: "Un menú solo admite platos. Añade productos y asigna un orden de plato a cada uno para agruparlos.",
   },
   "set_menu.not_publishable": {
     en: "Fix the problems in the set menu before publishing this menu.",
@@ -952,11 +952,11 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "course.name_taken": {
     en: "A course with that name already exists",
-    es: "Ya existe un curso con ese nombre",
+    es: "Ya existe un orden de plato con ese nombre",
   },
   "course.not_found": {
     en: "That course no longer exists",
-    es: "Ese curso ya no existe",
+    es: "Ese orden de plato ya no existe",
   },
   "device.not_found": {
     en: "That device no longer exists",
@@ -2063,7 +2063,7 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
   },
   lines: {
     en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",
-    es: "Un menú puede tener hasta 20 líneas. Combina varios cursos en una línea o elimina una.",
+    es: "Un menú puede tener hasta 20 líneas. Combina varios órdenes de plato en una línea o elimina una.",
   },
   count: {
     en: "Enter a whole number from 1 to 99.",
@@ -2071,11 +2071,11 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
   },
   courseId: {
     en: "Choose a course that is still available.",
-    es: "Elige un curso que siga disponible.",
+    es: "Elige un orden de plato que siga disponible.",
   },
   courseIds: {
     en: "Choose at least one available course and select each course only once per line.",
-    es: "Elige al menos un curso disponible y selecciona cada curso solo una vez por línea.",
+    es: "Elige al menos un orden de plato disponible. Selecciona cada uno solo una vez por línea.",
   },
   variants: {
     en: "Reload the dish and review the choices for its current variants.",

@@ -135,31 +135,32 @@ Puedes crear una unidad, una lista de extras o una lista de opciones sin abandon
 editando. Abre el formulario anidado y guarda el elemento nuevo: cuando vuelves, el producto ya lo usa.
 Los campos del producto sin guardar siguen ahí si el guardado anidado falla o lo cancelas.
 
-## Elige el curso {#course}
+## Elige el orden de plato {#course}
 
 Los locales nuevos en España empiezan con **Pica pica**, **Entradas**, **Platos principales** y
 **Postres**. Los nombres siguen el idioma
-del contenido inicial. Asigna estos cursos a tus productos o adapta la lista a tu servicio.
+del contenido inicial. Asigna estos órdenes de plato a tus productos o adapta la lista a tu servicio.
 
-Usa el campo **Curso**, en **Estación de preparación** dentro de **Detalles**, para elegir el curso de los platos nuevos. Se
-guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pueden ir en
+Usa el campo **Orden de plato**, en **Estación de preparación** dentro de **Detalles**, para fijar
+cuándo sale cada producto. En una mesa, organiza los platos en **Nuevo pedido**. Pueden ir en
 **Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está en espera. Puedes cambiar el
-curso de un plato sin enviar antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos,
-en vez de tratar cada curso como una sección fija para toda la mesa.
+orden de plato antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos. Un grupo
+puede incluir platos de distintos órdenes de plato.
 
 En la pestaña **Mesas** del departamento, elige **Marchar ya** para colocar los platos nuevos directamente en ese grupo de
-la mesa. Elige **Dejar para después** para agrupar el primer pedido por curso. En pedidos posteriores,
-comprueba el grupo propuesto antes de enviar; puedes mover los platos entre grupos. En **Cursos**, añade uno
-con **Añadir curso** y guarda su nombre con Intro o al salir del campo. Abre el menú ⋮ de la fila
-para renombrar o eliminar un curso.
+la mesa. Elige **Dejar para después** para agrupar el primer pedido por orden de plato. En pedidos
+posteriores, comprueba el grupo propuesto antes de enviar. Puedes mover los platos entre grupos. En
+**Orden de platos**, pulsa **Añadir orden de plato** y guarda el nombre con Intro o al salir del
+campo. Abre el menú ⋮ de la fila para cambiar el nombre o eliminar ese orden de plato.
 
-**Editar cursos…**, al final de la lista **Curso**, abre la lista de cursos en una
-ventana que guarda cada cambio al hacerlo. Al cerrarla, el último curso que añadiste pasa a ser el
-curso del producto; si en cambio eliminaste el curso del producto, el producto se queda sin ninguno.
-Los demás campos del producto sin guardar siguen como estaban.
+**Editar orden de platos…**, al final de la lista **Orden de plato**, abre una ventana que guarda
+cada cambio al hacerlo. Al cerrarla, el último orden de plato que añadiste se aplica al producto.
+Si eliminaste el que tenía, el producto se queda sin ninguno. Los demás campos del producto sin
+guardar siguen como estaban.
 
-La columna **Curso** de la lista de Productos muestra el curso de cada producto. Cuando el local tiene
-cursos, el filtro **Curso** de **Filtros** elige uno o varios de ellos, o **Sin curso**.
+La columna **Orden de plato** de la lista de Productos muestra el de cada producto. Cuando has
+configurado el orden de platos, abre **Filtros** y usa **Orden de plato** para elegir uno o varios,
+o **Sin orden de plato**.
 
 En una mesa de la demostración española, envía un primer pedido con bebidas y platos
 principales. Las bebidas van directamente a la barra y los platos principales esperan hasta
@@ -332,15 +333,14 @@ En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se ven
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
 incluyes. Indica el suplemento junto a cada plato que cueste más y pulsa **Guardar** en
 **Platos**. Deja el importe en blanco si el plato está incluido en el precio del menú.
-Ajusta los suplementos de las variantes en **Variantes**. Cambia el **Curso** de un plato si
-lo sirves de otra manera en este menú. Por ejemplo, pon una tapa en Entrantes
-para que cuente como entrante y salga con ese curso si la pides desde el menú.
+Ajusta los suplementos de las variantes en **Variantes**. Cambia el **Orden de plato** si sirves un plato de otra manera en este menú. Por ejemplo, pon una
+tapa en Entrantes para que cuente y salga como entrante cuando la pidas desde el menú.
 
-En **Qué incluye cada menú**, indica cuántos platos ofreces de cada curso. Por ejemplo,
-usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
-que el cliente elija entre ambos.
+En **Qué incluye cada menú**, indica cuántos platos ofreces de cada orden de plato.
+Por ejemplo, usa una línea para un entrante y otra para un principal. Pon dos órdenes de plato en
+la misma línea para que el cliente elija entre ambos.
 
-Si tu menú incluye bebidas, pan o café, [crea los cursos que necesites y asígnalos a los
+Si tu menú incluye bebidas, pan o café, [crea los órdenes de plato que necesites y asígnalos a los
 productos](products.md#course). En cada departamento, elige **Marchar ya** para Bebidas y Pan,
 así puedes enviarlos con el primer pedido.
 
@@ -425,8 +425,8 @@ con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aqu�
 Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
 el propio producto; consulta
 [Declara los alérgenos y la aptitud dietética directamente](products.md#allergens). Tampoco puede
-cambiar la unidad, la disponibilidad, el curso ni la categoría, el orden de los elementos, los
-colores ni qué elementos y secciones tiene la carta.
+cambiar la unidad, la disponibilidad, el orden de plato ni la categoría, el orden de los
+elementos, los colores ni qué elementos y secciones tiene la carta.
 
 Cada elemento que cambias se marca con un punto. Un valor que la corrección no admite se señala al
 elegir **Revisar**: su campo dice qué corregir, su elemento se marca con **!** y **Revisar** no

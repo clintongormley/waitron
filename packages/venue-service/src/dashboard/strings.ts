@@ -1442,7 +1442,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_tab.receipt": "Recibos",
   "venue.department_tab.transfers": "Traslados",
   "venue.orders_and_payment": "Pedidos y cobro",
-  "venue.courses_and_kitchen": "Cursos y estaciones",
+  "venue.courses_and_kitchen": "Orden de platos y estaciones",
   "venue.table_states": "Estados de la mesa",
   "venue.needs_clearing": "Por recoger",
   "venue.needs_clearing_hint":
@@ -1521,7 +1521,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.service_step_minutes_invalid": "Minutos enteros, de 0 a 120.",
   "venue.service_step_minutes_repeat": "Al menos 1 minuto.",
   "venue.service_step_start_invalid": "Elige un paso que no dependa de este paso.",
-  "venue.service_step_course_gone": "Ese curso se ha eliminado. Elige otro inicio.",
+  "venue.service_step_course_gone": "Ese orden de plato se ha eliminado. Elige otro inicio.",
   "venue.service_step_changed_elsewhere":
     "Un paso se ha cambiado en otra pantalla. Cancela y vuelve a abrirlo para ver lo último.",
   "venue.service_steps_refused":
@@ -1547,7 +1547,7 @@ const es: Record<keyof typeof en, string> = {
     "{other} y {name} caen el {date}. Se aplica {name}; cambia uno para elegir.",
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
-  "venue.release_reminder": "Avisar después de servir el curso anterior",
+  "venue.release_reminder": "Avisar después de servir los platos del orden anterior",
   "venue.release_reminder.off": "Deshabilitado",
   "venue.release_reminder.at_once": "Al momento",
   "venue.release_reminder.minutes": "{n} minutos",

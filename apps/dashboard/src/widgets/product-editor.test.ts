@@ -6278,7 +6278,7 @@ it.each([
 
 it.each([
   ["en-GB", "Prep station name: BAR · Course: Starters"],
-  ["es-ES", "Nombre de estación de preparación: BAR · Curso: Starters"],
+  ["es-ES", "Nombre de estación de preparación: BAR · Orden de plato: Starters"],
 ] as const)(
   "starts the Details line with the Kitchen fields, their names marked as names, in %s",
   async (locale, line) => {
@@ -7011,9 +7011,9 @@ describe("help mode", () => {
       const badge = await badgeOf(field(el, "product-course"));
       await expect
         .element(badge.shadowRoot!.querySelector("button")!)
-        .toHaveAccessibleName("Ayuda: Curso");
+        .toHaveAccessibleName("Ayuda: Orden de plato");
       expect(badge.textContent!.trim()).toBe(t("help.products.course"));
-      expect(badge.textContent!.trim()).toMatch(/^El curso en que sale/);
+      expect(badge.textContent!.trim()).toMatch(/^El orden de plato indica cuándo sale/);
     } finally {
       setLocale(before);
     }

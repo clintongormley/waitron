@@ -480,14 +480,14 @@ Un paso de servicio te recuerda volver a una mesa en el momento adecuado, como *
 de minutos después de marcar **Montar mesa** como hecho, o **¿Postre?** cinco minutos después de servir
 los Platos principales. Un local nuevo empieza con **Montar mesa**, **Tomar nota**, **¿Postre?** y
 **¿Café o la cuenta?**, que vence cinco minutos después de servir los Postres. Si falta cualquiera
-de esos cursos iniciales, un departamento nuevo empieza con los dos primeros pasos; añade tus
-propias visitas ligadas a cursos en Mesas. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
-configura en **Pasos de servicio**, en la pestaña **Mesas** del departamento, en el panel. Allí puedes
-leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fijos, pasos y cursos.
-Elige **Marchar ya** o **Dejar para después** en cada fila de curso. Un curso retenido ofrece su
-propio tiempo de aviso, con **Al momento** y **Deshabilitado**. Pulsa **Guardar** para conservar
-estas opciones con los demás ajustes del departamento. Usa **Cursos** para cambiar los nombres
-y el orden compartidos.
+de esos órdenes de plato iniciales, un departamento nuevo empieza con los dos primeros pasos.
+Añade tus propias visitas ligadas a un orden de plato en **Mesas**. Cada paso empieza en un momento
+así y vence unos minutos después. Configúralos en **Pasos de servicio**, en la pestaña **Mesas** del
+departamento, en el panel. Allí puedes ver los momentos fijos, los pasos y el orden de los platos
+desde que el grupo se sienta hasta que se va. En cada fila de orden de plato, elige **Marchar ya**
+o **Dejar para después**. Si eliges dejarlo para después, puedes fijar su tiempo de aviso, con
+**Al momento** y **Deshabilitado**. Pulsa **Guardar** para conservar estas opciones con los demás
+ajustes del departamento. Usa **Orden de platos** para cambiar los nombres y el orden compartidos.
 
 Elige por nombre cuándo empieza un paso, por ejemplo **Tras Montar mesa**, y ajusta su demora.
 La lista lo coloca junto a ese inicio. Cambiar el nombre de otro paso conserva el vínculo;
@@ -514,7 +514,7 @@ cosas también lo quitan:
 Hasta que se envía el primer pedido, no se muestra ningún paso mientras se toma nota en la mesa.
 
 Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como cuando se sirven más
-platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
+platos del mismo orden de plato. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
 ## Cada plato es su propia línea {#portions}
@@ -813,7 +813,7 @@ Algunas casillas salen en gris, con el motivo debajo del plato:
 En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
 nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
-pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si mueves
+pantalla. Cada plato conserva su orden de plato y sigue enviado, marchado o servido como estaba. Si mueves
 los últimos platos sin pagar de una cuenta pagada en parte, la cuenta queda pagada del todo y se
 emite su factura.
 

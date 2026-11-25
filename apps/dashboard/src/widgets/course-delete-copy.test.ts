@@ -16,7 +16,7 @@ it.each([
   ],
   [
     "es-ES",
-    "Eliminar curso",
+    "Eliminar orden de plato",
     "Esta acción no se puede deshacer.",
     "3 productos se preparan primero.",
     "1 producto se prepara primero.",
@@ -67,7 +67,11 @@ it.each([
 
 it.each([
   ["en-GB", "1 set-menu line loses this course.", "2 dishes return to their product's course."],
-  ["es-ES", "1 línea de un menú pierde este curso.", "2 platos vuelven al curso de su producto."],
+  [
+    "es-ES",
+    "1 línea de un menú pierde este orden de plato.",
+    "2 platos vuelven al orden de plato de su producto.",
+  ],
 ])("explains removed set-menu course choices in %s", (locale, line, dishes) => {
   setLocale(locale);
   const copy = courseDeleteCopy();

@@ -190,7 +190,7 @@ describe("SetupConfigurationPreviewScreen in Spanish", () => {
       el.shadowRoot!.querySelector("wt-choice-row[data-test=new-tax-id]")?.getAttribute("heading"),
     ).toBe("NIF nuevo");
     expect(terms(el, "li")).toEqual([
-      "Cartas, productos, cursos, estaciones de preparación, planos de sala, impresoras, perfiles de dispositivo y apariencia",
+      "Cartas, productos, orden de platos, estaciones de preparación, planos de sala, impresoras, perfiles de dispositivo y apariencia",
       "Usuarios, roles de acceso y roles de personal",
     ]);
   });

@@ -2,13 +2,15 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { CoursesScreen } from "./courses-screen.js";
 import "./courses-screen.js";
 
+const before = currentLocale();
 afterEach(cleanupWidgets);
+afterEach(() => setLocale(before));
 
 const COURSES: Course[] = [
   { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
@@ -97,12 +99,17 @@ describe("dashboard-courses-screen", () => {
     },
   );
 
-  it("shows the Courses heading, its help and the shared course list, which loads the courses itself", async () => {
+  it.each([
+    ["en-GB", "Courses", "Add course"],
+    ["es-ES", "Orden de platos", "Añadir orden de plato"],
+  ])("shows the heading, Add button, help and shared list in %s", async (locale, heading, add) => {
+    setLocale(locale);
     const { el, api } = await mount();
     await vi.waitFor(() =>
       expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
     );
-    expect(q(el, "h1")!.textContent!.trim()).toBe(t("kitchen.courses_title"));
+    expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
+    expect(headerAdd(el)!.textContent!.trim()).toBe(add);
     expect(q(el, ".description")).toBeNull();
     expect(
       list(el).shadowRoot!.querySelector("wt-help-tooltip")!.getAttribute("guide-href"),
