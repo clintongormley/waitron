@@ -1537,8 +1537,10 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
       },
     ]);
     expect((await challenge(route(service()))).status).toBe(200);
-    const last = (await dormantRevisions()).at(-1) as { dormant: unknown[] };
-    expect(last.dormant).toHaveLength(2);
+    expect(await dormantRevisions()).toMatchObject([
+      { dormant: [{ binding: held }] },
+      { dormant: [{ binding: { ...binding, action: "reserve" } }] },
+    ]);
   });
 
   describe("a request that dies part way, then a retry", () => {
