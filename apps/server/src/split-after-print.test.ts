@@ -1447,9 +1447,9 @@ describe("Reopen bill stopping the dishes that never came", () => {
     ]);
   });
 
-  it("refuses a flag other than true", async () => {
+  it("refuses a flag that is neither true nor false", async () => {
     const party = await steakAndBeer();
-    for (const stopUnserved of [false, "yes", null]) {
+    for (const stopUnserved of ["yes", null, 1]) {
       const refused = await expectRefused(
         party.tabId,
         () => fixture.split(venue, party.tabId, venue.supervisorTill, venue.app, { stopUnserved }),
@@ -1457,6 +1457,47 @@ describe("Reopen bill stopping the dishes that never came", () => {
       );
       expect(refused.json.params).toEqual({ field: "stopUnserved" });
     }
+  });
+
+  it("takes stopUnserved false as an ordinary Reopen", async () => {
+    const party = await steakAndBeer();
+
+    const refused = await expectRefused(
+      party.tabId,
+      () =>
+        fixture.split(venue, party.tabId, venue.supervisorTill, venue.app, {
+          stopUnserved: false,
+        }),
+      { status: 409, code: "bill.unserved_dishes" },
+    );
+
+    expect(refused.json.params).toMatchObject({ canStop: true });
+  });
+
+  it("refuses a body that is not an object before writing anything", async () => {
+    const party = await printed("Small beer");
+    for (const body of [true, "stop", 1, [{ stopUnserved: true }]]) {
+      const refused = await expectRefused(
+        party.tabId,
+        () =>
+          send(
+            venue.app,
+            venue.supervisorTill,
+            "POST",
+            `/api/working-orders/${party.tabId}/split-after-print`,
+            body,
+          ),
+        { status: 400, code: "management.request_invalid" },
+      );
+      expect(refused.json.params).toEqual({ field: "body" });
+    }
+    const absent = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/working-orders/${party.tabId}/split-after-print`,
+    );
+    expect(absent.status, JSON.stringify(absent.json)).toBe(200);
   });
 });
 
