@@ -108,10 +108,13 @@ export async function settleFromProviderRow(
  * One pass: a pending card payment not live in this process whose provider row is charged for its
  * actual amount is completed as the live attempt's P3 would have (the invoice included); one with no
  * provider row or with an automatic confirmed noncharge is failed; any other stays pending for a
- * manager. Each payment has its own transaction.
+ * manager. Each payment has its own transaction. Once `stopSignal` is aborted the pass starts
+ * settling no further payment: it checks before each payment and at the start of each payment's
+ * transaction, and every payment it has not started settling stays pending.
  */
 export async function settlePendingBillPayments(
   deps: BillPaymentsLoopDeps,
+  stopSignal?: AbortSignal,
 ): Promise<BillPaymentsPass> {
   deps.admission.require();
   const pending = await withTransaction(deps.db, (tx) =>
@@ -130,16 +133,21 @@ export async function settlePendingBillPayments(
   // While the gate holds it refuses the invoice, which is no failure to alert on: each payment
   // stays pending until it lets go. It can start holding mid-pass, when a clock set begins.
   for (const { id } of pending) {
-    if (deps.clockUnconfirmed?.() === true) break;
+    if (deps.clockUnconfirmed?.() === true || stopSignal?.aborted === true) break;
     const now = deps.clock.now().instant;
     try {
       const { settled } = await withSettledSlip((print) =>
         withIssuanceTransaction(
           deps.db,
-          (tx) => settleFromProviderRow(tx, deps, id, now, print),
+          // The stop can arrive while this waits for the write lock.
+          (tx): Promise<SettledFromRow | { settled: "stopped" }> =>
+            stopSignal?.aborted === true
+              ? Promise.resolve({ settled: "stopped" })
+              : settleFromProviderRow(tx, deps, id, now, print),
           deps.log,
         ),
       );
+      if (settled === "stopped") break;
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;
     } catch (error) {

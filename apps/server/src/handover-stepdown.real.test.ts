@@ -25,7 +25,13 @@ import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
-import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import {
+  capturedPendingPayment,
+  fiscalRecordCount,
+  provisionBillVenue,
+  tabWith,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -41,7 +47,8 @@ const outside = vi.hoisted(() => ({
   reconciles: [] as number[],
   sweeps: [] as number[],
   holdSubmit: null as Promise<void> | null,
-  holdSweep: null as Promise<void> | null,
+  holdSettle: null as Promise<void> | null,
+  settleHeld: false,
   holdReconcile: null as (() => Promise<void>) | null,
   atGateClose: null as { submits: number; reconciles: number; sweeps: number } | null,
 }));
@@ -63,6 +70,26 @@ vi.mock("./card-follow-up.js", async (importOriginal) => {
     cardFollowUpJob: (...args: Parameters<typeof actual.cardFollowUpJob>) => {
       const job = actual.cardFollowUpJob(...args);
       return { ...job, minSleepMs: 50, maxSleepMs: 50 };
+    },
+  };
+});
+
+// The card follow-up's settle step, held at its start: boot's own wiring decides which stop signal
+// the real pass receives.
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
+  return {
+    ...actual,
+    settlePendingBillPayments: async (
+      ...args: Parameters<typeof actual.settlePendingBillPayments>
+    ) => {
+      const held = outside.holdSettle;
+      outside.holdSettle = null;
+      if (held !== null) {
+        outside.settleHeld = true;
+        await held;
+      }
+      return actual.settlePendingBillPayments(...args);
     },
   };
 });
@@ -196,7 +223,7 @@ async function within<T>(promise: Promise<T>, ms: number, what: string): Promise
   }
 }
 
-/** How long the test keeps the server up after releasing AEAT and the sweep, before the sale. */
+/** How long the server stays up after releasing AEAT and the held settle step, before the sale. */
 const WINDOW_MS = 300;
 
 function hold() {
@@ -221,6 +248,7 @@ interface Observed {
   submitsBeforeStepdown: number;
   reconcilesBeforeStepdown: number;
   sweepsBeforeStepdown: number;
+  capturedPayment: { state: string; fiscalRecords: number };
 }
 
 describe("a card sale in flight when the box steps down", () => {
@@ -305,6 +333,9 @@ describe("a card sale in flight when the box steps down", () => {
       attempts: 1,
     });
     const billId = await tabWith(venue, "Small beer");
+    // A charged card payment the follow-up has yet to settle: its invoice is due on the first pass.
+    const capturedBill = await tabWith(venue, "Small beer");
+    const captured = await capturedPendingPayment(venue, capturedBill, 300);
     const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, billId));
     let restarts = 0;
     const restarted = hold();
@@ -331,6 +362,11 @@ describe("a card sale in flight when the box steps down", () => {
       reachedScheduler.release();
       return reconcile.wait;
     };
+    // Held across the stepdown, so the pass that settles began before it, and any later sweep is a
+    // pass the stopped loop should never have started.
+    const settling = hold();
+    releases.push(settling.release);
+    outside.holdSettle = settling.wait;
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
       timings: { maxTickMs: 600000, minTickMs: 200, scheduler: { maxPeriodsPerTick: 1 } },
@@ -344,9 +380,6 @@ describe("a card sale in flight when the box steps down", () => {
         const resolvePending = card.resolvePending.bind(card);
         card.resolvePending = async (now) => {
           outside.sweeps.push(Date.now());
-          const held = outside.holdSweep;
-          outside.holdSweep = null;
-          if (held !== null) await held;
           return resolvePending(now);
         };
         return {
@@ -381,6 +414,7 @@ describe("a card sale in flight when the box steps down", () => {
       () => {
         expect(outside.sweeps.length).toBeGreaterThan(0);
         expect(outside.reconciles.length).toBeGreaterThan(0);
+        expect(outside.settleHeld).toBe(true);
       },
       { timeout: 10_000 },
     );
@@ -420,12 +454,6 @@ describe("a card sale in flight when the box steps down", () => {
       }),
     });
     await vi.waitFor(() => expect(card!.collectCalls).toHaveLength(1), { timeout: 10_000 });
-    // A sweep held across the stepdown: its pass began before the stepdown, so any later sweep
-    // is a pass the stopped loop should never have started.
-    const sweep = hold();
-    releases.push(sweep.release);
-    outside.holdSweep = sweep.wait;
-    await vi.waitFor(() => expect(outside.holdSweep).toBeNull(), { timeout: 10_000 });
 
     await within(reachedScheduler.wait, 10_000, "a reconciliation pass at the scheduler");
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
@@ -495,7 +523,7 @@ describe("a card sale in flight when the box steps down", () => {
     const fromStranger = await crossOrigin(STRANGER);
 
     aeat.release();
-    sweep.release();
+    settling.release();
     // The held sale keeps the server up, so a drain pass or a card loop nobody stopped would
     // reach its stand-in in this window.
     await new Promise((resolve) => setTimeout(resolve, WINDOW_MS));
@@ -508,6 +536,9 @@ describe("a card sale in flight when the box steps down", () => {
     const [{ n }] = suite.db.all<{ n: number }>(
       sql`select count(*) as n from sales where working_order_id = ${workingOrderId}`,
     ) as [{ n: number }];
+    const [{ state: capturedState }] = suite.db.all<{ state: string }>(
+      sql`select state from bill_payments where id = ${captured}`,
+    ) as [{ state: string }];
     observed = {
       stepdown,
       billPayment,
@@ -519,6 +550,10 @@ describe("a card sale in flight when the box steps down", () => {
       submitsBeforeStepdown: atGateClose.submits,
       reconcilesBeforeStepdown: atGateClose.reconciles,
       sweepsBeforeStepdown: atGateClose.sweeps,
+      capturedPayment: {
+        state: capturedState,
+        fiscalRecords: fiscalRecordCount(venue, capturedBill),
+      },
     };
   }, 120_000);
 
@@ -596,7 +631,8 @@ describe("a card sale in flight when the box steps down", () => {
     expect(outside.submits).toHaveLength(1);
   });
 
-  // Both workers have work held across gate closure. The server's restart bounds the observation.
+  // The reconcile is held at the scheduler and the card follow-up's pass in its settle step, both
+  // across gate closure. The server's restart bounds the observation.
   it("the Stripe reconcile and the card sweep are not called after the stepdown began", () => {
     expect(seen().reconcilesBeforeStepdown).toBeGreaterThan(0);
     expect(seen().sweepsBeforeStepdown).toBeGreaterThan(0);
@@ -604,6 +640,15 @@ describe("a card sale in flight when the box steps down", () => {
       reconciles: outside.reconciles.slice(seen().reconcilesBeforeStepdown),
       sweeps: outside.sweeps.slice(seen().sweepsBeforeStepdown),
     }).toEqual({ reconciles: [], sweeps: [] });
+  });
+
+  // Control, run locally and not committed: with the stop signal dropped from boot's `settle`
+  // wiring (`settle: () => settlePendingBillPayments({ ... })`), this case fails with
+  //   expected { state: 'received', fiscalRecords: 1 } to deeply equal { state: 'pending', fiscalRecords: +0 }
+  // This case reaches the check before each payment; the check at the start of the payment's
+  // transaction is covered by the unit cases in bill-payments-loop.test.ts.
+  it("a charged card payment the follow-up had not settled when the stepdown began stays pending, with no invoice", () => {
+    expect(seen().capturedPayment).toEqual({ state: "pending", fiscalRecords: 0 });
   });
 
   it("the request that asked for the stepdown received its answer, and the box restarts once", () => {

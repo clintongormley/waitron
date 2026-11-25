@@ -4763,16 +4763,19 @@ async function bootServer(
               simulator: cardSimulator.forExistingPayments,
             }),
         owners: () => sweepOwners(tradingContext.nodeId, readSingletonRole(), takenOverFrom),
-        settle: () =>
-          settlePendingBillPayments({
-            db,
-            backend: nodeBackend,
-            admission: tradingAdmission,
-            clock: tillClock,
-            cfg: tradingContext,
-            clockUnconfirmed: startClockHolds,
-            log,
-          }),
+        settle: (stopSignal) =>
+          settlePendingBillPayments(
+            {
+              db,
+              backend: nodeBackend,
+              admission: tradingAdmission,
+              clock: tillClock,
+              cfg: tradingContext,
+              clockUnconfirmed: startClockHolds,
+              log,
+            },
+            stopSignal,
+          ),
         recoverRefunds: (stopSignal) =>
           recoverTenderRefunds({
             db,
