@@ -286,7 +286,10 @@ it("reopens a parked order with its saved millilitre and kilogram units", async 
       .where(eq(workingOrderLines.id, reopened.lines[0]!.workingOrderLineId!)),
   );
   const withoutShortName = await getHeldOrder({ db: venue.db }, order.id);
-  expect(withoutShortName.lines[0]!.product?.unit.staffAbbreviation).toBe("Millilitre");
+  expect(withoutShortName.lines[0]!.product?.unit).toMatchObject({
+    abbreviation: { es: "Millilitre" },
+    staffAbbreviation: "Millilitre",
+  });
 });
 
 describe("A1208 counter orders are written as portions", () => {

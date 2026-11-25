@@ -695,6 +695,22 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(0);
   });
 
+  it.each([true, false])("allows Cancel during a payment hold only (held %s)", async (held) => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", ham);
+    await el.updateComplete;
+    el.busy = true;
+    el.held = held;
+    await el.updateComplete;
+
+    expect(query(el, ".cancel")!.hasAttribute("disabled")).toBe(!held);
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, "till-numeric-pad") === null).toBe(held);
+    expect(store.lines).toHaveLength(0);
+  });
+
   it("keeps a declined card's Retry when staff tap a measured product", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "1");

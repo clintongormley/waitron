@@ -315,7 +315,7 @@ export class TillTenderPay extends LitElement {
    */
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
-  /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */
+  /** The pay controls are held while nothing is being sent, so amount entry can stay available. */
   @property({ type: Boolean }) held = false;
   @property() mode: OrderFlow = "prepay";
   /** Only amount entry, for a screen that takes payment elsewhere. */
