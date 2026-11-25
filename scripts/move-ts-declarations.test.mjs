@@ -33,6 +33,96 @@ async function move(source, targets, keep = [], lift) {
 }
 
 describe("move-ts-declarations", () => {
+  describe("client classes", () => {
+    const editedMethod = [
+      "  readTicket(): Ticket {",
+      '    return this.#request<Ticket>("/ticket/branch-edit");',
+      "  }",
+    ].join("\n");
+    const client = [
+      'import type { Request } from "./request.js";',
+      "export interface Ticket {",
+      "  amount: number;",
+      "}",
+      "export class Api {",
+      "  readonly #request: Request;",
+      "  constructor(request: Request) {",
+      "    this.#request = request;",
+      "  }",
+      editedMethod,
+      "}",
+      "",
+    ].join("\n");
+
+    beforeEach(() => {
+      write("request.ts", "export type Request = <T>(url: string) => T;\n");
+      write("client.ts", client);
+    });
+
+    async function moveClient(methods) {
+      write(
+        "moves.json",
+        JSON.stringify({
+          tsconfig: "tsconfig.json",
+          moves: [
+            {
+              source: "client.ts",
+              keep: ["Api"],
+              targets: { "tickets.ts": ["Ticket", "TicketApi"] },
+              classLift: {
+                name: "Api",
+                request: "Request",
+                keep: ["#request", "constructor"],
+                groups: { TicketApi: methods },
+              },
+            },
+          ],
+        }),
+      );
+      await main(["moves.json"], root);
+    }
+
+    it("preserves a branch-edited member and redirects an inline type import", async () => {
+      write("consumer.ts", 'export type Bill = import("./client.js").Ticket;\n');
+
+      await moveClient(["readTicket"]);
+
+      expect(read("tickets.ts")).toContain(editedMethod);
+      expect(read("consumer.ts")).toBe('export type Bill = import("./tickets.js").Ticket;\n');
+      expect(read("client.ts")).toContain("export class Api extends TicketApi");
+      expect(read("client.ts")).not.toContain("readTicket");
+      const program = ts.createProgram(
+        ["client.ts", "consumer.ts"].map((file) => join(root, file)),
+        {
+          target: ts.ScriptTarget.ESNext,
+          module: ts.ModuleKind.NodeNext,
+        },
+      );
+      expect(
+        ts
+          .getPreEmitDiagnostics(program)
+          .map(({ messageText }) => ts.flattenDiagnosticMessageText(messageText, "\n")),
+      ).toEqual([]);
+    });
+
+    it("refuses a type import that closes a cycle through the client", async () => {
+      const cyclic = client.replace("amount: number", "api: Api");
+      write("client.ts", cyclic);
+
+      await expect(moveClient(["readTicket"])).rejects.toThrow(/client import cycle/);
+
+      expect(read("client.ts")).toBe(cyclic);
+      expect(() => read("tickets.ts")).toThrow(/ENOENT/);
+    });
+
+    it("refuses an unassigned client member before changing any files", async () => {
+      await expect(moveClient([])).rejects.toThrow(/unmapped client member readTicket/);
+
+      expect(read("client.ts")).toBe(client);
+      expect(() => read("tickets.ts")).toThrow(/ENOENT/);
+    });
+  });
+
   const route = [
     "  // Keep the branch's callback and comment together.",
     '  app.post("/start", () => throttle.claim("branch edit"));',

@@ -146,6 +146,163 @@ function liftRoutes(source, { mount, groups }) {
   return parse(source.fileName, [replace(source.text, edits).trimEnd(), ...functions].join("\n\n"));
 }
 
+function liftClient(source, { name, request, keep, groups }) {
+  const client = source.statements.find((node) => nameOf(node) === name);
+  if (
+    !client ||
+    !ts.isClassDeclaration(client) ||
+    client.heritageClauses ||
+    client.typeParameters
+  ) {
+    throw new Error(`${source.fileName}: expected a client class named ${name}`);
+  }
+  const memberName = (member) =>
+    ts.isConstructorDeclaration(member) ? "constructor" : nameOf(member);
+  const members = new Map(client.members.map((member) => [memberName(member), member]));
+  const assignments = [...keep, ...Object.values(groups).flat()];
+  if (members.size !== client.members.length || new Set(assignments).size !== assignments.length) {
+    throw new Error(`${source.fileName}: duplicate client member`);
+  }
+  for (const member of assignments) {
+    if (!members.has(member))
+      throw new Error(`${source.fileName}: missing client member ${member}`);
+  }
+  for (const member of members.keys()) {
+    if (!assignments.includes(member)) {
+      throw new Error(`${source.fileName}: unmapped client member ${member}`);
+    }
+  }
+
+  const constructor = members.get("constructor");
+  if (!constructor?.body || !keep.includes("constructor")) {
+    throw new Error(`${source.fileName}: keep the client constructor`);
+  }
+  const classes = [];
+  const cuts = [];
+  let parent;
+  for (const [group, names] of Object.entries(groups)) {
+    const included = client.members.filter((member) => names.includes(memberName(member)));
+    const methods = included.map((member) => {
+      const cut = lineSpan(source, member);
+      cuts.push({ span: cut, newText: "" });
+      return source.text.slice(cut.start, cut.start + cut.length);
+    });
+    const header = parent ? ` extends ${parent}` : "";
+    const forward = parent ? "    super(request);\n" : "";
+    classes.push(
+      [
+        `export class ${group}${header} {`,
+        `  readonly #request: ${request};`,
+        `  constructor(request: ${request}) {`,
+        `${forward}    this.#request = request;`,
+        "  }",
+        ...methods,
+        "}",
+      ].join("\n"),
+    );
+    parent = group;
+  }
+  cuts.push(
+    { span: { start: client.name.end, length: 0 }, newText: ` extends ${parent}` },
+    {
+      span: { start: constructor.body.getStart(source) + 1, length: 0 },
+      newText: `\n    super(<T,>(...args: Parameters<${request}>) => this.#request<T>(...args));`,
+    },
+  );
+  cuts.sort((left, right) => left.span.start - right.span.start);
+  return parse(source.fileName, [replace(source.text, cuts).trimEnd(), ...classes].join("\n\n"));
+}
+
+function localModule(from, specifier) {
+  if (!specifier.text.startsWith(".")) return undefined;
+  return resolve(dirname(from), specifier.text.replace(/\.js$/, ".ts"));
+}
+
+function inlineImport(node) {
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+    const { literal } = node.argument;
+    if (ts.isStringLiteral(literal)) return literal;
+  }
+}
+
+function relativeImport(from, target) {
+  const path = relative(dirname(from), target).replace(/\.ts$/, ".js");
+  return path.startsWith("../") ? path : `./${path}`;
+}
+
+function redirectInlineImports(project, source, targets) {
+  const destinations = new Map(
+    Object.entries(targets).flatMap(([file, names]) => names.map((name) => [name, file])),
+  );
+  for (const file of project.service.getProgram().getSourceFiles()) {
+    if (file.isDeclarationFile) continue;
+    const edits = [];
+    function visit(node) {
+      const specifier = inlineImport(node);
+      if (specifier && localModule(file.fileName, specifier) === source) {
+        let qualifier = node.qualifier;
+        while (qualifier && ts.isQualifiedName(qualifier)) qualifier = qualifier.left;
+        const to = destinations.get(qualifier?.text);
+        if (to) {
+          const start = specifier.getStart(file);
+          edits.push({
+            span: { start, length: specifier.end - start },
+            newText: JSON.stringify(relativeImport(file.fileName, to)),
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(file);
+    if (edits.length) project.set(file.fileName, replace(file.text, edits));
+  }
+}
+
+function verifyClientImports(source, targets, allowedType, readFile) {
+  const files = new Set([source, ...Object.keys(targets)]);
+  const checked = new Set();
+  const visiting = new Set();
+  function visit(file) {
+    if (checked.has(file)) return;
+    if (visiting.has(file)) {
+      throw new Error(
+        `client import cycle: ${[...visiting, file].map((path) => relative(dirname(source), path)).join(" -> ")}`,
+      );
+    }
+    visiting.add(file);
+    function walk(node) {
+      const specifier =
+        ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+          ? node.moduleSpecifier
+          : inlineImport(node);
+      if (specifier && ts.isStringLiteral(specifier)) {
+        const imported = localModule(file, specifier);
+        const importedNames = node.importClause?.namedBindings;
+        const permitted =
+          file === allowedType?.file &&
+          imported === source &&
+          node.importClause?.isTypeOnly &&
+          !node.importClause.name &&
+          importedNames &&
+          ts.isNamedImports(importedNames) &&
+          importedNames.elements.length === 1 &&
+          importedNames.elements[0].name.text === allowedType.name;
+        if (files.has(imported) && !permitted) visit(imported);
+      }
+      ts.forEachChild(node, walk);
+    }
+    walk(parse(file, readFile(file)));
+    visiting.delete(file);
+    checked.add(file);
+  }
+  for (const file of files) visit(file);
+}
+
+function clientMethods(source, name) {
+  const declaration = source.statements.find((node) => nameOf(node) === name);
+  return declaration.members.filter(ts.isMethodDeclaration).map((method) => method.getText(source));
+}
+
 function tokens(text) {
   const source = parse("signature.ts", text);
   const optionalSemicolons = new Set();
@@ -265,8 +422,7 @@ function reexportEdits(program, source, names, target) {
       );
       if (!moved.length) continue;
       const staying = node.exportClause.elements.filter((item) => !moved.includes(item));
-      const modulePath = relative(dirname(file.fileName), target).replace(/\.ts$/, ".js");
-      const from = modulePath.startsWith("../") ? modulePath : `./${modulePath}`;
+      const from = relativeImport(file.fileName, target);
       const render = (items, specifier) =>
         `export ${node.isTypeOnly ? "type " : ""}{ ${items.map((item) => item.getText(file)).join(", ")} } from ${specifier};`;
       const newText = [
@@ -404,7 +560,8 @@ export async function main([mapFile], root) {
     const formatFile = async (file, text) =>
       format(text, { ...(await resolveConfig(file)), filepath: file });
     const operations = [];
-    for (const { source, targets, keep = [], lift } of map.moves) {
+    const clients = [];
+    for (const { source, targets, keep = [], lift, classLift } of map.moves) {
       const file = resolve(root, source);
       let original = parse(file, project.readFile(file));
       if (lift) {
@@ -416,6 +573,26 @@ export async function main([mapFile], root) {
           file,
           new Map([[lift.mount, [snapshot(formattedMount, formattedMount.statements[0])]]]),
         );
+      }
+      if (classLift) {
+        original = liftClient(original, classLift);
+        const destinations = Object.fromEntries(
+          Object.entries(targets).map(([target, names]) => [resolve(root, target), names]),
+        );
+        const methods = new Map([
+          [file, [classLift.name, clientMethods(original, classLift.name)]],
+        ]);
+        for (const name of Object.keys(classLift.groups)) {
+          const target = Object.keys(destinations).find((path) =>
+            destinations[path].includes(name),
+          );
+          methods.set(target, [name, clientMethods(original, name)]);
+        }
+        const allowedType = classLift.allowClientTypeFrom && {
+          file: resolve(root, classLift.allowClientTypeFrom),
+          name: classLift.name,
+        };
+        clients.push({ file, destinations, methods, allowedType });
       }
       validateMap(original, targets, keep);
       for (const [target, names] of Object.entries(targets)) {
@@ -434,6 +611,9 @@ export async function main([mapFile], root) {
       project.set(file, groupForTypeScript(original, targets));
     }
     for (const operation of operations) moveDeclarations(project, ...operation);
+    for (const { file, destinations } of clients) {
+      redirectInlineImports(project, file, destinations);
+    }
     verifyMoves(expected, project.readFile);
     const formatted = new Map();
     for (const [file, { text }] of project.changed) {
@@ -441,6 +621,16 @@ export async function main([mapFile], root) {
     }
     verifyMoves(expected, (file) => formatted.get(file));
     verifyMoves(mounts, (file) => formatted.get(file));
+    for (const { file, destinations, methods, allowedType } of clients) {
+      for (const [target, [name, originals]] of methods) {
+        const actual = clientMethods(parse(target, formatted.get(target)), name);
+        if (JSON.stringify(actual) !== JSON.stringify(originals)) {
+          throw new Error(`${target}: ${name} changed a method signature or body`);
+        }
+      }
+      verifyClientImports(file, destinations, allowedType, (path) => formatted.get(path));
+    }
+
     for (const [file, text] of formatted) writeFileSync(file, text);
     return [...formatted.keys()];
   } finally {
