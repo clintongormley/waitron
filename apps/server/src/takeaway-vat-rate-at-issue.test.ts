@@ -625,10 +625,10 @@ describe("a takeaway set menu priced for its invoice", () => {
 
     expect(await pricedRows(lunch.venue, billId)).toEqual({
       rows: [
-        ["Lunch menu", "0.00", "10.00", "-14.00"],
         ["Soup", "3.58", "10.00", "3.58"],
         ["Hake", "8.14", "10.00", "8.14"],
         ["Lemonade", "2.28", "21.00", "2.28"],
+        ["Lunch menu", "0.00", "10.00", "-14.00"],
       ],
       vat: [
         { rate: "10.00", base: "10.65", tax: "1.07" },
@@ -643,10 +643,10 @@ describe("a takeaway set menu priced for its invoice", () => {
 
     expect(await pricedRows(lunch.venue, billId)).toEqual({
       rows: [
-        ["Lunch menu", "14.00", "10.00", null],
         ["Soup", "0.00", "10.00", null],
         ["Hake", "0.00", "10.00", null],
         ["Lemonade", "0.00", "10.00", null],
+        ["Lunch menu", "14.00", "10.00", null],
       ],
       vat: [{ rate: "10.00", base: "12.73", tax: "1.27" }],
     });
@@ -658,7 +658,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
 
     const { rows } = await pricedRows(lunch.venue, billId);
-    expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.82", "7.95", "2.23"]);
+    expect(rows.map((row) => row[3])).toEqual(["3.82", "7.95", "2.23", "-14.00"]);
   });
 
   it("weighs a dish with no ordinary offer by its product's price when added", async () => {
@@ -670,7 +670,7 @@ describe("a takeaway set menu priced for its invoice", () => {
 
     // 14.00 over 7.00, 12.50 and 3.50.
     const { rows } = await pricedRows(lunch.venue, billId);
-    expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
+    expect(rows.map((row) => row[3])).toEqual(["4.26", "7.61", "2.13", "-14.00"]);
   });
 
   it("weighs a dish by the price stored when it was added, not its product's price at issue", async () => {
@@ -683,7 +683,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     await soupPrice(700);
     try {
       const { rows } = await pricedRows(lunch.venue, billId);
-      expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.58", "8.14", "2.28"]);
+      expect(rows.map((row) => row[3])).toEqual(["3.58", "8.14", "2.28", "-14.00"]);
     } finally {
       await soupPrice(550);
     }
@@ -706,7 +706,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     );
 
     const { rows } = await pricedRows(lunch.venue, billId);
-    expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
+    expect(rows.map((row) => row[3])).toEqual(["4.26", "7.61", "2.13", "-14.00"]);
   });
 
   it("weighs a dish sold as a variant by the variant's price in the menu copy", async () => {
@@ -719,7 +719,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     ]);
 
     const { rows } = await pricedRows(lunch.venue, billId);
-    expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.02", "9.06", "1.92"]);
+    expect(rows.map((row) => row[3])).toEqual(["3.02", "9.06", "1.92", "-14.00"]);
   });
 
   it("refuses a weighted dish with no rate on its own line, not its set menu's", async () => {
@@ -733,7 +733,7 @@ describe("a takeaway set menu priced for its invoice", () => {
 
     await expect(priced(lunch.venue, billId)).rejects.toMatchObject({
       code: "vat_rate.unavailable",
-      params: { lineNo: 2 },
+      params: { lineNo: 1 },
     });
   });
 
@@ -786,7 +786,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     copyReads.count = 0;
     try {
       const { rows } = await pricedRows(lunch.venue, billId);
-      expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.58", "8.14", "2.28"]);
+      expect(rows.map((row) => row[3])).toEqual(["3.58", "8.14", "2.28", "-14.00"]);
     } finally {
       copyReads.mode = "pass";
     }
