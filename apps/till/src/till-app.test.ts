@@ -5418,23 +5418,27 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => void vi.useRealTimers());
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     expect(
       ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
-    ).toContain("No se pudo consultar");
-    emit(ticket(el)!, "refresh-receipt");
-    await flush(el);
+    ).toContain(t("invoice.print_rechecking"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await el.updateComplete;
     expect(
       ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
-    ).not.toContain("No se pudo consultar");
+    ).not.toContain(t("invoice.print_rechecking"));
     emit(ticket(el)!, "retry-receipt");
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
       t("receipt.error"),
     );
-    emit(ticket(el)!, "refresh-receipt");
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
       t("receipt.error"),
     );
@@ -5460,7 +5464,7 @@ describe("till-app", () => {
     await flush(el);
     expect(
       ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
-    ).toContain("No se pudo consultar");
+    ).toContain(t("invoice.print_rechecking"));
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(currentApi.printReceipt).toHaveBeenCalledOnce();
@@ -5572,7 +5576,9 @@ describe("till-app", () => {
         ...done,
         handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
       });
+    const stream = liveReadFixture();
     const { el } = await mountApp({
+      readLiveEvents: vi.fn(stream.read),
       recordSale: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
       getReceiptPrintStatus: vi
         .fn()
@@ -5582,26 +5588,37 @@ describe("till-app", () => {
       confirmReceiptHandover,
     });
     const c = await toCounter(el);
+    stream.event("ready");
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => void vi.useRealTimers());
     c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     emit(ticket(el)!, "confirm-handover");
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
       "No se pudo confirmar la entrega al cliente",
     );
-    emit(ticket(el)!, "refresh-receipt");
-    await flush(el);
+    stream.event("change", '[{"type":"print_jobs"}]');
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     expect(
       ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
-    ).toContain("No se pudo consultar");
-    emit(ticket(el)!, "refresh-receipt");
-    await flush(el);
+    ).toContain(t("invoice.print_rechecking"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await el.updateComplete;
+    expect(
+      ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
+    ).not.toContain(t("invoice.print_rechecking"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
       "No se pudo confirmar la entrega al cliente",
     );
     emit(ticket(el)!, "confirm-handover");
-    await flush(el);
+    await vi.advanceTimersByTimeAsync(0);
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
     expect(confirmReceiptHandover).toHaveBeenCalledTimes(2);
@@ -5916,16 +5933,16 @@ describe("till-app", () => {
       }
     });
 
-    it("re-reads the status when the print status is checked", async () => {
+    it("re-reads the status automatically while the original remains open", async () => {
       const getInvoiceDeliveries = vi
         .fn()
         .mockResolvedValueOnce(statusOf(null))
         .mockResolvedValue(statusOf(attempt({ status: "failed" })));
-      const { el, id } = await soldF1({ getInvoiceDeliveries });
-      await flush(el);
+      const { el, id } = await soldF1({ getInvoiceDeliveries }, true);
+      onTestFinished(() => void vi.useRealTimers());
+      await pass(el, 0);
       expect(deliveryLine(el)).toBeUndefined();
-      emit(ticket(el)!, "refresh-receipt");
-      await flush(el);
+      await pass(el, 5_000);
       expect(getInvoiceDeliveries.mock.calls).toEqual([[id], [id]]);
       expect(deliveryLine(el)).toBe("No entregada.");
     });
@@ -6004,22 +6021,21 @@ describe("till-app", () => {
         .mockRejectedValueOnce({ code: "connection.failed" })
         .mockResolvedValue(statusOf(attempt({ status: "sending" })));
       const switchA4ToReceipt = vi.fn().mockRejectedValue({ code: "invoice_delivery.active" });
-      const { el } = await soldF1({ getInvoiceDeliveries, switchA4ToReceipt });
-      await flush(el);
+      const { el } = await soldF1({ getInvoiceDeliveries, switchA4ToReceipt }, true);
+      onTestFinished(() => void vi.useRealTimers());
+      await pass(el, 0);
       emit(ticket(el)!, "receipt-instead", { deliveryId: "d1" });
-      await flush(el);
+      await pass(el, 0);
       const refusal = () => part(el, "delivery-refused")?.textContent?.trim();
       expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
       expect(ticket(el)).not.toBeNull();
       expect(deliveryLine(el)).toBe("Enviando la factura.");
       expect(part(el, "receipt-instead")).toBeNull();
-      emit(ticket(el)!, "refresh-receipt");
-      await flush(el);
+      await pass(el, 5_000);
       expect(part(el, "delivery-read-failed")).not.toBeNull();
       expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
-      emit(ticket(el)!, "refresh-receipt");
-      await flush(el);
+      await pass(el, 5_000);
       expect(part(el, "delivery-read-failed")).toBeNull();
       expect(refusal()).toBe(codeMessage("invoice_delivery.active"));
     });
