@@ -24,9 +24,10 @@ that wait. The two planners’ own logs identify their placement decisions.
 2. **Waitron planner.** In `scripts/ci-server-health.mjs`, keep the stall scan and log the reason.
    The first-attempt split can use its published free slots if reads are complete and the snapshot
    is zero to under five minutes old. Published waiting jobs already use slots. Stale or missing
-   capacity sends the stalled batch to GitHub. A PR's initial `changes` placement still goes to
+   capacity sends the stalled batch to GitHub. Several planners can use the same published
+   slots until the next snapshot. A PR's initial `changes` placement still goes to
    GitHub while the snapshot reports server jobs waiting. Reruns and recovery keep their rules.
-3. **Drifting job list.** For routing only, after the existing reread still finds numerical count
+3. **Drifting job list.** For first-attempt batch routing, after the reread still finds numerical count
    drift in an attempt’s job list, make one more full read after a 10-second pause, at most once per
    planner. Accept a complete, consistent list. A1470 and the 18 November split still send an
    unreadable inventory to GitHub. Inject the wait in tests. In `scripts/ci-hosted-route.test.mjs`,

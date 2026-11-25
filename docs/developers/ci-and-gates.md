@@ -272,7 +272,8 @@ checks still apply. A failed planner leaves lint and root guards on GitHub.
 The first batch uses the capacity snapshot and the server-health inventory. With a readable
 inventory and a capacity snapshot less than five minutes old and dated no later than now, a stuck
 queue leaves the remaining slots available after the published waiting jobs are counted. The
-planner reports the stall. If a required server input is unreadable, or a stall coincides with an
+planner reports the stall while the health read sees no running or recently progressing server
+jobs. If a required server input is unreadable, or a stall coincides with an
 outdated snapshot, the batch uses GitHub. The planner skips the separate GitHub queue count on
 the first attempt. Dependent merges and the mutation aggregate use GitHub, since the planner's
 available slots describe the initial batch. A PR's `changes` planner still uses GitHub when its
@@ -288,8 +289,9 @@ still uses the run-creation snapshot. The watcher cleared these choices on 18 No
 
 Read the planner's `CI server job candidates`, capacity source and snapshot age alongside the actual
 job labels. Even a fresh read contains the publisher's last observation. The run's own planner can
-count as occupied, and simultaneous planners can select the same available slots. Confirm both
-placements and completed checks in an ordinary mixed run before calling the split qualified.
+count as occupied, and simultaneous planners can select the same available slots, including
+while a job is stalled. New waiting jobs use the available slots in the next published snapshot.
+Confirm placements and completed checks in an ordinary mixed run before calling the split qualified.
 
 Under the former whole-run rule, [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 
@@ -318,10 +320,10 @@ page may change its count; a changing count within the second read still refuses
 `Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
 (watcher, 2026-11-15 15:10). The run records below include natural acceptance of this queued-list exception.
 Different short rows still select hosted. Outside the discovery exceptions below, other
-lists discard earlier rows and retain strict count completeness. In routing, if a job list still
-changes its count during the reread, the planner logs both counts, waits 10 seconds and reads
-that list again from page 1. It uses that extra read once across the entire route decision and requires a complete,
-consistent result. Duplicate/excess rows
+lists discard earlier rows and retain strict count completeness. In first-attempt batch routing,
+if a job list still changes its count during the reread, the planner logs both counts, waits 10 seconds and reads
+that list again from page 1. It uses that extra read once and requires a complete, consistent
+result. Duplicate/excess rows
 take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
@@ -353,6 +355,8 @@ every routed job treats as hosted. This does not change the human routing switch
 When the retry record and previous attempt can be read, an unassigned server job cancelled
 after that wait keeps the retry hosted even after the old queue has disappeared. An unreadable
 retry record or previous attempt is uncertainty: routing still checks other readable runs for stalls.
+The Server health check can stop reporting a stranded job once unrelated server work starts.
+The watcher's queue alarm also checks jobs still waiting in a run whose other jobs have started.
 
 The hosted queue watchdog reads its configured families in pages of 30, allowing ten
 seconds for each complete read. It waits up to five minutes, with at most ten ordinary polls.

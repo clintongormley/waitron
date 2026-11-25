@@ -546,7 +546,7 @@ historical wait cause remains unknown; these observations do not measure a
 
   **2026-11-20 13:16, owner:** “No, keep today's split”. The owner declined the two-job overflow trial and said “the problem would be if several complete ci runs go straight to one side instead of being spread out, resulting in queues of 30+ minutes on one side with nothing queued on the other”. Report any such imbalance with the run IDs.
 
-  **2026-11-25 00:15, watcher:** keep the first-attempt split when a job has stalled and a current capacity snapshot and complete inventory remain available. The published waiting count uses those slots. Give a job list that changes its count again one delayed full read per route decision. Preserve hosted fallback when the list remains unreadable.
+  **2026-11-25 00:15, watcher:** keep the first-attempt split when a job has stalled and a current capacity snapshot and complete inventory remain available. The published waiting count uses those slots. In that first-attempt split, give a job list that changes its count again one delayed full read. Preserve hosted fallback when the list remains unreadable.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 

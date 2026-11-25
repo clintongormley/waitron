@@ -97,7 +97,7 @@ describe("queue-pressure routing", () => {
   });
 
   it.each([
-    ["one stalled job", 1, 1_000, 11],
+    ["one stalled job", 1, 299_999, 11],
     ["twelve stalled jobs", 12, 1_000, 0],
     ["stale capacity", 1, 300_000, 0],
     ["future capacity", 1, -1, 0],
@@ -548,6 +548,19 @@ describe("queue-pressure routing", () => {
       expect(knownStall.route).toBe("hosted");
       expect(knownStall.reason).toContain("could not be verified");
       expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+
+      f.options.now = Date.parse("2026-01-01T00:10:00Z");
+      f.options.capacity = {
+        observedAt: f.options.now,
+        slots: 12,
+        serverRunning: 0,
+        serverWaiting: 1,
+      };
+      f.options.families = [{ id: "test-server", count: 24, enabled: true }];
+      const firstBatch = await serverRoute(f.options);
+      expect(firstBatch.freeSlots).toBeUndefined();
+      expect(firstBatch.reason).toContain("server work has waited five minutes in runs 60");
+      expect(firstBatch.reason).toContain("Other CI inventory could not be verified");
     },
   );
 
@@ -635,7 +648,7 @@ describe("queue-pressure routing", () => {
     },
   );
 
-  it.each(["settles", "persists", "appears in a second run"])(
+  it.each(["settles", "persists", "ends short", "appears in a second run", "appears in a rerun"])(
     "limits a planner to one delayed full job inventory read when count drift %s",
     async (drift) => {
       const f = fixture(0, 39),
@@ -643,6 +656,8 @@ describe("queue-pressure routing", () => {
       f.run.head_repository.id = 42;
       f.options.families = [{ id: "test-server", count: 24, enabled: true }];
       f.options.capacity = { observedAt: 1, slots: 12, serverRunning: 0, serverWaiting: 0 };
+      const rerun = drift === "appears in a rerun";
+      if (rerun) f.options.attempt = 2;
       const waits = [],
         pages = [],
         nextPages = [],
@@ -653,6 +668,9 @@ describe("queue-pressure routing", () => {
       f.options.report = (line) => reports.push(line);
       const secondRun = { ...f.run, id: 60 };
       f.options.request = async (path, options) => {
+        if (rerun && path.endsWith("/runs/51")) return { ...f.run, id: 51 };
+        if (rerun && path.includes("/runs/51/attempts/1/jobs?"))
+          return { total_count: 0, jobs: [] };
         if (path.includes("/workflows/ci.yml/runs?status=in_progress")) {
           const runs = drift === "appears in a second run" ? [f.run, secondRun] : [f.run];
           return { total_count: runs.length, workflow_runs: runs };
@@ -664,6 +682,8 @@ describe("queue-pressure routing", () => {
         const reads = firstRun ? pages : nextPages;
         reads.push(page);
         const total = page === 1 && (!firstRun || !waits.length || drift === "persists") ? 37 : 39;
+        if (page === 2 && waits.length && drift === "ends short")
+          return { total_count: 39, jobs: [] };
         return {
           total_count: total,
           jobs: f.jobs.slice((page - 1) * 30, page * 30).map((job) => ({
@@ -675,9 +695,11 @@ describe("queue-pressure routing", () => {
       const result = await serverRoute(f.options);
       if (drift === "settles") expect(result.freeSlots).toBe(12);
       else expect(result).toMatchObject({ route: "hosted", blind: true });
-      expect(waits).toEqual([10_000]);
-      expect(reports).toEqual([expect.stringContaining("starting_total=37; reply_total=39")]);
-      expect(pages).toEqual([1, 2, 1, 2, 1, 2]);
+      expect(waits).toEqual(rerun ? [] : [10_000]);
+      expect(reports).toEqual(
+        rerun ? [] : [expect.stringContaining("starting_total=37; reply_total=39")],
+      );
+      expect(pages).toEqual(rerun ? [1, 2, 1, 2] : [1, 2, 1, 2, 1, 2]);
       expect(nextPages).toEqual(drift === "appears in a second run" ? [1, 2, 1, 2] : []);
     },
   );

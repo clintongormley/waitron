@@ -299,11 +299,12 @@ function validCapacity(capacity) {
 export async function serverRoute(options) {
   // The run-created cutoff also omits queued retries of older runs.
   const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
+  const firstBatch = (options.attempt ?? 1) === 1 && options.families;
   let retriedJobCountDrift = false;
   const recent = {
     ...options,
     retryJobCountDrift: async (message) => {
-      if (retriedJobCountDrift) return false;
+      if (!firstBatch || retriedJobCountDrift) return false;
       retriedJobCountDrift = true;
       options.report?.(message);
       await (options.wait ?? delay)(10_000);
@@ -323,7 +324,7 @@ export async function serverRoute(options) {
     const cancelled = await readInventory(async () => {
       const run = await request(`/repos/${repository}/actions/runs/${runId}`);
       assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
-      const jobs = await serverJobs(recent, run, attempt - 1);
+      const jobs = await serverJobs(options, run, attempt - 1);
       return jobs.filter(
         (job) =>
           job.status === "completed" &&
@@ -342,7 +343,6 @@ export async function serverRoute(options) {
   const state = await serverHealth(recent, unavailable, {
     report: (message) => options.report?.(`${message}; created>=${since}`),
   });
-  const firstBatch = attempt === 1 && options.families;
   const stalled = state.stuck.length
     ? `No running or recently progressing server work was observed in readable runs; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.`
     : "";
@@ -368,7 +368,11 @@ export async function serverRoute(options) {
       assert.ok(age >= 0 && age < 300_000, "Capacity snapshot is out of date");
     }
   } catch (error) {
-    if (stalled) return { route: "hosted", reason: `${stalled} ${error.message}.` };
+    if (stalled)
+      return {
+        route: "hosted",
+        reason: `${stalled} CI capacity could not be verified: ${error.message}.`,
+      };
     throw error;
   }
   const capacitySummary = `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, now - capacity.observedAt)} ms.`;
@@ -397,7 +401,7 @@ export async function serverRoute(options) {
   let running = 0,
     queued = 0;
   for (const run of runs.values()) {
-    for (const job of await runJobs(recent, run)) {
+    for (const job of await runJobs(options, run)) {
       if (!job.labels.length || job.labels.includes("self-hosted")) continue;
       if (job.status === "in_progress") running++;
       if (["queued", "pending", "waiting", "requested"].includes(job.status)) queued++;
