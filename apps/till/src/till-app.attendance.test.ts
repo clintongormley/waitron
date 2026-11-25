@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { en } from "./i18n/strings.js";
 import {
   clockApp,
@@ -57,14 +57,6 @@ const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
 describe("till attendance sign-in flow", () => {
   it("keeps Check your times open through an outage and its refused Retry", async () => {
     const origin = "https://box.example.test";
-    const servers = [
-      { nodeId: "node", url: origin, standing: "serving-primary" as const },
-      {
-        nodeId: "spare",
-        url: "https://spare.example.test",
-        standing: "serving-secondary" as const,
-      },
-    ];
     let online = false;
     const router = new ServerRouter({
       origin,
@@ -74,7 +66,10 @@ describe("till attendance sign-in flow", () => {
       },
     });
     const f = await clockApp({ props: { router } });
-    router.setServers(servers);
+    router.setServers([
+      { nodeId: "node", url: origin, standing: "serving-primary" },
+      { url: "https://spare.example.test", standing: "serving-secondary" },
+    ]);
     const pending = deferred<AttendanceInbox>();
     const offline = { code: "server.waiting_sales", status: 503 };
     f.api.getAttendanceInbox.mockReturnValueOnce(pending.promise).mockRejectedValue(offline);
@@ -98,7 +93,6 @@ describe("till attendance sign-in flow", () => {
     }
 
     const retry = () => open.shadowRoot!.querySelector("[data-retry]");
-    await vi.waitFor(() => expect(retry()).not.toBeNull());
     await questionButton(f.el, "[data-retry]");
     await vi.waitFor(() => expect(f.api.getAttendanceInbox).toHaveBeenCalledTimes(2));
     expect(open.shadowRoot!.textContent).toContain(words);
@@ -971,24 +965,7 @@ it("closing during an approver read retires that opening and does not block a re
   expect(reopened.shadowRoot!.querySelector("[data-approve]")).not.toBeNull();
 });
 
-it("an initial clock read failure keeps Retry read usable before attendance loads", async () => {
-  const f = await clockApp();
-  f.api.getClockState.mockRejectedValueOnce(new TypeError("clock offline"));
-  f.api.getAttendanceInbox.mockResolvedValueOnce(inbox());
-  await signIn(f.el);
-  await vi.waitFor(() =>
-    expect(questions(f.el)?.shadowRoot!.querySelector("[data-retry]") ?? null).not.toBeNull(),
-  );
-  expect(questions(f.el)!.shadowRoot!.querySelector("[data-retry]")!.hasAttribute("disabled")).toBe(
-    false,
-  );
-  await questionButton(f.el, "[data-retry]");
-  await vi.waitFor(() => expect(questions(f.el)?.inbox?.prompts.length).toBe(1));
-  expect(f.api.getClockState).toHaveBeenCalledTimes(2);
-  expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
-});
-
-it("uses the connection words when Retry read must retry the initial clock read", async () => {
+it("keeps Retry read usable when the initial clock read fails before attendance loads", async () => {
   const router = new ServerRouter({
     origin: "https://box.example.test",
     fetchImpl: async () => {
@@ -996,13 +973,22 @@ it("uses the connection words when Retry read must retry the initial clock read"
     },
   });
   const f = await clockApp({ props: { router } });
-  await router.probeNow();
-  f.api.getClockState.mockRejectedValue({ code: "server.waiting_sales", status: 503 });
+  f.api.getClockState.mockRejectedValueOnce(new TypeError("clock offline"));
   await signIn(f.el);
+  const retry = () => questions(f.el)?.shadowRoot!.querySelector("[data-retry]");
+  await vi.waitFor(() => expect(retry()?.hasAttribute("disabled")).toBe(false));
+
+  await router.probeNow();
+  f.api.getClockState.mockRejectedValueOnce({ code: "server.waiting_sales", status: 503 });
   await questionButton(f.el, "[data-retry]");
-  await vi.waitFor(() => expect(f.api.getClockState).toHaveBeenCalledTimes(2));
-  expect(questions(f.el)?.shadowRoot?.textContent ?? "").toContain(
-    "Can't reach the box. Check that this device is on the venue's WiFi.",
+  await vi.waitFor(() =>
+    expect(questions(f.el)?.shadowRoot?.textContent).toContain(t("server.none_answering")),
   );
   expect(f.el.shadowRoot!.querySelector(".banner[role='status']")).toBeNull();
+
+  f.api.getAttendanceInbox.mockResolvedValueOnce(inbox());
+  await questionButton(f.el, "[data-retry]");
+  await vi.waitFor(() => expect(questions(f.el)?.inbox?.prompts.length).toBe(1));
+  expect(f.api.getClockState).toHaveBeenCalledTimes(3);
+  expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
 });

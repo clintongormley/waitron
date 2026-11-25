@@ -3368,6 +3368,19 @@ describe("till-app", () => {
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    const opened = enrolScreen(el);
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    el.router = router;
+    await router.probeNow();
+    await flush(el);
+    expect(enrolScreen(el)).toBe(opened);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   it.each(["edited", "reverted", "submitted"] as const)(
@@ -3514,6 +3527,19 @@ describe("till-app", () => {
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
     expect(getDeviceIdentity).toHaveBeenCalledOnce();
     expect(chooser(el)!.list).toEqual(list);
+    const opened = chooser(el);
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    el.router = router;
+    await router.probeNow();
+    await flush(el);
+    expect(chooser(el)).toBe(opened);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   it("keeps / while the dev chooser is open instead of exposing a post-login tab route", async () => {
@@ -18072,54 +18098,6 @@ describe("till-app follows a server move", () => {
     expect(banner()!.textContent).toContain(t("server.waiting_sales"));
   });
 
-  it("shows WiFi guidance on the PIN screen and Counter while no box replies", async () => {
-    const router = new ServerRouter({
-      origin: BOX,
-      fetchImpl: probeFetch(),
-      storage: memoryStorage(),
-    });
-    const { el } = await mountWidget<TillApp>("till-app", { api: stubApi(), router });
-    await flush(el);
-    await router.probeNow();
-    await flush(el);
-    const status = lock(el)!.shadowRoot!.querySelector("[data-server-status]")!;
-    const words = t("server.none_answering", "es-ES");
-    expect(status.textContent).toContain(words);
-    expect(status.querySelector("[data-check-again]")).not.toBeNull();
-
-    await toCounter(el);
-    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(words);
-  });
-
-  it.each(["enrol", "chooser"])(
-    "keeps the %s screen open under the WiFi notice",
-    async (screen) => {
-      const router = new ServerRouter({
-        origin: BOX,
-        fetchImpl: probeFetch(),
-        storage: memoryStorage(),
-      });
-      const api = stubApi({
-        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-        getDevDevices:
-          screen === "chooser"
-            ? vi.fn().mockResolvedValue({ devices: [] })
-            : vi.fn().mockRejectedValue({ status: 404 }),
-      });
-      const { el } = await mountWidget<TillApp>("till-app", { api, router });
-      await flush(el);
-      const surface = () => (screen === "chooser" ? chooser(el) : enrolScreen(el));
-      const opened = surface();
-      expect(opened).not.toBeNull();
-      await router.probeNow();
-      await flush(el);
-      expect(surface()).toBe(opened);
-      expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
-        t("server.none_answering"),
-      );
-    },
-  );
-
   /** A fetch where each listed server answers its `/api/node` with the given body; the rest fail. */
   function answeringFetch(answers: Record<string, object>): typeof fetch {
     return vi.fn(async (input: RequestInfo | URL) => {
@@ -18156,6 +18134,12 @@ describe("till-app follows a server move", () => {
     expect(status!.querySelector("[data-check-again]")).not.toBeNull();
     expect(status!.textContent).not.toContain("box.deli.test");
     expect(status!.textContent).not.toContain("cloud.deli.test");
+  });
+
+  it("shows WiFi guidance beside Check again when the sign-in probe gets no reply", async () => {
+    const { status } = await lockAfterRound(probeFetch(), []);
+    expect(status!.textContent).toContain(t("server.none_answering"));
+    expect(status!.querySelector("[data-check-again]")).not.toBeNull();
   });
 
   it("draws no sign-in line on a one-box till whose box takes sales", async () => {
