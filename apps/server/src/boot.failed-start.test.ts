@@ -1755,27 +1755,33 @@ describe("settled-tender recovery boot lifetime", () => {
     });
     const failure = new Error("landing interfaces unavailable");
     failLandingAfterMdns(failure);
-    let release = () => {};
-    vi.mocked(stopTenderRefundResolvers).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          release = () => resolve([]);
-        }),
-    );
+    let markShutdownStarted!: () => void;
+    const shutdownStarted = new Promise<void>((resolve) => {
+      markShutdownStarted = resolve;
+    });
+    let release!: () => void;
+    const shutdownFinished = new Promise<string[]>((resolve) => {
+      release = () => resolve([]);
+    });
+    vi.mocked(stopTenderRefundResolvers).mockImplementationOnce(() => {
+      markShutdownStarted();
+      return shutdownFinished;
+    });
     const result = startServer(env).then(
       (server) => server,
       (error: unknown) => error,
     );
     const deadline = new AbortController();
     try {
-      await vi.waitFor(() => expect(stopTenderRefundResolvers).toHaveBeenCalledOnce());
-      expect(recoverTenderRefunds).not.toHaveBeenCalled();
+      await Promise.race([shutdownStarted, result]);
       expect(await Promise.race([result, delay(50, "waiting", { signal: deadline.signal })])).toBe(
         "waiting",
       );
       expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
       release();
       expect(await result).toBe(failure);
+      expect(stopTenderRefundResolvers).toHaveBeenCalledOnce();
+      expect(recoverTenderRefunds).not.toHaveBeenCalled();
       expect(readVenueHolder(venueDir)).toBeNull();
     } finally {
       deadline.abort();
@@ -1789,26 +1795,32 @@ describe("settled-tender recovery boot lifetime", () => {
     const env = await tradingEnv(venueDir, await stateDir(undefined, { leaf: true }));
     let stopped = false;
     let signal: AbortSignal | undefined;
-    let release = () => {};
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markRecoveryStarted!: () => void;
+    const recoveryStarted = new Promise<void>((resolve) => {
+      markRecoveryStarted = resolve;
+    });
     let abort!: () => void;
     const aborted = new Promise<void>((resolve) => {
       abort = resolve;
     });
-    vi.mocked(recoverTenderRefunds).mockImplementationOnce((options) => {
+    vi.mocked(recoverTenderRefunds).mockImplementationOnce(async (options) => {
       signal = options.stopSignal!;
-      return new Promise((resolve) => {
-        release = () => {
-          stopped = true;
-          resolve({ pending: 0, nextDueAt: null });
-        };
-        options.stopSignal!.addEventListener("abort", abort, { once: true });
-      });
+      signal.addEventListener("abort", abort, { once: true });
+      markRecoveryStarted();
+      await released;
+      stopped = true;
+      return { pending: 0, nextDueAt: null };
     });
     const server = await startServer(env);
     let closing: Promise<void> | undefined;
     const deadline = new AbortController();
     try {
       await listening(Number(env.WAITRON_HTTP_PORT));
+      await Promise.race([recoveryStarted, delay(10_000, undefined, { signal: deadline.signal })]);
       expect(recoverTenderRefunds).toHaveBeenCalledOnce();
       expect(recoverTenderRefunds).toHaveBeenCalledWith(
         expect.objectContaining({ log: expect.any(Function) }),
