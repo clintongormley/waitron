@@ -2262,11 +2262,3 @@ Since the grey reason gained ": move fewer dishes" (owner, 2026-11-01) it wraps 
 so Back and Move sit fully below the window at 1280×900 and are cut at the bottom at 390×844 in
 Spanish (re-taken pictures `slice4a-paid-floor-long-names-destination.png`,
 `slice4a-spanish-phone.png`).
-
-## A retrieved part-paid Counter order's red banner keeps its old amount
-
-After any payment (by amount or by items) on a parked, part-paid Counter order that was retrieved,
-the red banner at the top keeps the amount to pay from when it was retrieved ("€3.00 to pay" while
-€0.30 is due); the Total area below is right. `#onRetrieveOrder` sets it
-(`apps/till/src/till-app.ts`, around line 10691; it dates from ba1458c457, September 2026), and no
-later payment refreshes it. Seen 2026-11-25 while checking A1515-1 PR 3.

@@ -470,22 +470,27 @@ describe("counterItemsEdit", () => {
 
   it("answers the bill read's edit state for an order with no party, as the route parses it", async () => {
     const api = found({ workingOrderId: "wo-1", partyId: null, edit: stored });
+    const { signal } = new AbortController();
 
-    await expect(counterItemsEdit(api, "wo-1")).resolves.toEqual({
+    await expect(counterItemsEdit(api, "wo-1", { signal })).resolves.toEqual({
       billId: "wo-1",
       editorVersion: 4,
       draftId: null,
       draftRevision: null,
     });
-    expect(api.getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1");
+    expect(api.getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1", { signal });
   });
 
   it.each([
-    ["names a party", { partyId: "v1", edit: stored }],
-    ["has no edit state", { partyId: null, edit: null }],
-    ["gives another bill's edit state", { partyId: null, edit: { ...stored, billId: "wo-2" } }],
+    ["names a party", { workingOrderId: "wo-1", partyId: "v1", edit: stored }],
+    ["has no edit state", { workingOrderId: "wo-1", partyId: null, edit: null }],
+    [
+      "gives another bill's edit state",
+      { workingOrderId: "wo-1", partyId: null, edit: { ...stored, billId: "wo-2" } },
+    ],
+    ["is of another order", { workingOrderId: "wo-2", partyId: null, edit: stored }],
   ])("is out of date when the bill read %s", async (_, bill) => {
-    await expect(counterItemsEdit(found(bill), "wo-1")).rejects.toEqual({
+    await expect(counterItemsEdit(found(bill), "wo-1", {})).rejects.toEqual({
       code: "draft.out_of_date",
     });
   });

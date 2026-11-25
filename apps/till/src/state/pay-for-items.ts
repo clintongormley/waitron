@@ -17,6 +17,7 @@ import { listDishNames } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
+import { counterBillEdit } from "./bill-edit.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
 
 /** What Pay for items sends beyond a bill payment's confirmation, fixed when the waiter confirms:
@@ -212,12 +213,12 @@ export async function previewPayment(
 /** The edit state Pay for items sends for a Counter order with no party, whose held read carries
  * none (`working-order-held-read.ts`) while the items route checks one; refused as out of date
  * when the bill read names a party, as that bill's edit state comes with its held read. */
-export async function counterItemsEdit(api: TillApi, billId: string): Promise<BillEditExpected> {
-  const bill = await api.getFindBill(billId);
-  if (bill.partyId !== null || bill.edit == null || bill.edit.billId !== billId)
-    throw { code: "draft.out_of_date" };
-  const { editorVersion, draftId, draftRevision } = bill.edit;
-  return { billId, editorVersion, draftId, draftRevision };
+export async function counterItemsEdit(
+  api: TillApi,
+  billId: string,
+  options: ReadOptions,
+): Promise<BillEditExpected> {
+  return counterBillEdit(await api.getFindBill(billId, options), billId);
 }
 
 /** Takes the payment: with an items part through Pay for items, answering the new bill as

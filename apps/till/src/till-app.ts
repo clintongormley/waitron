@@ -288,6 +288,7 @@ import {
   billEditConflictRows,
   type BillEditConflict,
 } from "./state/bill-edit-conflicts.js";
+import { counterBillEdit, expectedEditOf } from "./state/bill-edit.js";
 import "./widgets/bill-edit-conflicts-dialog.js";
 import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
@@ -1705,8 +1706,7 @@ function foundBillEdit(row: {
 }): BillEditExpected | null | undefined {
   if (row.partyId === null) return null;
   if (row.edit === undefined || row.edit === null) return undefined;
-  const { billId, editorVersion, draftId, draftRevision } = row.edit;
-  return { billId, editorVersion, draftId, draftRevision };
+  return expectedEditOf(row.edit);
 }
 
 /** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
@@ -18356,26 +18356,14 @@ export class TillApp extends LitElement {
     try {
       const bill = await asked.api.getFindBill(orderId, { signal: limit.signal });
       if (!this.#counterRelocationCurrent(asked)) return null;
-      if (
-        bill.workingOrderId !== orderId ||
-        bill.partyId !== null ||
-        bill.edit == null ||
-        bill.edit.billId !== orderId
-      )
-        throw { code: "draft.out_of_date" };
-      const edits = [bill.edit];
+      const edits = [counterBillEdit(bill, orderId)];
       if (target != null) {
         const destination = await asked.api.listDrafts(target.id, { signal: limit.signal });
         edits.push(...destination.billEdits);
       }
       if (!this.#counterRelocationCurrent(asked)) return null;
       asked.expectedEdits = edits
-        .map(({ billId, editorVersion, draftId, draftRevision }) => ({
-          billId,
-          editorVersion,
-          draftId,
-          draftRevision,
-        }))
+        .map(expectedEditOf)
         .sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
       if (
         new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
@@ -22509,6 +22497,14 @@ export class TillApp extends LitElement {
       if (!this.#hasLeftCounterOrder(open.billId, open.visit)) {
         await this.#reloadCounterOrder(open.billId, open.visit);
         this.#refreshOpenPayLines(open.billId);
+        const said = this.errorKey;
+        if (
+          typeof said === "object" &&
+          "billPayments" in said &&
+          balance?.workingOrderId === open.billId &&
+          !this.#hasLeftCounterOrder(open.billId, open.visit)
+        )
+          this.#sayBillPayments(balance.outstanding);
       }
     } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
       await this.#rereadAmounts(open.billId, open.visit, balance);
@@ -22986,13 +22982,31 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const paidEdit = readCounterEdit ? await counterItemsEdit(api, open.billId) : expectedEdit;
+      const paidEdit = readCounterEdit ? await this.#counterItemsEditFor(open, api) : expectedEdit;
+      if (readCounterEdit && !current()) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false };
+        return;
+      }
       const preview = await previewPayment(api, open.billId, asked, paidEdit);
       const now = this.#billPayingNow(open.id);
       if (now !== null)
         this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
+    }
+  }
+
+  /** The edit state Pay for items sends from Counter window `open`: on its confirmation, the one
+   * that confirmation's preview was asked with; otherwise the bill's, read within the time limit. */
+  async #counterItemsEditFor(open: BillPaying, api: TillApi): Promise<BillEditExpected> {
+    if (open.preview !== null && open.expectedEdit?.billId === open.billId)
+      return open.expectedEdit;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      return await counterItemsEdit(api, open.billId, { signal: limit.signal });
+    } finally {
+      limit.done();
     }
   }
 
