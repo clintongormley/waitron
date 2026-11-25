@@ -2052,6 +2052,8 @@ export const en = {
   "bill_pay.way_share": "Split equally",
   "bill_pay.items": "Items to pay for",
   "bill_pay.items_none": "Every item on this bill is already paid for.",
+  "bill_pay.items_barred_counter":
+    "A Counter order sent to the kitchen is paid whole, by an amount or in equal shares.",
   "bill_pay.items_required": "Choose at least one item",
   "bill_pay.units": "How many",
   "bill_pay.amount": "Amount",
@@ -4506,6 +4508,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.way_share": "Dividir a partes iguales",
   "bill_pay.items": "Artículos que se pagan",
   "bill_pay.items_none": "Todos los artículos de esta cuenta ya están pagados.",
+  "bill_pay.items_barred_counter":
+    "Un pedido de mostrador enviado a cocina se paga entero, por importe o a partes iguales.",
   "bill_pay.items_required": "Elige al menos un artículo",
   "bill_pay.units": "Cuántos",
   "bill_pay.amount": "Importe",

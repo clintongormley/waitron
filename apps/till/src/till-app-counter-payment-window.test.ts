@@ -214,7 +214,7 @@ it.each([undefined, "F1/7"])(
   },
 );
 
-it("a Counter order sent to the kitchen offers no Items in its Pay window, and the other ways", async () => {
+it("a Counter order sent to the kitchen shows Items barred in its Pay window, with the reason", async () => {
   const id = "placed-order";
   const api = stubApi({
     listCounterWaiting: vi.fn().mockResolvedValue([
@@ -270,8 +270,68 @@ it("a Counter order sent to the kitchen offers no Items in its Pay window, and t
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
 
-  const ways = [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('[name="way"]')].map(
-    (input) => input.value,
-  );
-  expect(ways).toEqual(["contribution", "share", "whole"]);
+  const ways = [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('[name="way"]')];
+  expect(ways.map((input) => [input.value, input.disabled])).toEqual([
+    ["contribution", false],
+    ["share", false],
+    ["items", true],
+    ["whole", false],
+  ]);
+  ways[2]!.click();
+  await flush(el);
+  expect(ways.map((input) => input.checked)).toEqual([false, false, false, true]);
+  expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-lines]")).toBeNull();
+  expect(
+    dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")?.textContent?.trim(),
+  ).toBe("A Counter order sent to the kitchen is paid whole, by an amount or in equal shares.");
+});
+
+it("an unsent Counter order offers Items in its Pay window, with no reason", async () => {
+  let id = "";
+  const api = stubApi({
+    parkOrder: vi.fn(async (request: { id: string }) => {
+      id = request.id;
+      return { id, orderNumber: 7 };
+    }),
+    retrieveWorkingOrder: vi.fn(async () => ({
+      zoneId: null,
+      id,
+      orderNumber: 7,
+      revision: 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        { workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product },
+      ],
+    })),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 0,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
+    getBillBalance: vi.fn(async () =>
+      balanceOf({ workingOrderId: id, total: "30.00", outstanding: "30.00" }),
+    ),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(product, "1");
+  await flush(el);
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await flush(el);
+
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
+    '[name="way"][value="items"]',
+  )!;
+  expect(items.disabled).toBe(false);
+  expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")).toBeNull();
+  items.click();
+  await flush(el);
+  expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-lines]")).not.toBeNull();
 });

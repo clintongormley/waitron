@@ -12728,7 +12728,7 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsOffered=${open.surface !== "counter" || (this.stage !== "collect" && open.balance?.status !== "placed")}
+        .itemsBarred=${open.surface === "counter" && (this.stage === "collect" || open.balance?.status === "placed")}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}

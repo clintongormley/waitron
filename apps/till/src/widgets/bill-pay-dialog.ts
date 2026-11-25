@@ -277,10 +277,15 @@ export class TillBillPayDialog extends LitElement {
         margin: 0 0 var(--wt-space-3);
       }
 
-      .deferred p {
+      .deferred p,
+      .way-reason {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      .way-reason {
+        margin-block-start: var(--wt-space-2);
       }
 
       .scope,
@@ -507,8 +512,9 @@ export class TillBillPayDialog extends LitElement {
   /** The answer to the own-receipt question; null while unanswered. */
   @state() private ownReceipt: boolean | null = null;
   @property({ type: Boolean }) confirmationLocked = false;
-  /** False where paying for items is not offered: a Counter order already sent to the kitchen. */
-  @property({ type: Boolean }) itemsOffered = true;
+  /** True for a Counter order already sent to the kitchen, which the server refuses to pay for by
+   * item: Items shows disabled, with the reason. */
+  @property({ type: Boolean }) itemsBarred = false;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
   @property({ type: Boolean }) tipsEnabled = true;
@@ -1702,21 +1708,21 @@ export class TillBillPayDialog extends LitElement {
           ${t("bill_pay.way")}${helpBadge("help.payment", t("action.pay"), { guide: "table-service.pay-window" })}
         </legend>
         <div class="options">
-          ${BILL_PAY_WAYS.filter(({ way }) => way !== "items" || this.itemsOffered).map(
-            ({ way, label }) =>
-              this.#radio(
-                "way",
-                way,
-                t(label),
-                this.chosenWay === way,
-                () => {
-                  this.chosenWay = way;
-                  this.#shareRun = null;
-                },
-                way === "whole" && this.balance === null,
-              ),
+          ${BILL_PAY_WAYS.map(({ way, label }) =>
+            this.#radio(
+              "way",
+              way,
+              t(label),
+              this.chosenWay === way,
+              () => {
+                this.chosenWay = way;
+                this.#shareRun = null;
+              },
+              (way === "whole" && this.balance === null) || (way === "items" && this.itemsBarred),
+            ),
           )}
         </div>
+        ${this.itemsBarred ? html`<p class="way-reason" data-pay-items-reason>${t("bill_pay.items_barred_counter")}</p>` : nothing}
       </fieldset>
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#deferred()} ${this.#wayFields(errors)} ${this.#methodFields(errors)}
