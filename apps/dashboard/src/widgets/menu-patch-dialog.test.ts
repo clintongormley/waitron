@@ -3418,8 +3418,10 @@ it.each([
 );
 
 it("corrects a dish's variants through the dish's checkbox alone", async () => {
-  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [small, true])]));
   const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  const el = await mount(
+    scheduledApi([differing("v-q0", "2026-11-03", [lemonade, true], [small, true])]),
+  );
   await pick(el, "Small");
   await tick(el, declarations(el));
   expect(el.changes).toEqual([fromProduct(small)]);
@@ -3434,7 +3436,7 @@ it("corrects a dish's variants through the dish's checkbox alone", async () => {
   expect(changedDot(el, "Small")).toBeNull();
   expect(declarations(el).checked).toBe(true);
   expect(declarations(el).disabled).toBe(true);
-  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  expect(scheduledRows(el)).toEqual([]);
   const why = el.shadowRoot!.getElementById(declarations(el).getAttribute("aria-describedby")!)!;
   expect(why.textContent!.trim()).toBe("Set on the dish.");
   setLocale("es");
@@ -3530,6 +3532,26 @@ it("lists in each ticked item's form only the versions that differ for it, and n
   await pick(el, "Bread");
   await tick(el, declarations(el));
   await pick(el, "Salad");
+  expect(scheduledRows(el)).toEqual([]);
+});
+
+it("lists no version in the unticked form of a dish whose other place on the menu is ticked", async () => {
+  const document = menuDocument(
+    [documentProduct("mi-soup", "p-soup"), documentProduct("mi-soup-2", "p-soup")],
+    { "p-soup": "Soup" },
+  );
+  document.offers["mi-soup-2"]!.name = "Soup again";
+  const el = await mount(
+    scheduledApi([], {
+      getLiveMenu: vi.fn(async () =>
+        live(3, document, [differing("v-q0", "2026-11-03", [soup, true])]),
+      ),
+    }),
+  );
+  await pick(el, "Soup again");
+  await tick(el, declarations(el));
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  await pick(el, "Soup");
   expect(scheduledRows(el)).toEqual([]);
 });
 

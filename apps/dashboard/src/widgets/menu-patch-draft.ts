@@ -146,21 +146,12 @@ function declarationSubject(document: MenuDocument, target: MenuPatchTarget): st
   return offer && `offer:${offer.productId}`;
 }
 
-/** Every subject a declarations change corrects: a dish's takes its variants too. */
-function correctedSubjects(document: MenuDocument, target: MenuPatchTarget) {
-  const variants = target.kind === "offer" ? document.offers[target.menuItemId]?.variants : [];
-  return [
-    declarationSubject(document, target),
-    ...(variants ?? []).map(({ id }) => `variant:${id}`),
-  ];
-}
-
 export interface ScheduledCorrection {
   versionId: string;
   activatesAt: string;
   /** Whether the patch corrects this version too. */
   ticked: boolean;
-  /** Whether this version differs for something a change to `target` corrects. */
+  /** Whether `target` is one of the changed items this version differs for. */
   differsFor(target: MenuPatchTarget): boolean;
 }
 
@@ -174,7 +165,7 @@ export function scheduledCorrections(
 ): ScheduledCorrection[] {
   const staged = new Set(
     changes.flatMap(({ target, field }) =>
-      field === "declarations" ? correctedSubjects(document, target) : [],
+      field === "declarations" ? [declarationSubject(document, target)] : [],
     ),
   );
   if (staged.size === 0) return [];
@@ -190,8 +181,7 @@ export function scheduledCorrections(
         versionId,
         activatesAt,
         ticked: choices.get(activatesAt) ?? [...held.values()].every(Boolean),
-        differsFor: (target) =>
-          correctedSubjects(document, target).some((subject) => held.has(subject)),
+        differsFor: (target) => held.has(declarationSubject(document, target)),
       },
     ];
   });

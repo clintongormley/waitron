@@ -920,23 +920,10 @@ describe("scheduledCorrections", () => {
     const none = new Map<string, boolean>();
     expect(ticks(draft, [], none)).toEqual([]);
     expect(ticks(draft, [{ target: soup, field: "price", value: "4.00" }], none)).toEqual([]);
+    expect(ticks(draft, [declared(soup)], none)).toEqual([["q-soup", true]]);
     expect(ticks(draft, [declared(bowl)], none)).toEqual([["q-bowl", true]]);
     expect(ticks(draft, [declared(extraCheese)], none)).toEqual([["q-cheese", true]]);
     expect(ticks(draft, [declared(salad)], none)).toEqual([]);
-  });
-
-  it("lists for a dish the versions that differ for one of its variants, and ticks them by both", () => {
-    const draft = live(
-      differing("q-bowl", [bowl, true]),
-      differing("q-mixed", [soup, true], [bowl, false]),
-    );
-    const rows = scheduledCorrections(draft, [declared(soup)], new Map());
-    expect(rows.map(({ versionId, ticked }) => [versionId, ticked])).toEqual([
-      ["q-bowl", true],
-      ["q-mixed", false],
-    ]);
-    expect(rows.map((row) => row.differsFor(soup))).toEqual([true, true]);
-    expect(rows.map((row) => row.differsFor(salad))).toEqual([false, false]);
   });
 
   it("lists nothing for the same extra on another list", () => {

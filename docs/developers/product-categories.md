@@ -293,13 +293,14 @@ were.
   version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `queued`
   lists each scheduled version whose allergens or diets differ from the products' current ones, as
   `{ versionId, activatesAt, targets }`; each target is `{ target, stillOld }`, `stillOld` when every
-  differing copy holds what the live version's same copy holds. An unknown menu answers `menu.not_found` (404).
+  differing copy holds the value being corrected, and a dish's takes in its variants. An unknown menu answers `menu.not_found` (404).
 - `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued? }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
   number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
   `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A `declarations` change takes only
-  `"product"` and copies the product's current allergens and diets; the scheduled versions `queued`
+  `"product"` and copies the product's current allergens and diets, a dish's onto its variants too
+  from their own; the scheduled versions `queued`
   names take those changes and no others. A missing or non-string
   `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
   `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An

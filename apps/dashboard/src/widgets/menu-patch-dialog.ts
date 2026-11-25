@@ -1089,7 +1089,7 @@ export class MenuPatchDialog extends LitElement {
         : [];
     const byDish =
       target.kind === "variant" && this.#declared({ kind: "offer", menuItemId: target.menuItemId });
-    const ticked = byDish || this.#declared(target);
+    const declared = this.#declared(target);
     const note = byDish
       ? html`<p class="locked-note" id="declarations-note">
           ${t("menu_patch.declarations_by_dish")}
@@ -1097,13 +1097,13 @@ export class MenuPatchDialog extends LitElement {
       : error === ""
         ? nothing
         : html`<p class="field-error" id="declarations-note">${error}</p>`;
-    const rows = ticked ? this.#scheduled().filter((row) => row.differsFor(target)) : [];
+    const rows = declared ? this.#scheduled().filter((row) => row.differsFor(target)) : [];
     return html`<div data-test="declarations">
       <label class="tick">
         <input
           type="checkbox"
           name="declarations"
-          .checked=${live(ticked)}
+          .checked=${live(byDish || declared)}
           ?disabled=${byDish}
           aria-invalid=${error === "" ? "false" : "true"}
           aria-describedby=${note === nothing ? nothing : "declarations-note"}
