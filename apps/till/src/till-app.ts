@@ -46,6 +46,7 @@ import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/ven
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
 import "./widgets/main-server-strip.js";
+import { diskStopScreen } from "./widgets/disk-stop-screen.js";
 import "./widgets/cloud-emergency-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
@@ -4080,6 +4081,7 @@ export class TillApp extends LitElement {
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
   @state() private captureWarning: CaptureWarning | null = null;
+  @state() private dismissedCardOutcome?: CardOutcome;
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
   @state() private originalReceiptAvailable = false;
   @state() private originalReceiptPrint?: OriginalReceiptPrint;
@@ -25194,6 +25196,38 @@ export class TillApp extends LitElement {
     });
   }
 
+  #renderDiskStop() {
+    if (
+      this.deviceMode ||
+      this.formFactor === "kds" ||
+      this.clockPage ||
+      this.attendancePage ||
+      this.frontDoor !== undefined ||
+      this.#mainServerStrip() !== undefined ||
+      this.leave.asking
+    )
+      return nothing;
+    const paying = this.billPaying;
+    const refund = this.tenderRefunding;
+    const credit = this.cancelCrediting;
+    return diskStopScreen(
+      this.screen === "lock" ? this.pinNotices : this.staffNotices,
+      this.sendingTender !== null ||
+        this.#paymentsOut.size > 0 ||
+        (paying !== null &&
+          (paying.refusal !== null || paying.taken !== null || paying.refunded !== null)) ||
+        this.presentedPaying?.refusal != null ||
+        (this.findingBill && (this.findBillBusy || this.findBillError !== undefined)) ||
+        this.billRefunding?.busy === true ||
+        this.billRefunding?.refusal != null ||
+        (refund !== null && (refund.busy || refund.result !== null || refund.refusal !== null)) ||
+        (credit !== null && (credit.busy || credit.refusal !== null || credit.done !== null)) ||
+        this.settlementDocument !== null ||
+        this.captureWarning !== null ||
+        (this.cardOutcome !== undefined && this.cardOutcome !== this.dismissedCardOutcome),
+    );
+  }
+
   #renderPaymentsPaused() {
     const notice = pausingNotice(this.staffNotices);
     if (!this.paymentsPausedOpen || notice === undefined) return nothing;
@@ -25263,7 +25297,7 @@ export class TillApp extends LitElement {
             )
           : nothing
       }
-      ${this.#renderPaymentsPaused()}
+      ${this.#renderPaymentsPaused()} ${this.#renderDiskStop()}
       <div
         class="app"
         @open-problem-report=${(event: CustomEvent<{ opener: HTMLElement }>) => {
@@ -25314,6 +25348,7 @@ export class TillApp extends LitElement {
           this.receiptLanguageAsking = { orderId: this.#store.id };
         }}
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
+        @card-outcome-dismissed=${() => (this.dismissedCardOutcome = this.cardOutcome)}
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}

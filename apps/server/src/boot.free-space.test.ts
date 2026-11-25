@@ -106,15 +106,15 @@ describe("the running server's free-space watch", () => {
         expect(response.status).toBe(200);
         return response.json();
       };
-      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false, deleted: null });
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false });
 
       (holder.deps!.disk as DiskFullState).noteRefused();
-      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: true, deleted: null });
-      expect(await diskStop(venue.managerCookie)).toEqual({ stopped: true, deleted: null });
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: true });
+      expect(await diskStop(venue.managerCookie)).toEqual({ stopped: true });
 
       // The stop re-reads the real venue folder, which has room.
       await tick();
-      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false, deleted: null });
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false });
     });
   });
 

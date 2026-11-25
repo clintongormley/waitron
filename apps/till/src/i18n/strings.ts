@@ -2389,6 +2389,8 @@ export const en = {
   "update.reload": "Reload",
   "sale.unconfirmed":
     "The box did not answer. Check whether the sale went through before trying again.",
+  "disk_stop.heading": "Disk full",
+  "disk_stop.description": "Waitron cannot operate.",
   "staff_notice.storage.disk_full": "Nothing can be saved: the box is out of space",
   "staff_notice.clock.unusable": "Sales can't be recorded: the box's clock is wrong",
   "staff_notice.storage.space_low": "The box is nearly out of space",
@@ -4842,6 +4844,8 @@ export const es: Record<StringKey, string> = {
   "update.reload": "Recargar",
   "sale.unconfirmed":
     "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
+  "disk_stop.heading": "Disco lleno",
+  "disk_stop.description": "Waitron no puede funcionar.",
   "staff_notice.storage.disk_full": "No se puede guardar nada: el servidor no tiene espacio",
   "staff_notice.clock.unusable":
     "No se pueden registrar ventas: la hora del servidor es incorrecta",

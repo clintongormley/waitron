@@ -4535,6 +4535,8 @@ export const en = {
   "appearance.delete_changes": "What changes",
   "appearance.delete_in_use":
     "{name} is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+  "disk_stop.heading": "Disk full",
+  "disk_stop.description": "Waitron cannot operate.",
   "disk_stop.open_box_status": "Open Box status",
   "disk_stop.sign_in_as_manager": "Sign in as a manager",
   "box_status.title": "Box status",
@@ -9413,6 +9415,8 @@ export const es: Record<StringKey, string> = {
   "appearance.delete_changes": "Qué cambia",
   "appearance.delete_in_use":
     "{name} está en uso en todas las pantallas. Al eliminarlo, se pone el tema de Waitron en todas las pantallas.",
+  "disk_stop.heading": "Disco lleno",
+  "disk_stop.description": "Waitron no puede funcionar.",
   "disk_stop.open_box_status": "Abrir Estado del servidor",
   "disk_stop.sign_in_as_manager": "Iniciar sesión como encargado",
   "box_status.title": "Estado del servidor",

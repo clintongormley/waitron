@@ -826,6 +826,11 @@ export class TillTenderPay extends LitElement {
   }
 
   #cancel(): void {
+    if (this.view === "card_outcome") {
+      this.dispatchEvent(
+        new CustomEvent("card-outcome-dismissed", { bubbles: true, composed: true }),
+      );
+    }
     this.#finishEntry();
     this.selected = undefined;
     this.entry = "";

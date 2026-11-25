@@ -2324,29 +2324,16 @@ export interface AlertsResponse {
 /** The deletion facts are sent only to a person who may see the deleted-backups alert. */
 export interface DiskStopResponse {
   stopped: boolean;
-  deleted: { count: number; date: string; lastDate: string; severalDays: boolean } | null;
 }
 
 function diskStopFrom(body: unknown): DiskStopResponse {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return { stopped: false, deleted: null };
-  }
-  const { stopped, deleted } = body as Record<string, unknown>;
-  return { stopped: stopped === true, deleted: deletedBackupsFrom(deleted) };
-}
-
-function deletedBackupsFrom(value: unknown): DiskStopResponse["deleted"] {
-  if (typeof value !== "object" || value === null) return null;
-  const { count, date, lastDate, severalDays } = value as Record<string, unknown>;
-  if (
-    typeof count !== "number" ||
-    typeof date !== "string" ||
-    typeof lastDate !== "string" ||
-    typeof severalDays !== "boolean"
-  ) {
-    return null;
-  }
-  return { count, date, lastDate, severalDays };
+  return {
+    stopped:
+      typeof body === "object" &&
+      body !== null &&
+      !Array.isArray(body) &&
+      (body as Record<string, unknown>)["stopped"] === true,
+  };
 }
 
 /** LOCAL copy of the destination kinds `POST /api/backup/apply` reads

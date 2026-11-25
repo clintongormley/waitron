@@ -1116,14 +1116,6 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
-## DISK-FULL-SCREEN. Out of space: a red window over the whole screen
-
-Queued as DISK-FULL-SCREEN (lane I). The owner, 2026-11-24: "A modal like when the server is down - red
-covering the whole screen. Disk Full. Waitron cannot operate. or similar". Tills and dashboard; on the
-dashboard the window has Open Box status and does not cover that page (the watcher's addition, told to
-the owner). Pictures go to the owner before it is built. The long bar's words (A1127 slice 3, #2223) go,
-and #2223's other questions are closed.
-
 ## Bundle: Finish the clock work: a check at every start and every change
 
 2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1151,8 +1143,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
-- **DISK-FULL-SCREEN. Out of space: a red window over the whole screen** (owner, 2026-11-24), queued in
-  lane I. [Detail](box.md#disk-full-screen-out-of-space-a-red-window-over-the-whole-screen).
 
 ## Bundle: What pack part 1's reviews left
 

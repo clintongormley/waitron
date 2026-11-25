@@ -1,7 +1,6 @@
 import { expect, it } from "vitest";
 import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
 import { CODE_MESSAGES, SET_MENU_FIELDS } from "./codes.js";
-import { diskStopMessage } from "./disk-stop-words.js";
 import { en, es } from "./strings.js";
 
 // The Waitron machine is "the box" in English and "el servidor" in Spanish (owner, 2026-11-22).
@@ -27,7 +26,6 @@ const OTHER_EQUIPOS: Record<string, string[]> = {
 };
 
 function texts(locale: "en" | "es"): [string, string][] {
-  const deleted = { count: 2, date: "2026-11-01", lastDate: "2026-11-02", severalDays: false };
   return [
     ...Object.entries(locale === "en" ? en : es),
     ...Object.entries(CODE_MESSAGES).map(([code, words]): [string, string] => [
@@ -38,11 +36,6 @@ function texts(locale: "en" | "es"): [string, string][] {
       `set-menu-field:${field}`,
       words[locale],
     ]),
-    ["disk-stop:no-status", diskStopMessage(null, false, locale)],
-    ["disk-stop:none-deleted", diskStopMessage(null, true, locale)],
-    ["disk-stop:one-deleted", diskStopMessage({ ...deleted, count: 1 }, true, locale)],
-    ["disk-stop:deleted", diskStopMessage(deleted, true, locale)],
-    ["disk-stop:several-days", diskStopMessage({ ...deleted, severalDays: true }, true, locale)],
     ...alertTexts(locale),
   ];
 }
@@ -81,7 +74,7 @@ it("reads every table, nested alert wording included", () => {
       "servers.title",
       "code:backup.spare_stream_active",
       "set-menu-field:setPrice",
-      "disk-stop:several-days",
+      "disk_stop.open_box_status",
       "alert:payment.capture_mismatch.items",
       "alert:backup.archives_deleted.one",
       "alert:backup.run_stopped.spaceLow",

@@ -52,6 +52,7 @@ export { WtFormErrorSummary } from "./components/wt-form-error-summary.js";
 export { WtHelpTooltip } from "./components/wt-help-tooltip.js";
 export { WtRelativeTime } from "./components/wt-relative-time.js";
 export { WtDialog } from "./components/wt-dialog.js";
+export { WtStopScreen } from "./components/wt-stop-screen.js";
 export { WtModal } from "./components/wt-modal.js";
 export { WtUnsavedChanges } from "./components/wt-unsaved-changes.js";
 export { WtDeleteDialog, type DeleteDialogCopy } from "./components/wt-delete-dialog.js";

@@ -563,16 +563,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       },
       () => {},
     );
-    mountDiskStopApi(
-      app,
-      {
-        db,
-        disk: diskState,
-        registry: createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
-        now,
-      },
-      () => {},
-    );
+    mountDiskStopApi(app, { db, disk: diskState }, () => {});
     mountPersonalDataExportApi(
       app,
       {
@@ -791,7 +782,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     for (const cookie of [cashier.cookie, manager.cookie]) {
       const res = await app.request("/management-api/disk-stop", { headers: { cookie } });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ stopped: true, deleted: null });
+      expect(await res.json()).toEqual({ stopped: true });
     }
     expect(lastSeen()).toBe(before);
     expect(lastSeenOf(cashier.token)).toBe(cashierBefore);

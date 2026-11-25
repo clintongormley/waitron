@@ -6212,6 +6212,68 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
+  it("keeps the reader Stop and charged-card advice usable before covering the till", async () => {
+    let refuse!: (error: unknown) => void;
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((_, reject) => (refuse = reject)),
+    );
+    const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });
+    const equipment = equipmentWith(
+      equipmentItem(readers[0]!.id, readers[0]!.name, { provider: "sumup" }),
+    );
+    const getDeviceEquipment = vi.fn().mockResolvedValue(equipment);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await takeOnReader(
+        takeBillPayment,
+        {
+          getDeviceEquipment,
+          cancelBillReaderPayment,
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "sumup_cloud",
+            capabilities: ["print-receipt", "integrated-card-payment"],
+            activeReaders: readers.map((reader) => ({ ...reader, provider: "sumup_cloud" })),
+            defaultReaderId: readers[0]!.id,
+          }),
+        },
+        false,
+      );
+      const diskWindow = () => el.shadowRoot!.querySelector("wt-stop-screen");
+      getDeviceEquipment.mockResolvedValue({
+        ...equipment,
+        notices: [
+          {
+            owner: "box",
+            key: "storage.disk_full",
+            code: "storage.disk_full",
+            severity: "error",
+            params: {},
+          },
+        ],
+      });
+      vi.advanceTimersByTime(15_000);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-notice-strip")?.notices).toHaveLength(1),
+      );
+      expect(diskWindow()).toBeNull();
+      const stop = inDialog(el, "[data-pay-cancel-reader]")!;
+      await userEvent.click(stop.shadowRoot!.querySelector("button")!);
+      expect(cancelBillReaderPayment).toHaveBeenCalledOnce();
+      refuse({ code: "sale.charged_not_recorded", reason: "disk_full", status: 507 });
+      await vi.waitFor(() =>
+        expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/check-card-payments"),
+      );
+      expect(diskWindow()).toBeNull();
+      emit(dialog(el)!, "bill-pay-close");
+      await vi.waitFor(() =>
+        expect(diskWindow()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("A1399: keeps known-charge advice while checking the same payment after a full disk", async () => {
     const takeBillPayment = vi
       .fn()
