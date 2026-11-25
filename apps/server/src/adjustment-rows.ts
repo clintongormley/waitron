@@ -24,6 +24,7 @@ import { isReleased } from "./working-order-serving.js";
 export interface Row {
   id: string;
   setMenuRole: (typeof workingOrderLines.$inferSelect)["setMenuRole"];
+  setMenuLineId: string | null;
   lineNo: number;
   parentLineId: string | null;
   productId: string | null;
@@ -36,6 +37,7 @@ export interface Row {
   priceQuantity: number;
   unit: number;
   list: number | null;
+  aLaCarte: number | null;
   unitPrecision: number | null;
   groupId: string | null;
   groupState: "held" | "fired" | "removed" | null;
@@ -68,6 +70,7 @@ export async function readRows(tx: Transaction, orderId: string): Promise<Row[]>
     .select({
       id: workingOrderLines.id,
       setMenuRole: workingOrderLines.setMenuRole,
+      setMenuLineId: workingOrderLines.setMenuLineId,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
@@ -80,6 +83,7 @@ export async function readRows(tx: Transaction, orderId: string): Promise<Row[]>
       priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
       list: workingOrderLines.listUnitPriceGross,
+      aLaCarte: workingOrderLines.aLaCarteUnitPrice,
       unitPrecision: workingOrderLines.unitPrecision,
       groupId: workingOrderLines.groupId,
       groupState: orderGroups.state,

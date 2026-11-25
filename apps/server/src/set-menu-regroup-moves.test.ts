@@ -223,29 +223,36 @@ it("moves Hake alone to a bill holding a Soup, where the two form a Daily", asyn
   });
 });
 
-it("refuses moving alone a dish its own comp froze, changing neither bill (D18)", async () => {
+it("moves alone a dish its own comp took out of its Daily, with its comp (D31)", async () => {
   const source = await seated();
   await send(source, ["Soup", "Sirloin"]);
   const sirloin = await idOf(source.tabId, "Sirloin");
   expect((await grouping(source.tabId)).total).toBe(1900);
   await comp(source.tabId, sirloin);
   const target = await partyBill(source);
-  const before = await grouping(source.tabId);
 
-  await expect(move(source, target, [sirloin])).rejects.toMatchObject({
-    code: "set_menu.move_adjusted",
-    params: { dishNames: ["Sirloin"] },
+  await move(source, target, [sirloin]);
+
+  expect(await grouping(source.tabId)).toEqual({
+    rows: [{ what: "Soup", price: 600, in: null }],
+    total: 600,
   });
-  expect(await grouping(source.tabId)).toEqual(before);
-  expect(await grouping(target.tabId)).toEqual({ rows: [], total: 0 });
+  expect(await grouping(target.tabId)).toEqual({
+    rows: [{ what: "Sirloin", price: 0, in: null }],
+    total: 0,
+  });
+  expect((await specRows(spec, target.tabId))[0]).toMatchObject({
+    id: sirloin,
+    listUnitPriceGross: 2400,
+  });
 });
 
-it("moves alone a dish a comp of its row left with only a stamped list price (D30)", async () => {
+it("moves alone a dish a comp of its row took nothing off, which keeps no list price (D30)", async () => {
   const source = await seated();
   await send(source, ["Soup", "Soup", "Soup", "Sirloin", "Sirloin", "Sirloin"]);
   const sirloins = await Promise.all([0, 1, 2].map((nth) => idOf(source.tabId, "Sirloin", nth)));
   // One of the three-Sirloin row comped: the comp names the row's first Sirloin and the third it
-  // took, and stamps the list price on every Sirloin of the row.
+  // took; the stamp it puts on every Sirloin of the row is cleared as the bill is worked out again.
   await inTx(venue, async (tx) =>
     applyAdjustment(
       tx,
@@ -273,7 +280,7 @@ it("moves alone a dish a comp of its row left with only a stamped list price (D3
     held: new Set(),
   });
   expect((await specRows(spec, source.tabId)).find(({ id }) => id === middle)).toMatchObject({
-    listUnitPriceGross: 500,
+    listUnitPriceGross: null,
   });
   const target = await partyBill(source);
 
@@ -289,17 +296,17 @@ it("moves alone a dish a comp of its row left with only a stamped list price (D3
     total: 1900,
   });
   const left = await grouping(source.tabId);
-  expect(left.total).toBe(3900);
+  expect(left.total).toBe(3100);
   expect(left.rows.filter(({ what }) => what === "Sirloin")).toEqual([
-    { what: "Sirloin", price: 500, in: expect.any(String) },
-    { what: "Sirloin", price: 0, in: expect.any(String) },
+    { what: "Sirloin", price: 500, in: "Daily menu 1" },
+    { what: "Sirloin", price: 0, in: null },
   ]);
   expect(
     left.rows
       .filter(({ what }) => what === "Soup")
       .map(({ price }) => price)
       .sort(),
-  ).toEqual([0, 0, 600]);
+  ).toEqual([0, 600, 600]);
 });
 
 it("refuses moving alone a dish whose cancel kept its charge (D18)", async () => {
@@ -334,7 +341,7 @@ it("moves a dish with no comp of its own out of a comped Daily, which stays on i
   expect(await grouping(target.tabId)).toEqual(HAKE_DAILY);
 });
 
-it("keeps a comped dish and its Daily in place on the copy Reopen bill makes, after Sea bass is sent there (D15)", async () => {
+it("keeps a comped dish a la carte on the copy Reopen bill makes, where the Soup and a Sea bass sent there make a Special (D31)", async () => {
   const bill = await seated();
   await send(bill, ["Soup", "Sirloin"]);
   await comp(bill.tabId, await idOf(bill.tabId, "Sirloin"));
@@ -342,11 +349,13 @@ it("keeps a comped dish and its Daily in place on the copy Reopen bill makes, af
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
   const copied = await grouping(billId);
-  expect(copied.rows).toEqual([
-    { what: "Soup", price: 0, in: "Daily menu 1" },
-    { what: "Sirloin", price: expect.any(Number), in: "Daily menu 1" },
-    { what: "Daily menu 1", price: 1400 },
-  ]);
+  expect(copied).toEqual({
+    rows: [
+      { what: "Soup", price: 600, in: null },
+      { what: "Sirloin", price: 0, in: null },
+    ],
+    total: 600,
+  });
 
   const [copy] = await venue.db
     .select({ partyId: workingOrders.partyId })
@@ -355,9 +364,15 @@ it("keeps a comped dish and its Daily in place on the copy Reopen bill makes, af
   await send({ partyId: copy!.partyId!, tabId: billId }, ["Sea bass"]);
 
   expect(await grouping(billId)).toEqual({
-    rows: [...copied.rows, { what: "Sea bass", price: 1900, in: null }],
-    total: copied.total + 1900,
+    rows: [
+      { what: "Soup", price: 0, in: "Special menu 1" },
+      { what: "Sirloin", price: 0, in: null },
+      { what: "Sea bass", price: 0, in: "Special menu 1" },
+      { what: "Special menu 1", price: 2000 },
+    ],
+    total: 2000,
   });
+  expect((await specRows(spec, billId))[1]).toMatchObject({ listUnitPriceGross: 2400 });
 });
 
 it("merges Soup on one bill and Hake on the other into one Daily", async () => {

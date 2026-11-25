@@ -350,7 +350,7 @@ async function compedSurchargeBill() {
   return bill;
 }
 
-it("a comped surcharge keeps its row on both receipt reads", async () => {
+it("a comped set-menu dish keeps its row, at its a la carte price, on both receipt reads", async () => {
   const bill = await compedSurchargeBill();
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const { saleId, original, settled, bySaleId } = await printedItemRows(bill);
@@ -360,14 +360,15 @@ it("a comped surcharge keeps its row on both receipt reads", async () => {
   const receipt = await inTx(venue, (tx) =>
     readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
   );
-  expect(receipt.lines.filter((line) => line.adjustments !== undefined)).toEqual([
+  const adjusted = receipt.lines.filter((line) => line.adjustments !== undefined);
+  expect(adjusted).toEqual([
     expect.objectContaining({
-      setMenuRole: "dish",
       gross: "0.00",
-      listGross: "5.00",
-      adjustments: [{ kind: "comp", amount: "5.00" }],
+      listGross: "24.00",
+      adjustments: [{ kind: "comp", amount: "24.00" }],
     }),
   ]);
+  expect(adjusted[0]).not.toHaveProperty("setMenuRole");
 });
 
 it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async () => {
@@ -390,13 +391,23 @@ it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async 
 it("after a set menu leaves the bill, a reprint by sale id prints each discount under its own row", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   const dailies = await addEmptySpecSetMenus(spec, bill.tabId, spec.daily, 3);
-  const [firstSpecial] = await addEmptySpecSetMenus(spec, bill.tabId, spec.special, 2);
+  const [firstSpecial] = await addEmptySpecSetMenus(spec, bill.tabId, spec.special);
   await inTx(venue, (tx) =>
     tx.delete(workingOrderLines).where(eq(workingOrderLines.id, dailies[2]!)),
   );
-  const numbers = (await specRows(spec, bill.tabId)).map(({ lineNo }) => lineNo);
-  expect(numbers).not.toEqual(numbers.map((_, i) => i + 1));
   await compLine(bill.tabId, firstSpecial!, 1000);
+  // Added after the discount, which works out the bill's set menus and would drop the empty ones.
+  await addEmptySpecSetMenus(spec, bill.tabId, spec.special);
+  await addEmptySpecSetMenus(spec, bill.tabId, spec.daily, 2);
+  const lines = await specRows(spec, bill.tabId);
+  const numbers = lines.map(({ lineNo }) => lineNo);
+  expect(numbers).not.toEqual(numbers.map((_, i) => i + 1));
+  expect(lines.map(({ name }) => name)).toEqual([
+    "Special menu",
+    "Special menu",
+    "Daily menu",
+    "Daily menu",
+  ]);
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const [sale] = await venue.db
     .select({ id: sales.id })
@@ -404,7 +415,7 @@ it("after a set menu leaves the bill, a reprint by sale id prints each discount 
     .where(eq(sales.workingOrderId, bill.tabId));
   const settledTicket = await settled(bill.tabId);
   const settledRows = items(settledTicket);
-  expect(settledRows.slice(1, 3)).toEqual([
+  expect(settledRows.slice(0, 2)).toEqual([
     ["1  Special menu", "20,00"],
     [expect.stringMatching(/^ {2}\S/u), "-2,00"],
   ]);

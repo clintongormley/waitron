@@ -66,7 +66,6 @@ import {
   type StandIn,
 } from "./adjustment-rows.js";
 import { invalid, money } from "./bill-allocation.js";
-import { assertBillInvariant } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -81,7 +80,8 @@ import {
   type VoidTarget,
 } from "./working-order-removal.js";
 import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
-import { assertTabOpen, readLockedLines } from "./stored-order-lines.js";
+import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
+import { assertTabOpen, readLockedLines, totalBeforeEdit } from "./stored-order-lines.js";
 import { extraQuantityFor, keptExtrasOf } from "./order-line-quantities.js";
 import {
   captureOrderEdit,
@@ -192,6 +192,8 @@ interface Plan {
   /** On a row, every line of each stand-in line the action prices, taken or not: each gets its list
    * price, as one grouped line does before part of it is carved off (plan D32). */
   stamped: string[];
+  /** The dishes among `writes` that leave their set menus, read at their a la carte price (D31). */
+  released: string[];
   /** On a row, the split one grouped line's second price would record (plan D33). */
   rowSplits: AdjustmentSplit[];
   reduction: Decimal;
@@ -560,7 +562,7 @@ export async function planAdjustment(
   await refusePaymentInFlight(tx, [orderId]);
   await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
-  const rows = await readRows(tx, orderId);
+  const { rows, released } = await atReleasedPrices(tx, ask, await readRows(tx, orderId));
 
   let line: Row | null = null;
   let covered: number | null = null;
@@ -784,6 +786,7 @@ export async function planAdjustment(
     changes,
     writes: writes ?? changes,
     stamped,
+    released: (writes ?? changes).flatMap(({ row }) => (released.has(row.id) ? [row.id] : [])),
     rowSplits,
     reduction,
     nominal,
@@ -1143,6 +1146,8 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
+        const before = await totalBeforeEdit(tx, cfg, args.orderId);
+        await releaseDishes(tx, plan.released);
         const repriced = await reprice(
           tx,
           cfg,
@@ -1154,7 +1159,7 @@ export async function applyAdjustment(
         splits = [...repriced.splits, ...plan.rowSplits];
         taken = repriced.taken;
         await bumpRevision(tx, [args.orderId]);
-        await assertBillInvariant(tx, [args.orderId]);
+        await regroupAdjusted(tx, cfg, args.orderId, before);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
       }
       const { line } = plan;

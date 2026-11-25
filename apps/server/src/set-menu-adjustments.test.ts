@@ -124,12 +124,21 @@ it("a discount on a surcharge", async () => {
   const tab = await specBill(spec);
   const sirloin = await firstSirloin(tab.tabId);
   await adjust(tab.tabId, sirloin.id, { action: "discount_percent", percentBp: 5000 });
-  expect(await dishAt(tab.tabId, sirloin.setMenuLineId!, 1)).toMatchObject({
-    id: sirloin.id,
-    lineTotal: 250,
-    listUnitPriceGross: 500,
+  const after = await specRows(spec, tab.tabId);
+  expect(after.find(({ id }) => id === sirloin.id)).toMatchObject({
+    setMenuRole: null,
+    setMenuLineId: null,
+    setMenuPlace: null,
+    lineTotal: 1200,
+    listUnitPriceGross: 2400,
   });
-  expect(await total(tab.tabId)).toBe(6950);
+  expect(
+    after
+      .filter(({ setMenuRole }) => setMenuRole === "set_menu")
+      .map(({ name }) => name)
+      .sort(),
+  ).toEqual(["Daily menu", "Daily menu", "Special menu"]);
+  expect(await total(tab.tabId)).toBe(7100);
 });
 
 it("a bill discount spreads over set menus and surcharges and the ticket matches", async () => {
@@ -182,16 +191,17 @@ it("the offered move never names a comped or discounted dish", async () => {
       { dish: "Soup", from: spec.daily },
       { dish: "Sirloin", from: spec.daily },
     ]);
-    const [third] = await addEmptySpecSetMenus(spec, tab.tabId, spec.special);
     const sirloin = await firstSirloin(tab.tabId);
     await fix(tab.tabId, sirloin.id);
+    const [third] = await addEmptySpecSetMenus(spec, tab.tabId, spec.special);
     const state = await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId));
     const suggestion = suggestMove(state, [], {
       id: crypto.randomUUID(),
       productId: spec.productIds.Hake,
       variantId: null,
     });
-    return { daily: sirloin.setMenuLineId!, third: third!, sirloin: sirloin.id, suggestion };
+    const held = state.dishes.some(({ lineId }) => lineId === sirloin.id);
+    return { daily: sirloin.setMenuLineId!, third: third!, sirloin: sirloin.id, suggestion, held };
   };
 
   const control = await offeredFor(async () => {});
@@ -209,12 +219,22 @@ it("the offered move never names a comped or discounted dish", async () => {
     place: 1,
   });
 
-  for (const fix of [
-    (billId: string, lineId: string) => adjust(billId, lineId, { action: "comp" }),
-    (billId: string, lineId: string) =>
-      adjust(billId, lineId, { action: "discount_percent", percentBp: 1000 }),
-  ]) {
-    const { third, suggestion } = await offeredFor(fix);
+  // Its own comp or discount takes the Sirloin out of its set menu; a whole-bill discount holds it
+  // there.
+  for (const [inSetMenu, fix] of [
+    [false, (billId: string, lineId: string) => adjust(billId, lineId, { action: "comp" })],
+    [
+      false,
+      (billId: string, lineId: string) =>
+        adjust(billId, lineId, { action: "discount_percent", percentBp: 1000 }),
+    ],
+    [
+      true,
+      (billId: string) => adjust(billId, null, { action: "discount_percent", percentBp: 1000 }),
+    ],
+  ] as const) {
+    const { third, suggestion, held } = await offeredFor(fix);
+    expect(held).toBe(inSetMenu);
     expect(suggestion?.moves).toEqual([]);
     expect(suggestion?.place).toMatchObject({ setMenuLineId: third, place: 1 });
   }
@@ -233,10 +253,23 @@ async function moveAlone(partyId: string, from: string, to: string, lineIds: str
   return inTx(venue, (tx) => moveDishes(tx, venue.cfg, from, to, lineIds, command));
 }
 
-it("a discounted set-menu dish moves only with its set menu", async () => {
-  const { tab, other, emptyDaily } = await twoBills();
+it("a discounted set-menu dish moves alone, with its discount", async () => {
+  const { tab, other } = await twoBills();
   const sirloin = await firstSirloin(tab.tabId);
   await adjust(tab.tabId, sirloin.id, { action: "discount_percent", percentBp: 5000 });
+
+  await moveAlone(tab.partyId, tab.tabId, other, [sirloin.id]);
+  expect(await specRows(spec, other)).toMatchObject([
+    { id: sirloin.id, setMenuRole: null, lineTotal: 1200, listUnitPriceGross: 2400 },
+  ]);
+  expect((await specRows(spec, tab.tabId)).map(({ id }) => id)).not.toContain(sirloin.id);
+  expect(await total(tab.tabId)).toBe(5900);
+});
+
+it("a set-menu dish a whole-bill discount reduced moves only with its set menu", async () => {
+  const { tab, other, emptyDaily } = await twoBills();
+  const sirloin = await firstSirloin(tab.tabId);
+  await adjust(tab.tabId, null, { action: "discount_percent", percentBp: 5000 });
   const before = { from: await specRows(spec, tab.tabId), to: await specRows(spec, other) };
 
   await expect(moveAlone(tab.partyId, tab.tabId, other, [sirloin.id])).rejects.toMatchObject({
@@ -371,7 +404,7 @@ it("the same dish moves with its set menu", async () => {
   const sirloin = await firstSirloin(tab.tabId);
   const daily = sirloin.setMenuLineId!;
   const soup = await dishAt(tab.tabId, daily, 0);
-  await adjust(tab.tabId, sirloin.id, { action: "discount_percent", percentBp: 5000 });
+  await adjust(tab.tabId, null, { action: "discount_percent", percentBp: 5000 });
 
   await moveAlone(tab.partyId, tab.tabId, other, [daily, soup.id, sirloin.id]);
   const moved = await specRows(spec, other);

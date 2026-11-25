@@ -39,6 +39,7 @@ import {
   type SpecDish,
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
+import { freezeBillLine } from "./testing/set-menu-bill-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
 let spec: SpecVenue;
@@ -407,10 +408,32 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
     expect(await totalOf(bill.tabId)).toBe("2.00");
   });
 
-  it("refuses a comped dish chosen without its set menu in the preview as in the payment", async () => {
+  it("takes a comped dish without the Soup its set menu held, at 0.00, when something else is paid for", async () => {
     const bill = await seatedBill("Soup", "Sirloin");
     const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
     await compSpecLine(spec, bill.tabId, sirloin);
+    const water = await sendWater(bill);
+
+    await refusesBoth(bill, [{ lineId: sirloin }], {
+      code: "bill.nothing_outstanding",
+    });
+    const picks = [{ lineId: sirloin }, { lineId: water }];
+    expect(await preview(bill, picks)).toBe("2.00");
+    const newBill = await pay(bill, picks, "2.00");
+
+    expect((await specGrouping(spec, newBill)).rows).toEqual([
+      { what: "Sirloin", price: 0, in: null },
+      { what: "Water", price: 200, in: null },
+    ]);
+    expect((await specGrouping(spec, bill.tabId)).rows).toEqual([
+      { what: "Soup", price: 600, in: null },
+    ]);
+  });
+
+  it("refuses a dish reduced inside its set menu, chosen without it, in the preview as in the payment", async () => {
+    const bill = await seatedBill("Soup", "Sirloin");
+    const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
+    await inTx(venue, (tx) => freezeBillLine(tx, sirloin));
 
     await refusesBoth(bill, [{ lineId: sirloin }], {
       code: "set_menu.move_adjusted",
@@ -418,20 +441,20 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
     });
   });
 
-  it("takes a comped dish chosen with its set menu at what they come to", async () => {
+  it("takes a dish reduced inside its set menu, chosen with it, at what they come to", async () => {
     const bill = await seatedBill("Soup", "Sirloin");
     const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
-    await compSpecLine(spec, bill.tabId, sirloin);
+    await inTx(venue, (tx) => freezeBillLine(tx, sirloin));
     await sendWater(bill);
     const picks = [
       { lineId: await specLineId(spec, bill.tabId, "Daily menu") },
       { lineId: sirloin },
     ];
 
-    expect(await preview(bill, picks)).toBe("14.00");
-    const newBill = await pay(bill, picks, "14.00");
+    expect(await preview(bill, picks)).toBe("19.00");
+    const newBill = await pay(bill, picks, "19.00");
 
-    expect(await totalOf(newBill)).toBe("14.00");
+    expect(await totalOf(newBill)).toBe("19.00");
     expect(await totalOf(bill.tabId)).toBe("2.00");
   });
 
@@ -551,10 +574,36 @@ describe("Pay for items of set menus on a printed bill, whose dishes the payment
     expect(await totalOf(reopened!)).toBe("6.00");
   });
 
-  it("refuses a comped dish chosen without its set menu, and reopens nothing", async () => {
+  it("takes a comped dish without the Soup its set menu held, which the reopened bill keeps at 6.00", async () => {
     const bill = await seatedBill("Soup", "Sirloin");
     const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
     await compSpecLine(spec, bill.tabId, sirloin);
+    const water = await sendWater(bill);
+    await serveSpecBill(spec, bill.partyId, bill.tabId);
+    await printSpecBill(spec, bill.partyId, bill.tabId);
+
+    await refusesBoth(bill, [{ lineId: sirloin }], {
+      code: "bill.nothing_outstanding",
+    });
+    expect(await reopenedFrom(bill.tabId)).toEqual([]);
+    const picks = [{ lineId: sirloin }, { lineId: water }];
+    expect(await preview(bill, picks)).toBe("2.00");
+    const newBill = await pay(bill, picks, "2.00");
+
+    expect((await specGrouping(spec, newBill)).rows).toEqual([
+      { what: "Sirloin", price: 0, in: null },
+      { what: "Water", price: 200, in: null },
+    ]);
+    const [reopened] = await reopenedFrom(bill.tabId);
+    expect((await specGrouping(spec, reopened!)).rows).toEqual([
+      { what: "Soup", price: 600, in: null },
+    ]);
+  });
+
+  it("refuses a dish reduced inside its set menu, chosen without it, and reopens nothing", async () => {
+    const bill = await seatedBill("Soup", "Sirloin");
+    const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
+    await inTx(venue, (tx) => freezeBillLine(tx, sirloin));
     await serveSpecBill(spec, bill.partyId, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
 
