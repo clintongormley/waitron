@@ -345,8 +345,8 @@ describe("the bill action routes", () => {
       second,
       {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 1 }],
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: "3.00",
         applied: "3.00",
@@ -456,8 +456,8 @@ describe("the bill action routes", () => {
         tabId,
         {
           submissionId: randomUUID(),
-          kind: "items",
-          lines: [{ lineNo: 1 }],
+          kind: "contribution",
+          amount: "35.00",
           method: "cash",
           tendered: "35.00",
           applied: "35.00",

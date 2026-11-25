@@ -2591,21 +2591,7 @@ describe("A803 split", () => {
     await order(v, anna.tabId, "Burger", "Red wine bottle", "Water", "Flan");
     const b2 = await splitOff(anna.partyId, anna.tabId, [2, 3]);
     const b3 = await splitOff(anna.partyId, anna.tabId, [4]);
-    await takeBillPayment(
-      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-      v.cfg,
-      b2,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: (await lineRows(b2))[1]!.lineNo }],
-        method: "cash",
-        tendered: "2.00",
-        applied: "2.00",
-        tip: "0.00",
-      },
-      v.operator,
-    );
+    await cashContribution(v, b2, "2.00");
     await cashContribution(v, b3, "1.00");
     const money = async () => ({
       b2: {
@@ -2618,7 +2604,7 @@ describe("A803 split", () => {
       },
     });
     const before = await money();
-    expect(before.b2.balance.paidLines).toHaveLength(1);
+    expect(before.b2.balance.received).toBe("2.00");
     expect(before.b2.payments).toHaveLength(1);
     expect(before.b3.payments).toHaveLength(1);
     const splitting = await cmd(anna.partyId);
@@ -3032,21 +3018,7 @@ describe("A803 split", () => {
     describe("a part-paid bill", () => {
       async function partPaid(prefix: string) {
         const bill = await tableFor(prefix, "Burger", "Water");
-        await takeBillPayment(
-          { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
-          v.cfg,
-          bill.b1,
-          {
-            submissionId: randomUUID(),
-            kind: "items",
-            lines: [{ lineNo: (await lineOn(bill.b1, "Burger")).lineNo }],
-            method: "cash",
-            tendered: "12.00",
-            applied: "12.00",
-            tip: "0.00",
-          },
-          v.operator,
-        );
+        await cashContribution(v, bill.b1, "12.00");
         return bill;
       }
 
@@ -3061,7 +3033,7 @@ describe("A803 split", () => {
         expect(payments).toHaveLength(1);
       });
 
-      it("its unpaid dishes can go loose, the payment staying", async () => {
+      it("a dish no money received covers can go loose, the payment staying", async () => {
         const { anna, m5, b1 } = await partPaid("A803 Part loose");
         const payments = await paymentsOf(v, b1);
         const water = await lineOn(b1, "Water");
@@ -3077,8 +3049,23 @@ describe("A803 split", () => {
       });
 
       it("its paid dish refuses bill.line_paid, every row unchanged", async () => {
-        const { anna, m5, b1 } = await partPaid("A803 Part paid");
+        const { anna, m5, b1 } = await tableFor("A803 Part paid", "Burger", "Water");
         const burger = await lineOn(b1, "Burger");
+        await takeBillPayment(
+          { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          b1,
+          {
+            submissionId: randomUUID(),
+            kind: "items",
+            lines: [{ lineNo: burger.lineNo }],
+            method: "cash",
+            tendered: "12.00",
+            applied: "12.00",
+            tip: "0.00",
+          },
+          v.operator,
+        );
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(anna.partyId, m5, { wholeBillIds: [], loose: [loose(b1, burger.id)] }),

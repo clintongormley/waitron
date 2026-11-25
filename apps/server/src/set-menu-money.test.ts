@@ -205,40 +205,31 @@ it("builds the spec bill: 3 Daily and 1 Special with their dishes placed, 72.00 
 
 type Ask = Omit<BillPaymentRequest, "submissionId" | "tip" | "expectedEdit">;
 
-const kinds: Record<"items" | "contribution" | "share" | "cash" | "card", (lineNo: number) => Ask> =
-  {
-    items: (lineNo: number) => ({
-      kind: "items",
-      lines: [{ lineNo }],
-      method: "cash",
-      tendered: "14.00",
-      applied: "14.00",
-    }),
-    contribution: () => ({
-      kind: "contribution",
-      amount: "10.00",
-      method: "cash",
-      tendered: "10.00",
-      applied: "10.00",
-    }),
-    share: () => ({
-      kind: "share",
-      shareOf: 2,
-      method: "cash",
-      tendered: "36.00",
-      applied: "36.00",
-    }),
-    cash: () => ({ ...wholePayment("72.00"), method: "cash", tendered: "72.00" }),
-    card: () => ({ ...wholePayment("72.00"), method: "card", entry: "manual" }),
-  };
+const kinds: Record<"contribution" | "share" | "cash" | "card", () => Ask> = {
+  contribution: () => ({
+    kind: "contribution",
+    amount: "10.00",
+    method: "cash",
+    tendered: "10.00",
+    applied: "10.00",
+  }),
+  share: () => ({
+    kind: "share",
+    shareOf: 2,
+    method: "cash",
+    tendered: "36.00",
+    applied: "36.00",
+  }),
+  cash: () => ({ ...wholePayment("72.00"), method: "cash", tendered: "72.00" }),
+  card: () => ({ ...wholePayment("72.00"), method: "card", entry: "manual" }),
+};
 
 it.each(Object.keys(kinds) as (keyof typeof kinds)[])(
   "a set-menu bill takes each kind of bill payment: %s",
   async (kind) => {
     const tab = await specBill(spec);
     const before = await setMenuRows(tab.tabId);
-    const dailyLineNo = before.find(({ id }) => id === tab.daily[0])!.lineNo;
-    const request = kinds[kind](dailyLineNo);
+    const request = kinds[kind]();
     await takeBillPayment(
       deps(),
       venue.cfg,

@@ -1625,13 +1625,16 @@ describe("A803 split: the panel's read", () => {
     return split.json.billId as string;
   }
 
-  function payItems(billId: string, lineNo: number, amount: string) {
+  function payCash(
+    billId: string,
+    amount: string,
+    part: { kind: "contribution"; amount: string } | { kind: "share"; shareOf: number },
+  ) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
       submissionId: randomUUID(),
       tip: "0.00",
       method: "cash",
-      kind: "items",
-      lines: [{ lineNo }],
+      ...part,
       tendered: amount,
       applied: amount,
     });
@@ -1645,7 +1648,7 @@ describe("A803 split: the panel's read", () => {
 
   async function lewisWithAnnaFamilyBill(...dishes: string[]) {
     const anna = await seatedWith(venue, "Small beer");
-    const paid = await payItems(anna.tabId, 1, "3.00");
+    const paid = await payCash(anna.tabId, "3.00", { kind: "share", shareOf: 1 });
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const lewis = await seatedWith(venue, ...dishes);
     const joined = await post(`/api/parties/${lewis.partyId}/join`, {
@@ -1686,11 +1689,11 @@ describe("A803 split: the panel's read", () => {
     expect(merged.status, JSON.stringify(merged.json)).toBe(204);
     expect(await statusOf(venue, abandoned)).toBe("abandoned");
 
-    const paidAll = await payItems(settled, 1, "3.00");
+    const paidAll = await payCash(settled, "3.00", { kind: "share", shareOf: 1 });
     expect(paidAll.status, JSON.stringify(paidAll.json)).toBe(200);
     expect(await statusOf(venue, settled)).toBe("settled");
 
-    const paidOne = await payItems(partPaid, 1, "18.00");
+    const paidOne = await payCash(partPaid, "18.00", { kind: "contribution", amount: "18.00" });
     expect(paidOne.status, JSON.stringify(paidOne.json)).toBe(200);
 
     const linesOf = async (billId: string) => {
@@ -1751,10 +1754,10 @@ describe("A803 split: the panel's read", () => {
 
     const bills = answer.json.bills as {
       billId: string;
-      balance: { status: string; paidLines: { lineNo: number; paidQuantity: string }[] };
+      balance: { status: string; received: string };
     }[];
     const paidRow = bills.find((bill) => bill.billId === partPaid)!;
-    expect(paidRow.balance.paidLines).toMatchObject([{ lineNo: 1, paidQuantity: "1.000" }]);
+    expect(paidRow.balance.received).toBe("18.00");
     expect(bills.find((bill) => bill.billId === presented)!.balance.status).toBe("placed");
 
     expect((await read(lewis.partyId.toUpperCase())).json).toEqual(answer.json);

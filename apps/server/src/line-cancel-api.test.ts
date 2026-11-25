@@ -1079,8 +1079,8 @@ describe("the public cancellation read and command", () => {
         `/api/working-orders/${p.billId}/payments`,
         {
           submissionId: randomUUID(),
-          kind: "items",
-          lines: [{ lineNo: p.water.lineNo, quantity: "1" }],
+          kind: "contribution",
+          amount: "2.00",
           method: "cash",
           tendered: "2.00",
           applied: "2.00",
@@ -1132,8 +1132,8 @@ describe("the public cancellation read and command", () => {
         `/api/working-orders/${p.billId}/payments`,
         {
           submissionId: randomUUID(),
-          kind: "items",
-          lines: [{ lineNo: p.water.lineNo, quantity: "1" }],
+          kind: "contribution",
+          amount: "2.00",
           method: "cash",
           tendered: "2.00",
           applied: "2.00",
@@ -1166,8 +1166,8 @@ describe("the public cancellation read and command", () => {
       `/api/working-orders/${p.billId}/payments`,
       {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: p.water.lineNo, quantity: "1" }],
+        kind: "contribution",
+        amount: "2.00",
         method: "cash",
         tendered: "2.00",
         applied: "2.00",

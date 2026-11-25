@@ -2388,7 +2388,41 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       copy.mockRestore();
     }
   });
-  it.each([1, 2])("keeps %s paid units on the source or refuses the entire split", async (paid) => {
+  it("splits a part-paid line into single units, its first unit keeping its id", async () => {
+    const party = await seated();
+    const submitted = await submitGrouped(party, [
+      { lines: [dish("Tarta", "5")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const payment = await call("POST", `/api/working-orders/${party.tabId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "18.00",
+      method: "cash",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+    expect(payment.status).toBe(200);
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      lineId: group.lineIds[0]!,
+    };
+    const result = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, body);
+    expect(result.status).toBe(200);
+    const rows = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
+    expect(rows[0]!.id).toBe(body.lineId);
+  });
+  it("refuses the entire split of a line with two paid units", async () => {
     const party = await seated();
     const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "5")], release: "hold" },
@@ -2398,10 +2432,10 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const payment = await call("POST", `/api/working-orders/${party.tabId}/payments`, {
       submissionId: randomUUID(),
       kind: "items",
-      lines: [{ lineNo: 1, quantity: String(paid) }],
+      lines: [{ lineNo: 1, quantity: "2" }],
       method: "cash",
-      tendered: String(paid * 18),
-      applied: String(paid * 18),
+      tendered: "36",
+      applied: "36",
       tip: "0.00",
     });
     expect(payment.status).toBe(200);
@@ -2412,26 +2446,13 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       lineId: group.lineIds[0]!,
     };
     const result = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, body);
-    if (paid === 1) {
-      expect(result.status).toBe(200);
-      const rows = await inTx(venue, (tx) =>
-        tx
-          .select()
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, party.tabId))
-          .orderBy(workingOrderLines.lineNo),
-      );
-      expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
-      expect(rows[0]!.id).toBe(body.lineId);
-    } else {
-      expect(result.status).toBe(409);
-      expect(result.json).toEqual(
-        refusal("bill.line_paid", { workingOrderId: party.tabId, lineNo: 1 }),
-      );
-      expect(await snapshot(party)).toEqual(before);
-    }
+    expect(result.status).toBe(409);
+    expect(result.json).toEqual(
+      refusal("bill.line_paid", { workingOrderId: party.tabId, lineNo: 1 }),
+    );
+    expect(await snapshot(party)).toEqual(before);
     const quantities = await inTx(venue, (tx) => readPaidQuantities(tx, party.tabId));
-    expect([...quantities]).toEqual([[body.lineId, paid * 1000]]);
+    expect([...quantities]).toEqual([[body.lineId, 2000]]);
   });
 });
 

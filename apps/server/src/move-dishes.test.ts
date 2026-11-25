@@ -64,7 +64,6 @@ import {
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
-import { readPaidQuantities } from "./bill-payments.js";
 import { releaseDeliveries } from "./delivery-release.js";
 import "./errors.js";
 
@@ -408,11 +407,10 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(await paymentsOf(v, p.bill2)).toEqual([]);
   });
 
-  it("A803 move dishes: after an item payment for one Caña, the unpaid Cañas move and the paid one stays", async () => {
+  it("A803 move dishes: after a part payment of one Caña's price, the other Cañas move and one stays", async () => {
     const p = await party([dish("Caña", "3")]);
     const beerLines = await dishIds(p.bill1, "Caña");
-    const lineNos = (await rowsOf(p.bill1)).map((row) => row.lineNo);
-    await payItems(p.bill1, [lineNos[0]!], "3.00");
+    await cashContribution(v, p.bill1, "3.00");
 
     await move(p.partyId, p.bill1, p.bill2, beerLines.slice(1));
 
@@ -435,13 +433,12 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
   });
 
-  it("A803 move dishes: onto Bill 2 whose Red wine bottle is paid by item, the Caña moves and the Red wine bottle stays paid", async () => {
+  it("A803 move dishes: onto Bill 2 holding a part payment of its Red wine bottle's price, the Caña moves and the payment is unchanged", async () => {
     const p = await party([dish("Caña"), dish("Burger")], "fire", [
       dish("Red wine bottle"),
       dish("Water"),
     ]);
-    const [wineLine] = await rowsOf(p.bill2);
-    await payItems(p.bill2, [wineLine!.lineNo], "30.00");
+    const paymentId = await cashContribution(v, p.bill2, "30.00");
     const payments = await paymentsOf(v, p.bill2);
     const [beerLine] = await dishIds(p.bill1, "Caña");
 
@@ -449,8 +446,7 @@ describe("A803 move dishes: the moves that succeed", () => {
 
     expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
-    const paid = await inTx(v, (tx) => readPaidQuantities(tx, p.bill2));
-    expect([...paid]).toEqual([[wineLine!.id, 1000]]);
+    expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
   });
 
   it("A803 move dishes: onto Bill 2 holding a received €20 card payment, the Caña moves and the payment is unchanged", async () => {
