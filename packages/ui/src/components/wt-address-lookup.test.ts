@@ -164,15 +164,15 @@ test("shows a search answer during continued typing and skips added joining word
     false,
     1000,
   );
-  el.ignoredSearchWords = ["calle", "de", "la"];
-  type(el, "Calle de Nuestra ");
+  el.ignoredSearchWords = ["avenue", "of", "the"];
+  type(el, "Avenue of Saint ");
   await vi.advanceTimersByTimeAsync(0);
-  type(el, "Calle de Nuestra Señ");
+  type(el, "Avenue of Saint Jo");
   answers[0]!([MAYOR]);
   await vi.advanceTimersByTimeAsync(0);
   expect(options(el)).toHaveLength(1);
 
-  type(el, "Calle de Nuestra Señora ");
+  type(el, "Avenue of Saint John ");
   await vi.advanceTimersByTimeAsync(0);
   expect(options(el)).toHaveLength(0);
   answers[1]!([MAYOR]);
@@ -180,15 +180,15 @@ test("shows a search answer during continued typing and skips added joining word
   input(el).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
   await el.updateComplete;
   expect(input(el).hasAttribute("aria-activedescendant")).toBe(true);
-  type(el, "Calle de Nuestra Señora de la ");
+  type(el, "Avenue of Saint John of the ");
   await vi.advanceTimersByTimeAsync(1000);
   expect(options(el)).toHaveLength(1);
   expect(input(el).hasAttribute("aria-activedescendant")).toBe(false);
-  expect(queries).toEqual(["Calle de Nuestra", "Calle de Nuestra Señora"]);
+  expect(queries).toEqual(["Avenue of Saint", "Avenue of Saint John"]);
 
-  type(el, "Calle de Nuestra Señora de la Paz 3");
+  type(el, "Avenue of Saint John of the Cross 3");
   await vi.advanceTimersByTimeAsync(1000);
-  expect(queries.at(-1)).toBe("Calle de Nuestra Señora de la Paz 3");
+  expect(queries.at(-1)).toBe("Avenue of Saint John of the Cross 3");
 });
 
 test("the pause is one second unless set", () => {
