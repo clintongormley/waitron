@@ -294,7 +294,8 @@ were.
   the current allergens and diets of each dish, variant and extra, by product id. `queued` lists each
   scheduled version whose allergens or diets differ from the products' current ones, as
   `{ versionId, activatesAt, targets }`; each target is `{ target, stillOld }`, `stillOld` when every
-  differing copy holds the value being corrected, and a dish's takes in its variants. An unknown menu answers `menu.not_found` (404).
+  differing copy holds the value being corrected (its dish's, for a variant the live version lacks),
+  and a dish's takes in its variants. An unknown menu answers `menu.not_found` (404).
 - `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued? }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest

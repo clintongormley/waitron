@@ -89,7 +89,7 @@ export function liveDeclarations(live: MenuDocument): CorrectedFrom {
 }
 
 /** The queued versions holding a copy that is not the product's current declarations, each with the
- * targets that would correct it. */
+ * targets that would correct it. A variant `correctedFrom` does not know has its dish's old value. */
 export function queuedDeclarationDrift(
   queued: readonly { versionId: string; activatesAt: Date; document: MenuDocument }[],
   current: ReadonlyMap<string, DeclarationValues>,
@@ -102,7 +102,8 @@ export function queuedDeclarationDrift(
       const held = canonicalJson(copy.values);
       if (wanted === undefined || held === canonicalJson(declarationsFor(copy.target.kind, wanted)))
         continue;
-      const stillOld = canonicalJson(correctedFrom(copy)?.values ?? null) === held;
+      const from = correctedFrom(copy) ?? (copy.dish && correctedFrom(copy.dish));
+      const stillOld = canonicalJson(from?.values ?? null) === held;
       for (const taking of copy.dish === undefined ? [copy] : [copy.dish, copy]) {
         const target = correctedFrom(taking)?.target;
         if (target === undefined) continue;

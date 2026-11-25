@@ -324,7 +324,7 @@ it("writes money in the screen language", () => {
   ).toEqual(["Soup: Precio 3,00\u00a0€ → 3,50\u00a0€"]);
 });
 
-it("always notes open orders and the products, and names each queued version by its date", () => {
+it("notes open orders and the products for a price, and names each queued version by its date", () => {
   const openOrders = "Lines already on open orders keep their old price.";
   const products =
     "The next normal publish from the products puts the old values back unless you fix the products too.";

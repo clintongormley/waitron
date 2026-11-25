@@ -1237,12 +1237,50 @@ describe("declarations", () => {
       );
     });
 
-    it("lists a variant the live version lacks under its dish alone, unticked", async () => {
+    it("lists a variant the live version lacks under its dish alone, ticked while it holds the live dish's value", async () => {
       const { f, document, targets } = await lunchWithSetMenu();
       const live = structuredClone(document);
       for (const offer of offers(live)) offer.variants = [];
-      expect(drift(document, live, allOf(f, { variant: NUTS }))).toEqual(
+      const current = allOf(f, { variant: NUTS });
+      expect(drift(document, live, current)).toEqual(
+        listed({ target: targets.dish, stillOld: true }),
+      );
+
+      const deliberate = structuredClone(document);
+      Object.assign(setMenuOffers(deliberate)[0]!.variants[0]!, EGGS);
+      expect(drift(deliberate, live, current)).toEqual(
         listed({ target: targets.dish, stillOld: false }),
+      );
+    });
+
+    it("reads an added variant's old value from its dish live, not from its dish in the queued version", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const live = structuredClone(document);
+      for (const offer of offers(live))
+        Object.assign(offer, offer.productId === f.lemonade && EGGS, { variants: [] });
+      const current = allOf(f, { variant: NUTS });
+      expect(drift(document, live, current)).toEqual(
+        listed({ target: targets.dish, stillOld: false }),
+      );
+
+      const inheriting = structuredClone(document);
+      for (const offer of offers(inheriting))
+        for (const variant of offer.variants) Object.assign(variant, EGGS);
+      expect(drift(inheriting, live, current)).toEqual(
+        listed({ target: targets.dish, stillOld: true }),
+      );
+    });
+
+    it("keeps a variant the live version holds to its own old value, not its dish's", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const live = structuredClone(document);
+      for (const offer of offers(live))
+        for (const variant of offer.variants) Object.assign(variant, EGGS);
+      expect(drift(document, live, allOf(f, { variant: NUTS }))).toEqual(
+        listed(
+          { target: targets.dish, stillOld: false },
+          { target: targets.variant, stillOld: false },
+        ),
       );
     });
 

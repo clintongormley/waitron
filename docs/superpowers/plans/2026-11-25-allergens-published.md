@@ -81,11 +81,18 @@ Lane's own calls, for the watcher to confirm:
     save, the product's declarations before that save; in Patch live menu, that product's (an
     extra's: that product's in that list) declarations on the live version the patch is built on.
     Ticked when every differing copy equals it; a copy holding anything else (someone already
-    changed that version on purpose), or of a product the live version lacks, leaves the menu
-    unticked. (Changed 2026-11-25 by lane A, put to the watcher: it read "that copy's declarations
-    on the live version", and any copy in a place the live version lacked left the menu unticked
-    although it still held the old value. Where the live version's own copies of one product
-    disagree, there is no one old value, so the menu is unticked.)
+    changed that version on purpose) leaves the menu unticked. (Changed 2026-11-25 by lane A, agreed
+    by the watcher at 12:27, not the owner: it read "that copy's declarations on the live version",
+    and any copy in a place the live version lacked left the menu unticked although it still held
+    the old value. Where the live version's own copies of one product disagree, there is no one old
+    value, so the menu is unticked. Patch live menu has no item for a dish the live version lacks, or
+    an extra in a list it lacks, so such a copy is neither listed nor counted.)
+  - A variant the live version lacks, under a dish it holds: its old value is its dish's on the live
+    version, so a variant copy equal to that keeps the menu ticked, and one holding anything else
+    unticks it. It is corrected with its dish; a patch of the live menu cannot pick it. (The
+    watcher's, 2026-11-25 15:52, not the owner's: "the same rule as 12:27 (ticked when every
+    differing copy, the variant's own included, still has the old value); unticked leaves the wrong
+    allergen on the likeliest menu". The plan left such a menu unticked.)
   - A ticked queued version is cancelled and queued again under a new number with the corrected
     document, at its own time, by `requeueAfter`, which already does that with the document
     unchanged. An unticked one is requeued as today. A menu with only a scheduled version goes
@@ -555,8 +562,9 @@ tests about +300.
   request is queued again at its own time with the corrected allergens, and one not named keeps its
   document`; `a price in the same patch does not reach the named queued version` (A1151); `an id
   that is not queued is ignored`. `menu-patch.test.ts`: `stillOld is true only when every differing
-  copy holds the live version's value of its product` (a third value, a variant the live version
-  lacks, and live copies that disagree, give false; a copy in a place the live version lacks, true).
+  copy holds the live version's value of its product` (a third value, and live copies that
+  disagree, give false; a copy in a place the live version lacks, true; a variant the live version
+  lacks, true only with its dish's value there: the watcher, 2026-11-25 15:52).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/menu exec vitest run src/menu-patch.test.ts src/menu-patch.live.test.ts`; FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run**; PASS. Commit `-s`.

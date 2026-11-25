@@ -640,7 +640,7 @@ describe("declarations", () => {
     await declareMilk(f.lemonade);
     const [listed] = (await draft())!.queued;
     expect(listed!.targets).toEqual([
-      { target: lemonade, stillOld: false },
+      { target: lemonade, stillOld: true },
       { target: { ...lemonade, kind: "variant", variantId: f.large }, stillOld: true },
     ]);
     const { versionId, requeued } = await patchQueued(
