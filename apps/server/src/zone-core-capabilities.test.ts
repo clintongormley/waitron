@@ -109,7 +109,7 @@ function voidBackend() {
   });
 }
 
-describe("core-only callers prepare the saved writing zone", () => {
+describe("core-only callers write in the saved zone", () => {
   it.each(["deferred", "immediate"] as const)("dates an F1 %s invoice", async (kind) => {
     const full = await addSeries("full");
     const issued = await withTransaction(v.db, async (tx) =>

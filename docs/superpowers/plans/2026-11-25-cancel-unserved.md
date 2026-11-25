@@ -109,7 +109,8 @@ box (it then takes no payment, where today €1.00 is taken; Finish and unpaid d
   ticket y reabre la cuenta.»; `split.done` "Receipt taken back. Take off any dish that never came, move each guest's
   dishes to their own bill, then print each one." / «Ticket retirado. Quita los platos que no llegaron, pasa los platos de
   cada cliente a su propia cuenta y después imprime cada una.»; `split.credited_elsewhere` "already taken back" / «ya se
-  había retirado».
+  había retirado». (Owner, 25 Nov 18:19: Reopen keeps "This cancels the existing receipt and reopens the bill."; its
+  other lines follow those words.)
 
 ## 5. PR 3. Nothing was served
 

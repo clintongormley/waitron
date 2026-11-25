@@ -190,7 +190,8 @@ No stored fiscal row is to be rewritten.
   sale's period in that period; a void made later leaves that period's file as it was and goes on
   the corrections workbook of the period it is made in, listed against the sale's period (pinned by
   "C: a later void leaves the ended quarter as it was" in `vat-return.test.ts` and "lists, for a
-  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). That settles Q25
+  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). The accountant's sheet
+  lists a voided invoice again as a minus row by the same day (watcher, 2026-11-25). That settles Q25
   (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
@@ -409,7 +410,8 @@ answer, while the correction waited behind the cancellation. The action now refu
 existing ordinary cancellation is already held for resolution. It also refuses completed,
 failed or unknown cancellation states and a synthetic held absent-original cancellation. Once
 the queue has actually held the ordinary cancellation, the same decision can be submitted again,
-accepted and followed by its explicit release. No queue-order rule was weakened.
+accepted and followed by its explicit release (2026-11-25: for a voided sale, only while
+`release-held-cancellation` is enabled; it is off on every box). No queue-order rule was weakened.
 
 For a definitively rejected delivery, the correction action requires a matching non-null rejection
 code on the case and delivery; it refuses code 3000 in either admissible outcome. This aligns the

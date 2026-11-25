@@ -421,7 +421,8 @@ export interface CounterWaitingOrder {
   /** When it was handed over; set on a placed order handed over before payment. */
   collectedAt: string | null;
   /** What collecting a placed order charges: the sale already issued for it, net of its credit
-   * notes (`readIssuedSales`), else the sum of its lines. A settled order's is the sum of its lines. */
+   * notes and 0.00 once voided (`readIssuedSales`), else the sum of its lines. A settled order's is
+   * the sum of its lines. */
   total: string;
   /** {@link handOverOrder} would accept it now. */
   canHandOver: boolean;

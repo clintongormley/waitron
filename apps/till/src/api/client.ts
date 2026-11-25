@@ -2266,8 +2266,8 @@ export interface PartyBill {
   /** The numbers of the correctives correcting the invoice, oldest first; absent while no sale is
    * filed. */
   correctives?: string[];
-  /** Its sale's total plus its correctives, whether or not the bill has been paid; absent while no
-   * sale is filed. */
+  /** Its sale's total plus its correctives, whether or not the bill has been paid, or 0.00 once the
+   * sale is voided; absent while no sale is filed. */
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
   deferred?: true;

@@ -115,7 +115,7 @@ describe("the venue's zone across a daylight-saving change", () => {
   });
 });
 
-describe("the void caller's original writing venue", () => {
+describe("a cancellation's time zone", () => {
   it("keeps the offset-zero original day and prepares the new annulment from Madrid", async () => {
     const old = await original();
     const before = records(old.saleId)[0];
@@ -131,7 +131,7 @@ describe("the void caller's original writing venue", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual(numbers);
   });
   it.each(["", "  ", "Invalid/Zone", "+02:00"])(
-    "refuses unusable original zone %j without appending or allocating",
+    "refuses unusable venue zone %j without appending or allocating",
     async (timeZone) => {
       const old = await original();
       await suite.db.run(
