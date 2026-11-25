@@ -6056,8 +6056,8 @@ uses that same icon column for its tick. Keep the bill's label and amount layout
 **Print ▾** on a printer's or card reader's QR label
 (`apps/dashboard/src/widgets/equipment-qr-label.ts`) is a `wt-row-actions` with its words in the
 `trigger` slot, drawn as a primary button through `::part(trigger)`. While the code is drawn, the
-printers are read or a label is sent, and when Waitron has no active printer, it is a `wt-button`
-instead.
+printers are read or a label is sent, and when that read finds no active receipt printer, it is a
+`wt-button` instead.
 
 Put Delete last with the danger variant. Disconnect and Unpair also use danger. Keep Remove and
 Disable neutral. Use `rowActionTail` to put these actions after ordinary rows and to add the

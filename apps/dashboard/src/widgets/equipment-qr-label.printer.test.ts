@@ -393,7 +393,7 @@ describe("Copy code", () => {
     const el = await shown();
     q<WtButton>(el, "copy-equipment-code").click();
     await vi.waitFor(() => expect(copy).toHaveBeenCalledWith(`waitron-equipment:reader:${ID}`));
-    await vi.waitFor(() => expect(message(el)).toBe("Code copied"));
+    await vi.waitFor(() => expect(message(el)).toBe("Code copied."));
     expect(q(el, "equipment-label-code").textContent).toBe(`waitron-equipment:reader:${ID}`);
     copy.mockRejectedValue(new DOMException("refused", "NotAllowedError"));
     q<WtButton>(el, "copy-equipment-code").click();

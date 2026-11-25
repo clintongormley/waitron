@@ -168,7 +168,7 @@ export class TillEquipmentDialog extends LitElement {
     | "equipment.nfc_unavailable"
     | { pickedUp: string }
     | null = null;
-  /** The latest tap's choice, until the app answers it or a later tap or choice replaces it. */
+  /** The latest tap's choice, while the dialog still waits to show its answer. */
   #tapped: { change: EquipmentChange; item: string } | null = null;
   #nfcAbort?: AbortController;
   #permissionAbort?: AbortController;
