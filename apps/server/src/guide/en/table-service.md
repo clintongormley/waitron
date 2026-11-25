@@ -358,10 +358,15 @@ open its refund, filled in. When there is only one receipt, its refund opens str
 When the guests will wait and take their food from the counter, choose **They'll collect it at the
 counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
 cancelled or refunded. Dishes held back go to the station now, each bill whose food still to come
-has a station ticket becomes a paid order waiting at the counter, and the table finishes. The order
-waits under **Waiting orders** on the **Counter** screen, marked **Paid, not handed over**, and
-**Find a bill** lists it. Look for **Counter** on the pass and in **Waiting orders**. Choose
-**Hand over** when the guests collect it.
+has a station ticket becomes a paid order waiting at the counter, and the table finishes. Open
+**Waiting orders** on the first active counter in the sale's department. Look for **Counter** on
+the pass and in **Waiting orders**. Choose **Hand over** on the order marked **Paid, not handed
+over** when the guests collect it. From the table till you can still find its receipt in **Find a
+bill**. If the department has no active counter, use **Collect** on the order in **Stations**.
+
+If you move a presented bill to the counter by hand, take payment in the table's zone. After
+payment, check **Waiting orders** at the first active counter in zone order, even if you used a
+till at a different counter.
 
 ## Refund a payment on a receipt {#refund-receipt}
 

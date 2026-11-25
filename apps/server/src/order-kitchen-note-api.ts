@@ -14,7 +14,7 @@ import type { Logger } from "./logger.js";
 import type { Run } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
-import { checkZones } from "./zone-access.js";
+import { checkKitchenOrderZone, checkZones } from "./zone-access.js";
 import {
   readOrderKitchenNotes,
   readPartyKitchenNote,
@@ -64,9 +64,9 @@ export function mountOrderKitchenNoteApi(
               const snapshot = party
                 ? await readPartyKitchenNote(tx, id)
                 : (await readOrderKitchenNotes(tx, [id])).get(id)!;
-              await checkZones(tx, { device }, [
-                "partyId" in snapshot.scope ? { partyId: snapshot.scope.partyId } : { orderId: id },
-              ]);
+              if ("partyId" in snapshot.scope)
+                await checkZones(tx, { device }, [{ partyId: snapshot.scope.partyId }]);
+              else await checkKitchenOrderZone(tx, { device }, id);
               if (body === undefined) return snapshot;
               if (typeof body.submissionId !== "string" || !isUuid(body.submissionId))
                 throw new AppError("management.request_invalid", { field: "submissionId" });

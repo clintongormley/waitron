@@ -19,7 +19,7 @@ import { requireSession } from "./till-session.js";
 import { listCounterWaiting, handOverOrder } from "./working-order-counter.js";
 import { bumpBillReady, advanceTicketItem } from "./working-order-kitchen-service.js";
 import { listStationQueue } from "./working-order-station-queue.js";
-import { checkZones, visibleOrders } from "./zone-access.js";
+import { checkKitchenOrderZone, visibleOrders } from "./zone-access.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -32,7 +32,7 @@ function mountBillReady(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId }]);
+        await checkKitchenOrderZone(tx, session, orderId);
         await bumpBillReady(
           tx,
           orderId,
@@ -132,7 +132,7 @@ export function mountTillKitchenCounterRoutes(app: Hono, deps: TillApiDeps, log:
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const waiting = await listCounterWaiting({ db: deps.db });
-      return c.json(await visibleOrders(deps, session, waiting));
+      return c.json(await visibleOrders(deps, session, waiting, { atPickup: true }));
     }),
   );
 
@@ -144,7 +144,7 @@ export function mountTillKitchenCounterRoutes(app: Hono, deps: TillApiDeps, log:
       const body = await readJsonBody<Record<string, unknown>>(c);
       const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId: id }]);
+        await checkKitchenOrderZone(tx, session, id);
         return handOverOrder(
           tx,
           cfg,
@@ -166,7 +166,7 @@ export function mountTillKitchenCounterRoutes(app: Hono, deps: TillApiDeps, log:
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId: id }]);
+        await checkKitchenOrderZone(tx, session, id);
         await reprintOrderTickets(tx, cfg, id);
       });
       return c.body(null, 200);

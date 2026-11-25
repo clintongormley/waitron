@@ -3,6 +3,7 @@ import { diningTables, workingOrders } from "@waitron/db";
 import type { Database, SQL, Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily, partyStateAndZone } from "./parties.js";
+import { pickupZones } from "./watch-zones.js";
 
 /** What a till request acts on, by where its service zone is read from. */
 export type ZoneSubject =
@@ -72,6 +73,23 @@ export async function checkZones(
   await assertSubjectZones(tx, session.device.deviceProfileId, subjects);
 }
 
+/** A shared kitchen action can still be taken in the order's recorded zone. */
+export async function checkKitchenOrderZone(
+  tx: Transaction,
+  session: { device: { deviceProfileId: string } },
+  orderId: string,
+): Promise<void> {
+  const profileId = session.device.deviceProfileId;
+  const scope = await readZoneScope(tx, profileId);
+  if (scope === null) return;
+  const id = orderId.toLowerCase();
+  const recorded = (await VENUE_SERVICE.findOrderZones(tx, [id])).get(id);
+  if (recorded === undefined || scope.has(recorded)) return;
+  const pickup = (await pickupZones(tx, [id])).get(id);
+  if (pickup === undefined || !scope.has(pickup))
+    await VENUE_SERVICE.assertProfileZone(tx, profileId, recorded);
+}
+
 /**
  * {@link assertSubjectZones} for a route whose work runs in a helper that opens its own transaction.
  * It reads committed rows outside the transaction that acts, and takes no turn in the write queue.
@@ -111,12 +129,12 @@ export async function visibleOrders<T extends { id: string }>(
   deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
+  { atPickup = false }: { atPickup?: boolean } = {},
 ): Promise<T[]> {
   const scope = await readZoneScope(deps.db, session.device.deviceProfileId);
   if (scope === null) return [...orders];
-  const zones = await VENUE_SERVICE.findOrderZones(
-    deps.db,
-    orders.map((order) => order.id),
-  );
-  return orders.filter((order) => inScope(scope, zones.get(order.id)));
+  const ids = orders.map((order) => order.id);
+  const pickup = atPickup ? await pickupZones(deps.db, ids) : new Map<string, string>();
+  const zones = await VENUE_SERVICE.findOrderZones(deps.db, ids);
+  return orders.filter((order) => inScope(scope, pickup.get(order.id) ?? zones.get(order.id)));
 }

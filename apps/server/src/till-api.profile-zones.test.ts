@@ -99,8 +99,8 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET /api/invoice-corrections | each open correction's invoice's own working order, through `orderZoneCondition`. That is the set `checkAccess` reads for the GET by id: only a corrective or a substitution invoice has a source order other than its own (find-bill-transactions.ts:19-22), and opening a correction refuses both with `invoice_correction.not_settled` (invoice-corrections.ts:108) | invoice-correction-api.test.ts: "lists open corrections in the till's zones only"; the refusal: invoice-corrections.test.ts: "a corrective invoice and a substitution invoice, whose source order is another ticket's" |
  * | POST /api/invoice-corrections/:id/cash | every original source order of the correction's invoice, through `withCorrectionAuthorization`'s `checkAccess` | invoice-correction-api.test.ts: "refuses a till outside the invoice's zone, writing nothing, and gives cash once the zone is its own" |
  * | POST /api/invoice-corrections/:id/file; POST /api/invoice-corrections/:id/close | every original source order of the correction's invoice, through `withCorrectionAuthorization`'s `checkAccess` | invoice-correction-api.test.ts: "refuses a till outside the invoice's zone, writing nothing, and files and closes once the zone is its own" |
- * | GET /api/working-orders/:id/kitchen-note | canonical party or counter order | till-api.kitchen-note.test.ts: "refuses the %s scope outside profile zones and serves it once allowed"; retained bill: "checks the survivor party zone when a retained bill resolves to that party's note" |
- * | PUT /api/working-orders/:id/kitchen-note | canonical party or counter order | same scope refusal/allowed control |
+ * | GET /api/working-orders/:id/kitchen-note | canonical party, or the order's recorded or pickup zone | till-api.kitchen-note.test.ts: "refuses the %s scope outside profile zones and serves it once allowed"; retained bill: "checks the survivor party zone when a retained bill resolves to that party's note" |
+ * | PUT /api/working-orders/:id/kitchen-note | canonical party, or the order's recorded or pickup zone | same scope refusal/allowed control |
  * | GET /api/parties/:id/kitchen-note | party | same scope refusal/allowed control |
  * | PUT /api/parties/:id/kitchen-note | party | same scope refusal/allowed control |
  * | GET /api/parties/:id/allergy | surviving party | till-api.allergy.test.ts: "checks party zones for GET and serves an allowed control" |
@@ -141,10 +141,10 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/working-orders/:id/dining                     | order                  | refuses PUT .../dining                               |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
- * | POST /api/orders/:id/ready  | order                  | refuses POST /api/orders/:id/<verb>|
- * | GET  /api/orders/counter-waiting                        | list, by order zone    | "lists only the profile's zones, tables and orders"  |
- * | POST /api/orders/:id/collect                            | order                  | refuses POST /api/orders/:id/collect                 |
- * | POST /api/orders/:id/reprint                            | order                  | refuses POST /api/orders/:id/reprint                 |
+ * | POST /api/orders/:id/ready  | recorded or pickup zone | refuses POST /api/orders/:id/<verb>|
+ * | GET  /api/orders/counter-waiting                        | list, by pickup or recorded zone | "lists only the profile's zones, tables and orders"  |
+ * | POST /api/orders/:id/collect                            | recorded or pickup zone | refuses POST /api/orders/:id/collect                 |
+ * | POST /api/orders/:id/reprint                            | recorded or pickup zone | refuses POST /api/orders/:id/reprint                 |
  * | GET  /api/sales/:id                                     | order                  | refuses GET /api/sales/:id                           |
  * | GET  /api/sales/:id/receipt                             | order                  | refuses GET /api/sales/:id/receipt                   |
  * | POST /api/sales/:id/receipt/handover                    | order                  | refuses POST .../receipt/handover                    |
@@ -202,7 +202,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/dead-ends/order                               | body order; body zone  | refuses POST /api/dead-ends/order (order), (zone)    |
  * | PUT  /api/working-orders/:id/make-at                    | order                  | refuses PUT .../make-at                              |
  * | GET  /api/working-orders/:id/lines                      | order                  | refuses GET /api/working-orders/:id/lines            |
- * | POST /api/working-orders/:id/lines/move-station         | order                  | refuses POST .../lines/move-station                  |
+ * | POST /api/working-orders/:id/lines/move-station         | recorded or pickup zone | refuses POST .../lines/move-station                  |
  * | PUT  /api/working-orders/:id/lines/:lineNo              | order                  | refuses PUT .../lines/:lineNo                        |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course      | order                  | refuses PATCH .../lines/:lineNo/course               |
  * | POST /api/working-orders/:id/lines/send        | order                  | refuses POST .../lines/send                 |
@@ -231,7 +231,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
  * | POST /api/device/orders/:id/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/<verb> |
  * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
- * | POST /api/device/pass-screen/release | body party or order, against the profile's zones | "A773 pass release" below |
+ * | POST /api/device/pass-screen/release | party's zone, or bill's recorded or pickup zone | "A773 pass release" below |
  *
  * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
  * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
