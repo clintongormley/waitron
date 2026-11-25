@@ -1,3 +1,4 @@
+import { StatementSync } from "node:sqlite";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, getTableColumns, sql } from "drizzle-orm";
@@ -633,6 +634,89 @@ describe("attendance runner job", () => {
     await job().pass({ now: at, signal });
     expect(await suite.db.select().from(payPeriodClosures)).toEqual(closures);
   });
+
+  it.each([false, true])(
+    "projects earlier months before the write turn, with intervening clock work %s",
+    async (recordLateShift) => {
+      await withTransaction(suite.db, async (tx) => {
+        const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+        await backend.clockIn(tx, { ...event, at: "2026-01-05T09:00:00Z" });
+        await backend.clockOut(tx, { ...event, at: "2026-01-05T17:00:00Z" });
+      });
+      await settle();
+      const { attendanceJob } = await import("./attendance-loop.js");
+      let at = new Date("2026-02-05T04:00:00Z");
+      const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+      const pass = () => job.pass({ now: at, signal: new AbortController().signal });
+      await pass();
+      at = new Date("2026-03-05T04:00:00Z");
+      await pass();
+      expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(2);
+
+      at = new Date("2026-04-07T04:00:00Z");
+      const withWriteLock = suite.db.withWriteLock.bind(suite.db);
+      let writing = false;
+      const trackWrite = <T>(work: () => Promise<T>) =>
+        withWriteLock(async () => {
+          writing = true;
+          try {
+            return await work();
+          } finally {
+            writing = false;
+          }
+        });
+      const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementation(trackWrite);
+      if (recordLateShift) {
+        lock.mockImplementationOnce(async (work) => {
+          await withTransaction(suite.db, async (tx) => {
+            const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+            await backend.clockIn(tx, { ...event, at: "2026-01-06T09:00:00Z" });
+            await backend.clockOut(tx, { ...event, at: "2026-01-06T17:00:00Z" });
+          });
+          await settle();
+          return trackWrite(work);
+        });
+      }
+      const all = StatementSync.prototype.all;
+      const historicalRead: boolean[] = [];
+      const timerRanBetweenMonths: boolean[] = [];
+      let timerRan = false;
+      const statements = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
+        this: StatementSync,
+        ...args
+      ) {
+        if (this.sourceSQL.includes("with recursive")) {
+          if (args.includes("2025-12-31T10:00:00.000Z")) {
+            historicalRead.push(writing);
+            timerRan = false;
+            setImmediate(() => {
+              timerRan = true;
+            });
+          }
+          if (args.includes("2026-01-31T10:00:00.000Z")) timerRanBetweenMonths.push(timerRan);
+        }
+        return Reflect.apply(all, this, args) as ReturnType<typeof all>;
+      });
+      try {
+        await pass();
+        const march = await suite.db
+          .select()
+          .from(payPeriodClosures)
+          .where(eq(payPeriodClosures.periodStart, "2026-03-01"));
+        expect(march).toHaveLength(1);
+        expect(march[0]!.snapshot.adjustments).toEqual(
+          recordLateShift
+            ? [{ personId, sourcePeriodStart: "2026-01-01", workedMinutes: 480 }]
+            : undefined,
+        );
+        expect(historicalRead).toEqual(recordLateShift ? [false, true] : [false]);
+        expect(timerRanBetweenMonths).toEqual(recordLateShift ? [true, true] : [true]);
+      } finally {
+        statements.mockRestore();
+        lock.mockRestore();
+      }
+    },
+  );
 
   it("processes an outstanding clock-out before freezing the month", async () => {
     await seed();

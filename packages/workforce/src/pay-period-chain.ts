@@ -118,6 +118,20 @@ function canonicalSnapshot(snapshot: PayPeriodSnapshot) {
         splitGapMinutes: snapshot.paidBreakPolicy.splitGapMinutes,
       },
     }),
+    ...(snapshot.adjustments !== undefined && {
+      adjustments: snapshot.adjustments
+        .map(({ personId, sourcePeriodStart, workedMinutes }) => ({
+          personId,
+          sourcePeriodStart,
+          workedMinutes,
+        }))
+        .sort(
+          (a, b) =>
+            compare(a.sourcePeriodStart, b.sourcePeriodStart) ||
+            compare(a.personId, b.personId) ||
+            a.workedMinutes - b.workedMinutes,
+        ),
+    }),
   };
 }
 

@@ -91,14 +91,14 @@ async function day(automatic = false, personId = worker) {
   return (await run((tx) => backend.timeRecord(tx, { period, personId }))).entries[1]!.entry
     .entryId;
 }
-const close = () =>
+const close = (closingPeriod = period, now = "2026-02-01T06:00:00Z") =>
   run((tx) =>
     closePayPeriod(tx, {
       paidBreakPolicy: null,
       nodeId,
-      period,
+      period: closingPeriod,
       clock: { timeZone: "UTC", dayCutover: "06:00", cutoverChanges: [] },
-      now: "2026-02-01T06:00:00Z",
+      now,
       ruleset: { workingDaysPerWeek: 5, overtimeModel: "daily-accrual", dailyTargetMinutes: null },
       origin,
     }),
@@ -235,6 +235,60 @@ it("preserves frozen 480, late current 540 and person isolation", async () => {
       .map((r) => r.personId)
       .sort(),
   ).toEqual([worker, other].sort());
+});
+it("exports signed adjustments with names even when the workers did no work in the export month", async () => {
+  const ownTarget = await day();
+  const otherTarget = await day(false, other);
+  await close();
+  for (const [target, person, at] of [
+    [ownTarget, worker, "2026-01-05T18:00:00Z"],
+    [otherTarget, other, "2026-01-05T16:30:00Z"],
+  ] as const) {
+    const correctionId = await request(target, "Corrected finish", person, at);
+    await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: manager }),
+    );
+  }
+  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, other));
+  const february = { start: "2026-02-01", end: "2026-03-01" };
+  await close(february, "2026-03-01T06:00:00Z");
+  const all = await doc({ period: february });
+  expect(cells(all, "sessions")).toEqual([]);
+  const adjustments = all.sections.find((section) => section.key === "adjustments");
+  expect.soft(adjustments?.rows).toHaveLength(2);
+  expect.soft(adjustments?.rows.map((row) => row.cells)).toEqual(
+    expect.arrayContaining([
+      {
+        personId: worker,
+        personName: "María Worker",
+        sourceMonth: "2026-01",
+        carriedInMonth: "2026-02",
+        adjustmentMinutes: 60,
+      },
+      {
+        personId: other,
+        personName: "Other worker",
+        sourceMonth: "2026-01",
+        carriedInMonth: "2026-02",
+        adjustmentMinutes: -30,
+      },
+    ]),
+  );
+  const own = await doc({ period: february, personId: worker, locale: "es" });
+  expect.soft(cells(own, "adjustments")).toEqual([
+    {
+      personId: worker,
+      personName: "María Worker",
+      sourceMonth: "2026-01",
+      carriedInMonth: "2026-02",
+      adjustmentMinutes: 60,
+    },
+  ]);
+  expect(JSON.stringify(own)).not.toContain("Other worker");
+  const both = await doc({ period: { start: "2026-01-15", end: "2026-03-01" } });
+  const slice = await doc({ period: { start: "2026-02-10", end: "2026-02-11" } });
+  expect.soft(both.sections.find((section) => section.key === "adjustments")).toBeUndefined();
+  expect.soft(slice.sections.find((section) => section.key === "adjustments")).toBeUndefined();
 });
 it("minimizes representatives live and frozen reasons and preserves authors", async () => {
   const target = await day();

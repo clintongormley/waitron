@@ -24,12 +24,18 @@ export interface ProjectedRecordEntry {
   disputed: boolean;
   closedPeriodIds: string[];
 }
+export interface PayPeriodAdjustment {
+  personId: string;
+  sourcePeriodStart: string;
+  workedMinutes: number;
+}
 export interface PayPeriodSnapshot {
   sessions: WorkSession[];
   entries: ProjectedRecordEntry[];
   summaries: { personId: string; summary: PeriodSummary | null }[];
   markedAutomaticEntryIds: string[];
   paidBreakPolicy?: PaidBreakPolicy;
+  adjustments?: PayPeriodAdjustment[];
 }
 export interface PayPeriodClosure {
   id: string;

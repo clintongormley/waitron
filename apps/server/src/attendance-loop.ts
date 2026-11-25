@@ -3,6 +3,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import {
   attendanceDays,
   closePayPeriod,
+  preparePayPeriodAdjustments,
   processAttendanceDay,
   type WorkSummaryRuleset,
   type PaidBreakPolicy,
@@ -100,6 +101,7 @@ export function attendanceJob(
       if (close === null) return { nextDueAt: attendanceAt };
       const closeAt = new Date(close.scheduledCloseAt);
       if (closeAt <= now) {
+        const preparedAdjustments = await preparePayPeriodAdjustments(deps.db, close.period);
         await withTransaction(deps.db, async (tx) => {
           if (!isPrimary() || deps.clockUnconfirmed()) return;
           const closingAt = deps.now();
@@ -117,6 +119,7 @@ export function attendanceJob(
             now: closingAt.toISOString(),
             ruleset,
             paidBreakPolicy,
+            preparedAdjustments,
             origin: jobOrigin("business_day_close"),
           });
         });

@@ -124,6 +124,9 @@ const LABELS: Record<string, readonly [string, string]> = {
   beforeWorkedMinutes: ["Frozen worked minutes", "Minutos trabajados al cierre"],
   afterWorkedMinutes: ["Current worked minutes", "Minutos trabajados actuales"],
   deltaWorkedMinutes: ["Change in worked minutes", "Cambio en minutos trabajados"],
+  sourceMonth: ["Month corrected", "Mes corregido"],
+  carriedInMonth: ["Included in month", "Incluido en el mes"],
+  adjustmentMinutes: ["Adjustment (minutes)", "Ajuste (minutos)"],
 };
 const SESSION_KEYS = [
   "personId",
@@ -185,6 +188,7 @@ const TITLES: Record<string, readonly [string, string]> = {
   "frozen-days": ["Daily totals recorded at closure", "Totales diarios registrados al cierre"],
   "automatic-marks": ["Automatic entries at closure", "Asientos automáticos al cierre"],
   impacts: ["Changes after closure", "Cambios posteriores al cierre"],
+  adjustments: ["Adjustments from earlier months", "Ajustes de meses anteriores"],
 };
 export async function prepareTimeRecordExport(
   tx: Transaction,
@@ -216,6 +220,7 @@ export async function prepareTimeRecordExport(
   for (const closure of record.closures) {
     collect(closure.snapshot);
     for (const summary of closure.snapshot.summaries) ids.add(summary.personId);
+    for (const adjustment of closure.snapshot.adjustments ?? []) ids.add(adjustment.personId);
   }
   const names =
     ids.size === 0
@@ -402,6 +407,22 @@ export function formatTimeRecordExport(
     for (const entryId of closure.snapshot.markedAutomaticEntryIds)
       marks.push({ closureId: closure.closureId, entryId });
   }
+  const firstExportMonth = `${input.period.start.slice(0, 7)}-01`;
+  const adjustments = exported
+    .cierres!.filter(
+      ({ period }) => period.start >= input.period.start && period.end <= input.period.end,
+    )
+    .flatMap(({ period, snapshot }) =>
+      (snapshot.adjustments ?? [])
+        .filter(({ sourcePeriodStart }) => sourcePeriodStart < firstExportMonth)
+        .map(({ personId, sourcePeriodStart, workedMinutes }) => ({
+          personId,
+          personName: name(personId),
+          sourceMonth: sourcePeriodStart.slice(0, 7),
+          carriedInMonth: period.start.slice(0, 7),
+          adjustmentMinutes: workedMinutes,
+        })),
+    );
   const sections = [
     section(
       "metadata",
@@ -480,6 +501,15 @@ export function formatTimeRecordExport(
         deltaWorkedMinutes: i.deltaWorkedMinutes,
       })),
     ),
+    ...(adjustments.length === 0
+      ? []
+      : [
+          section(
+            "adjustments",
+            ["personId", "personName", "sourceMonth", "carriedInMonth", "adjustmentMinutes"],
+            adjustments,
+          ),
+        ]),
   ];
   return {
     title: ["Working-time record", "Registro de jornada"][language]!,

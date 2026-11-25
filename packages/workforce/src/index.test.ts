@@ -41,6 +41,7 @@ describe("the public surface", () => {
         "payPeriodCloseBoundary",
         "readNextMonthlyPayPeriod",
         "closePayPeriod",
+        "preparePayPeriodAdjustments",
         "readPayPeriodClosures",
         "timeEntries",
         "workforceCorrectionStatus",
