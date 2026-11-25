@@ -1,22 +1,38 @@
-import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import { and, asc, eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  menuReleases,
+  menuVersions,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import type { ProductAllergens } from "@waitron/shared";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
 import {
+  correctMenuDeclarations,
   declarationChanges,
   findDeclarationDrift,
   waitingDeclarationMenus,
 } from "./declaration-correction.js";
-import { documentSetMenuOffers } from "./menu-document.js";
-import { patchLiveMenu, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import { documentSetMenuOffers, menuDocumentHash } from "./menu-document.js";
+import * as publication from "./menu-publication.js";
+import {
+  insertVersion,
+  patchLiveMenu,
+  previewMenu,
+  publishMenu,
+  readLiveDocuments,
+} from "./menu-publication.js";
+import { readMenuStructure } from "./menu-structure.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, updateProduct } from "./operations.js";
 import { readProductDeclarationValues } from "./product-declarations.js";
 import { addMember } from "./sections.js";
 import { addSetMenuDishes } from "./set-menus.js";
+import { setProductVariants } from "./variants.js";
 
 const fx = useMenuDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -258,5 +274,215 @@ describe("waitingDeclarationMenus", () => {
     const before = await valuesOf(f.soup);
     expect(await drift([f.soup], before)).toHaveLength(1);
     expect(await waiting([f.soup], before)).toEqual([]);
+  });
+});
+
+describe("correctMenuDeclarations", () => {
+  const corrections = (productId: string, queued?: string[]) =>
+    app((tx) => correctMenuDeclarations(tx, productId, PERSON, queued ? { queued } : {}));
+  const documentOf = async (versionId: string) =>
+    (await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId)))[0]!;
+  const liveOf = async (menuId: string) =>
+    (await app((tx) => readLiveDocuments(tx, [menuId]))).get(menuId);
+  const queuedOf = async (menuId: string) =>
+    fx.db
+      .select({ versionId: menuReleases.versionId, activatesAt: menuReleases.activatesAt })
+      .from(menuReleases)
+      .where(and(eq(menuReleases.menuId, menuId), eq(menuReleases.state, "queued")))
+      .orderBy(asc(menuReleases.activatesAt));
+  const menuWith = (name: string, ref: Parameters<typeof addMember>[2]) =>
+    app(async (tx) => {
+      const { id } = await createMenu(tx, { name });
+      await addMember(tx, (await readMenuStructure(tx, id)).rootSectionId, ref);
+      return id;
+    });
+  const setMenuWithLemonade = () =>
+    app(async (tx) => {
+      const { id } = await createMenu(tx, {
+        name: "Daily set",
+        names: { en: "Daily set" },
+        kind: "set_menu",
+        setPrice: "14.00",
+      });
+      await tx.update(products).set({ courseId: f.course }).where(eq(products.id, f.lemonade));
+      await addSetMenuDishes(tx, id, [{ productId: f.lemonade, excludedVariantIds: [] }]);
+      return id;
+    });
+
+  it("corrects every drifting live version and each named queued version in one call, and leaves an unnamed queued version unchanged", async () => {
+    // Bar holds Extra lemon as a dish; Set lunch holds it only as an extra of a set menu's
+    // Lemonade; Lunch holds it as Lemonade's extra and has two queued versions; Dinner has only a
+    // scheduled first version.
+    const bar = await menuWith("Bar", product(f.extraLemon));
+    const setLunch = await menuWith("Set lunch", {
+      kind: "set_menu",
+      menuId: await setMenuWithLemonade(),
+    });
+    const barLive = await publish(bar);
+    const setLive = await publish(setLunch);
+    const lunchLive = await publish(f.lunch);
+    await app((tx) => updateProduct(tx, f.lager, { unitPrice: "4.50" }));
+    const named = await queue(f.lunch, hoursFromNow(24));
+    await app((tx) => updateProduct(tx, f.soup, { unitPrice: "5.50" }));
+    const unnamed = await queue(f.lunch, hoursFromNow(48));
+    const unnamedHash = (await documentOf(unnamed)).contentHash;
+    const dinnerAt = hoursFromNow(24);
+    const dinnerFirst = await queue(f.dinner, dinnerAt);
+    const before = await valuesOf(f.extraLemon);
+    await declare(f.extraLemon, { celery: {} });
+    const found = await drift([f.extraLemon], before);
+    expect(found.map(({ name }) => name)).toEqual([
+      "Bar",
+      "Dinner Menu",
+      "Lunch Menu",
+      "Set lunch",
+    ]);
+
+    expect(await corrections(f.extraLemon, [named, dinnerFirst])).toEqual({
+      menus: [
+        { menuId: bar, name: "Bar" },
+        { menuId: f.dinner, name: "Dinner Menu" },
+        { menuId: f.lunch, name: "Lunch Menu" },
+        { menuId: setLunch, name: "Set lunch" },
+      ],
+      productIds: [f.extraLemon],
+    });
+
+    for (const [menuId, old] of [
+      [bar, barLive],
+      [setLunch, setLive],
+      [f.lunch, lunchLive],
+    ] as const) {
+      const live = await liveOf(menuId);
+      expect(live!.versionId).not.toBe(old);
+      expect((await documentOf(live!.versionId)).createdBy).toBe(PERSON);
+    }
+    expect(await liveOf(f.dinner)).toBeUndefined();
+    const [dinnerQueued] = await queuedOf(f.dinner);
+    expect(dinnerQueued!.versionId).not.toBe(dinnerFirst);
+    expect(dinnerQueued!.activatesAt).toEqual(dinnerAt);
+    const lunchQueued = await queuedOf(f.lunch);
+    expect(lunchQueued).toHaveLength(2);
+    expect((await documentOf(lunchQueued[1]!.versionId)).contentHash).toBe(unnamedHash);
+    // Only Lunch's unnamed queued version still shows the old value.
+    expect(await drift([f.extraLemon], before)).toEqual([
+      {
+        menuId: f.lunch,
+        name: "Lunch Menu",
+        liveVersionId: (await liveOf(f.lunch))!.versionId,
+        live: [],
+        queued: [expect.objectContaining({ versionId: lunchQueued[1]!.versionId })],
+      },
+    ]);
+  });
+
+  it("corrects a named queued version's copies at places the drifting live version lacks", async () => {
+    await publish(f.lunch);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.extraLemon)));
+    const queued = await queue(f.lunch, hoursFromNow(24));
+    await declare(f.extraLemon, { celery: {} });
+    const [found] = await drift([f.extraLemon], new Map());
+    expect(found!.live).toHaveLength(1);
+    expect(found!.queued[0]!.changes).toHaveLength(2);
+    await corrections(f.extraLemon, [queued]);
+    expect(await drift([f.extraLemon], new Map())).toEqual([]);
+  });
+
+  it("corrects a named queued version whose live version already agrees, making no new live version", async () => {
+    const v1 = await publish(f.lunch);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.burger)));
+    const queued = await queue(f.lunch, hoursFromNow(24));
+    await declare(f.burger, { sesame: {} });
+    expect(await corrections(f.burger, [queued])).toEqual({
+      menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
+      productIds: [f.burger],
+    });
+    expect((await liveOf(f.lunch))!.versionId).toBe(v1);
+    const [requeued] = await queuedOf(f.lunch);
+    expect(requeued!.versionId).not.toBe(queued);
+    expect(await drift([f.burger], new Map())).toEqual([]);
+  });
+
+  it("a second call corrects nothing and answers menus: []", async () => {
+    await publish(f.lunch);
+    await app((tx) => updateProduct(tx, f.lager, { unitPrice: "4.50" }));
+    const queued = await queue(f.lunch, hoursFromNow(24));
+    await declare(f.soup, { milk: {} });
+    expect((await corrections(f.soup, [queued])).menus).toHaveLength(1);
+    const [requeued] = await queuedOf(f.lunch);
+    const live = (await liveOf(f.lunch))!.versionId;
+    expect(await corrections(f.soup, [queued, requeued!.versionId])).toEqual({
+      menus: [],
+      productIds: [f.soup],
+    });
+    expect((await liveOf(f.lunch))!.versionId).toBe(live);
+    expect((await queuedOf(f.lunch))[0]!.versionId).toBe(requeued!.versionId);
+  });
+
+  it("corrects a variant copied under the dish that the product does not list, and names it", async () => {
+    // A variant's parent is fixed, so the live version is written by hand: Lemonade's copy also
+    // holds Lager's variant Pint, which Lemonade's variants do not include.
+    const pint = await app(async (tx) => {
+      const [made] = await setProductVariants(
+        tx,
+        f.lager,
+        [
+          {
+            name: "Pint",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "5.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      const { document } = await previewMenu(tx, f.lunch);
+      const lemonade = Object.values(document.offers).find(
+        ({ productId }) => productId === f.lemonade,
+      )!;
+      lemonade.variants.push({ ...lemonade.variants[0]!, id: made!.id });
+      const versionId = await insertVersion(tx, {
+        menuId: f.lunch,
+        number: 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        createdAt: new Date(Date.now() - HOUR),
+        createdBy: PERSON,
+      });
+      await tx.insert(menuReleases).values({
+        menuId: f.lunch,
+        versionId,
+        state: "live",
+        activatesAt: new Date(Date.now() - HOUR),
+      });
+      return made!.id;
+    });
+    await declare(f.lemonade, { milk: {} });
+    expect(await corrections(f.lemonade)).toEqual({
+      menus: [{ menuId: f.lunch, name: "Lunch Menu" }],
+      productIds: [f.lemonade, f.large, pint],
+    });
+    expect(await drift([f.lemonade, f.large, pint], new Map())).toEqual([]);
+  });
+
+  it("a throw on the second menu leaves the first unpatched", async () => {
+    const bar = await menuWith("Bar", product(f.extraLemon));
+    const barLive = await publish(bar);
+    const lunchLive = await publish(f.lunch);
+    await declare(f.extraLemon, { celery: {} });
+    const patch = vi
+      .spyOn(publication, "patchLiveMenu")
+      .mockImplementationOnce(publication.patchLiveMenu)
+      .mockImplementationOnce(() => Promise.reject(new Error("second menu fails")));
+    try {
+      await expect(corrections(f.extraLemon)).rejects.toThrow("second menu fails");
+      expect(patch).toHaveBeenCalledTimes(2);
+    } finally {
+      patch.mockRestore();
+    }
+    expect((await liveOf(bar))!.versionId).toBe(barLive);
+    expect((await liveOf(f.lunch))!.versionId).toBe(lunchLive);
   });
 });

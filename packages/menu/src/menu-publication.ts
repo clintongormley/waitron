@@ -28,11 +28,12 @@ import { reachableProducts } from "./section-graph.js";
 import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, declarationProductIds, parseMenuPatch } from "./menu-patch.js";
 import { queuedChanges, queuedCorrections } from "./menu-patch-declarations.js";
-import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
+import type { LiveMenu, MenuPatchChange, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
 import { menuExists } from "./operations.js";
 import type {
   CombinedOffer,
+  ContentLanguages,
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
@@ -806,7 +807,13 @@ export async function patchLiveMenu(
   baseVersionId: string,
   changes: unknown,
   personId: string,
-  options: { at?: Date; fallbackLanguage?: string; queued?: readonly string[] } = {},
+  options: {
+    at?: Date;
+    fallbackLanguage?: string;
+    queued?: readonly string[];
+    /** Each named queued version's own declarations changes, in place of the live patch's. */
+    queuedOwn?: ReadonlyMap<string, readonly MenuPatchChange[]>;
+  } = {},
 ): Promise<MenuPatchResult> {
   await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
@@ -847,16 +854,11 @@ export async function patchLiveMenu(
     .filter(({ versionId }) => options.queued?.includes(versionId))
     .map((edition) => ({
       ...edition,
-      changes: queuedChanges(edition.document, live.document!, parsed),
+      changes:
+        options.queuedOwn?.get(edition.versionId) ??
+        queuedChanges(edition.document, live.document!, parsed),
     }));
-  const corrections = queuedCorrections(
-    named,
-    languages,
-    await readProductDeclarationValues(
-      tx,
-      named.flatMap(({ document, changes }) => declarationProductIds(document, changes)),
-    ),
-  );
+  const corrections = await correctionsOf(tx, named, languages);
   if (unchanged && corrections.size === 0) throw new AppError("menu_patch.unchanged", { menuId });
   let { versionId, number } = live;
   if (!unchanged) {
@@ -876,6 +878,46 @@ export async function patchLiveMenu(
     number,
     requeued: await requeueAfter(tx, menuId, waiting, at, personId, corrections),
   };
+}
+
+/** Queues the menu's still-queued versions again, each `changes` names with its own declarations
+ * changes applied, leaving the live version, if any, as it is. Writes nothing and answers [] when
+ * no named version would change. */
+export async function correctQueuedVersions(
+  tx: Transaction,
+  menuId: string,
+  changes: ReadonlyMap<string, readonly MenuPatchChange[]>,
+  personId: string,
+  options: { at?: Date; fallbackLanguage?: string } = {},
+): Promise<QueuedEdition[]> {
+  await assertMenuWritable(tx, menuId);
+  await refuseSetMenu(tx, menuId);
+  const at = options.at ?? now();
+  await settleDue(tx, at, [menuId]);
+  const waiting = await waitingEditions(tx, menuId, at);
+  const named = waiting.flatMap((edition) => {
+    const own = changes.get(edition.versionId);
+    return own === undefined ? [] : [{ ...edition, changes: own }];
+  });
+  const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
+  const corrections = await correctionsOf(tx, named, languages);
+  if (corrections.size === 0) return [];
+  return requeueAfter(tx, menuId, waiting, at, personId, corrections);
+}
+
+async function correctionsOf(
+  tx: Transaction,
+  named: Parameters<typeof queuedCorrections>[0],
+  languages: ContentLanguages,
+) {
+  return queuedCorrections(
+    named,
+    languages,
+    await readProductDeclarationValues(
+      tx,
+      named.flatMap(({ document, changes }) => declarationProductIds(document, changes)),
+    ),
+  );
 }
 
 /** The menu's queued versions not yet due at `at`, by number. */
