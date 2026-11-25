@@ -1887,6 +1887,7 @@ export const en = {
   "staff.email_missing_needs_admin":
     "This user has no email address, so no invitation can be sent and nothing was changed. Adding one needs permission to change other people's email addresses. Sign in as an administrator (this signs you out here first), add their email address, and their first and last names if missing, with Edit…, then try again.",
   "products.title": "Products",
+  "products.loading": "Loading products…",
   "units.title": "Units",
   "units.description": "Define how product quantities are measured and displayed.",
   "units.create": "Add unit",
@@ -6753,6 +6754,7 @@ export const es: Record<StringKey, string> = {
   "staff.email_missing_needs_admin":
     "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Para añadirlo hace falta permiso para cambiar el correo de otras personas. Inicia sesión como administrador (antes se cierra tu sesión aquí), añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
   "products.title": "Productos",
+  "products.loading": "Cargando productos…",
   "units.title": "Unidades",
   "units.description": "Define cómo se miden y muestran las cantidades de los productos.",
   "units.create": "Añadir unidad",

@@ -309,6 +309,14 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return api;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 async function flush(el: ProductsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -365,6 +373,118 @@ describe("menu-screen", () => {
     expect(list(el).products).toEqual(products);
     expect(list(el).courses).toEqual([oneCourse]);
     expect(el.shadowRoot!.querySelector('select[name="product-menu"]')).toBeNull();
+  });
+
+  it("shows loading until products answer, then shows the count for a genuinely empty list", async () => {
+    const pending = deferred<Product[]>();
+    const api = stubApi({
+      listProducts: vi.fn().mockReturnValue(pending.promise),
+      listCategories: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    const count = table.shadowRoot!.querySelector('[data-test="count-root"]')!;
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    expect(count.checkVisibility()).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()).toBe(
+      t("products.loading"),
+    );
+    pending.resolve([]);
+    await vi.waitFor(() => expect(count.checkVisibility()).toBe(true));
+    expect(count.textContent?.trim()).toContain("0 products");
+  });
+
+  it.each(["listUnits", "listProducts"] as const)(
+    "offers Try again when the first %s read fails before the table is ready",
+    async (read) => {
+      const api = stubApi();
+      vi.mocked(api[read]).mockRejectedValueOnce({ code: "connection.failed" });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      const table = await productTable(el);
+      await vi.waitFor(() => {
+        expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+          codeMessage("connection.failed"),
+        );
+        expect(table.checkVisibility()).toBe(false);
+      });
+      expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]')!.click();
+      await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      expect(api[read]).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("retries only a failed table read even when a library is also down", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    vi.mocked(api.listCategories).mockRejectedValue({ code: "category.invalid" });
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    const retry = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="products-retry"]',
+      );
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+    expect(table.checkVisibility()).toBe(false);
+    const pending = deferred<CategorySummary[]>();
+    vi.mocked(api.listCategories).mockReturnValueOnce(pending.promise);
+    retry()!.click();
+    retry()!.click();
+    await vi.waitFor(() => expect(api.listCategories).toHaveBeenCalledTimes(3));
+    pending.resolve(categories);
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(retry()).toBeNull();
+    expect(api.listProducts).toHaveBeenCalledTimes(2);
+    expect(api.listUnits).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    );
+  });
+
+  it("hands keyboard focus to Try again when a focused toolbar control disappears", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const select = list(el).shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
+    select.focus();
+    expect(list(el).shadowRoot!.activeElement).toBe(select);
+    vi.mocked(api.listProducts).mockRejectedValueOnce({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("products-retry"),
+    );
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement?.localName).toBe("h1"));
+  });
+
+  it("reveals a deep-linked category when the list first becomes visible", async () => {
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
+    history.replaceState(null, "", "/products/category/child");
+    const pending = deferred<Product[]>();
+    const api = stubApi({
+      listProducts: vi.fn().mockReturnValue(pending.promise),
+      listCategories: vi
+        .fn()
+        .mockResolvedValue([
+          ...categories,
+          { id: "child", name: "Child category", parentId: "c1", color: null },
+        ]),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    expect(table.checkVisibility()).toBe(false);
+    pending.resolve(products);
+    await vi.waitFor(() =>
+      expect(
+        table.shadowRoot!.querySelector('tr[data-row-key="folder:child"]')?.checkVisibility(),
+      ).toBe(true),
+    );
+    expect(table.isExpanded("folder:child")).toBe(true);
   });
 
   it("shows a product's new takeaway rate when its rates change", async () => {

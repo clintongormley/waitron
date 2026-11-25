@@ -43,6 +43,7 @@ import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
 import { refusalText } from "./delete-refusal.js";
+import { productListActionFeedback } from "./product-list-action-feedback.js";
 import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 import { countOf } from "./count-text.js";
@@ -98,6 +99,9 @@ export class ProductBrowser extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      dashboard-product-list[hidden] {
+        display: none;
+      }
       .operation-footer {
         width: 100%;
       }
@@ -123,6 +127,7 @@ export class ProductBrowser extends LitElement {
   @property({ attribute: false }) categoryId: string | null = null;
   @property({ type: Boolean }) canAddProduct = false;
   @property({ type: Boolean }) loaded = false;
+  @property({ type: Boolean }) tableHidden = false;
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) takeawayVat = false;
   @state() private search = "";
@@ -158,7 +163,7 @@ export class ProductBrowser extends LitElement {
   #previewRead = 0;
   readonly #operationFeedback = new FormFeedback(this);
 
-  @state() private dropError = "";
+  @state() private actionError = "";
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
   #operationLeave?: LeaveCoordinator;
@@ -216,7 +221,6 @@ export class ProductBrowser extends LitElement {
       !acceptsMenuDrop(keys, folderId, this.categories)
     )
       return;
-    this.dropError = "";
     this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
@@ -268,17 +272,42 @@ export class ProductBrowser extends LitElement {
       this.#folderMadeAt = this.routing ? folderMadeAt(this.routing, this.categories) : new Map();
   }
 
+  override update(changed: PropertyValues): void {
+    const active = this.shadowRoot?.activeElement;
+    const list = this.#list();
+    const losingFocus =
+      changed.has("tableHidden") &&
+      this.tableHidden &&
+      active &&
+      (active === list || list?.contains(active));
+    super.update(changed);
+    if (losingFocus) this.#emit("table-focus-lost", undefined);
+  }
+
   override updated(changed: PropertyValues): void {
-    if (!changed.has("categoryId") && !changed.has("categories")) return;
-    const id = this.categoryId;
+    if (this.tableHidden) return;
+    if (changed.has("categoryId") || changed.has("categories") || changed.has("tableHidden")) {
+      const id = this.categoryId;
+      if (
+        id !== null &&
+        id !== this.#revealed &&
+        this.categories.some((category) => category.id === id)
+      ) {
+        this.#revealed = id;
+        void this.#list()?.revealCategory(id);
+      }
+    }
     if (
-      id === null ||
-      id === this.#revealed ||
-      !this.categories.some((category) => category.id === id)
-    )
-      return;
-    this.#revealed = id;
-    void this.#list()?.revealCategory(id);
+      this.actionError &&
+      !this.operation &&
+      !this.colorTarget &&
+      ["actionError", "operation", "colorTarget", "tableHidden"].some((key) => changed.has(key))
+    ) {
+      this.renderRoot
+        .querySelector('[data-test="list-action-error"]')
+        ?.scrollIntoView({ block: "nearest" });
+    }
+    if (changed.has("tableHidden") && this.nameError) void this.#list()?.revealRefusedName();
   }
 
   #list(): ProductList | null {
@@ -411,6 +440,7 @@ export class ProductBrowser extends LitElement {
 
   #openMove(keys = this.selected, droppedDestination?: string): void {
     if (this.operationBusy || this.summaryLoading) return;
+    this.actionError = "";
     this.#operationFeedback.reset();
     this.summaryFailed = false;
     this.operationSelection = this.#outermost(this.#selection(keys));
@@ -422,6 +452,7 @@ export class ProductBrowser extends LitElement {
   }
   async #openDelete(keys = this.selected): Promise<void> {
     if (this.operationBusy || this.summaryLoading) return;
+    this.actionError = "";
     this.#operationFeedback.reset();
     const selection = this.#selection(keys);
     this.operationSelection = selection;
@@ -512,6 +543,7 @@ export class ProductBrowser extends LitElement {
     )
       return;
     this.operationBusy = true;
+    this.actionError = "";
     this.#operationScope?.commit(this.#operationBaseline);
     this.operationError = "";
     try {
@@ -560,6 +592,7 @@ export class ProductBrowser extends LitElement {
         (error as { params?: unknown } | null)?.params,
         { includeSingleProduct: this.operationSelection.categoryIds.length > 0 },
       );
+      if (operation === "move") this.actionError = this.operationError;
     } finally {
       this.operationBusy = false;
     }
@@ -912,6 +945,7 @@ export class ProductBrowser extends LitElement {
     // reaches its own box only while that box is still open.
     const draft = this.nameDraft;
     if (!draft) return;
+    this.actionError = "";
     this.nameError = "";
     const parentId = draft.kind === "create" ? draft.parentId : null;
     const color = this.nameColor;
@@ -926,7 +960,7 @@ export class ProductBrowser extends LitElement {
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
       if (this.nameDraft === draft) this.nameError = message;
-      else this.dropError = message;
+      if (draft.kind === "rename" || this.nameDraft !== draft) this.actionError = message;
     }
   }
   #renamed(draft: CategoryNameDraft | null): CategorySummary | undefined {
@@ -971,6 +1005,7 @@ export class ProductBrowser extends LitElement {
   }
   /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
   async #leaveSelection(): Promise<void> {
+    this.actionError = "";
     this.selected = [];
     this.selecting = false;
     await this.updateComplete;
@@ -980,6 +1015,7 @@ export class ProductBrowser extends LitElement {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     return html`<dashboard-product-list
+        .hidden=${this.tableHidden}
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
           this.#drop(event.detail.keys, event.detail.folderId);
@@ -1010,6 +1046,7 @@ export class ProductBrowser extends LitElement {
         @add-category=${(event: CustomEvent<{ parentId: string | null }>) => {
           event.stopPropagation();
           this.search = "";
+          this.actionError = "";
           this.nameError = "";
           this.nameDraft = { kind: "create", parentId: event.detail.parentId };
         }}
@@ -1022,6 +1059,7 @@ export class ProductBrowser extends LitElement {
         .optionLists=${this.optionLists}
         @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
+          this.actionError = "";
           this.nameError = "";
           this.nameDraft = { kind: "rename", categoryId: event.detail.folderId };
         }}
@@ -1051,6 +1089,7 @@ export class ProductBrowser extends LitElement {
           event.stopPropagation();
           this.nameDraft = null;
           this.nameError = "";
+          this.actionError = "";
         }}
       >
         <wt-icon-button
@@ -1060,6 +1099,7 @@ export class ProductBrowser extends LitElement {
           icon="select-rows"
           .pressed=${this.selecting}
           @click=${() => {
+            this.actionError = "";
             this.selected = [];
             this.selecting = !this.selecting;
           }}
@@ -1131,6 +1171,7 @@ export class ProductBrowser extends LitElement {
               </p>`
             : nothing
         }
+        ${productListActionFeedback(this.actionError, !this.operation && !this.colorTarget && !this.tableHidden)}
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}
@@ -1152,8 +1193,7 @@ export class ProductBrowser extends LitElement {
           event.stopPropagation();
           this.colorTarget = null;
         }}
-      ></dashboard-category-color-form
-      >${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
+      ></dashboard-category-color-form>`;
   }
 }
 declare global {

@@ -2545,6 +2545,8 @@ its controls wrap at phone width. Keep Customise after Search in the toolbar.
 The All products row has a named chevron: closing it closes every category and product branch;
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays
 closed on reload; an explicit category or product reveal opens only its ancestor path.
+While Products is loading, the table and its counts give way to a loading message. If a table
+read fails, choose **Try again** to bring it back.
 
 Products leaves this mode with **Done**. A valid drop opens the Move dialog with its destination
 selected, including **No category** when you drop on **All products**. Review any changes to
@@ -2555,6 +2557,8 @@ itself disappears.
 For example, selecting Drinks and Bread shows **2 selected** and lets you move both in one
 step. Confirm destructive actions in a `wt-modal` with a `danger` button. Keep a refused
 action open and show its message at the bottom of the form, so you can correct the choice.
+A refused move, drop or rename also leaves a message above the table. A refused category name
+comes into view with its field message.
 For folder deletion, read what every selected folder contains before enabling Delete.
 When the selection is only folders with no products, subfolders or routing rules (cells on their
 rows in the routing grid), they are deleted without asking; when they hold only routing rules, the
