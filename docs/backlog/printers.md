@@ -19,8 +19,7 @@ locally and hosts the print agent (et al)". It is the Waitron-owned outbound age
 design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
 started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
 
-**Brainstorm started 2026-10-29; paused until the owner is back on 3 November**, when the device
-test below runs.
+**Brainstorm started 2026-10-29; to be resumed with the open questions below.**
 
 The owner's answers (2026-10-29):
 
@@ -55,8 +54,8 @@ Proposed in the brainstorm, not agreed:
   selling. As read from Android's documentation and developer write-ups, NOT run: an installed app
   can ask for the Wi-Fi network without requiring internet from it, ask for mobile data as well,
   and tie each connection to one of them (`ConnectivityManager.requestNetwork`,
-  `Network.bindSocket`/`openConnection`). A web page has no such choice. The test below would
-  settle it.
+  `Network.bindSocket`/`openConnection`). A web page has no such choice. The test below
+  settled it for one phone.
 - The print agent runs on a device that stays in the venue (the counter tablet), never a waiter's
   phone, which leaves at the end of a shift.
 - The same app shows Waitron's screens. On fixed tablets it locks the tablet to Waitron (kiosk
@@ -69,7 +68,7 @@ Proposed in the brainstorm, not agreed:
 
 Owner, 2026-10-29, on the questions the router answer raised:
 
-- The device test: "it would be interesting to try regardless". It stays queued.
+- The device test: "it would be interesting to try regardless". It ran on 25 November 2026 (below).
 - Whether Waitron recommends or resells a backup router: "Quite possibly".
 - Whether staff are told when the venue is on the router's mobile data: "How would we know?" Ways
   proposed, not agreed and none tried: read the router's own status, which works only for routers
@@ -87,23 +86,20 @@ printing automatically when the print-agent tablet is off; which printer connect
 themselves ([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
 [Epson Server Direct Print](../superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md)).
 
-**The device test, queued for 3 November (owner, 2026-10-29: "Perhaps queue it instead").** A
-throwaway Android app, then a run at the owner's home:
+**The device test ran on 25 November 2026: one Android device can do both.** On the owner's Oppo
+(CPH2913, Android 17), with its internet blocked in UniFi but the local network open, and a throwaway app
+asking for both networks (`ConnectivityManager.requestNetwork`, one request tied to each):
 
-- An Android tablet or phone with a SIM and mobile data, on a Wi-Fi in `192.168.10.x` whose internet
-  is cut (block the device's internet in UniFi, or unplug the gateway's fibre).
-- The app shows whether Android believes that Wi-Fi has internet. If it says yes, the run proves
-  nothing and the cut has to be fixed first.
-- It prints to the Epson TM-T88III at `192.168.10.81:9100` over Wi-Fi a ticket carrying the public
-  address it fetched over mobile data at the same moment. That ticket is the proof.
-- Controls: the same fetch tied to the Wi-Fi must fail, and a printer connection tied to no network
-  may fail (the owner's concern, shown).
-- It keeps both connections for some minutes, since Android may drop a Wi-Fi that has no internet.
+- Control, internet on: the app fetched two different public addresses over the two networks and
+  refused to print, because Android said the Wi-Fi had internet.
+- Internet blocked: Android marked the Wi-Fi unvalidated; a fetch tied to the Wi-Fi timed out and a fetch tied to mobile
+  worked. The Epson at `192.168.10.81:9100` printed, over the Wi-Fi, a ticket carrying the address fetched over mobile in the same second.
+- The Wi-Fi without internet was the phone's default network, so an ordinary web page there would
+  have lost Cloud (the owner's concern); a printer connection tied to no network reached the printer, through the Wi-Fi.
+- Held for five minutes, 20 of 20 rounds of both worked.
 
-Nothing is built or installed for it yet. Installing Java 21 (`openjdk@21`) and Google's
-command-line Android tools (`android-commandlinetools`) through Homebrew on 2026-10-29 hung for
-about 30 minutes, every Homebrew process idle at its sandboxed unpacking step, and was stopped;
-the cause was not found.
+Not tried: the app in the background or the screen off, which a print agent would have to survive, and
+a device that is not this one. The app's source and tools are in `~/workspace/spikes/a1175-dual-network` on the owner's Mac.
 
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
@@ -270,9 +266,9 @@ Reprint for A4 rows), A1584 (a shorter Delete printer window), A1585 (dragging b
   platform (a packaged agent, or an app as A1175 is for Android). Not started; network printers
   need none.
 - **A1175: an Android app that runs the local print server when the venue runs from Waitron
-  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29; it waits for a
-  device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
-  Cloud over mobile data at once? [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
+  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29, to be
+  resumed with the owner. On 25 November 2026 one Android phone reached a printer over a Wi-Fi without internet and
+  the internet over mobile data at once. [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
 
 ## A1580. Edit printer holds the settings calibration hides
 
