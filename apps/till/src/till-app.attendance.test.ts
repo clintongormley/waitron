@@ -181,6 +181,8 @@ describe("till attendance sign-in flow", () => {
       questionId: null,
       itemId: item.id,
       personId: "p1",
+      businessDay: null,
+      day: null,
       history: item.history,
     });
     f.api.getAttendanceInbox
@@ -188,9 +190,10 @@ describe("till attendance sign-in flow", () => {
       .mockResolvedValue(empty());
     await signIn(f.el);
     await vi.waitFor(() =>
-      expect(questions(f.el)?.shadowRoot!.textContent).toContain("17:00 +02:00"),
+      expect(questions(f.el)?.shadowRoot!.textContent).toMatch(
+        /A manager proposed\s+18:00\s+instead of\s+17:00/,
+      ),
     );
-    expect(questions(f.el)!.shadowRoot!.textContent).toContain("18:00 +02:00");
     await questionButton(f.el, "[data-accept]");
     await working(f.el);
     expect(f.api.sendAttendanceCommand).toHaveBeenCalledWith(

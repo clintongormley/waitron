@@ -138,17 +138,6 @@ mornings, Monday to Thursday" (owner, 2026-10-22). A preference warns as a broke
 words that say it is the person's preference, not their contract. The `availability` table
 exists unused. Shown in A585's picker and warnings. After A586.
 
-## A1577. The till's Check your times screen in plain words
-
-Owner, 2026-11-25: "Build it that way", of a picture (`mock-check-times.png` in `.impeccable/shots/`
-on the owner's Mac, not in the repository). Dates as "Monday 23 November" and times as "19:10"; a line
-reads "Clocked in 19:10" or "Clocked out 19:35 · added automatically"; the person's own answer reads
-"You answered 19:35"; a day with none reads "No times recorded."; one button, "Add missing times",
-replaces the sentence printed twice. The recorded entries do not change, only how they read
-(`apps/till/src/screens/till-attendance-questions.ts`, `apps/till/src/widgets/attendance-history.ts`).
-Any kind of line the picture does not show (a manager's proposal, a correction, a time recorded under
-another offset) goes back to the owner as a picture. Check the shared helper's other screens.
-
 ## Decisions and deliberate limits
 
 - Monthly hours close after three working days by default. The grace period is adjustable (owner,
@@ -164,6 +153,15 @@ another offset) goes back to the owner as a picture. Check the shared helper's o
   (watcher, 2026-11-25).
 
 - Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept by the watcher 2026-11-24, not asked (A644).
+
+### A1577. The till's Check your times screen in plain words
+
+The owner chose the Suggested panel in `.impeccable/shots/mock-check-times.png` on 25 November
+2026 (“Build it that way”), as recorded at `b5425d2ba9`. The card shows the work date in words,
+short recorded times, and one **Add missing times** button for a day with missing times. After
+seeing the other examples, the owner chose plain wording for breaks, corrections, manager entries
+and proposals, with a date in words for an overnight finish. Offsets identify repeated clock
+times and changes of offset within one card (watcher, 25 November 2026 at 20:39 and 21:15 CET).
 
 ### A1268 corrections after a backward clock step
 

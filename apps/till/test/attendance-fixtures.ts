@@ -50,6 +50,62 @@ export function attendancePrompt(patch: Partial<AttendancePrompt> = {}): Attenda
   }));
   return prompt;
 }
+export function attendanceMissingTimesPrompts(): [AttendancePrompt, AttendancePrompt] {
+  const workDay = (businessDay: string, nextDay: string) => ({
+    businessDay,
+    startAt: `${businessDay}T04:00:00.000Z`,
+    endAt: `${nextDay}T04:00:00.000Z`,
+  });
+  const automatic = attendanceEntry({
+    eventAt: "2026-11-23T18:35:00.000Z",
+    recordedAt: "2026-11-23T18:35:00.000Z",
+    offsetMinutes: 60,
+  });
+  const worker = { ...automatic.extension!, authorKind: "worker" as const };
+  return [
+    attendancePrompt({
+      kind: "missing-times",
+      businessDay: "2026-11-23",
+      day: workDay("2026-11-23", "2026-11-24"),
+      timeZone: "Europe/Madrid",
+      automaticEntryId: null,
+      missingKinds: ["out"],
+      history: [
+        attendanceEntry({
+          ...automatic,
+          entryId: "clock-in",
+          entryKind: "in",
+          eventAt: "2026-11-23T18:10:00.000Z",
+          recordedAt: "2026-11-23T18:10:00.000Z",
+          sequenceNo: 1,
+          recordedByPersonId: "worker",
+          extension: worker,
+        }),
+        automatic,
+        attendanceEntry({
+          ...automatic,
+          entryId: "answer",
+          entryKind: "confirmation",
+          recordedAt: "2026-11-23T18:36:00.000Z",
+          sequenceNo: 3,
+          recordedByPersonId: "worker",
+          extension: { ...worker, respondsToEntryId: automatic.entryId },
+        }),
+      ],
+    }),
+    attendancePrompt({
+      id: "next-day",
+      questionId: "next-day",
+      kind: "missing-times",
+      businessDay: "2026-11-24",
+      day: workDay("2026-11-24", "2026-11-25"),
+      timeZone: "Europe/Madrid",
+      automaticEntryId: null,
+      missingKinds: ["in", "out"],
+      history: [],
+    }),
+  ];
+}
 export function attendanceItem(patch: Partial<CorrectionItem> = {}): CorrectionItem {
   const item: CorrectionItem = {
     id: "proposal",

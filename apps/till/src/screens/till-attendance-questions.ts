@@ -3,7 +3,11 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { AttendanceInbox, AttendancePrompt } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { attendanceHistory } from "../widgets/attendance-history.js";
+import {
+  attendanceDateInWords,
+  questionAttendanceHistory,
+  questionAttendanceProposal,
+} from "../widgets/attendance-history.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
 @customElement("till-attendance-questions")
@@ -49,7 +53,14 @@ export class TillAttendanceQuestions extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
         margin: 0;
-        padding-inline-start: var(--wt-space-4);
+        padding: 0;
+        list-style: none;
+      }
+      .muted {
+        color: var(--wt-color-text-muted);
+      }
+      .short-time {
+        font-weight: var(--wt-font-weight-bold);
       }
       li {
         overflow-wrap: anywhere;
@@ -87,29 +98,33 @@ export class TillAttendanceQuestions extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #prompt(prompt: AttendancePrompt) {
+  #prompt(prompt: AttendancePrompt, pendingProposalEntries: ReadonlySet<string>) {
     const disabled = this.busy || this.reading || this.blocked;
     const item = this.inbox?.items.find((candidate) => candidate.id === prompt.itemId);
     const proposal = prompt.kind === "proposal";
     const pending = item?.direction === "manager_proposal" && item.status === "waiting-worker";
+    const history = prompt.history.filter((entry) => !pendingProposalEntries.has(entry.entryId));
+    const lines =
+      proposal && item
+        ? questionAttendanceProposal(item, prompt.timeZone)
+        : questionAttendanceHistory({ ...prompt, history });
     return html`<article data-prompt=${prompt.id}>
-      ${prompt.businessDay ? html`<h2>${t("attendance.work_day")}: ${prompt.businessDay}</h2>` : nothing}
+      ${prompt.businessDay ? html`<h2>${attendanceDateInWords(prompt.businessDay)}</h2>` : nothing}
       ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}
-      ${proposal ? html`<p>${t("attendance.proposal")}</p>` : nothing}
-      ${prompt.kind === "missing-times" ? html`<p>${t("attendance.supply")}</p>` : nothing}
+      ${proposal && !item ? html`<p>${t("attendance.proposal")}</p>` : nothing}
+      ${prompt.kind === "missing-times" ? html`<p class="muted">${t(history.length ? "attendance.some_times_missing" : "attendance.no_times_recorded")}</p>` : nothing}
       ${
-        prompt.history.length > 0
-          ? html`<ul>
-              ${prompt.history.map((entry) => attendanceHistory(entry))}
+        lines.length
+          ? html`<ul role="list">
+              ${lines}
             </ul>`
           : nothing
       }
-      ${proposal && item?.reason ? html`<p>${item.reason}</p>` : nothing}
       ${proposal && !pending ? html`<p>${t("attendance.overtaken")}</p>` : nothing}
       ${proposal && pending && !item.readyToApply ? html`<p>${t("attendance.sequence_blocked")}</p>` : nothing}
       <div class="actions">
         ${prompt.kind === "automatic-out" ? html`<wt-button data-confirm variant=${disabled ? "secondary" : "primary"} .disabled=${disabled} @click=${(event: Event) => this.#emit(event, "attendance-confirm", { questionId: prompt.questionId })}>${t("attendance.confirm")}</wt-button>` : nothing}
-        ${!proposal ? html`<wt-button data-edit variant="secondary" .disabled=${disabled} @click=${(event: Event) => this.#emit(event, "attendance-edit", { prompt })}>${t(prompt.kind === "automatic-out" ? "attendance.different" : "attendance.supply")}</wt-button>` : nothing}
+        ${!proposal ? html`<wt-button data-edit variant="secondary" .disabled=${disabled} @click=${(event: Event) => this.#emit(event, "attendance-edit", { prompt })}>${t(prompt.kind === "automatic-out" ? "attendance.different" : "attendance.add_missing_times")}</wt-button>` : nothing}
         ${
           pending
             ? html`
@@ -135,10 +150,15 @@ export class TillAttendanceQuestions extends LitElement {
   }
 
   override render() {
+    const pendingProposalEntries = new Set(
+      this.inbox?.items.flatMap((item) =>
+        item.status === "waiting-worker" ? item.requestEntryIds : [],
+      ),
+    );
     return html`<div class="content">
       <h1>${t("attendance.questions")}</h1>
       ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("attendance.reading")}</p>` : nothing}
-      ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt))}
+      ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt, pendingProposalEntries))}
       <div class="actions">
         <wt-button
           data-cancel
