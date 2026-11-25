@@ -60,7 +60,10 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
    > nears expiry and once it has expired, and an email to each active manager and administrator
    > with an email address, on a box that files records and has outgoing mail set up, at most once each when the warning starts, when it turns urgent and when
    > the certificate expires. How AEAT itself answers an expired certificate is still one of the owner's
-   > checks, run after A795 lands (A888 in [the backlog](../backlog/fiscal.md)).
+   > checks, run after A795 lands (A888 in the backlog).
+   >
+   > **Pointer, 2026-11-25:** run. See
+   > [below](#2026-11-25--real-certificates-against-both-environments).
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural
    person acting for the company; the filing is made for the company. `ObligadoEmision.NIF` must be
    the deli's NIF, never the `SERIALNUMBER` in the certificate subject. Easy to get backwards, and
@@ -69,3 +72,50 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
 **What it does not establish:** that a *submission* will be accepted. `consultar` is a read — it
 exercises no `RegistroAlta` XSD validation, no chaining, and no registration coherence between the
 certificate, the NIF and the `IdSistemaInformatico`. Those remain open.
+
+---
+
+## 2026-11-25 — real certificates against both environments
+
+The owner's session for A888, on `main` at `9ea1020ca1`: read-only queries, nothing filed. The
+two certificates went first through the shipped code
+(`apps/server/src/aeat-certificate-check.preprod.test.ts`). A throwaway script on the same transport,
+not following redirects, then showed AEAT's raw answers and added the controls. What it changes is [A1571](../backlog/fiscal.md#a1571-what-aeats-answers-to-real-certificates-change).
+
+| Sent | Test environment | Production |
+| --- | --- | --- |
+| Representative certificate, its own address (`prewww1`, `www1`) | accepted | accepted |
+| The same, at the seal address (`prewww10`, `www10`) | accepted | accepted |
+| No certificate, either address | 302 to `erro4033.html` | 302 to `erro4033.html` |
+| An expired and revoked certificate, either address | 302 to `erro4011.html` | 302 to `erro4011.html` |
+| A self-signed certificate, either address | 302 to `erro4011.html` | not sent |
+| Representative certificate, asking about another company | SOAP fault `Codigo[4112]` | not sent |
+
+"Accepted" is HTTP 200 with a well-formed reply to a query. It says nothing about a filing.
+
+- **`erro4011.html` reads** "401 No autorizado. Se ha producido un error al verificar el certificado
+  presentado", and lists an unrecognised issuer, a certificate type not valid for the service, and an
+  expired certificate (fetched 2026-11-25). In the test environment a nonsense body got the same
+  redirect, so the answer did not depend on the query.
+- **Expiry alone was not isolated.** The refused certificate ran from June 2021 to 9 June 2023, and
+  FNMT's OCSP service and revocation list both say it was revoked on 23 May 2023 as superseded. The
+  company is closed. A second expired certificate could not be opened: its password was not known.
+- **What the shipped code makes of it.** It follows the redirect and reports `check_failed`. The
+  library throws on that page for a filing as well as a query (run on the real page); that the filing
+  pass then backs the batch off was read in `drain.ts`, not run.
+- **The 4112 fault:** HTTP 200, `faultcode` `env:Client`, `faultstring` "Codigo[4112].El titular del
+  certificado debe ser Obligado Emisión, Colaborador Social, Apoderado o Sucesor." A wrong company name
+  beside the right tax ID was accepted.
+- **Both certificates** carry `O` and `organizationIdentifier` (`VATES-<NIF>`). Both files use 3DES
+  with a SHA-1 check and open on Node 26.13.1, on the Mac and in `node:26-slim`.
+- **Exports, with throwaway certificates.** macOS (`security export` and the `SecItemExport` API; the
+  Keychain Access app itself was not clicked through): RC2 for the certificate, refused as
+  `old_encryption`, in `node:26-slim` too. Firefox 160.0.1 (its own export code): AES, opens. Windows:
+  not run.
+- **An accented password** opens a Firefox export, and passes the password check on a file from the
+  macOS API. The `security` command stores it misencoded, so a file made that way is refused as a wrong
+  password.
+- **Time to open a Firefox export** (600,000 rounds of PBKDF2): about 885 ms for the whole child
+  process on an idle i5-6400T box, in its own app image. The opener's limit is 2,000 ms.
+- **Not run:** a company seal at either address (owner: "i don't need it - each owner has their own
+  cert").

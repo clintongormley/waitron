@@ -840,37 +840,38 @@ Next action: design recovery for uncertain physical delivery across automatic re
 retry actions, retaining the customer's route to a legible invoice. Do not describe the outbox's
 job count as a physical exactly-once printing guarantee.
 
-## A888. After A795 lands: the owner's checks with real certificates
+## A1571. What AEAT's answers to real certificates change
 
-- **Left open by A795.** These were A795's landing condition until the owner approved landing it on
-  2026-10-19 before they ran; the owner runs them with real certificates afterwards. Each is a question the
-  [design](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md) (§8) and
-  [plan](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md) (§3, decision 11)
-  could not answer from a source or a test server.
-- Run them with the operator harness, which opens the file and asks AEAT a read-only `consultar`
-  with the code an install runs, and files nothing. Its variables are listed in
-  `apps/server/README.md` ("Installing or replacing the AEAT certificate after setup"):
-  `pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts`
-  (file `apps/server/src/aeat-certificate-check.preprod.test.ts`).
-- The checks:
-  - a consulta to production AEAT, and a consulta with a company seal at `www10`;
-  - each type at the other type's address: a seal sent to `www1` and a representative certificate
-    sent to `www10` (`WAITRON_CERT_CHECK_ADDRESS_KIND`), which says whether the live check catches
-    a wrong type;
-  - how AEAT answers an expired certificate: refused during the connection (and with which error,
-    `other side closed` or `ECONNRESET`), an HTTP error or SOAP fault, or a reply refusing each
-    record;
-  - where a real seal keeps the company's tax ID, and whether real representative certificates all
-    carry `organizationIdentifier` and `O`;
-  - whether files exported by FNMT's own procedure, by the browsers the export guides cover and by
-    the Mac keychain use the old RC2 encryption; if they do, the guides say how to export with AES;
-  - a non-ASCII passphrase: the tests use ASCII passphrases only, because a test file built with
-    one could not be opened by Node (plan §3);
-  - where an AEAT error number arrives in a refused consulta. This decides whether the design's
-    "AEAT refused this certificate for {taxpayerNif} ({codigo})" sentence is built; today a SOAP
-    fault is shown with the code and reason AEAT sent (plan decision 11).
-- If any of them answers differently from the design, the affected part is redesigned in a
-  follow-up.
+Left open by A888's session with the owner on 2026-11-25 (A795's design
+[§8](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)). What was run, and
+its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-25--real-certificates-against-both-environments).
+
+- **A Mac's certificate export is refused** (`old_encryption`). macOS packs the certificate with
+  40-bit RC2, which the box's Node cannot open, and setup's and the dialog's own export guides send
+  Mac users to Keychain Access. The refusal says to export again with AES; whether Keychain Access
+  offers that was not checked. Either the box opens RC2 files or the Mac guide names a way that works.
+- **AEAT's refusal of a certificate is shown as "failed for an unexpected reason".** AEAT answers
+  HTTP 302 to its page `erro4011.html` ("401", certificate not verified), or `erro4033.html` when no
+  certificate arrived. `mtlsFetch` follows the redirect, the library cannot read the page, and
+  `classify` in `certificate-check.ts` falls through to `check_failed`. Keep the redirect and say that
+  AEAT did not accept the certificate.
+- **Nothing names the certificate when AEAT refuses the installed one before its expiry date.** FNMT
+  had revoked the session's refused certificate as superseded 17 days before it expired. A filing
+  answered that way is retried; the card still shows days left, and the alert is the general
+  `fiscal.submission_delayed`.
+- **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
+  certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
+  unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's
+  policy, or at least start on representative (owner, 2026-11-25: "each owner has their own cert").
+- **The sentence "AEAT refused this certificate for {taxpayerNif} ({codigo})" can be built** (the
+  plan's decision 11). AEAT's number arrives in the SOAP fault's `faultstring`, as `Codigo[4112].`
+  followed by its text, with HTTP 200 and `faultcode` `env:Client`.
+- **Opening a Firefox export takes about 0.9 of the opener's 2 seconds** on an idle i5-6400T box, so
+  a slower or busy box may answer `unavailable` for a sound file.
+
+Not established: how AEAT answers a certificate that is only expired (the one tested was revoked
+too, and its company is closed), a company seal at either address, where a seal keeps the tax ID
+(owner: no seal is needed), and a Windows export.
 
 ## A853. The box makes a company seal's private key itself
 
@@ -1028,24 +1029,17 @@ was found in the inspected main/product trees. The [A739 owner-flow revision](..
 records the missing recipient/address, request recovery, bill/delivery and no-charge integration
 here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
 
-## Bundle: One owner session with a real certificate against AEAT
+## A1270. Verify the fake AEAT's invoice-date comparison at midnight
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1270. Verify the fake AEAT's invoice-date comparison at midnight.**
-  The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
-  at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
-  Establish it from an authoritative definition or controlled preproduction probe, then correct and
-  release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
-  The handover simulation now uses an advancing noon clock after its first filing reproduced
-  `1112` at 23:28 UTC on 6 November, on both main and the certificate-worker branch.
-  Audit the other server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
-  their exposure to the same date boundary has not been reproduced.
-  [Reproduction and sources](../developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
-- **A888. After A795 lands: the owner's checks with real certificates** (left open by A795). The
-  owner approved landing A795 on 2026-10-19 before these ran.
-  If any answers differently from the design, that part is redesigned in a follow-up.
-  [Detail](fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
+The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
+at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
+Establish it from an authoritative definition or controlled preproduction probe, then correct and
+release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
+The handover simulation now uses an advancing noon clock after its first filing reproduced
+`1112` at 23:28 UTC on 6 November, on both main and the certificate-worker branch.
+Audit the other server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
+their exposure to the same date boundary has not been reproduced.
+[Reproduction and sources](../developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
 
 ## Bundle: Settle the hold and the brake once
 

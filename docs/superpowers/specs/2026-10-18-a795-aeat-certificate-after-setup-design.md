@@ -746,6 +746,10 @@ twice (risk-trigger branch). The owner lands it.
 
 > **Pointer, 2026-10-19:** the owner approved landing A795 before these checks ran; they run after
 > landing (backlog A888).
+>
+> **Pointer, 2026-11-25:** run, except the seal's. Results:
+> [first-aeat-contact.md](../../compliance/first-aeat-contact.md#2026-11-25--real-certificates-against-both-environments);
+> what they change is backlog A1571.
 
 **Before landing, with real certificates** (the owner's, through the operator-run
 `aeat.preprod.test.ts` pattern). If any of these does not answer as this design expects, the affected
