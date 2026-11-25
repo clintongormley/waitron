@@ -1225,7 +1225,9 @@ _2026-11-25: the owner's answers of 24 November replace D1 and D3 (A1515 piece 1
 [plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)). D1: **Reopen to split**
 asks nobody for a PIN; the credit note names the signed-in person, backed by the reopened bill it
 opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to the reopened bill
-("2 B"); one holding a payment on its own receipt is still refused (owner, "ok", 24 November)._
+("2 B"); one holding a payment on its own receipt is still refused (owner, "ok", 24 November). As
+built, the refusal also covers a bill whose advance was given back in full (`refuseSplitMoney`,
+`apps/server/src/split-after-print-money.ts`), which the owner was not asked about._
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

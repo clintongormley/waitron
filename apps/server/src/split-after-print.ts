@@ -83,8 +83,8 @@ export async function refuseReopen(
 
 /**
  * {@link splitAfterPrint} inside the caller's issuance transaction. The new bill names the printed
- * one in `reopened_from` while that is still `placed`, which is what lets the credit be filed for
- * the session's person without `sale.rectify`.
+ * one in `reopened_from` while that is still `placed`, and holds copies of its dishes: both are what
+ * lets the credit be filed for the session's person without `sale.rectify`.
  */
 export async function reopenToSplitIn(
   tx: Transaction,
