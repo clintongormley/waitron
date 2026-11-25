@@ -945,6 +945,9 @@ describe("a prep station in the Calendar", () => {
     await expect
       .poll(() => dayBox(el)!.rows.map((row) => row.name))
       .toEqual(["Prep stations", "Grill"]);
+    expect(dayBox(el)!.rows.find((row) => row.name === "Grill")?.text).toBe(
+      "10:00–02:00 · 04:00–05:00",
+    );
     expect(dayBox(el)!.stationName).toBe("Grill");
     expect(dayBox(el)!.querySelector("a[data-test=edit-week]")).not.toBeNull();
   });
@@ -1329,18 +1332,23 @@ it("keeps departments distinct from station orders on a closed phone day, and ke
 });
 
 it.each([
-  ["manager", "year", false],
-  ["manager", "month", false],
-  ["manager", "week", false],
-  ["viewer", "year", true],
+  ["manager", "year", false, ""],
+  ["manager", "month", false, ""],
+  ["manager", "week", false, ""],
+  ["viewer", "year", true, ""],
+  ["viewer with a station in the address", "year", true, "station/s1/"],
+  ["viewer with a station group in the address", "year", true, "show/stations/"],
 ] as const)(
-  "a %s's %s day box includes department sections and all planned stations",
-  async (_, view, readOnly) => {
+  "a %s sees department sections and all planned stations in the %s day box",
+  async (_, view, readOnly, filter) => {
     const suffix =
       view === "year" ? "year/2026" : view === "month" ? "month/2026-12" : "week/2026-12-09";
-    const { el, paths } = await mount(`/opening-hours/view/${view}/${suffix}`, undefined, false, {
-      readOnly,
-    });
+    const { el, paths } = await mount(
+      `/opening-hours/view/${view}/${filter}${suffix}`,
+      undefined,
+      false,
+      { readOnly },
+    );
     if (view === "year") expect(paths.filter((path) => path.includes("/stations"))).toEqual([]);
     await expect.poll(() => el.shadowRoot!.querySelector(`opening-hours-${view}`)).not.toBeNull();
     const calendar = el.shadowRoot!.querySelector(`opening-hours-${view}`)!;
@@ -1362,7 +1370,10 @@ it.each([
         .rows.filter((row) => row.strong)
         .map((row) => row.name),
     ).toEqual(["Restaurant", "Bar", "Prep stations"]);
-    expect(paths.some((path) => path.includes("/stations/service-times?"))).toBe(true);
+    expect(paths.filter((path) => path.includes("/service-times?"))).toEqual([
+      "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
+    ]);
+    expect(dayBox(el)!.stationName).toBe("");
     expect(dayBox(el)!.querySelector("[data-test=station-explanation]")).toBeNull();
     const season = dayBox(el)!.querySelector<HTMLAnchorElement>("a[data-test=edit-week]")!;
     expect(season.textContent!.trim()).toBe("Winter standard hours");

@@ -9,7 +9,12 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { stationIcon } from "./station-icon.js";
-import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
+import {
+  calendarShowStyles,
+  showPicker,
+  stationExplanation,
+  type CalendarShow,
+} from "./calendar-show.js";
 import { formatDayHeading, formatDayTitleParts, formatWeekTitleParts } from "./hours-view.js";
 import {
   chosenDepartment,
@@ -122,6 +127,7 @@ function dayTitleCandidates(): TemplateResult[] {
 @customElement("opening-hours-week")
 export class OpeningHoursWeekView extends LitElement {
   static override styles = [
+    calendarShowStyles,
     baseStyles,
     periodColourStyles,
     dayNameWordStyles,
@@ -141,9 +147,6 @@ export class OpeningHoursWeekView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-      }
-      .head wt-combobox {
-        min-width: 0;
       }
       .no-orders {
         margin: 0;

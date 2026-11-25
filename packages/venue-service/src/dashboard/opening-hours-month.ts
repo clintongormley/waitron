@@ -24,7 +24,12 @@ import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { SPECIAL_DAY_LINE, seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t, VENUE_SERVICE_STRINGS } from "./strings.js";
 import { stationIcon } from "./station-icon.js";
-import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
+import {
+  calendarShowStyles,
+  showPicker,
+  stationExplanation,
+  type CalendarShow,
+} from "./calendar-show.js";
 import { placedStationRanges, type ShowStation, type StationShow } from "./station-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
@@ -66,6 +71,7 @@ interface Row {
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
+    calendarShowStyles,
     calendarSelectionStyles,
     baseStyles,
     seasonTintStyles,
@@ -84,9 +90,6 @@ export class OpeningHoursMonthView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-      }
-      .head wt-combobox {
-        min-width: 0;
       }
       .row-name {
         overflow: hidden;

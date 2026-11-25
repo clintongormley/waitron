@@ -690,7 +690,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** The station the address names, if the screen may show stations and the list holds it. */
   private shownStation() {
-    if (!this.stationId || !this.stationsWanted()) return undefined;
+    if (this.view === "year" || !this.stationId || !this.stationsWanted()) return undefined;
     return this.stations?.find((station) => station.id === this.stationId);
   }
   /** Whether the address names a station the list, not yet read, may hold. */
@@ -698,7 +698,13 @@ export class OpeningHoursScreen extends LitElement {
     return this.stationId !== "" && this.stationsWanted() && this.stations === undefined;
   }
   private shownGroup(): CalendarShow {
-    if (!this.stationsWanted() || this.shownStation() || !this.stations?.length) return "";
+    if (
+      this.view === "year" ||
+      !this.stationsWanted() ||
+      this.shownStation() ||
+      !this.stations?.length
+    )
+      return "";
     return this.show;
   }
   private watchStationTimes() {
@@ -1235,8 +1241,8 @@ export class OpeningHoursScreen extends LitElement {
     const error = year ? this.boxMonthError : "";
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
-      const chosen = year ? undefined : this.shownStation();
-      const group = year ? "" : this.shownGroup();
+      const chosen = this.shownStation();
+      const group = this.shownGroup();
       const departmentId = year || chosen || group ? "" : this.departmentId;
       const visibleDay = chosen || group === "stations" ? { ...day, departments: [] } : day;
       const shown = openingHoursDay(
@@ -1305,7 +1311,7 @@ export class OpeningHoursScreen extends LitElement {
     };
     return html`<calendar-day-box
       .heading=${formatDate(open.date)}
-      .stationName=${this.view === "year" ? "" : (this.shownStation()?.name ?? "")}
+      .stationName=${this.shownStation()?.name ?? ""}
       .name=${shown?.name ?? ""}
       .nameKind=${shown?.nameKind ?? ""}
       .line=${shown?.line ?? ""}
