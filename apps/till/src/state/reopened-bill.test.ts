@@ -8,6 +8,8 @@ import {
   creditedNotice,
   goneNotice,
   movedToBill,
+  noticeAfterGone,
+  reopenedTo,
 } from "./reopened-bill.js";
 
 const balance = (workingOrderId: string) => ({ workingOrderId }) as unknown as BillBalance;
@@ -121,5 +123,29 @@ describe("billAfterItems", () => {
 
   it("is nothing when the answer names the bill paid from", () => {
     expect(billAfterItems("wo-5", answer("open"), true)).toBeUndefined();
+  });
+});
+
+describe("reopenedTo and noticeAfterGone", () => {
+  beforeEach(() => setLocale("en"));
+  const reopen = { from: "wo-4", to: "wo-5" };
+  const reopened = billOf({ workingOrderId: "wo-5", billNumber: 2 });
+  const other = billOf({ workingOrderId: "wo-6", billNumber: 3 });
+
+  it("is the reopened bill only when the bill that left is the one Pay for items reopened, and it is listed", () => {
+    expect(reopenedTo(reopen, "wo-4", [reopened, other])).toBe("wo-5");
+    expect(reopenedTo(reopen, "wo-6", [reopened, other])).toBeUndefined();
+    expect(reopenedTo(reopen, "wo-4", [other])).toBeUndefined();
+    expect(reopenedTo(undefined, "wo-4", [reopened])).toBeUndefined();
+  });
+
+  it("says the receipt was credited for the reopened bill, else names the bill shown, else nothing", () => {
+    expect(noticeAfterGone(reopen, "wo-4", [reopened], undefined, reopened)).toEqual(
+      creditedNotice([reopened], reopen),
+    );
+    expect(noticeAfterGone(reopen, "wo-6", [reopened], other, reopened)).toEqual(
+      goneNotice(other, reopened),
+    );
+    expect(noticeAfterGone(undefined, "wo-6", [reopened], other, undefined)).toBeNull();
   });
 });

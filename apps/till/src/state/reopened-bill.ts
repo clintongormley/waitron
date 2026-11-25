@@ -17,6 +17,30 @@ export function billAfterItems(
   return kept ? { balance: own, kept } : { balance: reopened, kept };
 }
 
+/** The bill the table moved to from `gone` by Pay for items on a printed bill, while the bills
+ * read still lists it. */
+export function reopenedTo(
+  reopened: { from: string; to: string } | undefined,
+  gone: string | undefined,
+  bills: readonly PartyBill[],
+): string | undefined {
+  const to = reopened?.from === gone ? reopened?.to : undefined;
+  return bills.some((bill) => bill.workingOrderId === to) ? to : undefined;
+}
+
+/** The notice once bill `gone` left the screen for `shown`: its receipt credited when Pay for items
+ * reopened it, else {@link goneNotice}. */
+export function noticeAfterGone(
+  reopened: { from: string; to: string; kept?: boolean } | undefined,
+  gone: string,
+  bills: readonly PartyBill[],
+  was: BillRef | undefined,
+  shown: BillRef | undefined,
+): BillNotice | null {
+  if (reopened?.from === gone) return creditedNotice(bills, reopened);
+  return shown === undefined ? null : goneNotice(was, shown);
+}
+
 /** Whether a card that charged nothing left the chosen dishes on `own`, the bill Pay for items made
  * for them (`paidOn`), still open there because the server could not put them back. */
 export function keptOnOwnBill(

@@ -343,10 +343,11 @@ import {
   billAfterItems,
   billNoticeText,
   creditedNotice,
-  goneNotice,
   keptOnOwnBill,
   latestCorrectiveOf,
   movedToBill,
+  noticeAfterGone,
+  reopenedTo,
   type BillNotice,
 } from "./state/reopened-bill.js";
 import "./widgets/basket-refresh-dialog.js";
@@ -15184,11 +15185,7 @@ export class TillApp extends LitElement {
       return;
     const reopened = this.#reopenedByItems;
     const next =
-      reopened !== undefined &&
-      reopened.from === gone &&
-      bills.some((bill) => bill.workingOrderId === reopened.to)
-        ? reopened.to
-        : billToShow(paidAfterSplit ? undefined : gone, bills);
+      reopenedTo(reopened, gone, bills) ?? billToShow(paidAfterSplit ? undefined : gone, bills);
     if (afterSplit || gone === undefined) this.#billAfterSplit = undefined;
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
@@ -15213,13 +15210,8 @@ export class TillApp extends LitElement {
       const was = [...bills, ...before].find(
         (bill) => bill.workingOrderId === gone && bill.billNumber !== null,
       );
-      const shown = bills.find((bill) => bill.workingOrderId === next);
-      this.billGone =
-        reopened?.from === gone
-          ? creditedNotice(bills, reopened)
-          : shown === undefined || paidAfterSplit
-            ? null
-            : goneNotice(was, shown);
+      const shown = paidAfterSplit ? undefined : bills.find((bill) => bill.workingOrderId === next);
+      this.billGone = noticeAfterGone(reopened, gone, bills, was, shown);
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
         this.#leftBillDrafts.set(
