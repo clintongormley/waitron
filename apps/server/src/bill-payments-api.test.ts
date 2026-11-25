@@ -1321,6 +1321,24 @@ describe("a contribution (design §8 test 2)", () => {
     expect(await paymentRows(billId)).toEqual([]);
   });
 
+  it("refuses a tip in the preview with the venue's tips off, showing what can be charged", async () => {
+    const billId = await bill120();
+
+    const refused = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
+      kind: "contribution",
+      amount: "40.00",
+      method: "cash",
+      tendered: "50.00",
+      addedTip: "10.00",
+    });
+
+    expect(refused.status).toBe(422);
+    expect(refused.json).toMatchObject({
+      code: "bill.tip_not_allowed",
+      params: { workingOrderId: billId, chargeable: "40.00" },
+    });
+  });
+
   it("refuses an allocation other than the one the operator saw, with the new one, and writes nothing", async () => {
     const billId = await tabWith("Steak");
 

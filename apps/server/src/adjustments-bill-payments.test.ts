@@ -207,6 +207,26 @@ describe("a reduction after contributions (design §8 test 11)", () => {
   });
 });
 
+it("refuses a whole-bill discount that takes the bill below the money received, writing nothing", async () => {
+  const billId = await tabWith(venue, "Red wine bottle", "Octopus", "Croquettes");
+  await contribute(billId, "cash", "50.00");
+  const before = { lines: await linesOf(billId), revision: await revisionOf(billId) };
+
+  const refused = await adjust(billId, 1, {
+    lineId: null,
+    action: "discount_amount",
+    amount: "20.00",
+  });
+
+  expect([refused.status, refused.json]).toEqual([
+    409,
+    { code: "bill.received_exceeds_total", params: { workingOrderId: billId, excess: "10.00" } },
+  ]);
+  expect({ lines: await linesOf(billId), revision: await revisionOf(billId) }).toEqual(before);
+  expect(await recordedOn(billId)).toEqual([]);
+  expect(fiscalRecordCount(venue, billId)).toBe(0);
+});
+
 describe("a discount that leaves a bill fully paid", () => {
   it("rolls back the adjustment and its cached result when issuance refuses", async () => {
     const billId = await tabWith(venue, "Red wine bottle", "Croquettes");
