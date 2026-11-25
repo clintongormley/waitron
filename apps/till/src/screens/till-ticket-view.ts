@@ -117,16 +117,29 @@ function renderReceipt(result: TillSaleResult, language: string) {
         >
           <span>${element.text.trimStart()}</span>
         </p>`;
-      case "amount":
+      case "amount": {
+        const { caption, indent } = element;
+        const prefix =
+          typeof indent === "object" && indent.after.startsWith(" ") ? indent.after : undefined;
+        const count = prefix?.trimStart();
         return html`<p
           class="receipt-line receipt-amount"
           data-align=${alignment}
           ?data-bold=${element.style?.bold}
           ?data-double=${element.style?.double}
         >
-          <span style=${styleMap(indentation(element.indent))}>${element.caption.trimStart()}</span>
+          ${
+            prefix === undefined || count === undefined
+              ? html`<span style=${styleMap(indentation(indent))}>${caption.trimStart()}</span>`
+              : html`<span
+                  class="receipt-counted-extra"
+                  style=${styleMap(indentation(prefix.length - count.length))}
+                  ><span>${count}</span><span>${caption.slice(prefix.length)}</span></span
+                >`
+          }
           <span>${element.amount}</span>
         </p>`;
+      }
       case "table":
         itemHeader = element.table.header ?? itemHeader;
         return receiptTable<ReceiptTableRow>(
@@ -240,13 +253,25 @@ export class TillTicketView extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .receipt-amount span:last-child {
+      .receipt-amount > span:last-child {
         text-align: end;
       }
 
       .receipt-line,
-      .receipt-amount span:first-child {
+      .receipt-amount > span:first-child {
         padding-inline-start: var(--receipt-indent, 0);
+      }
+
+      .receipt-counted-extra {
+        display: flex;
+      }
+
+      .receipt-counted-extra > span:first-child {
+        white-space: pre;
+      }
+
+      .receipt-counted-extra > span:last-child {
+        min-inline-size: 0;
       }
 
       .receipt-table {

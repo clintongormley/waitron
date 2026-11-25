@@ -539,12 +539,18 @@ describe("receipt figure details", () => {
     expect(section?.kind === "withVat" && section.group).not.toHaveProperty("perUnit");
   });
 
-  it("shows how many counted extras each dish has and the measured extra's total quantity", () => {
+  it("carries combined counts for counted extras and the measured extra's total quantity", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     input.invoiceLocale = "en-GB";
     input.result.invoiceType = "F2";
     input.result.lines = [
-      { descriptions: { en: "Sundae" }, quantity: "2", gross: "8.00" },
+      {
+        descriptions: { en: "Sundae" },
+        quantity: "2",
+        gross: "8.00",
+        unitName: { en: "ea" },
+        soldInEach: true,
+      },
       { descriptions: { en: "Wafer" }, quantity: "4", gross: "2.00", parentLineNo: 1 },
       { descriptions: { en: "Cherry" }, quantity: "2", gross: "1.00", parentLineNo: 1 },
       {
@@ -558,11 +564,48 @@ describe("receipt figure details", () => {
     const [section] = receiptFigures(input).sections;
     expect(section?.kind === "withVat" && section.group).not.toHaveProperty("surcharge");
     expect(section?.kind === "withVat" && section.group.options).toEqual([
-      { item: "Wafer", quantity: "x2", amount: "2.00", rateLetter: "" },
-      { item: "Cherry", quantity: "", amount: "1.00", rateLetter: "" },
+      { item: "Wafer", quantity: "x2", combinedCount: "4", amount: "2.00", rateLetter: "" },
+      { item: "Cherry", quantity: "", combinedCount: "2", amount: "1.00", rateLetter: "" },
       { item: "Berries", quantity: "0.250 kg", amount: "3.00", rateLetter: "" },
     ]);
   });
+
+  it.each([
+    ["two named portions", "2", "4", "2.00", "4"],
+    ["one dish", "1", "2", "2.00", "2"],
+    ["two refunded portions", "-2", "-4", "-2.00", undefined],
+  ] as const)(
+    "carries the expected extra count for %s",
+    (_kind, dishCount, quantity, amount, combinedCount) => {
+      const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+      input.invoiceLocale = "en-GB";
+      input.result.invoiceType = dishCount === "-2" ? "R5" : "F2";
+      if (input.result.invoiceType === "R5") {
+        input.result.corrects = { invoiceNumber: "T/37", issuedAt: "2026-08-16T20:00:00.000Z" };
+      }
+      input.result.lines = [
+        {
+          descriptions: { en: "Pie" },
+          quantity: dishCount,
+          gross: dishCount === "-2" ? "-8.00" : "8.00",
+          unitName: { en: "slice" },
+          unitPrecision: 0,
+        },
+        { descriptions: { en: "Gravy" }, quantity, gross: amount, parentLineNo: 1 },
+      ];
+
+      const [section] = receiptFigures(input).sections;
+      expect(section?.kind === "withVat" && section.group.options).toEqual([
+        {
+          item: "Gravy",
+          quantity: "x2",
+          amount,
+          rateLetter: "",
+          ...(combinedCount === undefined ? {} : { combinedCount }),
+        },
+      ]);
+    },
+  );
 });
 
 it("carries the original issue and deferred account alongside the current issuer's available details", () => {

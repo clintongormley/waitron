@@ -782,10 +782,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A4 receipt copies.** When adding A4 receipt printing, have the copy-audit writer require a
   receipt-page job. Test that it accepts a receipt page and refuses an A4 invoice page.
 
-- **A1201. A receipt's extra shows its own count under a grouped dish** — queued as RECEIPT-EXTRA-COUNT
-  (lane I). Owner, 2026-11-24, picker: "Yes, show its total (Recommended)"; the paper is shown before landing.
-  [Detail](backlog/printers.md#a1201-a-receipts-extra-shows-its-own-count-under-a-grouped-dish)
-
 - **A full invoice can print `Descuento 100%` on a row that still has a charge.** On a takeaway
   bill, make the 10% olives on a 21% pizza free and issue a full invoice. The pizza and olives can
   each say `Descuento 100%` while both still carry filed amounts after sharing the price paid (A445).

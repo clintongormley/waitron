@@ -356,13 +356,6 @@ Hardware and inbox checks to complete in the owner session.
   with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
   "A clock jump"). Left open by A798-B slice 9 (#2025).
 
-## A1201. A receipt's extra shows its own count under a grouped dish
-
-Queued as RECEIPT-EXTRA-COUNT (lane I). Two Pollo asado with Padrón peppers print "2 Pollo asado con
-patatas 19.00" then "Pimientos de Padrón 4.00", at 58 and 80 mm (seen in A803 slice 1's LOOK). The owner
-picked, 2026-11-24, "Yes, show its total (Recommended)": "2 Pimientos de Padrón 4.00". Paper only; the
-owner sees it before it lands.
-
 ## Bundle: A print agent somewhere other than the box
 
 4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

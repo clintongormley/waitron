@@ -231,9 +231,15 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     }
     for (const answer of group.answers) text(`  ${answer}`, 2);
     for (const option of group.options) {
-      const caption =
-        option.quantity === "" ? `  ${option.item}` : `  ${option.item} ${option.quantity}`;
-      row(caption, `${itemAmount(option.amount)}${lettered(option.rateLetter)}`, 2);
+      const amount = `${itemAmount(option.amount)}${lettered(option.rateLetter)}`;
+      if (option.combinedCount !== undefined) {
+        const prefix = `  ${option.combinedCount}  `;
+        row(`${prefix}${option.item}`, amount, { after: prefix });
+      } else {
+        const caption =
+          option.quantity === "" ? `  ${option.item}` : `  ${option.item} ${option.quantity}`;
+        row(caption, amount, 2);
+      }
     }
     for (const adjustment of group.adjustments) {
       takenOff(adjustment.item, adjustment.amount, 2, adjustment.rateLetter);

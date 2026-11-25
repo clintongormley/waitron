@@ -1335,7 +1335,7 @@ describe("ordering extras and options — parent + child lines", () => {
     { listId: v.extrasListId, picks },
   ];
 
-  it("prints x3 for a sold extra whose product uses the stored Each unit", async () => {
+  it("prints the count before a sold extra whose product uses the stored Each unit", async () => {
     const v = await setupModifierVenue(true);
     const workingOrderId = randomUUID();
     const basket = {
@@ -1371,8 +1371,8 @@ describe("ordering extras and options — parent + child lines", () => {
     ).join("\n");
 
     expect(result.lines[1]).toMatchObject({ soldInEach: true, quantity: "3" });
-    expect(paper).toContain("Bacon customer x3");
-    expect(paper).not.toContain("Bacon customer 3 pzas");
+    expect(paper).toMatch(/^ {2}3 {2}Bacon customer +1,50$/mu);
+    expect(paper).not.toContain("3 pzas");
 
     await withTransaction(suite.db, async (tx) => {
       const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "each"));

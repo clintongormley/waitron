@@ -1538,7 +1538,7 @@ describe("identical dishes on the receipt (A803)", () => {
     });
     expect(simplified([burger, cheese(1), burger, cheese(3)]).slice(2, 4)).toEqual([
       ["2  Burger", "20,00"],
-      ["  Queso x2", "4,00"],
+      ["  4  Queso", "4,00"],
     ]);
   });
 

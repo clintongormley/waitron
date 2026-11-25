@@ -80,6 +80,39 @@ describe("till-ticket-view", () => {
     expect(caption.paddingInlineStart).not.toBe("0px");
   });
 
+  it("nests counted extras under the dish and wraps their names at the same inset", async () => {
+    const extra = "Roasted peppers with lemon, herbs, garlic and caramelised onions";
+    const { el, host } = await mount({
+      receiptPreview: [
+        { kind: "amount", caption: "2  Chicken", amount: "19.00", indent: { after: "2  " } },
+        { kind: "text", text: "  Well done", indent: 2 },
+        { kind: "amount", caption: `  2  ${extra}`, amount: "4.00", indent: { after: "  2  " } },
+      ],
+    });
+    host.style.inlineSize = "320px";
+    const [dish, option] = el.shadowRoot!.querySelectorAll(".receipt-amount > span:first-child");
+    const answer = el.shadowRoot!.querySelector(".receipt-line:not(.receipt-amount) > span")!;
+    const textRects = (caption: Element, value: string) => {
+      const textNodes = document.createTreeWalker(caption, NodeFilter.SHOW_TEXT);
+      for (let node = textNodes.nextNode(); node; node = textNodes.nextNode()) {
+        const start = node.textContent!.indexOf(value);
+        if (start === -1) continue;
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + value.length);
+        return [...range.getClientRects()];
+      }
+      throw new Error(`Missing receipt text: ${value}`);
+    };
+    const countInset = textRects(option!, "2")[0]!.left;
+    expect(countInset).toBeGreaterThan(textRects(dish!, "2")[0]!.left);
+    expect(countInset).toBeCloseTo(textRects(answer, "Well done")[0]!.left);
+    const [firstLine, ...rest] = textRects(option!, extra);
+    const continuation = rest.find((box) => box.top > firstLine!.top);
+    expect(continuation).toBeDefined();
+    expect(continuation!.left).toBeCloseTo(firstLine!.left);
+  });
+
   it("associates supplied headings with the item, continuation and tax columns", async () => {
     const header = {
       units: "Uds.",

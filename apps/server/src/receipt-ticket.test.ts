@@ -1348,35 +1348,43 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(text).not.toMatch(/\b(ud|ea|u|gl\.|cop\.|kop\.)\s+(Agua|Vino)/u);
   });
 
-  it("prints a filed Each extra as a pick count in Spanish, regardless of its abbreviation", () => {
-    const result: TillSaleResult = {
-      ...FILED_SALE,
-      lines: [
-        { descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "2.00", parentLineNo: null },
-        {
-          descriptions: { "es-ES": "Queso" },
-          quantity: "3",
-          gross: "1.50",
-          parentLineNo: 1,
-          unitName: { es: "pzas" },
-          unitPrecision: 0,
-          soldInEach: true,
-        },
-      ],
-      total: "3.50",
-    };
-    const text = decodeTicket(
-      formatReceipt({
-        result,
-        issuer: ISSUER,
-        receipt: {},
-        invoiceLocale: "es-ES",
-        printer: PRINTER_80,
-      }),
-    );
-    expect(text).toContain("Queso x3");
-    expect(text).not.toContain("3 pzas");
-  });
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints the count before an Each extra for one dish on $paperWidth",
+    (printer) => {
+      const result: TillSaleResult = {
+        ...FILED_SALE,
+        lines: [
+          {
+            descriptions: { "es-ES": "Tostada" },
+            quantity: "1",
+            gross: "2.00",
+            parentLineNo: null,
+          },
+          {
+            descriptions: { "es-ES": "Queso" },
+            quantity: "3",
+            gross: "1.50",
+            parentLineNo: 1,
+            unitName: { es: "pzas" },
+            unitPrecision: 0,
+            soldInEach: true,
+          },
+        ],
+        total: "3.50",
+      };
+      const text = decodeTicket(
+        formatReceipt({
+          result,
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      expect(text).toMatch(/^ {2}3 {2}Queso +1,50$/mu);
+      expect(text).not.toContain("3 pzas");
+    },
+  );
 
   it("keeps an integral volume amount and its unit when the stored identity is not Each", () => {
     const result: TillSaleResult = {
@@ -1465,55 +1473,57 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(compareDecimal(desgloseSum, decimal(withOptions.total))).toBe(0);
   });
 
-  it("badges an option's PER-DISH count when it exceeds one, leaving a plain option unbadged", () => {
-    // A child line's filed `quantity` is the COMBINED count (dish quantity × per-option quantity).
-    // The "xN" badge appears only when the PER-DISH count is above 1.
-    const withPerOptionQty: TillSaleResult = {
-      locale: "es-ES",
-      orderLabel: null,
-      orderNumber: 1,
-      invoiceNumber: "A/9",
-      issuedAt: "2026-08-17T12:34:00.000Z",
-      total: "34.50",
-      vatBreakdown: [{ rate: "21", base: "28.51", tax: "5.99" }],
-      lines: [
-        // A dish filed at quantity 3.
+  it.each([
+    {
+      printer: PRINTER_58,
+      wrapped: /^ {2}2 {2}Salsa de pimientos asados\n {5}y cebolla caramelizada\n +0,00$/mu,
+    },
+    {
+      printer: PRINTER_80,
+      wrapped: /^ {2}2 {2}Salsa de pimientos asados y cebolla\n {5}caramelizada +0,00$/mu,
+    },
+  ])(
+    "prints and wraps the combined extra count on $printer.paperWidth paper",
+    ({ printer, wrapped }) => {
+      const dish = {
+        descriptions: { "es-ES": "Pollo asado con patatas" },
+        quantity: "1",
+        gross: "9.50",
+      };
+      const extras = (parentLineNo: number) => [
         {
-          descriptions: { "es-ES": "Hamburguesa" },
-          quantity: "3",
-          gross: "33.00",
-          parentLineNo: null,
+          descriptions: { "es-ES": "Pimientos de Padrón" },
+          quantity: "1",
+          gross: "2.00",
+          parentLineNo,
         },
-        // An option taken x2 per dish → filed at the COMBINED quantity 6 (3 dishes × 2). Per-dish = 2 →
-        // badged "x2". Its gross is the FILED delta, unchanged by the badge.
-        { descriptions: { "es-ES": "Extra queso" }, quantity: "6", gross: "1.50", parentLineNo: 1 },
-        // A plain option taken once per dish → filed at quantity 3 (== dish quantity). Per-dish = 1
-        // → NO badge.
-        { descriptions: { "es-ES": "Sin cebolla" }, quantity: "3", gross: "0.00", parentLineNo: 1 },
-      ],
-      tender: { method: "cash", change: "0.00" },
-      qr: FILED_SALE.qr,
-      qrText: FILED_SALE.qrText,
-    };
-    const s = decodeTicket(
-      formatReceipt({
-        result: withPerOptionQty,
-        issuer: ISSUER,
-        receipt: {},
-        invoiceLocale: "es-ES",
-        printer: PRINTER_80,
-      }),
-    );
-
-    // The x2 option: an indented line carrying the "x2" badge after the name, its filed gross unchanged.
-    expect(s).toMatch(/\n {2,}Extra queso x2[^\n]*1,50/u);
-    // The plain option: NO badge — name, padding, then the gross.
-    expect(s).toMatch(/\n {2,}Sin cebolla {2,}0,00/u);
-    expect(s).not.toContain("Sin cebolla x");
-
-    // Without the badge the x2 line would read like the control.
-    expect(s).not.toMatch(/\n {2,}Extra queso {2,}1,50/u);
-  });
+        {
+          descriptions: { "es-ES": "Salsa de pimientos asados y cebolla caramelizada" },
+          quantity: "1",
+          gross: "0.00",
+          parentLineNo,
+        },
+      ];
+      const text = decodeTicket(
+        formatReceipt({
+          result: {
+            ...NO_QR_SALE,
+            total: "23.00",
+            vatBreakdown: [{ rate: "10.00", base: "20.91", tax: "2.09" }],
+            lines: [dish, ...extras(1), dish, ...extras(4)],
+          },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      expect(text).toMatch(/^2 {2}Pollo asado con patatas\n? +19,00$/mu);
+      expect(text).toMatch(/^ {2}2 {2}Pimientos de Padrón +4,00$/mu);
+      expect(text).toMatch(wrapped);
+      expect(text).toMatch(/^TOTAL +23,00 €/mu);
+    },
+  );
 
   it("ends in the full-cut command", () => {
     const bytes = formatReceipt({
@@ -3145,7 +3155,7 @@ describe("a receipt's goods names can be looked up in another language than its 
     expect(text).toContain("Efectiu 4,00 €");
     expect(text).toMatch(/^2 rebanada Pan con tomate 3,50$/mu);
     expect(text).toContain("Tipo de pan: Centeno entero");
-    expect(text).toMatch(/^Jamón extra 0,50$/mu);
+    expect(text).toMatch(/^2 Jamón extra 0,50$/mu);
     for (const other of [
       "Pa amb tomàquet",
       "llesca",
@@ -3174,7 +3184,7 @@ describe("a receipt's goods names can be looked up in another language than its 
       .join("\n");
     expect(text).toMatch(/^2 llesca Pa amb tomàquet 3,50$/mu);
     expect(text).toContain("Tipus de pa: Sègol sencer");
-    expect(text).toMatch(/^Pernil extra 0,50$/mu);
+    expect(text).toMatch(/^2 Pernil extra 0,50$/mu);
   });
 });
 

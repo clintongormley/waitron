@@ -111,8 +111,8 @@ export interface FiledFigureRow {
 
 export interface WithVatOption {
   item: string;
-  /** "" when nothing prints after the name. */
   quantity: string;
+  combinedCount?: string;
   amount: Decimal;
   rateLetter: string;
 }
@@ -399,6 +399,8 @@ export function receiptFigures({
       adjustments: [],
     };
     const sold = decimal(count);
+    const dishCount = Number(count);
+    const groupedCount = dishCount >= 2 && Number.isInteger(dishCount);
     const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
     if (
       simplified &&
@@ -421,18 +423,23 @@ export function receiptFigures({
     for (const option of options) {
       const item = resolveSnapshotText(option.descriptions, namesLocale, namesLocale);
       let quantity: string;
+      let combinedCount: string | undefined;
       if (!simplified) {
         const { quantity: count, unitName, soldInEach } = option;
         quantity = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
       } else if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         quantity = perDish > 1 ? `x${perDish}` : "";
+        if (groupedCount || (dishCount === 1 && perDish > 1)) {
+          combinedCount = formatDecimalInput(option.quantity, locale);
+        }
       } else {
         quantity = `${formatDecimalInput(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
       group.options.push({
         item,
         quantity,
+        ...(combinedCount === undefined ? {} : { combinedCount }),
         amount: decimal(option.listGross ?? option.gross),
         rateLetter: letter(option),
       });
