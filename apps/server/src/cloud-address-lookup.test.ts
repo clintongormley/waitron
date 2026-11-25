@@ -533,6 +533,8 @@ it("accepts only the matching, complete Cloud validation reply", async () => {
       reply = invalid;
       await expect(validate()).rejects.toMatchObject({ code: "cloud.unavailable" });
     }
+    reply = valid;
+    await expect(validate()).resolves.toEqual({ fields });
   } finally {
     await f.close();
   }

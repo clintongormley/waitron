@@ -304,13 +304,13 @@ it.each(["restart sign-in", "retry callback"])(
       });
 
       const restarted = f.client();
-      await expect(
-        restarted.startSignIn({ ...binding, tab: randomUUID() }, f.authorize),
-      ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
-      const recover = (authorize: () => Promise<void>) =>
+      const recover = (authorize: () => Promise<void>, from = binding) =>
         retry === "restart sign-in"
-          ? restarted.startSignIn(binding, authorize)
-          : restarted.returnSignIn(binding, proof, authorize);
+          ? restarted.startSignIn(from, authorize)
+          : restarted.returnSignIn(from, proof, authorize);
+      await expect(recover(f.authorize, { ...binding, tab: randomUUID() })).rejects.toMatchObject({
+        code: "cloud.binding_conflict",
+      });
       await expect(
         recover(async () => {
           if (f.requests.at(-1)?.[2] === "status") throw new AppError("setup.owner_required", {});
