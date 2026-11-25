@@ -15,12 +15,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type {
-  DashboardApi,
-  ExtraList,
-  OptionList,
-  Product,
-} from "../api/client.js";
+import type { DashboardApi, ExtraList, OptionList, Product } from "../api/client.js";
 import type { Course } from "../api/kitchen-api.js";
 import type { CategorySummary, Unit } from "../api/catalog-api.js";
 import { withoutVatClass } from "../widgets/product-editor-model.js";

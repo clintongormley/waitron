@@ -1,5 +1,7 @@
 import { nothing, type LitElement } from "lit";
-import type { CategorySummary, DashboardApi, MenuSettingsAnswer, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type { DashboardApi, Product } from "../api/client.js";
+import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { ProductEditorDialog, type ProductEditorChoices } from "./product-editor-dialog.js";

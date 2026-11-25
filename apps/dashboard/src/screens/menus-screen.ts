@@ -1,5 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
-import type { MenuSettingsAnswer } from "../api/client.js";
+import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import {
   MenuStructureProductEditor,
   type StructureProductEdit,

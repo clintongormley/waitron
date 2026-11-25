@@ -1,22 +1,19 @@
 import { html, nothing, type LitElement, type ReactiveController } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
 import type { WtModal } from "@waitron/ui";
+import type { CategorySummary, ProductSaveBody, Unit, UnitInput } from "../api/catalog-api.js";
+import type { Course } from "../api/kitchen-api.js";
+import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import type {
-  CategorySummary,
-  Course,
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  MenuSettingsAnswer,
   OptionList,
   OptionListInput,
   OptionListSaveBody,
   Product,
   ProductEditorInput,
   ProductEditorValue,
-  ProductSaveBody,
-  Unit,
-  UnitInput,
 } from "../api/client.js";
 import { allergenRefusalText, codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
