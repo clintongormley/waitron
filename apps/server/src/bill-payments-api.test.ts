@@ -6514,6 +6514,7 @@ describe("A1515 pay for items over HTTP", () => {
         { code: "management.request_invalid", params: { field: "partyId" } },
       ],
       [{ method: "card" }, { code: "management.request_invalid", params: { field: "tendered" } }],
+      [{ entry: "reader" }, { code: "management.request_invalid", params: { field: "entry" } }],
       [
         { simulationOutcome: "captured" },
         { code: "management.request_invalid", params: { field: "simulationOutcome" } },
