@@ -1193,6 +1193,7 @@ export const en = {
   "equipment.picked_up_receipt_only": "Picked up {item} for receipts",
   "equipment.picked_up_slip_only": "Picked up {item} for payment slips",
   "equipment.no_printer_role": "No printer role selected. Choose a role in Equipment.",
+  "equipment.no_pickup_role": "This printer has no pick-up role. Choose one above.",
   "pay_equipment.heading": "Reader and printer",
   "pay_equipment.change": "Change",
   "pay_equipment.qr": "QR",
@@ -3668,6 +3669,8 @@ export const es: Record<StringKey, string> = {
   "equipment.picked_up_slip_only": "Has recogido {item} para justificantes de pago",
   "equipment.no_printer_role":
     "No se ha seleccionado ninguna función de impresora. Elige una en Equipo.",
+  "equipment.no_pickup_role":
+    "Esta impresora no tiene ninguna función al recogerla. Elige una arriba.",
   "pay_equipment.heading": "Lector e impresora",
   "pay_equipment.change": "Cambiar",
   "pay_equipment.qr": "QR",

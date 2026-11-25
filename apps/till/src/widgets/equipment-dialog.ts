@@ -322,7 +322,9 @@ export class TillEquipmentDialog extends LitElement {
     if (tapped?.change !== change) return;
     this.#tapped = null;
     if (answer !== undefined && !("error" in answer))
-      this.nfcMessage = { pickedUp: pickedUpMessage(change, answer, tapped.item) };
+      this.nfcMessage = {
+        pickedUp: pickedUpMessage(change, answer, tapped.item, "equipment.no_pickup_role"),
+      };
   }
 
   #close(): void {

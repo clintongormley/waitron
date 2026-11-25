@@ -752,7 +752,7 @@ describe("equipment dialog NFC", () => {
     nfc.read(code("printer", PRINTER_ID));
     el.answered(seen[0]!, NFC_EQUIPMENT);
     await el.updateComplete;
-    expect(line(el)).toBe("No printer role selected. Choose a role in Equipment.");
+    expect(line(el)).toBe("This printer has no pick-up role. Choose one above.");
     nfc.read(code("printer", PRINTER_ID));
     el.answered(seen[1]!, {
       roles: NFC_EQUIPMENT.roles.map((role) =>
@@ -761,6 +761,18 @@ describe("equipment dialog NFC", () => {
     });
     await el.updateComplete;
     expect(line(el)).toBe("Picked up Portable printer for payment slips");
+  });
+  it("a printer with no pick-up role says so in Spanish", async () => {
+    installNfc();
+    setLocale("es");
+    const words = es["equipment.no_pickup_role"];
+    expect(words).not.toBe(es["equipment.no_printer_role"]);
+    const el = await mount();
+    const seen = changes(el);
+    (await reader()).read(code("printer", PRINTER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(words);
   });
   it.each(["refused", "unanswered"])("a %s tap never says picked up", async (outcome) => {
     installNfc();
@@ -828,7 +840,7 @@ describe("equipment dialog NFC", () => {
     expect(line(el)).toBe(HINT);
     el.answered(seen[1]!, NFC_EQUIPMENT);
     await el.updateComplete;
-    expect(line(el)).toBe("No printer role selected. Choose a role in Equipment.");
+    expect(line(el)).toBe("This printer has no pick-up role. Choose one above.");
   });
   it("an earlier tap's answer leaves a later reading error said", async () => {
     installNfc();
