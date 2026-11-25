@@ -1,4 +1,3 @@
-import "./errors.js";
 import {
   printJobs,
   printers,
