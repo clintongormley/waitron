@@ -38,8 +38,8 @@ ya abiertos; no hace falta publicar la carta.
 **Pedidos** dentro de **Detalles**, dice quién puede pedirlo solo: Cualquiera, Solo el personal o
 Nadie. La explicación bajo la opción elegida te dice qué permite. Una variante no tiene Pedidos,
 porque se pide como su producto. La lista de Productos
-muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
-elige por él.
+muestra **Solo el personal** o **No se vende por separado** junto al nombre cuando corresponde.
+Usa **Pedir por separado** en **Filtros** para buscar productos según este ajuste.
 
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.
@@ -158,9 +158,9 @@ cada cambio al hacerlo. Al cerrarla, el último orden de plato que añadiste se 
 Si eliminaste el que tenía, el producto se queda sin ninguno. Los demás campos del producto sin
 guardar siguen como estaban.
 
-La columna **Orden de plato** de la lista de Productos muestra el de cada producto. Cuando has
-configurado el orden de platos, abre **Filtros** y usa **Orden de plato** para elegir uno o varios,
-o **Sin orden de plato**.
+En la lista de Productos, abre **Personalizar** para mostrar la columna **Orden de plato**. Si el
+local tiene órdenes de plato, usa **Orden de plato** en **Filtros** para elegir uno o varios, o
+**Sin orden de plato**.
 
 En una mesa de la demostración española, envía un primer pedido con bebidas y platos
 principales. Las bebidas van directamente a la barra y los platos principales esperan hasta
@@ -270,8 +270,8 @@ o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una f
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
-comprobado de uno que sí. Una variante muestra su estado efectivo; el color gris indica que sigue a su
-producto. El filtro de Alérgenos usa ese mismo estado para cada variante. Las columnas
+comprobado de uno que sí. Una variante muestra el estado de los alérgenos que usa.
+El color gris indica que sigue a su producto. El filtro de Alérgenos usa el mismo estado. Las columnas
 **Alérgenos** e **Info dietética** empiezan ocultas. Para mostrarlas, pulsa el botón de columnas al
 final de la búsqueda de la lista; en **Personalizar**, pulsa el ojo junto a cada columna y luego
 **Listo**. Sus filtros funcionan aunque las columnas estén ocultas.
@@ -570,6 +570,10 @@ aviso aparte que debe confirmarse. Consulta cómo las
 [copias de alergias y sus correcciones](kitchen-service.md#allergy-copies) acompañan al trabajo.
 
 ## Marca un plato como agotado durante el servicio {#sold-out}
+
+En el panel, abre **Productos** y desactiva **Disponible** en la fila del plato o del tamaño. La fila
+muestra **No disponible**. El cambio afecta a todas las cartas que lo venden. Activa el interruptor
+cuando vuelva a estar listo.
 
 Cuando se agote un plato, mantén pulsado su botón en Mostrador o en el pedido de una mesa.
 Puedes enviar o marchar las raciones que ya estén en una cuenta.

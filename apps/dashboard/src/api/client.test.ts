@@ -761,6 +761,20 @@ describe("DashboardApi", () => {
     ]);
   });
 
+  it("changes availability of just the named product or variant", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.setProductAvailability("v1", false);
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+      "/management-api/products/availability",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        body: JSON.stringify({ productIds: ["v1"], available: false }),
+      }),
+    );
+  });
+
   it("listProducts GETs all products with credentials", async () => {
     const products = [
       {

@@ -3978,6 +3978,13 @@ export class DashboardApi {
     );
   }
 
+  setProductAvailability(id: string, available: boolean): Promise<void> {
+    return this.#request("/management-api/products/availability", "PUT", {
+      productIds: [id],
+      available,
+    });
+  }
+
   listProducts(): Promise<Product[]> {
     return this.#request<Product[]>("/management-api/products", "GET");
   }

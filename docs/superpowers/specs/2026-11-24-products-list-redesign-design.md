@@ -137,9 +137,12 @@ Show archived and the Archived state are gone before the list here is built).
 
 ### 7. Faults fixed with it
 
-1. **Loading and failing.** No count is shown until products have loaded. A failed read shows its
-   message in place of the table, with **Try again**. A refused move, rename or drop says so above the
-   table, where it can be seen, and a refused category name is scrolled into view.
+1. **Loading and failing.** No count is shown until products have loaded. If the first load fails,
+   its message and **Try again** appear in place of the table. If a later refresh fails, the loaded
+   list stays visible and the message and **Try again** appear above it (owner, 25 November 2026,
+   “Land it, the list stays (Recommended)”, recorded by the watcher at 09:13). A refused move,
+   rename or drop says so above the table, where it can be seen, and a refused category name is
+   scrolled into view.
 2. **Tick boxes and sort headings** (the shared table, so every list): the whole cell of a tick box
    ticks it, and the whole heading cell sorts. A help badge inside a heading keeps its own target, and
    so does the drag handle that shares the tick box's cell in Products and Menu structure.

@@ -2,7 +2,7 @@ import { registerIcons, setHelpMode, type WtCombobox } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-list.js";
 import type { ProductList } from "./product-list.js";
@@ -353,6 +353,8 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
   });
 
   it("renders accessibly with the Course column filled and its filter open in the panel", async () => {
+    localStorage.setItem("waitron.products.table:columns", JSON.stringify({ course: true }));
+    onTestFinished(() => localStorage.removeItem("waitron.products.table:columns"));
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
       {
@@ -378,7 +380,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map(
         (row) => row.querySelectorAll("td")[column]?.textContent!.trim() ?? "",
       ),
-    ).toEqual(expect.arrayContaining(["Mains", t("editor.missing_choice"), "—"]));
+    ).toEqual(expect.arrayContaining(["Mains", t("editor.missing_choice"), ""]));
     expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="course"]')).not.toBeNull();
     const filter = table.shadowRoot!.querySelector<WtCombobox>(
       'wt-combobox[data-filter="course"]',

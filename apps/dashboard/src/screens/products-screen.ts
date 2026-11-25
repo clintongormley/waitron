@@ -53,6 +53,11 @@ import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js"
 import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
 import { refusalText } from "../widgets/delete-refusal.js";
 import {
+  productsWithAvailability,
+  type ProductAvailabilityChange,
+} from "../widgets/product-tree-availability.js";
+import { missingChoiceField } from "./product-editor-missing-choice.js";
+import {
   productsListLoadFeedback,
   restartSharedLanguagesRead,
 } from "./products-list-load-feedback.js";
@@ -193,7 +198,10 @@ export class ProductsScreen extends LitElement {
     (error) => {
       this.productsReadError = codeOf(error);
     },
-    () => void this.#openLinkedProduct(),
+    () => {
+      if (this.productsLoaded) void this.#openLinkedProduct();
+      else this.#resumeInitialLoad();
+    },
   );
   readonly #routingQueries = new DashboardQueries(
     this,
@@ -292,9 +300,11 @@ export class ProductsScreen extends LitElement {
         this.#queries.watch("listCourses", [], (value) => {
           this.courses = value;
         }),
+        this.#watchProducts(),
       ]);
-      await this.#reloadProducts();
+      this.productsLoaded = true;
       this.initialLoadError = null;
+      await this.#openLinkedProduct();
     } catch (error) {
       if (!this.productsLoaded) this.initialLoadError = codeOf(error);
     } finally {
@@ -344,12 +354,15 @@ export class ProductsScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
+  #watchProducts(): Promise<void> {
+    return this.#productsQueries.watch("listProducts", [], (products) => {
+      this.products = products;
+    });
+  }
+
   async #reloadProducts(): Promise<boolean> {
     try {
-      await this.#productsQueries.watch("listProducts", [], (products) => {
-        this.products = products;
-        this.productsLoaded = true;
-      });
+      await this.#watchProducts();
     } catch {
       return false;
     }
@@ -420,7 +433,7 @@ export class ProductsScreen extends LitElement {
 
   async #openLinkedProduct(): Promise<void> {
     const id = this.#linkedProduct;
-    if (id === null || !this.#knows(id)) return;
+    if (!this.productsLoaded || id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
     if (this.editorValue?.id === id) return;
     await this.#openProduct(id, new URL(location.href).searchParams.get("field") ?? "");
@@ -768,6 +781,10 @@ export class ProductsScreen extends LitElement {
           this.#url.write({ category: this.categoryId }, true);
         }}
         .products=${this.products}
+        .availabilitySaved=${(change: ProductAvailabilityChange) => {
+          this.products = productsWithAvailability(this.products, change);
+          void this.#reloadProducts();
+        }}
         .courses=${this.courses}
         .routing=${this.routing}
         .routingFailed=${this.routingFailed}
@@ -963,27 +980,6 @@ const CHILD_FORMS: Partial<Record<ProductChildKind, string>> = {
   extras: "dashboard-extra-list-form",
   options: "dashboard-option-list-form",
 };
-
-/** The editor field that chose the id a not-found refusal names, or null when the save sent no such
- * id there. */
-function missingChoiceField(
-  code: string,
-  error: unknown,
-  submitted: ProductEditorInput,
-): string | null {
-  const params = (error as { params?: Record<string, unknown> }).params ?? {};
-  const named = (key: string, sent: string | null | undefined) =>
-    typeof params[key] === "string" && params[key] === sent;
-  if (code === "category.not_found" && named("categoryId", submitted.primaryCategoryId))
-    return "primary";
-  if (code === "unit.not_found" && named("unitId", submitted.unitId)) return "unit";
-  if (code === "course.not_found" && named("courseId", submitted.courseId)) return "product-course";
-  if (code === "product.variant_not_found") {
-    const index = submitted.variants.findIndex((variant) => named("variantId", variant.id));
-    if (index !== -1) return `variant-${index}-name`;
-  }
-  return null;
-}
 
 interface ChildRefusals {
   unit: UnitFormErrors;

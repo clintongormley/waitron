@@ -60,6 +60,7 @@ export function productMedia(options: {
   color: string | null;
   editable?: boolean;
   busy: boolean;
+  lazy?: boolean;
   /** Opens the product's Edit in place; without it the click follows the link. */
   open?: () => void;
   /** Where `color` comes from when it is not the product's own: a category's name or All products. */
@@ -67,7 +68,7 @@ export function productMedia(options: {
 }) {
   const { key, productId = key, name, image, color, editable = true, busy, open } = options;
   const inheritedFrom = isStoredColor(color) ? options.inheritedFrom : undefined;
-  const frame = productMediaFrame(image, color, inheritedFrom !== undefined);
+  const frame = productMediaFrame(image, color, inheritedFrom !== undefined, options.lazy);
   if (!editable)
     return html`<span part="product-media swatch-box" data-test=${`color-${key}`} aria-hidden="true"
       >${frame}</span
@@ -98,13 +99,18 @@ export function productMedia(options: {
   >`;
 }
 
-export function productMediaFrame(image: string | null, color: string | null, inherited = false) {
+export function productMediaFrame(
+  image: string | null,
+  color: string | null,
+  inherited = false,
+  lazy = false,
+) {
   const painted = isStoredColor(color);
   return html`<span
     part=${`${image ? "thumb-frame media-photo-frame" : "thumb-placeholder"} color-swatch media-frame${image && painted ? " photo-ring" : ""}${painted ? (inherited ? " inherited" : "") : " empty"}`}
     data-test=${image ? "thumb" : "thumb-placeholder"}
     style=${painted ? `--product-media-color:${color}` : nothing}
     aria-hidden="true"
-    >${image ? html`<img part="thumbnail" src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : nothing}</span
+    >${image ? html`<img part="thumbnail" loading=${lazy ? "lazy" : nothing} src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : nothing}</span
   >`;
 }

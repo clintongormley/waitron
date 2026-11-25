@@ -36,8 +36,8 @@ including orders already open; you do not need to publish the menu.
 **Ordering** in **Details**, says who can order it on its own: Anyone, Staff only or Nobody. The
 explanation below the selected choice tells you what it allows. A variant has no Ordering, because
 it is ordered as its product is. The Products list shows
-this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
-by it.
+**Staff only** or **Not sold separately** beside the product name when either applies. Use
+**Standalone ordering by** in **Filters** to find products by this setting.
 
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
@@ -149,8 +149,8 @@ saves each change as you make it. When you close it, the last course you added b
 course; if you removed the product's course instead, the product is left with none. Your other
 unsaved product fields stay as they were.
 
-The Products list's **Course** column shows each product's course. When the venue has courses, the
-**Course** filter in **Filters** picks one or several of them, or **No course**.
+In the Products list, open **Customise** to show the **Course** column. If your venue has courses,
+use **Course** in **Filters** to choose one or more of them or find products with **No course**.
 
 At a table in the Spanish demo, send a first order with drinks and mains. The drinks go
 straight to the bar, and the mains wait for **Fire**. Desserts sent with that first order
@@ -253,8 +253,8 @@ suitability of its own, because it is a way of asking for the same dish rather t
 to eat. The till and station show each item's own list.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
-checked from one you have checked. A variant shows its effective state; grey means it follows
-its parent. The Allergens filter uses that same state for each variant. The **Allergens** and
+checked from one you have checked. A variant shows the status of the allergens it uses.
+Grey means it follows its parent. The Allergens filter uses the same status. The **Allergens** and
 **Dietary info** columns start hidden. To show them, select the columns button at the right-hand
 end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.
 Their filters work while the columns are hidden.
@@ -534,6 +534,10 @@ notice to acknowledge. Read how [station allergy copies and corrections](kitchen
 stay with the work.
 
 ## Mark a dish sold out during service {#sold-out}
+
+In the dashboard, open **Products** and turn off **Available** on the dish or size. Its row shows
+**Unavailable**. The change takes effect on every menu that sells it. Turn the switch on when it is
+ready again.
 
 When the station runs out, hold the dish on Counter or a table order to open its information.
 You can still send or fire portions already on a bill.
