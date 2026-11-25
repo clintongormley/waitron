@@ -1,9 +1,10 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { adjustmentLines, billSetMenuCopies, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  AppError,
   groupSetMenus,
   suggestMove,
   thousandthsToDecimal,
@@ -323,4 +324,32 @@ it("Reopen with stopUnserved takes a set-menu dish that never came off the new b
   const { saleId } = await printSpecBill(spec, tab.partyId, billId);
   const ticket = await specSaleLines(spec, billId, saleId!);
   expect(ticket.reduce((sum, { lineGross }) => sum + lineGross!, 0)).toBe(7100);
+});
+
+it("Reopen with stopUnserved refuses a set-menu bill nothing on which was served, writing nothing", async () => {
+  const tab = await specBill(spec, "fire");
+  await printSpecBill(spec, tab.partyId, tab.tabId);
+  const written = () =>
+    venue.db.all(sql`select
+      (select count(*) from sales) as sales,
+      (select count(*) from working_orders) as bills,
+      (select count(*) from working_order_lines) as lines,
+      (select count(*) from kitchen_notices) as notices,
+      (select count(*) from line_service_cancellations) as stops`)[0];
+  const before = written();
+
+  const refused = await splitAfterPrint(
+    specDeps(spec),
+    venue.cfg,
+    tab.tabId,
+    venue.operator,
+    true,
+  ).catch((error: unknown) => error);
+
+  expect(refused).toBeInstanceOf(AppError);
+  expect(refused).toMatchObject({
+    code: "bill.unserved_dishes",
+    params: { workingOrderId: tab.tabId, canStop: false },
+  });
+  expect(written()).toEqual(before);
 });
