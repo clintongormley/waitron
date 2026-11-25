@@ -105,7 +105,6 @@ export interface FiledFigureRow {
 
 export interface WithVatOption {
   item: string;
-  /** "" when nothing prints after the name. */
   quantity: string;
   /** A grouped dish's counted extra, for the receipt caption. */
   combinedCount?: string;
