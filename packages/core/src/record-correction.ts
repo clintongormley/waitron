@@ -84,9 +84,10 @@ export interface RecordCorrectionInput {
    * state its gross. Refused together with `wholeInvoice`.
    */
   partialVatBreakdown?: readonly VatBreakdownLine[];
-  /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
-   * recorded on `sales.authorized_by`. An `invoiceCorrectionId` files on the approval given when
-   * that correction was opened (`authorizeCorrectionApproval`), with nobody signed in. A
+  /** Checked by `recordCorrection` itself; the authorizer is recorded on `sales.authorized_by`.
+   * A till or management session must hold `sale.rectify`, or a till session's override must. An
+   * `invoiceCorrectionId` files on the approval given when that correction was opened, whose
+   * approver must still hold it (`authorizeCorrectionApproval`), with nobody signed in. A
    * `reopenedBillId` files a whole credit for the open session's person without `sale.rectify`
    * (`authorizeReopenedCredit`). */
   authz:
@@ -175,7 +176,7 @@ export async function recordCorrection(
   const authorization =
     "reopenedBillId" in input.authz
       ? await authorizeReopenedCredit(tx, {
-          saleId: input.correctsSaleId,
+          saleId: correctsSaleId,
           reopenedBillId: input.authz.reopenedBillId,
           sessionId: input.authz.sessionId,
           wholeInvoice: input.wholeInvoice === true,

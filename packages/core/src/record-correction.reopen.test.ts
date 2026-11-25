@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  invoiceSeries,
   saleLines,
   sales,
   tillSessions,
@@ -19,6 +18,7 @@ import type { RecordSaleLine } from "./record-sale.js";
 import { recordSale } from "./record-sale.js";
 import { seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
+import { recordReplacement } from "./record-replacement.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -58,6 +58,8 @@ let printedBillId: string;
 let ticketId: SaleId;
 let staffId: string;
 let staffSessionId: string;
+let managerId: string;
+let managerSessionId: string;
 
 beforeEach(async () => {
   backend = new FakeFiscalBackend(suite.db);
@@ -72,13 +74,23 @@ beforeEach(async () => {
     pinHash: hashPin("1357"),
   });
   staffId = staff!.id;
-  const { deviceId } = await seedDevice(suite.db, {});
-  staffSessionId = (
-    await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId, personId: staffId, pin: "1357" }),
-    )
-  ).id;
+  staffSessionId = await openSession(staffId, "1357");
+  const [manager] = await seedPersons(suite.db, {
+    displayName: "Manager holding sale.rectify",
+    role: "manager",
+    pinHash: hashPin("2468"),
+  });
+  managerId = manager!.id;
+  managerSessionId = await openSession(managerId, "2468");
 });
+
+async function openSession(personId: string, pin: string): Promise<string> {
+  const { deviceId } = await seedDevice(suite.db, {});
+  const session = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { deviceId, personId, pin }),
+  );
+  return session.id;
+}
 
 async function bill(status: "open" | "placed"): Promise<string> {
   const row = await seedWorkingOrder(suite.db, {
@@ -115,17 +127,17 @@ async function reopen(from: string): Promise<string> {
   return reopened;
 }
 
-async function wholeCredit(): Promise<Omit<RecordCorrectionInput, "authz">> {
+async function wholeCredit(of: SaleId = ticketId): Promise<Omit<RecordCorrectionInput, "authz">> {
   const [line] = await suite.db
     .select({ id: saleLines.id })
     .from(saleLines)
-    .where(eq(saleLines.saleId, ticketId));
+    .where(eq(saleLines.saleId, of));
   return {
     origin: deviceOrigin(seed.deviceId),
     operationDescription: "Reopen to split",
     nodeId: seed.nodeId,
     seriesId: correctiveSeriesId,
-    correctsSaleId: ticketId,
+    correctsSaleId: of,
     total: "-12.10",
     wholeInvoice: true,
     lines: [{ ...LINES[0]!, quantity: "-2", lineTotal: "-10.00", correctsLineId: line!.id }],
@@ -137,27 +149,29 @@ function apply(input: Omit<RecordCorrectionInput, "authz">, authz: RecordCorrect
   return withTransaction(suite.db, (tx) => recordCorrection(tx, backend, { ...input, authz }));
 }
 
-async function snapshot() {
-  return {
-    sales: await suite.db.select().from(sales),
-    series: await suite.db.select().from(invoiceSeries),
-  };
-}
-
+/** Reads `sales` inside the refused call's own transaction, before it rolls back, so a refusal
+ * that came after a number was taken shows the corrective row it wrote. */
 async function expectRefused(
   input: Omit<RecordCorrectionInput, "authz">,
   authz: RecordCorrectionInput["authz"],
   refusal: object,
 ) {
-  const before = await snapshot();
-  await expect(apply(input, authz)).rejects.toMatchObject(refusal);
-  expect(await snapshot()).toEqual(before);
+  const { error, before, after } = await withTransaction(suite.db, async (tx) => {
+    const before = await tx.select().from(sales);
+    const error = await recordCorrection(tx, backend, { ...input, authz }).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    return { error, before, after: await tx.select().from(sales) };
+  });
+  expect(error).toMatchObject(refusal);
+  expect(after).toEqual(before);
 }
 
-function reopenInvalid(reopenedBillId: string, reason: string) {
+function reopenInvalid(reopenedBillId: string, reason: string, saleId: SaleId = ticketId) {
   return {
     code: "sale.correction_reopen_invalid",
-    params: { saleId: ticketId, reopenedBillId, reason },
+    params: { saleId, reopenedBillId, reason },
   };
 }
 
@@ -246,4 +260,57 @@ it("the other kinds still need sale.rectify", async () => {
     { sessionId: staffSessionId },
     { code: "authorization.not_permitted", params: { permission: "sale.rectify" } },
   );
+});
+
+it("credits a replaced ticket's replacement whole on the reopened bill's authority", async () => {
+  const reopenedBillId = await reopen(printedBillId);
+  const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+    recordReplacement(tx, backend, {
+      origin: deviceOrigin(seed.deviceId),
+      operationDescription: "Replacement",
+      nodeId: seed.nodeId,
+      seriesId: correctiveSeriesId,
+      correctsSaleId: ticketId,
+      authz: { sessionId: managerSessionId },
+      clock,
+    }),
+  );
+  const result = await apply(await wholeCredit(replacementId), {
+    reopenedBillId,
+    sessionId: staffSessionId,
+  });
+  const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(row).toMatchObject({ authorizedBy: staffId, correctsSaleId: replacementId });
+});
+
+it("refuses a credit of an earlier correction of the reopened bill's ticket", async () => {
+  const reopenedBillId = await reopen(printedBillId);
+  const whole = await wholeCredit();
+  const { saleId: earlierId } = await withTransaction(suite.db, (tx) =>
+    recordCorrection(tx, backend, {
+      ...whole,
+      wholeInvoice: false,
+      total: "-6.05",
+      lines: [{ ...whole.lines[0]!, quantity: "-1", lineTotal: "-5.00" }],
+      authz: { sessionId: managerSessionId },
+    }),
+  );
+  await expectRefused(
+    { ...whole, correctsSaleId: earlierId },
+    { reopenedBillId, sessionId: staffSessionId },
+    reopenInvalid(reopenedBillId, "no_reopened_bill", earlierId),
+  );
+});
+
+it("records the session's person even when the reopen kind also names a manager", async () => {
+  const reopenedBillId = await reopen(printedBillId);
+  const authz = {
+    reopenedBillId,
+    sessionId: staffSessionId,
+    override: { personId: managerId, pin: "2468" },
+    managementSessionId: crypto.randomUUID(),
+  };
+  const result = await apply(await wholeCredit(), authz);
+  const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(row).toMatchObject({ authorizedBy: staffId, correctsSaleId: ticketId });
 });
