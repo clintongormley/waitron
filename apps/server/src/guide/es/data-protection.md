@@ -355,7 +355,9 @@ datos, y Waitron puede enviarle la factura por correo.
   borra ninguno, así que los datos del cliente de una factura impresa en la caja también quedan en
   la base de datos. Una factura A4 se genera de nuevo cada vez que se imprime, y esa copia impresa
   no se guarda.
-- Seguridad: como en todas las entradas. Las copias impresas quedan a tu cuidado.
+- Seguridad: como en todas las entradas. En **Buscar cuenta**, la dirección se ve en cajas con
+  permiso para imprimir tickets. En **Pedidos**, puede verla el personal con permiso para enviar
+  facturas por correo. Custodia las copias impresas.
 
 **Facturas de proveedores autónomos.** Cuando registras la factura de un proveedor en **Compras**,
 el nombre y el NIF del proveedor son datos personales si el proveedor es autónomo.
@@ -529,7 +531,8 @@ Esto es lo que el panel puede mostrarte.
 - En **Pedidos**, **Ver detalle** muestra las copias del recibo impresas desde **Pedidos** o desde
   la pestaña **Transacciones** de la caja, con quién imprimió cada una. En una factura completa
   también muestra cada vez que se imprimió o se envió por correo, con quién lo pidió cuando alguien
-  lo hizo, y quién descargó su PDF.
+  lo hizo, y quién descargó su PDF. Si tienes permiso para enviar facturas por correo, puedes ver
+  la dirección de cada intento de envío.
 - Ninguna pantalla muestra quién abrió el cajón de efectivo. Las aperturas recientes están entre los
   trabajos de la **Cola de impresión**, en **Impresoras**, pero ninguna columna dice cuáles son, y
   ninguna nombra a una persona. Quién abrió el cajón, o lo autorizó, está en el archivo
@@ -639,7 +642,6 @@ minuto y vuelve a enviarla. Después revisa lo que se hizo con la cuenta: descar
 datos de la persona y revisa **Pedidos**. Consulta [Acceso a la cuenta](staff.md#account-access).
 
 **Una factura enviada a una dirección equivocada.** El correo lleva la factura en PDF, que muestra
-el nombre, el NIF y la dirección del cliente y lo que compró. En **Pedidos**, **Ver detalle**
-muestra cuándo se envió la factura por correo y quién lo pidió, pero no la dirección a la que fue,
-así que pregúntalo a la persona que la envió. Desde el mismo sitio puedes enviarla a la dirección
-correcta.
+el nombre, el NIF y la dirección del cliente y lo que compró. En **Pedidos**, elige **Ver detalle**
+y comprueba la hora y quién pidió el envío. Si tienes permiso para enviar facturas por correo,
+comprueba también la dirección y envía la factura a la correcta.

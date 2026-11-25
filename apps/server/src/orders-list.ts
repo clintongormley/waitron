@@ -751,6 +751,7 @@ export async function readOrderDetail(
   id: string,
   scope: OrderListFilter["scope"],
   emailTransport: boolean,
+  includeInvoiceRecipientEmail = false,
 ): Promise<OrderDetail> {
   const row = await readVisibleOrder(tx, id, scope);
   return {
@@ -762,7 +763,10 @@ export async function readOrderDetail(
     party: row.partyId === null ? null : await readParty(tx, row.partyId, row.tables),
     departure: row.kind === "bill" ? await readDeparture(tx, id) : null,
     reprints: row.saleId === null ? [] : await readReprints(tx, row.saleId),
-    deliveries: row.saleId === null ? null : await readDeliveries(tx, row.saleId, emailTransport),
+    deliveries:
+      row.saleId === null
+        ? null
+        : await readDeliveries(tx, row.saleId, emailTransport, includeInvoiceRecipientEmail),
     invoicePdfDownloads: row.saleId === null ? [] : await readPdfDownloads(tx, row.saleId),
   };
 }
@@ -771,10 +775,12 @@ async function readDeliveries(
   tx: Transaction,
   saleId: string,
   emailTransport: boolean,
+  includeInvoiceRecipientEmail: boolean,
 ): Promise<OrderDeliveries | null> {
   const status = await readInvoiceDeliveries(tx, saleId, {
     emailAvailable: (sale) =>
       canEmailInvoice(tx, { kind: "sale", saleId: sale.id }, emailTransport),
+    includeInvoiceRecipientEmail,
     printers: orderInvoicePrinters(tx),
   });
   if (status === null) return null;

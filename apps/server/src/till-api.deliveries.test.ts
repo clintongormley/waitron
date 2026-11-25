@@ -648,6 +648,35 @@ describe("GET /api/sales/:id/deliveries", () => {
     expect(await readStatus(v, simplified.orderId)).toEqual({ status: 200, body: null });
   });
 
+  it("shows a refused invoice email's address only to a proven till that can send it again", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const id = await endedEmail(v, orderId, "failed");
+    const attempt = { id, status: "failed", invoiceRecipientEmail: CUSTOMER_EMAIL };
+    expect(await readStatus(v, orderId)).toMatchObject({
+      status: 200,
+      body: {
+        current: attempt,
+        history: [attempt],
+        actions: { retryOriginal: { medium: "email" } },
+      },
+    });
+    const withoutPrint = await till(
+      v,
+      NO_DRAWER.filter((flag) => flag !== "print-receipt"),
+    );
+    const [session] = v.cookie.split(";");
+    const otherDevice = (await till(v)).split(";")[1]!;
+    for (const cookie of [withoutPrint, session!, `${session};${otherDevice}`]) {
+      const restricted = await readStatus(v, orderId, cookie);
+      expect(restricted).toMatchObject({
+        status: 200,
+        body: { current: { id }, history: [{ id }] },
+      });
+      expect(JSON.stringify(restricted.body)).not.toContain(CUSTOMER_EMAIL);
+    }
+  });
+
   it("offers the till's own invoice printer, not another A4 printer at the venue", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
@@ -674,12 +703,14 @@ describe("GET /api/sales/:id/deliveries", () => {
   it("ends a lapsed A4 claim before reading, so the attempt reads uncertain and can be retried", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);
+    const emailId = await endedEmail(v, orderId, "failed");
     const queued = await printInvoice(v, orderId);
     await lapsedClaim(v);
     const answer = await readStatus(v, orderId);
     expect(answer.body).toMatchObject({
       current: { id: queued.body!.id, status: "unknown", failureCode: "timeout" },
       actions: { retryOriginal: { medium: "a4" } },
+      history: [{ id: queued.body!.id }, { id: emailId, invoiceRecipientEmail: CUSTOMER_EMAIL }],
     });
   });
 });
@@ -1915,9 +1946,16 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
       expect.objectContaining({ recipient: CUSTOMER_EMAIL, personId: v.staffId }),
     ]);
     expect((await readStatus(v, simplified.orderId)).body).toBeNull();
-    expect(
-      (await send(v, "GET", `/api/sales/${simplified.orderId}/deliveries?medium=email`)).body,
-    ).toMatchObject({ current: accepted.body, actions: { email: null } });
+    const simplifiedStatus = await send(
+      v,
+      "GET",
+      `/api/sales/${simplified.orderId}/deliveries?medium=email`,
+    );
+    expect(simplifiedStatus.body).toMatchObject({
+      current: accepted.body,
+      actions: { email: null },
+    });
+    expect(JSON.stringify(simplifiedStatus.body)).not.toContain(CUSTOMER_EMAIL);
     expect(await jobsOf(simplified.saleId)).toEqual([]);
     expect(await emailWorkerPass("throws")).toMatchObject({ processed: true });
     expect(await retry(v, simplified.orderId, accepted.body!.id as string)).toMatchObject({
@@ -1987,26 +2025,27 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { email: null } });
   });
 
-  it("puts the customer's address in no response and no log line", async () => {
+  it("keeps the customer's address out of writes, reads without device proof and log lines", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     const key = randomUUID();
+    const sessionOnly = v.cookie.split(";")[0]!;
     const answers = [
       await emailIt(v, orderId, CUSTOMER_EMAIL, key),
       await emailIt(v, orderId, CUSTOMER_EMAIL, key),
       await emailIt(v, orderId, "otra@example.test", key),
       await emailIt(v, orderId),
-      await readStatus(v, orderId),
+      await readStatus(v, orderId, sessionOnly),
     ];
     await emailWorkerPass("throws");
     v.email.transport = new Error("credentials unreadable");
-    answers.push(await readStatus(v, orderId));
+    answers.push(await readStatus(v, orderId, sessionOnly));
     // A request does not hide a failed check, as staging an email choice does not.
     answers.push(await retry(v, orderId, answers[0]!.body!.id as string));
     v.email.transport = true;
     const unknownId = answers[0]!.body!.id as string;
     answers.push(await retry(v, orderId, unknownId));
-    answers.push(await readStatus(v, orderId));
+    answers.push(await readStatus(v, orderId, sessionOnly));
     expect(answers.map((answer) => answer.status)).toEqual([
       200, 200, 409, 409, 200, 200, 500, 200, 200,
     ]);

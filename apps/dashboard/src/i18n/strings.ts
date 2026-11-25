@@ -24,7 +24,7 @@ export const en = {
   "permission.report.view.help":
     "View sales reports and the adjustments report in the dashboard. In Orders, browse the full order history.",
   "permission.report.export.help":
-    "Download accountant exports, invoices and other staff’s working-time records, and email invoices from Orders. Open the VAT return and Fiscal filing pages too.",
+    "Download accountant exports, invoices and other staff’s working-time records. In Orders, email invoices and see the addresses used. Open the VAT return and Fiscal filing pages too.",
   "permission.fiscal.view.help":
     "Read tax-certificate details and see fiscal alerts. Installing or replacing a certificate needs Manage the system.",
   "permission.invoice.inspect.help":
@@ -434,6 +434,7 @@ export const en = {
   "orders.detail.outcome_unknown": "Uncertain",
   "orders.detail.outcome_late_success": "Delivered after all",
   "orders.detail.requested_by": "Requested by {name}",
+  "orders.detail.delivery_email_address": "To {address}",
   "orders.detail.pdf_line": "{date}: PDF downloaded by {name}",
   "orders.download_pdf": "Download PDF",
   "orders.email": "Send by email",
@@ -4803,7 +4804,7 @@ export const es: Record<StringKey, string> = {
   "permission.report.view.help":
     "Consulta los informes de ventas y de ajustes en el panel. En Pedidos, consulta el historial completo.",
   "permission.report.export.help":
-    "Descarga exportaciones contables, facturas y registros horarios de otros empleados, y envía facturas por correo desde Pedidos. También abre las páginas de declaración de IVA y Remisión a la AEAT.",
+    "Descarga exportaciones contables, facturas y registros horarios de otros empleados. En Pedidos, envía facturas por correo y consulta las direcciones usadas. También abre las páginas de declaración de IVA y Remisión a la AEAT.",
   "permission.fiscal.view.help":
     "Consulta los datos del certificado fiscal y las alertas fiscales. Para instalar o sustituir un certificado necesitas Gestionar el sistema.",
   "permission.invoice.inspect.help":
@@ -5219,6 +5220,7 @@ export const es: Record<StringKey, string> = {
   "orders.detail.outcome_unknown": "Sin confirmar",
   "orders.detail.outcome_late_success": "Entregada al final",
   "orders.detail.requested_by": "Pedida por {name}",
+  "orders.detail.delivery_email_address": "A {address}",
   "orders.detail.pdf_line": "{date}: PDF descargado por {name}",
   "orders.download_pdf": "Descargar PDF",
   "orders.email": "Enviar por correo electrónico",

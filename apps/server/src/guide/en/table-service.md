@@ -186,6 +186,9 @@ the language it was issued in. For a paper copy, choose **Print/Reprint**. For a
 version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
 printers. Both versions of a full invoice keep the recorded customer details.
 
+On a till with permission to print receipts, check **Last email address** before you resend a full
+invoice.
+
 Choose a printer from your device’s list. **Use default** follows the profile’s default; another
 choice is saved in **Equipment** for this device. If another device carries the receipt printer,
 Waitron asks before you take it over.

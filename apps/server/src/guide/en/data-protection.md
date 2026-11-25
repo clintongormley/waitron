@@ -330,7 +330,9 @@ details, and Waitron can email them the invoice.
   keeps every receipt and ticket it sends to a receipt or station printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4
   invoice is made again each time it is printed, and that printed copy is not kept.
-- Security: as for every entry. Printed copies are yours to look after.
+- Security: as for every entry. In **Find a bill**, the address is visible on tills with permission
+  to print receipts. In **Orders**, it is visible to staff with permission to email invoices. Look
+  after printed copies.
 
 **Supplier invoices from sole traders.** When you enter a supplier's invoice in **Purchases**, the
 supplier's name and tax number are personal data if the supplier is a sole trader.
@@ -489,7 +491,7 @@ what the dashboard can show you.
 - On **Orders**, **View details** lists the receipt copies printed from **Orders** or from the
   till's **Transactions** tab, with who printed each. For a full invoice it also lists each time the
   invoice was printed or emailed, with who asked for it when someone did, and who downloaded its
-  PDF.
+  PDF. If you have permission to email invoices, you can see the address for each email attempt.
 - No screen shows who opened the cash drawer. Recent openings are among the jobs in **Print Queue**,
   on **Printers**, but no column says which jobs they are, and none names a person. Who opened the
   drawer, or authorised it, is in the `actions.json` file of that person's copy of their data.
@@ -579,6 +581,6 @@ what was done under the account: download the person's copy of their data, and c
 See [Account access](staff.md#account-access).
 
 **An invoice emailed to the wrong address.** The email carries the invoice as a PDF, which shows
-the customer's name, tax number and address and what they bought. On **Orders**, **View details**
-lists when the invoice was sent by email and who asked for it, but not the address it went to, so
-ask the person who sent it. You can send it to the right address from the same place.
+the customer's name, tax number and address and what they bought. In **Orders**, choose **View
+details** and check the time and person on the delivery entry. With permission to email invoices,
+check the address there and send the invoice to the correct one.

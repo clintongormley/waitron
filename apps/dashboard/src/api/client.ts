@@ -2942,6 +2942,7 @@ export interface OrderDeliveryAttempt {
   personName: string | null;
   /** What the office printer holds an A4 for; the server may send a code `holdReason` has no words for. */
   printerHold: string | null;
+  invoiceRecipientEmail?: string;
   lateSuccess: boolean;
 }
 
@@ -5123,7 +5124,7 @@ export class DashboardApi {
     );
   }
 
-  /** Emails the invoice again to the address the ended attempt went to; the dashboard never sees it. */
+  /** Emails the invoice again to the address recorded on the ended attempt. */
   retryOrderEmailDelivery(
     id: string,
     deliveryId: string,

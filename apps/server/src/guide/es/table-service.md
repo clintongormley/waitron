@@ -199,6 +199,9 @@ El ticket se muestra en el idioma en que se emitió. Para una copia en papel, el
 simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
 
+En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
+reenviar una factura completa.
+
 Elige una impresora de la lista de tu dispositivo. **Usar el predeterminado** sigue la
 predeterminada del perfil; otra elección se guarda en **Equipo de este dispositivo**. Si otro
 dispositivo lleva la impresora de recibos, Waitron pregunta antes de que te la quedes.

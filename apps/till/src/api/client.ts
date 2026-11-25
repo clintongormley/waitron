@@ -2728,6 +2728,7 @@ export interface InvoiceDeliveryAttempt {
   personId: string | null;
   printerHold: string | null;
   printerName?: string;
+  invoiceRecipientEmail?: string;
   lateSuccess: boolean;
 }
 

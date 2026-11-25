@@ -89,7 +89,7 @@ function deliveryWords(attempt: OrderDeliveryAttempt | null, mayHaveArrived: boo
   }
 }
 
-function attemptLine(attempt: OrderDeliveryAttempt): string {
+function attemptLine(attempt: OrderDeliveryAttempt, mayExport: boolean): string {
   const parts = [
     date(attempt.requestedAt),
     t(`orders.detail.medium_${attempt.medium}`),
@@ -108,6 +108,10 @@ function attemptLine(attempt: OrderDeliveryAttempt): string {
         name: attempt.personName ?? t("orders.staff_unknown"),
       }),
     );
+  if (mayExport && attempt.invoiceRecipientEmail !== undefined)
+    parts.push(
+      fill("orders.detail.delivery_email_address", { address: attempt.invoiceRecipientEmail }),
+    );
   return parts.join(" · ");
 }
 
@@ -116,11 +120,12 @@ function attemptLine(attempt: OrderDeliveryAttempt): string {
 function historyLines(
   history: OrderDeliveryAttempt[],
   downloads: OrderDetailDto["invoicePdfDownloads"],
+  mayExport: boolean,
 ): string[] {
   return [
     ...history.map((attempt) => ({
       at: Date.parse(attempt.requestedAt),
-      line: attemptLine(attempt),
+      line: attemptLine(attempt, mayExport),
     })),
     ...downloads.map((download) => ({
       at: Date.parse(download.requestedAt),
@@ -175,6 +180,9 @@ export class OrderDetailDialog extends LitElement {
       }
       li {
         margin-block: var(--wt-space-2);
+      }
+      [data-test="delivery-history"] {
+        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -318,7 +326,9 @@ export class OrderDetailDialog extends LitElement {
       ${
         status.history.length + downloads.length > 0
           ? html`<ul data-test="delivery-history">
-              ${historyLines(status.history, downloads).map((line) => html`<li>${line}</li>`)}
+              ${historyLines(status.history, downloads, this.mayExport).map(
+                (line) => html`<li>${line}</li>`,
+              )}
             </ul>`
           : nothing
       }

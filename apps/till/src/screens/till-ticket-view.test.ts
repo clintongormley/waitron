@@ -1366,12 +1366,18 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
 
     it("offers to send an ended email again, by its attempt, and the email action to another address", async () => {
       const { el } = await mountF1({
-        deliveries: statusOf(attempt({ id: "d7", medium: "email", status: "failed" }), {
-          retryOriginal: { medium: "email" },
-          email: emailOffer,
-        }),
+        deliveries: statusOf(
+          attempt({
+            id: "d7",
+            medium: "email",
+            status: "failed",
+            invoiceRecipientEmail: "guest@example.test",
+          }),
+          { retryOriginal: { medium: "email" }, email: emailOffer },
+        ),
       });
       expect(line(el)).toBe("Not delivered.");
+      expect(label(el, "delivery-email-address")).toBe("Last email address: guest@example.test");
       expect(label(el, "email-again")).toBe("Send the email again");
       expect(button(el, "email-again")!.getAttribute("variant")).toBe("secondary");
       expect(label(el, "email-invoice")).toBe("Send to another address");
@@ -1640,12 +1646,22 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
           "drops the doubt about a %s attempt, keeping the fact",
           async (status) => {
             const { el } = await mountF1({
-              deliveries: behind(attempt({ id: "d2", medium: "email", status })),
+              deliveries: behind(
+                attempt({
+                  id: "d2",
+                  medium: "email",
+                  status,
+                  invoiceRecipientEmail: "guest@example.test",
+                }),
+              ),
               originalReceiptPrint: handedOver,
             });
             const section = button(el, "original-delivery")!.textContent!;
             expect(section).toContain("Customer handover confirmed");
             expect(button(el, "delivery-status")).toBeNull();
+            expect(label(el, "delivery-email-address")).toBe(
+              "Last email address: guest@example.test",
+            );
             expect(section).not.toContain("Not delivered.");
             expect(words(fact(el))).toBe(FACT);
           },
@@ -1750,7 +1766,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(dialog(el)).toBeNull();
     });
 
-    it("never shows the address an email went to", async () => {
+    it("keeps the email status when no address was returned", async () => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ medium: "email", status: "sent" }), {
           email: { designation: "duplicate" },
@@ -1759,6 +1775,34 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(line(el)).toBe("Sent by email.");
       expect(text(el)).not.toContain("@");
     });
+
+    it.each([
+      ["F1", true, "failed", "Last email address: guest@example.test · Not delivered."],
+      ["F1", true, "sent", "Last email address: guest@example.test · Sent by email."],
+      ["F1", false, "sent", null],
+      ["F2", true, "sent", null],
+    ] as const)(
+      "shows the last email address and outcome after printing for %s with print capability %s and email status %s",
+      async (invoiceType, canPrintReceipt, status, expected) => {
+        const printed = attempt({ medium: "a4", status: "sent" });
+        const lastEmail = {
+          ...attempt({ id: "d2", medium: "email", status }),
+          invoiceRecipientEmail: "guest@example.test",
+        };
+        const olderEmail = { ...lastEmail, id: "d3", invoiceRecipientEmail: "older@example.test" };
+        const { el } = await mountF1(
+          {
+            canPrintReceipt,
+            historicalDelivery: true,
+            deliveries: { ...statusOf(printed), history: [printed, lastEmail, olderEmail] },
+          },
+          { invoiceType },
+        );
+        expect(button(el, "original-delivery")).not.toBeNull();
+        expect(label(el, "delivery-email-address")?.replace(/\s+/g, " ") ?? null).toBe(expected);
+        expect(text(el)).not.toContain(olderEmail.invoiceRecipientEmail);
+      },
+    );
   });
 });
 

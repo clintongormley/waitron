@@ -14,7 +14,7 @@ import {
 } from "@waitron/shared";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { officePrinterHoldText } from "../i18n/staff-notices.js";
 import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
@@ -154,7 +154,7 @@ function printLabel(
   ).replace("{printer}", () => printer.name);
 }
 
-/** The current attempt in words; a receipt attempt is worded by the original's print status. */
+/** A receipt attempt is worded by the original's print status. */
 function deliveryWords(
   attempt: InvoiceDeliveryAttempt,
   mayHaveArrived: boolean,
@@ -777,6 +777,11 @@ export class TillTicketView extends LitElement {
     );
   }
 
+  protected lastInvoiceEmailAttempt(): InvoiceDeliveryAttempt | undefined {
+    if (this.result.invoiceType !== "F1" || !this.canPrintReceipt) return undefined;
+    return this.deliveries?.history.find((attempt) => attempt.medium === "email");
+  }
+
   protected renderDelivery() {
     const status = this.deliveries;
     const mayHaveArrived = this.#mayHaveArrived;
@@ -804,8 +809,21 @@ export class TillTicketView extends LitElement {
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
         ? status.current?.id
         : null;
+    const lastEmail = this.lastInvoiceEmailAttempt();
+    const emailAddress = lastEmail?.invoiceRecipientEmail;
+    const emailOutcome =
+      lastEmail !== undefined && lastEmail.id !== status?.current?.id
+        ? deliveryWords(lastEmail, false)
+        : undefined;
     return html`
       ${words === undefined || doubtAnswered ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
+      ${
+        emailAddress === undefined
+          ? nothing
+          : html`<p data-test="delivery-email-address">
+              ${fill(t("invoice.delivery_email_address"), { address: emailAddress })}${emailOutcome === undefined ? nothing : ` · ${emailOutcome}`}
+            </p>`
+      }
       ${
         lateAttempt
           ? html`<p role="status" data-test="delivery-late-success">

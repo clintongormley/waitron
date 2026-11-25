@@ -206,12 +206,13 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       tx: Transaction,
       scope: OrderListFilter["scope"],
       clock: Awaited<ReturnType<typeof resolveVenueClock>>,
+      authority: Parameters<typeof holds>[0],
     ) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       const { authority } = await resolveManagementSession(tx, sessionId);
       const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
-      return fn(tx, orderScope(authority, clock), clock);
+      return fn(tx, orderScope(authority, clock), clock, authority);
     });
 
   app.get("/management-api/orders", (c) =>
@@ -269,9 +270,9 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
       const transport = await readEmailTransport();
       return c.json(
-        await scoped(sessionId, async (tx, scope) => {
+        await scoped(sessionId, async (tx, scope, _clock, authority) => {
           await expireInvoiceDeliveryClaims(tx);
-          return readOrderDetail(tx, id, scope, transport);
+          return readOrderDetail(tx, id, scope, transport, holds(authority, "report.export"));
         }),
       );
     }),
