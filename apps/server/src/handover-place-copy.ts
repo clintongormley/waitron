@@ -1,5 +1,16 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, copyFile, open, rename, rm, rmdir, type FileHandle } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  open,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  type FileHandle,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
@@ -8,7 +19,13 @@ import type { SignedMembershipDocument } from "@waitron/membership";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { appendHandoverEventTx, readHandoverEvent } from "@waitron/node-db";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
-import { NODE_FILE, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
+import {
+  JOURNAL_SUFFIX,
+  NODE_FILE,
+  SIDE_FILE_SUFFIXES,
+  VENUE_FILE,
+  WAL_SUFFIX,
+} from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
@@ -171,9 +188,45 @@ async function sizeIfPresent(path: string): Promise<number | null> {
   }
 }
 
+async function hasJournalData(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).size > 0;
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** The first WAL open of a captured copy can rewrite its header. Any change outside those fields
+ * must keep the digest from matching. A nonempty journal can hold data outside the main file. */
+async function openedCopyMatches(live: string, signedDigest: string): Promise<boolean> {
+  if (await hasJournalData(live + WAL_SUFFIX)) return false;
+  if (await hasJournalData(live + JOURNAL_SUFFIX)) return false;
+  const file = await open(live, "r");
+  try {
+    // https://www.sqlite.org/fileformat.html#the_database_header
+    const header = Buffer.alloc(100);
+    const { bytesRead } = await file.read(header, 0, header.length, 0);
+    if (bytesRead !== header.length || header[18] !== 2 || header[19] !== 2) return false;
+    const counter = header.readUInt32BE(24);
+    if (counter < 2 || header.readUInt32BE(92) !== counter) return false;
+    header[18] = header[19] = 1;
+    header.writeUInt32BE(counter - 1, 24);
+    header.writeUInt32BE(counter - 1, 92);
+
+    const hash = createHash("sha256").update(header);
+    for await (const chunk of file.createReadStream({ start: header.length, autoClose: false })) {
+      hash.update(chunk);
+    }
+    return hash.digest("hex") === signedDigest;
+  } finally {
+    await file.close();
+  }
+}
+
 /**
  * A lost selection could let this box pick a minute the old box already used, so the start stops
- * rather than place the copy without them, while the live database is still as it was.
+ * before recording placement.
  */
 async function mergeSelections(
   merge: typeof mergeModulePreparationRevisions,
@@ -221,9 +274,9 @@ async function swapIn(steps: PlacementSteps, accepted: string, venueDir: string)
 /**
  * Places the copy this spare accepted as its live `venue.db` once the old box has given up filing.
  * `node.db` is never changed: the caller records `copy_placed` at its first node handle, and only
- * then removes `accepted.db`, which until then is what a repeat of this places from. A live file
- * equal to the indicator's digest is taken as already placed, and any open changes the file's
- * bytes (a placed copy opened before the event was recorded is placed again, with nothing lost).
+ * then removes `accepted.db`. The signed digest identifies a copy already in place. If opening
+ * the copy changed its header and the retained file is gone, the same digest must identify
+ * the live file with the first WAL open's header changes reversed in memory.
  */
 export async function placeAcceptedCopyAtStart(args: {
   venueDir: string;
@@ -254,16 +307,28 @@ export async function placeAcceptedCopyAtStart(args: {
       (JSON.parse(awaiting.indicatorText) as { body?: unknown }).body,
     );
     const { sha256, bytes } = indicator.snapshot;
+    // `parseIndicator` refuses an indicator whose row for this file lacks revisions.
+    const revisions = indicator.nodeLocal
+      .filter((row) => row.item === MODULE_PREPARED_ITEM)
+      .flatMap((row) => row.revisions!);
     const live = join(venueDir, VENUE_FILE);
     const liveSize = await sizeIfPresent(live);
-    // A whole venue's file, and one of another size cannot have this digest.
-    if (liveSize === bytes && (await digestFileIfPresent(live))?.sha256 === sha256) {
+    const accepted = acceptedCopyPath(stateDir, operationId);
+    if (
+      liveSize === bytes &&
+      ((await digestFileIfPresent(live))?.sha256 === sha256 ||
+        ((await lstat(accepted).then(
+          () => false,
+          (error: unknown) => errnoOf(error) === "ENOENT",
+        )) &&
+          (await openedCopyMatches(live, sha256))))
+    ) {
+      await mergeSelections(merge, stateDir, revisions);
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };
     }
 
-    const accepted = acceptedCopyPath(stateDir, operationId);
     // No server runs while this holds the lock, so no chart can arrive between this read and the swap.
     if (liveSize !== null && holdsMovedOnChart(live, accepted, awaiting, log)) {
       log("warn", "handover-place-copy.source_no_longer_main", { operationId });
@@ -276,14 +341,7 @@ export async function placeAcceptedCopyAtStart(args: {
     if (held.sha256 !== sha256) throw new AppError("handover.copy_mismatch", {});
 
     args.onWriting?.(bytes);
-    await mergeSelections(
-      merge,
-      stateDir,
-      // `parseIndicator` refuses an indicator whose row for this file lacks them.
-      indicator.nodeLocal
-        .filter((row) => row.item === MODULE_PREPARED_ITEM)
-        .flatMap((row) => row.revisions!),
-    );
+    await mergeSelections(merge, stateDir, revisions);
     await deleteBackupRoomNote(stateDir);
     await clearSelectedCopy(stateDir);
     await swapIn(steps, accepted, venueDir);
@@ -337,7 +395,8 @@ async function removeAcceptedCopy(
     await rm(accepted, { force: true });
     // The folder may hold this operation's other files, which are not this step's to remove.
     await rmdir(dirname(accepted)).catch((error: unknown) => {
-      if (errnoOf(error) !== "ENOTEMPTY") throw error;
+      const errno = errnoOf(error);
+      if (errno !== "ENOTEMPTY" && errno !== "ENOENT") throw error;
     });
   } catch (error) {
     log("error", "handover-place-copy.remove_failed", { operationId, errno: errnoOf(error) });

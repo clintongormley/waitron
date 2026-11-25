@@ -461,17 +461,15 @@ back is signed by M2's own key. `mintNextMembershipDocument`'s `minTerm` exists 
 
 ## The module preparation file grows with every write, and a handover cannot promise room in it
 
-Left open by A1018 Slice 5 (Rulings R29, R30). Each `module-records/<module>.json` keeps prepared
-revisions that repeat earlier entries. Prepared revisions are capped at 1 MiB across modules; each
-record, including retained history, also has a 1 MiB limit. At the limit later module operations
-refuse `setup.attempt_invalid`.
+Prepared revisions share a 1 MiB cap across modules. Each individual module record, including
+retained history, also has a 1 MiB cap. A new revision stores its own entry, and an intent's
+references can still grow with the history. Existing cumulative revisions keep their size.
 
-`modulePreparationMergeFits` (`packages/provisioning/src/module-preparation-state.ts`) estimates room
-from all prepared revisions for three writes now: the dormant setup, the wait and the selection. **Any
-further write can still fill the file**, so it is a check on the likely shapes and promises nothing.
-If it does fill, M2 fails to activate after the old box has given up filing, with no exit but the
-file's owner clearing it. The cure is a format change: stop repeating the earlier entries, or lift
-the cap. The owner sees this in Slice 5's PR.
+`modulePreparationMergeFits` estimates room for the dormant setup, wait and selection from the
+largest prepared revisions. A later write can still reach either limit and refuse with
+`setup.attempt_invalid` after the old box has given up filing. The spare cannot finish taking
+over until the file can accept writes again while keeping the recorded selections. Left open
+by A1018 Slice 5 (Rulings R29, R30).
 
 ## A1185: a venue not yet connected sees no prices
 
@@ -544,27 +542,16 @@ Slice 3.
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
-  Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
-  for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
-  (Rulings R29, R30).
+  Intent references still grow and existing cumulative revisions keep their size. The handover's
+  size check estimates room for three writes. A later write can still fill the file.
   [Detail](replication-cloud.md#the-module-preparation-file-grows-with-every-write-and-a-handover-cannot-promise-room-in-it)
 
 ## Bundle: The spare's wait loop: back-off, reasons, stop signals
 
-2 entries, size M.
+1 entry, size M.
 
 - **A chart post's yes/no answer cannot distinguish a refusal from an already-held chart.**
   The route's answer needs a ruling. Left open by A1018 Slice 5 (Ruling R53).
-- **A box can refuse its start while its `venue.db` already holds the accepted copy.** Killed just
-  after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
-  the start refuses `handover.accepted_copy_missing`. The real placement case “cannot identify an
-  opened accepted copy by its signed size and empty summaries alone” in `handover-place-copy.test.ts`
-  confirms the refusal for the placed file and a different valid file with the same signed size
-  and empty summaries. In this fixture, opening changes only bytes 18, 19, 27 and 95; replacing
-  those bytes with the accepted file's bytes recovers its signed digest. Recognition after normalizing the
-  header remains to be qualified through a real start and its WAL; the fixture alone does not
-  establish what may be ignored after a killed start.
-  Left open by A1018 Slice 5 (Ruling R53).
 
 ## Bundle: Remaining setup and failover gaps
 
@@ -626,6 +613,17 @@ Slice 3.
   [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
 
 ## Decisions and deliberate limits
+
+**A spare can retry from its placed copy when the signed digest identifies it.** Opening with a
+different SQLite version can prevent that match. A damaged retained file can also stop the start
+after the placed copy has been opened, even with the same SQLite version. If the old box still holds
+the exact `<state>/handover/<operation>/venue.db`, restore it to
+`<state>/handover/<operation>/accepted.db` on the spare. If you see the copy error page, restore
+the file and choose **Retry a normal boot**. If the spare is running and the handover says the
+old box is no longer main, stop the spare before restoring the file, then start it again.
+
+If the start reports an unreadable or full preparation file, the accepted database may already be
+in place. Repair the preparation file before choosing **Retry a normal boot**.
 
 <a id="a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself"></a>
 

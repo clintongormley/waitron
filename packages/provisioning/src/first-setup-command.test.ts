@@ -151,9 +151,9 @@ it("prepares a real owned name after the terminal's wait, asking no question, wi
   const journal = JSON.parse(
     await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(journal.prepared.at(-1).value.entries).toMatchObject([
-    { kind: "wait", targetMs: Date.parse("2026-10-16T11:40:00Z") },
-    { kind: "intent", identity: "0CNNW" },
+  expect(journal.prepared).toMatchObject([
+    { value: { entries: [{ kind: "wait", targetMs: Date.parse("2026-10-16T11:40:00Z") }] } },
+    { value: { entries: [{ kind: "intent", identity: "0CNNW" }] } },
   ]);
   expect(
     await venue.db.execute("select count(*) as count from verifactu_identities"),

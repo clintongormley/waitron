@@ -161,6 +161,9 @@ it("stores the boot reading in the intent but never hands it out", async () => {
 
 it("a repeated select keeps its chosen hour, and stores the boot reading it judged after a restart", async () => {
   const f = fixture();
+  f.at(instant - 60_000, 0);
+  expect(await f.run(event(binding, "earlier-selection"))).toMatchObject({ status: "selected" });
+  f.at(instant, 0);
   let boot = { bootId: "b1", uptimeMs: 1000 };
   const announced: unknown[] = [];
   const engine = () =>
@@ -179,19 +182,19 @@ it("a repeated select keeps its chosen hour, and stores the boot reading it judg
   boot = { bootId: "b1", uptimeMs: 31_000 };
   f.at(instant + 30_000, 0);
   expect(await select()).toEqual(first);
-  expect(f.writes).toHaveLength(1);
+  expect(f.writes).toHaveLength(2);
   boot = { bootId: "b2", uptimeMs: 5000 };
   f.at(instant + 60_000, 0);
   const again = await select();
   expect(again).toEqual(first);
   expect(again).not.toHaveProperty("boot");
   expect(announced).toHaveLength(1);
-  expect(f.writes).toHaveLength(2);
-  expect(f.writes[1]).toEqual({
+  expect(f.writes).toHaveLength(3);
+  expect(f.writes[2]).toEqual({
     version: 1,
     entries: [
       {
-        ...(f.writes[0] as { entries: object[] }).entries[0],
+        ...(f.writes[1] as { entries: object[] }).entries[0],
         boot: { bootId: "b2", uptimeMs: 5000, wallMs: instant + 60_000, confirmed: true },
       },
     ],
@@ -598,10 +601,15 @@ it("retains abandoned or uncertain intent and skips its minute for the replaceme
   });
   f.at(Date.parse("2026-10-16T12:00:00Z"), 1_200_000);
   expect(await f.run(next)).toMatchObject({ status: "selected", identity: "0CNPG" });
-  expect((f.value as { entries: unknown[] }).entries).toEqual([
-    expect.objectContaining({ identity: "0CNNW" }),
-    expect.objectContaining({ kind: "wait", targetMs: Date.parse("2026-10-16T11:41:00Z") }),
-    expect.objectContaining({ identity: "0CNPG" }),
+  expect(f.writes).toEqual([
+    { version: 1, entries: [expect.objectContaining({ identity: "0CNNW" })] },
+    {
+      version: 1,
+      entries: [
+        expect.objectContaining({ kind: "wait", targetMs: Date.parse("2026-10-16T11:41:00Z") }),
+      ],
+    },
+    { version: 1, entries: [expect.objectContaining({ identity: "0CNPG" })] },
   ]);
 });
 it.each(["contextKey", "scope", "bases"])(
@@ -1284,7 +1292,9 @@ it.each([
     f.at(at(when), 0);
     expect(await f.run(setup)).toMatchObject(expected);
     expect(
-      (f.value as { entries: { kind: string }[] }).entries.filter((entry) => entry.kind === "wait"),
+      (f.writes as { entries: { kind: string }[] }[])
+        .flatMap((value) => value.entries)
+        .filter((entry) => entry.kind === "wait"),
     ).toHaveLength(waits);
   },
 );

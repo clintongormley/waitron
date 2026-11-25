@@ -945,6 +945,17 @@ describe("a spare's start refused while placing the copy it accepted", () => {
 });
 
 describe("what brings a refused placing back", () => {
+  it.each([
+    [undefined, "Without those selections this box could reuse a name the old box already used."],
+    [
+      SPANISH,
+      "Sin esas selecciones, este servidor podría repetir un nombre que el servidor antiguo ya usó.",
+    ],
+  ])("explains the risk of missing preparation selections in %s", async (locale, reason) => {
+    const page = await pageFor("handover.preparation_state_unusable", undefined, locale);
+    expect(page).toContain(escapeHtml(reason));
+  });
+
   it.each(["handover.placement_failed", "handover.placement_no_room"])(
     "%s says the retry tries again, because a box on this page does not boot by itself",
     async (code) => {

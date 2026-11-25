@@ -102,19 +102,19 @@ const hourFacts = (eventId: string) => ({
   ),
 });
 
-/** One of M1's own minute selections, kept in the `{ binding, value }` shape. */
+/** One of M1's own minute selections, with each preparation revision it writes. */
 async function selectOnM1(eventId: string, activate: boolean) {
-  let value: unknown = null;
+  const history: unknown[] = [];
   const held = { ...joinBinding, action: "setup", eventId, targetNodeId: primary.nodeId };
   const preparation = createHourPreparation({
     withState: async (_binding, run) =>
       run({
         get value() {
-          return value;
+          return history.at(-1) ?? null;
         },
-        history: [],
+        history,
         async replace(next) {
-          value = next;
+          history.push(next);
         },
       }),
     monotonicNow: () => performance.now(),
@@ -143,7 +143,7 @@ async function selectOnM1(eventId: string, activate: boolean) {
       );
     return selected.identity;
   });
-  return { identity, revision: { binding: held, value } };
+  return { identity, revisions: history.map((value) => ({ binding: held, value })) };
 }
 
 let m1Revisions: { binding: OperationBinding; value: unknown }[];
@@ -186,7 +186,7 @@ beforeEach(async () => {
     role: "admin",
     passwordHash: hashPassword(PASSWORD),
   });
-  m1Revisions = [(await selectOnM1("first", true)).revision];
+  m1Revisions = (await selectOnM1("first", true)).revisions;
   await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
@@ -332,7 +332,7 @@ it("a name M1 selected and never activated is not in the copy, and the spare wit
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
-  m1Revisions.push(abandoned.revision);
+  m1Revisions.push(...abandoned.revisions);
   vi.setSystemTime(minuteOf(abandoned.identity));
   const selected = await spareSelects(s);
   expect(selected).toMatchObject({ status: "selected", identity: abandoned.identity });
@@ -347,7 +347,7 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
-  m1Revisions.push(abandoned.revision);
+  m1Revisions.push(...abandoned.revisions);
   await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
   const minute = minuteOf(abandoned.identity);
   vi.setSystemTime(minute);
@@ -359,7 +359,7 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
 it("a name M1 selected and never used stays used after the switch-on writes the setup", async () => {
   const s = spareService();
   const abandoned = await selectOnM1("abandoned", false);
-  m1Revisions.push(abandoned.revision);
+  m1Revisions.push(...abandoned.revisions);
   await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
   await switchOnWritesSetup(s);
   const history = await readModulePreparationRevisions({ stateDir: join(root, "state") });
@@ -388,7 +388,7 @@ it("holding M1's selections on two adjacent minutes, the spare waits past both, 
   vi.setSystemTime(minute - 60_000);
   const next = await selectOnM1("abandoned-next", false);
   expect(minuteOf(next.identity)).toBe(minute + 60_000);
-  m1Revisions.push(abandoned.revision, next.revision);
+  m1Revisions.push(...abandoned.revisions, ...next.revisions);
   await mergeModulePreparationRevisions({ stateDir: join(root, "state") }, m1Revisions);
   vi.setSystemTime(minute);
   expect(await spareSelects(s)).toEqual(
@@ -436,7 +436,7 @@ describe("a merged file close to its limit", () => {
   /** The clock on M1's name, so `select` writes a wait and then an intent before promotion. */
   const onAbandonedMinute = async () => {
     const abandoned = await selectOnM1("abandoned", false);
-    m1Revisions.push(abandoned.revision);
+    m1Revisions.push(...abandoned.revisions);
     const minute = minuteOf(abandoned.identity);
     vi.setSystemTime(minute);
     return minute;
@@ -572,6 +572,13 @@ describe("a merged file close to its limit", () => {
     return { s, minute, m1List };
   };
 
+  it("keeps room for 45 actual setup attempts and still avoids the last selected minute", async () => {
+    const { s, minute, m1List } = await rig(45, 0, { venueHistory: true, waits: true });
+    expect(await modulePreparationMergeFits({ stateDir: stateDir() }, m1List)).toBe(true);
+    await mergeModulePreparationRevisions({ stateDir: stateDir() }, m1List);
+    await waitsSelectsPromotes(s, minute);
+  }, 120_000);
+
   const FILLED_SHAPES = [
     { title: "few selections", m1: 0, m2: 0, venueHistory: false, waits: true },
     {
@@ -581,19 +588,19 @@ describe("a merged file close to its limit", () => {
       venueHistory: false,
       waits: false,
     },
-    { title: "the most attempts one box holds", m1: 20, m2: 0, venueHistory: false, waits: true },
+    { title: "110 attempts from one box", m1: 110, m2: 0, venueHistory: false, waits: true },
     {
-      title: "the most, reading the venue's history",
-      m1: 19,
+      title: "105 attempts, reading the venue's history",
+      m1: 105,
       m2: 0,
       venueHistory: true,
       waits: true,
     },
-    { title: "two boxes' lists", m1: 14, m2: 14, venueHistory: false, waits: true },
+    { title: "70 attempts from each box", m1: 70, m2: 70, venueHistory: false, waits: true },
     {
-      title: "two lists, reading the venue's history",
-      m1: 13,
-      m2: 13,
+      title: "65 attempts from each box, reading the venue's history",
+      m1: 65,
+      m2: 65,
       venueHistory: true,
       waits: true,
     },
@@ -641,7 +648,7 @@ it("M1's history placed as the restore path places it (the retained section) is 
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
-  m1Revisions.push(abandoned.revision);
+  m1Revisions.push(...abandoned.revisions);
   if (FISCAL_HOUR_BACKUP_STATE.kind !== "preparation-history") throw new Error("source kind");
   const evidence = FISCAL_HOUR_BACKUP_STATE.project({
     preparations: m1Revisions.map((revision) => revision.value),

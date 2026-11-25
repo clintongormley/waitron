@@ -148,7 +148,6 @@ export async function modulePreparationMergeFits(
   incoming: readonly { binding: OperationBinding; value: unknown }[],
 ): Promise<boolean> {
   const own = await readStateFile(options.stateDir);
-  // Computed because each revision repeats all earlier entries, so the need grows with the file.
   const room =
     3 * (largestRevisionBytes(incoming) + largestRevisionBytes(own.revisions)) + MERGE_ROOM_FLOOR;
   const merged = mergedFile(own, incoming).revisions;

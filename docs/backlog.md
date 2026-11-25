@@ -113,7 +113,7 @@ the handover bundles.
 - [Series and module-preparation gaps at handover](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 - [Finish the clock work: a check at every start and every change](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
-- [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals): chart answers and accepted-copy recognition.
+- [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals).
 - [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
@@ -1201,7 +1201,7 @@ Not in any track until the standalone primary is done.
   and the role, then killed, stays a mirror holding an activation row and its own SIF. Neither sold
   or filed in the runs, and no route clears them. Left open by A1018 Slice 5.
 
-- **The spare's wait loop: back-off, reasons, stop signals** (2 remaining entries: chart answers and accepted-copy recognition, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
+- **The spare's wait loop: back-off, reasons, stop signals** (chart answers, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
   [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)

@@ -433,13 +433,13 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "en-GB": {
       title: "This box cannot record the old box's selections, so it did not take over.",
       action:
-        "This is a fault in Waitron or this box's disk: its module preparation file is unreadable or too full. Without those selections this box could reuse a name the old box already used, so its own database stays unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been repaired.",
+        "This is a fault in Waitron or this box's disk: its module preparation file is unreadable or too full. Without those selections this box could reuse a name the old box already used. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been repaired.",
     },
     "es-ES": {
       title:
         "Este servidor no puede guardar las selecciones del servidor antiguo, así que no se ha hecho cargo.",
       action:
-        "Es un fallo de Waitron o del disco de este servidor: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este servidor podría repetir un nombre que el servidor antiguo ya usó, así que su propia base de datos sigue sin cambios. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
+        "Es un fallo de Waitron o del disco de este servidor: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este servidor podría repetir un nombre que el servidor antiguo ya usó. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
     },
   },
   "handover.placement_failed": {
