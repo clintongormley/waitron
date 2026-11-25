@@ -722,8 +722,9 @@ If the guests then want to pay separately, open **⋮** and choose **Reopen bill
 cancels the existing receipt and reopens the bill, ready for [**Move dishes…**](table-service.md#move-dishes).
 Money already paid counts towards it. A bill that has had a payment on its own receipt cannot be
 reopened: take the rest with **An amount** or **Split equally**.
-If **Reopen bill** lists dishes not yet served and some never came, choose **Stop these dishes and
-reopen**: they are stopped in the kitchen and left off the reopened bill.
+If **Reopen bill** lists dishes not yet served, choose **Mark served** for any that came.
+**Stop these dishes and reopen** stops every dish still listed in the kitchen and leaves it off the
+reopened bill, except one the kitchen had started, which stays on it, charged.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment

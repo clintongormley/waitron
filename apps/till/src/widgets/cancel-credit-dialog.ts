@@ -2,7 +2,7 @@ import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { formatMoney } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -44,6 +44,29 @@ export function cancelCreditRefusalOf(error: unknown, refusal: DialogRefusal): C
   const { dishes, canStop } = (error ?? {}) as { dishes?: unknown; canStop?: unknown };
   if (refusal.code !== "bill.unserved_dishes" || !Array.isArray(dishes)) return refusal;
   return { ...refusal, dishes: dishes as MealEndUnservedDish[], canStop: canStop === true };
+}
+
+/**
+ * Whether a reopen that got no answer, finding the printed bill credited, was credited some other
+ * way: no open bill appeared that it could have opened. Only its own bill holds copies of the
+ * dishes, at the printed `total` unless it stopped dishes; a credit elsewhere may open an empty one.
+ */
+export function creditedElsewhere(
+  sent: { mode: CancelCreditMode; billsBefore: readonly string[]; stopUnserved?: true | undefined },
+  bills: readonly { workingOrderId: string; status: string; total: string }[],
+  total: string,
+): boolean {
+  return (
+    sent.mode === "split" &&
+    !bills.some(
+      (row) =>
+        row.status === "open" &&
+        !sent.billsBefore.includes(row.workingOrderId) &&
+        (sent.stopUnserved === true
+          ? compareDecimal(decimal(row.total), decimal("0")) > 0
+          : compareDecimal(decimal(row.total), decimal(total)) === 0),
+    )
+  );
 }
 
 const REFUSALS: Record<string, StringKey> = {
@@ -215,6 +238,7 @@ export class TillCancelCreditDialog extends LitElement {
 
   async #continue(): Promise<void> {
     if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
+    if (this.#unservedShown() !== null) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownError() !== null) {
@@ -388,7 +412,7 @@ export class TillCancelCreditDialog extends LitElement {
           variant="primary"
           data-cancel-credit-confirm
           .loading=${this.busy}
-          .disabled=${this.busy || own !== null}
+          .disabled=${this.busy || own !== null || unserved !== null}
           @click=${() => void this.#continue()}
         >
           ${t(TEXT[this.mode].confirm)}

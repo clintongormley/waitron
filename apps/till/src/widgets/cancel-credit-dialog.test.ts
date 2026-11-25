@@ -289,7 +289,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
   const unservedBox = (el: TillCancelCreditDialog) =>
     root(el).querySelector("[data-split-unserved]");
   const markServed = (el: TillCancelCreditDialog) =>
-    root(el).querySelector<HTMLElement>("[data-split-mark-served]");
+    root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-split-mark-served]");
 
   it("says only that it cancels the receipt and reopens the bill, and asks for no reason", async () => {
     const el = await mount({ mode: "split" });
@@ -483,6 +483,21 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
       expect(text(unservedBox(el))).not.toContain(t("split.stop_unserved"));
     },
   );
+
+  it("while the dishes not served are listed, holds Reopen bill and leaves Mark served and the stop to press", async () => {
+    const el = await mount({
+      mode: "split",
+      refusal: { code: "bill.unserved_dishes", dishes: [served], canStop: true },
+      canMarkServed: true,
+    });
+    const continued = capture(el, "cancel-credit-continue");
+
+    expect(confirm(el).disabled).toBe(true);
+    expect(markServed(el)!.disabled).toBe(false);
+    expect(stopButton(el)!.disabled).toBe(false);
+    confirm(el).click();
+    expect(continued).toEqual([]);
+  });
 
   it("Stop these dishes and reopen asks for the reopen with the dishes stopped, once", async () => {
     const el = await mount({
