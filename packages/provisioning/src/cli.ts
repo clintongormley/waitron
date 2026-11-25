@@ -402,12 +402,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         // just before activation reads them.
         const rechecked = await recheckFirstSetupCommand(runtime, owner, deps.io);
         if (rechecked.status !== "ready") return 1;
-        const result = await completeFirstSetupCommand(
-          runtime,
-          { venue: target, node },
-          owner,
-          deployment,
-        );
+        const result = await completeFirstSetupCommand(runtime, target, owner, deployment);
         deps.io.stdout("");
         deps.io.stdout(`node:     ${result.nodeId}`);
         for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);

@@ -9,7 +9,6 @@ export type RecoveryDocument = {
   createdAt: string;
   nodeKey: Pick<NamedNodeKey, "nodeId" | "name">;
 };
-export type RecoveryDocumentPublic = RecoveryDocument;
 export function refuseRecovery(): never {
   throw new Error("Recovery PDF refused");
 }
@@ -31,7 +30,7 @@ function label(value: unknown): value is string {
     !/\p{Cc}/u.test(value)
   );
 }
-function checked(value: unknown): RecoveryDocument {
+export function parseRecoveryDocument(value: unknown): RecoveryDocument {
   if (
     !exact(value, [
       "kind",
@@ -62,13 +61,4 @@ function checked(value: unknown): RecoveryDocument {
   )
     refuseRecovery();
   return structuredClone(value) as RecoveryDocument;
-}
-export function parseRecoveryDocumentPublic(value: unknown): RecoveryDocumentPublic {
-  return checked(value);
-}
-export async function parseRecoveryDocument(value: unknown): Promise<RecoveryDocument> {
-  return checked(value);
-}
-export function recoveryDocumentPublic(value: RecoveryDocument): RecoveryDocumentPublic {
-  return checked(value);
 }

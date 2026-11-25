@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRecoveryDelivery } from "./recovery-delivery.js";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
-import { recoveryDocumentPublic, type RecoveryDocument } from "./recovery-document.js";
+import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
   version: 1,
@@ -38,7 +38,7 @@ describe("transient recovery delivery session", () => {
       expect(file).not.toHaveProperty("serverKey");
       expect([file.masterKey, file.masterKeyName]).toEqual([made.masterKey, made.masterKeyName]);
       const binding = await session.ready();
-      expect(binding.statement).toEqual(recoveryDocumentPublic(document));
+      expect(binding.statement).toEqual(parseRecoveryDocument(document));
       expect(binding.bindingDigest).toBe(
         await digest(
           new TextEncoder().encode(

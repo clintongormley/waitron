@@ -80,7 +80,7 @@ export class RecoveryPackDialog extends LitElement {
   @state() private step: Step = "form";
   /** A refusal's sentence that names no field, kept until the next press. */
   @state() private refusal = "";
-  /** The status read again after a lost answer or an unreplaced key; null when unreadable. */
+  /** The status read again after a lost answer; null when unreadable. */
   @state() private reread: RecoveryPackStatus | null = null;
   @state() private lostMasterKey = false;
   @state() private shown: { key: string; name: string; url: string; number: number } | null = null;
@@ -377,7 +377,7 @@ export class RecoveryPackDialog extends LitElement {
       <p>
         ${t("recovery_pack_dialog.lost_new_key")}
         ${
-          unreceived && this.reread?.masterKey?.pack === unreceived.number
+          unreceived?.holdsCurrentMasterKey
             ? fill("recovery_pack_dialog.lost_new_key_named", {
                 number: String(unreceived.number),
                 date: packDate(unreceived.madeAt, this.#zone),

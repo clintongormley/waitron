@@ -12,11 +12,7 @@ import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import { WAIT_BOUND_MS } from "./hour-selection.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
-import {
-  parseRecoveryDocumentPublic,
-  recoveryDocumentPublic,
-  type RecoveryDocument,
-} from "./recovery-document.js";
+import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import { startAgainHoldings, startAgainKept } from "./start-again-holdings.js";
 
@@ -150,7 +146,7 @@ export function createHourInitialSetup(
         document.identity.timeZone,
         loadRecoveryPackFonts,
       );
-      return { bytes, statement: recoveryDocumentPublic(recovery) };
+      return { bytes, statement: parseRecoveryDocument(recovery) };
     },
     async commandBeforeActivation(context, actions) {
       readHourSetupInput(context, (context.request as { input: unknown })?.input);
@@ -313,9 +309,9 @@ export function createHourInitialSetup(
     documentConfirmation: undefined,
     recoveryDocument(context, imported, document) {
       readHourSetupInput(context, imported.input);
-      let statement: ReturnType<typeof parseRecoveryDocumentPublic>;
+      let statement: RecoveryDocument;
       try {
-        statement = parseRecoveryDocumentPublic(document.statement);
+        statement = parseRecoveryDocument(document.statement);
       } catch {
         return refuse("outside_confirmation_missing");
       }

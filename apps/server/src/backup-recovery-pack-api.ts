@@ -3,7 +3,6 @@ import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
-  insertMasterKey,
   insertRecoveryPack,
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
@@ -44,6 +43,7 @@ import { keepOldPackUntil, packStatus, type CurrentChecks } from "./backup-recov
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
+import { insertNewMasterKey } from "./master-key-record.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
@@ -284,13 +284,7 @@ async function makePack(
   );
   await insertRecoveryPack(tx, record);
   if (newMasterKey !== undefined) {
-    await insertMasterKey(tx, {
-      name: newMasterKey.made.masterKeyName,
-      checkValue: newMasterKey.checkValue,
-      publicKey: newMasterKey.publicKey,
-      madeAt: new Date(madeAt),
-      madeBy: input.personId,
-    });
+    await insertNewMasterKey(tx, newMasterKey, new Date(madeAt), input.personId);
   }
   return { number, madeAt, pdf, parts };
 }

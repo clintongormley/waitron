@@ -584,7 +584,7 @@ describe("a lost answer", () => {
 
   it("names the pack and its date when the status names it unreceived, and hands the status on", async () => {
     const after = status({
-      unreceived: { number: 4, madeAt: MADE_AT },
+      unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentMasterKey: true },
       masterKey: { name: "2026-10-12 · QZJV", pack: 4 },
     });
     const statuses: RecoveryPackStatus[] = [];

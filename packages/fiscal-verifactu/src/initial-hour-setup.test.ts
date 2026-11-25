@@ -194,7 +194,7 @@ it("the command document seat refuses a foreign staged node and changed hour inp
   const document = {
     key: {
       nodeId: "foreign",
-      name: "2026-10-16 · ACRY",
+      name: made.masterKeyName,
       secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
     },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
@@ -218,7 +218,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
   const saved = fixture();
   vi.setSystemTime(new Date("2026-10-17T12:30:00Z"));
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
-    key: { nodeId: "node", name: "2026-10-17 · ACRY" },
+    key: { nodeId: "node", name: made.masterKeyName },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     masterKey: made,
     locale: "en",

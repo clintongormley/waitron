@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  parseRecoveryDocument,
-  parseRecoveryDocumentPublic,
-  recoveryDocumentPublic,
-  type RecoveryDocument,
-} from "./recovery-document.js";
+import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
 
 export function fixture(): RecoveryDocument {
   return {
@@ -18,19 +13,19 @@ export function fixture(): RecoveryDocument {
   };
 }
 describe("recovery document", () => {
-  it("parses a detached document", async () => {
+  it("parses a detached document", () => {
     const input = fixture();
-    const parsed = await parseRecoveryDocument(input);
+    const parsed = parseRecoveryDocument(input);
     Object.assign(input.nodeKey, { name: "changed" });
     expect(parsed.nodeKey.name).toBe("Caja principal");
   });
-  it("public projection has exact public keys and refuses a secret", () => {
+  it("the parsed document has exact public keys and refuses a secret", () => {
     const input = fixture();
-    const publicDoc = recoveryDocumentPublic(input);
+    const publicDoc = parseRecoveryDocument(input);
     expect(publicDoc).toEqual({ ...input, nodeKey: { nodeId: "node-1", name: "Caja principal" } });
-    expect(parseRecoveryDocumentPublic(publicDoc)).toEqual(publicDoc);
+    expect(parseRecoveryDocument(publicDoc)).toEqual(publicDoc);
     expect(() =>
-      parseRecoveryDocumentPublic({
+      parseRecoveryDocument({
         ...input,
         nodeKey: { ...input.nodeKey, secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
       }),
@@ -68,9 +63,9 @@ describe("recovery document", () => {
       Object.assign(d.scope, { softwareId: "bad" });
     },
     (d: RecoveryDocument) => Object.assign(d.scope, { environment: "demo" }),
-  ])("refuses malformed or extra data %#", async (change) => {
+  ])("refuses malformed or extra data %#", (change) => {
     const d = fixture();
     change(d);
-    await expect(parseRecoveryDocument(d)).rejects.toThrow("Recovery PDF refused");
+    expect(() => parseRecoveryDocument(d)).toThrow("Recovery PDF refused");
   });
 });

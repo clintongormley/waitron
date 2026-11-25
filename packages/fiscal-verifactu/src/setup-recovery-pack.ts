@@ -9,7 +9,7 @@ export async function renderSetupRecoveryPack(
   timeZone: string,
   loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const document = await parseRecoveryDocument(input);
+  const document = parseRecoveryDocument(input);
   return renderRecoveryPack({
     locale,
     timeZone,

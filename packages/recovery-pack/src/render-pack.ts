@@ -53,7 +53,7 @@ export function packPageNumbers(parts: readonly PackPart[]): Map<PackPart, numbe
   return pageOf;
 }
 
-/** How the pack prints instants (in `timeZone`) and `YYYY-MM-DD` days. */
+/** How the pack prints instants (in `timeZone`). */
 export function packDates(locale: PackLocale, timeZone: string) {
   const language = locale === "en" ? "en-GB" : "es-ES";
   let long: Intl.DateTimeFormat;
@@ -71,13 +71,10 @@ export function packDates(locale: PackLocale, timeZone: string) {
   } catch {
     refuse("timeZone");
   }
-  const longDay = new Intl.DateTimeFormat(language, { timeZone: "UTC", dateStyle: "long" });
   return {
     longAt: (instant: string) => long.format(new Date(instant)),
     shortAt: (instant: string) => short.format(new Date(instant)),
     timeAt: (instant: string) => time.format(new Date(instant)),
-    /** A `YYYY-MM-DD` day, which names no time zone. */
-    longDay: (day: string) => longDay.format(new Date(`${day}T00:00:00.000Z`)),
   };
 }
 

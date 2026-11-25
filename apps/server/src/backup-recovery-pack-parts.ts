@@ -146,13 +146,6 @@ async function orFailed(
   }
 }
 
-/** The day `instant` falls on in the venue's zone, `YYYY-MM-DD`. */
-export function dayIn(timeZone: string, instant: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, dateStyle: "short" }).format(
-    new Date(instant),
-  );
-}
-
 async function backupKey(env: PartsContext["env"]): Promise<string> {
   const { held, key } = await readHeldKey(async () => loadRecoveryKey(env));
   if (!held) throw new AppError("backup.recovery_key_missing", {});
