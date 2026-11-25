@@ -1304,6 +1304,24 @@ describe("bill payments: the two tables, their checks and their triggers", () =>
       );
     });
 
+    it("…or when its tender's advance names another payment", async () => {
+      await expectRefusedMove(
+        await reopened(
+          {},
+          {
+            before: async (id) => {
+              const other = await receivedPayment({
+                workingOrderId: await billOf(id),
+                method: "cash",
+                tendered: 1000,
+              });
+              await advanceFor(other, await tenderFor(id));
+            },
+          },
+        ),
+      );
+    });
+
     it("…or is on a bill's own receipt", async () => {
       await expectRefusedMove(
         await reopened(

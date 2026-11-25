@@ -31,8 +31,8 @@ export const billPaymentState = enumType(["pending", "received", "failed", "decl
  * or when a received payment that no tender names, on an open or placed bill, moves money from
  * applied to tip, keeping their sum and leaving applied at least what its pending and completed
  * refunds give back of it. Its bill changes only when a received payment moves from an abandoned
- * bill to the bill reopened from it, while no tender names it other than the sale of the advance it
- * paid. `bill_payments_guard_update` and `bill_payments_no_delete`
+ * bill to the bill reopened from it, while the only tender naming it, if any, is on the sale of the
+ * advance it paid, a sale that names no bill. `bill_payments_guard_update` and `bill_payments_no_delete`
  * enforce these rules (`triggers/core.sql`).
  */
 export const billPayments = table(
