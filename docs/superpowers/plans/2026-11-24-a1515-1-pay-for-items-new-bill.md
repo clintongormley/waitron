@@ -1695,9 +1695,9 @@ the table, to print again or pay (PR4-D8).
 
 ## PR 3 — Removal (`feat/a1515-1-items-kind-removal`)
 
-On PR 4's head (`f6689d9bc8`, #4317) until that lands, then rebased onto `main`. Every `file:line`
-below was read on that head on 25 November 2026; #4317 still has the owner's wording change to come
-(lane C `questions.md`, 13:07), which renames some `split.*` strings and their tests.
+On PR 4's head (`a9d84eef8f`, #4317, which holds `main` with #4313 and the owner's wording change)
+until that lands, then rebased onto `main`. Every `file:line` below was re-read on that head on
+25 November 2026.
 
 **What it delivers.** Nothing new to see. The old "items" payment (dishes paid for while they stay on
 the table's bill) goes: the kind, its table `bill_payment_lines`, the guards that kept a paid dish
@@ -1705,11 +1705,12 @@ where it was, the two ways to pay for items that cost more than was left, and th
 Pay > Items already moves the dishes to a bill of their own. **The PR's first line: "Resets venues"**
 (core's starting migration is rebuilt). It files and charges nothing differently.
 
-**Measured first.** The product code below was removed in a throwaway worktree, the core migration
-rebuilt, and the 40 server test files that name it or the new route run: every failure is a case
-listed under Changed test checks, or follows from one in the same file. `till-api.fiscal-sale-paths`,
-the four `pay-for-items*`, `payments-api.stuck`, the golden huella test and `inmutabilidad` passed
-unedited. Of the till, only the product code and its typecheck were tried.
+**Measured first,** on PR 4's earlier head `f6689d9bc8`, before #4313. The product code below was
+removed in a throwaway worktree, the core migration rebuilt, and the 40 server test files that name it
+or the new route run: every failure is a case listed under Changed test checks, or follows from one in
+the same file. `till-api.fiscal-sale-paths`, the four `pay-for-items*`, `payments-api.stuck`, the golden
+huella test and `inmutabilidad` passed unedited. Of the till, only the product code and its typecheck
+were tried.
 
 ### Decisions
 
@@ -1717,14 +1718,17 @@ unedited. Of the till, only the product code and its typecheck were tried.
   and `bill.line_paid`, and an items payer's own-receipt advance go. `full_with_tip`/`use_pool` go with
   them: `previewAllocation` answers `choose` only for an items request
   (`packages/orders-sales/src/bill-allocation.ts:166`), `previewPayForItems` asks as a share
-  (`apps/server/src/pay-for-items.ts:616-627`), and the till's only producer is the choose step
+  (`apps/server/src/pay-for-items.ts:614-626`), and the till's only producer is the choose step
   (`apps/till/src/widgets/bill-pay-dialog.ts:2399-2456`).
 - **PR3-D2 (follows).** An old request with `kind: "items"` is refused
   `400 management.request_invalid {field: "kind"}`, also a resend; `lines` and `choice` on another kind
   are ignored, as any unknown key is. Stored items payments go with the venue reset: no reading code.
 - **PR3-D3 (follows).** In the till, `PayChoice`'s `items` stays (it is what Pay > Items means);
-  `paymentAsk` asks for it as `share` of 1, which is what the server takes on the new bill. The resend
-  key still tells picks apart (`submissionFor` adds `items.picks`, `state/bill-payment.ts:173`).
+  `paymentAsk` asks for it as `share` of 1, which is what the server takes on the new bill. Sent down
+  the bill's own route, that ask would pay the whole bill, so `takePayment` (`state/pay-for-items.ts:210`)
+  is handed the choice and throws on an items choice with no items part, as `withItems` already throws
+  with no edit state (`:144`). The resend key still tells picks apart (`submissionFor` adds
+  `items.picks`, `state/bill-payment.ts:173`).
 - **PR3-D4 (follows; corrects #4317's note).** `paysOnNewBill` (`state/pay-for-items.ts:113`) is NOT
   dead: it reads the preview's `total`, which hides the guest count and own-receipt questions and shows
   the items' price. Keep it. `AllocationPreview` keeps its one `kind: "allocated"` on the wire.
@@ -1744,90 +1748,100 @@ unedited. Of the till, only the product code and its typecheck were tried.
   back on for the sent Counter order the owner has asked for next (COUNTER-SENT-ITEMS, 12:17); it is
   designed on the new route, so PR 3 does not block it and the two only meet in `pay-for-items.ts`.
 
-**The closing dated note below (grouping) is lane B's, not this PR's.** On this branch `regroupBills`
-(`set-menu-regroup.ts:185`) has no caller. In #4313 (`ddc19b73be`) `moveOrderLines` regroups
-(`working-order-transfer.ts:195`), so the put-back (`movedItemsBack`) and Pay for items' move, part
-splits included, do too; pricing the preview by grouping is its PR 2c (D21, Task 2c.1).
+**#4313, landed first.** `moveOrderLines` regroups both bills (`working-order-transfer.ts:195`), so the
+put-back (`movedItemsBack`) and Pay for items' move do too; pricing the preview by grouping is lane B's
+PR 2c (its D21, Task 2c.1), as the dated note below. `set-menu-count.ts` is gone, leaving 8
+`refusePaidLines` calls. Its rule that a dish paid for by item keeps its place (its D2) goes here with
+the pin at `set-menu-bill.ts:392-396` and the union at `set-menu-freeze.ts:43-46`; `set-menu-moves.ts`'s
+caller of `namedFrozenLineIds` needs no edit.
 
-**#4313 and this PR** (whoever lands second rebases; take `main`'s core starting migration and rebuild):
-- *#4313 first:* `set-menu-count.ts` is gone (its three uses with it, leaving 8 `refusePaidLines`
-  calls). Still to remove here: the union at `set-menu-freeze.ts:43-46`, the pin now at
-  `set-menu-bill.ts:393`, and `bill.line_paid` in `bill-actions.ts`'s comment. Tests: the item case in
-  `set-menu-regroup.test.ts:536`, `set-menu-bill.test.ts:212`, the last `fix` in
-  `set-menu-adjustments.test.ts:200` with its helper (`:91`), the `items` row in
-  `set-menu-money.test.ts:208`, `order-portions.counter.test.ts` (~`:530-570`). Its
-  `set-menu-moves.ts` caller of `namedFrozenLineIds` needs no edit. Its D2 wording is lane B's plan.
-- *#4313 second:* lane B drops the same tests and its deletion of `set-menu-count.ts` wins.
+**REOPEN-WITH-ADVANCE** (lane C queue, after #4317, beside this PR) rewrites `refuseSplitMoney`
+(`split-after-print-money.ts`), the readers of `bill_advances` and `split.refused_advance`'s words.
+Whoever lands second rebases. Task 6's edit of `refuseSplitMoney` leaves the advance refusal exactly as
+it finds it.
 
 **Size (production measured in the trial, the rest estimated):** production +110 / −930 (till +78 / −382,
-server +21 / −437, packages and triggers +10 / −106); tests +300 / −2,200 (about 1,300 of it deleted server cases, 800
-till, 170 packages; about 100 one-line fixture edits); generated +6 / −96; docs +15 / −25.
+server +21 / −437, packages and triggers +10 / −106); tests +330 / −2,150 (about 1,300 of it deleted server cases, 750
+till, 170 packages; about 100 one-line fixture edits); generated +6 / −96; docs +15 / −30.
 
 ### Task 1 (PR 3): The till's Pay and refund windows lose the choice and the part-paid dish
 
-**Files:** `apps/till/src/state/bill-payment.ts` (`paymentAsk` `:83-112`, `confirmationOf` `:132-147`,
-`paidQuantities` `:404-418` stays until Task 2), `state/pay-for-items.ts` (`itemsChoiceOf` loses
-`offered`, `choice: null`, the `kind` checks), `widgets/bill-pay-dialog.ts` (`allocation` `:120`, the
-choose step `:2395-2456`, `#paidUnits`/`#remaining`/`#offered` `:979-993`, the cash "own tip" code
-`:2103-2115` and its use in `#tipErrors`, the `.choices` styles `:383`), `widgets/bill-refund-dialog.ts` (`#wholeOnly`),
-`till-app.ts` (`:23523-23526`, `:23875`; the `itemsDue` comment `:1804-1806`), `api/client.ts`
-(`AllocationChoice` `:1158`, `BillPaymentAsk` `:1161-1177`, `AllocationPreview` `:1201-1214`,
-`BillPaymentView.kind` `:1244`), `i18n/strings.ts` (`bill_pay.choose_later`, `.choice_legend`,
-`.choice_tip`, `.choice_pool`, `.tip_amount_between`, `bill_refund.whole_only`; reword `.items_none`,
-PR3-D7), `test/bill-pay-app.ts`.
+**Files:** `apps/till/src/state/bill-payment.ts` (`paymentAsk` `:83-112`, `confirmationOf` `:132-147`;
+`paidQuantities` `:404-418` stays until Task 2b), `state/pay-for-items.ts` (`itemsChoiceOf` loses
+`offered`, `choice: null`, the `kind` checks; `takePayment` PR3-D3), `widgets/bill-pay-dialog.ts`
+(`allocation` `:120`, the choose step `:2395-2456`, `#paidUnits`/`#remaining`/`#offered` `:979-993`, the
+cash "own tip" code `:2103-2115` and its use in `#tipErrors`, the `.choices` styles `:383`),
+`widgets/bill-refund-dialog.ts` (`#wholeOnly`), `till-app.ts` (`:23506-23509`, `takePayment` at `:23596`
+is passed `submission.shown.asked.choice`, `:23854`; the `itemsDue` comment `:1808-1810`),
+`api/client.ts` (`AllocationChoice` `:1186`, `BillPaymentAsk` `:1189-1205`, `AllocationPreview`
+`:1227-1242`, `BillPaymentView.kind` `:1273`), `i18n/strings.ts` (`bill_pay.choose_later`,
+`.choice_legend`, `.choice_tip`, `.choice_pool`, `.tip_amount_between`, `bill_refund.whole_only`; reword
+`.items_none`, PR3-D7), `test/bill-pay-app.ts`.
 
-- [ ] **Step 1: Write the failing test** in `state/bill-payment.test.ts`, replacing `:45`'s items half:
+- [ ] **Step 1: Write the failing tests.** In `state/bill-payment.test.ts`, replacing `:45`'s items half:
   `"chosen items are asked for as the whole of their own bill"` → `paymentAsk` of an items choice
-  equals the ask of a whole choice. Run `pnpm --filter @waitron/till exec vitest run
-  src/state/bill-payment.test.ts`; expected FAIL (`kind: "items"`).
+  equals the ask of a whole choice; expected FAIL (`kind: "items"`). In `state/pay-for-items.test.ts`:
+  `"takePayment refuses an items choice with no items part"` → it throws and neither
+  `api.takeBillPayment` nor `api.payForItems` is called; expected FAIL (it calls `takeBillPayment`). Run
+  `pnpm --filter @waitron/till exec vitest run src/state/bill-payment.test.ts src/state/pay-for-items.test.ts`.
 - [ ] **Step 2: Implement.** For cash the server's own rule tip is always nothing
   (`bill-allocation.ts`, `ruleTip`), so the tip floor is 0 and `addedTip` is the tip itself.
 - [ ] **Step 3: Edit the tests** (list: Changed test checks, Till 1). A pick quantity capped by a
   payment becomes a line whose quantity fell in the re-read.
-- [ ] **Step 4: Run** the files edited, `src/till-app-pay-for-items.test.ts
-  src/till-app-handheld-pay.test.ts src/i18n/strings.test.ts src/i18n/refund-wording.test.ts`,
-  `pnpm --filter @waitron/till typecheck`, and from the root `pnpm exec vitest run
-  scripts/product-file-size.test.ts scripts/english-only.test.ts`.
+- [ ] **Step 4: Run** the files edited, `src/till-app-pay-for-items.test.ts src/i18n/strings.test.ts
+  src/i18n/refund-wording.test.ts`, `pnpm --filter @waitron/till typecheck`, and from the root `pnpm exec
+  vitest run scripts/product-file-size.test.ts scripts/english-only.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "Take the old items payment's choices out of the till's Pay and refund windows"`.
 
-### Task 2 (PR 3): The till's paid marks, pickers and groupings
+### Task 2a (PR 3): The till's pick rows lose the paid row
 
 **Files:** `state/portion-selection.ts` (`PickGroup.paid`, the `paid` block, `pickedTotal`,
-`tidyPicks`, `pickedLineIds`), `state/split-selection.ts` (`picksEveryDish` `:95-104`, `keyFor`'s
-balance `:268`, `:284`), `widgets/portion-picker.ts` (`:189`, `:206`),
-`screens/till-table-order-screen.ts` (`fallbackPortionKeys` `:441-464`, `.line-paid` `:900`,
-`#paidIndexed`/`#paidDishes` `:2904-2921` and its use `:2935-2937`, `:3512`, `:4011`, `:5433-5463`,
-`:6545-6556`), `state/bill-payment.ts` (`paidQuantities`), `state/counter-portion-rows.ts` (comment),
-`i18n/strings.ts` (`table.pick_payment_stays`, `table.line_payment_part`).
+`tidyPicks`, `pickedLineIds`), `state/split-selection.ts` (`picksEveryDish` `:95-104` with its comment),
+`widgets/portion-picker.ts` (`:189`, `:206`), `state/counter-portion-rows.ts` (comment).
 
-- [ ] **Step 1: Re-point the tests first** (list: Till 2), and run them: a dish leaving the bill in the
+- [ ] **Step 1: Re-point the tests first** (list: Till 2a), and run them: a dish leaving the bill in the
   re-read already drops its pick, so these pass before the code changes. Control: with the line put
   back in the re-read, each fails.
 - [ ] **Step 2: Remove the code and the deleted tests.** Keep the money floor, the presented stop and a
   whole-bill tick on a part-paid bill exactly as they are: `picksEveryDish` keeps its `ownUnsent` test.
-- [ ] **Step 3: Run** the files edited plus `src/till-app-move-dishes.test.ts
-  src/till-app-split-table.test.ts src/till-app-split-table.reads.test.ts`, the pickers' and
-  `till-table-order-screen`'s `*.a11y.test.ts`, the till typecheck, and
-  `scripts/product-file-size.test.ts` (lower `till-table-order-screen.ts` to the limit it names).
-- [ ] **Step 4: Commit** `git commit -s -m "Take the till's paid marks and paid-dish stops away"`.
+  `anywayNote`'s `"paid"` and `data-split-paid` are about a paid bill and stay.
+- [ ] **Step 3: Run** the files edited, `src/till-app-move-dishes.test.ts src/till-app-split-table.test.ts
+  src/till-app-split-table.reads.test.ts`, the pickers' `*.a11y.test.ts` and the till typecheck.
+- [ ] **Step 4: Commit** `git commit -s -m "Stop a pick row being held back as paid for"`.
+
+### Task 2b (PR 3): The till's order screen loses the paid marks
+
+**Files:** `screens/till-table-order-screen.ts` (`fallbackPortionKeys` `:438-461`, `.line-paid` `:897`,
+`#paidIndexed`/`#paidDishes` `:2874-2891` and its use `:2905-2907`, `:3480`, `:3979`, `:5401-5431`,
+`:6511-6522`), `state/split-selection.ts` (`keyFor`'s balance `:268`, `:284`; `pickGroups` keeps its
+own), `state/bill-payment.ts` (`paidQuantities`), `i18n/strings.ts` (`table.pick_payment_stays`,
+`table.line_payment_part`).
+
+- [ ] **Step 1: Edit the tests** (list: Till 2b) and run them; the kept halves pass on the old code.
+- [ ] **Step 2: Remove the code.**
+- [ ] **Step 3: Run** the files edited, every `till-table-order-screen*.a11y.test.ts`, the till
+  typecheck, and from the root `scripts/product-file-size.test.ts` (lower `till-table-order-screen.ts` to
+  the limit it names) and `scripts/english-only.test.ts`.
+- [ ] **Step 4: Commit** `git commit -s -m "Take the paid marks off the till's order screen"`.
 
 ### Task 3 (PR 3): The till's refusal codes, live table and wire fields
 
-**Files:** `i18n/codes.ts` (`bill.line_paid` `:592`, `bill.refund_not_whole` `:728`), `till-app.ts`
-(`bill.line_paid` at `:939`, `:973`, `:994`), `widgets/cancel-credit-dialog.ts` (`:61`) and
-`split.refused_payments` (`strings.ts:2166`, `:4520`; the server's only raise, Task 6, goes),
-`api/live-connection.ts` (`:94`), `api/client.ts` (`paidLines` and `BillPaymentView.lines`
-`:1257-1258`, `:1289-1290`, doc comments `:5207`, `:5272`, `:5628`), and every test fixture that
+**Files:** `i18n/codes.ts` (`bill.line_paid` `:608`, `bill.refund_not_whole` `:744`), `till-app.ts`
+(`bill.line_paid` at `:934`, `:968`, `:989`), `widgets/cancel-credit-dialog.ts` (`:54`) and
+`split.refused_payments` (`strings.ts:2267`, `:4718`; the server's only raise for a reopen, Task 6,
+goes), `api/live-connection.ts` (`:94`), `api/client.ts` (`paidLines` and `BillPaymentView.lines`
+`:1286-1287`, `:1318-1319`, doc comments `:5085`, `:5150`, `:5502`), and every test fixture that
 states them (`git grep -n "paidLines" apps/till`; `test/bill-pay-app.ts:179,199`,
 `test/bill-pay-fixtures.ts:18`, `test/allergy-app-fixture.ts`, two `*.test-helpers.ts`).
 
 - [ ] **Step 1: Remove.** Where `bill.line_paid` is only an example of a money refusal in a test, use
   `bill.received_exceeds_total`; where that is already a row beside it, drop the row (list: Till 3).
 - [ ] **Step 2: Control.** `git grep -nE
-  "paidLines|paidQuantit|line_paid|refund_not_whole|full_with_tip|use_pool|bill_payment_lines" apps/till`
-  answers nothing.
+  "paidLines|paidQuantit|line_paid|refund_not_whole|refused_payments\"|full_with_tip|use_pool|bill_payment_lines"
+  apps/till` answers only `cancel_credit.refused_payments`.
 - [ ] **Step 3: Run** the files edited, `src/i18n/codes.test.ts src/i18n/refund-wording.test.ts
-  src/i18n/strings.test.ts src/api/client.test.ts src/api/client.item-payments.test.ts`, the till
+  src/i18n/strings.test.ts src/api/client.test.ts src/api/client.item-payments.test.ts
+  src/widgets/cancel-credit-dialog.test.ts src/till-app-parties-closing.test.ts`, the till
   typecheck, and from the root `pnpm exec vitest run scripts/live-subscriptions.test.ts
   scripts/staff-notice-codes.test.ts scripts/english-only.test.ts scripts/product-file-size.test.ts`.
 - [ ] **Step 4: Commit** `git commit -s -m "Drop the old items payment's codes and fields from the till"`.
@@ -1840,9 +1854,14 @@ tests still assert the same thing. Replace the items payment by a **contribution
 title that said "item payment". The per-file list is under Changed test checks, "Re-pointed".
 
 - [ ] **4a Payments suites:** `bill-payments-api`, `bill-payments`, `bill-payments.card`, `bill-unsent`,
-  `bill-editing.table-actions`, `adjustments-apply`.
+  `bill-editing.table-actions`, `adjustments-apply`. And one new case in `bill-payments`, "the writers
+  with no route of their own": `"refuses cutting part of a grouped line below what was received"` — three
+  Beers (9.00) on one grouped line (`writeGroupedLines`), a contribution of 6.00, then
+  `cancelLine(tx, cfg, billId, 1, "2")` is `bill.received_exceeds_total {excess: "3.00"}` and cancelling
+  `"1"` goes through. It is the only test of the check at `working-order-removal.ts:206` (Task 6).
 - [ ] **4b Bills and kitchen:** `draft-discard`, `line-cancel-api`, `move-dishes`,
-  `party-table-actions`, `till-api.bill-actions`, `till-api.table-actions`.
+  `party-table-actions`, `set-menu-adjustments`, `set-menu-money`, `till-api.bill-actions`,
+  `till-api.groups`, `till-api.table-actions`.
 - [ ] **4c Fiscal:** `bill-payments.after-ticket`, `order-dining.filing`, `order-dining.switch`,
   `order-portions.lifecycle`, `split-table.fiscal`, `till-api.move-bill`, `till-api.move-dishes`. Filed
   totals, rates, tender amounts, record counts and one-invoice checks stay word for word; a reviewer
@@ -1851,59 +1870,99 @@ title that said "item payment". The per-file list is under Changed test checks, 
   mutate one re-pointed expectation per file to see it fail, put it back, and commit
   `git commit -s -m "Part-pay with an amount where these tests used an items payment (…)"`.
 
-### Task 5 (PR 3): The server takes no items payment
+### Task 5a (PR 3): Delete the tests of the removed payment
+
+No product code: the cases listed "Deleted with the writer", and nothing else.
+
+- [ ] **Step 1: Delete them,** with the helpers and imports only they used.
+- [ ] **Step 2: Run** the edited files and the `server` and `orders-sales` typechecks. A case deleted
+  with a `venue.card.stallNextCollect()` takes the stall with it; a case that stays must use its stalled
+  reader up. (In the trial `bill-payments.card` `:736` failed only because `:709`'s stall, refused before
+  the reader, was left for it.)
+- [ ] **Step 3: Commit** `git commit -s -m "Delete the tests of the old items payment"`.
+
+### Task 5b (PR 3): The server takes no items payment
 
 After this nothing can write `bill_payment_lines`.
 
 **Files:** `packages/orders-sales/src/bill-allocation.ts` (`AllocationChoice`, `AllocationOption`, the
 items request, `offeredChoices`, `BillFunds.hasPending`, `choice`), `apps/server/src/bill-payments.ts`
-(`BillPaymentAsk` `:187-204`, `itemsDue` `:1447-1533`, `allocationRequestFor` `:1535-1564` becomes a
-plain function of the ask, the insert `:2102-2108`, `lines` in `retryShapeOf` `:1698`),
+(`BillPaymentAsk` `:188-205`, `itemsDue` `:1448-1534`, `allocationRequestFor` `:1536-1565` becomes a
+plain function of the ask, the insert `:2105-2111`, `lines` in `retryShapeOf` `:1699`),
 `bill-payments-api.ts` (`parseLines` `:73-91`, `:95`, `:103-104`, `:117-119`, the counter check
-`:142-146`), `pay-for-items.ts` (`:611`, the comment `:615` and the cast), `payments-api.ts`
-(`hasPending` `:1449`, the not-allocated refusal `:1458`, `choice: null` in `allocationChanged`).
-`BillPaymentView.kind` becomes `PaymentRow["kind"]` so Task 7 narrows it.
+`:142-146`), `pay-for-items.ts` (`:610`, the comment `:614` and the cast), `payments-api.ts`
+(`hasPending` `:1449`, the not-allocated refusal `:1458`, `choice: null` in `allocationChanged`),
+`scripts/personal-log-params.test.ts:26` (the allocation holds money amounts only). Test types that
+still name the kind or `choice`: `bill-payments-api.test.ts:572`, `:580`, `bill-payments.card.test.ts:50`,
+`:58`, `till-api.move-bill.test.ts:57`. `BillPaymentView.kind` becomes `PaymentRow["kind"]` so Task 7
+narrows it.
 
 - [ ] **Step 1: Write the failing test** in `bill-payments.card.test.ts`'s refused-body table: the row
   `["the old items kind", { ...card, kind: "items", lines: [{ lineNo: 1 }] }, "kind"]`. Expected FAIL
   (refused for `amount`).
-- [ ] **Step 2: Implement; delete the tests listed "Deleted with the writer"** and re-point
-  `packages/orders-sales/src/bill-allocation.test.ts`.
+- [ ] **Step 2: Implement,** and re-point `packages/orders-sales/src/bill-allocation.test.ts`.
 - [ ] **Step 3: Control.** `git grep -n billPaymentLines -- 'apps/server/src/*.ts' ':!*.test.ts'` shows
   reads only. An ordinary payment's fingerprint is unchanged: `retryShapeOf` only
   loses a key that `canonicalJson` dropped when absent — check by asserting one known request's
   fingerprint before and after in a scratch test, not committed.
 - [ ] **Step 4: Run** `pnpm --filter @waitron/orders-sales exec vitest run src/bill-allocation.test.ts`,
-  every server file of Tasks 4 and 5, `src/pay-for-items.test.ts src/pay-for-items.card.test.ts
+  every server file of Tasks 4 and 5a, `src/pay-for-items.test.ts src/pay-for-items.card.test.ts
   src/pay-for-items.move.test.ts src/pay-for-items.printed.test.ts src/payments-api.stuck.test.ts
-  src/counter-bill-payments.test.ts src/till-api.fiscal-sale-paths.test.ts`, and both typechecks
-  (`orders-sales`, `server`). The fiscal-sale-paths file must pass UNEDITED: it holds no items payment
+  src/counter-bill-payments.test.ts src/till-api.fiscal-sale-paths.test.ts`, both typechecks
+  (`orders-sales`, `server`), and from the root `pnpm exec vitest run scripts/personal-log-params.test.ts`.
+  The fiscal-sale-paths file must pass UNEDITED: it holds no items payment
   (its `paidLines` at `:1127` is a local name).
 - [ ] **Step 5: Commit** `git commit -s -m "Refuse the old items payment on the server"`.
 
 ### Task 6 (PR 3): The guards and readers of what items payments paid for
 
-**Files (`apps/server/src/`):** `bill-payments.ts` (`readPaymentLines` `:455`, `paidQuantitiesOf`
-`:494`, `readPaidQuantities` `:519`, `refusePaidLines` `:547`, `PaymentMoney.refunds` `:338-358`,
-`readLineNos` `:759`, `BillPaymentView.lines` and `paidLines`); the nine `refusePaidLines` calls —
-`adjustments-apply.ts` `:860`, `:906`, `:1011` (and the then-unused `covering`), `line-cancel.ts:295`,
-`set-menu-count.ts:146`, `working-order-line-edits.ts` `:429`, `:550`, `working-order-transfer.ts`
-`:137`, `:506`; `set-menu-count.ts:43-46` (the empties keep their order: `empty.slice(change)`);
-`working-order-line-edits.ts:355`; `working-order-removal.ts:552-561` (`paidLineParts`);
-`set-menu-bill.ts:302-316`; `set-menu-freeze.ts:43-46`; `bill-refunds.ts:262`; `bill-overpaid.ts:119-121`;
-`split-after-print-money.ts:25-36`; `errors.ts` (`bill.line_paid` `:906-910`, `bill.refund_not_whole`
-`:1013-1017`, the `bill.payments_received` comment `:941-944`); `till-api-errors.ts` `:225`, `:246`;
-comments at `bill-actions.ts:296`, `working-order-removal.ts:104`.
+**Files (`apps/server/src/`):** `bill-payments.ts` (`readPaymentLines` `:456`, `paidQuantitiesOf`
+`:495`, `readPaidQuantities` `:520`, `refusePaidLines` `:548`, `PaymentMoney.refunds` `:339-340`, `:359`,
+`readLineNos` `:760`, `BillPaymentView.lines` `:282-283` and `paidLines` `:305`, `:1042`);
+`bill-advances.ts` (`AdvancePaymentMoney.correctives` `:241-242`, `:360`: `:359` was its one reader); the
+eight `refusePaidLines` calls — `adjustments-apply.ts` `:862`, `:908`, `:1013` (and the then-unused
+`covering` `:972`; the comment `:801`), `line-cancel.ts:295`, `working-order-line-edits.ts` `:429`,
+`:550`, `working-order-transfer.ts` `:143`, `:511`; `working-order-line-edits.ts:355`;
+`working-order-removal.ts:620-629` (`paidLineParts`, also in `scripts/working-order-split.json:181`);
+`set-menu-bill.ts:392-396` and its spread into `fixed`; `set-menu-freeze.ts:43-46`; `bill-refunds.ts:262`
+and the comment `:149-152`; `bill-overpaid.ts:119-121` and the comment `:60-61`;
+`split-after-print-money.ts:25-36` (nothing else in `refuseSplitMoney`); `errors.ts` (`bill.line_paid`
+`:902-906`, `bill.refund_not_whole` `:1009-1013`, the `bill.payments_received` comment `:937-940`);
+`till-api-errors.ts` `:221`, `:242`; comments at `bill-actions.ts:296`, `working-order-removal.ts:105`.
 
 - [ ] **Step 1: The control, before deleting.** Make `readPaidQuantities` and `paidQuantitiesOf` answer
   an empty map and run every server file of Tasks 4 to 6 plus the four `pay-for-items*`: the only
   failures are the cases listed "Deleted with the guards". Anything else is a guard that also protected
   something; stop and report it.
 - [ ] **Step 2: Delete the code and those tests.** Keep `assertBillInvariant`,
-  `assertLinesKeptExcess`, `refusePaymentInFlight` and `refuseRefundInProgress` at every site: check
-  each of the nine callers still reaches one of the first two after its write where money may be held.
+  `assertLinesKeptExcess`, `refusePaymentInFlight` and `refuseRefundInProgress` at every site. Then
+  delete each money check below in turn, run its file, see the named test fail, and put it back
+  (measured on this head, 25 November):
+
+  | Check that stays | Guards | Its test |
+  | --- | --- | --- |
+  | `working-order-removal.ts:193`, a whole line | `adjustments-apply.ts:908`, `line-cancel.ts:295` | `bill-payments-api` "refuses a €20.00 void by the €10.00 excess…" |
+  | `working-order-removal.ts:206`, part of a line not held as portions | the same two | Task 4a's new case, nothing else |
+  | `working-order-removal.ts:285`, portions | the same two | `bill-payments-api` "refuses cutting part of a line when the rest would be less…" |
+  | `adjustments-apply.ts:1431`, a comp or discount | `adjustments-apply.ts:862`, `:1013` | `adjustments-bill-payments` "refuses a €20.00 comp by the €10.00 excess…" |
+  | `working-order-line-edits.ts:1138`, an item edit or whole-order save | `working-order-line-edits.ts:429`, `:550` | `bill-payments` `:639` re-pointed, the only one on an ordinary bill; `set-menu-regroup-paths` "checks a bill's excess payment against the grouped total…" |
+  | `bill-actions.ts:380`, Move dishes | `working-order-transfer.ts:143` | `move-dishes` "…€52.00 with €40.01 received…" |
+  | `table-actions.ts:437`, Split table | `working-order-transfer.ts:143` | `party-table-actions` "a loose pick leaving €39.99 of €52.00…" |
+  | `working-order-transfer.ts:205`, the bill the lines arrive on | `working-order-transfer.ts:143` | `set-menu-regroup-moves` "refuses moving a Water onto a part-paid bill…" |
+
+  Three kinds of write end in no check on the bill they cut or leave, and need none:
+  a cut within one bill, for Move to group and Split line (`order-group-edits.ts:221`, `:348`) and for
+  Pay for items' part (`pay-for-items.ts:262`), because `checkLinePart` (`working-order-transfer.ts:296`)
+  refuses parts whose prices do not add up to the line's; Pay for items' move
+  (`sourceMayBeOverpaid`, `pay-for-items.ts:266`), because the excess is given back or kept as a tip and
+  `refuseBelowAdvances` (`:219`) holds the advances' floor; and a bill that is emptied and abandoned — the
+  put-back, only when the new bill holds no other money (`itemsPaymentSource`,
+  `bill-payments.ts:2538`), and the merge, whose source may hold no payment
+  (`refuseBillWithPayments`, `bill-actions.ts:142`). Both check the bill the lines arrive on
+  (`working-order-transfer.ts:205`).
 - [ ] **Step 3: Run** Step 1's files, `src/finish-party-service.test.ts src/give-back.test.ts
-  src/set-menu-edits.test.ts src/set-menu-count.test.ts src/split-after-print.test.ts
+  src/set-menu-edits.test.ts src/set-menu-regroup.test.ts src/set-menu-regroup-paths.test.ts
+  src/set-menu-regroup-moves.test.ts src/split-after-print.test.ts
   src/split-after-print.money.test.ts`, the server typecheck, and from the root `pnpm exec vitest run
   scripts/errors-reachable.test.ts scripts/product-file-size.test.ts` (lower `bill-payments.ts` to the
   limit it names; 2,726 lines in the trial, so 2,750).
@@ -1952,11 +2011,13 @@ it; they are created from the manifest's list when migrating. A venue's old file
 
 ### Task 8 (PR 3): Say it
 
-**Files:** `docs/developers/design-system.md` (`:6509` "or paid mark", `:6513-6517`, `:6557`),
-`docs/backlog/menu.md` (the Piece 1 paragraph `:773` loses "Left: pull request 3…" and, if it is the
-last piece-1 point, is cut to what later pieces need; `:821-823`'s `bill.line_paid` sentence),
-`docs/backlog/till.md:925-930` (Item payment is no longer a part-of-row path there),
-`docs/superpowers/specs/2026-09-26-bill-payments-design.md` and
+**Files:** `docs/developers/design-system.md` (`:6497` "or paid mark", `:6501-6504`, the first reason at
+`:6545-6548`, `:6573` "a dish is paid or", `:6576-6577` "A paid dish stays ticked…"),
+`docs/operations/payments.md:6-8` (a part-paid bill's dishes move down to what it has received; a printed
+bill is reopened first, so its Pay items also moves the dishes), `docs/backlog/menu.md` (`:771` loses "paid
+for by item"; the Piece 1 paragraph `:773` loses "Left: pull request 3…" and, if it is the last piece-1
+point, is cut to what later pieces need), `docs/backlog/till.md:913-917` (Item payment is no longer a
+part-of-row path there), `docs/superpowers/specs/2026-09-26-bill-payments-design.md` and
 `docs/superpowers/specs/2026-10-16-a664-retention-table-inventory.md` (one dated line each: the items
 kind and `bill_payment_lines` were removed; do not rewrite). The guides need nothing: no English or
 Spanish guide names the paid mark, the choices or an items refund (checked 25 November with
@@ -1966,9 +2027,11 @@ Spanish guide names the paid mark, the choices or an items refund (checked 25 No
   Items (all, some, part of a line), Move dishes… and Split table on a part-paid bill (the floor stop
   shows; no "Has a payment"), a partial refund of a contribution. Pictures stay in the working folder.
 - [ ] **Step 2: Edit; run** `pnpm exec vitest run scripts/claude-md-pointers.test.ts
-  scripts/guide-links.test.ts`; `git grep -nE "bill_payment_lines|line_paid|refund_not_whole|paidLines|use_pool|full_with_tip"
+  scripts/guide-links.test.ts`. Two controls. `git grep -nE "bill_payment_lines|line_paid|refund_not_whole|paidLines|use_pool|full_with_tip"
   -- apps packages scripts` answers only the frozen Madrid captures, `REMOVED_TABLES`
   and the local names in `till-api.fiscal-sale-paths.test.ts` and `finish-party-service.test.ts`.
+  `git grep -nE "kind[^,;]{0,12}[\"']items[\"']|[\"']items[\"'] \| \"|[\[(, ]'items'" -- apps/server packages scripts
+  ':!packages/country-es/test-fixtures'` answers only the two refused rows of Task 5b and Task 7.
 - [ ] **Step 3: Commit** `git commit -s -m "Say in the docs that paying by item moves the dishes"`, then
   `/finish-branch`, full wave with two Codex angles. The PR body says "Resets venues" first, "Changed
   test checks", and `Sale-path read changed:` — the bill balance, an item edit and a move each make one
@@ -1980,69 +2043,84 @@ Spanish guide names the paid mark, the choices or an items refund (checked 25 No
 `bill-payments-api` — "takes an item payment for a held line…" `:1584` and "sends a held dish one guest
 paid for…" `:1644` go to `POST …/item-payments` (probed 25 November: 200, the Cake's group stays held
 on the paid bill, firing it answers 200 and makes a queued ticket, the table's bill owes 35.00; the
-`line_paid`/`paidLines` lines go); `:3956` keeps its added-tip half on a contribution; the balance
-shapes `:668`, `:686` lose `paidLines`. `bill-payments` — `:639` (contribution 25.00: dropping the Steak
-is refused `bill.received_exceeds_total`, dropping the Beer is saved); `:1533` loses its `items` row and
-its line rows. `bill-payments.card` — "change versus tip" ×3 `:505-569`, `:930`.
+`line_paid`/`paidLines` lines go); `:3956` keeps its added-tip half on a contribution; `:4457` keeps that a
+payment holding only a tip is refunded tip-only (a contribution with 0.00 applied; its lines and
+`paidLines` go); the balance shapes `:668`, `:686` lose `paidLines`. `bill-payments` — `:639` (contribution
+25.00: dropping the Steak is refused `bill.received_exceeds_total`, dropping the Beer is saved; see Task 6,
+never cut it); `:1533` loses its `items` row and its line rows. `bill-payments.card` — "change versus tip"
+×3 `:505-569`, `:930`.
 `bill-unsent` — `:217`; `:318` asks a share; the loop `:340` loses `items`. `bill-editing.table-actions`
 — the race `:818` pays with `payForItems` (party and revision named): both losers are
 `party.out_of_date` (probed), and pay-first leaves the staying dish alone on the table's bill.
 `adjustments-apply` — `:4205` keeps "comps the unpaid one" with a contribution; its refusal half goes.
 `draft-discard` `setup(true)`; `line-cancel-api` `:1071` (×2), `:1118`, `:1160`; `move-dishes` `:401`,
 `:428`; `party-table-actions` `:2587` (loses `paidLines`), `partPaid` `:3033`; `till-api.bill-actions`
-`:335` (share), `:444`; `till-api.table-actions` `payItems` `:1628` (loses `:1757`);
-`set-menu-adjustments` `:245` loses its third `fix`; `set-menu-money` loses its `items` row.
+`:335` (share), `:444`; `till-api.groups` `:2391`'s paid = 1 half (a contribution of 18.00; the five rows
+and the kept id stay); `till-api.table-actions` `payItems` `:1628` (loses `:1757`);
+`set-menu-adjustments` `:200` loses its third `fix`, "or item-paid" in its title and `payByItems` `:88`;
+`set-menu-money` `:208` loses its `items` row.
 **Re-pointed, fiscal:** `bill-payments.after-ticket` `:117`; `order-dining.filing` `:156` (two amounts of
-the same cents: same previews, same rates); `order-dining.switch` `:236`, `:570` (share);
+the same cents: same previews, same rates; titled "a takeaway bill paid in two amounts");
+`order-dining.switch` `:236`, `:570` (share);
 `order-portions.lifecycle` `:679` (share); `split-table.fiscal` `payFor` `:237` (its parametrised "an
 item payment" row goes, "a contribution" stays); `till-api.move-bill` `:474` (its line row goes, the one
 invoice of both dishes stays); `till-api.move-dishes` `:446` ×3 (loses `paidLines`).
 
 **Deleted with the writer (they assert the removed payment itself, or need one to reach a guard):**
 `adjustments-bill-payments` `:157`, `:183`; `advance-money` `:497` (an items payer's advance);
-`bill-overpaid` `:572`; `bill-payments-api` `:1460`–`:1532`, `:1724`, `:1739`, the block `:1754`,
-`:3994`, `:4423`, `:4484`, `:5620`; `bill-payments` `:594`, `:681`, `:711`, `:739`, `:3161`;
+`bill-overpaid` `:572`; `bill-payments-api` `:1460`–`:1532` with `steakPaid`, `:1724`, `:1739`, the block
+`:1754`, `:3994`, `:4423`, `:4484`, `:5620`; `bill-payments` `:594`, `:681`, `:711`, `:739`, `:3161`;
 `bill-payments.card` the block `:572` ("the steak") and the body rows "lines that are not a list", "a
 line numbered 0", "lines on a contribution", "an unknown choice"; `line-cancel-api` `:719`;
 `move-dishes` `:667`, `:985`; `order-portions.adjustments` `:985`, `:1322`; `order-portions.counter`
-`:514` (its insert goes; a 3,277-burger `payForItems` was probed as far as the invoice limit);
-`party-bill-actions` `:294`; `party-table-actions` `:3079`; `set-menu-adjustments` `:194`;
-`set-menu-regroup` `:536`; `split-after-print.money` `:349`; `till-api.groups` `:2391` ×2;
+`:532` (its insert goes; a 3,277-burger `payForItems` was probed as far as the invoice limit);
+`party-bill-actions` `:294`; `party-table-actions` `:3079`; `set-menu-regroup` `:536`;
+`split-after-print.money` `:349`; `till-api.groups` `:2391`'s paid = 2 half;
 `till-api.move-dishes` `:301`; `till-api.table-actions` `:1324`. In
 `packages/orders-sales/src/bill-allocation.test.ts`: the block `:350`, `:501`, the "items costing
-nothing" row; its other items cases become a contribution of the same amount, and five `choice: null`
-go.
-**Deleted with the guards (they insert the rows directly):** `bill-payments-api` `:4457`;
-`draft-split` `:339`'s `items` row and `frozen()`'s `allocations` (every case in that file reads it);
-`set-menu-bill` `:196`; `tabs` `:3039`. **With the storage:** as Task 7, Step 1.
+nothing" row; in Task 5b its other items cases become a contribution of the same amount, and five
+`choice: null` go.
+**Deleted with the guards (they insert the rows directly):** `draft-split` `:339`'s `items` row and
+`frozen()`'s `allocations` (every case in that file reads it); `set-menu-bill` `:212`; `tabs` `:3039`.
+**With the storage:** as Task 7, Step 1.
 
 **Till 1:** delete `widgets/bill-pay-dialog.test.ts` `:344`, `:410`, `:436`'s paid half (the empty list
-keeps a case), `:899`, the choices block `:945`, `:1098`, `:1117`, `:3364`; re-point `:237` (the re-read's line
+keeps a case), `:899`, the choices block `:945`, `:1098`, `:1117`, `:3372`; re-point `:237` (the re-read's line
 quantity fell); `bill-pay-dialog.a11y.test.ts` `:369` and the choose rows `:1285`; `bill-refund-dialog`
 `:213` and its a11y `:88`; `state/bill-payment.test.ts` `:45`'s items half, `:139`;
-`pay-for-items.test.ts` `:138`; `api/client.test.ts` `:6410` previews a share and answers an allocation.
-About 50 `choice: null` fixture lines go.
-**Till 2:** delete `till-table-order-screen.bill-payments`'s block `:401` (its `:508` keeps the held
-half); `.sent-portions` `:392`; `.sent-fallback` `:114` and its a11y `:111`;
-`.current-list-retirement.a11y` `:24`; `.sent-change` `:266`, `:297` and the "a payment for it lands"
-row `:1017` (`:246` is a settled bill and stays; `:1198` loses only its paid mark);
-`state/bill-payment.test.ts` `:655`;
-`portion-selection` `:180`, `:284`, `:429`; `split-selection` `:258`, `:303`, `:382`, `:800`'s paid
-block, `:1160`; `portion-picker` `:249`, `:293`, `:650`; `split-picker` `:225`; the paid states of the
-pickers' a11y files. Re-point at a dish that left the bill: `.move-dishes` `:597`, `.split-table`
-`:1329` (without its reason text), `:1354`, the helper `paidSalad` `:2194`, `:2914`, `.split-table.unsaved` `:825`,
-`split-selection` `:893`, `:905`, `:917`; `:979` becomes a contribution. `till-app-move-dishes` `:613`,
-`:667`, `:1005` use the money floor.
-**Till 3:** `bill.line_paid` → `bill.received_exceeds_total` in `till-app-bill-payments` `:2536`,
-`:4339`, `till-app-move-dishes` `:648`, `:729`, `:1005`, `:1314`, `till-app-split-table`
-`:2465`–`:3225`, `till-app-adjustments`, `till-app-table-service` `:1424`, `adjustment-dialog` and its
-a11y; rows dropped in `codes.test.ts:268`, `refund-wording.test.ts` `:6`, `:58`, and
-`till-app-split-table` `:2439`. `till-app-bill-payments` `:5878`'s stub says `kind: "share"`.
+`pay-for-items.test.ts` `:138`, and `takePayment`'s calls gain the choice; `api/client.test.ts` `:6438`
+previews a share and answers an allocation; `till-app-bill-payments.test.ts` `:5951` says
+`kind: "share"`. About 50 `choice: null` fixture lines go (`git grep -n "choice: null" apps/till`); the
+typecheck names these outside the files above: `till-app-handheld-pay.test.ts:97`,
+`till-app-bill-payments.test.ts:6067`, `bill-pay-dialog.unsaved.test.ts:144,266`,
+`widgets/payment-leading-zeros.test.ts:158`, `pay-for-items.test.ts:186,235`, `test/bill-pay-app.ts:220`.
+**Till 2a:** delete `portion-selection` `:180`, `:284`, `:429`; `split-selection` `:258`, `:303`, `:382`,
+`:1160`; `portion-picker` `:249`, `:293`, `:650`; `split-picker` `:225`; the paid states of the pickers'
+a11y files. Re-point: `split-selection` `:800` ("draws rows from the read's lines and balance") keeps
+its subject with the floor as the stop; at a dish that left the bill, `.move-dishes` `:597`,
+`.split-table` `:1329` (without its reason text), `:1354`, the helper `paidSalad` `:2196`, `:2914`,
+`.split-table.unsaved` `:825`, `split-selection` `:893`, `:905`, `:917`; `split-selection` `:979` becomes
+a contribution. `till-app-move-dishes` `:617`, `:671`, `:1009` use the money floor. The test keys' third
+argument (`paidQuantities`) goes.
+**Till 2b:** delete `till-table-order-screen.bill-payments`'s block `:401` (its `:508` keeps the held
+half); `.sent-portions` `:392`; `.sent-fallback`'s a11y `:111`; `.sent-change` `:266`, `:297` and the "a
+payment for it lands" row `:1017` (`:246` is a settled bill and stays; `:1198` loses only its paid mark);
+`state/bill-payment.test.ts` `:655`; the file `.current-list-retirement.a11y.test.ts`, whose only test is
+the mark (a held dish's window keeps its axe checks in `.sent-actions.a11y.test.ts:44` and
+`.drawer-placement-retirement.a11y.test.ts`). Re-point `.sent-fallback` `:114`: on a part-paid bill the
+read-only list still has no buttons.
+**Till 3:** `bill.line_paid` → `bill.received_exceeds_total` in `till-app-bill-payments` `:2567`,
+`:4370`, `till-app-move-dishes` `:652`, `:733`, `:1009`, `:1318`, `till-app-split-table`
+`:2465`–`:3225`, `till-app-adjustments`, `till-app-table-service` `:1519`, `adjustment-dialog` and its
+a11y; rows dropped in `codes.test.ts:311`, `refund-wording.test.ts` `:7` (Task 1's `whole_only`), `:71`,
+and `till-app-split-table` `:2439`. `split.refused_payments` goes from `cancel-credit-dialog.test.ts`
+(`:457`'s row, `:557`) and `till-app-parties-closing.test.ts` `:841`.
 
 ### Review Focus (PR 3)
 
-1. **A guard that protected something else.** Nine `refusePaidLines` sites go; each must still refuse
-   what money on the bill forbids (`bill.received_exceeds_total`) and a card in flight. Task 6 Step 1.
+1. **A guard that protected something else.** Eight `refusePaidLines` sites go; each must still refuse
+   what money on the bill forbids (`bill.received_exceeds_total`) and a card in flight. Task 6 Steps 1
+   and 2.
 2. **Give back and Keep as tip.** `kind` conditions go from the refund, Keep as tip and the two trigger
    clauses: a partial refund and a kept tip now apply to every bill payment. Nothing else in
    `bill_payments_guard_update` may move (advances, tenders and pending refunds still refuse).
@@ -2050,10 +2128,11 @@ a11y; rows dropped in `codes.test.ts:268`, `refund-wording.test.ts` `:6`, `:58`,
    across the change: the fingerprint's remaining keys are the same.
 4. **What is charged and filed.** The allocation for a share and a contribution, cash and card, tips on
    and off, is unchanged to the cent; a bill's invoice is still issued once, when received equals due.
+   Items never become a whole-bill payment of the table's bill (PR3-D3).
 5. **The till's stops on a part-paid bill.** Move dishes and Split table still refuse picks below the
    money floor, and a held or presented bill; a whole-bill tick still carries payments.
 6. **A stale name.** `bill_payment_lines` in a live-update list breaks `scripts/live-subscriptions`,
-   in the append-only list breaks start; a till left open from before PR 2 gets a plain 400.
+   in the append-only list breaks start; a till left open from before PR 4 gets a plain 400.
 
 _2026-11-24, for the piece that runs the bill's set-menu grouping on the server: PR 1's put-back moves lines with `moveOrderLines` in `movedItemsBack` (`bill-payments.ts`), not through `moveDishes`; Pay for items splits part of a line with `splitLinesWithinOrder` (`pay-for-items.ts`); the preview prices picks in `priceItemPicks` (`pay-for-items.ts`). Each must regroup or price with the grouping too._
-_2026-11-25: lane B's, as the section above says: #4313 for the moves, its PR 2c for the preview._
+_2026-11-25: #4313 landed the moves' regrouping; the preview is lane B's PR 2c._
