@@ -268,7 +268,7 @@ export async function refundBillPayment(
           }
 
           const manual = provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true;
-          // Money just taken on this bill goes back with no approver's PIN (owner, 2026-11-24).
+          // An overpaid bill's excess goes back with no approver's PIN (owner, 2026-11-24).
           const approver =
             manual && permission === "sale.refund"
               ? await confirmManualRefundAuthority(

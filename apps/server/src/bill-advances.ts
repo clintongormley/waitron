@@ -24,10 +24,13 @@ import {
   AppError,
   addDecimal,
   centsToDecimal,
+  compareDecimal,
   decimal,
   localCalendarDate,
   rawCentsToDecimal,
   seriesId,
+  subtractDecimal,
+  sumDecimals,
   timeZoneOffsetMinutes,
   type Decimal,
 } from "@waitron/shared";
@@ -363,6 +366,25 @@ export async function readBillAdvances(
     });
   }
   return { credits, payments };
+}
+
+/** Refuse (D4) a bill whose `left` total is less than its advances credit; with none, `left` is not
+ * worked out. */
+export async function refuseBelowAdvances(
+  tx: Transaction,
+  billId: string,
+  left: () => Promise<Decimal>,
+): Promise<void> {
+  const credits = (await readBillAdvances(tx, [billId])).credits.get(billId);
+  if (credits === undefined) return;
+  const credited = sumDecimals(credits.map((credit) => credit.gross));
+  const excess = subtractDecimal(credited, await left());
+  if (compareDecimal(excess, ZERO) > 0)
+    throw new AppError("bill.below_advances", {
+      workingOrderId: billId,
+      advances: money(credited),
+      excess: money(excess),
+    });
 }
 
 /**

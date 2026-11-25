@@ -1321,13 +1321,13 @@ it.each([
   },
 );
 
-it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
+it("tells staff the receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "The table's receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
+    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket de la mesa no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
+    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
     /while money back on the payment on account is under way\. /,
@@ -1604,6 +1604,29 @@ it("words bill.below_advances with the advances' amount, and without it when non
   expect(codeMessage("bill.below_advances", "en")).toBe(
     "Part of this bill was paid with its own receipt, so it cannot come to less than that. Choose fewer items, or pay by amount.",
   );
+});
+
+it("words bill.below_advances met seating a Counter order with what to give back, and without it", () => {
+  const seating = { reason: "seating", advances: "20.00", excess: "6.00" };
+  expect(codeMessage("bill.below_advances", "en", seating)).toBe(
+    `${formatMoney("20.00", "en")} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give back ${formatMoney("6.00", "en")} on that receipt with Give money back, or keep the order at the Counter.`,
+  );
+  expect(codeMessage("bill.below_advances", "es", seating)).toBe(
+    `${formatMoney("20.00", "es")} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes ${formatMoney("6.00", "es")} de ese ticket con Devolver dinero, o deja el pedido en el mostrador.`,
+  );
+  for (const params of [
+    { reason: "seating" },
+    { reason: "seating", advances: "20.00" },
+    { reason: "seating", excess: "6.00" },
+    { reason: "seating", advances: 20, excess: 6 },
+  ]) {
+    expect(codeMessage("bill.below_advances", "en", params)).toBe(
+      "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give money back on that receipt with Give money back, or keep the order at the Counter.",
+    );
+    expect(codeMessage("bill.below_advances", "es", params)).toBe(
+      "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+    );
+  }
 });
 
 it("words Give money back's refusals in both languages, saying nothing went back or what to do", () => {

@@ -56,6 +56,19 @@ export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof 
   </div>`;
 }
 
+/** Where a Counter order went, with what its set menus there left it paid over, if anything. */
+export function movedToTableNotice(
+  table: string,
+  overpaid: string | undefined,
+  keepsTips: boolean,
+): string {
+  if (overpaid === undefined) return fill(t("counter.moved_to_table"), { table });
+  return fill(
+    t(keepsTips ? "counter.moved_to_table_overpaid" : "counter.moved_to_table_overpaid_give_back"),
+    { table, amount: formatMoney(decimal(overpaid), currentLocale()) },
+  );
+}
+
 /** Finish table's refusal when what stops it is a bill paid more than it comes to: that bill's
  * excess is given back, or kept as a tip, on the bill itself. `go` is absent for the bill on screen,
  * whose own notice offers both. */

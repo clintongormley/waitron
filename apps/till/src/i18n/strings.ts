@@ -1900,6 +1900,10 @@ export const en = {
   "held.move_to_table": "Move to table",
   "held.no_tables": "The floor lists no tables to move it to",
   "counter.moved_to_table": "Moved to {table}",
+  "counter.moved_to_table_overpaid":
+    "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back, or keep it as a tip, on its bill there.",
+  "counter.moved_to_table_overpaid_give_back":
+    "Moved to {table}. It has been paid {amount} more than it now comes to: give the extra back on its bill there.",
   "counter.held_move_draft_conflict":
     "Someone else has unsent dishes on this parked order. Choose a table with no unsent orders, or leave the order where it is.",
   "bill.pay_with_bill_payments":
@@ -4280,6 +4284,10 @@ export const es: Record<StringKey, string> = {
   "held.move_to_table": "Pasar a mesa",
   "held.no_tables": "El plano no tiene mesas a las que pasarlo",
   "counter.moved_to_table": "Pasado a {table}",
+  "counter.moved_to_table_overpaid":
+    "Pasado a {table}. Se han pagado {amount} de más: devuelve lo que sobra, o déjalo de propina, en su cuenta.",
+  "counter.moved_to_table_overpaid_give_back":
+    "Pasado a {table}. Se han pagado {amount} de más: devuelve lo que sobra en su cuenta.",
   "counter.held_move_draft_conflict":
     "Otra persona tiene platos sin enviar en este pedido aparcado. Elige una mesa sin pedidos pendientes o deja el pedido donde está.",
   "bill.pay_with_bill_payments":

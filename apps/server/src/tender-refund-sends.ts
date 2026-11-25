@@ -326,7 +326,7 @@ async function recordOutcomeIn(
   return saved!;
 }
 
-/** A completed refund of a bill payment can leave a bill Pay for items overpaid owing exactly what
+/** A completed refund of a bill payment can leave an overpaid bill owing exactly what
  * it holds: its invoice is issued then, under the device and person that asked for the refund,
  * dated by the latest acceptance as a card payment completed later is. The provider has already
  * given the money back, so an advance's open correction leaves the invoice waiting, as it does for

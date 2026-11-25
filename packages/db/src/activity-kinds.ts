@@ -152,7 +152,7 @@ export interface ActivityKindData {
     readonly to: string;
     readonly rows: number;
   };
-  /** Who kept as a tip what Pay for items left a bill paid over its total: the whole amount, and
+  /** Who kept as a tip what a bill was paid over its total: the whole amount, and
    * how much each bill payment moved from its applied money to its tip. */
   readonly "bill.overpaid_kept_as_tip": {
     readonly amount: string;

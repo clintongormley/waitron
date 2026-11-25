@@ -16,9 +16,9 @@ export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): strin
   return over === undefined || compareDecimal(decimal(over), decimal("0")) <= 0 ? null : over;
 }
 
-/** Whether `asked` gives back no more than `balance` was paid over its total: money just taken on
- * this bill, which the server gives back with no approver's PIN unless tips it gave back earlier
- * used up the excess (`refundPermission`, apps/server/src/bill-overpaid.ts). */
+/** Whether `asked` gives back no more than `balance` was paid over its total, which the server
+ * gives back with no approver's PIN unless tips it gave back earlier used up the excess
+ * (`refundPermission`, apps/server/src/bill-overpaid.ts). */
 export function givesBackOverpaid(
   balance: Pick<BillBalance, "overpaid"> | null,
   asked: Pick<RefundAsk, "appliedAmount" | "tipAmount">,

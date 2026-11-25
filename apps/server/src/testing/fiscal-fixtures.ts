@@ -227,6 +227,21 @@ export function filedRecordOf(db: Database, workingOrderId: string) {
     where s.working_order_id = ${workingOrderId}`)[0]!;
 }
 
+/** The total each record filed for an order states, the payments on account of it that got their own
+ * receipts included, in the order they were filed. */
+export function filedTotalsOf(db: Database | Transaction, workingOrderId: string): string[] {
+  return db
+    .all<{ total: string }>(
+      sql`
+    select importe_total as total from verifactu_records
+    where sale_id in (
+      select id from sales where working_order_id = ${workingOrderId}
+      union select advance_sale_id from bill_advances where working_order_id = ${workingOrderId})
+    order by rowid`,
+    )
+    .map(({ total }) => total);
+}
+
 /** The producer the latest record filed names. */
 export function lastFiledProducer(db: Database): string {
   return db.all<{ producer: string }>(sql`

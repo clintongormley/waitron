@@ -33,11 +33,10 @@ import "./errors.js";
 
 /**
  * The permission a give-back of `amount` from a bill payment needs, its applied money and tip
- * together (owner, 2026-11-24): on a bill Pay for items left holding more than it owes, handing
- * back no more than that excess is money just taken on this bill, so `payment.take`; any other
- * refund `sale.refund`. The excess counts applied money only, so applied money given back lowers
- * it and a tip given back does not: every tip the bill's payments have given back is counted
- * against it too, or give-backs in turn could hand back more than it.
+ * together (owner, 2026-11-24): handing back no more than what an open bill holds above its total
+ * needs `payment.take`; any other refund `sale.refund`. The excess counts applied money only, so
+ * applied money given back lowers it and a tip given back does not: every tip the bill's payments
+ * have given back is counted against it too, or give-backs in turn could hand back more than it.
  */
 export async function refundPermission(
   tx: Transaction,
