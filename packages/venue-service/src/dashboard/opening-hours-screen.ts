@@ -683,7 +683,6 @@ export class OpeningHoursScreen extends LitElement {
       (stations) => {
         this.stations = activeStationsInOrder(stations);
       },
-      // Show keeps its departments; the station list is a choice the page works without.
       () => {
         this.stations ??= [];
       },
@@ -1601,6 +1600,7 @@ export class OpeningHoursScreen extends LitElement {
         .stations=${this.showStations()}
         .station=${this.stationShow()}
         .show=${this.shownGroup()}
+        .readOnly=${this.readOnly}
         @calendar-day-open=${this.openDayBox}
         @week-month-open=${(event: CustomEvent<{ month: string }>) => {
           this.dropDayBox();

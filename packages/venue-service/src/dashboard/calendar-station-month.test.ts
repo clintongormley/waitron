@@ -262,6 +262,9 @@ describe("A725 Calendar station month, migrated from Times", () => {
     expect(text(el.shadowRoot!.querySelector("[data-test=station-change-policy]"))).toBe(
       "Changes after sending: While held or waiting",
     );
+    const hint = text(monthRoot(el)!.querySelector("[data-test=station-explanation]"));
+    expect(hint).toContain("A prep station is open while a period sends it orders.");
+    expect(hint).not.toContain("Change its hours");
     cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!.click();
     const box = () => el.shadowRoot!.querySelector("calendar-day-box");
     await expect.poll(() => box()?.shown).toBe(true);
@@ -275,6 +278,10 @@ describe("A725 Calendar station month, migrated from Times", () => {
     const view = month(el)!;
     expect(view.station?.state).toBe("ready");
     expect(view.readOnly).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=station-change-policy]")).toBeNull();
+    expect(text(monthRoot(el)!.querySelector("[data-test=station-explanation]"))).toContain(
+      "Change its hours through the periods",
+    );
     expect(readsOf(calls, "month?")).toEqual([
       "/management-api/venue-service/opening-hours/month?month=2026-12",
     ]);

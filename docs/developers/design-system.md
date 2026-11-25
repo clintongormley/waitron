@@ -5803,8 +5803,9 @@ Opening hours' Year.
   today's own inner ring in `--wt-color-primary`. Show starts on All departments, followed by
   indented departments, then pickable All prep stations and its indented stations. Month and Week add
   Show all first. Viewers get the same Show choices. When they choose one station, its saved
-  Changes after sending rule appears as text above the Month or Week. A station option draws its
-  named icon after the label in the list and the closed picker.
+  Changes after sending rule appears as text above the Month or Week. The station hours hint gives
+  editing directions to people who can edit the Calendar. A station option draws its named icon
+  after the label in the list and the closed picker.
   Choosing one writes `/station/<id>`; choosing a group writes `/show/stations` or `/show/all`.
   A station takes precedence over a group, then a group over a department. Year keeps these keys without using them; Month and Week both use Show all to compare
   departments followed by stations.

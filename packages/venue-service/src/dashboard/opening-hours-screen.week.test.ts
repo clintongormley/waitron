@@ -1023,6 +1023,11 @@ describe("a prep station in the Calendar", () => {
     expect(policy()?.textContent?.trim()).toBe("Changes after sending: While held");
     expect(policy()!.tagName).toBe("P");
     expect(policy()!.children).toHaveLength(0);
+    const hint = week(el)!.shadowRoot!.querySelector(
+      "[data-test=station-explanation]",
+    )?.textContent;
+    expect(hint).toContain("A prep station is open while a period sends it orders.");
+    expect(hint).not.toContain("Change its hours");
     for (const date of ["2026-12-09", "2026-12-14"]) {
       if (date === "2026-12-14") {
         week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();

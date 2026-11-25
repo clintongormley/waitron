@@ -1,4 +1,4 @@
-import { html, type TemplateResult } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { MonthNames } from "./opening-hours-day.js";
@@ -9,8 +9,11 @@ const ALL = "all";
 const STATION = "station:";
 export type CalendarShow = "" | "stations" | "all";
 
-export const stationExplanation = () =>
-  html`<p data-test="station-explanation">${t("opening.station_hours")}</p>`;
+export const stationExplanation = (readOnly: boolean) =>
+  html`<p data-test="station-explanation">
+    ${t("opening.station_hours")} ${readOnly ? nothing : t("opening.station_hours_edit")}
+    ${t("opening.default_station_hours")}
+  </p>`;
 
 export function showPicker(options: {
   model: OpeningHoursMonth;

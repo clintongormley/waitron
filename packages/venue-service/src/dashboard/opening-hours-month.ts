@@ -593,7 +593,7 @@ export class OpeningHoursMonthView extends LitElement {
         ${model ? this.#tools(model, chosen, names) : nothing}
       </div>
       ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
-      ${this.stations.length ? stationExplanation() : nothing}
+      ${this.stations.length ? stationExplanation(this.readOnly) : nothing}
       ${model ? this.#body(model, chosen, names) : nothing}
       ${
         model && !this.readOnly && !this.station

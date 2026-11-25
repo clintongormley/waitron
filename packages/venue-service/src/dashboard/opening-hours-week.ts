@@ -361,6 +361,7 @@ export class OpeningHoursWeekView extends LitElement {
   /** The station Show shows, drawn in place of `model`'s departments; its rows read as orders. */
   @property({ attribute: false }) station?: StationShow;
   @property() show: CalendarShow = "";
+  @property({ type: Boolean }) readOnly = false;
 
   /** Whether the Week's own width is below `PHONE_WIDTH`. */
   @state() narrow = false;
@@ -487,7 +488,7 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${this.stations.length ? stationExplanation() : nothing}
+      ${this.stations.length ? stationExplanation(this.readOnly) : nothing}
       ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}`;
   }
 
@@ -524,7 +525,7 @@ export class OpeningHoursWeekView extends LitElement {
         )}
         ${this.#step(1, "next-day", "week.next_day", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
-      ${this.stations.length ? stationExplanation() : nothing}
+      ${this.stations.length ? stationExplanation(this.readOnly) : nothing}
       ${drawn ? this.#body(drawn, (body) => this.#day(body)) : nothing}
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>`;
   }
