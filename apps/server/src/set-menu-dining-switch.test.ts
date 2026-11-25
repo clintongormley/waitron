@@ -186,8 +186,6 @@ async function whileLateSoupMenuOnSale(act: () => Promise<void>): Promise<void> 
       kind: "set_menu",
       name: `Late menu ${randomUUID()}`,
       setPrice: "4.00",
-      setVatClass: "reduced",
-      setTakeawayVatClass: "general",
     });
     await addSetMenuDishes(tx, menuId, [
       { productId: spec.productIds.Soup, excludedVariantIds: [] },

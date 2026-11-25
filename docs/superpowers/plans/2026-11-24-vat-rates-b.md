@@ -564,6 +564,9 @@ B1.2b already removed the one label read that decided a filed rate (`line-vat-ra
 Assertions: run the label script with `MODE=A` on the task's packages (measured: menu 54 cuts, server
 70, venue-service 3, till 4, dashboard 2), then the hand edits named. **About 40 hand edits a task.**
 
+_2026-11-25: `set-menu-count.ts` and its tests are gone (A1515-3 PR 2b, #4313); `set-menu-regroup.ts` is
+the one writer of a set menu's line._
+
 - [ ] **B3.1 Server production.** `working-order.ts:273, 519-520, 916-950, 1062-1063, 1128-1129, 4961-4962,
   5166-5167, 5466, 5731` (**not `:5007`**, D8), `modifier-selection.ts:12, 23-24, 41-43, 156-157, 524-525`,
   `upgrade-sale.ts:95`, `set-menu-count.ts:91-92`, `free-items.ts:161`. D8's `$defaultFn` in

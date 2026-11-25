@@ -379,8 +379,8 @@ async function whatTheBillShows(billId: string) {
   const { copies, recorded, setMenus, dishes } = read.setMenus;
   const offer = (copyId: string) => {
     const copy = copies.find(({ id }) => id === copyId)!;
-    const { setMenuId, name, priceCents, lines, terms } = copy;
-    return { setMenuId, name, priceCents, lines, terms, dishes: copy.dishes };
+    const { setMenuId, name, priceCents, lines } = copy;
+    return { setMenuId, name, priceCents, lines, dishes: copy.dishes };
   };
   return {
     exact,
