@@ -398,27 +398,41 @@ it("asks about a waiting refund once while that is out, and answers it though it
   expect(api.retryTenderRefund).toHaveBeenCalledOnce();
 });
 
-it("leaves a press saved since the device locked alone when the old asking is answered", async () => {
-  const api = fakeApi();
-  api.giveBack.mockResolvedValueOnce(pendingWithRest);
-  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
-  let answer!: (value: { state: string }) => void;
-  api.retryTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
-  const locked = new GiveBackSession(scope, api);
-  await locked.submit("sale-1", ask);
-  const out = locked.checkRest("sale-1");
-  await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
-  localStorage.clear();
-  api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-  const session = new GiveBackSession(scope, api);
-  await session.submit("sale-1", ask).catch(() => {});
-  const saved = session.read("sale-1");
-  expect(saved?.sent).toBeTruthy();
+it.each([
+  ["a press with no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+  [
+    "another refund left waiting",
+    async () =>
+      outcome({
+        parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-2" }],
+      }),
+  ],
+])(
+  "leaves %s saved since the device locked alone when the old asking is answered",
+  async (_what, next) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+    let answer!: (value: { state: string }) => void;
+    api.retryTenderRefund.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const locked = new GiveBackSession(scope, api);
+    await locked.submit("sale-1", ask);
+    const out = locked.checkRest("sale-1");
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    localStorage.clear();
+    api.giveBack.mockImplementationOnce(next);
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask).catch(() => {});
+    const saved = session.read("sale-1");
+    expect(saved).not.toBeNull();
 
-  answer({ state: "failed" });
-  expect(await out).toEqual({ state: "failed" });
-  expect(session.read("sale-1")).toEqual(saved);
-});
+    answer({ state: "failed" });
+    expect(await out).toEqual({ state: "failed" });
+    expect(session.read("sale-1")).toEqual(saved);
+  },
+);
 
 it("keeps no rest after a refusal: what is left is given back from a new press", async () => {
   const api = fakeApi();

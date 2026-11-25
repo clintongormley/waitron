@@ -456,6 +456,17 @@ describe("a card refund the box knows is waiting", () => {
     expect(status(el)).toBe("");
   });
 
+  it("only reads the receipt when the box has settled the refund meanwhile, asking the card company nothing", async () => {
+    const api = waitingApi();
+    const { el } = await mount(api);
+    api.readGiveBack.mockResolvedValueOnce(VIEW);
+    check(el)!.click();
+    await vi.waitFor(() => expect(check(el)).toBeNull());
+    expect(status(el)).toBe("");
+    expect(api.getRefundableTenders).not.toHaveBeenCalled();
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
   it.each([
     [undefined, "tender_refund.failed"],
     ["provider_balance_unavailable", "refund.provider_balance_unavailable"],

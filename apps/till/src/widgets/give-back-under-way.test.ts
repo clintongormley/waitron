@@ -1349,13 +1349,16 @@ describe("Check again while a card refund waits for the card company", () => {
     },
   );
 
-  it("says the receipt could not be read when nothing was asked", async () => {
+  it("says the receipt could not be read when nothing was asked, also after an asking was lost", async () => {
     const api = waitingApi();
     const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockRejectedValueOnce(lost());
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
     api.getInvoiceCorrection.mockRejectedValueOnce(lost());
     press(el, "check");
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
-    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
   });
 
   it("asks an approver when the person signed in may not, then asks with their PIN", async () => {
