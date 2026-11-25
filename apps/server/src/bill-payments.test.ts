@@ -1558,7 +1558,7 @@ describe("the invoice at full payment", () => {
   });
 
   it.each(["share", "contribution"] as const)(
-    "retains explicit net money without changing a pending %s selection",
+    "retains explicit net money without changing a pending %s's kind",
     async (kind) => {
       const billId = await tabWith("Beer");
       const id = await insertPayment(billId, {

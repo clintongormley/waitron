@@ -2421,6 +2421,9 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     );
     expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
     expect(rows[0]!.id).toBe(body.lineId);
+    expect(rows.reduce((sum, row) => sum + row.lineTotal, 0)).toBe(9000);
+    const balance = await call("GET", `/api/working-orders/${party.tabId}/payments`);
+    expect(balance.json).toMatchObject({ received: "18.00" });
   });
   it("refuses the entire split of a line with two paid units", async () => {
     const party = await seated();

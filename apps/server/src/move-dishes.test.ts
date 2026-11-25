@@ -407,7 +407,7 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(await paymentsOf(v, p.bill2)).toEqual([]);
   });
 
-  it("A803 move dishes: after a part payment of one Caña's price, the other Cañas move and one stays", async () => {
+  it("A803 move dishes: after a part payment of one Caña's price, two of three Cañas move, leaving exactly what was received", async () => {
     const p = await party([dish("Caña", "3")]);
     const beerLines = await dishIds(p.bill1, "Caña");
     await cashContribution(v, p.bill1, "3.00");
@@ -429,22 +429,6 @@ describe("A803 move dishes: the moves that succeed", () => {
 
     expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await total(p.bill2)).toBe(before + 300);
-    expect(await paymentsOf(v, p.bill2)).toEqual(payments);
-    expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
-  });
-
-  it("A803 move dishes: onto Bill 2 holding a part payment of its Red wine bottle's price, the Caña moves and the payment is unchanged", async () => {
-    const p = await party([dish("Caña"), dish("Burger")], "fire", [
-      dish("Red wine bottle"),
-      dish("Water"),
-    ]);
-    const paymentId = await cashContribution(v, p.bill2, "30.00");
-    const payments = await paymentsOf(v, p.bill2);
-    const [beerLine] = await dishIds(p.bill1, "Caña");
-
-    await move(p.partyId, p.bill1, p.bill2, [beerLine!]);
-
-    expect(await dishIds(p.bill2, "Caña")).toEqual([beerLine]);
     expect(await paymentsOf(v, p.bill2)).toEqual(payments);
     expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
   });

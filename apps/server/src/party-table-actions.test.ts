@@ -3033,7 +3033,7 @@ describe("A803 split", () => {
         expect(payments).toHaveLength(1);
       });
 
-      it("a dish no money received covers can go loose, the payment staying", async () => {
+      it("a dish can go loose when what stays still covers the part payment, the payment staying", async () => {
         const { anna, m5, b1 } = await partPaid("A803 Part loose");
         const payments = await paymentsOf(v, b1);
         const water = await lineOn(b1, "Water");

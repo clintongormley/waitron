@@ -205,23 +205,23 @@ it("builds the spec bill: 3 Daily and 1 Special with their dishes placed, 72.00 
 
 type Ask = Omit<BillPaymentRequest, "submissionId" | "tip" | "expectedEdit">;
 
-const kinds: Record<"contribution" | "share" | "cash" | "card", () => Ask> = {
-  contribution: () => ({
+const kinds: Record<"contribution" | "share" | "cash" | "card", Ask> = {
+  contribution: {
     kind: "contribution",
     amount: "10.00",
     method: "cash",
     tendered: "10.00",
     applied: "10.00",
-  }),
-  share: () => ({
+  },
+  share: {
     kind: "share",
     shareOf: 2,
     method: "cash",
     tendered: "36.00",
     applied: "36.00",
-  }),
-  cash: () => ({ ...wholePayment("72.00"), method: "cash", tendered: "72.00" }),
-  card: () => ({ ...wholePayment("72.00"), method: "card", entry: "manual" }),
+  },
+  cash: { ...wholePayment("72.00"), method: "cash", tendered: "72.00" },
+  card: { ...wholePayment("72.00"), method: "card", entry: "manual" },
 };
 
 it.each(Object.keys(kinds) as (keyof typeof kinds)[])(
@@ -229,7 +229,7 @@ it.each(Object.keys(kinds) as (keyof typeof kinds)[])(
   async (kind) => {
     const tab = await specBill(spec);
     const before = await setMenuRows(tab.tabId);
-    const request = kinds[kind]();
+    const request = kinds[kind];
     await takeBillPayment(
       deps(),
       venue.cfg,

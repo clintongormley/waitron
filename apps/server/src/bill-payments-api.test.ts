@@ -1634,6 +1634,10 @@ describe("an item already paid for (design §8 test 5)", () => {
     const paid = await payForDish(partyId, billId, held.lineNo, "18.00");
 
     expect(paid.status).toBe(200);
+    expect(paid.json.payment).toMatchObject({
+      outcome: "received",
+      invoice: { total: "18.00" },
+    });
     expect(await lineTotals(paid.json.billId as string)).toEqual(["18.00"]);
     expect(await lineTotals(billId)).toEqual(["35.00"]);
     const groups = await request("GET", `/api/parties/${partyId}/groups`);
@@ -1677,6 +1681,10 @@ describe("an item already paid for (design §8 test 5)", () => {
     )!;
     const leaving = await payForDish(partyId, billId, cake.lineNo, "18.00");
     expect(leaving.status).toBe(200);
+    expect(leaving.json.payment).toMatchObject({
+      outcome: "received",
+      invoice: { total: "18.00" },
+    });
     const groups = await request("GET", `/api/parties/${partyId}/groups`);
     const held = (groups.json.groups as { id: string; state: string }[]).find(
       (group) => group.state === "held",

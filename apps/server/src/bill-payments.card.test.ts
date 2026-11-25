@@ -498,7 +498,7 @@ describe("a malformed payment body", () => {
 });
 
 describe("change versus tip (design §8 test 1)", () => {
-  // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta that stays unpaid.
+  // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta, so €18.00 stays owing.
   const bill = () => tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
 
   it("gives €10.00 change on €50.00 cash for a €40.00 part payment", async () => {

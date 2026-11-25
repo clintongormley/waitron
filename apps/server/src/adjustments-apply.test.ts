@@ -4202,7 +4202,7 @@ describe("a counter order (B11c)", () => {
     expect(commands).toEqual([{ scopeKind: "bill" }]);
   });
 
-  it("comps the dish no money received covers, on a part-paid bill at the counter", async () => {
+  it("comps a dish down to exactly what was received, on a part-paid bill at the counter", async () => {
     const { billId, partyId } = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await send(
       venue.app,
