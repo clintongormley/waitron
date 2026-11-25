@@ -613,19 +613,18 @@ cuestan las variantes. Toca el producto para elegir una y ver su precio.
 
 ## Menús {#set-menus}
 
-Indica cuántos menús de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
-o escribe su nombre en **Buscar** y pulsa el resultado. Después, elige los platos. En la
-carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento.
+Añade los platos que piden los clientes, desde cualquier carpeta. La cuenta los agrupa en los
+menús más baratos cada vez que cambia el pedido, y cobra a la carta un plato que no cabe en
+ninguno. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
+desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado. Una cuenta para
+llevar no tiene menús: cada plato se cobra a su propio precio.
 
-Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
-Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
-para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otro menú
-de la misma cuenta o cancelar un menú vacío. Para invitar o hacer un descuento en un menú,
-pulsa **Descuento…** en él dentro del resumen.
+Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
+libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del
+resumen. Un menú no se puede anular: anula o mueve sus platos.
 
-Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus
-platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
-cuenta antes de confirmar.
+Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
+mueven con él.
 
 En el **Mostrador**, elige **Para llevar**, indica cuántos menús quieres y abre la
 carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los

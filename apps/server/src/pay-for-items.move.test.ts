@@ -17,7 +17,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { placeGrouped, REASONS } from "./testing/adjustment-venue.js";
-import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import { priceSetMenuDish, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { ACME, fullInvoice } from "./testing/bill-invoice-fixture.js";
 import { setMenuBill } from "./testing/set-menu-readers-fixture.js";
 import {
@@ -103,6 +103,11 @@ useVenueDb({
       offers = await offerProducts(tx, { zone: "tables" });
       ids = { soup, hake, beer, salad, burger, cheese, toppings, ham };
       houseReason = (await createAdjustmentReason(tx, REASONS.house)).id;
+      // Flan at 20.00 a la carte and +2.00 in the set menu, so a bill keeps it in its set menu.
+      setMenu.versionId = await priceSetMenuDish(tx, setMenu, {
+        aLaCarte: 2000,
+        supplementCents: 200,
+      });
     });
   },
 });

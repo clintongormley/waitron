@@ -26,7 +26,6 @@ import {
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
-import { setSetMenuCount } from "./set-menu-count.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { issueIfFullyPaid, type BillPaymentRequest } from "./bill-payments.js";
@@ -59,7 +58,6 @@ import {
   sendSpecDraft,
   serveSpecBill,
   specDeps,
-  setSpecCount,
   printSpecBill,
   setupSetMenuSpecVenue,
   specBill,
@@ -171,7 +169,7 @@ function applyArgs(args: Awaited<ReturnType<typeof adjustmentArgs>>) {
   );
 }
 
-it("builds the spec bill: 2 Daily and 2 Special with their dishes placed, 73.00 in all", async () => {
+it("builds the spec bill: 3 Daily and 1 Special with their dishes placed, 72.00 in all", async () => {
   const tab = await specBill(spec);
   const rows = await specRows(spec, tab.tabId);
   const dishes = rows.filter(({ setMenuRole }) => setMenuRole === "dish");
@@ -185,14 +183,24 @@ it("builds the spec bill: 2 Daily and 2 Special with their dishes placed, 73.00 
   ).toEqual([
     ["Soup", tab.daily[0], 0, 0],
     ["Soup", tab.daily[1], 0, 0],
+    ["Soup", tab.daily[2], 0, 0],
     ["Soup", tab.special[0], 0, 0],
-    ["Soup", tab.special[1], 0, 0],
     ["Hake", tab.daily[0], 1, 0],
     ["Sea bass", tab.special[0], 1, 0],
-    ["Sirloin", tab.special[1], 1, 0],
     ["Sirloin", tab.daily[1], 1, 500],
+    ["Sirloin", tab.daily[2], 1, 500],
   ]);
-  expect(rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(7300);
+  expect(
+    rows
+      .filter(({ setMenuRole }) => setMenuRole === "set_menu")
+      .map(({ name, unitPriceGross }) => [name, unitPriceGross]),
+  ).toEqual([
+    ["Daily menu", 1400],
+    ["Daily menu", 1400],
+    ["Daily menu", 1400],
+    ["Special menu", 2000],
+  ]);
+  expect(rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(7200);
 });
 
 type Ask = Omit<BillPaymentRequest, "submissionId" | "tip" | "expectedEdit">;
@@ -217,11 +225,11 @@ const kinds: Record<"items" | "contribution" | "share" | "cash" | "card", (lineN
       kind: "share",
       shareOf: 2,
       method: "cash",
-      tendered: "36.50",
-      applied: "36.50",
+      tendered: "36.00",
+      applied: "36.00",
     }),
-    cash: () => ({ ...wholePayment("73.00"), method: "cash", tendered: "73.00" }),
-    card: () => ({ ...wholePayment("73.00"), method: "card", entry: "manual" }),
+    cash: () => ({ ...wholePayment("72.00"), method: "cash", tendered: "72.00" }),
+    card: () => ({ ...wholePayment("72.00"), method: "card", entry: "manual" }),
   };
 
 it.each(Object.keys(kinds) as (keyof typeof kinds)[])(
@@ -259,28 +267,42 @@ it("a part payment on a printed set-menu bill is taken and writes no line", asyn
 it("a dish added after a payment is placed as any dish is", async () => {
   const tab = await specBill(spec);
   await cashContribution(venue, tab.tabId, "10.00");
-  const draft = await saveSpecDishes(spec, tab, [{ dish: "Sea bass", from: spec.special }]);
-  await expect(sendSpecDraft(spec, tab.partyId, draft.id)).rejects.toMatchObject({
-    code: "set_menu.no_place",
-    params: { dishName: "Sea bass" },
-  });
-
-  const { setMenus } = await setSpecCount(spec, tab.tabId, spec.special, 3);
-  const third = setMenus.at(-1)!.lineId;
+  const draft = await saveSpecDishes(spec, tab, [
+    { dish: "Soup", from: spec.special },
+    { dish: "Sea bass", from: spec.special },
+  ]);
   const before = await specRows(spec, tab.tabId);
   await sendSpecDraft(spec, tab.partyId, draft.id);
   const after = await specRows(spec, tab.tabId);
   expect(after.slice(0, before.length)).toEqual(before);
-  expect(after.slice(before.length)).toMatchObject([
+  const added = after.slice(before.length);
+  const second = added.find(({ setMenuRole }) => setMenuRole === "set_menu")?.id;
+  expect(added).toMatchObject([
+    {
+      name: "Soup",
+      setMenuRole: "dish",
+      setMenuLineId: second,
+      setMenuPlace: 0,
+      unitPriceGross: 0,
+      lineTotal: 0,
+    },
     {
       name: "Sea bass",
       setMenuRole: "dish",
-      setMenuLineId: third,
+      setMenuLineId: second,
       setMenuPlace: 1,
       unitPriceGross: 0,
       lineTotal: 0,
     },
+    {
+      setMenuRole: "set_menu",
+      setMenuId: spec.special.menuId,
+      unitPriceGross: 2000,
+      lineTotal: 2000,
+    },
   ]);
+  expect(second).toBeDefined();
+  expect(after.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(9200);
 });
 
 it.each(["takeaway", "eat_in"] as const)(
@@ -288,8 +310,8 @@ it.each(["takeaway", "eat_in"] as const)(
   async (dining) => {
     const daily = async () => {
       const seated = await seatedBill(dining);
-      await setSpecCount(spec, seated.tabId, spec.daily, 1);
       await order(venue, seated.tabId, "Burger");
+      await inTx(venue, (tx) => seedBillSetMenu(tx, seated.tabId, spec.daily, 2));
       return seated;
     };
     const outcome = (attempt: Promise<unknown>) =>
@@ -300,7 +322,7 @@ it.each(["takeaway", "eat_in"] as const)(
     const paid = await daily();
     expect(await outcome(cashContribution(venue, paid.tabId, "5.00"))).toBe("accepted");
     const comped = await daily();
-    expect(await outcome(applyArgs(await adjustmentArgs(comped.tabId, 2, "comp")))).toBe(
+    expect(await outcome(applyArgs(await adjustmentArgs(comped.tabId, 1, "comp")))).toBe(
       "accepted",
     );
     const printed = await daily();
@@ -334,7 +356,7 @@ it("still accepts a contribution on a bill without set menus", async () => {
 });
 
 /** Each stored line of the bill against each line of the sale it filed: name, quantity, gross and
- * set-menu role; and the sale's total, 73.00. */
+ * set-menu role; and the sale's total, 72.00. */
 async function expectFiledAsStored(billId: string) {
   const stored = (await specRows(spec, billId)).map(
     ({ name, quantity, lineTotal, setMenuRole }) => [name, quantity, lineTotal, setMenuRole],
@@ -348,12 +370,12 @@ async function expectFiledAsStored(billId: string) {
     .select({ total: sales.total })
     .from(sales)
     .where(eq(sales.workingOrderId, billId));
-  expect(sale!.total).toBe(7300);
+  expect(sale!.total).toBe(7200);
 }
 
 async function payAtReader(
   billId: string,
-  total = "73.00",
+  total = "72.00",
   provider = new FakePaymentProvider(venue.db),
 ) {
   await takeReaderBillPayment(
@@ -368,7 +390,7 @@ async function payAtReader(
 
 async function payWhole(
   billId: string,
-  total = "73.00",
+  total = "72.00",
   request: Parameters<typeof takeBillPayment>[3] = {
     ...wholePayment(total),
     method: "cash",
@@ -482,7 +504,7 @@ it.each(Object.keys(paths))(
   "a set-menu bill is paid whole or issued through each path: %s",
   async (path) => {
     const tab = await specBill(spec, "fire");
-    await paths[path]!(tab, "73.00");
+    await paths[path]!(tab, "72.00");
     await expectFiledAsStored(tab.tabId);
   },
 );
@@ -511,30 +533,31 @@ it("still lets staff cancel a dish on a set-menu bill", async () => {
   expect(adjustmentIds).toHaveLength(1);
 });
 
-it("keeps the cancellation when the remaining takeaway set-menu bill matches cash already received, and issues the bill the received cash covers", async () => {
+it("keeps the cancellation when what a takeaway bill keeps, its set menu worked out away, matches cash already received", async () => {
   const id = await bill(false, "takeaway");
   await order(venue, id, "Paella");
-  const paymentId = await cashContribution(venue, id, "26.00");
+  // The cancel works the bill out again, and a takeaway bill keeps no set menu (D14): the Burger.
+  const paymentId = await cashContribution(venue, id, "12.00");
   await inTx(venue, (tx) => seedBillSetMenu(tx, id, spec.daily, 3));
 
   const invoice = await inTx(venue, async (tx) => {
     await cancelItemForTest(tx, venue.cfg, id, 2, undefined, venue.operator.personId);
     return issueIfFullyPaid(tx, deps(), venue.cfg, id, venue.operator.personId);
   });
-  expect(invoice).not.toBeNull();
+  expect(invoice).toMatchObject({ total: "12.00" });
   expect((await billRow(venue, id)).status).toBe("settled");
   expect(await paymentsOf(venue, id)).toMatchObject([
-    { id: paymentId, applied: 2600, state: "received" },
+    { id: paymentId, applied: 1200, state: "received" },
   ]);
   const lines = await venue.db
     .select({ lineNo: workingOrderLines.lineNo })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
-  expect(lines).toEqual([{ lineNo: 1 }, { lineNo: 3 }]);
+  expect(lines).toEqual([{ lineNo: 1 }]);
   expect(
     await venue.db.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, id)),
-  ).toEqual([{ total: 2600 }]);
+  ).toEqual([{ total: 1200 }]);
 });
 
 it("recovers a captured card payment that covers the whole set-menu bill without another charge", async () => {
@@ -619,9 +642,6 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
    * sent from it, fired unless told: 14.00. */
   async function lunchBill(release: "hold" | "fire" = "fire") {
     const bill = await seatedBill("takeaway");
-    await inTx(venue, (tx) =>
-      setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, 1, venue.operator.personId),
-    );
     const draft = await saveSetMenuDraft(
       venue,
       bill,

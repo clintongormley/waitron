@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { formatMoney, type ServedSetMenuCopy, type ServedSetMenuOffer } from "@waitron/shared";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { setMenuCourseName, setMenuPrice } from "./set-menu-presentation.js";
 
@@ -65,21 +65,6 @@ export class TillSetMenuFolder extends LitElement {
     }
     return html`
       <h2>${copy.name} · ${formatMoney(copy.terms.price, currentLocale())}</h2>
-      <div>
-        <wt-button
-          variant="secondary"
-          ?disabled=${this.busy}
-          @click=${() =>
-            this.dispatchEvent(
-              new CustomEvent("add-set-menu", {
-                detail: { setMenuId: copy.menuId },
-                bubbles: true,
-                composed: true,
-              }),
-            )}
-          >${fill(t("set_menu.add"), { name: copy.name })}</wt-button
-        >
-      </div>
       ${copy.terms.lines.map(
         ({ count, courseIds }, index) => html`
           <section>

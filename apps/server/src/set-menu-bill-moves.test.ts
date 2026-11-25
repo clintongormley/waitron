@@ -1,13 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import {
-  billSetMenuCopies,
-  kitchenCourses,
-  orderDraftLines,
-  orderDrafts,
-  ticketItems,
-  workingOrderLines,
-} from "@waitron/db";
+import { billSetMenuCopies, kitchenCourses, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { saveSetMenuDishCourse, updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,7 +12,6 @@ import {
 import { insertPartyBill } from "./parties.js";
 import { cancelItem } from "./line-cancel.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
-import { setSetMenuCount } from "./set-menu-count.js";
 import { moveOrderLines } from "./working-order-transfer.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
@@ -39,9 +31,11 @@ import {
 } from "./testing/party-venue.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { addPortionRound } from "./testing/portion-bill.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
-  saveSetMenuDraft,
+  freezeBillLine,
+  priceSetMenuDish,
   seedBillSetMenu,
   setMenuOnFullMenu,
 } from "./testing/set-menu-bill-fixture.js";
@@ -61,8 +55,22 @@ useVenueDb({
         .values({ name: "Sharing", displayOrder: 5 })
         .returning({ id: kitchenCourses.id });
       await saveSetMenuDishCourse(tx, copy.menuId, copy.menuItemId, id);
-      return setMenuOnFullMenu(tx, copy.fullMenuId, copy.productId, "Special menu", "21.00");
+      const special = await setMenuOnFullMenu(
+        tx,
+        copy.fullMenuId,
+        copy.productId,
+        "Special menu",
+        "21.00",
+      );
+      // Daily counts Flan as the course Flan now has (D12), so a Daily can hold a Flan ordered a
+      // la carte.
+      await saveSetMenuDishCourse(tx, copy.menuId, copy.menuItemId, special.courseId);
+      return special;
     });
+    // Flan at 20.00 a la carte, so a bill works a Flan out into a Daily (14.00).
+    copy.versionId = special.versionId = await inTx(venue, (tx) =>
+      priceSetMenuDish(tx, copy, { aLaCarte: 2000 }),
+    );
   },
 });
 
@@ -106,72 +114,13 @@ function copies(billId: string) {
     .where(eq(billSetMenuCopies.workingOrderId, billId));
 }
 
-async function billsWithReservedDraft() {
-  const { venue, copy } = fixture;
-  const { partyId, tabId: billId } = await seatWithNoAllergies(
-    venue,
-    await venue.table(crypto.randomUUID()),
-  );
-  const [menuLineId, target] = await inTx(venue, async (tx) => {
-    const menuLineId = await seedBillSetMenu(tx, billId, copy, 1);
-    return [menuLineId, await insertPartyBill(tx, venue.cfg, partyId)];
-  });
-  const draft = await saveSetMenuDraft(
-    venue,
-    { partyId, tabId: billId },
-    {
-      menuItemId: copy.menuItemId,
-      menuVersionId: copy.versionId,
-      setMenuId: copy.menuId,
-      quantity: "1",
-      setMenuReservedLineId: menuLineId,
-      setMenuReservedPlace: 0,
-    },
-  );
-
-  return { partyId, billId, target, menuLineId, draft };
-}
-
-it("refuses to move the only menu with a place for a saved draft dish", async () => {
-  const { partyId, billId, target, menuLineId } = await billsWithReservedDraft();
-  await expect(move({ partyId, billId, target }, menuLineId)).rejects.toMatchObject({
-    code: "set_menu.needed_by_draft",
-    params: { setMenuName: "Daily menu", dishNames: ["Flan"] },
-  });
-  expect((await lines(billId)).map(({ id }) => id)).toEqual([menuLineId]);
-  expect(await lines(target)).toEqual([]);
-});
-
-it("moves the draft with its reserved menu when merging the whole bill", async () => {
-  const { venue } = fixture;
-  const { partyId, billId, target, menuLineId, draft } = await billsWithReservedDraft();
-  const command = await commandFor(venue, partyId);
-  await inTx(venue, (tx) => mergeBills(tx, venue.cfg, target, billId, command));
-
-  expect(await lines(billId)).toEqual([]);
-  expect((await lines(target)).map(({ id }) => id)).toEqual([menuLineId]);
-  expect(
-    await venue.db
-      .select({
-        billId: orderDrafts.billId,
-        menuLineId: orderDraftLines.setMenuReservedLineId,
-        place: orderDraftLines.setMenuReservedPlace,
-      })
-      .from(orderDraftLines)
-      .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
-      .where(eq(orderDraftLines.id, draft.lines[0]!.id)),
-  ).toEqual([{ billId: target, menuLineId, place: 0 }]);
-});
-
 it("moves a menu and its dishes together, with their original places, prices and recorded copy", async () => {
   const source = await bills();
   const { venue, copy } = fixture;
   const stayingId = await inTx(venue, async (tx) => {
-    await tx
-      .update(workingOrderLines)
-      .set({ unitPriceGross: 500, lineTotal: 500 })
-      .where(eq(workingOrderLines.id, source.dishId));
-    return seedBillSetMenu(tx, source.billId, special, 3, 2100);
+    const id = await seedBillSetMenu(tx, source.billId, special, 3, 2100);
+    await freezeBillLine(tx, id);
+    return id;
   });
   const before = await lines(source.billId);
   await move(source, source.menuLineId, source.dishId);
@@ -191,42 +140,47 @@ it("moves a menu and its dishes together, with their original places, prices and
   );
 });
 
-it("places a dish moved alone on a Special and takes the target surcharge", async () => {
+/** The target after a Flan moved alone: the Flan in a Daily of its own, the Daily at 14.00. */
+async function expectFlanInOwnDaily(source: Awaited<ReturnType<typeof bills>>) {
+  const { copy } = fixture;
+  const rows = await lines(source.target);
+  expect(rows).toEqual([
+    {
+      id: source.dishId,
+      setMenuLineId: rows[1]?.id,
+      place: 0,
+      unitPriceGross: 0,
+      lineTotal: 0,
+      versionId: null,
+    },
+    {
+      id: expect.any(String),
+      setMenuLineId: null,
+      place: null,
+      unitPriceGross: 1400,
+      lineTotal: 1400,
+      versionId: copy.versionId,
+    },
+  ]);
+}
+
+it("moves a dish alone to a bill holding a Special with no dish, and both bills work out their set menus", async () => {
   const source = await bills();
   const { venue } = fixture;
-  const targetMenu = await inTx(venue, (tx) =>
-    seedBillSetMenu(tx, source.target, special, 1, 2100),
-  );
-  await inTx(venue, (tx) =>
-    tx
-      .update(workingOrderLines)
-      .set({ unitPriceGross: 500, lineTotal: 500 })
-      .where(eq(workingOrderLines.id, source.dishId)),
-  );
+  await inTx(venue, (tx) => seedBillSetMenu(tx, source.target, special, 1, 2100));
   await move(source, source.dishId);
-  expect((await lines(source.billId)).map(({ id }) => id)).toEqual([source.menuLineId]);
-  expect((await lines(source.target))[1]).toEqual({
-    id: source.dishId,
-    setMenuLineId: targetMenu,
-    place: 0,
-    unitPriceGross: 0,
-    lineTotal: 0,
-    versionId: null,
-  });
+  expect(await lines(source.billId)).toEqual([]);
+  await expectFlanInOwnDaily(source);
 });
 
-it("refuses a loose dish when the target has no place and leaves both bills as they were", async () => {
+it("moves a dish alone to a bill with no set menu, charging it as that bill groups it", async () => {
   const source = await bills();
-  const before = await lines(source.billId);
-  await expect(move(source, source.dishId)).rejects.toMatchObject({
-    code: "set_menu.no_place_on_target",
-    params: { dishName: "Flan" },
-  });
-  expect(await lines(source.billId)).toEqual(before);
-  expect(await lines(source.target)).toEqual([]);
+  await move(source, source.dishId);
+  expect(await lines(source.billId)).toEqual([]);
+  await expectFlanInOwnDaily(source);
 });
 
-it("keeps the target's recorded version while the arriving line keeps its own version and price", async () => {
+it("records both versions of Daily on a target that recorded another one (D26)", async () => {
   const source = await bills();
   const { venue, copy } = fixture;
   const versionId = await inTx(venue, async (tx) => {
@@ -235,23 +189,26 @@ it("keeps the target's recorded version while the arriving line keeps its own ve
     await seedBillSetMenu(tx, source.target, { ...copy, versionId }, 1, 1600);
     return versionId;
   });
+  const recorded = await copies(source.billId);
   await move(source, source.menuLineId);
   expect(new Set(await copies(source.target))).toEqual(
-    new Set([
-      { menuId: copy.menuId, versionId },
-      { menuId: special.menuId, versionId: special.versionId },
-    ]),
+    new Set([{ menuId: copy.menuId, versionId }, ...recorded]),
   );
-  expect((await lines(source.target)).slice(1)).toMatchObject([
-    { id: source.menuLineId, versionId: copy.versionId, lineTotal: 1400 },
-    { id: source.dishId, setMenuLineId: source.menuLineId },
-  ]);
+  // Daily back at 14.00 for the cases after this one, which share the database.
+  copy.versionId = special.versionId = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, copy.menuId, { setPrice: "14.00" });
+    return publishWorkingMenu(tx, copy.fullMenuId);
+  });
 });
 
 it("merges both menus with their places and brings across missing recorded copies", async () => {
   const source = await bills();
   const { venue, copy } = fixture;
-  const otherMenu = await inTx(venue, (tx) => seedBillSetMenu(tx, source.target, special, 1, 2100));
+  const otherMenu = await inTx(venue, async (tx) => {
+    const id = await seedBillSetMenu(tx, source.target, special, 1, 2100);
+    await freezeBillLine(tx, id);
+    return id;
+  });
   const command = await commandFor(venue, source.partyId);
   await inTx(venue, (tx) => mergeBills(tx, venue.cfg, source.target, source.billId, command));
   expect(await lines(source.billId)).toEqual([]);
@@ -336,13 +293,18 @@ it("keeps a cancelled dish fixed at its charged price after moving its menu", as
   ]);
 });
 
-it("keeps an unsent eaten-in bill eaten in when its guests move to a table of a takeaway-only department, so a set menu ordered there is paid", async () => {
-  const { venue, copy } = fixture;
+it("keeps an unsent eaten-in bill eaten in when its guests move to a table of a takeaway-only department, so the set menu it formed is paid", async () => {
+  const { venue } = fixture;
   const { partyId, tabId: billId } = await seatWithNoAllergies(
     venue,
     await venue.table(crypto.randomUUID()),
   );
   expect((await billRow(venue, billId)).dining).toBe("eat_in");
+  await inTx(venue, (tx) =>
+    addPortionRound(tx, venue.cfg, billId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
+  );
+  const formed = await inTx(venue, (tx) => readBillSetMenus(tx, billId));
+  expect(formed.setMenus).toHaveLength(1);
   const shopZone = await inTx(venue, async (tx) => {
     const shop = await createDepartment(tx, {
       name: `Takeaway shop ${crypto.randomUUID()}`,
@@ -363,8 +325,10 @@ it("keeps an unsent eaten-in bill eaten in when its guests move to a table of a 
   );
   expect(await zoneOf(venue, billId)).toBe(shopZone);
   expect((await billRow(venue, billId)).dining).toBe("eat_in");
-  await inTx(venue, (tx) => setSetMenuCount(tx, venue.cfg, billId, copy.menuId, 1, OPERATOR));
+  const kept = await inTx(venue, (tx) => readBillSetMenus(tx, billId));
+  expect(kept.setMenus).toEqual(formed.setMenus);
+  expect(await inTx(venue, (tx) => storedOrderTotal(tx, billId))).toBe("14.00");
 
-  await pay(venue, billId, "20.00");
+  await pay(venue, billId, "14.00");
   expect((await billRow(venue, billId)).status).toBe("settled");
 });

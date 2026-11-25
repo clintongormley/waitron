@@ -44,6 +44,17 @@ it("folds to type and open-place counts, then shows sent and unsent dishes in th
 });
 
 it("cancels an empty menu but names the dishes that keep another menu on the bill", async () => {
+  const { el: without } = await mount(undefined);
+  without.removeMenu = undefined;
+  await without.updateComplete;
+  await userEvent.click(without.shadowRoot!.querySelector("summary")!);
+  expect(
+    Array.from(without.shadowRoot!.querySelectorAll("wt-button"), (button) =>
+      button.textContent!.trim(),
+    ).filter((text) => text === "Cancel"),
+  ).toEqual([]);
+  cleanupWidgets();
+
   const remove = vi.fn(async (id: string) =>
     id === "daily-1" ? "Daily menu holds Sirloin. Cancel those dishes or use Move." : undefined,
   );
@@ -169,3 +180,52 @@ it("offers Comp on each set menu only when comping is allowed, and names that me
     ),
   ).toEqual([true, true, true]);
 });
+
+it.each([
+  ["en-GB", "These set menus may not be the cheapest for this bill."],
+  ["es-ES", es["set_menu.not_cheapest"]],
+] as const)(
+  "says once in %s when the bill's set menus may not be the cheapest",
+  async (locale, text) => {
+    const originalLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount(vi.fn(), vi.fn(), [], { ...bill, exact: false });
+      const notes = Array.from(el.shadowRoot!.querySelectorAll("[data-not-cheapest]"), (note) =>
+        note.textContent!.trim(),
+      );
+      expect(notes).toEqual([text]);
+      el.bill = bill;
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-not-cheapest]")).toBeNull();
+      expect(el.shadowRoot!.textContent).not.toContain(text);
+    } finally {
+      setLocale(originalLocale);
+    }
+  },
+);
+
+it.each([
+  ["en-GB", "Set menus might make this bill cheaper."],
+  ["es-ES", es["set_menu.none_maybe_cheaper"]],
+] as const)(
+  "still says in %s that the bill may not be at its cheapest when the answer holds no set menus",
+  async (locale, text) => {
+    const originalLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const empty = { ...bill, setMenus: [], dishes: [] };
+      const { el } = await mount(vi.fn(), vi.fn(), [], { ...empty, exact: false });
+      const notes = Array.from(el.shadowRoot!.querySelectorAll("[data-not-cheapest]"), (note) =>
+        note.textContent!.trim(),
+      );
+      expect(notes).toEqual([text]);
+      el.bill = { ...empty, exact: true };
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-not-cheapest]")).toBeNull();
+      expect(el.shadowRoot!.textContent!.trim()).toBe("");
+    } finally {
+      setLocale(originalLocale);
+    }
+  },
+);

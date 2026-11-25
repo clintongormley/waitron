@@ -10,7 +10,11 @@ import type { ZoneSelling, ZoneSetMenus } from "@waitron/module";
 import { copiesListing, newBillVersionOf, setMenuCopyOf, type SetMenuCopy } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { isSetMenuBill, readBillSetMenuVersions } from "./set-menu-bill.js";
+import {
+  isSetMenuBill,
+  readBillSetMenuVersions,
+  type RecordedSetMenuVersion,
+} from "./set-menu-bill.js";
 
 /** A dish as a set menu lists it: a variant by its parent's id and its own. */
 interface ListedDish {
@@ -34,7 +38,7 @@ type DishRow = Pick<
 >;
 
 /** The newest copy on sale of each set menu the zone sells, with the version a new bill records. */
-export function copiesOnSale(zone: ZoneSetMenus): SetMenuCopy[] {
+function copiesOnSale(zone: ZoneSetMenus): SetMenuCopy[] {
   const selling = new Set(zone.sellingVersionIds);
   return zone.setMenus
     .filter(({ newestOnSale }) => newestOnSale)
@@ -93,7 +97,8 @@ export async function linkSetMenusFor(
   if (!(await isSetMenuBill(tx, billId))) return;
   const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, selling));
   if (onSale.length === 0) return;
-  const linked = listingAny(onSale, dishes);
+  const recorded = new Set((await readBillSetMenuVersions(tx, billId)).map(({ menuId }) => menuId));
+  const linked = listingAny(onSale, dishes).filter(({ setMenuId }) => !recorded.has(setMenuId));
   if (linked.length === 0) return;
   await tx
     .insert(billSetMenuCopies)
@@ -105,23 +110,34 @@ export async function linkSetMenusFor(
       })),
     )
     .onConflictDoNothing({
-      target: [billSetMenuCopies.workingOrderId, billSetMenuCopies.setMenuId],
+      target: [
+        billSetMenuCopies.workingOrderId,
+        billSetMenuCopies.setMenuId,
+        billSetMenuCopies.menuVersionId,
+      ],
     });
 }
 
-/** The set menus `billId` records a copy of that list one of the top-level dishes among `rows`. */
+/** The (set menu, version) pairs `billId` records whose copy lists one of the top-level dishes among
+ *  `rows`; another version of the same set menu that lists none of them is left out. */
 export async function recordedSetMenusListing(
   tx: Transaction,
   billId: string,
   rows: readonly DishRow[],
-): Promise<string[]> {
+): Promise<RecordedSetMenuVersion[]> {
   const productIds = topLevelProductIds(rows);
   if (productIds.length === 0) return [];
-  const recorded = await readBillSetMenuVersions(tx, billId);
-  if (recorded.size === 0) return [];
-  const requests = [...recorded].map(([menuId, versionId]) => ({ menuId, versionId }));
+  const requests = await readBillSetMenuVersions(tx, billId);
+  if (requests.length === 0) return [];
   const copies = (await serveRecordedSetMenus(tx, requests)).map((copy, index) =>
     setMenuCopyOf(copy, requests[index]!.versionId),
   );
-  return listingAny(copies, await listedDishes(tx, productIds)).map(({ setMenuId }) => setMenuId);
+  const listing = new Set(
+    (await listedDishes(tx, productIds)).flatMap(({ productId, variantId }) =>
+      copiesListing(copies, productId, variantId),
+    ),
+  );
+  return copies
+    .filter((copy) => listing.has(copy))
+    .map(({ setMenuId, versionId }) => ({ menuId: setMenuId, versionId }));
 }

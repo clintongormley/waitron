@@ -645,7 +645,6 @@ export {
   type DishToPlace,
   type MoveSuggestion,
   type PlacedDish,
-  type PlacementResult,
   type SetMenuCopy,
 } from "./set-menu-bill.js";
 

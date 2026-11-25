@@ -6,7 +6,6 @@ const moves = [{ lineId: "dish", to: { setMenuLineId: "menu-line", place: 0 } }]
 const revision = { expectedPartyRevision: 7, expectedEdit: edit };
 
 it.each([
-  ["GET", "set-menus", undefined, (api: TillApi) => api.readBillSetMenus("bill")],
   [
     "PUT",
     "set-menus/daily",

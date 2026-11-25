@@ -572,19 +572,18 @@ cost. Tap the product to choose one and see its price.
 
 ## Set menus {#set-menus}
 
-Set the number of each set menu on the bill. Open its folder from the grid or type its name
-in **Search** and tap the result. Then choose the dishes.
-The folder shows which dishes are included and which cost extra.
+Add the dishes the guests order, from any folder. The bill groups them into the cheapest set
+menus each time the order changes, and charges a dish that fits none à la carte. A set menu's
+folder shows which dishes it includes and which cost extra: open it from the grid, or type its
+name in **Search** and tap the result. A takeaway bill has no set menus: each dish is charged at
+its own price.
 
-Open the set-menu summary on **Order** to see where dishes go and which places are free.
-If a dish has no place, choose one of the options shown, or tap **Cancel** to keep the
-order as it was. From the summary you can move a dish to another set menu on the same
-bill or cancel an empty set menu. To comp or discount a set menu, choose **Comp…** on it in
-the summary.
+Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
+are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A set menu cannot
+be cancelled: cancel or move its dishes instead.
 
-To move a set menu to another bill, open **Move dishes…** and select the set menu. Its
-dishes move with it. If you choose a dish by itself, check its price on the other bill
-before confirming.
+To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
+with it.
 
 At the **Counter**, choose **Take away**, set the number, then open the set-menu folder
 and choose the dishes. You can **Park** a takeaway before adding any dishes. To add

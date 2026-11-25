@@ -4,6 +4,7 @@ import {
   newId,
   nowIso,
   products,
+  units,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -14,6 +15,7 @@ import {
   planBillGrouping,
   type GroupingCopy,
   type GroupingLine,
+  type GroupingPlan,
 } from "@waitron/orders-sales/set-menu-grouping-plan.js";
 import type { SetMenuGrouping, SetMenuGroupingInput } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
@@ -29,10 +31,7 @@ type Calculate = (input: SetMenuGroupingInput) => SetMenuGrouping;
 
 /** The set-menu copies the bill records, served once for the whole bill. */
 export async function readGroupingCopies(tx: Transaction, billId: string): Promise<GroupingCopy[]> {
-  const requests = [...(await readBillSetMenuVersions(tx, billId))].map(([menuId, versionId]) => ({
-    menuId,
-    versionId,
-  }));
+  const requests = await readBillSetMenuVersions(tx, billId);
   if (requests.length === 0) return [];
   const served = await serveRecordedSetMenus(tx, requests);
   return served.map((copy, index) => ({ copy, versionId: requests[index]!.versionId }));
@@ -50,7 +49,7 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
       countsAsCourseId: workingOrderLines.countsAsCourseId,
       menuItemId: workingOrderLines.menuItemId,
       quantity: workingOrderLines.quantity,
-      countAsPortions: workingOrderLines.countAsPortions,
+      soldByMeasure: units.measure,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
@@ -65,10 +64,12 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(units, eq(units.id, workingOrderLines.unitId))
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
-  return rows.map(({ productId, parentProductId, ...line }) => ({
+  return rows.map(({ productId, parentProductId, soldByMeasure, ...line }) => ({
     ...line,
+    soldByMeasure: soldByMeasure === true,
     listedProductId: parentProductId ?? productId,
     listedVariantId: parentProductId === null ? null : productId,
   }));
@@ -92,6 +93,19 @@ export async function saveBillGrouping(
   return writeBillGrouping(tx, billId, bill!.setMenusExact, copies, calculate);
 }
 
+async function planGrouping(
+  tx: Transaction,
+  lines: readonly GroupingLine[],
+  copies: readonly GroupingCopy[],
+  calculate?: Calculate,
+): Promise<GroupingPlan> {
+  const named = await namedFrozenLineIds(
+    tx,
+    lines.map(({ id }) => id),
+  );
+  return planBillGrouping(lines, frozenLinesOf(lines, named), copies, newId, calculate);
+}
+
 /** {@link saveBillGrouping} for a bill whose stored `set_menus_exact` is `wasExact`. */
 async function writeBillGrouping(
   tx: Transaction,
@@ -101,11 +115,7 @@ async function writeBillGrouping(
   calculate?: Calculate,
 ): Promise<{ changed: boolean; exact: boolean }> {
   const lines = await readGroupingLines(tx, billId);
-  const named = await namedFrozenLineIds(
-    tx,
-    lines.map(({ id }) => id),
-  );
-  const plan = planBillGrouping(lines, frozenLinesOf(lines, named), copies, newId, calculate);
+  const plan = await planGrouping(tx, lines, copies, calculate);
 
   if (plan.inserts.length > 0) {
     const locales = await readInvoiceLocales(tx);
@@ -189,25 +199,70 @@ export async function regroupBills(
 ): Promise<ReadonlySet<string>> {
   const changed = new Set<string>();
   for (const billId of new Set(billIds)) {
-    const [bill] = await tx
-      .select({
-        status: workingOrders.status,
-        dining: workingOrders.dining,
-        partyId: workingOrders.partyId,
-        serviceMode: workingOrders.serviceMode,
-        setMenusExact: workingOrders.setMenusExact,
-      })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, billId));
-    if (bill?.status !== "open") continue;
-    const copies =
-      bill.dining !== "takeaway" && isSetMenuBillRow(bill)
-        ? await readGroupingCopies(tx, billId)
-        : [];
-    if (copies.length === 0 && !(await hasBillSetMenuLines(tx, billId))) continue;
-    if ((await writeBillGrouping(tx, billId, bill.setMenusExact, copies)).changed) {
+    const bill = await readOpenBill(tx, billId);
+    if (bill === null) continue;
+    if (bill.copies.length === 0 && !(await hasBillSetMenuLines(tx, billId))) continue;
+    if ((await writeBillGrouping(tx, billId, bill.setMenusExact, bill.copies)).changed) {
       changed.add(billId);
     }
   }
   return changed;
+}
+
+/** An open bill's stored `set_menus_exact` and the copies it is grouped over; null when not open. */
+async function readOpenBill(
+  tx: Transaction,
+  billId: string,
+): Promise<{ setMenusExact: boolean; copies: GroupingCopy[] } | null> {
+  const [bill] = await tx
+    .select({
+      status: workingOrders.status,
+      dining: workingOrders.dining,
+      partyId: workingOrders.partyId,
+      serviceMode: workingOrders.serviceMode,
+      setMenusExact: workingOrders.setMenusExact,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (bill?.status !== "open") return null;
+  const copies =
+    bill.dining !== "takeaway" && isSetMenuBillRow(bill)
+      ? await readGroupingCopies(tx, billId)
+      : [];
+  return { setMenusExact: bill.setMenusExact, copies };
+}
+
+/** A removal's line writes: rows deleted with their extras, and rows left at a new size. */
+export interface BillRowRemoval {
+  deleted: ReadonlySet<string>;
+  resized: ReadonlyMap<string, { quantity: number; lineTotal: number }>;
+}
+
+/**
+ * By how much, in cents, {@link regroupBills} would lower the bill's total once `removal`'s writes
+ * were made, writing nothing (D24).
+ */
+export async function regroupDropAfter(
+  tx: Transaction,
+  billId: string,
+  removal: BillRowRemoval,
+): Promise<number> {
+  const bill = await readOpenBill(tx, billId);
+  if (bill === null) return 0;
+  const gone = (line: GroupingLine) =>
+    removal.deleted.has(line.id) ||
+    (line.parentLineId !== null && removal.deleted.has(line.parentLineId));
+  const lines = (await readGroupingLines(tx, billId)).flatMap((line) =>
+    gone(line) ? [] : [{ ...line, ...removal.resized.get(line.id) }],
+  );
+  if (bill.copies.length === 0 && !lines.some(({ setMenuRole }) => setMenuRole !== null)) return 0;
+  const plan = await planGrouping(tx, lines, bill.copies);
+  const was = new Map(lines.map(({ id, lineTotal }) => [id, lineTotal]));
+  const sum = (cents: number[]) => cents.reduce((total, one) => total + one, 0);
+  return (
+    sum(plan.deletes.map((id) => was.get(id)!)) +
+    sum(plan.dishUpdates.map(({ id, lineTotal }) => was.get(id)! - lineTotal)) +
+    sum(plan.menuUpdates.map(({ id, priceCents }) => was.get(id)! - priceCents)) -
+    sum(plan.inserts.map(({ priceCents }) => priceCents))
+  );
 }

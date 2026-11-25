@@ -21,7 +21,6 @@ import { billRow, inTx, seatWithNoAllergies, type PartyVenue } from "./testing/p
 import {
   printSpecBill,
   sendSpecDishes,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specBill,
   specDeps,
@@ -68,7 +67,7 @@ async function saleTotal(billId: string) {
 }
 
 /** The spec bill's filed rows: its four set menus at their prices, and its dishes at 0.00 but the
- * Daily menu's sirloin at 5.00, each with the role its stored line holds; total 73.00. */
+ * Daily menus' two Sirloins at 5.00, each with the role its stored line holds; total 72.00. */
 async function expectSpecBillFiled(billId: string) {
   const stored = (await specRows(spec, billId)).map(
     ({ name, quantity, lineTotal, setMenuRole }) => [name, quantity, lineTotal, setMenuRole],
@@ -89,7 +88,7 @@ async function expectSpecBillFiled(billId: string) {
   ).toEqual([
     ["Daily menu", 1400],
     ["Daily menu", 1400],
-    ["Special menu", 2000],
+    ["Daily menu", 1400],
     ["Special menu", 2000],
   ]);
   const dishes = filed.filter(({ setMenuRole }) => setMenuRole === "dish");
@@ -98,13 +97,16 @@ async function expectSpecBillFiled(billId: string) {
     dishes
       .filter(({ lineGross }) => lineGross !== 0)
       .map(({ name, lineGross }) => [name, lineGross]),
-  ).toEqual([["Sirloin", 500]]);
-  expect(await saleTotal(billId)).toBe(7300);
+  ).toEqual([
+    ["Sirloin", 500],
+    ["Sirloin", 500],
+  ]);
+  expect(await saleTotal(billId)).toBe(7200);
 }
 
 it("a full payment files the set menus and their dishes", async () => {
   const { tabId } = await specBill(spec, "fire");
-  await payWhole(tabId, "73.00");
+  await payWhole(tabId, "72.00");
   await expectSpecBillFiled(tabId);
   const ticket = await inTx(venue, (tx) => readSettledTicket(venue.backend, tx, venue.cfg, tabId));
   expect(ticket.lines.map(({ setMenuRole }) => setMenuRole)).toEqual(
@@ -121,10 +123,10 @@ it("Print the bill files the same rows", async () => {
 
 it("a set menu with open places is charged in full", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, spec.daily, 2);
-  await sendSpecDishes(spec, bill, [{ dish: "Soup", from: spec.daily }], "fire");
+  // Hake alone is cheaper as a Daily menu (14.00) than a la carte (16.00).
+  await sendSpecDishes(spec, bill, [{ dish: "Hake", from: spec.daily }], "fire");
   await printSpecBill(spec, bill.partyId, bill.tabId);
-  await payWhole(bill.tabId, "28.00");
+  await payWhole(bill.tabId, "14.00");
 
   expect(
     (await specSaleLines(spec, bill.tabId)).map(({ name, lineGross, setMenuRole }) => [
@@ -133,16 +135,15 @@ it("a set menu with open places is charged in full", async () => {
       setMenuRole,
     ]),
   ).toEqual([
+    ["Hake", 0, "dish"],
     ["Daily menu", 1400, "set_menu"],
-    ["Daily menu", 1400, "set_menu"],
-    ["Soup", 0, "dish"],
   ]);
-  expect(await saleTotal(bill.tabId)).toBe(2800);
+  expect(await saleTotal(bill.tabId)).toBe(1400);
 });
 
 async function paidSpecSale() {
   const { tabId } = await specBill(spec, "fire");
-  await payWhole(tabId, "73.00");
+  await payWhole(tabId, "72.00");
   const lines = await specSaleLines(spec, tabId);
   return { saleId: brandSaleId(lines[0]!.saleId), lines };
 }

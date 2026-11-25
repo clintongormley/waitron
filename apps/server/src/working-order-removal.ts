@@ -22,7 +22,7 @@ import {
   compareDecimal,
   addDecimal,
 } from "@waitron/shared";
-import { and, eq, or, inArray } from "drizzle-orm";
+import { and, eq, or, inArray, sql } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { assertBillInvariant } from "./bill-payments.js";
 import { type DishKitchenItem, dishKitchenItems } from "./dish-kitchen.js";
@@ -52,6 +52,7 @@ import {
 } from "./order-line-quantities.js";
 import { cancelPortions, refuseTooManyPortions } from "./order-portions.js";
 import { partyOfOrder, bumpPartyRevision, canonicalJson } from "./parties.js";
+import { regroupBills, regroupDropAfter } from "./set-menu-regroup.js";
 import type { TradingContext } from "./trading-context.js";
 import {
   bumpRevision,
@@ -102,7 +103,8 @@ function heldChangeOf(
 }
 /**
  * The caller checks that the bill and paid quantities allow removal. Corrections must precede
- * deletion because notices and slips read the removed rows.
+ * deletion because notices and slips read the removed rows. Answers, in cents, what working the
+ * bill's set menus out again took off its total beyond the removed part's own charge.
  */
 export async function removeFromLine(
   tx: Transaction,
@@ -113,7 +115,7 @@ export async function removeFromLine(
   operatorId: string | undefined,
   attendance?: { recorder: AttendanceRecorder; at: string },
   preparationStarted = false,
-): Promise<void> {
+): Promise<number> {
   const wasStarted = preparationStarted || isStarted(target.state);
   const extra =
     target.parentLineId === null ? null : await readCancelledExtra(tx, target.id, cfg.locale);
@@ -187,6 +189,7 @@ export async function removeFromLine(
         ),
       );
     if (extra !== null) await tellKitchenOfCancelledExtra(tx, cfg, tabId, extra);
+    const regrouped = await regroupAfterRemoval(tx, tabId);
     await assertBillInvariant(tx, [tabId]);
     await partyAfterEdit(
       tx,
@@ -195,9 +198,17 @@ export async function removeFromLine(
       operatorId,
       attendance,
     );
-    return;
+    return regrouped;
   }
-  const children = await tx
+  const children = await readExtras(tx, target.id);
+  await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
+  const regrouped = await regroupAfterRemoval(tx, tabId);
+  await assertBillInvariant(tx, [tabId]);
+  await partyAfterEdit(tx, tabId, [], operatorId, attendance);
+  return regrouped;
+}
+function readExtras(tx: Transaction, dishId: string) {
+  return tx
     .select({
       id: workingOrderLines.id,
       quantity: workingOrderLines.quantity,
@@ -205,10 +216,7 @@ export async function removeFromLine(
       unitPriceGross: workingOrderLines.unitPriceGross,
     })
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.parentLineId, target.id));
-  await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
-  await assertBillInvariant(tx, [tabId]);
-  await partyAfterEdit(tx, tabId, [], operatorId, attendance);
+    .where(eq(workingOrderLines.parentLineId, dishId));
 }
 /**
  * {@link removeFromLine} for several whole dish portions of one till row at once, each with its
@@ -222,7 +230,7 @@ export async function removePortions(
   operatorId: string | undefined,
   attendance?: { recorder: AttendanceRecorder; at: string },
   preparationStarted = false,
-): Promise<void> {
+): Promise<number> {
   const ids = targets.map(({ id }) => id);
   const work = await dishKitchenItems(tx, ids);
   const childrenOf = (target: VoidTarget) =>
@@ -273,8 +281,26 @@ export async function removePortions(
         or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)),
       ),
     );
+  const regrouped = await regroupAfterRemoval(tx, tabId);
   await assertBillInvariant(tx, [tabId]);
   await partyAfterEdit(tx, tabId, groupIds, operatorId, attendance);
+  return regrouped;
+}
+/**
+ * Works the bill's set menus out again after a removal's last line write, before its total checks
+ * read the bill; answers, in cents, by how much that lowered the bill's total (D24).
+ */
+async function regroupAfterRemoval(tx: Transaction, tabId: string): Promise<number> {
+  const before = await linesTotal(tx, tabId);
+  if (!(await regroupBills(tx, [tabId])).has(tabId)) return 0;
+  return before - (await linesTotal(tx, tabId));
+}
+async function linesTotal(tx: Transaction, tabId: string): Promise<number> {
+  const [row] = await tx
+    .select({ cents: sql<number>`coalesce(sum(${workingOrderLines.lineTotal}), 0)` })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  return Number(row!.cents);
 }
 /**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
@@ -344,17 +370,65 @@ export async function rescaleExtras(
   kept: readonly KeptExtra[],
   dishQuantity: Decimal,
 ): Promise<void> {
-  for (const { child, perDish } of kept) {
+  for (const { id, ...size } of extrasAt(kept, dishQuantity)) {
+    await tx.update(workingOrderLines).set(size).where(eq(workingOrderLines.id, id));
+  }
+}
+function extrasAt(kept: readonly KeptExtra[], dishQuantity: Decimal): ResizedLine[] {
+  return kept.map(({ child, perDish }) => {
     const priceQuantity = child.priceQuantity ?? decimal("1");
     const quantity = extraQuantityFor(perDish, dishQuantity, priceQuantity);
-    await tx
-      .update(workingOrderLines)
-      .set({
-        quantity: decimalToThousandths(quantity),
-        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity, priceQuantity)),
-      })
-      .where(eq(workingOrderLines.id, child.id));
+    return {
+      id: child.id,
+      quantity: decimalToThousandths(quantity),
+      lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity, priceQuantity)),
+    };
+  });
+}
+interface ResizedLine {
+  id: string;
+  quantity: number;
+  lineTotal: number;
+}
+/** A dish line once `removed` thousandths are taken off it, at its stored gross price. */
+function dishLeft(
+  target: { id: string; quantity: number; unitPriceGross: number },
+  removed: number,
+): ResizedLine & { remaining: Decimal } {
+  const remaining = subtractDecimal(
+    thousandthsToDecimal(target.quantity),
+    thousandthsToDecimal(removed),
+  );
+  return {
+    id: target.id,
+    remaining,
+    quantity: decimalToThousandths(remaining),
+    lineTotal: decimalToCents(grossLineTotal(centsToDecimal(target.unitPriceGross), remaining)),
+  };
+}
+/**
+ * What {@link removeFromLine} would answer for `removed` of one target, or {@link removePortions}
+ * for whole targets (`removed` null), writing nothing: by how much, in cents, working the bill's set
+ * menus out again would lower its total beyond the removed part's own charge.
+ */
+export async function regroupDropOfRemoval(
+  tx: Transaction,
+  tabId: string,
+  targets: readonly { id: string; quantity: number; unitPriceGross: number }[],
+  removed: number | null,
+): Promise<number> {
+  if (removed === null) {
+    const deleted = new Set(targets.map(({ id }) => id));
+    return regroupDropAfter(tx, tabId, { deleted, resized: new Map() });
   }
+  const target = targets[0]!;
+  const left = dishLeft(target, removed);
+  const kept = keptExtrasOf(await readExtras(tx, target.id), target.quantity);
+  const resized = [left, ...extrasAt(kept, left.remaining)];
+  return regroupDropAfter(tx, tabId, {
+    deleted: new Set(),
+    resized: new Map(resized.map(({ id, quantity, lineTotal }) => [id, { quantity, lineTotal }])),
+  });
 }
 /**
  * Take `removed` thousandths off a dish line: its quantity and total at its stored gross price, its
@@ -372,16 +446,10 @@ export async function reduceLine(
   removed: number,
   children: readonly KeptExtra[],
 ): Promise<void> {
-  const remaining = subtractDecimal(
-    thousandthsToDecimal(target.quantity),
-    thousandthsToDecimal(removed),
-  );
+  const { remaining, quantity, lineTotal } = dishLeft(target, removed);
   await tx
     .update(workingOrderLines)
-    .set({
-      quantity: decimalToThousandths(remaining),
-      lineTotal: decimalToCents(grossLineTotal(centsToDecimal(target.unitPriceGross), remaining)),
-    })
+    .set({ quantity, lineTotal })
     .where(eq(workingOrderLines.id, target.id));
   await rescaleExtras(tx, children, remaining);
   const ids = [target.id, ...children.map(({ child }) => child.id)];

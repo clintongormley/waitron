@@ -50,7 +50,7 @@
   "apps/till/src/api/client.ts": 5750,
   "apps/till/src/screens/till-floor-screen.ts": 3250,
   "apps/till/src/screens/till-station-screen.ts": 1500,
-  "apps/till/src/screens/till-table-order-screen.ts": 7750,
+  "apps/till/src/screens/till-table-order-screen.ts": 7500,
   "apps/till/src/screens/till-ticket-view.ts": 1250,
   "apps/till/src/state/draft-sync.ts": 1250,
   "apps/till/src/state/working-order.ts": 1250,

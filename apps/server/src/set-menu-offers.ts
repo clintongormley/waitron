@@ -45,10 +45,12 @@ export async function setMenuOfferLookup(
     });
   }
   if (requests.size === 0) return { offerFor: () => undefined };
-  const recorded =
-    workingOrderId === null || stale === "stored"
-      ? new Map<string, string>()
-      : await readBillSetMenuVersions(tx, workingOrderId);
+  const recorded = new Map<string, Set<string>>();
+  if (workingOrderId !== null && stale !== "stored") {
+    for (const { menuId, versionId } of await readBillSetMenuVersions(tx, workingOrderId)) {
+      recorded.set(menuId, (recorded.get(menuId) ?? new Set()).add(versionId));
+    }
+  }
   const documents = await readRecordedDocuments(
     tx,
     [...requests.values()].map(({ versionId }) => versionId),
@@ -65,8 +67,8 @@ export async function setMenuOfferLookup(
       throw new AppError("management.request_invalid", { field: "menuVersionId" });
     }
     const liveVersionId = live.get(fullMenuId) ?? null;
-    const expected = recorded.get(menuId) ?? liveVersionId;
-    if (stale !== "stored" && versionId !== expected) {
+    const expected = recorded.get(menuId) ?? new Set([liveVersionId]);
+    if (stale !== "stored" && !expected.has(versionId)) {
       if (allowStale) requests.delete(key);
       else changed.set(fullMenuId, liveVersionId);
     }
@@ -95,7 +97,7 @@ export async function setMenuOfferLookup(
         {
           copy: setMenuCopyOf(snapshot, versionId),
           document: doc,
-          fromRecordedCopy: stale === "stored" || recorded.get(menuId) === versionId,
+          fromRecordedCopy: stale === "stored" || recorded.get(menuId)?.has(versionId) === true,
           offers: new Map(
             snapshot.offers.map((offer) => [
               offer.id,

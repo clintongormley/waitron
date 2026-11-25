@@ -333,8 +333,7 @@ En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se ven
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
 incluyes. Indica el suplemento junto a cada plato que cueste más y pulsa **Guardar** en
 **Platos**. Deja el importe en blanco si el plato está incluido en el precio del menú.
-Ajusta los suplementos de las variantes en **Variantes**. Cambia el **Orden de plato** si sirves un plato de otra manera en este menú. Por ejemplo, pon una
-tapa en Entrantes para que cuente y salga como entrante cuando la pidas desde el menú.
+Ajusta los suplementos de las variantes en **Variantes**.
 
 En **Qué incluye cada menú**, indica cuántos platos ofreces de cada orden de plato.
 Por ejemplo, usa una línea para un entrante y otra para un principal. Pon dos órdenes de plato en

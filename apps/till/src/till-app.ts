@@ -1000,12 +1000,22 @@ function refusedBillIn(error: unknown): { billId?: string } {
   return typeof billId === "string" ? { billId } : {};
 }
 
-/** A table refusal as said: a move that would leave the bill owing less than it has received names
+/** What was refused for leaving a bill owing less than it has received, which picks its words. */
+type ExcessCause = "move" | "line" | "send" | "merge";
+
+const EXCESS_WORDS = {
+  move: "bill.received_exceeds_total_excess",
+  line: "bill.received_exceeds_total_line_excess",
+  send: "bill.received_exceeds_total_send_excess",
+  merge: "bill.received_exceeds_total_merge_excess",
+} as const satisfies Record<ExcessCause, StringKey>;
+
+/** A table refusal as said: one that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
-function billWriteError(error: unknown, lineChange = false): CounterError {
+function billWriteError(error: unknown, cause: ExcessCause = "move"): CounterError {
   const refused = error as { code?: unknown; excess?: unknown } | undefined;
   return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
-    ? { excess: refused.excess, ...(lineChange ? { lineChange: true } : {}) }
+    ? { excess: refused.excess, ...(cause === "move" ? {} : { cause }) }
     : tableWriteError(error);
 }
 
@@ -1938,15 +1948,24 @@ type CounterError =
     }
   | { billPayments: string }
   | { replacedGroups: string }
-  /** `lineChange`: refused for a change to a line, not a move of items. `billId`: the bill the
-   * Refund acts on, for a refusal that names one; `bill`: its label when it is not on screen. */
-  | { excess: string; lineChange?: true; billId?: string; bill?: string }
+  /** `cause`: what was refused, when not a move of items. `billId`: the bill the Refund acts on,
+   * for a refusal that names one; `bill`: its label when it is not on screen. `split`: refused by
+   * Split a table. */
+  | {
+      excess: string;
+      cause?: Exclude<ExcessCause, "move">;
+      billId?: string;
+      bill?: string;
+      split?: true;
+    }
   /** A ticked bill of Split a table's panel changed: its label. */
   | { splitChanged: string }
   /** A refusal named someone else's unsent order on a ticked bill: their name, or "" for none. */
   | { splitTaken: string }
-  /** The bill a refusal's Refund named has left the party: its label. */
+  /** The bill a split's refusal's Refund named has left the party: its label. */
   | { splitGone: string }
+  /** The bill another refusal's Refund named has left the party: its label. */
+  | { refundGone: string }
   /** An order past the simplified-invoice limit, `overLimit` being the limit. */
   | { overLimit: string }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
@@ -2099,13 +2118,11 @@ function errorText(
       ? t("table.split_taken_unnamed")
       : fill(t("table.split_taken"), { who: error.splitTaken });
   if ("splitGone" in error) return fill(t("table.split_bill_gone"), { bill: error.splitGone });
+  if ("refundGone" in error)
+    return fill(t("bill.refund_excess_bill_gone"), { bill: error.refundGone });
   if ("excess" in error) {
     const amount = formatMoney(error.excess, currentLocale());
-    const words = t(
-      error.lineChange === true
-        ? "bill.received_exceeds_total_line_excess"
-        : "bill.received_exceeds_total_excess",
-    ).replaceAll("{amount}", () => amount);
+    const words = t(EXCESS_WORDS[error.cause ?? "move"]).replaceAll("{amount}", () => amount);
     return html`<span class="error-part"
         >${
           error.bill === undefined
@@ -2124,6 +2141,7 @@ function errorText(
                   excess: error.excess,
                   ...(error.billId === undefined ? {} : { billId: error.billId }),
                   ...(error.bill === undefined ? {} : { bill: error.bill }),
+                  ...(error.split === true ? { split: true } : {}),
                 },
                 bubbles: true,
                 composed: true,
@@ -16047,7 +16065,7 @@ export class TillApp extends LitElement {
       this.errorKey =
         billId !== undefined && refusal?.refused === "tab.not_open"
           ? { code: "tab.not_open" }
-          : lineWriteError(error);
+          : this.#lineOrExcessError(error, "send");
       return refusal !== undefined && UNSELLABLE_LINE_REFUSALS.has(refusal.refused)
         ? "mark-unsellable"
         : undefined;
@@ -16075,19 +16093,29 @@ export class TillApp extends LitElement {
   /** A refused send or group command: a party changed elsewhere is read again and described, and never
    * sent again; anything else reads the order and its groups again, since part of it may have gone,
    * and then says what was refused. */
-  async #onReleaseRefusal(error: unknown): Promise<void> {
+  async #onReleaseRefusal(error: unknown, cause: "line" | "send" = "line"): Promise<void> {
     if (isPartyOutOfDate(error)) {
       await this.#onPartyOutOfDate(error);
       return;
     }
     if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
     await this.#loadTabLines();
-    this.errorKey = lineWriteError(error);
+    this.errorKey = this.#lineOrExcessError(error, cause);
   }
 
+  /** A line write's refusal as said; one that would leave a bill holding more than it owes names by
+   * how much, with the offer to give that back first. */
+  #lineOrExcessError(error: unknown, cause: "line" | "send"): CounterError {
+    return (error as { code?: unknown } | undefined)?.code === "bill.received_exceeds_total"
+      ? this.#excessOnBill(billWriteError(error, cause), error)
+      : lineWriteError(error);
+  }
+
+  /** `cause`: what a refusal for leaving a bill owing less than it received says was refused. */
   async #onGroupCommand(
     send: (party: TableParty) => Promise<unknown>,
     current: () => boolean = () => true,
+    cause: "line" | "send" = "line",
   ): Promise<void> {
     if (this.groupCommandBusy || !current()) return;
     this.groupCommandBusy = true;
@@ -16111,7 +16139,7 @@ export class TillApp extends LitElement {
       try {
         await send(party);
       } catch (error) {
-        if (current()) await this.#onReleaseRefusal(error);
+        if (current()) await this.#onReleaseRefusal(error, cause);
         return;
       }
       if (current()) await this.#loadTabLines();
@@ -16151,37 +16179,45 @@ export class TillApp extends LitElement {
   }
 
   async #fireGroup(groupId: string): Promise<void> {
-    await this.#onGroupCommand(async (party) => {
-      const allergy = await this.#prepareTableAllergy(
-        party.id,
-        { kind: "group", groupId },
-        () => true,
-      );
-      if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
-        allergy.api.fireGroup(party.id, groupId, command, { signal }),
-      );
-      if (written === null || !allergy.current()) return;
-      this.#notePartyRevision(party.id, written.value.revision);
-    });
+    await this.#onGroupCommand(
+      async (party) => {
+        const allergy = await this.#prepareTableAllergy(
+          party.id,
+          { kind: "group", groupId },
+          () => true,
+        );
+        if (allergy === null) return;
+        const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+          allergy.api.fireGroup(party.id, groupId, command, { signal }),
+        );
+        if (written === null || !allergy.current()) return;
+        this.#notePartyRevision(party.id, written.value.revision);
+      },
+      undefined,
+      "send",
+    );
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
     const { lineId, ...members } = (event as CustomEvent<{ lineId: string; lineIds?: string[] }>)
       .detail;
-    await this.#onGroupCommand(async (party) => {
-      const allergy = await this.#prepareTableAllergy(
-        party.id,
-        { kind: "held-line", lineId, ...members },
-        () => true,
-      );
-      if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
-        allergy.api.fireHeldLine(party.id, lineId, { ...command, ...members }, { signal }),
-      );
-      if (written === null || !allergy.current()) return;
-      this.#notePartyRevision(party.id, written.value.revision);
-    });
+    await this.#onGroupCommand(
+      async (party) => {
+        const allergy = await this.#prepareTableAllergy(
+          party.id,
+          { kind: "held-line", lineId, ...members },
+          () => true,
+        );
+        if (allergy === null) return;
+        const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+          allergy.api.fireHeldLine(party.id, lineId, { ...command, ...members }, { signal }),
+        );
+        if (written === null || !allergy.current()) return;
+        this.#notePartyRevision(party.id, written.value.revision);
+      },
+      undefined,
+      "send",
+    );
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
@@ -16602,7 +16638,7 @@ export class TillApp extends LitElement {
       if (written === null) return;
     } catch (error) {
       if (!live()) return;
-      await this.#onReleaseRefusal(error);
+      await this.#onReleaseRefusal(error, "send");
       return;
     }
     if (live()) await this.#loadTabLines();
@@ -18108,7 +18144,7 @@ export class TillApp extends LitElement {
             : code === "working_order.out_of_date"
               ? "held.changed_elsewhere"
               : code === "bill.received_exceeds_total"
-                ? billWriteError(outcome.error, true)
+                ? billWriteError(outcome.error, "line")
                 : lineWriteError(outcome.error);
     }
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
@@ -19614,7 +19650,12 @@ export class TillApp extends LitElement {
       await rereadBills();
       say(
         typeof said === "object" && "excess" in said
-          ? { ...said, ...refusedBillIn(error), ...(named === undefined ? {} : { bill: named }) }
+          ? {
+              ...said,
+              ...refusedBillIn(error),
+              ...(named === undefined ? {} : { bill: named }),
+              split: true,
+            }
           : typeof said === "object" && "code" in said && named !== undefined
             ? { ...said, bill: named }
             : said,
@@ -19801,18 +19842,29 @@ export class TillApp extends LitElement {
   /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
    * the two are served in different ways. `draft.out_of_date` and `draft.taken_over` show their own
    * words. */
-  async #onBillPairRefusal(error: unknown): Promise<void> {
+  async #onBillPairRefusal(error: unknown, cause: "move" | "merge" = "move"): Promise<void> {
     const code = (error as { code?: string } | undefined)?.code;
     if (code === "service_zone.mode_incompatible") this.errorKey = "table.bills_served_differently";
     else if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
-    else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
+    else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error, cause);
     else await this.#onTableRefusal(error);
   }
 
-  async #onBillMoneyRefusal(error: unknown): Promise<void> {
-    this.errorKey = billWriteError(error);
+  async #onBillMoneyRefusal(error: unknown, cause: "move" | "merge" = "move"): Promise<void> {
+    this.errorKey = this.#excessOnBill(billWriteError(error, cause), error);
     const billId = this.activeTabId;
     if (billId !== undefined) await this.#rereadAmounts(billId, this.#orderVisit, undefined, false);
+  }
+
+  /** An excess refusal naming another bill of the party says that bill's label and carries its id,
+   * so Refund acts on that bill; one naming a bill the party does not list offers no Refund. */
+  #excessOnBill(said: CounterError, error: unknown): CounterError {
+    if (typeof said !== "object" || !("excess" in said)) return said;
+    const { billId } = refusedBillIn(error);
+    if (billId === undefined || billId === this.activeTabId) return said;
+    const bill = this.partyBills.find((each) => each.workingOrderId === billId);
+    if (bill === undefined) return { code: "bill.received_exceeds_total" };
+    return { ...said, billId, bill: billLabel(bill) };
   }
 
   async #onRelocationRefusal(error: unknown, live: () => boolean): Promise<void> {
@@ -20142,7 +20194,7 @@ export class TillApp extends LitElement {
           ...(bill === undefined ? {} : { bill: billLabel(bill) }),
         };
         await this.#loadPartyBills();
-      } else await this.#onBillPairRefusal(error);
+      } else await this.#onBillPairRefusal(error, "merge");
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
@@ -22807,12 +22859,13 @@ export class TillApp extends LitElement {
   }
 
   async #onRefundExcess(event: Event): Promise<void> {
-    const { excess, billId, bill } = (
-      event as CustomEvent<{ excess: string; billId?: string; bill?: string }>
+    const { excess, billId, bill, split } = (
+      event as CustomEvent<{ excess: string; billId?: string; bill?: string; split?: true }>
     ).detail;
     if (billId !== undefined && billId !== this.activeTabId) {
       if (!this.partyBills.some((listed) => listed.workingOrderId === billId)) {
-        this.errorKey = { splitGone: bill ?? billNumberLabel({ billNumber: null }) };
+        const label = bill ?? billNumberLabel({ billNumber: null });
+        this.errorKey = split === true ? { splitGone: label } : { refundGone: label };
         return;
       }
       this.#requestLeave(async () => {
@@ -24634,13 +24687,11 @@ export class TillApp extends LitElement {
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
-      const bill = this.#currentCounterSetMenuBill;
-      const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
         .sumUpConnected=${this.sumUpConnected}
-        .setMenuBill=${bill?.setMenus}
-        .setMenuCopies=${copies}
-        .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
+        .setMenuBill=${this.#currentCounterSetMenuBill?.setMenus}
+        .setMenuCopies=${NO_ORDERING_COPIES}
+        .setMenuCourses=${{}}
         .saveSetMenuCount=${this.#saveCounterSetMenuCount}
         .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
         .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}

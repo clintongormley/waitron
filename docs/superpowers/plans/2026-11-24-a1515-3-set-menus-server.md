@@ -452,11 +452,22 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   changes the saved answer". A menu item's course override (`packages/menu/src/menu-document.ts:878`)
   is not used. Splits copy it (the carve context, `working-order-transfer.ts:445`) and Reopen to split
   copies whole rows (`split-after-print.ts:162-170`). 2a adds it, since 2a already resets venues.
-- **D13. Only a dish row holding exactly one whole portion takes part** (`quantity` 1000 and
-  `count_as_portions`). Table sends write one row per portion (`expandPortionRows`,
+- **D13. Only a dish row holding exactly one whole portion takes part, unless its product is sold
+  by measure** (`quantity` 1000, and the row's unit not a measure: the flag `assertSetMenuPortion`
+  refuses on, `set-menu-offers.ts:126`). Table sends write one row per portion (`expandPortionRows`,
   `order-portions.ts:55`, from `order-group-submission.ts:219-225`), so do new counter lines
-  (`expand: true`, `working-order-line-edits.ts:351-355`); a set-menu dish is never sold by measure
-  (`assertSetMenuPortion`, `set-menu-offers.ts:126`). Any other row is charged as stored.
+  (`expand: true`, `working-order-line-edits.ts:351-355`). Any other row is charged as stored.
+
+  _2026-11-25, corrected in 2b Task 2b.2: this said "and `count_as_portions`", which left out a whole
+  portion of a dish whose unit takes fractions; the spec's Goal 2 groups it._
+
+  _2026-11-25, corrected in 2b review: "charged as stored" left a dish at its set-menu price once a
+  line edit raised it past one portion, or its unit became a measure, while its set menu was
+  deleted. An unfrozen dish row left out keeps its stored charge only when it holds no set-menu
+  place and costs its à la carte price; otherwise the grouping writes it à la carte (place cleared,
+  unit price its `a_la_carte_unit_price`, line total that times its quantity). The measure flag is
+  still read live from `units`: the line records no copy of it (`count_as_portions` also folds in
+  the unit's decimals)._
 - **D14. FOR THE OWNER. A takeaway or delivery bill is grouped with no set menus until VAT piece B.** Grouping one
   would make it unpayable: payment refuses a takeaway bill holding a set-menu row
   (`refuseTakeawaySetMenuMoney`, `set-menu-bill.ts:66-90`, from `bill-payments.ts:1759`), and PR 1
@@ -467,6 +478,7 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   Piece B lifts it in one line. **FOR THE OWNER:** spec section 8 keeps set menus for takeaway and
   delivery; this takes them away from the counter until piece B. Alternatives: group takeaway and
   accept that such orders cannot be paid (breaks "never block a sale"), or hold 2b until piece B.
+  _Owner's answer (watcher 2026-11-24 22:30): "Accept for now"._
 - **D15. What freezes a row (D2), as read:** an `adjustments` row naming it whose action is not
   `cancel`; any `adjustment_lines` row naming it; a `cancel` with `charge_kept` naming it, or a
   `line_service_cancellations` row (today's not-movable set, `set-menu-bill.ts:323-339,352`); any
@@ -528,12 +540,14 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   adjustment names, so the report's cancels no longer add up to the bill's drop. Alternative: record
   the bill's whole drop (13.00), which matches the bill but counts a set menu falling apart as part of
   the cancellation. 2b Task 2b.3 pins the chosen figure.
+  _Owner's answer (watcher 2026-11-24 22:30): "13", the bill's whole drop._
 - **D25. FOR THE OWNER. A cancel on a part-paid bill can now be refused.** When the regrouped total
   drops below what was received, the cancel is refused `bill.received_exceeds_total`
   (`assertBillInvariant`, `bill-payments.ts:568`), as it is today for any line whose removal does
   that. New: a dish at 0 inside a set menu can now cause it (Daily of Soup and Hake, 14.00 received:
   cancelling Hake leaves Soup at 6.00). Today that cancel is accepted. Recommended: accept the refusal,
   as for any other line today. Alternative: allow the cancel and leave the bill overpaid.
+  _Owner's answer (watcher 2026-11-24 22:30): keep the refusal until the overpaid-bills work lands._
 - **D26. Settled by the owner (watcher 2026-11-24 22:32): a bill keeps both versions.** "this should
   never happen. but it may not be just the price that changed, it could be the contents. should we
   not keep both?" A set menu moved with its dishes (or a dish moved alone whose set menu the source
@@ -560,7 +574,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   - The till's folder shows the newest only with no till change: `orderingCopies`
     (`apps/till/src/state/set-menus.ts:28-35`) offers only the version `recorded` names per set menu,
     so `readBillsSetMenus` (`set-menu-bill.ts:176-272`) fills `recorded` with the newest
-    (`changedAt`) of the bill's versions of each set menu. A set-menu row of the older version is
+    of the bill's versions of each set menu: the copy changed last (`changedAt`, as a new bill
+    picks), publish order breaking a tie. A set-menu row of the older version is
     still drawn from its own copy, which `setMenuCopies` already serves.
 - **D27. FOR THE OWNER. An existing money-total test changes:** the spec fixture's bill
   (`testing/set-menu-spec-fixture.ts:248`) totals 72.00 instead of 73.00, because 3 Daily and 1
@@ -591,8 +606,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   (`working-order-edit-state.ts:374-375`), and its closing regroup keeps or deletes the row (2b Task
   2b.2's held-order save case); cancel and adjustment-cancel keep refusing it (`line-cancel.ts:208`,
   `adjustments-apply.ts:871-872`; 2b Task 2b.5).
-- The golden huella test and `inmutabilidad` pass UNEDITED; 2a and 2c say "Resets venues" in the PR's
-  first line; 2b's body carries a `Sale-path read changed:` line (CLAUDE.md §4) and one line on D2:
+- The golden huella test and `inmutabilidad` pass UNEDITED; 2a, 2b (D26) and 2c say "Resets venues" in
+  the PR's first line; 2b's body carries a `Sale-path read changed:` line (CLAUDE.md §4) and one line on D2:
   "A comped or discounted set menu, and every dish in it, keeps its saved place and price until PR 3,
   and keeps any empty place, so a dish added later is charged à la carte or in another set menu
   rather than filling it."
@@ -949,7 +964,7 @@ and is not a failing test.
     (`adjustments-apply.ts:1388`) each regroup.
   - **D24 (owner):** cancelling Sirloin (+5.00) from a Daily of Soup and Sirloin takes the bill from
     19.00 to 6.00; the cancel's recorded reduction (`planAdjustment`, `adjustments-apply.ts:900-907`)
-    is 5.00, and the adjustments report (`packages/adjustments/src/reports.ts:191-193`) counts 5.00.
+    is 13.00, the bill's whole drop, and the adjustments report (`packages/adjustments/src/reports.ts:191-193`) counts 13.00.
   - **D25 (owner):** a part-paid bill (Daily of Soup and Hake, 14.00 received as an amount):
     cancelling Soup keeps the Daily (14.00 beats Hake's 16.00) and is accepted; cancelling Hake leaves
     Soup at 6.00, below what was received, and is refused `bill.received_exceeds_total`. Today that
@@ -1087,7 +1102,7 @@ switch never changes a grouping.
   src/write-path.e2e.test.ts` (unedited), the typechecks of `@waitron/server`, `@waitron/till`,
   `@waitron/shared`, and prettier on the changed files.
 - [ ] **Step 3: Backlog and PR body.** `docs/backlog/menu.md`: 2b done, 2c, 3, 4 left; piece 4
-  inherits D22's list. PR body: no reset (no schema change); the D2 line; the D10 line; the owner
+  inherits D22's list. PR body: first line "Resets venues: …" (D26 changes the copies' key); the D2 line; the D10 line; the owner
   items D14, D24–D27; the measurement. `git commit -s -m "Record what the set-menu switch leaves for later"`.
 
 ---

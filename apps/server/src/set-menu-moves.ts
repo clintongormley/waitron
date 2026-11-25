@@ -1,122 +1,63 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import {
+  adjustments,
   lineServiceCancellations,
-  products,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import { AppError, checkMoves, placeInOrder, type DishMove } from "@waitron/shared";
-import {
-  adjustedDishIds,
-  readBillSetMenus,
-  readSetMenuReservations,
-  setMenuDishColumns,
-} from "./set-menu-bill.js";
-import type { TradingContext } from "./trading-context.js";
-import { bumpRevisionKeepingPayment, refusePaymentInFlight } from "./working-order-edit-state.js";
-import { refuseOrderOverSimplifiedLimit, totalBeforeEdit } from "./stored-order-lines.js";
+import { AppError } from "@waitron/shared";
+import { namedFrozenLineIds } from "./set-menu-freeze.js";
 import "./errors.js";
 
-export async function moveSetMenuDishes(
+/**
+ * Refuses moving these set-menu dishes away from their set menu when that would unfreeze them
+ * (D18): `set_menu.no_place_on_target` for a dish whose cancel kept its charge, and
+ * `set_menu.move_adjusted` for one frozen by its own comp or discount, or an extra's, or a stamped
+ * list price (D15).
+ */
+export async function refuseMovingFrozenDishes(
   tx: Transaction,
-  cfg: TradingContext,
-  workingOrderId: string,
-  moves: readonly DishMove[],
-) {
-  await refusePaymentInFlight(tx, [workingOrderId]);
-  const state = await readBillSetMenus(tx, workingOrderId);
-  const move = checkMoves(state, moves, await readSetMenuReservations(tx, workingOrderId));
-  if (move.kind === "not_placed") {
-    throw new AppError("management.request_invalid", { field: "moves" });
-  }
-  if (move.kind === "place_taken") {
-    const [line] = await tx
-      .select({ name: workingOrderLines.name })
-      .from(workingOrderLines)
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, workingOrderId),
-          eq(workingOrderLines.id, move.lineId),
-        ),
-      );
-    throw new AppError("set_menu.place_taken", { dishName: line!.name });
-  }
-  const before = await totalBeforeEdit(tx, cfg, workingOrderId);
-  for (const result of move.results) {
-    await tx
-      .update(workingOrderLines)
-      .set(setMenuDishColumns(result))
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, workingOrderId),
-          eq(workingOrderLines.id, result.id),
-        ),
-      );
-  }
-  await refuseOrderOverSimplifiedLimit(tx, cfg, workingOrderId, before);
-  await bumpRevisionKeepingPayment(tx, [workingOrderId]);
-  return readBillSetMenus(tx, workingOrderId);
-}
-
-export async function replaceMovedDishes(
-  tx: Transaction,
-  workingOrderId: string,
   lineIds: readonly string[],
 ): Promise<void> {
-  const moving = new Set(lineIds);
-  const state = await readBillSetMenus(tx, workingOrderId);
-  const lines = await tx
+  if (lineIds.length === 0) return;
+  const ids = sql`(select value from json_each(${JSON.stringify(lineIds)}))`;
+  const rows = await tx
     .select({
       id: workingOrderLines.id,
       name: workingOrderLines.name,
-      productId: workingOrderLines.productId,
-      parentProductId: products.parentId,
+      parentLineId: workingOrderLines.parentLineId,
+      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       cancellationLineId: lineServiceCancellations.lineId,
+      keptChargeId: adjustments.id,
     })
     .from(workingOrderLines)
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
-    .where(
+    .leftJoin(
+      adjustments,
       and(
-        eq(workingOrderLines.workingOrderId, workingOrderId),
-        inArray(
-          workingOrderLines.id,
-          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-        ),
+        eq(adjustments.lineId, workingOrderLines.id),
+        eq(adjustments.action, "cancel"),
+        eq(adjustments.chargeKept, true),
       ),
     )
+    .where(or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)))
     .orderBy(workingOrderLines.lineNo);
-  const cancelled = lines.find((line) => line.cancellationLineId !== null);
+  const dishes = rows.filter(({ parentLineId }) => parentLineId === null);
+  const cancelled = dishes.find(
+    ({ cancellationLineId, keptChargeId }) => cancellationLineId !== null || keptChargeId !== null,
+  );
   if (cancelled !== undefined)
     throw new AppError("set_menu.no_place_on_target", { dishName: cancelled.name });
-  const reduced = await adjustedDishIds(tx, lineIds);
-  const adjusted = lines.filter(({ id }) => reduced.has(id));
+  const named = await namedFrozenLineIds(
+    tx,
+    rows.map(({ id }) => id),
+  );
+  const frozen = new Set(
+    rows.flatMap(({ id, parentLineId, listUnitPriceGross }) =>
+      named.has(id) || listUnitPriceGross !== null ? [parentLineId ?? id] : [],
+    ),
+  );
+  const adjusted = dishes.filter(({ id }) => frozen.has(id));
   if (adjusted.length > 0)
     throw new AppError("set_menu.move_adjusted", { dishNames: adjusted.map(({ name }) => name) });
-
-  const { placed, unplaced } = placeInOrder(
-    { ...state, dishes: state.dishes.filter(({ lineId }) => !moving.has(lineId)) },
-    lines.map(({ id, productId, parentProductId }) => ({
-      id,
-      productId: parentProductId ?? productId!,
-      variantId: parentProductId === null ? null : productId,
-      reserved: null,
-    })),
-    await readSetMenuReservations(tx, workingOrderId),
-  );
-  if (unplaced.length > 0)
-    throw new AppError("set_menu.no_place_on_target", {
-      dishName: lines.find(({ id }) => id === unplaced[0])!.name,
-    });
-  for (const result of placed) {
-    await tx
-      .update(workingOrderLines)
-      .set(setMenuDishColumns(result))
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, workingOrderId),
-          eq(workingOrderLines.id, result.id),
-        ),
-      );
-  }
 }

@@ -39,6 +39,7 @@ import {
   type PinAttempts,
 } from "@waitron/identity";
 import {
+  addDecimal,
   AppError,
   centsToDecimal,
   compareDecimal,
@@ -65,6 +66,7 @@ import { splitLinesWithinOrder, type SplitRow } from "./working-order-transfer.j
 import {
   partyAfterEdit,
   quantityOfLine,
+  regroupDropOfRemoval,
   removeFromLine,
   removePortions,
   type VoidTarget,
@@ -1191,6 +1193,15 @@ export async function previewAdjustment(
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
   const plan = await planAdjustment(tx, ask, venueLocale);
+  const regrouped =
+    ask.action === "cancel"
+      ? await regroupDropOfRemoval(
+          tx,
+          ask.orderId,
+          (plan.removedPortions ?? [plan.line!]).map(voidTargetOf),
+          plan.removed,
+        )
+      : 0;
   const lines =
     ask.action === "cancel"
       ? [
@@ -1211,7 +1222,7 @@ export async function previewAdjustment(
           })),
         }));
   return {
-    reduction: money(plan.reduction),
+    reduction: money(addDecimal(plan.reduction, centsToDecimal(regrouped))),
     nominalValue: money(plan.nominal),
     needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
@@ -1382,8 +1393,10 @@ export async function applyAdjustment(
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       let splits: AdjustmentSplit[] = [];
       let taken: LineReduction[] = [];
+      // A cancel records the bill's whole drop, its set menus worked out again included (D24).
+      let regrouped = 0;
       if (plan.removedPortions !== null) {
-        await removePortions(
+        regrouped = await removePortions(
           tx,
           cfg,
           args.orderId,
@@ -1393,7 +1406,7 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else if (args.action === "cancel") {
-        await removeFromLine(
+        regrouped = await removeFromLine(
           tx,
           cfg,
           args.orderId,
@@ -1441,9 +1454,9 @@ export async function applyAdjustment(
         },
         action: args.action,
         percentBp: args.action === "discount_percent" ? args.percentBp! : null,
-        beforeAmount: plan.before,
+        beforeAmount: addDecimal(plan.before, centsToDecimal(regrouped)),
         afterAmount: subtractDecimal(plan.before, plan.reduction),
-        reduction: plan.reduction,
+        reduction: addDecimal(plan.reduction, centsToDecimal(regrouped)),
         nominalValue: plan.nominal,
         requestedBy: args.operatorId,
         approvedBy: approved,

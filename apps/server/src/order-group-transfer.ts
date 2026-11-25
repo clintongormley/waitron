@@ -299,7 +299,7 @@ export async function activeGroupLines(tx: Transaction, groupId: string) {
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
       quantity: workingOrderLines.quantity,
-      setMenuRole: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
       sentAt: workingOrderLines.sentAt,
     })
     .from(workingOrderLines)

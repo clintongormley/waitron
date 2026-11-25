@@ -768,7 +768,7 @@ _2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-edi
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 
-_2026-11-24: Piece 3, the server, is planned as four pull requests ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md)). The first stores each dish's à la carte price on its bill line, also when it is tapped in a set-menu folder, and records on the bill every set menu on sale that lists a dish when the dish is ordered; a dish moved to another bill brings those records with it, so that set menu stays usable after its period. PR 2a adds the code that works out and saves a bill's cheapest set menus, leaving anything comped, discounted, paid for by item or cancelled with its charge kept as it was, and the bill's answer says when the search stopped before proving the cheapest; nothing calls it yet. Left: every change to a bill's dishes regroups and the counts and "No place" question go (PR 2b), Pay for items groups the chosen items as their own bill would (PR 2c), comps and discounts (PR 3), and moves with discounts (PR 4)._
+_2026-11-25: Piece 3, the server ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md)). Each dish's bill line stores its à la carte price, also when it is tapped in a set-menu folder, and ordering a dish records on the bill every set menu on sale that lists it; a moved dish brings those records, so that set menu stays usable after its period. Whenever a bill's dishes change (a send, an edit, a cancel, a move, a merge, a table split or Pay for items), the server works out and saves its cheapest set menus, leaving anything comped, discounted, paid for by item or cancelled with its charge kept as it was. When the search stops before proving the cheapest, the till's set-menu summary says so. A set menu moved to a bill that records another version of it brings its own, and the bill keeps both (owner, 2026-11-24). The waiter only adds dishes: set-menu counts, the "No place for this dish" question, and removing a set menu or moving dishes between set menus by hand are gone. A takeaway bill is grouped with no set menus, and the Counter offers no set-menu folders, until VAT-RATES piece B (owner, 2026-11-24). Left: Pay for items groups the chosen items as their own bill would and takes a set-menu dish chosen alone, which it refuses until then (PR 2c); comps and discounts that regroup (PR 3); moving dishes with their discounts (PR 4). The reworked design's piece 4, the till (lane C), deletes the till code PR 2b left unreachable (plan D22): the place question and its add-a-set-menu choices in `menu-browser.ts`, `set-menu-counts.ts`, the count, remove and in-bill move calls in `till-app.ts`, the order screen and `api/client.ts`, the texts of the codes the server no longer sends and the drafts' `setMenuReserved` fields with the server's draft-reservation columns._
 
 _Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): the server and, since pull request 2 of 4, the till pay for chosen items on a bill of their own, put them back when the card fails, and give back or keep as a tip what that leaves the table's bill paid over its total; a printed bill's items are still paid the old way until pull request 4 (printed bills), and pull request 3 (removing the old items payment) follows it._
 
@@ -793,21 +793,13 @@ Shared ordering code calculates where a dish fits, what it costs there and which
 Bill storage now holds set menus and their recorded copies, dish places and draft reservations.
 The server reads the recorded copies and dish places.
 Kitchen tickets, station queues and service reads show the dishes from a set menu. The menu
-itself adds no kitchen work and does not count as a dish. The server keeps set-menu dishes
-separate in drafts and saves their places and prices together on Send. A table can still order
-from its recorded copy after the menu period ends. The server can move placed dishes to another
-set menu on the same bill and save the new surcharge. An edit keeps the first dish's place,
-and additional dishes each need their own place. Cancelling a dish without charging for it opens
-its place. The server can move a menu with its dishes between bills, keeping their prices. A
-dish moved on its own needs a place on the destination bill and takes that place's surcharge.
-Splitting a draft keeps the dish's menu offer and clears its place reservation on the old bill.
-The till API can save counts, cancel an empty set menu, and return the bill's saved copies
-after a full menu is republished. It refuses to remove or move a set menu when a saved draft
-dish on its original bill would lose its only place. The till restores saved set-menu dishes
-from the bill's copy, follows sold-out changes and explains refusals in English and Spanish.
-At a seated table the till can set counts, order from the bill's folders, handle a dish
-with no place, and move a set menu with its dishes. At the Counter, staff can start a
-takeaway with a set menu, park it and retrieve the recorded menu and its prices.
+itself adds no kitchen work and does not count as a dish. A table can still order
+from its recorded copy after the menu period ends. The server can move a menu with its dishes
+between bills. Splitting a draft keeps the dish's menu offer and clears its
+place reservation on the old bill. The till API returns the bill's saved copies after a full menu
+is republished. The till restores saved set-menu dishes from the bill's copy, follows sold-out
+changes and explains refusals in English and Spanish. At a seated table the till orders from the
+bill's folders and moves a set menu with its dishes.
 The dashboard's management API can now create and edit drafts and place them in full menus.
 Full-menu Preview and publication status refresh when set-menu settings change.
 The dashboard can open an existing set-menu draft, edit its name, price and inclusion
@@ -818,8 +810,7 @@ shows the inclusion lines added or removed by a dish change. The dashboard piece
 and publish its current version to the tills. The products guide covers setup in both languages.
 Piece 4 ([plan](../superpowers/plans/2026-11-18-a1515-set-menu-bill.md)) lets a set-menu bill
 eaten here take payments like any bill: whole, by items or in part, with comps and discounts on set
-menus. A set menu paid by items cannot be removed (`bill.line_paid`); an empty unpaid one can, comped
-or not. A comped or discounted set-menu dish moves to another bill only with its set menu
+menus. A comped or discounted set-menu dish moves to another bill only with its set menu
 (`set_menu.move_adjusted`). The ticket and the full invoice list set menus and supplements, not the
 dishes a set menu covers; the till's pay-by-items list leaves those out too, and category sales
 show set menus as a group of their own. The table-service guide covers this in both languages.

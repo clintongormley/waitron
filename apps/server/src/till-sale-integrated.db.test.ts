@@ -986,9 +986,9 @@ describe("walk-up invoice preparation", () => {
       withTransaction(suite.db, (tx) =>
         createOpenOrder(
           tx,
-          { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
+          { ...cfg, simplifiedInvoiceLimit: decimal("100.00") },
           id,
-          [{ menuItemId: coffee.menuItemId, quantity: "2001" }],
+          [{ menuItemId: coffee.menuItemId, quantity: "99" }],
           null,
           { zoneId: coffee.zoneId },
         ),

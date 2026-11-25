@@ -6,6 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { splitDraft } from "./order-drafts.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { commandFor, inTx, join, seatWithNoAllergies } from "./testing/party-venue.js";
 import { saveSetMenuDraft, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
@@ -80,36 +81,26 @@ it("keeps the recorded menu and dish places when a whole bill moves to another t
   expect(await read(moved.billId)).toEqual(before);
 });
 
-it("splits a table with a set-menu dish only when its destination has a place", async () => {
+it("splits a table taking a set-menu dish alone, and both bills work out their set menus", async () => {
   const { venue } = fixture;
   const source = await setMenuBill(fixture);
   const leaving = await venue.table(crypto.randomUUID());
   await join(venue, source.partyId, leaving);
-  const before = await read(source.billId);
   const command = await commandFor(venue, source.partyId);
-  const split = (lineIds: string[]) =>
-    inTx(venue, (tx) =>
-      splitTable(
-        tx,
-        venue.cfg,
-        source.partyId,
-        leaving,
-        { wholeBillIds: [], loose: [{ billId: source.billId, lineIds }] },
-        command,
-      ),
-    );
-  await expect(split([source.dishId])).rejects.toMatchObject({
-    code: "set_menu.no_place_on_target",
-  });
-  expect(await read(source.billId)).toEqual(before);
-  const moved = await split([source.menuLineId]);
+  const moved = await inTx(venue, (tx) =>
+    splitTable(
+      tx,
+      venue.cfg,
+      source.partyId,
+      leaving,
+      { wholeBillIds: [], loose: [{ billId: source.billId, lineIds: [source.dishId] }] },
+      command,
+    ),
+  );
   expect(moved.billIds).toEqual([moved.billId]);
-  expect(await read(moved.billId)).toMatchObject({
-    recorded: before.recorded,
-    setMenus: before.setMenus,
-    dishes: before.dishes,
-  });
-  expect((await read(source.billId)).dishes).toEqual([]);
+  expect(await read(source.billId)).toMatchObject({ setMenus: [], dishes: [] });
+  expect(await read(moved.billId)).toMatchObject({ setMenus: [], dishes: [] });
+  expect(await inTx(venue, (tx) => storedOrderTotal(tx, moved.billId))).toBe("5.00");
 });
 
 it("clears only the moved draft dish's reservation while keeping its set-menu offer", async () => {

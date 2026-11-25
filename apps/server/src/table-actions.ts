@@ -32,6 +32,8 @@ import {
 import { readPartiesSentWork } from "./kitchen-ticket-paper.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { carryDoneWithBill } from "./service-step-done.js";
+import { regroupBills } from "./set-menu-regroup.js";
+import { refuseOrderOverSimplifiedLimit, totalBeforeEdit } from "./stored-order-lines.js";
 import {
   copyHeldGroups,
   copyWaitingGroups,
@@ -423,11 +425,15 @@ export async function splitTable(
       newParty,
       await storedOrderDining(tx, looseSourceIds[0]!),
     );
+    const before = await totalBeforeEdit(tx, cfg, newBill);
     for (const { billId, transfers } of looseMoves) {
       await moveCheckedDishes(tx, cfg, billId, newBill, transfers, {
         actorId: options.operatorId,
+        deferTarget: true,
       });
     }
+    await regroupBills(tx, [newBill]);
+    await refuseOrderOverSimplifiedLimit(tx, cfg, newBill, before);
     await assertBillInvariant(tx, looseSourceIds);
     const left = await leaveParty(tx, newBill, "keep", { keepWaiting: true });
     arriving.push({ billId: newBill, firers: left.firers });

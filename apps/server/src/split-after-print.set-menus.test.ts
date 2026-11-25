@@ -14,9 +14,9 @@ import { readOrderRevision } from "./working-order-context.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { inTx, type PartyVenue } from "./testing/party-venue.js";
 import {
+  addEmptySpecSetMenus,
   printSpecBill,
   serveSpecBill,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specBill,
   specDeps,
@@ -126,7 +126,7 @@ it("a printed set-menu bill splits after print", async () => {
     expect(newIds.has(dish.setMenuLineId!)).toBe(true);
     expect(copied.find(({ id }) => id === dish.setMenuLineId)!.setMenuRole).toBe("set_menu");
   }
-  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(7300);
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(7200);
 
   const before = await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId));
   const after = await inTx(venue, (tx) => readBillSetMenus(tx, billId));
@@ -149,29 +149,21 @@ it("a printed set-menu bill splits after print", async () => {
 
 it("a comped set-menu dish splits after print with its comp", async () => {
   const tab = await specBill(spec, "fire");
-  const sirloin = (await specRows(spec, tab.tabId)).find(
-    ({ name, setMenuLineId }) => name === "Sirloin" && setMenuLineId === tab.daily[1],
-  )!;
-  await comp(tab.tabId, sirloin.lineNo);
+  // Both Sirloins sit at +5.00 in a Daily menu; each is comped, so neither may be offered a move.
+  const sirloins = (await specRows(spec, tab.tabId)).filter(({ name }) => name === "Sirloin");
+  expect(sirloins).toHaveLength(2);
+  for (const sirloin of sirloins) await comp(tab.tabId, sirloin.lineNo);
   await serveSpecBill(spec, tab.partyId, tab.tabId);
   await printSpecBill(spec, tab.partyId, tab.tabId);
   const movable = async (billId: string, lineId: string) =>
     (await inTx(venue, (tx) => readBillSetMenus(tx, billId))).dishes.find(
       (dish) => dish.lineId === lineId,
     )!.movable;
-  expect(await movable(tab.tabId, sirloin.id)).toBe(false);
+  for (const sirloin of sirloins) expect(await movable(tab.tabId, sirloin.id)).toBe(false);
+  const old = await specRows(spec, tab.tabId);
   const { billId } = await split(tab.tabId);
 
   const copied = await specRows(spec, billId);
-  const copy = copied.find(({ lineNo }) => lineNo === sirloin.lineNo)!;
-  expect(copy).toMatchObject({
-    name: "Sirloin",
-    setMenuLineId: copied.find(({ lineNo }) => lineNo === 2)!.id,
-    setMenuPlace: 1,
-    unitPriceGross: 0,
-    lineTotal: 0,
-    listUnitPriceGross: 500,
-  });
   const reductions = (lineId: string) =>
     venue.db
       .select({
@@ -181,21 +173,33 @@ it("a comped set-menu dish splits after print with its comp", async () => {
       })
       .from(adjustmentLines)
       .where(inArray(adjustmentLines.lineId, [lineId]));
-  const original = await reductions(sirloin.id);
-  expect(original).toMatchObject([{ reduction: 500 }]);
-  expect(await reductions(copy.id)).toEqual(original);
-  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(6800);
+  for (const sirloin of sirloins) {
+    const copy = copied.find(({ lineNo }) => lineNo === sirloin.lineNo)!;
+    const setMenuLineNo = old.find(({ id }) => id === sirloin.setMenuLineId)!.lineNo;
+    expect(copy).toMatchObject({
+      name: "Sirloin",
+      setMenuLineId: copied.find(({ lineNo }) => lineNo === setMenuLineNo)!.id,
+      setMenuPlace: 1,
+      unitPriceGross: 0,
+      lineTotal: 0,
+      listUnitPriceGross: 500,
+    });
+    const original = await reductions(sirloin.id);
+    expect(original).toMatchObject([{ reduction: 500 }]);
+    expect(await reductions(copy.id)).toEqual(original);
+    expect(await movable(billId, copy.id)).toBe(false);
+  }
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(6200);
 
-  expect(await movable(billId, copy.id)).toBe(false);
-  // Uncomped, a third Special would draw the Sirloin off its +5.00 place to make room for a Hake.
-  const third = (await setSpecCount(spec, billId, spec.special, 3)).setMenus.at(-1)!;
+  // Uncomped, an empty Special would draw a Sirloin off its +5.00 place to make room for a Hake.
+  const [third] = await addEmptySpecSetMenus(spec, billId, spec.special);
   const suggestion = suggestMove(await inTx(venue, (tx) => readBillSetMenus(tx, billId)), [], {
     id: crypto.randomUUID(),
     productId: spec.productIds.Hake,
     variantId: null,
   });
   expect(suggestion?.moves).toEqual([]);
-  expect(suggestion?.place).toMatchObject({ setMenuLineId: third.lineId, place: 1 });
+  expect(suggestion?.place).toMatchObject({ setMenuLineId: third, place: 1 });
 });
 
 it("a comped set menu splits after print with its comp", async () => {
@@ -227,7 +231,7 @@ it("a comped set menu splits after print with its comp", async () => {
   const original = await reductions(daily.id);
   expect(original).toMatchObject([{ reduction: 1400 }]);
   expect(await reductions(copy.id)).toEqual(original);
-  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(5900);
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(5800);
   expect(
     copied.filter(({ setMenuLineId }) => setMenuLineId === copy.id).map(({ name }) => name),
   ).toEqual(

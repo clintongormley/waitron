@@ -262,7 +262,7 @@ CREATE TABLE `bill_set_menu_copies` (
 	`working_order_id` text NOT NULL,
 	`set_menu_id` text NOT NULL,
 	`menu_version_id` text NOT NULL,
-	PRIMARY KEY(`working_order_id`, `set_menu_id`),
+	PRIMARY KEY(`working_order_id`, `set_menu_id`, `menu_version_id`),
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`set_menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_version_id`) REFERENCES `menu_versions`(`id`) ON UPDATE no action ON DELETE no action

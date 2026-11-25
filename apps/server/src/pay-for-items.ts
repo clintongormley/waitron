@@ -151,8 +151,7 @@ async function readPicks(
           part: { quantity, ofQuantity: row.quantity },
         };
   });
-  // A set menu's dish chosen with its set menu is already in the set menu's price; chosen without
-  // it, the new bill has no set menu to place it in, as the move would find.
+  // A set menu's dish chosen with its set menu is already in the set menu's price.
   const ids = new Set(picked.map((line) => line.id));
   const priced = picked.map((line) => {
     const row = byId.get(line.id)!;

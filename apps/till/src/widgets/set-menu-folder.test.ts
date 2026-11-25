@@ -31,17 +31,17 @@ it("lists each portion dish under its first matching heading with its set-menu p
   expect(el.shadowRoot!.querySelector("wt-button[disabled]")!.textContent).toContain("Water");
 });
 
-it("asks the order to add the menu or pick the served offer and its version", async () => {
+it("draws no button to add a set menu and asks the order to pick the served offer", async () => {
   const { el } = await mount();
-  const added: unknown[] = [];
   const picked: unknown[] = [];
-  el.addEventListener("add-set-menu", (event) => added.push((event as CustomEvent).detail));
   el.addEventListener("pick-set-menu-dish", (event) => picked.push((event as CustomEvent).detail));
   const buttons = [...(el.shadowRoot?.querySelectorAll("wt-button") ?? [])];
-  expect(buttons.map((button) => button.textContent)).toHaveLength(4);
-  await userEvent.click(buttons[0]!);
-  await userEvent.click(buttons[2]!);
-  expect(added).toEqual([{ setMenuId: "daily" }]);
+  expect(buttons.map((button) => button.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Soup Included",
+    "Sirloin +€5.00",
+    "Water Included · Sold out",
+  ]);
+  await userEvent.click(buttons[1]!);
   expect(picked).toEqual([{ setMenuId: "daily", offer: daily.offers[1], versionId: "lunch" }]);
 });
 

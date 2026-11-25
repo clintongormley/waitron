@@ -18,6 +18,7 @@ import * as venueService from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { submitDraft, type Draft } from "./order-drafts.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
+import { readGroupingCopies, saveBillGrouping } from "./set-menu-regroup.js";
 import { mountTillApi } from "./till-api.js";
 import { copyBillDishes } from "./split-after-print.js";
 import { moveOrderLines, splitLinesWithinOrder } from "./working-order-transfer.js";
@@ -33,6 +34,7 @@ import {
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
+  freezeBillLine,
   saveSetMenuDraft,
   seedBillSetMenu,
   setMenuOnFullMenu,
@@ -188,6 +190,13 @@ const coursesOf = (tabId: string) =>
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
 
+const rowsWithIds = (tabId: string) =>
+  venue.db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+
 const tableBill = async () => seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
 const inMenu = (copy: typeof daily) => ({
   menuItemId: copy.menuItemId,
@@ -217,7 +226,7 @@ function request(method: string, path: string, body?: unknown) {
   });
 }
 
-async function counterTakeaway(lines: unknown[] = [], firstSetMenuId?: string) {
+async function counterTakeaway(lines: unknown[] = []) {
   const id = crypto.randomUUID();
   const zoneId = venue.counter.zoneId;
   await inTx(venue, async (tx) => {
@@ -232,13 +241,52 @@ async function counterTakeaway(lines: unknown[] = [], firstSetMenuId?: string) {
       "till_choice",
     );
   });
-  return {
-    id,
-    zoneId,
-    dining: "takeaway",
-    lines,
-    ...(firstSetMenuId === undefined ? {} : { firstSetMenuId }),
-  };
+  return { id, zoneId, dining: "takeaway", lines };
+}
+
+/**
+ * A counter takeaway holding an empty set menu of `copy` at line 2, with its revision and set-menu
+ * state. Opened with a Flan the caller's save drops: an order opens with at least one line.
+ */
+async function counterWithSetMenu(copy: typeof daily) {
+  const body = await counterTakeaway([{ menuItemId: venue.counterItem("Flan"), quantity: "1" }]);
+  expect((await request("POST", "/api/working-orders", body)).status).toBe(200);
+  await inTx(venue, (tx) => seedBillSetMenu(tx, body.id, copy, 2));
+  const held = await (await request("GET", `/api/working-orders/${body.id}`)).json();
+  return { body, revision: held.revision, setMenus: held.setMenus };
+}
+
+/**
+ * Saves a grouping that places every dish on the bill in one set menu of `copy`, charged
+ * `chargeCents` each, as a calculation could hand it: under D12 Flan counts as its product's
+ * course, which the Daily does not list, and no set menu here is cheaper than Flan a la carte.
+ */
+async function groupInto(billId: string, copy: typeof daily, chargeCents = 0) {
+  await inTx(venue, async (tx) =>
+    saveBillGrouping(tx, billId, await readGroupingCopies(tx, billId), (input) => {
+      const offer = input.offers.find(({ id }) => id.startsWith(`${copy.menuId}:`))!;
+      return {
+        exact: true,
+        totalCents: offer.priceCents + chargeCents * input.dishes.length,
+        unusedDiscountIds: [],
+        setMenus: [
+          {
+            id: "menu",
+            offerId: offer.id,
+            discountId: null,
+            baseCents: offer.priceCents,
+            discountCents: 0,
+          },
+        ],
+        dishes: input.dishes.map(({ id, extrasCents }) => ({
+          id,
+          place: { setMenuId: "menu", lineIndex: 0 },
+          chargeCents,
+          extrasCents,
+        })),
+      };
+    }),
+  );
 }
 
 it("probe D4: the set-menu copy and the holding menu's ordinary offer agree on category and VAT", async () => {
@@ -297,22 +345,22 @@ it("writes an a la carte dish's charged price as its a la carte price when a dra
 
 it("writes the holding menu's price on an included set-menu dish, its extras and set-menu row left null", async () => {
   const bill = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
   await send(await saveSetMenuDraft(venue, bill, { ...inMenu(daily), extras: [extra] }));
+  await groupInto(bill.tabId, daily);
   expect(await rowsOf(bill.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
     { setMenuRole: "dish", unitPriceGross: 0, aLaCarteUnitPrice: 800 },
     { setMenuRole: null, unitPriceGross: 150, aLaCarteUnitPrice: null },
+    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
   ]);
 });
 
 it("writes the holding menu's price on a set-menu dish with a supplement", async () => {
   const bill = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, supplement, 1, 2100));
   await send(await saveSetMenuDraft(venue, bill, inMenu(supplement)));
+  await groupInto(bill.tabId, supplement, 250);
   expect(await rowsOf(bill.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
     { setMenuRole: "dish", unitPriceGross: 250, aLaCarteUnitPrice: 800 },
+    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
   ]);
 });
 
@@ -325,11 +373,9 @@ it("writes the a la carte price when a counter order is opened with dishes", asy
   ]);
 });
 
-it("writes the a la carte price on dishes a counter order saves, a la carte and in a set menu", async () => {
-  const body = await counterTakeaway([], daily.menuId);
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const { revision, setMenus } = await opened.json();
+// D10 and D14: a takeaway bill groups no set menus, so a counter save charges every dish a la carte.
+it("writes the a la carte price on dishes a counter order saves, a la carte and from a set-menu folder", async () => {
+  const { body, revision, setMenus } = await counterWithSetMenu(daily);
   const saved = await request("PUT", `/api/working-orders/${body.id}`, {
     dining: body.dining,
     expectedEdit: null,
@@ -346,8 +392,7 @@ it("writes the a la carte price on dishes a counter order saves, a la carte and 
   });
   expect(saved.status).toBe(200);
   expect(await rowsOf(body.id)).toMatchObject([
-    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
-    { setMenuRole: "dish", unitPriceGross: 0, aLaCarteUnitPrice: 800 },
+    { setMenuRole: null, unitPriceGross: 800, aLaCarteUnitPrice: 800 },
     { setMenuRole: null, unitPriceGross: 800, aLaCarteUnitPrice: 800 },
   ]);
 });
@@ -369,28 +414,31 @@ it("keeps the a la carte price on the row a split cuts off", async () => {
 it("keeps the a la carte price on the set-menu dish Reopen to split copies onto the new bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
   await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));
+  await groupInto(from.tabId, supplement, 250);
   await inTx(venue, async (tx) => {
     await copyBillDishes(tx, from.tabId, to.tabId);
   });
   expect(await rowsOf(to.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
     { setMenuRole: "dish", unitPriceGross: 250, aLaCarteUnitPrice: 800 },
+    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
   ]);
 });
 
 it("keeps the a la carte price on a set-menu dish moved to another bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
   await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));
+  await groupInto(from.tabId, supplement, 250);
+  // Special (21.00 + 2.50) never beats Flan a la carte (8.00), so the target keeps it only frozen.
+  const [dish] = await rowsWithIds(from.tabId);
+  await inTx(venue, (tx) => freezeBillLine(tx, dish!.id));
   await inTx(venue, async (tx) => {
     await moveOrderLines(tx, venue.cfg, from.tabId, to.tabId, [1, 2]);
   });
   expect(await rowsOf(to.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
     { setMenuRole: "dish", unitPriceGross: 250, aLaCarteUnitPrice: 800 },
+    { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
   ]);
 });
 
@@ -400,10 +448,7 @@ it.each([
 ] as const)(
   "writes the a la carte price of a set-menu dish the menu does not list: %s",
   async (_, which, cents) => {
-    const body = await counterTakeaway([], tapas.menuId);
-    const opened = await request("POST", "/api/working-orders", body);
-    expect(opened.status).toBe(200);
-    const { revision, setMenus } = await opened.json();
+    const { body, revision, setMenus } = await counterWithSetMenu(tapas);
     const saved = await request("PUT", `/api/working-orders/${body.id}`, {
       dining: body.dining,
       expectedEdit: null,
@@ -420,8 +465,7 @@ it.each([
     });
     expect(saved.status).toBe(200);
     expect(await rowsOf(body.id)).toMatchObject([
-      { setMenuRole: "set_menu", aLaCarteUnitPrice: null },
-      { setMenuRole: "dish", unitPriceGross: 0, aLaCarteUnitPrice: cents },
+      { setMenuRole: null, unitPriceGross: cents, aLaCarteUnitPrice: cents },
     ]);
   },
 );
@@ -457,16 +501,16 @@ it("records the dish's own course when the waiter sends it with another course",
 
 it("records the product's course on a dish tapped in a set menu, not the copy's, and none on the set menu's row", async () => {
   const bill = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
   await send(await saveSetMenuDraft(venue, bill, { ...inMenu(daily), extras: [extra] }));
+  await groupInto(bill.tabId, daily);
   expect(await coursesOf(bill.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", countsAsCourseId: null },
     {
       setMenuRole: "dish",
-      setMenuCountsAsCourseId: courses.sharing,
+      setMenuCountsAsCourseId: supplement.courseId,
       countsAsCourseId: supplement.courseId,
     },
     { setMenuRole: null, parentLineId: expect.any(String), countsAsCourseId: null },
+    { setMenuRole: "set_menu", countsAsCourseId: null },
   ]);
 });
 
@@ -474,10 +518,7 @@ it.each([
   ["a variant with no course of its own takes its dish's", "unpriced", "parent"],
   ["a variant with a course of its own takes that course", "priced", "dessert"],
 ] as const)("records the course a variant counts as: %s", async (_, which, course) => {
-  const body = await counterTakeaway([], tapas.menuId);
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const { revision, setMenus } = await opened.json();
+  const { body, revision, setMenus } = await counterWithSetMenu(tapas);
   const saved = await request("PUT", `/api/working-orders/${body.id}`, {
     dining: body.dining,
     expectedEdit: null,
@@ -494,9 +535,8 @@ it.each([
   });
   expect(saved.status).toBe(200);
   expect(await coursesOf(body.id)).toMatchObject([
-    { setMenuRole: "set_menu", countsAsCourseId: null },
     {
-      setMenuRole: "dish",
+      setMenuRole: null,
       countsAsCourseId: course === "parent" ? tapas.courseId : courses.dessert,
     },
   ]);
@@ -519,13 +559,13 @@ it("keeps the course a dish counts as on the rows a split carves", async () => {
 it("keeps the course a dish counts as on the dishes Reopen to split copies onto the new bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, from.tabId, supplement, 1, 2100));
   await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));
+  await groupInto(from.tabId, supplement, 250);
   await inTx(venue, async (tx) => {
     await copyBillDishes(tx, from.tabId, to.tabId);
   });
   expect(await coursesOf(to.tabId)).toMatchObject([
-    { setMenuRole: "set_menu", countsAsCourseId: null },
     { setMenuRole: "dish", countsAsCourseId: supplement.courseId },
+    { setMenuRole: "set_menu", countsAsCourseId: null },
   ]);
 });

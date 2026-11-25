@@ -66,7 +66,6 @@ export function mountTillWorkingOrderRoutes(
         kitchenNote?: string | null;
         lateSend?: unknown;
         dining?: unknown;
-        firstSetMenuId?: unknown;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -74,15 +73,6 @@ export function mountTillWorkingOrderRoutes(
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const firstSetMenu =
-        body.firstSetMenuId === undefined
-          ? undefined
-          : {
-              menuId: requireBodyUuid(body.firstSetMenuId, "firstSetMenuId").toLowerCase(),
-              personId,
-            };
-      if (firstSetMenu !== undefined && body.zoneId === undefined)
-        throw new AppError("management.request_invalid", { field: "zoneId" });
       const lateSend = parseLateSend(body.lateSend);
       const dining = requireDining(body.dining);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
@@ -104,7 +94,6 @@ export function mountTillWorkingOrderRoutes(
             operatorId: personId,
             lateSend: late,
             dining,
-            firstSetMenu,
           },
           deps.attendance === undefined
             ? undefined

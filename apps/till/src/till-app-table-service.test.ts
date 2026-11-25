@@ -1403,6 +1403,100 @@ describe("till-app table ordering: refused and failed table actions", () => {
       expect(shown).not.toBe(t("table.error"));
     });
 
+  for (const locale of ["en-GB", "es-ES"])
+    it(`a send that would leave the bill owing less than it received names the amount and offers its refund (${locale})`, async () => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        submitDraft: vi.fn().mockRejectedValue({
+          code: "bill.received_exceeds_total",
+          status: 409,
+          workingOrderId: "wo-7",
+          excess: "2.00",
+        }),
+      });
+      const screen = await toTableOrder(el);
+      const draft = await ringCoffee(el, screen);
+      setLocale(locale);
+
+      emit(screen, "submit-draft", draft);
+      await flush(el);
+
+      const amount = formatMoney("2.00", currentLocale());
+      const shown = banner(el)!.textContent!;
+      expect(shown).toContain(
+        t("bill.received_exceeds_total_send_excess").replaceAll("{amount}", amount),
+      );
+      expect(shown).not.toContain(codeMessage("bill.received_exceeds_total", locale));
+      expect(shown).not.toContain(
+        t("bill.received_exceeds_total_line_excess").replaceAll("{amount}", amount),
+      );
+      expect(
+        banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.textContent!.trim(),
+      ).toBe(t("bill.refund_excess").replace("{amount}", amount));
+    });
+
+  it.each([
+    ["fire-group", { groupId: "g1" }, "fireGroup"],
+    ["send-lines", { lineNos: [1] }, "sendLines"],
+  ] as const)(
+    "a %s that would leave the bill owing less than it received names the amount and offers its refund",
+    async (type, detail, method) => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        [method]: vi.fn().mockRejectedValue({
+          code: "bill.received_exceeds_total",
+          status: 409,
+          workingOrderId: "wo-7",
+          excess: "2.00",
+        }),
+      });
+      const screen = await toTableOrder(el);
+      setLocale("en-GB");
+
+      emit(screen, type, detail);
+      await flush(el);
+
+      expect(api[method]).toHaveBeenCalled();
+      const amount = formatMoney("2.00", currentLocale());
+      expect(banner(el)!.textContent).toContain(
+        t("bill.received_exceeds_total_send_excess").replaceAll("{amount}", amount),
+      );
+      expect(
+        banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.textContent!.trim(),
+      ).toBe(t("bill.refund_excess").replace("{amount}", amount));
+    },
+  );
+
+  for (const locale of ["en-GB", "es-ES"])
+    it(`a merge that would leave the bill owing less than it received offers the refund and keeping the bills apart (${locale})`, async () => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        mergeBills: vi.fn().mockRejectedValue({
+          code: "bill.received_exceeds_total",
+          status: 409,
+          workingOrderId: "wo-7",
+          excess: "2.00",
+        }),
+      });
+      const screen = await toTableOrder(el);
+      setLocale(locale);
+
+      emit(screen, "merge-bills", { fromBillId: "wo-9" });
+      await flush(el);
+
+      const amount = formatMoney("2.00", currentLocale());
+      const shown = banner(el)!.textContent!;
+      expect(shown).toContain(
+        t("bill.received_exceeds_total_merge_excess").replaceAll("{amount}", amount),
+      );
+      expect(shown).not.toContain(
+        t("bill.received_exceeds_total_excess").replaceAll("{amount}", amount),
+      );
+      expect(
+        banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.textContent!.trim(),
+      ).toBe(t("bill.refund_excess").replace("{amount}", amount));
+    });
+
   it.each(["bill.presented", "bill.paid", "bill.other_party", "bill.payments_received"])(
     "a merge refused %s says so in that code's own words",
     async (code) => {

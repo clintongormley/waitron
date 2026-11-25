@@ -21,7 +21,7 @@ import {
 } from "@waitron/venue-service";
 import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { setSetMenuCount } from "./set-menu-count.js";
+import { readBillSetMenus } from "./set-menu-bill.js";
 import { mountTillApi } from "./till-api.js";
 import { send as tillRequest } from "./testing/bill-venue.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
@@ -38,6 +38,7 @@ import {
 } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
+  priceSetMenuDish,
   saveSetMenuDraft,
   seedBillSetMenu,
   setMenuOnFullMenu,
@@ -76,7 +77,14 @@ useVenueDb({
       () => {},
     );
     daily = await inTx(venue, async (tx) => {
-      const menu = await setMenuOnFullMenu(tx, venue.tables.menuId, venue.productId("Flan"));
+      // Cheaper than Flan a la carte (5.00), so a send groups Flan into it.
+      const menu = await setMenuOnFullMenu(
+        tx,
+        venue.tables.menuId,
+        venue.productId("Flan"),
+        "Daily menu",
+        "4.00",
+      );
       const { departmentId } = await resolveZoneContext(tx, venue.tables.zoneId);
       const dinner = await createMenu(tx, { name: "Dinner menu" });
       evening = await setMenuOnFullMenu(tx, dinner.id, menu.productId, "Evening set menu");
@@ -180,10 +188,9 @@ it("fires a held dessert ordered from the recorded copy after lunch without a qu
   ).resolves.toMatchObject({ revision: command.expectedPartyRevision + 1 });
 });
 
-it("asks before sending from an ended unrecorded copy and places the confirmed dish", async () => {
+it("asks before sending from an ended unrecorded copy and records the confirmed dish", async () => {
   const draft = await draftMenuDish(false);
   at("15:30");
-  const target = await inTx(venue, (tx) => seedBillSetMenu(tx, draft.billId, evening, 1));
   await expect(send(draft, "fire")).rejects.toMatchObject({
     code: "menu_period.ended",
     params: { menus: [{ menuId: daily.fullMenuId, periodName: "Lunch" }] },
@@ -193,8 +200,11 @@ it("asks before sending from an ended unrecorded copy and places the confirmed d
     confirm: async () => venue.operator.personId,
   });
   const dish = await dishRow(sent.groups[0]!.lineIds[0]!);
+  // The bill records no copy of a set menu on sale now, so the dish is charged a la carte.
   expect(dish).toMatchObject({
-    setMenuLineId: target,
+    setMenuRole: null,
+    setMenuId: daily.menuId,
+    unitPriceGross: 500,
     latePeriodName: "Lunch",
     lateConfirmedBy: venue.operator.personId,
   });
@@ -261,54 +271,41 @@ it.each([
   });
 });
 
-function countDaily(billId: string, count: number) {
-  return inTx(venue, (tx) =>
-    setSetMenuCount(tx, venue.cfg, billId, daily.menuId, count, venue.operator.personId),
-  );
+/** Orders a Flan on the bill, which records the set menus listing it, and reads the bill's set menus. */
+async function orderFlan(billId: string) {
+  await order(venue, billId, "Flan");
+  return inTx(venue, (tx) => readBillSetMenus(tx, billId));
 }
 
 it("takes the current sale price on a new bill and keeps the recorded price on an existing one", async () => {
   at("13:00");
   const initialVersion = await inTx(venue, async (tx) => {
+    // Flan a la carte dearer than the Daily, so each Flan ordered makes a Daily.
+    await priceSetMenuDish(tx, daily, { aLaCarte: 2000 });
     await updateMenuDetails(tx, daily.menuId, { setPrice: "14.00" });
     return publishWorkingMenu(tx, daily.fullMenuId);
   });
-  const old = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  const newBill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  expect((await countDaily(old.tabId, 1)).recorded).toEqual({ [daily.menuId]: initialVersion });
-  const nextVersion = await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, daily.menuId, { setPrice: "15.00" });
-    return publishWorkingMenu(tx, daily.fullMenuId);
-  });
+  try {
+    const old = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    const newBill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    expect((await orderFlan(old.tabId)).recorded).toEqual({ [daily.menuId]: initialVersion });
+    const nextVersion = await inTx(venue, async (tx) => {
+      await updateMenuDetails(tx, daily.menuId, { setPrice: "15.00" });
+      return publishWorkingMenu(tx, daily.fullMenuId);
+    });
 
-  expect(await countDaily(old.tabId, 2)).toMatchObject({
-    copies: [{ versionId: initialVersion, priceCents: 1400 }],
-    setMenus: [{ lineNo: 1 }, { lineNo: 2 }],
-  });
-  expect(await countDaily(newBill.tabId, 1)).toMatchObject({
-    recorded: { [daily.menuId]: nextVersion },
-    copies: [{ versionId: nextVersion, priceCents: 1500 }],
-  });
-});
-
-it("needs a copy on sale for a new bill and keeps selling the recorded copy after lunch", async () => {
-  at("13:00");
-  const versionId = await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, daily.menuId, { setPrice: "16.00" });
-    return publishWorkingMenu(tx, daily.fullMenuId);
-  });
-  const old = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  const newBill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await countDaily(old.tabId, 1);
-  at("16:00");
-  await expect(countDaily(newBill.tabId, 1)).rejects.toMatchObject({
-    code: "set_menu.not_selling",
-    params: { setMenuName: "Daily menu" },
-  });
-  expect(await countDaily(old.tabId, 2)).toMatchObject({
-    copies: [{ versionId, priceCents: 1600 }],
-    setMenus: [{ lineNo: 1 }, { lineNo: 2 }],
-  });
+    // Each Flan is on the bill before the Daily it makes.
+    expect(await orderFlan(old.tabId)).toMatchObject({
+      copies: [{ versionId: initialVersion, priceCents: 1400 }],
+      setMenus: [{ lineNo: 2 }, { lineNo: 4 }],
+    });
+    expect(await orderFlan(newBill.tabId)).toMatchObject({
+      recorded: { [daily.menuId]: nextVersion },
+      copies: [{ versionId: nextVersion, priceCents: 1500 }],
+    });
+  } finally {
+    await inTx(venue, (tx) => priceSetMenuDish(tx, daily, { aLaCarte: 500 }));
+  }
 });
 
 it("takes the newest copy on sale and records a full menu that sells it now", async () => {
@@ -329,9 +326,10 @@ it("takes the newest copy on sale and records a full menu that sells it now", as
       return publishWorkingMenu(tx, evening.fullMenuId);
     });
     const first = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-    expect(await countDaily(first.tabId, 1)).toMatchObject({
-      recorded: { [daily.menuId]: dinnerVersion },
-      copies: [{ priceCents: 1500 }],
+    const firstDaily = await orderFlan(first.tabId);
+    expect(firstDaily.recorded[daily.menuId]).toBe(dinnerVersion);
+    expect(firstDaily.copies.find(({ setMenuId }) => setMenuId === daily.menuId)).toMatchObject({
+      priceCents: 1500,
     });
 
     const lunchVersion = await inTx(venue, async (tx) => {
@@ -339,10 +337,21 @@ it("takes the newest copy on sale and records a full menu that sells it now", as
       return publishWorkingMenu(tx, daily.fullMenuId);
     });
     const lunch = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-    expect((await countDaily(lunch.tabId, 1)).recorded).toEqual({ [daily.menuId]: lunchVersion });
+    expect((await orderFlan(lunch.tabId)).recorded[daily.menuId]).toBe(lunchVersion);
     at("16:00");
     const dinner = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-    expect((await countDaily(dinner.tabId, 1)).recorded).toEqual({ [daily.menuId]: dinnerVersion });
+    // After lunch only the dinner menu sells, and it lists Flan only in the Daily's folder.
+    await send(
+      await saveSetMenuDraft(venue, dinner, {
+        menuItemId: daily.menuItemId,
+        menuVersionId: dinnerVersion,
+        setMenuId: daily.menuId,
+        quantity: "1",
+      }),
+      "fire",
+    );
+    const dinnerMenus = await inTx(venue, (tx) => readBillSetMenus(tx, dinner.tabId));
+    expect(dinnerMenus.recorded[daily.menuId]).toBe(dinnerVersion);
   } finally {
     await inTx(venue, async (tx) => {
       await removeMember(tx, root, memberId);
@@ -358,16 +367,19 @@ it("keeps a set menu linked by a dish ordered at lunch usable for a dessert sent
     venue,
     await venue.table(crypto.randomUUID()),
   );
+  // Earlier cases leave the Daily dearer than Flan a la carte; at 4.00 a send groups Flan into it.
+  const versionId = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "4.00" });
+    return publishWorkingMenu(tx, daily.fullMenuId);
+  });
   await order(venue, tabId, "Flan");
-  at("16:00");
-  const { recorded } = await countDaily(tabId, 1);
   at("16:15");
   const draft = await saveSetMenuDraft(
     venue,
     { tabId, partyId },
     {
       menuItemId: daily.menuItemId,
-      menuVersionId: recorded[daily.menuId]!,
+      menuVersionId: versionId,
       setMenuId: daily.menuId,
       quantity: "1",
     },
@@ -403,4 +415,87 @@ it("links the set menus on sale when the dish was priced, though the clock passe
     .from(billSetMenuCopies)
     .where(eq(billSetMenuCopies.workingOrderId, tabId));
   expect(linked).toEqual([{ menuId: daily.menuId }]);
+});
+
+async function heldFlanFiredAfterLunch(dailyPrice: string, fromFolder: boolean) {
+  at("14:00");
+  const versionId = await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: dailyPrice });
+    return publishWorkingMenu(tx, daily.fullMenuId);
+  });
+  const { tabId, partyId } = await seatWithNoAllergies(
+    venue,
+    await venue.table(crypto.randomUUID()),
+  );
+  const draft = await saveSetMenuDraft(
+    venue,
+    { tabId, partyId },
+    fromFolder
+      ? {
+          menuItemId: daily.menuItemId,
+          menuVersionId: versionId,
+          setMenuId: daily.menuId,
+          quantity: "1",
+        }
+      : { menuItemId: venue.item("Flan"), quantity: "1" },
+  );
+  const {
+    groups: [group],
+  } = await send(draft, "hold");
+  const lineId = group!.lineIds[0]!;
+  const held = await dishRow(lineId);
+  at("15:30");
+  const command = await commandFor(venue, partyId);
+  const fire = (lateSend?: { menuIds: string[] }) =>
+    tillRequest(app, cookie, "POST", `/api/parties/${partyId}/groups/${group!.id}/fire`, {
+      ...command,
+      submissionId: crypto.randomUUID(),
+      lateSend,
+    });
+  return { lineId, held, fire };
+}
+
+it("asks before firing a held dish tapped in an ended set-menu folder that no set menu took", async () => {
+  // Dearer than Flan a la carte (5.00), so the grouping leaves the folder's Flan a la carte.
+  const { lineId, held, fire } = await heldFlanFiredAfterLunch("9.00", true);
+  expect(held).toMatchObject({ setMenuRole: null, setMenuId: daily.menuId });
+  expect(await fire()).toMatchObject({
+    status: 409,
+    json: {
+      code: "menu_period.ended",
+      params: { menuItemIds: [daily.menuItemId], workingOrderLineIds: [lineId] },
+    },
+  });
+  expect((await fire({ menuIds: [daily.fullMenuId] })).status).toBe(200);
+});
+
+it("fires a held a la carte dish the grouping put in a set menu without a question", async () => {
+  const { held, fire } = await heldFlanFiredAfterLunch("4.00", false);
+  expect(held).toMatchObject({ setMenuRole: "dish", setMenuId: null });
+  expect((await fire()).status).toBe(200);
+});
+
+it("charges a Flan sent after lunch a la carte on a bill with no set menu, where at lunch it makes a Daily", async () => {
+  at("13:00");
+  await inTx(venue, async (tx) => {
+    await updateMenuDetails(tx, daily.menuId, { setPrice: "4.00" });
+    await publishWorkingMenu(tx, daily.fullMenuId);
+  });
+  const lunch = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  expect((await orderFlan(lunch.tabId)).setMenus).toHaveLength(1);
+  const late = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  const draft = await saveSetMenuDraft(venue, late, {
+    menuItemId: venue.item("Flan"),
+    quantity: "1",
+  });
+  at("16:00");
+  const sent = await send(draft, "fire", {
+    menuIds: new Set([daily.fullMenuId]),
+    confirm: async () => venue.operator.personId,
+  });
+  expect(await dishRow(sent.groups[0]!.lineIds[0]!)).toMatchObject({
+    setMenuRole: null,
+    unitPriceGross: 500,
+  });
+  expect((await inTx(venue, (tx) => readBillSetMenus(tx, late.tabId))).setMenus).toEqual([]);
 });

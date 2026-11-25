@@ -120,8 +120,7 @@ export async function saveHeldOrderIn(
     expectedEdit: req.expectedEdit,
   });
   const order = await readEditableOrder(tx, id);
-  if (req.lines.length === 0 && !order.lines.some((line) => line.setMenuRole === "set_menu"))
-    throw new AppError("sale.empty_basket", {});
+  if (req.lines.length === 0) throw new AppError("sale.empty_basket", {});
   const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
   const claimed = new Set<string>();
   const edits: { parent: EditableParent; intent: LineIntent }[] = [];

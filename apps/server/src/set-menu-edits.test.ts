@@ -27,11 +27,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import {
-  saveSetMenuDraft,
-  seedBillSetMenu,
-  setMenuOnFullMenu,
-} from "./testing/set-menu-bill-fixture.js";
+import { saveSetMenuDraft, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder, updateOrderLine } from "./working-order-held-write.js";
 import { setLineCourse } from "./working-order-kitchen-service.js";
@@ -81,7 +77,8 @@ useVenueDb({
         { kind: "options", id: spoon.id },
         { kind: "extras", id: sides.id },
       ]);
-      daily = await setMenuOnFullMenu(tx, venue.tables.menuId, flan);
+      // Below Flan's 5.00, so a send groups Flan alone into a Daily.
+      daily = await setMenuOnFullMenu(tx, venue.tables.menuId, flan, "Daily menu", "4.00");
       const tarta = venue.productId("Tarta");
       const unit = await createUnit(
         tx,
@@ -101,11 +98,9 @@ useVenueDb({
   },
 });
 
-async function bill(menus = 1, menu = daily) {
+/** A seated bill holding one dish from `menu`'s folder, sent held: line 1, grouped by line 2. */
+async function bill(menu = daily) {
   const tab = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await inTx(venue, async (tx) => {
-    for (let no = 1; no <= menus; no++) await seedBillSetMenu(tx, tab.tabId, menu, no);
-  });
   const draft = await saveSetMenuDraft(venue, tab, {
     menuItemId: menu.menuItemId,
     menuVersionId: menu.versionId,
@@ -123,7 +118,7 @@ async function bill(menus = 1, menu = daily) {
       groups: [{ lineIds: [draft.lines[0]!.id], release: "hold" }],
     }),
   );
-  return { ...tab, lineNo: menus + 1 };
+  return { ...tab, lineNo: 1 };
 }
 
 function rows(tabId: string) {
@@ -157,7 +152,7 @@ function edit(
 
 it("edits an option from the recorded offer without moving or repricing the dish", async () => {
   const tab = await bill();
-  const [menu, before] = await rows(tab.tabId);
+  const [before, menu] = await rows(tab.tabId);
   await inTx(venue, (tx) => writeProductModifiers(tx, daily.productId, []));
   try {
     await edit(tab, { options: [options[1]!] });
@@ -169,7 +164,7 @@ it("edits an option from the recorded offer without moving or repricing the dish
       ]),
     );
   }
-  const [, after] = await rows(tab.tabId);
+  const [after] = await rows(tab.tabId);
   expect(after).toMatchObject({
     id: before!.id,
     setMenuLineId: menu!.id,
@@ -182,7 +177,7 @@ it("edits an option from the recorded offer without moving or repricing the dish
 
 it("keeps the set-menu heading when saving the bill's edited dishes", async () => {
   const tab = await bill();
-  const [menu, dish] = await rows(tab.tabId);
+  const [dish, menu] = await rows(tab.tabId);
   const observed = await inTx(venue, async (tx) => ({
     expectedEdit: await readBillEditState(tx, tab.tabId),
     revision: await readOrderRevision(tx, tab.tabId),
@@ -200,46 +195,57 @@ it("keeps the set-menu heading when saving the bill's edited dishes", async () =
       },
     ],
   });
-  expect(await rows(tab.tabId)).toEqual([menu, { ...dish, note: "At the end" }]);
+  expect(await rows(tab.tabId)).toEqual([{ ...dish, note: "At the end" }, menu]);
 });
 
-it("places added portions without moving the first dish", async () => {
-  const tab = await bill(3);
-  const [first, second, third, original] = await rows(tab.tabId);
+it("groups added portions into set menus of their own without moving the first dish", async () => {
+  const tab = await bill();
+  const [original, first] = await rows(tab.tabId);
   await edit(tab, { quantity: "3" });
   const saved = await rows(tab.tabId);
-  expect(saved[3]).toEqual(original);
-  expect(
-    saved.slice(3).map(({ quantity, setMenuLineId, lineTotal }) => ({
-      quantity,
-      setMenuLineId,
-      lineTotal,
-    })),
-  ).toEqual([
-    { quantity: 1000, setMenuLineId: first!.id, lineTotal: 0 },
-    { quantity: 1000, setMenuLineId: second!.id, lineTotal: 0 },
-    { quantity: 1000, setMenuLineId: third!.id, lineTotal: 0 },
+  expect(saved.slice(0, 2)).toEqual([original, first]);
+  const menus = saved.filter(({ setMenuRole }) => setMenuRole === "set_menu");
+  expect(menus.map(({ id, lineTotal }) => ({ id, lineTotal }))).toEqual([
+    { id: first!.id, lineTotal: 400 },
+    { id: expect.any(String), lineTotal: 400 },
+    { id: expect.any(String), lineTotal: 400 },
   ]);
+  expect(
+    saved
+      .filter(({ setMenuRole }) => setMenuRole === "dish")
+      .map(({ quantity, setMenuLineId, lineTotal }) => ({ quantity, setMenuLineId, lineTotal })),
+  ).toEqual(menus.map(({ id }) => ({ quantity: 1000, setMenuLineId: id, lineTotal: 0 })));
 });
 
 it("splits each added set-menu dish even when its ordinary unit accepts fractions", async () => {
-  const tab = await bill(3, decimalUnitMenu);
-  const original = (await rows(tab.tabId))[3]!;
+  const tab = await bill(decimalUnitMenu);
+  const original = (await rows(tab.tabId))[0]!;
   expect(original.wholePortion).toBe(false);
+  expect(original.countAsPortions).toBe(false);
   expect(original.cohortId).toEqual(expect.any(String));
   await edit(tab, { quantity: "3" });
-  const dishes = (await rows(tab.tabId)).filter(({ setMenuRole }) => setMenuRole === "dish");
-  expect(dishes.map(({ quantity }) => quantity)).toEqual([1000, 1000, 1000]);
-  expect(new Set(dishes.map(({ setMenuLineId }) => setMenuLineId)).size).toBe(3);
-});
-
-it("leaves the whole bill as it was if an added dish has no available place", async () => {
-  const tab = await bill(2);
-  const before = await rows(tab.tabId);
-  await expect(edit(tab, { quantity: "3", note: "Changed" })).rejects.toMatchObject({
-    code: "set_menu.no_place",
-  });
-  expect(await rows(tab.tabId)).toEqual(before);
+  const dishes = (await rows(tab.tabId)).filter(
+    ({ productId }) => productId === decimalUnitMenu.productId,
+  );
+  const menus = (await rows(tab.tabId)).filter(({ setMenuRole }) => setMenuRole === "set_menu");
+  expect(menus.map(({ setMenuId, lineTotal }) => ({ setMenuId, lineTotal }))).toEqual(
+    [1, 2, 3].map(() => ({ setMenuId: decimalUnitMenu.menuId, lineTotal: 1400 })),
+  );
+  expect(
+    dishes.map(({ quantity, setMenuRole, setMenuLineId, lineTotal }) => ({
+      quantity,
+      setMenuRole,
+      setMenuLineId,
+      lineTotal,
+    })),
+  ).toEqual(
+    menus.map(({ id }) => ({
+      quantity: 1000,
+      setMenuRole: "dish",
+      setMenuLineId: id,
+      lineTotal: 0,
+    })),
+  );
 });
 
 it("keeps the set-menu classification when the kitchen course changes", async () => {
@@ -250,7 +256,7 @@ it("keeps the set-menu classification when the kitchen course changes", async ()
       expectedEdit: await readBillEditState(tx, tab.tabId),
     }),
   );
-  expect((await rows(tab.tabId))[1]).toMatchObject({
+  expect((await rows(tab.tabId))[0]).toMatchObject({
     courseId: null,
     setMenuCountsAsCourseId: daily.courseId,
   });
@@ -259,21 +265,25 @@ it("keeps the set-menu classification when the kitchen course changes", async ()
 it.each([
   ["item cancel", cancelItemForTest],
   ["adjustment", cancelLine],
-] as const)("a dish cancellation frees its place via %s", async (_route, cancel) => {
-  const tab = await bill();
-  const [menu] = await rows(tab.tabId);
-  await inTx(venue, (tx) => cancel(tx, venue.cfg, tab.tabId, tab.lineNo));
-  expect((await rows(tab.tabId))[0]).toEqual(menu);
-  expect(await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId))).toMatchObject({
-    setMenus: [{ lineId: menu!.id }],
-    dishes: [],
-  });
-});
+] as const)(
+  "a dish cancellation takes its emptied set menu away via %s",
+  async (_route, cancel) => {
+    const tab = await bill();
+    const [, menu] = await rows(tab.tabId);
+    expect(menu).toMatchObject({ setMenuRole: "set_menu" });
+    await inTx(venue, (tx) => cancel(tx, venue.cfg, tab.tabId, tab.lineNo));
+    expect(await rows(tab.tabId)).toEqual([]);
+    expect(await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId))).toMatchObject({
+      setMenus: [],
+      dishes: [],
+    });
+  },
+);
 
 it("an adjustment refuses a set-menu heading", async () => {
   const tab = await bill();
   const before = await rows(tab.tabId);
-  await expect(inTx(venue, (tx) => cancelLine(tx, venue.cfg, tab.tabId, 1))).rejects.toMatchObject({
+  await expect(inTx(venue, (tx) => cancelLine(tx, venue.cfg, tab.tabId, 2))).rejects.toMatchObject({
     code: "set_menu.remove_from_summary",
   });
   expect(await rows(tab.tabId)).toEqual(before);
@@ -281,17 +291,17 @@ it("an adjustment refuses a set-menu heading", async () => {
 
 it("prices an added extra from the recorded menu and preserves the placed dish", async () => {
   const tab = await bill();
-  const [menu, dish] = await rows(tab.tabId);
+  const [dish, menu] = await rows(tab.tabId);
   await edit(tab, { extras: [extra] });
   expect(await rows(tab.tabId)).toMatchObject([
-    { id: menu!.id, lineTotal: 1400 },
+    { id: menu!.id, lineTotal: 400 },
     { id: dish!.id, setMenuLineId: menu!.id, lineTotal: 0 },
     { parentLineId: dish!.id, lineTotal: 150, productId: extra.picks[0]!.productId },
   ]);
 });
 
 it("refuses a fractional increase in a whole-bill set-menu edit", async () => {
-  const tab = await bill(2, decimalUnitMenu);
+  const tab = await bill(decimalUnitMenu);
   const before = await rows(tab.tabId);
   const observed = await inTx(venue, async (tx) => ({
     expectedEdit: await readBillEditState(tx, tab.tabId),
@@ -303,7 +313,7 @@ it("refuses a fractional increase in a whole-bill set-menu edit", async () => {
       operatorId: venue.operator.personId,
       lines: [
         {
-          workingOrderLineId: before[2]!.id,
+          workingOrderLineId: before[0]!.id,
           menuItemId: decimalUnitMenu.menuItemId,
           quantity: "1.5",
         },
@@ -318,7 +328,7 @@ it("refuses a request to cancel a set-menu heading while keeping its charge", as
   const before = await rows(tab.tabId);
   await expect(
     inTx(venue, async (tx) => {
-      const { target, lineId, body } = await observedCancelItem(tx, tab.tabId, 1);
+      const { target, lineId, body } = await observedCancelItem(tx, tab.tabId, 2);
       await cancelItem(
         tx,
         venue.cfg,

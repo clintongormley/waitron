@@ -5553,10 +5553,6 @@ export class TillApi {
     });
   }
 
-  readBillSetMenus(billId: string): Promise<BillSetMenusReply> {
-    return this.#request(`/api/bills/${billId}/set-menus`, "GET");
-  }
-
   setSetMenuCount(
     billId: string,
     setMenuId: string,

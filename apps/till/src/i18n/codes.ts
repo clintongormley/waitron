@@ -34,8 +34,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El sitio que elegiste para {dishName} está ocupado. Elige un sitio libre en un menú o deja el plato donde está.",
   },
   "set_menu.no_place_on_target": {
-    en: "The other bill has no place for {dishName}. Move its set menu with it, or leave it on this bill.",
-    es: "La otra cuenta no tiene sitio para {dishName}. Mueve también su menú o deja el plato en esta cuenta.",
+    en: "{dishName} can only move together with its set menu. Move the set menu as well, or leave it on this bill.",
+    es: "{dishName} solo puede moverse junto con su menú. Mueve también el menú o deja el plato en esta cuenta.",
   },
   "set_menu.move_adjusted": {
     en: "Because of a comp or discount, {dishNames} can only move with the set menu. Move the set menu as well, or leave {dishNames} on this bill.",
@@ -46,8 +46,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un plato vendido al peso o por medida no puede ir en un menú. Pídelo a la carta.",
   },
   "set_menu.remove_from_summary": {
-    en: "This item is a set menu. To remove it, use Cancel in the set-menu summary.",
-    es: "Este artículo es un menú. Para quitarlo, usa Anular en el resumen de menús.",
+    en: "This is a set menu the bill works out by itself. Cancel or move its dishes instead.",
+    es: "Este es un menú que la cuenta calcula sola. Anula o mueve sus platos.",
   },
   "sale.empty_basket": {
     en: "This order has no items. Add an item before continuing.",

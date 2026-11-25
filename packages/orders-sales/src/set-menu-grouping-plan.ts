@@ -1,6 +1,10 @@
 import {
+  centsToDecimal,
+  decimalToCents,
+  grossOf,
   groupSetMenus,
   setMenuOfferOf,
+  thousandthsToDecimal,
   type ServedSetMenuCopy,
   type SetMenuGrouping,
   type SetMenuGroupingDish,
@@ -18,7 +22,8 @@ export interface GroupingLine {
   menuItemId: string | null;
   /** Whole thousandths. */
   quantity: number;
-  countAsPortions: boolean;
+  /** Its unit is a measure (g, ml…): never a set-menu dish (`set_menu.dish_sold_by_measure`). */
+  soldByMeasure: boolean;
   /** Stamped by any comp or discount (D15). */
   listUnitPriceGross: number | null;
   unitPriceGross: number;
@@ -92,8 +97,31 @@ function isGroupingDish(line: GroupingLine, frozen: ReadonlySet<string>): boolea
     line.listedProductId !== null &&
     line.aLaCarteUnitPrice !== null &&
     line.quantity === ONE_PORTION &&
-    line.countAsPortions
+    !line.soldByMeasure
   );
+}
+
+const A_LA_CARTE = {
+  setMenuRole: null,
+  setMenuLineId: null,
+  setMenuPlace: null,
+  setMenuCountsAsCourseId: null,
+} as const;
+
+/** An unfrozen dish the calculation is not handed still loses any place or charge a set menu gave
+ *  it, or a resized or remeasured dish would keep a deleted set menu's price. */
+function aLaCarteUpdate(line: GroupingLine): GroupingDishUpdate | null {
+  if (line.parentLineId !== null || line.setMenuRole === "set_menu") return null;
+  if (line.aLaCarteUnitPrice === null) return null;
+  if (line.setMenuRole === null && line.unitPriceGross === line.aLaCarteUnitPrice) return null;
+  return {
+    id: line.id,
+    ...A_LA_CARTE,
+    unitPriceGross: line.aLaCarteUnitPrice,
+    lineTotal: decimalToCents(
+      grossOf(centsToDecimal(line.aLaCarteUnitPrice), thousandthsToDecimal(line.quantity)),
+    ),
+  };
 }
 
 function copyKey(copies: readonly GroupingCopy[], row: GroupingLine): string {
@@ -114,12 +142,49 @@ function sameDish(line: GroupingLine, update: GroupingDishUpdate): boolean {
   );
 }
 
+/** {@link groupSetMenus} handed ids that sort in line order: it breaks ties between identical
+ *  dishes by id, so random ids would pair the same bill differently each time. */
+export function groupInLineOrder(
+  lines: readonly GroupingLine[],
+): (input: SetMenuGroupingInput) => SetMenuGrouping {
+  const byLine = new Map(
+    lines.map(({ id, lineNo }) => [id, `line-${String(lineNo).padStart(12, "0")}`]),
+  );
+  const byToken = new Map([...byLine].map(([id, token]) => [token, id]));
+  const swap = (map: ReadonlyMap<string, string>) => (id: string) => map.get(id) ?? id;
+  const remap = <T extends { id: string; place: { setMenuId: string } | null }>(
+    dish: T,
+    to: (id: string) => string,
+  ): T => ({
+    ...dish,
+    id: to(dish.id),
+    place: dish.place && { ...dish.place, setMenuId: to(dish.place.setMenuId) },
+  });
+  const to = swap(byLine);
+  const back = swap(byToken);
+  return (input) => {
+    const result = groupSetMenus({
+      ...input,
+      dishes: input.dishes.map((dish) => ({ ...dish, id: to(dish.id) })),
+      previous: input.previous && {
+        setMenus: input.previous.setMenus.map((menu) => ({ ...menu, id: to(menu.id) })),
+        dishes: input.previous.dishes.map((dish) => remap(dish, to)),
+      },
+    });
+    return {
+      ...result,
+      setMenus: result.setMenus.map((menu) => ({ ...menu, id: back(menu.id) })),
+      dishes: result.dishes.map((dish) => remap(dish, back)),
+    };
+  };
+}
+
 export function planBillGrouping(
   lines: readonly GroupingLine[],
   frozen: ReadonlySet<string>,
   copies: readonly GroupingCopy[],
   newId: () => string,
-  calculate: (input: SetMenuGroupingInput) => SetMenuGrouping = groupSetMenus,
+  calculate: (input: SetMenuGroupingInput) => SetMenuGrouping = groupInLineOrder(lines),
 ): GroupingPlan {
   const byId = new Map(lines.map((line) => [line.id, line]));
   const extrasCents = new Map<string, number>();
@@ -144,7 +209,8 @@ export function planBillGrouping(
     eligible: line.countsAsCourseId !== null && line.menuItemId !== null,
   }));
   const input: SetMenuGroupingInput = {
-    offers: copies.map(({ copy }) => setMenuOfferOf(copy)),
+    // A menu version id belongs to the whole published menu, so two recorded versions can hold one copy.
+    offers: [...new Map(copies.map(({ copy }) => [copy.key, copy])).values()].map(setMenuOfferOf),
     dishes,
     discounts: [],
     previous:
@@ -221,15 +287,16 @@ export function planBillGrouping(
             setMenuPlace: place.lineIndex,
             setMenuCountsAsCourseId: line.countsAsCourseId,
           }
-        : {
-            setMenuRole: null,
-            setMenuLineId: null,
-            setMenuPlace: null,
-            setMenuCountsAsCourseId: null,
-          }),
+        : A_LA_CARTE),
     };
     return sameDish(line, update) ? [] : [update];
   });
+  const grouped = new Set(groupingDishes.map(({ id }) => id));
+  for (const line of lines) {
+    if (frozen.has(line.id) || grouped.has(line.id)) continue;
+    const update = aLaCarteUpdate(line);
+    if (update !== null) dishUpdates.push(update);
+  }
 
   const kept = new Set(result.setMenus.map(({ id }) => id));
   return {

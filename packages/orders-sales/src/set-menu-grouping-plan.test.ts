@@ -102,7 +102,7 @@ function dish(
     countsAsCourseId: course[productId] ?? null,
     menuItemId: `item-${productId}`,
     quantity: 1000,
-    countAsPortions: true,
+    soldByMeasure: false,
     listUnitPriceGross: null,
     unitPriceGross: price,
     lineTotal: price,
@@ -256,6 +256,14 @@ describe("planBillGrouping", () => {
     });
   });
 
+  it("passes one offer for a copy two recorded versions hold (D26)", () => {
+    const lines = [dish("soup", 1, "soup"), dish("hake", 2, "hake")];
+    const republished: GroupingCopy = { copy: dailyCopy, versionId: "v2" };
+    const { plan, input } = planWithInput(lines, none, [daily, republished], ids("menu-a"));
+    expect(input.offers.map(({ id }) => id)).toEqual(["daily:v1-hash"]);
+    expect(plan.inserts).toMatchObject([{ copy: daily, priceCents: 1400 }]);
+  });
+
   it("charges a supplement dish its supplement inside the set menu", () => {
     const lines = [dish("soup", 1, "soup"), dish("sirloin", 2, "sirloin")];
     const plan = planBillGrouping(lines, none, [daily], ids("menu-a"));
@@ -317,6 +325,47 @@ describe("planBillGrouping", () => {
     expect(homes.get("soup-1")).toBe(homes.get("hake-1"));
     expect(homes.get("soup-2")).toBe(homes.get("hake-2"));
     expect(homes.get("soup-1")).not.toBe(homes.get("soup-2"));
+  });
+
+  it("pairs identical dishes rung by different waiters by line number, whatever their ids", () => {
+    const pairing = (firstSoup: string, secondSoup: string) => {
+      const lines = [
+        dish(firstSoup, 1, "soup", { creditedTo: "ana" }),
+        dish(secondSoup, 2, "soup", { creditedTo: "ben" }),
+        dish("hake", 3, "hake"),
+        dish("sirloin", 4, "sirloin"),
+      ];
+      const plan = planBillGrouping(lines, none, [daily], ids("menu-a", "menu-b"));
+      const lineNoOf = new Map(lines.map(({ id, lineNo }) => [id, lineNo]));
+      return plan.inserts.map(({ id, lineNo, creditedTo }) => ({
+        lineNo,
+        creditedTo,
+        dishes: plan.dishUpdates
+          .filter(({ setMenuLineId }) => setMenuLineId === id)
+          .map(({ id: dishId, unitPriceGross }) => [lineNoOf.get(dishId), unitPriceGross])
+          .sort(),
+      }));
+    };
+    const expected = [
+      {
+        lineNo: 5,
+        creditedTo: "ana",
+        dishes: [
+          [1, 0],
+          [3, 0],
+        ],
+      },
+      {
+        lineNo: 6,
+        creditedTo: "ben",
+        dishes: [
+          [2, 0],
+          [4, 500],
+        ],
+      },
+    ];
+    expect(pairing("soup-a", "soup-z")).toEqual(expected);
+    expect(pairing("soup-z", "soup-a")).toEqual(expected);
   });
 
   it("keeps a saved set menu that keeps a dish under its own id (D5)", () => {
@@ -464,9 +513,9 @@ describe("planBillGrouping", () => {
     expect(plan.dishUpdates).toEqual([]);
   });
 
-  it("leaves out a row not counted as portions, and one with no listing or price (D13)", () => {
+  it("leaves out a row sold by measure, and one with no listing or price (D13)", () => {
     const lines = [
-      dish("soup", 1, "soup", { countAsPortions: false }),
+      dish("soup", 1, "soup", { soldByMeasure: true }),
       dish("soup-2", 2, "soup", { listedProductId: null }),
       dish("soup-3", 3, "soup", { aLaCarteUnitPrice: null }),
       dish("hake", 4, "hake"),
@@ -474,6 +523,48 @@ describe("planBillGrouping", () => {
     const { plan, input } = planWithInput(lines, none, [daily], ids("unused"));
     expect(input.dishes.map(({ id }) => id)).toEqual(["hake"]);
     expect(plan.inserts).toEqual([]);
+  });
+
+  it("charges a la carte a placed dish that no longer holds one portion, or is now sold by measure", () => {
+    const aLaCarteRow = {
+      setMenuRole: null,
+      setMenuLineId: null,
+      setMenuPlace: null,
+      setMenuCountsAsCourseId: null,
+    };
+    const lines = [
+      placed(dish("soup", 1, "soup"), "menu-a", 0),
+      placed(dish("hake", 2, "hake", { quantity: 2000 }), "menu-a", 1),
+      menuRow("menu-a", 3),
+      placed(dish("sirloin", 4, "sirloin", { soldByMeasure: true }), "menu-b", 1, 500),
+      menuRow("menu-b", 5),
+      {
+        ...dish("hake-2", 6, "hake", { quantity: 333, aLaCarteUnitPrice: 1999 }),
+        unitPriceGross: 0,
+      },
+      extra("bread", 7, "hake", 150),
+    ];
+    const plan = planBillGrouping(lines, none, [daily], ids("unused"));
+    expect(plan.deletes).toEqual(["menu-a", "menu-b"]);
+    expect(plan.inserts).toEqual([]);
+    expect(plan.dishUpdates).toEqual([
+      { id: "soup", ...aLaCarteRow, unitPriceGross: 600, lineTotal: 600 },
+      { id: "hake", ...aLaCarteRow, unitPriceGross: 1200, lineTotal: 2400 },
+      { id: "sirloin", ...aLaCarteRow, unitPriceGross: 1800, lineTotal: 1800 },
+      // 19.99 x 0.333 is 6.65667, rounded half away from zero to whole cents.
+      { id: "hake-2", ...aLaCarteRow, unitPriceGross: 1999, lineTotal: 666 },
+    ]);
+  });
+
+  it("leaves a frozen placed dish of two portions as it is", () => {
+    const lines = [
+      placed(dish("hake", 1, "hake", { quantity: 2000 }), "menu-a", 1),
+      menuRow("menu-a", 2),
+    ];
+    const frozen = frozenLinesOf(lines, new Set(["hake"]));
+    const plan = planBillGrouping(lines, frozen, [daily], ids());
+    expect(plan.dishUpdates).toEqual([]);
+    expect(plan.deletes).toEqual([]);
   });
 
   it("passes a dish with no course or no menu item as not eligible, and charges it a la carte (D12)", () => {

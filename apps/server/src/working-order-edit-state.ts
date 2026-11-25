@@ -388,7 +388,7 @@ export async function readEditableOrder(tx: Transaction, orderId: string): Promi
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
     newWork: rows.some(
       (line) =>
-        (partyId !== null || line.setMenuRole !== "set_menu") &&
+        line.setMenuRole !== "set_menu" &&
         line.sentAt !== null &&
         (!line.madeHere || line.groupState !== "held"),
     )
