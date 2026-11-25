@@ -3399,7 +3399,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   aria-expanded=${hasChildren ? String(expanded) : nothing}
                 >
                   ${this.#renderSelectCell(key, row, true)}
-                  ${rowColumns.map(
+                  ${repeat(
+                    rowColumns,
+                    (column) => column.key,
                     (column, ci) =>
                       html`<td
                         role="gridcell"
