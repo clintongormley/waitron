@@ -33,7 +33,7 @@ import type {
 } from "../state/working-order.js";
 import type { BlockReason } from "../state/menu-refresh.js";
 import type { StringKey } from "../i18n/strings.js";
-import { lineProductName, productUnit } from "./product-name.js";
+import { lineProductName, productUnit, stepsByWholeUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
   adjustableListing,
@@ -1201,7 +1201,7 @@ export class TillBasket extends LitElement {
     if (this.readOnly || line.setMenuId !== undefined)
       return html`<span class="qty">${quantityLabel(line)}</span>`;
     const unit = productUnit(line.product);
-    if (unit.hardwareUnit !== null || unit.precision > 0) {
+    if (!stepsByWholeUnit(unit)) {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
     }
     const count = Number(line.quantity);
@@ -1224,7 +1224,7 @@ export class TillBasket extends LitElement {
                 <span aria-hidden="true">−</span>
               </wt-button>`
         }
-        <span class="count">${line.quantity}</span>
+        <span class="count">${unit.measure === true ? quantityLabel(line) : line.quantity}</span>
         <wt-button
           class="step step-inc"
           ?disabled=${this.store.editsLocked || this.orderInFlight || this.store.canSelectProduct?.(line.product) === false}

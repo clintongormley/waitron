@@ -15683,7 +15683,7 @@ export class TillApp extends LitElement {
       listed.map((line) => ({
         quantity: line.quantity,
         name: lineProductName(line.product),
-        unitName: productUnit(line.product).name,
+        unitName: productUnit(line.product).abbreviation,
         soldInEach: soldByTheUnit(line.product),
         ...(purpose === "extras" && line.extras !== undefined
           ? {

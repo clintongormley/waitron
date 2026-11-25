@@ -59,14 +59,15 @@ the **Pricing unit** window, which lists **Each** first and then your units, sor
 dashboard language. **Add unit** there creates a new unit without leaving the product.
 
 Once you choose a unit, the price is for one of that unit, and the field's label says so, such as
-**Price per kg**. At the till, a product sold in one of the weight units Waitron provides (grams,
-kilograms or milligrams), or by a unit whose **Precision** allows decimal places, asks how much each
-time, to no more decimal places than the unit allows. Any other product sells one per tap. The
-receipt prints the quantity with the unit's abbreviation, such as 0.35 kg. A product the till asks
-the quantity of cannot take extras. Nor can a product in a unit switched to **Measures a quantity
-(ml, g…) — no extras**: when Waitron sets up a venue, the millilitres, litres, grams, kilograms and
-milligrams it provides start with it on, a unit you add starts with it off, and a change to it reaches the till when you
-next publish the menus that sell the unit's products.
+**Price per kg**. Choose **Measures a quantity (ml, g…) — no extras** for a unit you sell by
+amount. The till asks for the amount when you tap the product. It also asks for amounts in weight
+units or units whose **Precision** allows decimal places. For a measure such as ml, enter the
+amount on the keypad or adjust it with **+** and **−**. The receipt prints the amount and the
+unit's abbreviation, such as 250 ml. A product entered by amount does not take extras.
+
+Waitron provides millilitres, litres, grams, kilograms and milligrams with the measure switch on.
+A unit you create starts with it off. Publish the menus that sell the unit's products to send
+your changes to the till.
 
 When you rename a unit used by an extra, the menu preview shows its old and new names even
 when the abbreviation stays the same. If the displayed unit label and decimal places are

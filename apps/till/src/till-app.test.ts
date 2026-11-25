@@ -7762,8 +7762,6 @@ describe("till-app", () => {
     });
   });
 
-  // A held line's stored unit has no measure switch; the server judges an edit against the LIVE
-  // offer's unit, so the till offers the lists that unit takes now.
   const mlUnit = {
     id: "unit-ml",
     staffName: "Staff unit",
@@ -7773,7 +7771,10 @@ describe("till-app", () => {
     precision: 0,
     hardwareUnit: null,
   };
-  const heldWineProduct: TillProduct = { ...coffee, unit: mlUnit };
+  const heldWineProduct: TillProduct = {
+    ...coffee,
+    unit: { ...mlUnit, abbreviation: { en: "ml" }, staffAbbreviation: "ml", measure: true },
+  };
   const liveWineProduct: TillProduct = {
     ...coffee,
     unit: { ...mlUnit, measure: true },
@@ -7819,6 +7820,7 @@ describe("till-app", () => {
     expect(counter.store.lines[0]!.product.offeredModifiers).toEqual([]);
     const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
     expect(basket.shadowRoot!.textContent).toContain("Café");
+    expect(basket.shadowRoot!.querySelector(".count")?.textContent).toBe("250 ml");
     expect(basket.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
   });
 

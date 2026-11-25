@@ -62,7 +62,7 @@ export function needsModifierPicker(
 /** Whether the dish takes extras: only when sold in whole portions — not weighed, not in decimals,
  * not a measure — because the server refuses any other (`extras.unsupported_product`). */
 export function takesExtras(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {
-  return soldByTheUnit(product) && productUnit(product).measure !== true;
+  return soldByTheUnit(product);
 }
 
 export function offeredListsOf(

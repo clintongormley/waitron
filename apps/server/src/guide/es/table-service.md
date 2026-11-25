@@ -524,9 +524,11 @@ Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, a
 lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo
 liberas.
 
-Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
-plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra
-cuenta. En una mesa o en el mostrador puedes añadir hasta 99 unidades de un mismo plato cada vez.
+Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
+zumo vendido por ml, toca el plato, introduce la cantidad con el teclado o usa **+** y **−**, y elige **Añadir**.
+Por ejemplo, 250 ml van en una sola línea. **Marcar servido** marca toda la cantidad como servida.
+
+En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 
 En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola
 fila mientras no se haya pagado nada de él.

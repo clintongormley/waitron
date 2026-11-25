@@ -3,7 +3,13 @@ import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { adjustmentLines, adjustments, createAdjustmentReason } from "@waitron/adjustments";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
+import {
+  assignProductUnit,
+  createExtraList,
+  createProduct,
+  createUnit,
+  writeProductModifiers,
+} from "@waitron/menu";
 import {
   billPaymentLines,
   orderEvents,
@@ -32,6 +38,7 @@ import { openTillSession } from "./testing/session-device.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { getHeldOrder } from "./working-order-held-read.js";
 import { updateHeldOrder } from "./working-order-held-write.js";
 import { createOpenOrder, parkOrder, type TabRoundLine } from "./working-order-open.js";
 import { readOrderRevision } from "./working-order-context.js";
@@ -212,6 +219,65 @@ async function payOnReader(id: string, lines: TabRoundLine[], provider: FakePaym
 }
 
 const sorted = (values: (string | null)[]) => [...values].sort();
+
+it("reopens a parked order with its saved millilitre and kilogram units", async () => {
+  const [juice, ham] = await inTx(venue, async (tx) => {
+    const millilitre = await createUnit(
+      tx,
+      {
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
+        name: { en: "Millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        measure: true,
+      },
+      venue.cfg.locale,
+    );
+    const juice = await createProduct(tx, {
+      categoryId: null,
+      name: "Juice",
+      pricingUnit: "each",
+      unitPrice: "0.03",
+      vatClass: "general",
+    });
+    await assignProductUnit(tx, juice.id, millilitre.id);
+    const ham = await createProduct(tx, {
+      categoryId: null,
+      name: "Ham",
+      pricingUnit: "weight",
+      unitPrice: "28.00",
+      vatClass: "general",
+    });
+    counter = await offerProducts(tx, { zone: "counter" });
+    return [juice, ham];
+  });
+  const order = await park(
+    counter.toOfferLines([
+      { productId: juice.id, quantity: "250" },
+      { productId: ham.id, quantity: "0.25" },
+    ]),
+  );
+
+  const reopened = await getHeldOrder({ db: venue.db }, order.id);
+  expect(reopened.lines.map(({ quantity, product }) => [quantity, product?.unitPrice])).toEqual([
+    ["250.000", "0.03"],
+    ["0.250", "28.00"],
+  ]);
+  expect(reopened.lines[0]!.product?.unit).toMatchObject({
+    precision: 0,
+    hardwareUnit: null,
+    measure: true,
+    abbreviation: { es: "ml" },
+    staffAbbreviation: "ml",
+  });
+  expect(reopened.lines[1]!.product?.unit).toMatchObject({
+    precision: 3,
+    hardwareUnit: "kg",
+    staffAbbreviation: "kg",
+  });
+  expect(linesOf(order.id).map((line) => line.lineTotal)).toEqual([750, 700]);
+});
 
 describe("A1208 counter orders are written as portions", () => {
   it("A1208 a walk-up of 2 × burger with cheese stores two portions of one cohort, each with its own cheese, and files one row of 2 linked to both", async () => {

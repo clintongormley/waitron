@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtTextarea } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -125,6 +126,44 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(rows(el)).toEqual(["Jamón ×0.25"]);
     expect(barText(el)).toContain("Jamón");
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
+  });
+
+  it("takes an integer millilitre amount as one draft line", async () => {
+    const juice: TillProduct = {
+      ...beer,
+      name: "Juice",
+      unit: {
+        id: "millilitre",
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
+        name: { en: "Millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        hardwareUnit: null,
+        measure: true,
+      },
+    };
+    const { el } = await mount({ products: [juice] });
+    await tap(el, "Juice");
+    expect(store(el).lines).toHaveLength(0);
+    const panel = browser(el).shadowRoot!.querySelector("till-tender-pay")!;
+    await panel.updateComplete;
+    const add = () =>
+      panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
+    await userEvent.keyboard("250.5");
+    expect(add().disabled).toBe(true);
+    await userEvent.keyboard("{Backspace}{Backspace}");
+    expect(add().disabled).toBe(false);
+    add().click();
+    await el.updateComplete;
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
+    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
+      /Juice\s+250 ml/,
+    );
+    expect(el.shadowRoot!.querySelector("[data-split-draft-line]")).toBeNull();
+    expect(barText(el)).toContain("Juice 250 ml");
+    await step(el, "1");
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["251"]);
   });
 
   it("shows no weighing prompt until a weighed dish is tapped", async () => {

@@ -495,9 +495,12 @@ since.
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
 sent**. A dish on hold shows what is published now until you release it.
 
-A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
-twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill
-whole. At a table or at the counter you can add up to 99 of one dish at a time.
+Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
+juice sold by the ml, tap the dish, enter the amount on the keypad or use **+** and **−**, then
+choose **Add**. For example,
+250 ml goes on one line. **Mark served** marks the whole amount as served.
+
+At a table or at the counter you can add up to 99 portions of one dish at a time.
 
 At the counter, an order you park and open again shows its 2 × Burger as one row while none of it
 is paid.

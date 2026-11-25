@@ -93,6 +93,16 @@ describe("till-basket-refresh-dialog", () => {
     expect(rows(el)).toEqual(["Ham €20.00/kg → €18.00/kg", "Cheese €2.00/kg → €4.00/kg"]);
   });
 
+  it("prices a millilitre measure per ml even when it uses whole numbers", async () => {
+    const ml = { ...each, abbreviation: { en: "ml" }, measure: true as const };
+    const { el } = await mount({
+      changed: [
+        { lineNo: 1, name: "Juice", from: "0.03", to: "0.04", units: { from: ml, to: ml } },
+      ],
+    });
+    expect(rows(el)).toEqual(["Juice €0.03/ml → €0.04/ml"]);
+  });
+
   it("names a weighed dish's unit in the operator's language", async () => {
     const { el } = await mount({ changed: weighedParts, blocked: [] }, "es-ES");
     expect(rows(el)).toEqual([

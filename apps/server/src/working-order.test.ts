@@ -522,6 +522,9 @@ describe("getHeldOrder", () => {
           unit: {
             id: unitId,
             name: { [CONTENT_LANGUAGE]: "kg" },
+            staffName: "kg",
+            abbreviation: { [CONTENT_LANGUAGE]: "kg" },
+            staffAbbreviation: "kg",
             precision: 3,
             hardwareUnit: "kg",
           },
@@ -638,6 +641,9 @@ describe("getHeldOrder", () => {
           unit: {
             id: EACH_UNIT.id,
             name: { [CONTENT_LANGUAGE]: EACH_UNIT.name[CONTENT_LANGUAGE]! },
+            staffName: EACH_UNIT.name[CONTENT_LANGUAGE]!,
+            abbreviation: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation[CONTENT_LANGUAGE]! },
+            staffAbbreviation: EACH_UNIT.abbreviation[CONTENT_LANGUAGE]!,
             precision: EACH_UNIT.precision,
             hardwareUnit: EACH_UNIT.hardwareUnit,
           },

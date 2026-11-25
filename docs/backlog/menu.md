@@ -209,18 +209,13 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
   product's staff name is over 500 characters is sent with no product as
   context, because that product is left out of the job (plan Decisions 9 and 10).
 
-## A dish in a measure unit is still rung up one unit per tap
+## Remaining actions on measured dishes
 
-Left open by A821f. A 250 ml line is 1 ml per tap with ±1 steps, the split control turns it into
-250 lines, a course group counts it as 250 items (`itemCount`, `apps/till/src/state/draft-groups.ts`),
-and the basket-refresh dialog prices it "each". Queued as MEASURE-AMOUNT (lane E). The owner, 2026-11-24: "yes type the amount, or use the +- to increment
-or decrement the amount, but that should be a single value, not a line per ml. Only portions/units are
-stored one per line, eg 3 x 50g portions of ham = 3 lines of 50g ham each, but the portion is a unit, it
-is not editable." So a measure with no scale asks its amount, typed or with + and −, as one line with one
-value. The readers of the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`): `splitLine`
-(`apps/till/src/state/working-order.ts`), `countsWholeUnits` and the last-added steps and split
-control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
-(`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
+- **Partial adjustments and payments.** Carry the measured-line fact to the actions that let
+  staff comp, cancel or pay part of a line. `TabLine` lacks the portion flag used by the Sent
+  panel, and `adjustments-apply.ts` checks for weighed amounts without recognising whole-number ml.
+- **Replacing a measured set-menu dish in a draft.** `DraftStore.addProduct` drops the line to
+  replace, and the amount picker also needs that line before it can save the new choice in place.
 
 ## Modifiers' Spanish "Opciones" tab is cut at a 310 px screen on CI's Linux fonts
 

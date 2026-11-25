@@ -80,5 +80,9 @@ export function productTilePrice(product: TillProduct, locale: string = currentL
 
 export function soldByTheUnit(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {
   const unit = productUnit(product);
+  return stepsByWholeUnit(unit) && unit.measure !== true;
+}
+
+export function stepsByWholeUnit(unit: NonNullable<TillProduct["unit"]>): boolean {
   return unit.hardwareUnit === null && unit.precision === 0;
 }

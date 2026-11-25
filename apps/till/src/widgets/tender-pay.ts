@@ -54,7 +54,8 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
-import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
+import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
+import { needsModifierPicker } from "../state/order-line.js";
 import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 
@@ -144,8 +145,6 @@ const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
   ["customer_canceled", "card.cancelled"],
 ]);
 
-const ZERO = decimal("0");
-
 type EntryDraft = {
   entry: string;
   label: string;
@@ -215,6 +214,12 @@ export class TillTenderPay extends LitElement {
       .amount {
         font-variant-numeric: tabular-nums;
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .quantity-step {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
       }
 
       .change .amount {
@@ -510,19 +515,27 @@ export class TillTenderPay extends LitElement {
     this.#entryBaseline = undefined;
   }
 
+  #quantityBlocked(): boolean {
+    return (this.busy && !this.held) || this.store.sending || this.store.editsLocked;
+  }
+
+  #entryBlocked(): boolean {
+    return this.view === "weighing" ? this.#quantityBlocked() : this.busy;
+  }
+
   #requestCancel(): void {
     if (!this.isConnected) return;
     if (this.view === "collecting" || this.view === "card_outcome") {
       this.#cancel();
       return;
     }
-    if (this.busy) return;
+    if (this.#entryBlocked()) return;
     if (this.#entryScope && this.#leave) {
       void this.#leave.request({
         scopes: [this.#entryOwner],
         reason: "cancel",
         proceed: () => {
-          if (this.isConnected && !this.busy) this.#cancel();
+          if (this.isConnected && !this.#entryBlocked()) this.#cancel();
         },
       });
     } else this.#cancel();
@@ -540,9 +553,9 @@ export class TillTenderPay extends LitElement {
   }
 
   #onProductSelected(product: TillProduct): void {
-    if (!this.isConnected || this.busy || soldByTheUnit(product)) return;
+    if (!this.isConnected || this.#quantityBlocked() || soldByTheUnit(product)) return;
     const select = () => {
-      if (!this.isConnected || this.busy) return;
+      if (!this.isConnected || this.#quantityBlocked()) return;
       this.#finishEntry();
       this.selected = product;
       this.entry = "";
@@ -600,7 +613,12 @@ export class TillTenderPay extends LitElement {
 
   #onPadChange(event: Event): void {
     event.stopPropagation();
-    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
+    if (
+      !this.isConnected ||
+      !(event.currentTarget as HTMLElement).isConnected ||
+      this.#entryBlocked()
+    )
+      return;
     this.entry = (event as CustomEvent<{ value: string }>).detail.value;
     this.#entryScope?.changed();
   }
@@ -932,9 +950,9 @@ export class TillTenderPay extends LitElement {
    * returns.
    */
   #addWeight(product: TillProduct): void {
-    if (!this.isConnected || this.busy || this.view !== "weighing") return;
+    if (!this.isConnected || this.#quantityBlocked() || this.view !== "weighing") return;
     const quantity = this.#enteredDecimal();
-    if (compareDecimal(quantity, ZERO) <= 0 || !this.#quantityFitsUnit(product)) return;
+    if (!this.#quantityFitsUnit(product, quantity)) return;
     this.#finishEntry();
     this.selected = undefined;
     this.entry = "";
@@ -950,9 +968,21 @@ export class TillTenderPay extends LitElement {
     return formatDecimalInput(this.entry === "" ? "0" : this.entry, currentLocale());
   }
 
-  /** Ignore insignificant zeroes, matching the server's exact decimal-string check. */
-  #quantityFitsUnit(product: TillProduct): boolean {
-    return quantityPlaces(this.entry) <= productUnit(product).precision;
+  #quantityFitsUnit(product: TillProduct, quantity: string): boolean {
+    try {
+      assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  #stepQuantity(product: TillProduct, by: Decimal): void {
+    if (this.view !== "weighing" || this.selected !== product || this.#quantityBlocked()) return;
+    const next = addDecimal(this.#enteredDecimal(), by);
+    if (!this.#quantityFitsUnit(product, next)) return;
+    this.entry = next;
+    this.#entryScope?.changed();
   }
 
   override render() {
@@ -1612,14 +1642,23 @@ export class TillTenderPay extends LitElement {
   #renderWeighing() {
     // `view === "weighing"` is only ever entered with a product set (see #onProductSelected).
     const product = this.selected as TillProduct;
-    const invalid =
-      compareDecimal(this.#enteredDecimal(), ZERO) <= 0 || !this.#quantityFitsUnit(product);
+    const unit = productUnit(product);
+    const manualMeasure = unit.hardwareUnit === null && !soldByTheUnit(product);
+    const quantity = this.#enteredDecimal();
+    const invalid = !this.#quantityFitsUnit(product, quantity);
+    const blocked = this.#quantityBlocked();
     return html`
       <p class="prompt">${t("weigh.prompt")}</p>
       <div class="summary">
         <div class="row">
           <span class="label">${unitName(product)}</span>
-          <span class="amount kg">${this.#entryDisplay()}</span>
+          <div class="quantity-step">
+            ${manualMeasure ? this.#quantityStep(product, quantity, "-1", blocked) : nothing}
+            <span class="amount kg" aria-live="polite"
+              >${manualMeasure && this.entry === "" ? "" : this.#entryDisplay()}</span
+            >
+            ${manualMeasure ? this.#quantityStep(product, quantity, "1", blocked) : nothing}
+          </div>
         </div>
       </div>
       <till-numeric-pad
@@ -1628,21 +1667,45 @@ export class TillTenderPay extends LitElement {
         @pad-enter=${() => pressIfEnabled(this.#button(".add"))}
         @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
       ></till-numeric-pad>
+      ${
+        manualMeasure && this.entry !== "" && invalid
+          ? html`<p role="status">${t("line.quantity_invalid")}</p>`
+          : nothing
+      }
       <div class="actions">
         <wt-button
           class="add"
           variant="primary"
           size="lg"
-          ?disabled=${invalid}
+          ?disabled=${invalid || blocked}
           @click=${() => this.#addWeight(product)}
         >
           ${t("action.add")}
         </wt-button>
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
+        <wt-button
+          class="cancel"
+          variant="secondary"
+          ?disabled=${blocked}
+          @click=${() => this.#requestCancel()}
+        >
           ${t("action.cancel")}
         </wt-button>
       </div>
     `;
+  }
+
+  #quantityStep(product: TillProduct, quantity: Decimal, step: "-1" | "1", blocked: boolean) {
+    const glyph = step === "1" ? "+" : "−";
+    const label = t(step === "1" ? "basket.increase" : "basket.decrease");
+    const by = decimal(step);
+    return html`<wt-button
+      variant="secondary"
+      data-quantity-step=${step}
+      .ariaLabel=${`${label} ${unitName(product)}`}
+      ?disabled=${blocked || !this.#quantityFitsUnit(product, addDecimal(quantity, by))}
+      @click=${() => this.#stepQuantity(product, by)}
+      >${glyph}</wt-button
+    >`;
   }
 }
 

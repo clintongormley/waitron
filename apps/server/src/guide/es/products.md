@@ -63,14 +63,16 @@ después tus unidades, ordenadas en el idioma de tu panel. **Añadir unidad** cr
 sin salir del producto.
 
 Cuando eliges una unidad, el precio es por una de esa unidad, y la etiqueta del campo lo indica, por
-ejemplo **Precio por kg**. En la caja, un producto vendido en una de las unidades de peso que trae
-Waitron (gramos, kilogramos o miligramos), o en una unidad cuya **Precisión** admite decimales, pide la
-cantidad cada vez, con no más decimales de los que admite la unidad. Cualquier otro producto se vende
-de uno en uno con cada toque. El ticket imprime la cantidad con la abreviatura de la unidad, por ejemplo
-0,35 kg. Un producto cuya cantidad pide la caja no admite extras. Tampoco un producto en una unidad
-con **Mide una cantidad (ml, g…) — sin extras** activado: cuando Waitron prepara un local, los mililitros, litros, gramos,
-kilogramos y miligramos que trae empiezan con él activado, una unidad que añades empieza con él desactivado,
-y un cambio llega a la caja cuando vuelves a publicar las cartas que venden los productos de esa unidad.
+ejemplo **Precio por kg**. Elige **Mide una cantidad (ml, g…) — sin extras** para una unidad
+que vendes por medida. La caja pide la cantidad cuando tocas el producto. También la pide para
+las unidades de peso y las que admiten decimales en **Precisión**. Para una medida como ml,
+introduce la cantidad con el teclado o ajústala con **+** y **−**. El ticket imprime la cantidad
+y la abreviatura de la unidad, por ejemplo 250 ml. Un producto que se vende por medida no admite
+extras.
+
+Waitron trae mililitros, litros, gramos, kilogramos y miligramos con el ajuste de medida activado.
+Las unidades que añades lo tienen desactivado al crearlas. Publica las cartas que venden los
+productos de esa unidad para enviar tus cambios a la caja.
 
 Cuando cambias el nombre de una unidad que usa un extra, la vista previa de la carta muestra
 el nombre anterior y el nuevo aunque la abreviatura siga igual. Si la etiqueta de la unidad y

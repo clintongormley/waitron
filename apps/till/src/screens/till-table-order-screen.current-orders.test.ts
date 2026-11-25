@@ -326,6 +326,22 @@ describe("Current orders and Sent service", () => {
     expect(dialog.hasAttribute("open")).toBe(false);
   });
 
+  it("marks a millilitre line served in full without asking for a count", async () => {
+    const measured = row("l-juice", "Juice", "250.000", {
+      countsWholePortions: false,
+      unitPrecision: 0,
+    });
+    const { el } = await mountSent({
+      currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [measured])] }),
+    });
+    const serves = capture(el, "serve-lines");
+    await chooseSentServing(el, "l-juice");
+    expect(serves.map((event) => event.detail)).toEqual([
+      { items: [{ lineId: "l-juice", quantity: "250" }] },
+    ]);
+    expect(q(el, "[data-serve-dialog]")!.hasAttribute("open")).toBe(false);
+  });
+
   it("offers what is left of a partly served row, and never less than one", async () => {
     const { el } = await mountSent();
     const serves = capture(el, "serve-lines");
