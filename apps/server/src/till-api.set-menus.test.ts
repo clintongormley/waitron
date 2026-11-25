@@ -446,6 +446,23 @@ it("answers the dead-end check for a held Counter takeaway whose basket now hold
   expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
 });
 
+it("prices a held eat-in Counter order's dead-end check as stored, whatever dining the request sends", async () => {
+  const body = await freshBasket("eat_in");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    workingOrderId: body.id,
+    dining: "takeaway",
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+});
+
 it("answers the dead-end check for a table draft line tapped in a set-menu folder", async () => {
   const { venue, copy } = fixture;
   const bill = await seated();

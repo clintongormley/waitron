@@ -285,7 +285,7 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
             : [{ line, key: String(index) }],
         );
         // A held order is priced as it is stored; a new one as the till will write it.
-        const unwrittenBill =
+        const unwrittenBill = async () =>
           order === undefined &&
           zoneId !== undefined &&
           active.some(({ line }) => line[SET_MENU_DRAFT_LINE] !== undefined)
@@ -307,7 +307,7 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
                 "ignore",
                 "none",
                 undefined,
-                unwrittenBill,
+                await unwrittenBill(),
               )
             : null;
         const parents = priced?.lineRows.filter((line) => line.parentLineId === null) ?? [];
