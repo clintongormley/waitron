@@ -356,8 +356,14 @@ When the guests will wait and take their food from the counter, choose **They'll
 counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
 cancelled or refunded. Dishes held back go to the station now, each bill whose food still to come
 has a station ticket becomes a paid order waiting at the counter, and the table finishes. Open
-**Waiting orders** on the first active counter in the table's department. Choose **Hand over** on
-the order marked **Paid, not handed over** when the guests collect it.
+**Waiting orders** on the first active counter in the sale's department. Choose **Hand over** on
+the order marked **Paid, not handed over** when the guests collect it. From the table till you can
+still find its receipt in **Find a bill**. If the department has no active counter, use **Collect**
+on the order in **Kitchen**.
+
+If you move a presented bill to the counter by hand, take payment in the table's zone. After
+payment, check the first active counter's **Waiting orders**, even if you moved the bill from a
+different counter.
 
 ## Refund a payment on a receipt {#refund-receipt}
 

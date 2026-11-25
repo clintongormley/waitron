@@ -965,30 +965,37 @@ describe("a bill sent to the counter waits there until handed over", () => {
     expect(await counterWaitingIn(pickup.id, soldAtCounter)).toBe(false);
   });
 
-  it("keeps a presented unpaid bill in the table's zone until payment", async () => {
+  it("lists an explicitly moved presented bill at the first counter after payment", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], [null]);
     const billId = t.billIds[0]!;
     await placeByHand(venue, billId);
     const expectedPartyRevision = await partyRevision(t.partyId);
-    const pickup = await inTx(venue, async (tx) => {
+    const { first, chosen } = await inTx(venue, async (tx) => {
       const { departmentId } = (await VENUE_SERVICE.findOrderContext(tx, billId))!;
-      const { id } = await createServiceZone(tx, {
+      const first = await createServiceZone(tx, {
         departmentId,
-        name: "Unpaid control counter",
+        name: "First counter for presented bills",
         orderStart: "counter",
+        displayOrder: -40,
+      });
+      const chosen = await createServiceZone(tx, {
+        departmentId,
+        name: "Chosen counter for presented bill",
+        orderStart: "counter",
+        displayOrder: 20,
       });
       await moveBill(
         tx,
         venue.cfg,
         billId,
-        { counter: { zoneId: id } },
+        { counter: { zoneId: chosen.id } },
         {
           partyId: t.partyId,
           expectedPartyRevision,
           operatorId: venue.staffId,
         },
       );
-      return id;
+      return { first: first.id, chosen: chosen.id };
     });
     expect(await billRow(billId)).toMatchObject({
       status: "placed",
@@ -996,8 +1003,9 @@ describe("a bill sent to the counter waits there until handed over", () => {
       zoneId: venue.tables.zoneId,
     });
     expect(await counterWaitingIn(venue.tables.zoneId, billId)).toBe(true);
-    expect(await counterWaitingIn(pickup, billId)).toBe(false);
-    const crossZone = await withZones([pickup], () =>
+    expect(await counterWaitingIn(first, billId)).toBe(false);
+    expect(await counterWaitingIn(chosen, billId)).toBe(false);
+    const crossZone = await withZones([chosen], () =>
       cashPayment(venue, venue.cookie.staff, billId, "12.00"),
     );
     expect(crossZone).toMatchObject({
@@ -1006,6 +1014,9 @@ describe("a bill sent to the counter waits there until handed over", () => {
     });
     await withZones([venue.tables.zoneId], () => pay(billId, "12.00"));
     expect(await billRow(billId)).toMatchObject({ status: "settled", zoneId: venue.tables.zoneId });
+    expect(await counterWaitingIn(venue.tables.zoneId, billId)).toBe(false);
+    expect(await counterWaitingIn(first, billId)).toBe(true);
+    expect(await counterWaitingIn(chosen, billId)).toBe(false);
   });
 
   it("shows on the pass, the station, Waiting orders and Find a bill, then leaves them all on hand over", async () => {

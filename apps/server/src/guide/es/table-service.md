@@ -376,8 +376,14 @@ Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo re
 mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación. No se cancela ni se
 devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
 tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
-cierra. Abre **Pedidos pendientes** en el primer mostrador activo del departamento de la mesa.
-Elige **Entregar** en el pedido marcado **Pagado, sin entregar** cuando lo recojan.
+cierra. Abre **Pedidos pendientes** en el primer mostrador activo del departamento de la venta.
+Elige **Entregar** en el pedido marcado **Pagado, sin entregar** cuando lo recojan. Desde la caja
+de la mesa, puedes encontrar su ticket en **Buscar cuenta**. Si el departamento no tiene mostrador
+activo, elige **Entregar** en el pedido en **Cocina**.
+
+Si mueves manualmente al mostrador una cuenta que ya has presentado, cobra en la zona de la mesa.
+Una vez cobrada, abre **Pedidos pendientes** en el primer mostrador activo, aunque hayas movido
+la cuenta desde otro mostrador.
 
 ## Devolver un pago desde el recibo {#refund-receipt}
 

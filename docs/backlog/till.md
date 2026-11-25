@@ -876,6 +876,8 @@ If the server requires an options list on a recalled dish absent from the live m
 
 ## Decisions and deliberate limits
 
+- **Pickup counter when the department has more than one.** Decide whether a presented bill moved at a later counter should keep that counter after payment. Today paid food from detached table bills goes to the first active counter in the sale's department.
+
 - **On the voids and comps report, choosing a reason narrows the list, not the totals below it (A958,
   left open by A758-3; kept by the watcher 2026-11-24, not asked).** With
   Staff meal chosen, By action, By stage and By reason still count every reason for the person (or
