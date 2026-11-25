@@ -2290,8 +2290,8 @@ kind of row's toggle apart from another's: the Products list names a product's t
 `variant-toggle` and makes only that one small and muted. In tree mode the
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
 what its rows draw there. Supply `rowControls` to render controls in the leading column shared with
-selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`. Keep
-its default baseline alignment for Products' wrapped names; Structure uses
+selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`.
+Products centres the contents of its cells over the row. Structure uses
 `rowControlsAlign="center"` for its name-and-note stacks. In Select mode, the header's native
 checkbox and each row's checkbox line up. Grip and checkbox sit side by side in the wide Products
 Tree and stack at phone width. Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.
@@ -2333,8 +2333,9 @@ can move toward the leading edge to leave room for Price and the switch. The Str
 product slots when narrow, except while naming a section.
 A variant's row draws no grip. Its photo and name sit one step further in than the product's.
 The square shows the variant's photo or the product's photo and opens the variant's editor at its
-photo. Names wrap within their cells. A category name box takes at least `--wt-tap-min`.
-On a phone, the name field sits beside the swatch, with the counts above the field. In the narrow Tree, Select stacks each grip below its checkbox in the leading column.
+photo. Names wrap within their cells. On a phone, the category name field sits beside the swatch,
+with the counts above the field. It can use the category row's empty Price and Available cells
+as far as the pinned Actions column. In the narrow Tree, Select stacks each grip below its checkbox in the leading column.
 The square shows the category's own colour, else the nearest coloured category above it or the
 venue's default. An inherited colour keeps its dashed border while the name is typed. The chooser
 starts on No colour when the category has no colour of its own. Tab moves on from the name field.

@@ -9,11 +9,6 @@ export const productListLayoutStyles = css`
   }
   /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
      crossing used for their presentation. */
-  /* Laid out as a product's cell is, so a wrapped name keeps its grip and swatch beside its
-     first line. */
-  wt-data-table::part(folder-cell) {
-    display: block;
-  }
   /* The name box's room is a flex basis; the phone's grid rule below still wins. */
   wt-data-table::part(naming) {
     display: flex;
@@ -36,11 +31,6 @@ export const productListLayoutStyles = css`
   }
   wt-data-table::part(tree-heading) {
     margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
-  }
-  /* Keep wrapped names on their first-line baseline beside the media slot. */
-  wt-data-table::part(product-cell),
-  wt-data-table::part(variant-cell) {
-    display: block;
   }
   wt-data-table::part(drag-grip) {
     display: inline-flex;
@@ -168,21 +158,18 @@ export const fullRowProductsMediaStyles = css`
   wt-data-table::part(tree-indent) {
     flex: none;
   }
-  wt-data-table[data-list]::part(products-cell),
-  wt-data-table[narrow]::part(products-cell) {
+  wt-data-table::part(products-cell) {
     vertical-align: middle;
   }
-  wt-data-table[narrow]::part(tree-cell) {
-    align-items: center;
-  }
   wt-data-table::part(tree-cell) {
+    align-items: center;
     max-inline-size: 100%;
     min-inline-size: 0;
     box-sizing: border-box;
   }
-  wt-data-table[narrow]::part(product-cell),
-  wt-data-table[narrow]::part(variant-cell),
-  wt-data-table[narrow]::part(folder-cell) {
+  wt-data-table::part(product-cell),
+  wt-data-table::part(variant-cell),
+  wt-data-table::part(folder-cell) {
     display: flex;
     align-items: center;
     min-inline-size: 0;
@@ -207,7 +194,9 @@ export const fullRowProductsMediaStyles = css`
   wt-data-table[narrow]::part(name-box) {
     grid-column: 2;
     grid-row: 2;
-    inline-size: 100%;
+    position: relative;
+    z-index: 1;
+    inline-size: max(var(--wt-tap-min), var(--name-box-room));
     min-inline-size: var(--wt-tap-min);
   }
   wt-data-table[narrow]:not([data-list])::part(row-controls) {

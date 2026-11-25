@@ -613,15 +613,13 @@ export class ProductList extends LitElement {
     const naming = box.parentElement!;
     const cell = box.closest("td")!;
     const pinned = cell.closest("tr")!.querySelector('td[data-pinned="end"]')!;
-    const end =
-      Math.min(
-        cell.getBoundingClientRect().right + scroll.scrollLeft,
-        pinned.getBoundingClientRect().left,
-      ) -
-      parseFloat(getComputedStyle(cell).paddingInlineEnd) -
-      scroll.scrollLeft;
-    const room = Math.max(0, end - naming.getBoundingClientRect().left);
-    const boxRoom = Math.max(0, end - box.getBoundingClientRect().left);
+    const tableEnd = pinned.getBoundingClientRect().left - scroll.scrollLeft;
+    const padding = parseFloat(getComputedStyle(cell).paddingInlineEnd);
+    const cellEnd = Math.min(cell.getBoundingClientRect().right, tableEnd) - padding;
+    const room = Math.max(0, cellEnd - naming.getBoundingClientRect().left);
+    // Category rows have no price or switch, so a narrow field can use that room while editing.
+    const fieldEnd = root.host.hasAttribute("narrow") ? tableEnd - padding : cellEnd;
+    const boxRoom = Math.max(0, fieldEnd - box.getBoundingClientRect().left);
     naming.style.setProperty("--name-room", `${room}px`);
     naming.style.setProperty("--name-box-room", `${boxRoom}px`);
     const hidden = scroll.getBoundingClientRect().left - box.getBoundingClientRect().left;

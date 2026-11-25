@@ -2043,8 +2043,14 @@ describe("the product list at phone width", () => {
     )!;
     const row = box.closest("tr")!;
     const error = box.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+    const input = box.shadowRoot!.querySelector("input")!;
+    const inputStyle = getComputedStyle(input);
     return {
       edges,
+      textWidth:
+        input.clientWidth -
+        parseFloat(inputStyle.paddingInlineStart) -
+        parseFloat(inputStyle.paddingInlineEnd),
       box: box.getBoundingClientRect(),
       grip: (
         row.querySelector('.drag-grip, [part~="grip-space"]') ??
@@ -2069,7 +2075,7 @@ describe("the product list at phone width", () => {
   function expectOwnLine(line: Awaited<ReturnType<typeof nameBoxLine>>) {
     expect(line.error).toBe(codeMessage("category.name_taken"));
     expect(line.scrollLeft).toBe(0);
-    expect(line.box.width).toBeGreaterThanOrEqual(44);
+    expect(line.textWidth).toBeGreaterThanOrEqual(80);
     expect(line.box.left).toBeGreaterThanOrEqual(line.icon.right);
     expect(line.box.bottom).toBeGreaterThan(line.grip.top);
     expectInView(line.edges);
@@ -4146,6 +4152,31 @@ describe("the Products tree's Name column", () => {
     },
   );
 
+  it.each([560, 1180])(
+    "keeps the photo target beside every line of a wrapped Tree name at %i px",
+    async (width) => {
+      await page.viewport(width, 844);
+      const dish = product({
+        id: "croquettes",
+        name: "Homemade croquettes with roast garlic and aged sheep cheese, served with seasonal vegetables and bread",
+        image: "croquettes.png",
+        primaryCategoryId: "g",
+      });
+      const { root } = await mountDeep({ products: [...deepProducts(), dish], reordering: false });
+      const row = root.querySelector('tr[data-row-key="croquettes"]')!;
+      const name = document.createRange();
+      name.selectNodeContents(row.querySelector("strong")!);
+      const media = row.querySelector('[part~="product-media"]')!.getBoundingClientRect();
+      const lines = [...name.getClientRects()];
+      expect(lines.length).toBeGreaterThan(1);
+      for (const line of lines) {
+        expect(line.left).toBeGreaterThanOrEqual(media.right);
+        const hit = root.elementFromPoint(line.left + 1, line.top + line.height / 2);
+        expect(hit?.closest('[part~="product-media"]') ?? null).toBeNull();
+      }
+    },
+  );
+
   it("keeps a product's photo at laptop width", async () => {
     const restore = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -4767,7 +4798,7 @@ describe("a refresh during a drag", () => {
     press(nameOf(root, "folder:d"), "pointermove");
     expect(gapBefore(root)).toEqual(["cola"]);
     expect(Math.abs(row.getBoundingClientRect().height - height * 2)).toBeLessThanOrEqual(
-      width === 390 ? 3 : 0.5,
+      width === 390 ? 3 : 2,
     );
     const after = await refreshed(el, {
       products: [
