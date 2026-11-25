@@ -1,5 +1,19 @@
-import { expect, it, vi } from "vitest";
-import { cloudAddressProvider, type CloudAddressOperation } from "./index.js";
+import { assert, expect, it, vi } from "vitest";
+import {
+  cloudAddressProvider,
+  type CloudAddressOperation,
+  type CloudAddressReply,
+} from "./index.js";
+
+const addressFields = {
+  addressLine1: "Main Street 2",
+  addressLine2: null,
+  postalCode: "46001",
+  city: "Valencia",
+  province: "Valencia",
+  countryCode: "ES",
+} satisfies NonNullable<CloudAddressReply["fields"]>;
+const selection = { suggestionId: "Main Street 2", sessionToken: "open" };
 
 it("starts a new workflow after expiry while an ordinary refusal keeps the original workflow", async () => {
   const operations: CloudAddressOperation[] = [];
@@ -30,6 +44,74 @@ it("starts a new workflow after expiry while an ordinary refusal keeps the origi
   const first = operations[1] as { workflowId: string };
   expect(operations[2]).toHaveProperty("workflowId", first.workflowId);
   expect(operations[3]).not.toHaveProperty("workflowId", first.workflowId);
+});
+
+it.each([
+  {
+    scenario: "a second line and a named province",
+    addressLine2: "Unit 3",
+    province: "Valencia",
+    lines: ["Main Street 2", "Unit 3"],
+    code: "46",
+  },
+  {
+    scenario: "no second line or province",
+    addressLine2: null,
+    province: "",
+    lines: ["Main Street 2"],
+    code: undefined,
+  },
+])("fills the selected address with $scenario", async ({ addressLine2, province, lines, code }) => {
+  const read = vi.fn(async (operation: CloudAddressOperation): Promise<CloudAddressReply> => {
+    if (operation.kind === "available") return { available: true };
+    if (operation.kind === "suggest") return { candidates: [{ text: "Main Street 2" }] };
+    return { fields: { ...addressFields, addressLine2, province } };
+  });
+  const provider = (await cloudAddressProvider(read, () => "en"))!;
+  await provider.suggest({
+    query: "Main",
+    countryCode: "ES",
+    sessionToken: selection.sessionToken,
+  });
+  const suggestion = read.mock.calls[1]?.[0];
+  assert(suggestion?.kind === "suggest");
+  const address = await provider.resolve(selection);
+  expect(read).toHaveBeenLastCalledWith({
+    kind: "validate",
+    workflowId: suggestion.workflowId,
+    selectedText: "Main Street 2",
+  });
+  expect(address).toMatchObject({
+    lines,
+    locality: "Valencia",
+    postalCode: "46001",
+    countryCode: "ES",
+  });
+  expect(address.administrativeAreaCode).toBe(code);
+  await expect(provider.resolve(selection)).rejects.toThrow("No address search");
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
+it.each([
+  { missing: "street", fields: { ...addressFields, addressLine1: " " } },
+  { missing: "postal code", fields: { ...addressFields, postalCode: " " } },
+  { missing: "city", fields: { ...addressFields, city: " " } },
+  { missing: "all fields", fields: undefined },
+])("refuses to fill a selected address missing $missing", async ({ fields }) => {
+  const provider = (await cloudAddressProvider(
+    async (operation) => {
+      if (operation.kind === "available") return { available: true };
+      if (operation.kind === "suggest") return { candidates: [{ text: "Main Street 2" }] };
+      return fields ? { fields } : {};
+    },
+    () => "en",
+  ))!;
+  await provider.suggest({
+    query: "Main",
+    countryCode: "ES",
+    sessionToken: selection.sessionToken,
+  });
+  await expect(provider.resolve(selection)).rejects.toThrow("Incomplete address fields");
 });
 
 it("leaves the search hidden when Cloud says it is unavailable", async () => {
