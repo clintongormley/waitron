@@ -3732,8 +3732,6 @@ export class DashboardApi {
     return this.#request<MenuPreview>(`/management-api/menus/${id}/preview`, "GET");
   }
 
-  /** The menu's working Device Home Page: every shortcut in order, the ones its structure no longer
-   * reaches marked, and both devices' display settings. */
   getMenuHome(menuId: string): Promise<MenuHome> {
     return this.#request<MenuHome>(`/management-api/menus/${menuId}/home`, "GET");
   }

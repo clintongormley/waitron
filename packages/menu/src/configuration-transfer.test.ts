@@ -257,6 +257,18 @@ describe("validateMenuConfiguration: each menu's root and Home sections", () => 
     expect(() => validateMenuConfiguration({ menus, sections })).not.toThrow();
   });
 
+  it.each([{ order: null }, { order: ["home_first"] }])(
+    "refuses $order as a menu's home order",
+    ({ order }) => {
+      expect(() =>
+        validateMenuConfiguration({
+          menus: menus.map((menu) => (menu.id === "lunch" ? { ...menu, home_order: order } : menu)),
+          sections,
+        }),
+      ).toThrowError(refusedAs("menus.home_order"));
+    },
+  );
+
   it.each([
     ["lunch", "menu_root"],
     ["lunch", "home_layout"],

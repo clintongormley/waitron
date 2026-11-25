@@ -223,7 +223,7 @@ export class WtSegmentedControl extends LitElement {
       .filter(Boolean)
       .join(" ");
     return html`
-      ${this.hideLabel ? nothing : html`<span class="label">${this.label}</span>`}
+      ${this.hideLabel ? nothing : html`<span class="label" part="label">${this.label}</span>`}
       <div
         role="radiogroup"
         aria-label=${this.label}

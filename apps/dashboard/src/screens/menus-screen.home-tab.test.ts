@@ -773,8 +773,15 @@ describe("the Home page tab's shortcuts", () => {
     const grid = widget.shadowRoot!.querySelector(".grid")!;
     const tracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
     expect(tracks).toHaveLength(width === 1280 ? 6 : 3);
-    if (width === 1280) expect(control.clientWidth).toBeLessThan(350);
+    const label = control.shadowRoot!.querySelector(".label")!.getBoundingClientRect();
+    const row = control.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
+    if (width === 1280) {
+      expect(row.width).toBeLessThan(350);
+      expect(label.right).toBeLessThan(row.left);
+      expect(label.top + label.height / 2).toBeCloseTo(row.top + row.height / 2, 1);
+    }
     if (width <= 390) {
+      expect(label.bottom).toBeLessThan(row.top);
       const buttons = [...control.shadowRoot!.querySelectorAll("button")];
       const [first, second] = buttons.map((button) => button.getBoundingClientRect().width);
       expect(first).toBeCloseTo(second!, 1);

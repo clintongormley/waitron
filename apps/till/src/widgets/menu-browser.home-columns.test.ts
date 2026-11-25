@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import { applyTokens } from "@waitron/ui";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -26,6 +27,9 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
   async ({ width, columns, theme, scale }) => {
     const locale = currentLocale();
     setLocale("es-ES");
+    const pageRoot = document.documentElement;
+    const hadPageTokens = pageRoot.hasAttribute("data-wt-theme-root");
+    applyTokens(pageRoot);
     try {
       await pageAt(width === 792 ? 1280 : width, 844, scale);
       const products: TillProduct[] = [
@@ -120,6 +124,7 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
       if (width === 792) host.style.width = "792px";
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
+      if (width <= 390) expect(grid.getBoundingClientRect().width).toBeCloseTo(width - 16);
       expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(columns);
       expect(grid.querySelectorAll(".tile")).toHaveLength(4);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
@@ -168,6 +173,7 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
       expect(grid.querySelector('[data-kind="section"] wt-icon')).not.toBeNull();
       if (width === 360) await expectNoA11yViolations(host);
     } finally {
+      if (!hadPageTokens) pageRoot.removeAttribute("data-wt-theme-root");
       setLocale(locale);
       await resetPage();
     }

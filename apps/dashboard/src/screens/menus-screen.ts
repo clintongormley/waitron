@@ -8,7 +8,6 @@ import {
 } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
-import { live } from "lit/directives/live.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
@@ -416,7 +415,13 @@ export class MenusScreen extends LitElement {
       }
       @media (min-width: 800px) {
         .home-settings {
+          display: flex;
+          align-items: center;
+          gap: var(--wt-space-3);
           inline-size: fit-content;
+        }
+        .home-settings::part(label) {
+          margin-block-end: 0;
         }
       }
       .status-line {
@@ -3237,7 +3242,7 @@ export class MenusScreen extends LitElement {
         data-test="home-settings"
         name="home-order"
         label=${t("home.order")}
-        .value=${live(order)}
+        .value=${order}
         .options=${HOME_ORDERS.map((value) => ({
           value,
           label: t(value === "home_first" ? "home.block_shortcuts" : "home.block_menu"),

@@ -365,7 +365,7 @@ describe("dashboard-device-home-preview", () => {
       expect(water.hasAttribute("data-painted")).toBe(false);
     });
 
-    it("uses colour and the folder even with stored Thumbnails and photos", async () => {
+    it("uses colour and the folder even with photos", async () => {
       const { el } = await mount({ document: lunch() });
       const lemonade = tile(el, "structure", "Lemonade");
       expect(image(lemonade)).toBeNull();
