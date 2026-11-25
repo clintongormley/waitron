@@ -91,6 +91,8 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
       );
       await flush(el);
       await expectNoA11yViolations(host);
+      await enterPin(el, "");
+      await expectNoA11yViolations(host);
     },
   );
 

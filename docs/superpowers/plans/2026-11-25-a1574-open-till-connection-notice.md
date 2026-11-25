@@ -13,3 +13,5 @@ The owner said “Build it” and “Split it” on 25 November 2026, recorded u
 Expected size is 60–105 added product lines and 100–175 added test lines, including moved code, plus guides and backlog.
 
 The watcher asked at 23:09 on 25 November to use the same top connection banner on the roster and PIN steps, with Check again inside it. Check the phone and tablet views and how it fits the A1591 PIN layout. Send the updated pictures before landing.
+
+On 26 November at 00:36 the watcher cleared putting the PIN banner in its existing scrollable notice area to keep the keypad still on short phones. The roster keeps its top banner. Send fresh phone and tablet PIN captures and wait for the owner's answer before landing.

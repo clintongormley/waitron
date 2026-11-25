@@ -18,8 +18,9 @@ que tengas que [volver a instalar su certificado](table-service.md#certificate-t
 
 Si la caja ya está abierta y dice **No se puede conectar con el servidor**, comprueba que este
 dispositivo esté conectado a la red WiFi del local. Deja la pantalla abierta mientras la caja
-vuelve a comprobar la conexión. En la pantalla del PIN, pulsa **Comprobar de nuevo** si quieres
-comprobarla al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
+vuelve a comprobar la conexión. En la pantalla del PIN, desplaza el aviso que está encima del
+teclado si hace falta y pulsa **Comprobar de nuevo** para comprobarla al momento.
+En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
 
 ## Lee la línea de avisos {#notice-line}
 

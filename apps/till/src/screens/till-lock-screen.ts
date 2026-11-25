@@ -506,7 +506,7 @@ export class TillLockScreen extends LitElement {
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></wt-language-chooser>
       </div>
-      ${this.noBoxAnswering ? this.#renderServers() : nothing}
+      ${!pinScreen && this.noBoxAnswering ? this.#renderServers() : nothing}
       <div class=${pinScreen ? "screen pin-screen" : "screen"}>
         ${this.#renderLogo()}
         ${
@@ -718,7 +718,7 @@ export class TillLockScreen extends LitElement {
     const throttled = this.#throttle.remaining > 0;
     const error = this.errorKey;
     const hasNotices =
-      (this.serverWaiting && !this.noBoxAnswering) ||
+      this.serverWaiting ||
       this.notices.length > 0 ||
       this.loggedOutByOther ||
       this.clockNotice !== undefined;
@@ -746,7 +746,7 @@ export class TillLockScreen extends LitElement {
               aria-label=${hasNotices ? t("staff_notice.list") : nothing}
               tabindex=${hasNotices ? 0 : nothing}
             >
-              ${this.noBoxAnswering ? nothing : this.#renderServers()}${this.#renderNotices()}
+              ${this.#renderServers()}${this.#renderNotices()}
             </div>`
       }
       <div class="pad-wrap" ?inert=${throttled}>

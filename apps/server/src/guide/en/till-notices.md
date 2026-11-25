@@ -15,9 +15,10 @@ page open. The till opens by itself when the box is ready.
 If you are already on the venue's WiFi, check that the box is switched on. If it is, you may
 need to [install its certificate again](table-service.md#certificate-trust).
 
-If the till is already open and says **Can't reach the box**, check that this device is on the venue's WiFi.
-Keep the screen open while the till checks again. On the PIN screen, you can press **Check again**
-to check now. In **Check your times**, press **Retry read** if the read failed.
+If the till is already open and says **Can't reach the box**, check that this device is on the
+venue's WiFi. Keep the screen open while the till checks again. On the PIN screen, scroll the
+notice above the keypad if needed, then press **Check again** to check now. In **Check your times**,
+press **Retry read** if the read failed.
 
 ## Read the notice line {#notice-line}
 
