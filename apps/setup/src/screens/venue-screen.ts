@@ -736,7 +736,6 @@ export class SetupVenueScreen extends LitElement {
     const [addressLine1 = "", ...later] = address.lines;
     const rest = later.filter((line) => line.trim() !== "");
     if (which === "domicile") {
-      this.sameAsVenue = false;
       this.#fill({
         registeredStreet: addressLine1,
         ...(rest.length > 0 ? { registeredLine2: rest.join(", ") } : {}),
@@ -1080,12 +1079,13 @@ export class SetupVenueScreen extends LitElement {
 
   #addressSearch(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
     const foreign = this.foreignAddress?.which === which ? this.foreignAddress : undefined;
+    const shown = which === "address" || !this.sameAsVenue;
     return html`<wt-address-lookup
       class="field"
       data-test=${`${which}-lookup`}
       name=${`${which}-search`}
-      .appliedAttribution=${this.addressCredits[which]}
-      .provider=${pack?.countryCode === "ES" ? this.addressProvider : undefined}
+      .appliedAttribution=${shown ? this.addressCredits[which] : undefined}
+      .provider=${shown && pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
       label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}
       placeholder=${t("venue.address_lookup.placeholder")}
@@ -1138,7 +1138,6 @@ export class SetupVenueScreen extends LitElement {
       pack === undefined ? undefined : findAdministrativeArea(pack, this.values.registeredProvince);
     return html`<fieldset class="registered" data-test="registered-address">
       <legend>${t("venue.label.taxpayer_domicile")}</legend>
-      ${this.#addressSearch("domicile", pack)}
       <wt-switch
         class=${this.sameAsVenue ? "field with-hint" : "field"}
         data-test="registeredSameAsVenue"
@@ -1155,6 +1154,7 @@ export class SetupVenueScreen extends LitElement {
             </p>`
           : nothing
       }
+      ${this.#addressSearch("domicile", pack)}
       ${
         this.sameAsVenue
           ? nothing

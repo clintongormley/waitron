@@ -126,6 +126,7 @@ describe("the venue screen's address search", () => {
 
   it("keeps both searches hidden until Spain is selected", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) }, { venue: { country: "" } });
+    await type(el, "registeredSameAsVenue", "off");
     for (const which of ["address-lookup", "domicile-lookup"])
       expect(lookup(el, which)!.hidden).toBe(true);
     await type(el, "country", "ES");
@@ -186,6 +187,7 @@ describe("the venue screen's address search", () => {
     expect(value(el, "addressLine2")).toBe("3º B");
     await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "", "Puerta 4"] });
     expect(value(el, "addressLine2")).toBe("Puerta 4");
+    await type(el, "registeredSameAsVenue", "off");
     await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "Escalera 2"] }, "domicile-lookup");
     await choose(el, { ...MADRID, lines: ["Calle Mayor 1", " "] }, "domicile-lookup");
     expect(value(el, "registeredLine2")).toBe("Escalera 2");
@@ -275,6 +277,7 @@ describe("the venue screen's address search", () => {
       invalidField: "taxpayerDomicile",
     });
     expect(sameAsVenue(el)).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
     await choose(el, BARCELONA, "domicile-lookup");
     expect(sameAsVenue(el)).toBe(false);
     expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
@@ -313,16 +316,33 @@ describe("the venue screen's address search", () => {
     expect(patches).toEqual([]);
   });
 
-  it("fills the registered business address in its parts and turns the switch off, outside Demo only", async () => {
+  it("shows the registered search below the switch only when a separate address is needed", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) });
+    const control = q(el, "[data-test=registeredSameAsVenue]")!;
+    const toggle = control.shadowRoot!.querySelector("input")!;
+    const domicile = lookup(el, "domicile-lookup")!;
+    expect(domicile.getBoundingClientRect().height).toBe(0);
+    expect(lookup(el)!.hidden).toBe(false);
+
+    toggle.focus();
+    await userEvent.keyboard(" ");
+    await domicile.updateComplete;
+    const searchBox = domicile.getBoundingClientRect();
+    expect(searchBox.height).toBeGreaterThan(0);
+    expect(searchBox.top).toBeGreaterThanOrEqual(control.getBoundingClientRect().bottom);
+    expect(searchBox.bottom).toBeLessThanOrEqual(
+      q(el, "[data-test=registeredStreet]")!.getBoundingClientRect().top,
+    );
+
+    await userEvent.keyboard(" ");
+    await domicile.updateComplete;
+    expect(domicile.getBoundingClientRect().height).toBe(0);
+  });
+
+  it("fills the separate registered business address in its parts, outside Demo only", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     const patches = collect(el);
-    const domicile = lookup(el, "domicile-lookup")!;
-    expect(domicile.hidden).toBe(false);
-    const tests = [...el.shadowRoot!.querySelectorAll("[data-test]")].map((n) =>
-      n.getAttribute("data-test"),
-    );
-    expect(tests.indexOf("domicile-lookup")).toBe(tests.indexOf("registeredSameAsVenue") - 1);
-    expect(sameAsVenue(el)).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
     await choose(
       el,
       { ...MADRID, lines: ["Calle Mayor 1", "3º B"], administrativeAreaCode: "Madrid" },
@@ -346,9 +366,9 @@ describe("the venue screen's address search", () => {
 
   it("refuses a registered address in another country on its own line", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
-    await choose(el, { ...MADRID, countryCode: "PT" }, "domicile-lookup");
-    expect(sameAsVenue(el)).toBe(true);
     await type(el, "registeredSameAsVenue", "off");
+    await choose(el, { ...MADRID, countryCode: "PT" }, "domicile-lookup");
+    expect(sameAsVenue(el)).toBe(false);
     for (const part of ["registeredStreet", "registeredPostalCode", "registeredCity"])
       expect(value(el, part), part).toBe("");
     expect(lookup(el, "domicile-lookup")!.message).not.toBe("");

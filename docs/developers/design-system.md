@@ -4008,9 +4008,9 @@ and refuses choices in a different province by comparing province codes. The car
 only while the street, line 2, postcode and city can all
 change. The registered business address, on the setup screen and in Venue details' Change
 registered address dialog, is asked for in parts (street, line 2, postcode, city, province) behind
-a **Same as the venue's address** switch; while the switch is on the parts are hidden and the
-venue's address is used, copied when the form is saved. In the dashboard dialog, the search sits
-just above Street address and is hidden with the address fields. The parts are saved as one line,
+a **Same as the venue's address** switch. The search sits below the switch, just above Street
+address. While the switch is on, the search and the address fields are hidden, and the form
+copies the venue's address when you save. The parts are saved as one line,
 "street, line 2, postcode city, province" leaving blank parts out (`joinRegisteredAddress` in
 `@waitron/country-packs`), and opening splits that line back into them (`registeredAddressParts`).
 Street, postcode and city are required; the server refuses a line it cannot split back into
@@ -4019,7 +4019,7 @@ rule (`apps/server/src/registered-address-check.ts`).
 Setup opens with the switch on unless a different line was saved; the dialog opens with it on
 only when the saved line is the venue's address. Choosing a suggestion fills the parts, as for
 the venue's address, and takes the province from the address's area code, else its postcode.
-In setup, a chosen suggestion also turns the switch off. The till's invoice recipient dialog
+The till's invoice recipient dialog
 names the address country in its search label and fills its one street line with every line of the
 address, joined by commas, so a typed floor or unit is replaced; the province is the comma-free
 name of the area Waitron knows for the address's area code, else its postcode, and is emptied when
