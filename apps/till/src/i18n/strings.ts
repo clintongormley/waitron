@@ -229,6 +229,7 @@ export const en = {
   "give_back.sending": "Giving the money back…",
   "give_back.approvers_failed":
     "The people who can approve this could not be read. Nothing has been given back. Press Give back to try again.",
+  "give_back.nothing_given": "Nothing has been given back.",
   "give_back.storage":
     "This device could not save the money back before sending it. Nothing has been given back. Close this window and, on another device that takes payments, open Give money back on the receipt.",
   "give_back.lost":
@@ -2706,6 +2707,7 @@ export const es: Record<StringKey, string> = {
   "give_back.sending": "Devolviendo el dinero…",
   "give_back.approvers_failed":
     "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
+  "give_back.nothing_given": "No se ha devuelto nada.",
   "give_back.storage":
     "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
   "give_back.lost":

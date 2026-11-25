@@ -559,17 +559,22 @@ export class TillGiveBackDialog extends LitElement {
     this.#approval = undefined;
     const step = this.step;
     if (step?.kind === "done") {
-      this.step = { ...step, notice: this.#sendRefusalText(refusal) };
+      this.step = { ...step, notice: this.#sendRefusalText(refusal, true) };
       return;
     }
     this.step = null;
     this.sendRefusal = refusal;
     if (refusal.code === "give_back.changed") void this.#preview();
   }
-  #sendRefusalText(refusal: Refusal): string {
+  /** A fiscal conflict thrown at a press proves nothing went back (the server checks it before
+   * writing, and a reader's later part answers it instead); after a part went back, `moved`, not. */
+  #sendRefusalText(refusal: Refusal, moved = false): string {
     if (refusal.code === "approvers") return t("give_back.approvers_failed");
     if (refusal.code === "storage") return t("give_back.storage");
-    return this.#refusalText(refusal, "give_back.preview_failed");
+    const text = this.#refusalText(refusal, "give_back.preview_failed");
+    return !moved && refusal.code === "sif.allocation_invalid" && recoveryText(refusal) !== null
+      ? `${text} ${t("give_back.nothing_given")}`
+      : text;
   }
   async #checkAgain(step: Extract<Step, { kind: "done" }>): Promise<void> {
     this.sending = true;
@@ -577,7 +582,7 @@ export class TillGiveBackDialog extends LitElement {
     try {
       check = await this.session.checkRest(this.saleId);
     } catch (error) {
-      this.step = { ...step, notice: this.#sendRefusalText(refusalOf(error)) };
+      this.step = { ...step, notice: this.#sendRefusalText(refusalOf(error), true) };
       return;
     } finally {
       this.sending = false;

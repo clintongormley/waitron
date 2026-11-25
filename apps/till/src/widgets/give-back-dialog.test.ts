@@ -906,6 +906,23 @@ describe("a fiscal conflict", () => {
     expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
   });
 
+  it("says nothing was given back when Give back is refused, with the recovery link", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({ ...conflict, status: 409 });
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await reason(el, "complaint");
+    await type(el, "5");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(
+        `${t("recovery.issuance_stopped")} ${t("give_back.nothing_given")}`,
+      ),
+    );
+    expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
+  });
+
   it("says so after part of the money went back, with the recovery link", async () => {
     const api = fakeGiveBackApi();
     const { code, ...params } = conflict;
