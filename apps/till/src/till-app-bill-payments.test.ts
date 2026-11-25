@@ -43,9 +43,11 @@ import {
   resetBillPayDrafts,
   equipmentItem,
   equipmentWith,
+  diskFullNotice,
+  pollDiskNotice,
   roleOf,
 } from "../test/bill-pay-app.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
@@ -6242,20 +6244,9 @@ describe("till-app: a bill payment on the card reader", () => {
       const diskWindow = () => el.shadowRoot!.querySelector("wt-stop-screen");
       getDeviceEquipment.mockResolvedValue({
         ...equipment,
-        notices: [
-          {
-            owner: "box",
-            key: "storage.disk_full",
-            code: "storage.disk_full",
-            severity: "error",
-            params: {},
-          },
-        ],
+        notices: [diskFullNotice],
       });
-      vi.advanceTimersByTime(15_000);
-      await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("till-notice-strip")?.notices).toHaveLength(1),
-      );
+      await pollDiskNotice(el);
       expect(diskWindow()).toBeNull();
       const stop = inDialog(el, "[data-pay-cancel-reader]")!;
       await userEvent.click(stop.shadowRoot!.querySelector("button")!);
@@ -9546,12 +9537,22 @@ it("offers whole payment on a presented bill that already has an invoice", async
 });
 
 it("a handheld opens the remaining bill payment after a short presented-bill capture", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const balance = balanceOf({
     status: "placed",
     received: "110.00",
     outstanding: "10.00",
     captureWarning: { requestedAmount: "120.00", reportedAmount: "110.00" },
   });
+  const equipment = equipmentWith(equipmentItem("r2", "Reader 2", { provider: "sumup" }));
+  const getDeviceEquipment = vi.fn().mockResolvedValue(equipment);
+  const { promise, resolve } = Promise.withResolvers<{
+    outcome: "partial";
+    balance: BillBalance;
+  }>();
   const { el } = await mountApp({
     getTill: vi.fn().mockResolvedValue({
       ...till,
@@ -9567,11 +9568,9 @@ it("a handheld opens the remaining bill payment after a short presented-bill cap
     getPartyBills: vi
       .fn()
       .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]),
-    getDeviceEquipment: vi
-      .fn()
-      .mockResolvedValue(equipmentWith(equipmentItem("r2", "Reader 2", { provider: "sumup" }))),
+    getDeviceEquipment,
     getBillBalance: vi.fn().mockResolvedValue(balance),
-    pay: vi.fn().mockResolvedValue({ outcome: "partial", balance }),
+    pay: vi.fn(() => promise),
   });
   const order = await openTable(el);
   await showBillFooter(order);
@@ -9580,6 +9579,16 @@ it("a handheld opens the remaining bill payment after a short presented-bill cap
   const presented = el.shadowRoot!.querySelector<HTMLElement>("till-presented-pay-dialog")!;
   expect(presented).not.toBeNull();
   emit(presented, "presented-pay", { method: "card", readerId: "r2" });
+  await vi.waitFor(() => expect(api.pay).toHaveBeenCalledOnce());
+  getDeviceEquipment.mockResolvedValue({ ...equipment, notices: [diskFullNotice] });
+  await pollDiskNotice(el);
+  expect(el.shadowRoot!.querySelector("wt-stop-screen")).toBeNull();
+  getDeviceEquipment.mockResolvedValue(equipment);
+  vi.advanceTimersByTime(15_000);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-notice-strip")?.notices).toEqual([]),
+  );
+  resolve({ outcome: "partial", balance });
   await flush(el);
   expect(api.pay).toHaveBeenCalledOnce();
   expect(el.shadowRoot!.querySelector("till-presented-pay-dialog")).toBeNull();

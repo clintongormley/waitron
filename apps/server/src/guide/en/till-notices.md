@@ -28,7 +28,8 @@ who can authorise opening it and enter their PIN.
 
 **Disk full. Waitron cannot operate.** covers the till or handheld, including the PIN screen.
 Follow **Tell a manager** so they can free space on the [Box status page](box-status.md#free-space).
-If a payment is in progress, finish checking its result first.
+If a payment is in progress, check its result first and stay signed in while space is freed.
+On the clock-in and attendance pages, the notice reads **Nothing can be saved: the box is out of space**.
 
 **Sales can't be recorded: the box's clock is wrong · See Box status in the dashboard** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the box also

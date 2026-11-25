@@ -2321,7 +2321,6 @@ export interface AlertsResponse {
   alerts: AlertView[];
 }
 
-/** The deletion facts are sent only to a person who may see the deleted-backups alert. */
 export interface DiskStopResponse {
   stopped: boolean;
 }

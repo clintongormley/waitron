@@ -244,8 +244,8 @@ Waitron no puede funcionar.** En Estado del servidor, **Ventas** y **Espacio en 
 en rojo.
 
 Si ves la ventana roja en el panel, pulsa **Abrir Estado del servidor**. Si ves **Iniciar sesión
-como encargado**, úsalo para abrir el inicio de sesión del encargado. Puedes seguir abriendo
-Estado del servidor y **Comprobar pagos con tarjeta** durante la parada.
+como encargado**, úsalo para abrir el inicio de sesión del encargado. Si la caja te da un enlace a
+**Comprobar pagos con tarjeta**, puedes seguirlo durante la parada.
 
 Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, los terminales vuelven a
 poder guardar por sí solos; no hace falta reiniciar nada.

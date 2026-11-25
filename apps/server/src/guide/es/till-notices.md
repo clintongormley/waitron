@@ -29,8 +29,9 @@ se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 
 **Disco lleno. Waitron no puede funcionar.** cubre la caja o el terminal de mano, incluida la
 pantalla del PIN. Sigue **Avisa al encargado** para que libere espacio en la
-[página Estado del servidor](box-status.md#free-space). Si hay un cobro en curso, termina de
-comprobar su resultado primero.
+[página Estado del servidor](box-status.md#free-space). Si hay un cobro en curso, comprueba primero
+su resultado y mantén abierta la sesión mientras se libera espacio. En las páginas de fichaje y
+asistencia, el aviso dice **No se puede guardar nada: el servidor no tiene espacio**.
 
 **No se pueden registrar ventas: la hora del servidor es incorrecta · Consulta Estado del servidor en el panel** es rojo.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que

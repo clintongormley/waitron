@@ -9,6 +9,15 @@ export class WtStopScreen extends WtDialog {
     this.dismissible = false;
   }
 
+  keepAbove(dialog: WtDialog): void {
+    if (dialog !== this) this.raiseModal();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.open) this.refocus();
+  }
+
   static override styles = [
     ...WtDialog.styles,
     css`

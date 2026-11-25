@@ -30,6 +30,7 @@ import {
   reportVenueLogoFailure,
   reportVenueLogoLoaded,
   setHelpMode,
+  type WtDialog,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -51,8 +52,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
-import { WtStopScreen } from "@waitron/ui/src/components/wt-stop-screen.js";
-import { ref } from "lit/directives/ref.js";
+import "@waitron/ui/src/components/wt-stop-screen.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
@@ -2335,6 +2335,8 @@ export class DashboardApp extends LitElement {
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
+        @wt-dialog-opened=${(event: CustomEvent<{ dialog: WtDialog }>) =>
+          this.shadowRoot!.querySelector("wt-stop-screen")?.keepAbove(event.detail.dialog)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${this.#demoBar(true)}
@@ -2533,19 +2535,6 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  readonly #openDiskStopScreen = async (element?: Element): Promise<void> => {
-    if (!(element instanceof WtStopScreen)) return;
-    await Promise.resolve();
-    if (!element.isConnected) return;
-    if (element.slot === "notices") {
-      // A newly entered Floor plan opens its own modal first.
-      const editor = element.parentElement as HTMLElementTagNameMap["dashboard-floor-plan-editor"];
-      await editor.updateComplete;
-      await editor.shadowRoot!.querySelector("wt-modal")!.updateComplete;
-    }
-    if (element.isConnected) element.open = true;
-  };
-
   #diskStopScreen(slot?: string): TemplateResult | typeof nothing {
     if (
       this.diskStop?.stopped !== true ||
@@ -2557,7 +2546,7 @@ export class DashboardApp extends LitElement {
       return nothing;
     const canOpenBoxStatus = this.#canOpenScreen("box-status");
     return html`<wt-stop-screen
-      ${ref(this.#openDiskStopScreen)}
+      .open=${true}
       data-test="disk-stop-screen"
       slot=${slot ?? nothing}
       .heading=${t("disk_stop.heading")}

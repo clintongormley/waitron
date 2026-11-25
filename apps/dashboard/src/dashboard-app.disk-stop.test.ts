@@ -276,14 +276,19 @@ describe("the shell's full-disk window", () => {
   });
 
   it("takes the window away when a later read finds the stop lifted", async () => {
-    const background = vi.fn().mockResolvedValueOnce(stopped).mockResolvedValue(notStopped);
+    const background = vi.fn().mockResolvedValue(notStopped);
     const { api, liveData } = shellApi(background, {
       getMe: vi.fn().mockResolvedValue(me("manager", ["venue.view", "system.manage"])),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
-    await expect.poll(() => diskScreen(el)).not.toBeNull();
+    const main = el.shadowRoot!.querySelector<HTMLElement>("main")!;
+    main.focus();
+    background.mockResolvedValueOnce(stopped);
+    liveData.invalidate([{ type: "incidents", id: "x" }]);
+    await expect.poll(() => diskDialog(el)).toBeTruthy();
     liveData.invalidate([{ type: "incidents", id: "x" }]);
     await expect.poll(() => diskScreen(el)).toBeNull();
+    expect(el.shadowRoot!.activeElement?.localName).toBe("main");
   });
 
   it("keeps the window when a later read fails, and records the failure", async () => {

@@ -1688,6 +1688,24 @@ describe("dashboard-app", () => {
     return { el, editor, price, fromBrowser, reprice, passThroughYourProfile };
   }
 
+  it("keeps the disk warning above a product editor that loads after it", async () => {
+    history.replaceState(null, "", "/products/product/p1");
+    const { promise, resolve } = Promise.withResolvers<typeof productEditorValue>();
+    const { el, editor } = await mountOnMenu({
+      getDiskStop: vi.fn().mockResolvedValue({ stopped: true }),
+      getProductEditor: vi.fn(() => promise),
+    });
+    const warning = () => el.shadowRoot!.querySelector("wt-stop-screen");
+    await expect.poll(() => warning()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
+    expect(editor()?.open).not.toBe(true);
+
+    resolve(productEditorValue);
+    await expect.poll(() => editor()?.shadowRoot?.querySelector("wt-modal")?.open).toBe(true);
+    expect(el.shadowRoot!.elementFromPoint(innerWidth / 2, innerHeight / 2)?.localName).toBe(
+      "wt-stop-screen",
+    );
+  });
+
   it("closing Your profile keeps the product editor it opened over, with its unsaved price", async () => {
     history.replaceState(null, "", "/products/product/p1");
     const { el, editor, price, reprice, passThroughYourProfile } = await mountOnMenu();

@@ -9150,6 +9150,7 @@ export class TillApp extends LitElement {
     this.#counterSends++;
     const session = this.#operatorSession;
     const { guestCount, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    this.sendingTender = tender.method;
     const id = this.#store.id;
     this.errorKey = undefined;
     let collected = false;
@@ -9184,6 +9185,7 @@ export class TillApp extends LitElement {
           settlingErrorOf(error));
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     if (!collected || session !== this.#operatorSession) return;
     void this.#refreshListsAfterWrite(session, [["waiting", "refresh.waiting_after_sale"]]);
@@ -22672,6 +22674,7 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
+    this.sendingTender = "card";
     this.errorKey = undefined;
     const billId = bill.workingOrderId;
     const readerMakesSlip = this.#readerMakesSlip(readerId);
@@ -22769,6 +22772,7 @@ export class TillApp extends LitElement {
         );
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     if (readerLost) await this.#onReaderNotHeld("till-presented-pay-dialog", billId);
     if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
@@ -25210,6 +25214,8 @@ export class TillApp extends LitElement {
     const paying = this.billPaying;
     const refund = this.tenderRefunding;
     const credit = this.cancelCrediting;
+    const onCounter =
+      this.#shellActive() && this.drill === undefined && this.#activeTab() === "counter";
     return diskStopScreen(
       this.screen === "lock" ? this.pinNotices : this.staffNotices,
       this.sendingTender !== null ||
@@ -25224,7 +25230,9 @@ export class TillApp extends LitElement {
         (credit !== null && (credit.busy || credit.refusal !== null || credit.done !== null)) ||
         this.settlementDocument !== null ||
         this.captureWarning !== null ||
-        (this.cardOutcome !== undefined && this.cardOutcome !== this.dismissedCardOutcome),
+        (onCounter &&
+          this.cardOutcome !== undefined &&
+          this.cardOutcome !== this.dismissedCardOutcome),
       this.screen === "lock" ? undefined : this.errorKey,
     );
   }

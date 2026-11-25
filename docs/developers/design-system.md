@@ -4392,8 +4392,8 @@ message without spilling sideways. Reload loads the page again; on the demo stac
 took the new build as its own and showed no bar.
 
 The full-disk stop opens a `wt-stop-screen` over the signed-in dashboard. Box status and
-Check card payments stay accessible. In Floor plan, the shell places the warning in the
-editor's `notices` slot and opens it after the editor's modal. **Open Box status** moves focus
+Check card payments stay accessible. The shell keeps the warning above editors that open after it.
+In Floor plan, the warning sits in the editor's `notices` slot. **Open Box status** moves focus
 to the destination. **Sign in as a manager** opens the existing sign-in on top of the dashboard,
 so a refused sign-in leaves the current session available. The shell reads
 `GET /management-api/disk-stop` passively every 30 seconds and on any `incidents` change.

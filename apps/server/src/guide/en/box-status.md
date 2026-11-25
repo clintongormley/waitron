@@ -223,8 +223,8 @@ When the disk is full, trading tills and handhelds show **Disk full. Waitron can
 On Box status, **Sales** and **Disk space** turn red.
 
 If you see the red window on the dashboard, choose **Open Box status**. If you see
-**Sign in as a manager**, use it to open manager sign-in. You can still open Box status and
-**Check card payments** during the stop.
+**Sign in as a manager**, use it to open manager sign-in. If a till links you to **Check card payments**,
+you can follow that link during the stop.
 
 Press **Free** to free space. Once enough space is free, the tills can save again by themselves;
 nobody needs to restart anything.
