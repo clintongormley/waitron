@@ -32,7 +32,7 @@ En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** p
 
 Si tienes el rol de supervisor, elige una estación en **Mostrar** para consultar su ajuste de **Cambios tras el envío** encima del calendario.
 
-Para cambiar cuándo recibe pedidos una estación, edita sus **Últimos pedidos** y cartas en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que le envían pedidos. Abre una fecha para leer el horario por escrito. Si muestras una estación o **Todas las estaciones de preparación**, la ventana del día muestra los horarios de las estaciones.
+Si una estación recibe pedidos después de que termine un periodo, su fila muestra el horario ampliado. Para cambiar cuándo recibe pedidos una estación, edita sus periodos, cartas o **Últimos pedidos** en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que le envían pedidos. Abre una fecha para leer el horario por escrito. Si muestras una estación o **Todas las estaciones de preparación**, la ventana del día muestra los horarios de las estaciones.
 
 ## Selecciona varios días {#select-days}
 

@@ -178,9 +178,9 @@ const en = {
     "Prep-station times could not be loaded. They will be tried again.",
   "opening.all_stations": "All prep stations",
   "opening.prep_station": "Prep station",
-  "opening.station_hours": "A prep station is open while a period sends it orders.",
+  "opening.station_hours": "Last orders after a period ends extend the station's hours shown here.",
   "opening.station_hours_edit":
-    "Change its hours through the periods and their Last orders settings, menus, routing or zone closing times.",
+    "Change its hours through the periods, their menus, routing or zone closing times.",
   "opening.zone_placeholder": "{name}: closed times",
   "opening.closed_invalid": "These closed times overlap or are not in 15-minute steps.",
   "opening.check_day": "Check this day's time ranges and periods.",
@@ -1129,9 +1129,9 @@ const es: Record<keyof typeof en, string> = {
   "opening.all_stations": "Todas las estaciones de preparación",
   "opening.prep_station": "Estación de preparación",
   "opening.station_hours":
-    "Una estación de preparación está abierta mientras un periodo le envía pedidos.",
+    "Si los últimos pedidos se aceptan después de que termine un periodo, aquí se amplía el horario de la estación.",
   "opening.station_hours_edit":
-    "Cambia sus horarios mediante los periodos y sus ajustes de últimos pedidos, las cartas, las rutas o los cierres de las zonas.",
+    "Cambia sus horarios mediante los periodos, sus cartas, las rutas o los cierres de las zonas.",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.closed_invalid": "Estas horas de cierre se solapan o no van de 15 en 15 minutos.",
   "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",

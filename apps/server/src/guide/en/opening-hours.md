@@ -32,7 +32,7 @@ In Month or Week, choose **All prep stations** in **Show** to compare station ho
 
 If you’re a supervisor, choose one station in **Show** to read its **Changes after sending** rule above the Calendar.
 
-To change when a station gets orders, edit its **Last orders** times and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. Open a date to read the times in words. When you show one station or **All prep stations**, the day box shows the station hours.
+If a station takes orders after a period ends, its row shows the longer hours. To change when a station gets orders, edit its periods, menus or **Last orders** times in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. Open a date to read the times in words. When you show one station or **All prep stations**, the day box shows the station hours.
 
 ## Select days together {#select-days}
 
