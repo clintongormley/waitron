@@ -18,12 +18,7 @@ import {
 import type { FiscalBackend } from "@waitron/fiscal";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
-import {
-  centsToDecimal,
-  decimal,
-  quoteLiteral,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, quoteLiteral, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
@@ -36,12 +31,14 @@ import { printSaleReceipt } from "./till-sale.js";
 import type { Logger } from "./logger.js";
 
 import {
+  capturedPendingPayment,
   inTx,
   paymentRows,
   provisionBillVenue,
   fiscalRecordCount,
   send,
   statusOf,
+  strandedPending,
   tabWith,
   tendersOfBill,
   type BillVenue,
@@ -97,34 +94,6 @@ function balance(billId: string) {
   return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
 
-/** What a crash straight after P1 leaves: a pending card payment no provider was asked about. */
-async function strandedPending(
-  billId: string,
-  applied: number,
-  tip = 0,
-  device = { deviceId: venue.device2Id },
-): Promise<string> {
-  const [row] = await inTx(venue, (tx) =>
-    tx
-      .insert(billPayments)
-      .values({
-        workingOrderId: billId,
-        submissionId: randomUUID(),
-        fingerprint: "stranded",
-        kind: "contribution",
-        method: "card",
-        applied,
-        tip,
-        state: "pending",
-        requestedBy: venue.operatorId,
-        source: "device",
-        deviceId: device.deviceId,
-      })
-      .returning({ id: billPayments.id }),
-  );
-  return row!.id;
-}
-
 /** The bill payments and refunds the database still holds pending. */
 function stillPending(): number {
   const [row] = venue.db.all<{ n: number }>(
@@ -144,26 +113,10 @@ async function stateOf(billPaymentId: string): Promise<string> {
   return row!.state;
 }
 
-/** A pending card payment of `applied` cents whose provider row captured that amount. */
-async function capturedPending(
-  billId: string,
-  applied: number,
-  device?: { deviceId: string },
-): Promise<string> {
-  const id = await strandedPending(billId, applied, 0, device);
-  await inTx(venue, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: brandWorkingOrderId(billId),
-      provider: "fake",
-      paymentRef: `captured-${randomUUID()}`,
-      amount: centsToDecimal(applied),
-      settledAt: new Date(),
-      billPaymentId: id,
-    }),
+async function alertsFor(billPaymentId: string) {
+  return (await incidentsOf("payment.bill_settle_failed")).filter(
+    (row) => (row.params as { billPaymentId?: string }).billPaymentId === billPaymentId,
   );
-  return id;
 }
 
 /** Runs `fn` while the database refuses a sale of this bill, as an invoice that cannot be issued. */
@@ -200,7 +153,7 @@ async function incidentsOf(code: string) {
 
 /** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
 async function mismatchedPending(billId: string, device?: { deviceId: string }): Promise<string> {
-  const id = await strandedPending(billId, 3000, 500, device);
+  const id = await strandedPending(venue, billId, 3000, 500, device);
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
@@ -249,7 +202,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
   it("files the invoice under the device that took the payment, not the loop's", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    await capturedPending(billId, 3500);
+    await capturedPendingPayment(venue, billId, 3500);
     expect(venue.device2Id).not.toBe(venue.cfg.origin.deviceId);
 
     await settle();
@@ -319,7 +272,7 @@ describe("the loop's own edges", () => {
     "releases a confirmed noncharge only with automatic audit = %s",
     async (automatic) => {
       const billId = await tabWith(venue, "Seafood rice");
-      const id = await strandedPending(billId, 2000);
+      const id = await strandedPending(venue, billId, 2000);
       const paymentRef = randomUUID();
       await inTx(venue, async (tx) => {
         await insertFailedPayment(tx, {
@@ -357,7 +310,7 @@ describe("the loop's own edges", () => {
 
   it("dates a capture whose provider row carries no time at the pass", async () => {
     const billId = await tabWith(venue, "Seafood rice", "Tarta");
-    const id = await strandedPending(billId, 1000);
+    const id = await strandedPending(venue, billId, 1000);
     const paymentRef = `untimed-${randomUUID()}`;
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
@@ -388,9 +341,9 @@ describe("the loop's own edges", () => {
 
   it("reports a payment it could not settle and carries on with the next", async () => {
     const stuckBill = await tabWith(venue, "Seafood rice");
-    const stuck = await strandedPending(stuckBill, 1000);
+    const stuck = await strandedPending(venue, stuckBill, 1000);
     const freeBill = await tabWith(venue, "Seafood rice");
-    const free = await strandedPending(freeBill, 1000);
+    const free = await strandedPending(venue, freeBill, 1000);
     // A trigger body takes no bound value, so the id is written into it.
     venue.db.run(
       sql.raw(
@@ -415,7 +368,7 @@ describe("the loop's own edges", () => {
 
   it("raises one alert for a captured card whose invoice cannot be issued, leaving it pending", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await capturedPending(billId, 3500);
+    const id = await capturedPendingPayment(venue, billId, 3500);
     let first, second;
     await refusingSalesOf(billId, async () => {
       first = await settle();
@@ -445,7 +398,7 @@ describe("the loop's own edges", () => {
 
   it("raises no such alert for a payment no card was charged for", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await strandedPending(billId, 1000);
+    const id = await strandedPending(venue, billId, 1000);
     const before = await incidentsOf("payment.bill_settle_failed");
     venue.db.run(
       sql.raw(
@@ -465,9 +418,9 @@ describe("the loop's own edges", () => {
 
   it("reports an alert it could not record beside the failure, and carries on with the next", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await capturedPending(billId, 3500);
+    const id = await capturedPendingPayment(venue, billId, 3500);
     const freeBill = await tabWith(venue, "Seafood rice");
-    const free = await strandedPending(freeBill, 1000);
+    const free = await strandedPending(venue, freeBill, 1000);
     venue.db.run(
       sql.raw(
         `create trigger refuse_incidents before insert on incidents ` +
@@ -507,8 +460,8 @@ describe("the invoice a finished card payment issues", () => {
     try {
       const onA = await tabWith(venue, "Seafood rice");
       const onB = await tabWith(venue, "Seafood rice");
-      await capturedPending(onA, 3500, a);
-      await capturedPending(onB, 3500, b);
+      await capturedPendingPayment(venue, onA, 3500, a);
+      await capturedPendingPayment(venue, onB, 3500, b);
 
       expect(await settle()).toMatchObject({ received: 2 });
 
@@ -553,7 +506,7 @@ describe("the guests a finished card payment's receipt prints", () => {
     try {
       const billId = await tabWith(venue, "Seafood rice");
       await countGuests(billId, 4);
-      await capturedPending(billId, 3500, { deviceId: venue.cfg.origin.deviceId });
+      await capturedPendingPayment(venue, billId, 3500, { deviceId: venue.cfg.origin.deviceId });
 
       expect(await settle()).toMatchObject({ received: 1 });
       const stored = await inTx(venue, (tx) =>
@@ -599,7 +552,7 @@ describe("the guests a finished card payment's receipt prints", () => {
 describe("a pending card with no provider row (design §8 test 16)", () => {
   it("is failed by the loop, releasing its reservation", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await strandedPending(billId, 2000);
+    const id = await strandedPending(venue, billId, 2000);
 
     const pass = await settle();
 
@@ -610,7 +563,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
 
   it("stays pending when its provider row says failed: that word is not trusted", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await strandedPending(billId, 2000);
+    const id = await strandedPending(venue, billId, 2000);
     await inTx(venue, (tx) =>
       insertFailedPayment(tx, {
         origin: venue.cfg.origin,
@@ -801,7 +754,7 @@ describe("bill settlement in card follow-up", () => {
 
   it("settles only on the primary, reading the role each pass", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await strandedPending(billId, 2000);
+    const id = await strandedPending(venue, billId, 2000);
     let role: SingletonRole = "secondary";
     const job = testCardFollowUp({ settle }, { getRole: () => role });
     await job.pass(ctx);
@@ -836,6 +789,103 @@ describe("bill settlement in card follow-up", () => {
       expect(log).not.toHaveBeenCalled();
     },
   );
+
+  it("writes no invoice and dates no card when the stepdown arrives before the first card is tried", async () => {
+    venue.db.run(
+      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()} where state = 'pending'`,
+    );
+    const firstBill = await tabWith(venue, "Seafood rice");
+    const first = await capturedPendingPayment(venue, firstBill, 3500);
+    const secondBill = await tabWith(venue, "Seafood rice");
+    const second = await capturedPendingPayment(venue, secondBill, 3500);
+    const stop = new AbortController();
+    const log = vi.fn<Logger>();
+    let clockReads = 0;
+    const deps = {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: {
+        ...venue.clock,
+        now: () => {
+          clockReads += 1;
+          return venue.clock.now();
+        },
+      },
+      cfg: venue.cfg,
+      clockUnconfirmed: () => {
+        stop.abort();
+        return false;
+      },
+      log,
+    };
+    const job = testCardFollowUp(
+      { settle: (stopSignal) => settlePendingBillPayments(deps, stopSignal) },
+      { log },
+    );
+
+    await job.pass({ now, signal: stop.signal });
+
+    expect(await stateOf(first)).toBe("pending");
+    expect(await stateOf(second)).toBe("pending");
+    expect(fiscalRecordCount(venue, firstBill)).toBe(0);
+    expect(fiscalRecordCount(venue, secondBill)).toBe(0);
+    expect(clockReads).toBe(0);
+    expect(log.mock.calls.filter(([, event]) => event === "bill_payment.settle_failed")).toEqual(
+      [],
+    );
+    expect(await alertsFor(first)).toEqual([]);
+    expect(await alertsFor(second)).toEqual([]);
+
+    await settle();
+
+    expect(await stateOf(first)).toBe("received");
+    expect(await stateOf(second)).toBe("received");
+    expect(fiscalRecordCount(venue, firstBill)).toBe(1);
+    expect(fiscalRecordCount(venue, secondBill)).toBe(1);
+  });
+
+  it("writes no invoice when the stepdown arrives after the card was dated, before its transaction", async () => {
+    venue.db.run(
+      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()} where state = 'pending'`,
+    );
+    const billId = await tabWith(venue, "Seafood rice");
+    const id = await capturedPendingPayment(venue, billId, 3500);
+    const stop = new AbortController();
+    const log = vi.fn<Logger>();
+    const deps = {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: {
+        ...venue.clock,
+        now: () => {
+          stop.abort();
+          return venue.clock.now();
+        },
+      },
+      cfg: venue.cfg,
+      log,
+    };
+    const job = testCardFollowUp(
+      { settle: (stopSignal) => settlePendingBillPayments(deps, stopSignal) },
+      { log },
+    );
+
+    await job.pass({ now, signal: stop.signal });
+
+    expect(await stateOf(id)).toBe("pending");
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
+    expect(log.mock.calls.filter(([, event]) => event === "bill_payment.settle_failed")).toEqual(
+      [],
+    );
+    expect(await alertsFor(id)).toEqual([]);
+
+    await settle();
+
+    expect(await stateOf(id)).toBe("received");
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
+  });
 
   it("reports a thrown settlement and contains a refusal for a single payment", async () => {
     const log = vi.fn<Logger>();
@@ -879,14 +929,9 @@ describe("a pass while the start's time is unconfirmed", () => {
       clockUnconfirmed: holds,
     });
   }
-  const alertsFor = async (id: string) =>
-    (await incidentsOf("payment.bill_settle_failed")).filter(
-      (row) => (row.params as { billPaymentId?: string }).billPaymentId === id,
-    );
-
   it("leaves a card charged before the start pending with no alert while waiting, and records it once confirmed", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await capturedPending(billId, 3500);
+    const id = await capturedPendingPayment(venue, billId, 3500);
     const state = startClockState();
 
     const paused = await gatedPass(state);
@@ -906,9 +951,9 @@ describe("a pass while the start's time is unconfirmed", () => {
 
   it("leaves cards pending with no alert when a clock set begins after the pass listed them, and tries no further card", async () => {
     const firstBill = await tabWith(venue, "Seafood rice");
-    const first = await capturedPending(firstBill, 3500);
+    const first = await capturedPendingPayment(venue, firstBill, 3500);
     const secondBill = await tabWith(venue, "Seafood rice");
-    const second = await capturedPending(secondBill, 3500);
+    const second = await capturedPendingPayment(venue, secondBill, 3500);
     const state = startClockState();
     state.confirm("by_devices", {});
     let setting = false;
@@ -957,9 +1002,9 @@ describe("a pass while the start's time is unconfirmed", () => {
 
   it("records the card it reached before a clock set began, and takes no further card to the seat", async () => {
     const firstBill = await tabWith(venue, "Seafood rice");
-    const first = await capturedPending(firstBill, 3500);
+    const first = await capturedPendingPayment(venue, firstBill, 3500);
     const secondBill = await tabWith(venue, "Seafood rice");
-    const second = await capturedPending(secondBill, 3500);
+    const second = await capturedPendingPayment(venue, secondBill, 3500);
     const state = startClockState();
     state.confirm("by_devices", {});
     let setting = false;
@@ -1027,7 +1072,7 @@ describe("a pass while the start's time is unconfirmed", () => {
 
   it("records a card charged before the start at once, with no alert, when the internet confirmed the start", async () => {
     const billId = await tabWith(venue, "Seafood rice");
-    const id = await capturedPending(billId, 3500);
+    const id = await capturedPendingPayment(venue, billId, 3500);
     const state = startClockState();
     state.confirm("by_internet", {});
 

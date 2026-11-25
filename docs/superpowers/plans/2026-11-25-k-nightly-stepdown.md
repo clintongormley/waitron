@@ -24,7 +24,8 @@ run keeps its existing behavior. The shutdown deadline still applies to both pro
   The existing checks still cover the admitted sale, payment refusals, AEAT and the card sweep.
 - Check the signal inside the menu activation transaction. Give attendance's existing primary
   check the signal so it can refuse a queued write turn. Card follow-up still drops the signal
-  before settling captured bill payments. Lane L's SETTLE-STEPDOWN owns that invoice-writing path.
+  before settling captured bill payments. Lane L's SETTLE-STEPDOWN owns that invoice-writing path
+  (2026-11-25: branch `feat/settle-stepdown` passes the signal to that step).
   The demo printer would need a separate change at its send boundary.
 
 ## Checks

@@ -32,11 +32,17 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { loginWithPin } from "@waitron/identity";
-import { cardReaders } from "@waitron/payments";
+import { cardReaders, insertCapturedPayment } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { planVenue } from "@waitron/provisioning";
-import { AppError, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import type { CardProviderPool } from "../card-provider-pool.js";
 import type { DiskFullState } from "../disk-full-state.js";
 import { deploymentEnvironment } from "../config.js";
@@ -477,6 +483,58 @@ export async function statusOf(venue: BillVenue, billId: string): Promise<string
       .where(eq(workingOrders.id, billId)),
   );
   return row!.status;
+}
+
+/** What a crash straight after P1 leaves: a pending card payment no provider was asked about. */
+export async function strandedPending(
+  venue: BillVenue,
+  billId: string,
+  applied: number,
+  tip = 0,
+  device = { deviceId: venue.device2Id },
+): Promise<string> {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .insert(billPayments)
+      .values({
+        workingOrderId: billId,
+        submissionId: randomUUID(),
+        fingerprint: "stranded",
+        kind: "contribution",
+        method: "card",
+        applied,
+        tip,
+        state: "pending",
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: device.deviceId,
+      })
+      .returning({ id: billPayments.id }),
+  );
+  return row!.id;
+}
+
+/** A pending card payment of `applied` cents whose provider row captured that amount. */
+export async function capturedPendingPayment(
+  venue: BillVenue,
+  billId: string,
+  applied: number,
+  device?: { deviceId: string },
+): Promise<string> {
+  const id = await strandedPending(venue, billId, applied, 0, device);
+  await inTx(venue, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      workingOrderId: brandWorkingOrderId(billId),
+      provider: "fake",
+      paymentRef: `captured-${randomUUID()}`,
+      amount: centsToDecimal(applied),
+      settledAt: new Date(),
+      billPaymentId: id,
+    }),
+  );
+  return id;
 }
 
 export function fiscalRecordCount(venue: Pick<BillVenue, "db">, billId?: string): number {
