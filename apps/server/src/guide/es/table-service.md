@@ -745,8 +745,8 @@ nueva**.
 
 Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir para dividir**. El
 ticket se abona y sus platos pasan a una cuenta nueva, listos para [**Mover platos…**](table-service.md#move-dishes).
-Lo ya pagado cuenta para la cuenta nueva. Una cuenta con un pago que tiene su propio ticket no se
-puede dividir así: cobra el resto con **Una cantidad** o **Dividir a partes iguales**.
+Lo ya pagado cuenta para la cuenta nueva. Una cuenta que ha tenido un pago con su propio ticket no
+se puede dividir así: cobra el resto con **Una cantidad** o **Dividir a partes iguales**.
 
 Cuando un cliente ya ha pagado una parte de la cuenta con
 [un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta
