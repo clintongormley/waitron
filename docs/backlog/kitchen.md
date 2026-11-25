@@ -259,6 +259,8 @@ the change (plan PR 8 Decision 1).
   _2026-11-15, A1546 slice 1: Calendar uses Closed in place of No orders; station comparisons
   group sender rows under station headings. See the current Calendar contract in
   [design-system.md](../developers/design-system.md#calendar)._
+  **2026-11-25:** The owner chose one row with joined hours per station in Calendar. See the
+  [current station view](../developers/design-system.md#worked-out-prep-station-times).
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").

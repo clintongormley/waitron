@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { stationShowModel } from "./station-show.js";
 import { commands } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -71,32 +72,22 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");
     const model = monthModel();
+    const station = { id: "grill", name: "Grill", colour: "red" } as const;
+    const days = model.days.map((day) => ({
+      date: day.date,
+      departments: day.date === "2026-12-15" ? [] : day.departments,
+    }));
     Object.assign(el, {
       model,
       departments: DEPARTMENTS,
-      stations: [{ id: "grill", name: "Grill" }],
-      station: {
-        id: "grill",
-        state: "ready",
-        model: {
-          ...model,
-          days: model.days.map((day) => ({
-            ...day,
-            departments:
-              day.date === "2026-12-15"
-                ? day.departments.map((d) => ({ ...d, ranges: [], zones: [] }))
-                : day.departments.map((d) => ({ ...d, zones: [] })),
-          })),
-        },
-        departments: DEPARTMENTS.map(({ id, name, periods }) => ({ id, name, zones: [], periods })),
-      },
+      stations: [station],
+      station: { id: station.id, state: "ready", ...stationShowModel(model, { days }, station)! },
     });
     host.append(el);
     await el.updateComplete;
     const root = el.shadowRoot!;
     for (const shown of [
       '[data-test="no-orders"]',
-      ".track:not(:has(.segment))",
       ".segment",
       "button.day",
       "[data-closed]",

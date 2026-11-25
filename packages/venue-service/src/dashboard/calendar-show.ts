@@ -12,7 +12,6 @@ export type CalendarShow = "" | "stations" | "all";
 export const stationExplanation = (readOnly: boolean) =>
   html`<p data-test="station-explanation">
     ${t("opening.station_hours")} ${readOnly ? nothing : t("opening.station_hours_edit")}
-    ${t("opening.default_station_hours")}
   </p>`;
 
 export function showPicker(options: {

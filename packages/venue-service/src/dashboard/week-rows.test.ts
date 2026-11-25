@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { stationShowModel } from "./station-show.js";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
@@ -188,70 +189,35 @@ describe("weekRows", () => {
 });
 
 describe("weekStationRows", () => {
-  /** The Grill's 2 December: the Restaurant sends it Lunch, the Bar nothing. */
-  function grillDay() {
-    const day = monthModel().days.find((d) => d.date === "2026-12-02")!;
-    return {
-      ...day,
-      departments: [
-        {
-          departmentId: "rest",
-          zones: [],
-          ranges: [
-            { periodId: "breakfast", startsAt: "08:00", endsAt: "10:30" },
-            { periodId: "lunch", startsAt: "13:00", endsAt: "15:30" },
-          ],
-        },
-        { departmentId: "bar", zones: [], ranges: [] },
-      ],
-    };
-  }
+  const station = { id: "grill", name: "Grill", colour: "red" } as const;
+  const model = monthModel();
+  const date = "2026-12-02";
+  const days = model.days.map((day) => ({
+    date: day.date,
+    departments: day.date === date ? day.departments : [],
+  }));
+  const shown = stationShowModel(model, { days }, station)!;
+  const stationNames = monthNames(shown.departments);
 
-  it("draws a row per sending department, its blocks the orders it sends", () => {
-    const [rest, bar, ...more] = weekStationRows(grillDay(), names);
-    expect(more).toEqual([]);
-    expect(rest).toMatchObject({ key: "rest", name: "Restaurant", zone: false, strong: true });
-    expect(rest!.blocks.map((b) => [b.periodId, b.text, b.faded])).toEqual([
-      ["breakfast", "Breakfast 08:00–10:30", false],
-      ["lunch", "Lunch 13:00–15:30", false],
+  it("keeps station identity and omits department zones", () => {
+    const day = shown.model.days.find((row) => row.date === date)!;
+    const rows = weekStationRows(day, stationNames);
+    expect(rows.map(({ key, name, station, zone }) => ({ key, name, station, zone }))).toEqual([
+      { key: "grill", name: "Grill", station: true, zone: false },
     ]);
-    expect(rest!.blocks[1]).toMatchObject({ start: 420, end: 570 });
-    expect(rest!.empty).toBe("");
-    expect(rest!.words).toBe("Breakfast 08:00–10:30 · Lunch 13:00–15:30");
-    expect(bar).toMatchObject({
-      key: "bar",
-      name: "Bar",
-      blocks: [],
-      empty: "",
+    expect(rows[0]!.blocks.every((block) => block.periodId === "grill" && !block.faded)).toBe(true);
+    expect(weekStationRows({ ...day, departments: [] }, stationNames)).toEqual([]);
+  });
+
+  it("reads Closed even on a date closed all day, and in Spanish", () => {
+    const day = shown.model.days.find((row) => row.date === "2026-12-25")!;
+    expect(weekStationRows(day, stationNames)[0]).toMatchObject({
+      empty: "Closed",
       words: "Closed",
     });
-  });
-
-  it("retains grouped rows when their station has an empty stored name", () => {
-    const grouped = monthNames(
-      DEPARTMENTS.map((row) => ({ ...row, station: true, stationGroup: "" })),
-    );
-    for (const row of weekStationRows(grillDay(), grouped))
-      expect(row).toHaveProperty("stationGroup", "");
-  });
-
-  it("draws no rows when no department sends, and no zones ever", () => {
-    expect(weekStationRows({ ...grillDay(), departments: [] }, names)).toEqual([]);
-    const withZone = grillDay();
-    withZone.departments[0] = {
-      ...withZone.departments[0]!,
-      zones: [{ zoneId: "terrace", closed: [{ startsAt: "13:00", endsAt: "14:00" }] }],
-    } as never;
-    expect(weekStationRows(withZone, names).map((r) => r.key)).toEqual(["rest", "bar"]);
-  });
-
-  it("reads Closed on a date closed all day too, and in Spanish", () => {
-    const christmas = monthModel().days.find((d) => d.date === "2026-12-25")!;
-    const closed = { ...christmas, departments: [{ departmentId: "rest", zones: [], ranges: [] }] };
-    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "Closed" });
     setLocale("es");
     try {
-      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Cerrada");
+      expect(weekStationRows(day, stationNames)[0]!.words).toBe("Cerrada");
     } finally {
       setLocale("en");
     }

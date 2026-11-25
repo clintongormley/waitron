@@ -54,7 +54,6 @@ import {
   monthWeeks,
   stationShowModel,
   type StationShow,
-  type TimesPeriod,
 } from "./station-show.js";
 import type { CalendarShow } from "./calendar-show.js";
 import { monthNames } from "./opening-hours-day.js";
@@ -756,6 +755,7 @@ export class OpeningHoursScreen extends LitElement {
       group ? this.stations : undefined,
       station?.id,
       station?.name,
+      station?.colour,
       times,
       meta,
       this.readMonth(),
@@ -778,17 +778,9 @@ export class OpeningHoursScreen extends LitElement {
   ): StationShow {
     const loading: StationShow = { id: "", state: "loading" };
     if (!times || meta?.month !== this.readMonth()) return loading;
-    const periods = this.timesPeriods();
     const parts = this.showStations().map((station) => {
       const read = times[station.id];
-      if (!read) return undefined;
-      const part = stationShowModel(meta, read, station, periods, "station");
-      if (part)
-        part.departments = part.departments.map((row) => ({
-          ...row,
-          station: true,
-        }));
-      return part;
+      return read && stationShowModel(meta, read, station);
     });
     if (parts.some((part) => !part)) return loading;
     return {
@@ -811,17 +803,6 @@ export class OpeningHoursScreen extends LitElement {
       ],
     };
   }
-  private timesPeriods(): TimesPeriod[] {
-    return this.model!.departments.flatMap((department) =>
-      department.periods.map(({ id, name, colour }) => ({
-        id,
-        name,
-        colour,
-        departmentId: department.id,
-        departmentName: department.name,
-      })),
-    );
-  }
   private composeStation(
     station: PrepStation,
     times: StationServiceTimes | undefined,
@@ -829,8 +810,7 @@ export class OpeningHoursScreen extends LitElement {
   ): StationShow {
     const { id } = station;
     if (!times || meta?.month !== this.readMonth()) return { id, state: "loading" };
-    const periods = this.timesPeriods();
-    const shown = stationShowModel(meta, times, station, periods, "department");
+    const shown = stationShowModel(meta, times, station);
     return shown ? { id, state: "ready", ...shown } : { id, state: "loading" };
   }
   private boxMonthNeeded() {
@@ -1255,28 +1235,33 @@ export class OpeningHoursScreen extends LitElement {
     const error = year ? this.boxMonthError : "";
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {
-      const departmentId =
-        year || this.shownStation() || this.shownGroup() ? "" : this.departmentId;
-      const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
+      const chosen = year ? undefined : this.shownStation();
+      const group = year ? "" : this.shownGroup();
+      const departmentId = year || chosen || group ? "" : this.departmentId;
+      const visibleDay = chosen || group === "stations" ? { ...day, departments: [] } : day;
+      const shown = openingHoursDay(
+        visibleDay,
+        read.seasons,
+        this.model!.departments,
+        departmentId,
+      );
       if (this.stations?.length) {
         const times =
           this.stationTimes?.key === this.stationTimesWatch.month
             ? this.stationTimes.value
             : undefined;
-        const chosen = this.shownStation();
         const stations = chosen ? [chosen] : this.stations;
         const rows = stations.flatMap((station) => {
           const value = times?.[station.id];
-          const planned =
-            value && stationShowModel(read, value, station, this.timesPeriods(), "station");
+          const planned = value && stationShowModel(read, value, station);
           if (!planned) return [];
           const names = monthNames(planned.departments);
           const plannedDay = planned.model.days.find((row) => row.date === date)!;
-          const rows = weekStationRows(plannedDay, names);
-          return rows.flatMap((row) => [
-            ...(row.stationHeading ? [{ name: row.stationHeading, text: "", station: true }] : []),
-            { name: row.name, text: row.words, station: row.stationGroup === undefined },
-          ]);
+          return weekStationRows(plannedDay, names).map((row) => ({
+            name: row.name,
+            text: row.words,
+            station: true,
+          }));
         });
         shown.rows.push(
           {

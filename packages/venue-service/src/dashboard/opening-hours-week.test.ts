@@ -8,7 +8,7 @@ import { addDays, weekdayOf } from "../hours-rules.js";
 import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.js";
 import type { CalendarDayOpen } from "./opening-hours-month.js";
 import { dayTitleCandidateDates, type OpeningHoursWeekView } from "./opening-hours-week.js";
-import type { ShowStation, StationShow } from "./station-show.js";
+import { stationShowModel, type ShowStation, type StationShow } from "./station-show.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(async () => {
@@ -764,50 +764,19 @@ describe("Opening hours week on a phone", () => {
 });
 
 const STATIONS: ShowStation[] = [
-  { id: "grill", name: "Grill" },
-  { id: "cold", name: "Cold kitchen" },
+  { id: "grill", name: "Grill", colour: "red" },
+  { id: "cold", name: "Cold kitchen", colour: "green" },
 ];
-const SENDERS = DEPARTMENTS.map(({ id, name, periods }) => ({
-  id,
-  name,
-  zones: [],
-  periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
-}));
-/** The Grill's month: the Restaurant sends it orders until 15:30 for lunch, the
- *  Bar all day; neither on 3 December. */
-function grill(): Extract<StationShow, { state: "ready" }> {
+function grill(unsent = false): Extract<StationShow, { state: "ready" }> {
   const model = monthModel();
-  return {
-    id: "grill",
-    state: "ready",
-    model: {
-      ...model,
-      days: model.days.map((day) => ({
-        ...day,
-        departments: day.departments.map((d) => ({
-          departmentId: d.departmentId,
-          zones: [],
-          ranges:
-            day.date === "2026-12-03"
-              ? []
-              : d.ranges.map((r) => (r.periodId === "lunch" ? { ...r, endsAt: "15:30" } : r)),
-        })),
-      })),
-    },
-    departments: SENDERS,
-  };
+  const days = model.days.map((day) => ({
+    date: day.date,
+    departments: unsent || day.date === "2026-12-03" ? [] : day.departments,
+  }));
+  return { id: "grill", state: "ready", ...stationShowModel(model, { days }, STATIONS[0]!)! };
 }
-/** The Grill when no department sends it anything. */
 function unsent(): StationShow {
-  const station = grill();
-  return {
-    ...station,
-    model: {
-      ...station.model,
-      days: station.model.days.map((day) => ({ ...day, departments: [] })),
-    },
-    departments: [],
-  };
+  return grill(true);
 }
 const show = (el: OpeningHoursWeekView) =>
   root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=departmentId]")!;
@@ -869,24 +838,17 @@ describe("Opening hours week, a station shown", () => {
     expect(show(el).value).toBe("station:grill");
   });
 
-  it("a station draws a row per sending department, its day names still open the box", async () => {
+  it("a station draws its own row, and its day names still open the box", async () => {
     const el = await mount({ stations: STATIONS, station: grill() });
-    expect(root(el).querySelector('.row-name wt-icon[name="prep-station"]')).toBeNull();
+    expect(root(el).querySelector('.row-name wt-icon[name="prep-station"]')).not.toBeNull();
     expect(root(el).querySelectorAll("section")).toHaveLength(7);
     const wednesday = section(el, "2026-12-02");
     expect([...wednesday.querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([
-      "rest",
-      "bar",
+      "grill",
     ]);
-    expect(text(row(el, "2026-12-02", "rest").querySelector(".spoken"))).toBe(
-      "Restaurant: Breakfast 08:00–11:00 · Lunch 13:00–15:30 · Dinner 20:00–23:00",
+    expect(text(row(el, "2026-12-02", "grill").querySelector(".spoken"))).toBe(
+      "Prep station Grill: 08:00–02:00",
     );
-    expect(
-      [...track(el, "2026-12-02", "rest").querySelectorAll(".block")].map((b) => text(b)),
-    ).toEqual(["Breakfast 08:00–11:00", "Lunch 13:00–15:30", "Dinner 20:00–23:00"]);
-    expect(row(el, "2026-12-02", "terrace")).toBeNull();
-    expect(text(row(el, "2026-12-06", "rest").querySelector(".spoken"))).toBe("Restaurant: Closed");
-    expect(track(el, "2026-12-06", "rest").textContent!.trim()).toBe("");
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     const name = root(el).querySelector<HTMLElement>(
       '[data-test="day-name"][data-date="2026-12-02"]',
@@ -959,18 +921,11 @@ describe("Opening hours week, a station shown", () => {
       expect(window.innerWidth).toBe(390);
       const el = await mount({ date: "2026-12-02", stations: STATIONS, station: grill() });
       const card = testId(el, "day-card")!;
-      expect(card.querySelector('.row-name wt-icon[name="prep-station"]')).toBeNull();
+      expect(card.querySelector('.row-name wt-icon[name="prep-station"]')).not.toBeNull();
       const rows = [...card.querySelectorAll<HTMLElement>(".row")];
-      expect(rows.map((r) => r.dataset.row)).toEqual(["rest", "bar"]);
-      expect(rows.map((r) => text(r.querySelector(".words")))).toEqual([
-        "Breakfast 08:00–11:00 · Lunch 13:00–15:30 · Dinner 20:00–23:00",
-        "All day 10:00–02:00",
-      ]);
+      expect(rows.map((r) => r.dataset.row)).toEqual(["grill"]);
+      expect(text(rows[0]!.querySelector(".words"))).toBe("08:00–02:00");
       expect(show(el).value).toBe("station:grill");
-
-      el.date = "2026-12-06";
-      await el.updateComplete;
-      expect(text(card.querySelector('.row[data-row="rest"] .words'))).toBe("Closed");
 
       el.date = "2026-12-03";
       await el.updateComplete;
@@ -986,17 +941,23 @@ describe("Opening hours week, a station shown", () => {
     await page.viewport(390, 844);
     try {
       expect(window.innerWidth).toBe(390);
-      const el = await mount({ date: "2026-12-06", stations: STATIONS, station: grill() });
+      const el = await mount({
+        date: "2026-12-03",
+        stations: STATIONS,
+        station: grill(),
+        show: "stations",
+      });
       const card = testId(el, "day-card")!;
-      const words = (key: string) =>
-        card.querySelector<HTMLElement>(`.row[data-row="${key}"] .words`)!;
-      expect(text(words("rest"))).toBe("Closed");
-      expect(text(words("bar"))).toBe("All day 10:00–02:00");
+      const words = () => card.querySelector<HTMLElement>('.row[data-row="grill"] .words')!;
       const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
       const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;
       expect(muted).not.toBe(normal);
-      expect(getComputedStyle(words("rest")).color).toBe(muted);
-      expect(getComputedStyle(words("bar")).color).toBe(normal);
+      expect(text(words())).toBe("Closed");
+      expect(getComputedStyle(words()).color).toBe(muted);
+      el.date = "2026-12-06";
+      await el.updateComplete;
+      expect(text(words())).toBe("10:00–02:00");
+      expect(getComputedStyle(words()).color).toBe(normal);
     } finally {
       await page.viewport(width, height);
     }
@@ -1083,22 +1044,21 @@ it.each([1280, 390])(
     const closed = root(el).querySelector<HTMLElement>(".row .track")!;
     const trigger = root(el).querySelector<HTMLElement>('[data-test="day-name"]')!;
     const rect = closed.getBoundingClientRect();
-    closed.dispatchEvent(
-      new MouseEvent("click", {
-        bubbles: true,
-        composed: true,
-        detail: 1,
-        clientX: rect.left + 3,
-        clientY: rect.top + 3,
-      }),
-    );
+    const click = new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      detail: 1,
+      clientX: rect.left + 3,
+      clientY: rect.top + 3,
+    });
+    closed.dispatchEvent(click);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.returnTo()).toBe(trigger);
     const anchor = closed.closest<HTMLElement>(".row")!;
     expect(sent[0]!.anchor).toBe(anchor);
     expect(sent[0]!.point).toEqual({
-      x: rect.left + 3 - anchor.getBoundingClientRect().left,
-      y: rect.top + 3 - anchor.getBoundingClientRect().top,
+      x: click.clientX - anchor.getBoundingClientRect().left,
+      y: click.clientY - anchor.getBoundingClientRect().top,
     });
   },
 );
@@ -1145,17 +1105,11 @@ it.each([1280, 390])(
 
     const mixed = grill();
     mixed.mixed = true;
-    mixed.departments = [
-      ...DEPARTMENTS,
-      ...mixed.departments.map((row) => ({ ...row, id: `grill:${row.id}`, station: true })),
-    ];
+    mixed.departments = [...DEPARTMENTS, ...mixed.departments];
     const base = monthModel();
     mixed.model.days = mixed.model.days.map((day, index) => ({
       ...day,
-      departments: [
-        ...base.days[index]!.departments,
-        ...day.departments.map((row) => ({ ...row, departmentId: `grill:${row.departmentId}` })),
-      ],
+      departments: [...base.days[index]!.departments, ...day.departments],
     }));
     el.station = mixed;
     await el.updateComplete;
@@ -1165,7 +1119,7 @@ it.each([1280, 390])(
     click(department().querySelector<HTMLElement>(".block")!);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.point).toBeUndefined();
-    const station = root(el).querySelector<HTMLElement>('.row[data-row="grill:rest"]')!;
+    const station = root(el).querySelector<HTMLElement>('.row[data-row="grill"]')!;
     click(station.querySelector<HTMLElement>(".track")!);
     expect(sent).toHaveLength(2);
     expect(sent[1]!.point).toBeDefined();

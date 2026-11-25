@@ -269,6 +269,8 @@ the season painter continues saving through the season-week route._
   dates. If the station list cannot be read, Show offers departments only, with no alert.
   **2026-10-17:** A725 retires the Times tab; Calendar's station view above remains the current
   surface. The earlier sentence about the lone Times row records the pre-retirement behavior.
+  **2026-11-25:** The owner chose [one row per station](../developers/design-system.md#worked-out-prep-station-times)
+  with joined hours in Calendar.
 
 - **A read-only Calendar offers no prep stations in Show ([A722 Part 3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs
