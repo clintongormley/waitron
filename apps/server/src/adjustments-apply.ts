@@ -69,6 +69,7 @@ import {
   type WireApproval,
 } from "./adjustment-rows.js";
 import { invalid, money } from "./bill-allocation.js";
+import { assertBillInvariantAt } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -196,7 +197,7 @@ export interface Plan {
    * price, as one grouped line does before part of it is carved off (plan D32). */
   stamped: string[];
   /** The dishes among `writes` read at their a la carte price and written out of their set menus
-   * (D31); one the action takes nothing off can be grouped straight back in. */
+   * (A1515-3 D31); one the action takes nothing off can be grouped straight back in. */
   released: string[];
   /** On a row, the split one grouped line's second price would record (plan D33). */
   rowSplits: AdjustmentSplit[];
@@ -893,7 +894,7 @@ function dishPrices(
 }
 
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes, and
- * its refusal of a bill raised past the simplified-invoice limit. */
+ * its refusals of a bill left below what it holds or raised past the simplified-invoice limit. */
 export async function previewAdjustment(
   tx: Transaction,
   cfg: Pick<TradingContext, "simplifiedInvoiceLimit">,
@@ -936,6 +937,7 @@ export async function previewAdjustment(
     plan,
     ask.action === "cancel" ? reduction : null,
   );
+  await assertBillInvariantAt(tx, ask.orderId, billTotal.after);
   if (ask.action !== "cancel") {
     await refuseOrderOverSimplifiedLimit(tx, cfg, ask.orderId, billTotal.before, billTotal.after);
   }

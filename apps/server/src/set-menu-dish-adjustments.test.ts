@@ -564,13 +564,25 @@ it("refuses a comp that takes the bill below what it has received", async () => 
   await cashContribution(venue, tabId, "10.00");
   const [hake] = await idsOf(tabId, "Hake");
   const before = await rows(tabId);
-
-  await expect(adjust(tabId, hake!, FREE)).rejects.toMatchObject({
+  const refusal = {
     code: "bill.received_exceeds_total",
     params: { workingOrderId: tabId, excess: "4.00" },
-  });
+  };
+
+  await expect(preview(tabId, hake!, FREE)).rejects.toMatchObject(refusal);
+  await expect(adjust(tabId, hake!, FREE)).rejects.toMatchObject(refusal);
   expect(await rows(tabId)).toEqual(before);
   expect(await recorded(tabId)).toEqual([]);
+});
+
+it("previews and applies a comp that takes the bill down to what it has received", async () => {
+  const { tabId } = await billOf(["Soup", "Hake"]);
+  await cashContribution(venue, tabId, "6.00");
+  const [hake] = await idsOf(tabId, "Hake");
+
+  expect((await preview(tabId, hake!, FREE)).billTotal).toEqual({ before: "14.00", after: "6.00" });
+  await adjust(tabId, hake!, FREE);
+  expect(await total(tabId)).toBe(600);
 });
 
 it("refuses a discount that raises the bill over the simplified-invoice limit", async () => {

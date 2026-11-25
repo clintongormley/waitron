@@ -97,6 +97,25 @@ async function adjust(billId: string, lineNo: number, ask: Record<string, unknow
   });
 }
 
+/** What the till is shown before {@link adjust} asks the same adjustment. */
+async function previewOf(billId: string, lineNo: number, ask: Record<string, unknown>) {
+  const line = (await linesOf(billId)).find((row) => row.lineNo === lineNo)!;
+  return send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/adjustments/preview`,
+    {
+      expectedEdit: await readBillEditState(venue.db, billId),
+      expectedRevision: await revisionOf(billId),
+      lineId: line.id,
+      reasonId,
+      note: null,
+      ...ask,
+    },
+  );
+}
+
 async function pay(billId: string, body: Record<string, unknown>) {
   return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
     submissionId: randomUUID(),
@@ -169,13 +188,32 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     const billId = await tabWith(venue, "Red wine bottle", "Octopus", "Croquettes");
     const paymentId = await contribute(billId, "cash", "50.00");
     const before = { lines: await linesOf(billId), revision: await revisionOf(billId) };
-
-    const refused = await adjust(billId, 2, { action: "comp" });
-
-    expect([refused.status, refused.json]).toEqual([
+    const excess = [
       409,
       { code: "bill.received_exceeds_total", params: { workingOrderId: billId, excess: "10.00" } },
+    ];
+
+    const previewed = await previewOf(billId, 2, { action: "comp" });
+    expect([previewed.status, previewed.json]).toEqual(excess);
+    const discount = { action: "discount_amount", amount: "15.00" };
+    const discountPreviewed = await previewOf(billId, 2, discount);
+    expect([discountPreviewed.status, discountPreviewed.json]).toEqual([
+      409,
+      { code: "bill.received_exceeds_total", params: { workingOrderId: billId, excess: "5.00" } },
     ]);
+    const discountRefused = await adjust(billId, 2, discount);
+    expect([discountRefused.status, discountRefused.json]).toEqual([
+      409,
+      { code: "bill.received_exceeds_total", params: { workingOrderId: billId, excess: "5.00" } },
+    ]);
+    const covered = await previewOf(billId, 2, { action: "discount_amount", amount: "10.00" });
+    expect([covered.status, covered.json.billTotal]).toEqual([
+      200,
+      { before: "60.00", after: "50.00" },
+    ]);
+    const refused = await adjust(billId, 2, { action: "comp" });
+
+    expect([refused.status, refused.json]).toEqual(excess);
     expect({ lines: await linesOf(billId), revision: await revisionOf(billId) }).toEqual(before);
     expect(await recordedOn(billId)).toEqual([]);
     expect(fiscalRecordCount(venue, billId)).toBe(0);

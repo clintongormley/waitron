@@ -474,17 +474,33 @@ function refuseExcess(workingOrderId: string, excess: Decimal, allowed: Decimal 
   }
 }
 
+/**
+ * {@link assertBillInvariant} for one bill as an edit not yet written would leave it, `pricedMeal`
+ * its priced total then, so a preview refuses what the edit's own check would.
+ */
+export async function assertBillInvariantAt(
+  tx: Transaction,
+  workingOrderId: string,
+  pricedMeal: Decimal,
+): Promise<void> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  const { excess } = await excessOf(tx, workingOrderId, held, advances, pricedMeal);
+  if (excess !== undefined) refuseExcess(workingOrderId, excess, undefined);
+}
+
 /** By how much the bill, holding these of its payments, has received and reserved more than its
- * total now (undefined when it is not overpaid), and that total (undefined when it holds no
- * payment, as the total is then not read). */
+ * total now, or at `pricedMeal` (undefined when it is not overpaid), and that total (undefined
+ * when it holds no payment, as the total is then not read). */
 async function excessOf(
   tx: Transaction,
   workingOrderId: string,
   held: readonly PaymentMoney[],
   advances: BillAdvances,
+  pricedMeal?: Decimal,
 ): Promise<{ excess: Decimal | undefined; total: Decimal | undefined }> {
   if (held.length === 0) return { excess: undefined, total: undefined };
-  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
+  const total = await billPaymentTotal(tx, workingOrderId, advances, pricedMeal);
+  const funds = fundsOf(workingOrderId, total, held);
   const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
   return { excess: compareDecimal(excess, ZERO) > 0 ? excess : undefined, total: funds.total };
 }

@@ -897,6 +897,32 @@ it("accepts a cancel on a part-paid bill the regrouped total still covers, and r
   expect(await saved(bill.tabId)).toEqual(before);
 });
 
+it("refuses the preview of a cancel the apply refuses for leaving the bill below what it received", async () => {
+  const bill = await seated();
+  await sendDraft(bill, ["Soup", "Hake"]);
+  await cashContribution(venue, bill.tabId, "10.00");
+  const [hake] = await rowsOf(bill.tabId, "Hake");
+  const before = await saved(bill.tabId);
+  // Soup alone is 6.00 once the Daily breaks up.
+  const refusal = {
+    code: "bill.received_exceeds_total",
+    params: { workingOrderId: bill.tabId, excess: "4.00" },
+  };
+
+  await expect(previewCancel(bill.tabId, [hake!.id])).rejects.toMatchObject(refusal);
+  await expect(adjustmentCancel(bill.tabId, [hake!.id])).rejects.toMatchObject(refusal);
+  expect(await saved(bill.tabId)).toEqual(before);
+
+  const covered = await seated();
+  await sendDraft(covered, ["Soup", "Hake"]);
+  await cashContribution(venue, covered.tabId, "6.00");
+  const [coveredHake] = await rowsOf(covered.tabId, "Hake");
+  expect((await previewCancel(covered.tabId, [coveredHake!.id])).billTotal).toEqual({
+    before: "14.00",
+    after: "6.00",
+  });
+});
+
 it("leaves the set menus as they are when a cancel keeps the dish's charge (D15)", async () => {
   const bill = await seated();
   await sendDraft(bill, ["Soup", "Sirloin"], venue.cfg, "fire");
