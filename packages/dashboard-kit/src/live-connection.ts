@@ -100,7 +100,7 @@ export class LiveConnection {
     }
     this.#generation = generation;
     this.#active = true;
-    this.#position = position;
+    this.#position = this.#suspended ? undefined : position;
     if (!this.#suspended && this.data.resume()) this.data.refresh();
     this.#page = typeof window === "undefined" ? undefined : window;
     this.#page?.addEventListener("pagehide", this.#onPageHide);
