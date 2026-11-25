@@ -1441,9 +1441,9 @@ describe("menu operations", () => {
 });
 
 /**
- * A parent's variants follow it onto every menu it is on, nested under its offer
- * and priced by the chain in `offer-price.ts`. The parent's own price (4.00) and its price
- * on this menu (4.50) differ, so a variant priced from the wrong step of the chain fails.
+ * A parent's variants follow it onto every menu it is on, nested under its offer. The parent's
+ * price on this menu (4.50) is cleared when it gains its first variant, so a variant with no price
+ * of its own charges the parent's own price (4.00).
  */
 describe("menu offers nest a product's variants", () => {
   let f: { menuId: string; parentId: string; offerId: string };

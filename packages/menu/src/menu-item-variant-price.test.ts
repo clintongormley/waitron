@@ -5,8 +5,20 @@ import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing
 import { useMenuDb } from "../test/fixtures.js";
 import { saveBodyOf } from "../test/save-body.js";
 import { deleteMenu } from "./delete.js";
-import { addProductToMenu, createMenu, createProduct, updateMenuItem } from "./operations.js";
+import type { MenuOffer } from "@waitron/shared";
+import { clashesOf } from "./menu-combine.js";
+import { buildMenuDocument, documentOffers } from "./menu-document.js";
+import { requireMenuRoot } from "./menu-structure.js";
+import {
+  addProductToMenu,
+  createMenu,
+  createProduct,
+  listMenuOffers,
+  menuPrices,
+  updateMenuItem,
+} from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
+import { addMember } from "./sections.js";
 import { addSetMenuDishes, readSetMenu } from "./set-menus.js";
 import { setProductVariants } from "./variants.js";
 
@@ -154,5 +166,61 @@ describe("a product's first variant", () => {
       await saveProductEditor(tx, f.wine, { ...saveBodyOf(value), variants: [] }, "en");
     });
     expect(await stored(f.lunch, f.wine)).toBeNull();
+  });
+});
+
+describe("a menu price stored on a product with variants by hand", () => {
+  /** Wine gains a Glass with no price of its own, then Lunch's 9.00 is written straight into the
+   * table, past the writers that refuse it. */
+  const storeByHand = async () => {
+    await app((tx) => setProductVariants(tx, f.wine, [{ ...glass, unitPrice: null }], "en"));
+    await suite.db.update(menuItems).set({ grossPrice: 900 }).where(eq(menuItems.id, f.lunchWine));
+  };
+  const priced = (offers: readonly MenuOffer[]) =>
+    offers
+      .filter((offer) => offer.productId === f.wine)
+      .map((offer) => ({
+        grossPrice: offer.grossPrice,
+        unitPrice: offer.unitPrice,
+        variants: offer.variants.map((variant) => variant.unitPrice),
+      }));
+  const includes = (tx: Transaction, menuId: string, includedMenuId: string) =>
+    requireMenuRoot(tx, includedMenuId).then(async (sectionId) =>
+      addMember(tx, await requireMenuRoot(tx, menuId), { kind: "section", sectionId }),
+    );
+
+  it("is not offered, listed among the menu's prices or published", async () => {
+    await storeByHand();
+    expect(priced(await app((tx) => listMenuOffers(tx, [f.lunch])))).toEqual([
+      { grossPrice: null, unitPrice: "8.00", variants: ["8.00"] },
+    ]);
+    const [row] = (await app((tx) => menuPrices(tx, f.lunch))).filter(
+      (price) => price.productId === f.wine,
+    );
+    expect(row).toMatchObject({ override: null, effectivePrice: "8.00" });
+    expect(row!.combined.variants[0]!.price).toMatchObject({ state: "decided", value: "8.00" });
+    const { document } = await app((tx) => buildMenuDocument(tx, f.lunch));
+    expect(
+      documentOffers(document)
+        .filter((offer) => offer.productId === f.wine)
+        .map((offer) => ({
+          grossPrice: offer.grossPrice,
+          unitPrice: offer.unitPrice,
+          variants: offer.variants.map((variant) => variant.unitPrice),
+        })),
+    ).toEqual([{ grossPrice: null, unitPrice: "8.00", variants: ["8.00"] }]);
+  });
+
+  it("reaches no menu that includes that menu, one or two levels up", async () => {
+    await storeByHand();
+    const terrace = await app((tx) => createMenu(tx, { name: "Terrace" }));
+    const patio = await app((tx) => createMenu(tx, { name: "Patio" }));
+    await app((tx) => includes(tx, terrace.id, f.lunch));
+    await app((tx) => includes(tx, patio.id, terrace.id));
+    for (const menuId of [terrace.id, patio.id]) {
+      const offers = await app((tx) => listMenuOffers(tx, [menuId]));
+      expect(priced(offers)).toEqual([{ grossPrice: null, unitPrice: "8.00", variants: ["8.00"] }]);
+      expect(offers.flatMap((offer) => clashesOf(offer.combined))).toEqual([]);
+    }
   });
 });

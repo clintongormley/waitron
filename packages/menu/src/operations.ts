@@ -79,7 +79,7 @@ import {
   setMenuSurchargeCents,
   touchSetMenu,
 } from "./set-menus.js";
-import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
+import { priceOrNull } from "./offer-price.js";
 import {
   assertNotOfferedAsExtra,
   menuVariantsOfItems,
@@ -658,20 +658,6 @@ async function offerRowsOn(
   return { rows: offered, placementsOf };
 }
 
-/** An offer row's prices. Only a top-level product is an offer, so `products_top_level_owns_ck`
- * sets `productPrice`. */
-function offerPrices(row: { grossPrice: number | null; productPrice: number | null }) {
-  const override = priceOrNull(row.grossPrice);
-  const productPrice = centsToDecimal(row.productPrice!);
-  const unitPrice = resolveOfferPrice({
-    variantMenuPrice: null,
-    variantPrice: null,
-    parentMenuPrice: override,
-    parentPrice: productPrice,
-  });
-  return { override, unitPrice };
-}
-
 async function offersOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
@@ -699,13 +685,15 @@ async function offersOn(
     offered.map((row) => row.id),
   );
   const raw = offered.map((row) => {
-    const { override, unitPrice } = offerPrices(row);
+    const variants = variantsByItem.get(row.id) ?? [];
+    // An ordinary menu prices a product with variants on its variants only; a set menu's price
+    // on a dish is its supplement, which `freezeSetMenu` copies.
+    const pricedOnVariants = variants.length > 0 && graph.menu(row.menuId)?.kind !== "set_menu";
     return {
       id: row.id,
       menuId: row.menuId,
       productId: row.productId,
-      grossPrice: override,
-      unitPrice,
+      grossPrice: pricedOnVariants ? null : priceOrNull(row.grossPrice),
       menuName: row.menuName,
       placements: placementsOf(row),
       name: row.name,
@@ -714,7 +702,7 @@ async function offersOn(
       ordering: row.ordering,
       ...offerLineValues(row),
       offeredModifiers: offeredByItem.get(row.id) ?? [],
-      variants: variantsByItem.get(row.id) ?? [],
+      variants,
     };
   });
 
@@ -810,14 +798,13 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
     .filter((row) => combinedByProduct.has(row.productId))
     .map((row) => {
       const combinedOffer = combinedByProduct.get(row.productId)!;
-      const { override } = offerPrices(row);
       return {
         menuItemId: row.id,
         productId: row.productId,
         name: row.name,
         categoryId: row.categoryId,
         placements: combinedOffer.placements,
-        override,
+        override: combinedOffer.grossPrice,
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,
         available: row.available,
@@ -826,10 +813,12 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
     });
 }
 
+type OfferVariantRow = Omit<MenuOfferVariant, "unitPrice"> & { productPrice: Decimal | null };
+
 async function readOfferVariants(
   tx: Transaction,
   menuItemIds: readonly string[],
-): Promise<Map<string, (MenuOfferVariant & { productPrice: Decimal | null })[]>> {
+): Promise<Map<string, OfferVariantRow[]>> {
   const rows = await tx
     .select({
       menuItemId: menuItems.id,
@@ -838,10 +827,8 @@ async function readOfferVariants(
       customerName: products.customerName,
       kitchenName: products.kitchenName,
       image: effective.image,
-      // RAW, not the effective price: a blank one must fall to the parent's MENU price.
+      // RAW, not the effective price: `combineOffer` decides what a blank one charges.
       ownPrice: products.unitPrice,
-      parentMenuPrice: menuItems.grossPrice,
-      parentPrice: parentProducts.unitPrice,
       menuPrice: menuItemVariantOverrides.price,
       available: products.available,
       ...offerLineColumns,
@@ -860,7 +847,7 @@ async function readOfferVariants(
     )
     .where(and(inArray(menuItems.id, [...menuItemIds]), eq(products.active, true)))
     .orderBy(menuItems.id, products.variantOrder, products.id);
-  const grouped = new Map<string, (MenuOfferVariant & { productPrice: Decimal | null })[]>();
+  const grouped = new Map<string, OfferVariantRow[]>();
   for (const row of rows) {
     const held = grouped.get(row.menuItemId) ?? [];
     held.push({
@@ -869,13 +856,6 @@ async function readOfferVariants(
       customerName: row.customerName,
       kitchenName: row.kitchenName,
       image: row.image,
-      unitPrice: resolveOfferPrice({
-        variantMenuPrice: priceOrNull(row.menuPrice),
-        variantPrice: priceOrNull(row.ownPrice),
-        parentMenuPrice: priceOrNull(row.parentMenuPrice),
-        // The parent of a variant is top-level, so `products_top_level_owns_ck` sets its price.
-        parentPrice: centsToDecimal(row.parentPrice!),
-      }),
       productPrice: priceOrNull(row.ownPrice) as Decimal | null,
       menuPrice: priceOrNull(row.menuPrice),
       available: row.available,
