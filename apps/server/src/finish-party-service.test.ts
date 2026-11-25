@@ -25,6 +25,7 @@ import { adjustments } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import { saveDraft } from "./order-drafts.js";
@@ -619,16 +620,20 @@ describe("A773 requested lifecycle", () => {
 
   /** Finish `body`, answering the jobs it printed as the kitchen names each one carries. */
   async function finishPrinting(p: Fixture, body: unknown) {
-    const before = new Set((await snapshot(p)).jobs.map((job) => job.id));
+    const { bill, jobs } = await snapshot(p);
+    const before = new Set(jobs.map((job) => job.id));
+    const orderLine = `${kitchenTicketWords("es").order} ${bill[0]!.orderNumber}`;
     const answer = await post(p, body);
     const printed = (await snapshot(p)).jobs
       .filter((job) => !before.has(job.id))
-      // A slip's table, party number and time differ between two parties.
-      .map((job) =>
-        printedLines(job.payload).map((line) =>
-          line.replace(/^M-[0-9a-f]{8}$|^\d+$|^\d\d:\d\d$/, "<varies>"),
-        ),
-      );
+      // A slip's table, order number and time differ between two parties.
+      .map((job) => {
+        const lines = printedLines(job.payload);
+        expect(lines).toContain(orderLine);
+        return lines.map((line) =>
+          line === orderLine || /^(M-[0-9a-f]{8}|\d\d:\d\d)$/.test(line) ? "<varies>" : line,
+        );
+      });
     const byDish = KITCHEN.map((name) =>
       printed.filter((lines) => lines.some((line) => line.includes(name))),
     );

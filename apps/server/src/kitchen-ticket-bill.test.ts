@@ -1,4 +1,5 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { kitchenStations, printJobs, workingOrderLines, workingOrders } from "@waitron/db";
@@ -92,7 +93,9 @@ it("a moved dish shows under its new bill on every kitchen read", async () => {
     )
       .filter((job) => !before.has(job.id))
       .flatMap((job) => printedLines(job.payload));
-    expect(paper).toContain(String(bills.find((bill) => bill.id === id)!.number));
+    expect(paper).toContain(
+      `${kitchenTicketWords("es").order} ${bills.find((bill) => bill.id === id)!.number}`,
+    );
     expect(paper.join(" ")).toContain(wanted);
     expect(paper.join(" ")).not.toContain(absent);
   }

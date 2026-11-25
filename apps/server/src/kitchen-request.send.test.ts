@@ -208,18 +208,18 @@ describe("A773 waiter request: send", () => {
         pass: await jobsAt(tx, venue.printers.pass),
         kitchen: await jobsAt(tx, venue.printers.kitchen),
       }).toEqual({
-        grill: ["Grill\n\n2\n13:00\n1 x BURG\n"],
-        pass: ["Grill\n\n2\n13:00\n1 x BURG\n"],
-        kitchen: ["Kitchen\n\n2\n13:00\n1 x SALAD\n"],
+        grill: ["Grill\n\nOrder 2\n13:00\n1 x BURG\n"],
+        pass: ["Grill\n\nOrder 2\n13:00\n1 x BURG\n"],
+        kitchen: ["Kitchen\n\nOrder 2\n13:00\n1 x SALAD\n"],
       });
       expect({
         grill: await payloadHashes(tx, venue.printers.grill),
         pass: await payloadHashes(tx, venue.printers.pass),
         kitchen: await payloadHashes(tx, venue.printers.kitchen),
       }).toEqual({
-        grill: ["f9d1f346ad67d68f84b01611fc77bce7c0912e2be194fa1635a2604d06e57961"],
-        pass: ["f9d1f346ad67d68f84b01611fc77bce7c0912e2be194fa1635a2604d06e57961"],
-        kitchen: ["46c0b0b5d6875f71ae23db3e3184dbb792b1e47be6227cc77afb49fa54c9d1df"],
+        grill: ["b33b7d6c9a5aac3309a3484b9a882de3d96a6543f06ece19bd8856d0b38800c5"],
+        pass: ["b33b7d6c9a5aac3309a3484b9a882de3d96a6543f06ece19bd8856d0b38800c5"],
+        kitchen: ["d079886fc02a10c0c0327cc64390d0ee5b8fa489690ab06b2ab332dde4f22b62"],
       });
     });
   });

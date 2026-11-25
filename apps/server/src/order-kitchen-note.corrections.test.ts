@@ -180,7 +180,7 @@ it("A1378 lists only each printer's affected bills on a party note change", asyn
       .join(", ")}`,
   );
   expect(printedLines(jobs.find((job) => job.printerId === bar.printerId)!.payload)[3]).toBe(
-    numbers.get(second),
+    `${spanish.order} ${numbers.get(second)}`,
   );
   expect(
     (await inTx(v, (tx) => listStationNotices(tx, stationId)))

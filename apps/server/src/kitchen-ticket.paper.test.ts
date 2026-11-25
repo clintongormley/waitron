@@ -94,7 +94,7 @@ describe("kitchen paper in the venue's time zone", () => {
           "Europe/Madrid",
         ),
       ).slice(0, 5),
-    ).toEqual(["*** REPRINT 03:40 ***", "Grill", "Table 4", "17", "01:30"]);
+    ).toEqual(["*** REPRINT 03:40 ***", "Grill", "Table 4", "Order 17", "01:30"]);
   });
 
   it("dates correction, note-change and MOVED slips in the same venue zone", () => {

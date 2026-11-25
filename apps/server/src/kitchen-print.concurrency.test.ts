@@ -213,7 +213,7 @@ describe("A773 pass release: a printer two pass screens share", () => {
       },
     ]);
 
-    const fire = `Grill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
+    const fire = `Grill\nSplit extras\nOrder 1\n${AT_CLOCK}\nGROUP 1\n1 x BURG\n`;
     const printedAt = async (printerId: string) =>
       (
         await suite.db

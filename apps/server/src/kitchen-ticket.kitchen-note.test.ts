@@ -236,7 +236,8 @@ describe.each([
     it.each(singleDish)(
       "prints one station's single dish in the same lines as the single-dish slip ($locale, after $after)",
       ({ locale, after, head, body }) => {
-        const top = [...head, "Grill", "Table 2", "17", "10:00", ...body];
+        const { order } = kitchenTicketWords(locale);
+        const top = [...head, "Grill", "Table 2", `${order} 17`, "10:00", ...body];
         expect(
           slip(
             [{ stationName: "Grill", items: [{ qty: 2, name: "Burger", note: "No onions" }] }],

@@ -74,7 +74,7 @@ describe("formatKitchenTicket", () => {
       "*** HOLD ***",
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       origin,
       "1 x Steak",
@@ -82,7 +82,7 @@ describe("formatKitchenTicket", () => {
     ]);
   });
 
-  it("prints the origin on a station ticket", () => {
+  it("prints the origin on a combined ticket", () => {
     const lines = printedLines(
       formatKitchenTicket(
         {
@@ -101,7 +101,7 @@ describe("formatKitchenTicket", () => {
     expect(lines).toEqual([
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "From Bar",
       "Grill",
@@ -437,7 +437,7 @@ describe("one ticket for several stations sharing a printer", () => {
     expect(lines).toEqual([
       "Grill · Pastry",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "Grill",
       "2 x Steak",
@@ -479,14 +479,14 @@ describe("joinKitchenTickets", () => {
       "*** REPRINT 15:20 ***",
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "1 x Steak",
       "*** REPRINT 15:20 ***",
       "*** HOLD ***",
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "1 x Tart",
       "",
@@ -615,9 +615,9 @@ describe("the rest of the order on a station's ticket", () => {
 
 describe("formatCorrectionSlip", () => {
   it.each([
-    ["en-GB", "Grill", "*** MOVED TO GRILL ***"],
-    ["es-ES", "Grill", "*** PASADO A GRILL ***"],
-  ])("prints the destination and old station for %s", (locale, toStation, header) => {
+    ["en-GB", "Grill", "*** MOVED TO GRILL ***", "Order A-17"],
+    ["es-ES", "Grill", "*** PASADO A GRILL ***", "Pedido A-17"],
+  ])("prints the destination and old station for %s", (locale, toStation, header, orderLine) => {
     const lines = printedLines(
       formatCorrectionSlip(
         {
@@ -634,7 +634,7 @@ describe("formatCorrectionSlip", () => {
         TEST_TIME_ZONE,
       ),
     );
-    expect(lines).toEqual([header, "Bar", "Table 4", "A-17", "14:30", "1 x Steak", ""]);
+    expect(lines).toEqual([header, "Bar", "Table 4", orderLine, "14:30", "1 x Steak", ""]);
   });
   it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
     const bytes = formatCorrectionSlip(
@@ -1066,7 +1066,7 @@ describe("the reprint mark and a party's group numbers", () => {
     expect(lines).toEqual([
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 2",
       "2 x Steak",
@@ -1092,7 +1092,7 @@ describe("the reprint mark and a party's group numbers", () => {
     expect(lines).toEqual([
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "1 x Bread",
       "GROUP 1",
@@ -1108,7 +1108,7 @@ describe("the reprint mark and a party's group numbers", () => {
     const lines = printedLines(
       formatKitchenTicket(station([{ qty: 1, name: "Chips" }]), KITCHEN_80, TEST_TIME_ZONE),
     );
-    expect(lines).toEqual(["Kitchen", "Table 4", "A-17", "14:30", "1 x Chips", ""]);
+    expect(lines).toEqual(["Kitchen", "Table 4", "Order A-17", "14:30", "1 x Chips", ""]);
   });
 
   it("names a combined ticket's one group once under the header, and heads each group within a station otherwise", () => {
@@ -1137,7 +1137,7 @@ describe("the reprint mark and a party's group numbers", () => {
     ).toEqual([
       "Bar · Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 3",
       "Bar",
@@ -1160,7 +1160,7 @@ describe("the reprint mark and a party's group numbers", () => {
     ).toEqual([
       "Bar · Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "Bar",
       "GROUP 1",
@@ -1345,7 +1345,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
       "*** HOLD ***",
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 4",
       "Kitchen",
@@ -1375,7 +1375,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
       "*** HOLD CHANGED ***",
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 4",
       row,
@@ -1397,7 +1397,7 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
       "*** HOLD CANCELLED ***",
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 4",
       "1 x Fish",
@@ -1458,7 +1458,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
       "*** CHANGED ***",
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "1 x BURG",
       "  + Fries",
@@ -1488,7 +1488,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
       "*** HOLD CHANGED ***",
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 2",
       "1 x BURG",
@@ -1706,9 +1706,9 @@ describe("a kitchen ticket for a named party", () => {
     ).toEqual(["*** FIRE ***", "Grill", "Table 4", "Order 5 · Ana"]);
   });
 
-  it("prints a ticket with no party name with the bare order number", () => {
+  it("prints the order word and number when the party has no name", () => {
     const bytes = formatKitchenTicket(unnamed, KITCHEN_80, TEST_TIME_ZONE);
-    expect(printedLines(bytes)).toEqual(["Grill", "Table 4", "5", "13:24", "1 x BURG", ""]);
+    expect(printedLines(bytes)).toEqual(["Grill", "Table 4", "Order 5", "13:24", "1 x BURG", ""]);
     expect(
       formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80, TEST_TIME_ZONE),
     ).toEqual(bytes);
@@ -1750,7 +1750,7 @@ describe("a dish sent after its period", () => {
       expect(lines).toEqual([
         "Kitchen",
         "Table 4",
-        "A-17",
+        "Order A-17",
         "14:30",
         "** AFTER LUNCH — AGREED **",
         "1 x Steak",
@@ -1773,7 +1773,7 @@ describe("a dish sent after its period", () => {
     expect(lines).toEqual([
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Pedido A-17",
       "14:30",
       banner("Lunch", "es"),
       "1 x Steak",
@@ -1804,7 +1804,7 @@ describe("a dish sent after its period", () => {
       expect(lines).toEqual([
         "Kitchen",
         "Table 4",
-        "A-17",
+        `${kitchenTicketWords(locale).order} A-17`,
         "14:30",
         banner("Lunch", locale === "es-ES" ? "es" : "en"),
         "1 x Steak",
@@ -1916,7 +1916,7 @@ describe("a dish sent after its period", () => {
     expect(lines).toEqual([
       "Kitchen",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 1",
       "** AFTER LUNCH — AGREED **",
@@ -1965,7 +1965,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     expect(lines(station(items))).toEqual([
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 3 · MAINS",
       "2 x Steak",
@@ -2024,7 +2024,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     ).toEqual([
       "Grill",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 3 · STARTERS",
       "1 x Soup",
@@ -2045,7 +2045,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     ).toEqual([
       "Grill · Bar",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 2 · MAINS, DRINKS",
       "Grill",
@@ -2073,7 +2073,7 @@ describe("A773 fire paper: group headings name their dishes' courses", () => {
     ).toEqual([
       "Grill · Bar",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "Grill",
       "GROUP 3 · MAINS",
@@ -2248,7 +2248,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(lines(ticket(flagged))).toEqual([
       "Bar",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 4 · DESSERTS",
       "Goes with Grill and Pastry",
@@ -2371,7 +2371,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
         expect(onPaper(grillAndBar([moscatel], locale), paper)).toEqual([
           "Grill · Bar",
           "Table 4",
-          "A-17",
+          `${kitchenTicketWords(locale).order} A-17`,
           "14:30",
           heading,
           "Grill",
@@ -2425,7 +2425,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     ).toEqual([
       "Grill · Bar",
       "Table 4",
-      "A-17",
+      "Order A-17",
       "14:30",
       "GROUP 4 · DESSERTS",
       "Grill",

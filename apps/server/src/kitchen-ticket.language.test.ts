@@ -39,6 +39,7 @@ describe("A964 frame menu", () => {
     );
     expect(lines).not.toContain(`*** ${mark} ***`);
     expect(lines).not.toContain("*** REPRINT 13:24 ***");
+    expect(lines).toContain(`${kitchenTicketWords("es").order} 12`);
     expect(lines).not.toContain("GROUP 3");
     expect(lines).toContain("2 x Pass roast");
   });
@@ -133,7 +134,7 @@ describe("A964 frame menu", () => {
       "*** HOLD ***",
       "Grill",
       "Table 7",
-      "12",
+      "Order 12",
       "13:24",
       "GROUP 3",
       "2 x Pass roast",
@@ -270,7 +271,7 @@ describe("A964 complete paper frames", () => {
         `*** ${header} ***`,
         "Grill",
         "Table 7",
-        "12",
+        `${w.order} 12`,
         "13:24",
         `${w.group} 3`,
         `${sign}2 x Pass roast`,
@@ -298,7 +299,7 @@ describe("A964 complete paper frames", () => {
     ).toEqual([
       `*** ${w.noteRemoved} ***`,
       "Grill",
-      "12",
+      `${w.order} 12`,
       "13:24",
       w.noteRemovedBody,
       `${w.was}: $& Together`,

@@ -926,7 +926,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     return [
       (await defaultStation()).name,
       label,
-      String((await billRow(v, billId)).orderNumber),
+      `${kitchenTicketWords("es").order} ${(await billRow(v, billId)).orderNumber}`,
       TIME,
     ];
   }

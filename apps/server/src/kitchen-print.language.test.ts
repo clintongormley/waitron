@@ -420,7 +420,9 @@ it.each(["en", "es"] as const)(
     expect(
       papers.filter((p) => p.includes(`${kitchenTicketWords(language).order} ${ids.named} · Alex`)),
     ).toHaveLength(2);
-    expect(papers.filter((p) => p.includes(String(ids.delivered)))).toHaveLength(2);
+    expect(
+      papers.filter((p) => p.includes(`${kitchenTicketWords(language).order} ${ids.delivered}`)),
+    ).toHaveLength(2);
     for (const paper of papers) {
       expect(paper).toContain("Split extras");
       expect(paper).toContain("1 x BURG");

@@ -647,7 +647,7 @@ describe("the party's name on a kitchen ticket", () => {
     ]);
   });
 
-  it("prints the bare order number for an unnamed party's order and a counter order", async () => {
+  it("prints the order word and number for an unnamed party and at the counter", async () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
     const { tabId } = await seat(v, await v.table("Table 74"));
@@ -676,13 +676,13 @@ describe("the party's name on a kitchen ticket", () => {
       [
         "Cocina",
         "Table 74",
-        String((await billRow(v, tabId)).orderNumber),
+        `Pedido ${(await billRow(v, tabId)).orderNumber}`,
         expect.stringMatching(/^\d\d:\d\d$/),
       ],
       [
         "Cocina",
         "",
-        String((await billRow(v, counter)).orderNumber),
+        `Pedido ${(await billRow(v, counter)).orderNumber}`,
         expect.stringMatching(/^\d\d:\d\d$/),
       ],
     ]);
