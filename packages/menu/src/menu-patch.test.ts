@@ -16,7 +16,7 @@ import { setIncludeFolder } from "./include-folder.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn } from "./sections.js";
 import { menuDocumentHash } from "./menu-document.js";
-import { createMenu, updateMenuDetails } from "./operations.js";
+import { createMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { liveVersions, previewMenu, publishMenu } from "./menu-publication.js";
 import { readMenuStructure } from "./menu-structure.js";
@@ -104,21 +104,25 @@ const EGGS = productDeclarationValues({
 
 describe("applyMenuPatch", () => {
   it("patches a dish's price on the menu, keeping a menu price in step", async () => {
-    const { f, document } = await liveLunch();
-    const lemonade = await menuItem(f, f.lemonade);
+    const { f, document } = await liveLunch(async (tx, f) => {
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), {
+        grossPrice: "3.80",
+      });
+    });
+    const lager = await menuItem(f, f.lager);
     const soup = await menuItem(f, f.soup);
-    expect(document.offers[lemonade]!.grossPrice).toBe("2.80");
+    expect(document.offers[lager]!.grossPrice).toBe("3.80");
     expect(document.offers[soup]!.grossPrice).toBeNull();
     const patched = applyMenuPatch(
       document,
       parseMenuPatch([
-        { target: { kind: "offer", menuItemId: lemonade }, field: "price", value: "5.5" },
+        { target: { kind: "offer", menuItemId: lager }, field: "price", value: "5.5" },
         { target: { kind: "offer", menuItemId: soup }, field: "price", value: "6" },
       ]),
       languages,
     );
-    expect(patched.offers[lemonade]!.unitPrice).toBe("5.50");
-    expect(patched.offers[lemonade]!.grossPrice).toBe("5.50");
+    expect(patched.offers[lager]!.unitPrice).toBe("5.50");
+    expect(patched.offers[lager]!.grossPrice).toBe("5.50");
     expect(patched.offers[soup]!.unitPrice).toBe("6.00");
     expect(patched.offers[soup]!.grossPrice).toBeNull();
   });
@@ -166,7 +170,11 @@ describe("applyMenuPatch", () => {
   });
 
   it("patching a dish leaves every variant as it was, but for its declarations", async () => {
-    const { f, document } = await liveLunch();
+    const { f, document } = await liveLunch(async (tx, f) => {
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
+        grossPrice: "2.80",
+      });
+    });
     const lemonade = await menuItem(f, f.lemonade);
     const target = { kind: "offer", menuItemId: lemonade };
     const patched = applyMenuPatch(
@@ -952,11 +960,14 @@ describe("parseMenuPatch", () => {
 
 describe("patchFieldValue", () => {
   it("patchFieldValue reads the current value, or undefined for a missing target", async () => {
-    const { f, document } = await liveLunch();
+    const { f, document } = await liveLunch(async (tx, f) => {
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "4.20" });
+    });
     const lemonade = await menuItem(f, f.lemonade);
     const dish = { kind: "offer", menuItemId: lemonade } as const;
+    const soup = { kind: "offer", menuItemId: await menuItem(f, f.soup) } as const;
     const large = { kind: "variant", menuItemId: lemonade, variantId: f.large } as const;
-    expect(patchFieldValue(document, dish, "price")).toBe("2.80");
+    expect(patchFieldValue(document, soup, "price")).toBe("4.20");
     expect(patchFieldValue(document, dish, "name")).toBe("Lemonade");
     expect(patchFieldValue(document, dish, "description")).toEqual({ en: "All about Lemonade" });
     expect(patchFieldValue(document, large, "price")).toBe("3.50");

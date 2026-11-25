@@ -205,6 +205,11 @@ describe("preview live snapshot", () => {
         .then((rows) => rows[0]!);
       await assignProductUnit(tx, f.lemonade, unit.id);
     });
+    const soupId = await app(async (tx) => {
+      const id = await offerOf(tx, f.lunch, f.soup);
+      await updateMenuItem(tx, f.lunch, id, { grossPrice: "4.20" });
+      return id;
+    });
     const offerId = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
     const frozen = structuredClone((await app((tx) => previewMenu(tx, f.lunch))).document);
     await publish(f.lunch);
@@ -271,7 +276,7 @@ describe("preview live snapshot", () => {
       precision: 0,
       hardwareUnit: null,
     });
-    expect(offer.unitPrice).toBe("2.80");
+    expect(preview.document.offers[soupId]!.unitPrice).toBe("4.20");
     expect(offer.vatClass).toBe("reduced");
     expect(offer.name).toBe("Lemonade");
     expect(offer.kitchenName).toBe("LEMONADE");
@@ -1848,19 +1853,22 @@ describe("previewMenu", () => {
         (change) => change.kind === "price_changed",
       );
 
-    it("credits Lunch clearing its own Lemonade price, reached only through Drinks", async () => {
+    it("credits Lunch clearing its own Lager price, reached only through Drinks", async () => {
       const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: "3.80" }),
+      );
       await publish(f.lunch);
       await app(async (tx) =>
-        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: null }),
       );
       expect(await priceChange(f.lunch)).toEqual([
         {
           kind: "price_changed",
-          productId: f.lemonade,
-          name: "Lemonade",
-          from: "2.80",
-          to: "3.00",
+          productId: f.lager,
+          name: "Lager",
+          from: "3.80",
+          to: "4.00",
           source: "this_menu",
         },
       ]);
@@ -1946,9 +1954,12 @@ describe("previewMenu", () => {
       ]);
     });
 
-    it("credits Lunch clearing its own Lemonade price to Lunch on Brunch, which includes Lunch", async () => {
+    it("credits Lunch clearing its own Lager price to Lunch on Brunch, which includes Lunch", async () => {
       const f = await menusFixture(fx.db);
       const brunch = await app(async (tx) => {
+        await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), {
+          grossPrice: "3.80",
+        });
         const created = await createMenu(tx, { name: "Brunch Menu" });
         const root = (await readMenuStructure(tx, created.id)).rootSectionId;
         await addMember(tx, root, section(f.lunchRoot));
@@ -1956,7 +1967,7 @@ describe("previewMenu", () => {
       });
       await publish(brunch);
       await app(async (tx) =>
-        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: null }),
       );
       expect(
         (await priceChange(brunch)).map(({ source, includedMenu, from, to }) => ({
@@ -1969,8 +1980,8 @@ describe("previewMenu", () => {
         {
           source: "included_menu",
           includedMenu: { id: f.lunch, name: "Lunch Menu" },
-          from: "2.80",
-          to: "3.00",
+          from: "3.80",
+          to: "4.00",
         },
       ]);
     });
@@ -1994,6 +2005,9 @@ describe("previewMenu", () => {
           ],
           "en",
         ),
+      );
+      await app(async (tx) =>
+        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "2.80" }),
       );
       await publish(f.lunch);
       await app(async (tx) => {
@@ -2695,7 +2709,13 @@ it("filters inactive top-level and transitive menus before combining", async () 
 it.each([false, true])("credits included variant price, own dish price=%s", async (ownPrice) => {
   const f = await menusFixture(fx.db);
   const menuId = ownPrice ? f.lunch : f.dinner;
-  if (ownPrice) await app((tx) => updateProduct(tx, f.large, { unitPrice: null }));
+  if (ownPrice)
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { unitPrice: null });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
+        grossPrice: "2.80",
+      });
+    });
   await publish(menuId);
   await app(async (tx) =>
     setMenuVariants(

@@ -27,7 +27,7 @@ import {
 } from "./menu-schedule.js";
 import { menuDocumentHash } from "./menu-document.js";
 import { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
-import { updateProduct } from "./operations.js";
+import { updateMenuItem, updateProduct } from "./operations.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 
@@ -81,6 +81,12 @@ async function priceChange(price: string) {
   return [
     { target: { kind: "offer", menuItemId: await lemonadeItem() }, field: "price", value: price },
   ];
+}
+
+/** A price patch on Lager, which Lunch prices at 3.80 of its own. */
+async function lagerPriceChange(price: string) {
+  const menuItemId = await app((tx) => offerOf(tx, f.lunch, f.lager));
+  return [{ target: { kind: "offer", menuItemId }, field: "price", value: price }];
 }
 
 function patch(baseVersionId: string, changes: unknown, at = NOW, menuId = f.lunch) {
@@ -151,14 +157,17 @@ async function scheduleRow(versionId: string) {
 
 beforeEach(async () => {
   f = await menusFixture(fx.db);
+  await app(async (tx) =>
+    updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: "3.80" }),
+  );
   v1 = (await publish(f.lunch)).versionId;
 });
 
 describe("patchLiveMenu", () => {
   it("puts the patch live at once under the next number", async () => {
-    const item = await lemonadeItem();
+    const item = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const later = new Date(NOW.getTime() + 60_000);
-    const result = await patch(v1, await priceChange("5.5"), later);
+    const result = await patch(v1, await lagerPriceChange("5.5"), later);
     expect(result).toEqual({ versionId: expect.any(String), number: 2, requeued: [] });
 
     const live = await app((tx) => readLiveMenu(tx, f.lunch, later));
@@ -784,7 +793,7 @@ describe("declarations", () => {
     await setSoup("5.50");
     const { versionId: queued } = await queue(day(8));
     const readsWaiting = async (price: string) => {
-      const changes = await priceChange(price);
+      const changes = await lagerPriceChange(price);
       return (
         await statements(async (tx) => {
           await patchLiveMenu(tx, f.lunch, v1, changes, ANA, {
@@ -798,8 +807,8 @@ describe("declarations", () => {
         (text) => /"menu_versions"\."document"/.test(text) && /"activates_at" > \?/.test(text),
       );
     };
-    expect(await readsWaiting("2.80")).toBe(false);
-    expect(await readsWaiting("2.90")).toBe(true);
+    expect(await readsWaiting("3.80")).toBe(false);
+    expect(await readsWaiting("3.90")).toBe(true);
   });
 
   it("readPatchDraft lists no queued version that is due but not yet settled", async () => {

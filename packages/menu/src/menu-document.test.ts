@@ -298,6 +298,9 @@ async function addTile(homeSectionId: string, ref: { productId?: string; section
 describe("buildMenuDocument", () => {
   it("holds the structure with display content, one offer per product, and the Device Home Page", async () => {
     const f = await menusFixture(fx.db);
+    await app(async (tx) =>
+      updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "4.20" }),
+    );
     const document = await build(f.lunch);
     const lemonade = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
@@ -346,9 +349,12 @@ describe("buildMenuDocument", () => {
       kitchenName: "LEMONADE",
       description: { en: "All about Lemonade" },
       image: libraryImageName("lemonade.jpg"),
-      grossPrice: "2.80",
-      unitPrice: "2.80",
       placements: [[f.drinks]],
+    });
+    expect(document.offers[soup]).toMatchObject({
+      productId: f.soup,
+      grossPrice: "4.20",
+      unitPrice: "4.20",
     });
     expect(offer.variants).toHaveLength(1);
     expect(offer.variants[0]).toMatchObject({
@@ -813,6 +819,9 @@ describe("menuDocumentHash", () => {
 describe("applyLiveFields", () => {
   it("puts availability, course and category back from the current rows, and not VAT", async () => {
     const f = await menusFixture(fx.db);
+    await app(async (tx) =>
+      updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "4.20" }),
+    );
     const lunch = await build(f.lunch);
     const dinner = await build(f.dinner);
     await app(async (tx) => {
@@ -836,12 +845,12 @@ describe("applyLiveFields", () => {
       ["Soup", true],
     ]);
     expect(lunchOffers[2]!.category).toBeNull();
+    expect(lunchOffers[2]!.unitPrice).toBe("4.20");
     const lemonade = lunchOffers[0]!;
     expect(lemonade).toMatchObject({
       vatClass: "reduced",
       courseId: f.course,
       category: "Cold drinks",
-      unitPrice: "2.80",
       menuName: "Lunch Menu",
       image: libraryImageName("lemonade.jpg"),
     });
@@ -1320,31 +1329,34 @@ describe("diffMenuDocuments", () => {
 
   it("names this menu's price, and the product's own price, apart", async () => {
     const f = await menusFixture(fx.db);
+    await app(async (tx) =>
+      updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: "3.80" }),
+    );
     const lunch = await build(f.lunch);
     const dinner = await build(f.dinner);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
-        grossPrice: "2.60",
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), {
+        grossPrice: "3.60",
       });
-      await updateProduct(tx, f.lemonade, { unitPrice: "3.20" });
+      await updateProduct(tx, f.lager, { unitPrice: "4.20" });
     });
     expect(changeBodies(diffMenuDocuments(lunch, await build(f.lunch)))).toEqual([
       {
         kind: "price_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        from: "2.80",
-        to: "2.60",
+        productId: f.lager,
+        name: "Lager",
+        from: "3.80",
+        to: "3.60",
         source: "this_menu",
       },
     ]);
     expect(changeBodies(diffMenuDocuments(dinner, await build(f.dinner)))).toEqual([
       {
         kind: "price_changed",
-        productId: f.lemonade,
-        name: "Lemonade",
-        from: "3.00",
-        to: "3.20",
+        productId: f.lager,
+        name: "Lager",
+        from: "4.00",
+        to: "4.20",
         source: "shared_product",
       },
     ]);
@@ -1352,7 +1364,12 @@ describe("diffMenuDocuments", () => {
 
   it("names a variant price that follows this menu's price as this menu's change", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => updateProduct(tx, f.large, { unitPrice: null }));
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { unitPrice: null });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
+        grossPrice: "2.80",
+      });
+    });
     const live = await build(f.lunch);
     await app(async (tx) =>
       updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "2.60" }),
