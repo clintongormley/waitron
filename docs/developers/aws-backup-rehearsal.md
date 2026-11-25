@@ -125,7 +125,7 @@ The helper checks matching-key access and wrong-key/keyless refusals before cont
 The existing loop then uses a valid-minute setup fixture, rotates the backup key and checks that
 the old key cannot read the new generation while the matching old key still restores its old one.
 It downloads the production recovery PDF over HTTPS and passes that PDF to the restore command
-for a fresh box. The loop checks restored rows, sealed TLS material and the server-key verifier.
+for a fresh box. The loop checks restored rows, sealed TLS material and the master key's check value.
 The ordinary loop keeps its existing fixture. Teardown removes the trial's PDF with its scratch
 folder; a leftover PDF carries the rehearsal's credentials and keys, so treat it as a secret.
 

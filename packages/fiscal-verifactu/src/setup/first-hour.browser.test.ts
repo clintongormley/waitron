@@ -1162,7 +1162,7 @@ it.each([
     "Paquete de recuperación confirmado.",
   ],
 ] as const)(
-  "names the %s step's download a recovery pack and never the server key a recovery key",
+  "names the %s step's download a recovery pack and never calls the master key a recovery key",
   async (locale, next, show, download, complete) => {
     const { downloads } = captureDownloads();
     const { el, api } = await mount({ locale });

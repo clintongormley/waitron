@@ -1896,8 +1896,7 @@ pull request that left it:
 - **A1187-2 (Backups’ pack):** Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
 - **#2274 (the Backups card).** A pack whose receipt the box confirmed after the card left the page, or after the
   person lost `system.manage`, is counted received though no link to it was offered. So is an older
-  pack whose receipt lands while a newer pack's link is on offer, unless it holds the newest server
-  key the card was handed.
+  pack whose receipt lands while a newer pack's link is on offer.
 
 ## A1323. One master key for the venue
 

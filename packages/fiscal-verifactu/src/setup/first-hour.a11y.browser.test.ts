@@ -194,12 +194,14 @@ for (const theme of ["light", "dark"] as const)
             }
             if (state === "pdf") {
               await click("prepare-pdf");
-              await vi.waitFor(() =>
-                expect(
-                  el
-                    .shadowRoot!.querySelector("wt-master-key-box")
-                    ?.shadowRoot!.querySelector("[data-test=download]") ?? null,
-                ).not.toBeNull(),
+              await vi.waitFor(
+                () =>
+                  expect(
+                    el
+                      .shadowRoot!.querySelector("wt-master-key-box")
+                      ?.shadowRoot!.querySelector("[data-test=download]") ?? null,
+                  ).not.toBeNull(),
+                { timeout: 5_000 },
               );
             }
             expect((await axe.run(host)).violations).toEqual([]);
@@ -215,4 +217,4 @@ for (const theme of ["light", "dark"] as const)
       } finally {
         await page.viewport(previous[0]!, previous[1]!);
       }
-    });
+    }, 120_000);

@@ -1747,7 +1747,7 @@ Each guard below reads named string tables or rendered pages, and each is weaker
   English it allows "mail server" (singular or plural), every "Servers page" (a link's name, "the
   Servers page", "the main box's Servers page") and the menu paths "System → Servers" and "System, then Servers"; "Open
   Servers" with no "page" is refused. In Spanish it refuses every "equipo". It does not read words
-  written inline in setup's screens, such as the saved key file's name.
+  written inline in setup's screens.
 - `packages/recovery-pack/src/i18n/box-word.test.ts` reads English and Spanish: `PACK_WORDS` and
   `PART_WORDS` in `pack-words.ts`, nested tables included, calling each function once with sample
   arguments, so only the branch those arguments reach is read. It refuses "server" in English and

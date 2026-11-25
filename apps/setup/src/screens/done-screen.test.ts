@@ -1063,21 +1063,21 @@ describe("setup-done-screen", () => {
     },
   );
 
-  it("drops the node recovery key once its poll answers ready", async () => {
+  it("drops the master key once its poll answers ready", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
     const el = await mountDone(getStatus, { nodeRecoveryKey: "node-key-secret" });
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
     expect(el.nodeRecoveryKey).toBeUndefined();
   });
 
-  it("keeps the node recovery key while its poll answers 503", async () => {
+  it("keeps the master key while its poll answers 503", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "setup.not_ready", status: 503 });
     const el = await mountDone(getStatus, { nodeRecoveryKey: "node-key-secret" });
     await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(2));
     expect(el.nodeRecoveryKey).toBe("node-key-secret");
   });
 
-  it("drops the node recovery key once it leaves the page", async () => {
+  it("drops the master key once it leaves the page", async () => {
     const el = await mountDone(() => new Promise(() => {}), { nodeRecoveryKey: "node-key-secret" });
     el.remove();
     expect(el.nodeRecoveryKey).toBeUndefined();

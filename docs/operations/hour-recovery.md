@@ -97,8 +97,7 @@ not link to or serve those guides.
 
 ## Make the new invoice series
 
-If the backup has no usable time zone, the clock times and a reissued recovery pack
-show UTC. Recovery keeps the saved zone unchanged.
+If the backup has no usable time zone, the clock times show UTC. Recovery keeps the saved zone unchanged.
 
 The page lists the backup's environment, country, taxpayer NIF and time zone one to a row, and after
 **Proceed**, when the box's time service is not synchronised and the clocks differ, the clock step the first-setup runbook describes
@@ -258,7 +257,7 @@ and with box TLS that is not usable serves none of it. The setup page where
 the restore was started keeps the key it sent in its memory, never in storage, and
 shows both times on the same page, with **Confirm the time** and **This device**
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
-screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+screen holds the master key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "asks for the time on the screen itself when the restore's start waits for it"). If that page was
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
 selected backup's master key: the waiting page then shows the same step

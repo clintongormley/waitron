@@ -253,6 +253,6 @@ AEAT already has them.
 ## An invoice conflict on a running box {#invoice-conflict}
 
 If the box still has your orders and payments but stops issuing invoices after an identity
-conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with its current box
-key. That procedure switches the live identity without restoring a backup. It keeps the rejected
-record and its open case. Take any old or copied box offline before continuing.
+conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with the venue's
+current master key. That procedure switches the live identity without restoring a backup. It keeps
+the rejected record and its open case. Take any old or copied box offline before continuing.

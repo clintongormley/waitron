@@ -422,13 +422,13 @@ describe("a download that also hands back the response headers it names (headers
       {},
       {
         as: "file",
-        headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+        headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Absent"],
       },
     );
 
     expect(out.headers).toEqual({
       "X-Waitron-Recovery-Pack": "3",
-      "X-Waitron-Recovery-Pack-Key": null,
+      "X-Waitron-Absent": null,
     });
     expect(out.fileName).toBeNull();
     expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);

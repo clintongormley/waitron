@@ -471,8 +471,8 @@ configuración para poner en marcha otro local.
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase.
-  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior o una hoja que
-  también necesites. Conserva esos papeles y los paquetes de las copias anteriores que puedas
+  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior que
+  también necesites. Conserva ese paquete y los paquetes de las copias anteriores que puedas
   necesitar. Guarda cada paquete de recuperación bajo llave, fuera del servidor.
 
 El paquete de recuperación también puede contener la dirección y el código de emergencia para una copia bloqueada en Cloud. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Inicio de emergencia en Cloud](servers.md#cloud-emergency).

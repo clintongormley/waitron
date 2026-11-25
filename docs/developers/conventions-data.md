@@ -4510,7 +4510,7 @@ is an outbox, never inline.
 A definite invoice-identity conflict already retained in the local database is a separate stop on
 new issuance and new money. Its preflight reads local rows; it does not wait for an external filing
 request. The owner-approved [administrator procedure](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict)
-uses the current recovery key, the same minute/second-clock/history admission as restore, and an
+uses the current master key, the same minute/second-clock/history admission as restore, and an
 explicit switch through the existing activation writer. It starts new series and a chain without
 changing issued records or closing the original rejected case. Automatic switching is excluded.
 The local conflict, pre-capture and captured-payment paths run in the conflict issuance/recovery
@@ -4638,8 +4638,8 @@ start-failure page").
 restore the setup page keeps the key it sent, in memory only, and its done
 screen drops it once the server answers ready or the screen leaves the page
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
-screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
-"drops the node recovery key once its poll answers ready" and "drops the node recovery key once it
+screen holds the master key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+"drops the master key once its poll answers ready" and "drops the master key once it
 leaves the page"). The waiting app's clock routes take the key in the body, and compare it with the staged key file,
 refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
@@ -6699,7 +6699,7 @@ asserting that every raw reader was exercised.
 
 `classifyTimeZone` continues normalizing new input, including the original padded-input case.
 `classifySavedTimeZone` asks the runtime about the stored spelling. Raw context, fiscal clocks,
-provisioning reuse, completed recovery packs and recovery comparison consume the latter; request,
+provisioning reuse and recovery comparison consume the latter; request,
 candidate and country-list inputs retain normalization. Missing blanks, runtime-supported aliases
 and unexpected runtime failures retain their separate outcomes. Repair stores an explicitly chosen
 canonical name; old raw rows are not silently rewritten. The focused shared, boot, repair,

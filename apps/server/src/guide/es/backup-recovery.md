@@ -275,7 +275,7 @@ entrégale el archivo. No vuelvas a registrar esas ventas: la AEAT ya las tiene.
 ## Un conflicto de facturación en un servidor en marcha {#invoice-conflict}
 
 Si el servidor conserva tus pedidos y pagos pero deja de emitir facturas por un conflicto de
-identidad, sigue [Recuperar una identidad de facturación](box-status.md#invoice-conflict) con su clave
-del servidor actual. Ese procedimiento cambia la identidad activa sin restaurar una copia.
+identidad, sigue [Recuperar una identidad de facturación](box-status.md#invoice-conflict) con la
+clave maestra actual del local. Ese procedimiento cambia la identidad activa sin restaurar una copia.
 Conserva el registro rechazado y su incidencia abierta. Desconecta cualquier servidor antiguo o
 copiado antes de continuar.

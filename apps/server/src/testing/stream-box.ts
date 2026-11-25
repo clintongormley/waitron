@@ -75,7 +75,7 @@ export interface StreamBox {
   seriesId: string;
   streamId: string;
   publicKey: string;
-  /** The node's break-glass secret. */
+  /** The venue's master key. */
   nodeSecret: string;
 }
 

@@ -325,8 +325,8 @@ table: it moved to `node.db` on purpose, so a spare holding a copy of `venue.db`
 Folds the one-row-per-box `node.db` tables into one row per box (R1: they are all facts about the same
 thing, each keyed by `node_id`, one row each).
 
-2026-11-24, A1323 PR 3b: the three `recovery_key_*` columns below are gone; the venue's master key is
-in `master_keys`.
+2026-11-25, A1323 PR 3b: the three `recovery_key_*` columns below are gone, and so is the
+`box.recovery_key_replaced` event; the venue's master key is in `master_keys`.
 
 | column | type | null | from |
 | --- | --- | --- | --- |

@@ -951,7 +951,7 @@ restructuring wider than a review fix:
   `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
 - Matching lock nests use `withVenueAndNodeTransaction`; the remaining sites do work before or
   between venue transactions. Keep their separate commit/check stages when consolidating them:
-  credential rotation, spare join, recovery-pack replacement, first setup and return records.
+  credential rotation, spare join and return records.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 

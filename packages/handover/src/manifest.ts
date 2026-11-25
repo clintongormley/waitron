@@ -67,7 +67,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     item: "box",
     where: "node.db",
     class: "destination-owned",
-    treatment: "M2 keeps its own role, recovery key, mirror link and pinned key",
+    treatment: "M2 keeps its own role, mirror link and pinned key",
   },
   {
     item: "box.signing_key",

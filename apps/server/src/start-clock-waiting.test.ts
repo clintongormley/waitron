@@ -175,7 +175,7 @@ describe("the restore's waiting app: pages", () => {
   });
 });
 
-describe("the restore's waiting app: the node recovery key", () => {
+describe("the restore's waiting app: the master key", () => {
   it.each(["challenge", "compare", "confirm", "set"])(
     "/restore-clock/%s refuses a missing or wrong key, keeping and setting nothing",
     async (path) => {

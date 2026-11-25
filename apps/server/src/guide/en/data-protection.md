@@ -436,8 +436,8 @@ own, can also make scheduled backups, and can export your setup to start another
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
   as that passphrase.
-  Read the recovery pack's pages before you need it: they may name an older pack or sheet you also need.
-  Keep those papers and the packs for any older backups you may still need. Keep every recovery
+  Read the recovery pack's pages before you need it: they may name an older pack you also need.
+  Keep that pack and the packs for any older backups you may still need. Keep every recovery
   pack locked away, off the box.
 
 The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).

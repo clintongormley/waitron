@@ -388,7 +388,7 @@ Ask the owner then which fire immediately and which wait. Left open by A1458.
   confirms and presses Proceed** (owner, 2026-11-07, on A1385; 2026-11-09 and 2026-11-10, A1466):
   making a series and throwing it away unused costs nothing, because the first invoice is what
   commits a series, so nobody is asked whether a new one is needed. The person's part is the details
-  tick (setup) or the recovery key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
+  tick (setup) or the master key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
   that — the countdown, the second-clock checks and a used code's countdown — runs by itself. A
   wait the setup box recorded before a reload carries on with no tick and no press. (Since A1420 PR
   3a, 2026-11-15: when the box cannot check its time over the internet, a page whose clocks agree

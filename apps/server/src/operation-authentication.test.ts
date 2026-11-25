@@ -290,7 +290,7 @@ describe("host-issued authority after fresh operator authentication", () => {
   });
 });
 
-describe("a recovery key's authority", () => {
+describe("a master key's authority", () => {
   const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   const recovery = { ...binding, action: "restore", targetNodeId: NODE };
   const PRINTED_BOX_KEY = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
