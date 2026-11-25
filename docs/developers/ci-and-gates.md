@@ -1440,20 +1440,25 @@ placed placement in job 3 and search in job 4, with 486.6 weight seconds each, c
 
 Later on 25 November, the [fourth shard on runner 1000401397](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139241719163)
 completed 2,101 of its 2,102 mutations before the deadline. Its initial 1,152 tests took 38 seconds.
-Earlier jobs instrumented the same 2,102 mutations and ran the same initial tests in 21 and 24
-seconds. Test execution on runner 1000401397 was slower on the same-sized workload.
+Earlier jobs also instrumented 2,102 mutations and ran 1,152 initial tests in 21 and 24 seconds.
+The timeout log shows slower test execution on runner 1000401397 with the same workload counts.
 [First run](https://github.com/clintongormley/waitron/actions/runs/45605912501),
 [second run](https://github.com/clintongormley/waitron/actions/runs/45618464015).
 
 Runner 1000401482 ran those initial tests in 22 seconds and completed the same shard.
 [Retry log](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139252242561).
 
-The refreshed table uses the per-file medians from the three sets of completed whole-file reports,
-including the retry's shard 4 report. Recorded durations leave out time Stryker spends handling
-each mutation. The review compared elapsed time with reported durations and used about 0.075 seconds
-per mutation in elapsed time, or 0.3 weight seconds at four workers. Using this estimate, the first
-packing based on time alone weighed 393, 786, 844 and 757 seconds. Packing with the added overhead
-gave each job about 695 weight seconds. Use the job logs to check elapsed time on GitHub-hosted runners.
+The refreshed table uses six completed whole-file jobs, jobs 3 and 4 from the three runs above,
+including the retry's shard 4 report. The `Killed` and `Survived` durations are test times. To estimate
+the rest of the work, subtract the reported test and timeout durations divided by four from the
+elapsed time between the initial tests passing and mutation testing finishing. The logs show four
+test runners for each job. Divide the difference by the number of report entries. The six jobs
+gave 0.063 to 0.097 seconds per entry, with a median of 0.071. At four workers that is 0.284 weight
+seconds, rounded to 0.3. This charge uses every report entry because the comparison counted them all.
+
+With that charge, the seven-job draft packed using test durations alone weighed 393, 786, 844 and
+757 seconds across its four whole-file jobs. Repacking with the charge gave each about 695 weight
+seconds. Use the job logs to check elapsed time on GitHub-hosted runners.
 
 To refresh `packages/shared/mutation-costs.json`, download `mutation-report-shared-shard-*` from
 completed runs. Use the whole-file jobs, currently 4 through 7, and prefer jobs with the `ubuntu-latest`
@@ -1463,7 +1468,7 @@ per file, then add 300 milliseconds for each mutation in that file's report, reg
 Use the median across runs, round to tenths of a second and use a minimum weight of 0.1,
 including for a file absent from the reports. Remove or rename a key when its listed source file goes
 away or moves. `scripts/mutation-shard.test.mjs` checks the table's file names against the mutation
-selection. Use this recorded-duration recipe for Shared because the reports from Stryker 10.1.1
+selection. Shared uses recorded durations plus a per-mutation charge. Its Stryker 10.1.1 reports
 include time spent on timeouts, including mutations stopped by the execution-count limit. Reserve
 `scripts/mutation-costs.mjs` for db, where the generator adds a fixed 82.2 seconds per timeout.
 
@@ -3442,10 +3447,9 @@ Current sharded mutation limits are unchanged by the shared workflow:
 | each selected caller | aggregate | 5 |
 
 The following measurements describe the October window above. Since 13 November, the three
-sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs; the old
-job names in this table remain historical. Since 1 November 2026,
-[Shared has seven mutation shards and a five-minute score job](#shared-mutation-shards);
-the `mutation-shared` row below records the earlier unsharded job.
+sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs. The old job
+names in this table remain historical. The `mutation-shared` row records the earlier unsharded job.
+[Shared now has seven mutation shards and a five-minute score job](#shared-mutation-shards).
 
 | file               | job                               | longest measured (min)         | limit |
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
