@@ -2485,14 +2485,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
             (row !== undefined && this.filterOpensBranch!(row))
           );
         },
-        (keys) => (this.collapseDescendants ? this.#closureKeys(keys) : keys),
+        (keys) => this.#closureKeys(keys),
       );
       if (persistent.length !== keys.length) this.requestUpdate();
       if (persistent.length === 0) return;
       keys = persistent;
     }
     if (!open && this.collapseDescendants) keys = this.#closureKeys(keys);
-    if (filtering && !fromToggle && !searching) this.#filterExpansion.set(keys, open);
+    if (filtering && !fromToggle) this.#filterExpansion.set(keys, open);
     if (searching) {
       const next = new Set(this.searchExpanded);
       for (const key of keys) {

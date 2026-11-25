@@ -279,7 +279,8 @@ export class ProductBrowser extends LitElement {
       void this.#list()
         ?.hiddenSavedProductName(saved.id)
         .then((name) => {
-          if (name === undefined && this.hiddenSave === saved) this.hiddenSave = null;
+          if (name !== saved.name && this.hiddenSave === saved)
+            this.hiddenSave = name === undefined ? null : { id: saved.id, name };
         });
     if (changed.has("categoryId") || changed.has("categories") || changed.has("tableHidden")) {
       const id = this.categoryId;
@@ -313,7 +314,7 @@ export class ProductBrowser extends LitElement {
     const list = this.#list();
     const name = id === null ? undefined : await list?.hiddenSavedProductName(id);
     this.hiddenSave = id !== null && name !== undefined ? { id, name } : null;
-    if (created && id !== null) await list?.revealProduct(id);
+    if (created && id !== null && name === undefined) await list?.revealProduct(id);
   }
   readonly #clearProductSearch = (): void => {
     const saved = this.hiddenSave;

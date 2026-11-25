@@ -663,27 +663,40 @@ describe("menu-screen", () => {
     expect(api.listProducts).toHaveBeenCalledOnce();
   });
 
-  it("focuses Filters when a keyboard switch removes the last matching dish", async () => {
-    const product = { ...products[0]!, primaryCategoryId: null };
-    const api = stubApi({
-      listProducts: vi
-        .fn()
-        .mockResolvedValueOnce([product])
-        .mockResolvedValue([{ ...product, available: false }]),
-      setProductAvailability: vi.fn().mockResolvedValue(undefined),
-    });
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-    await flush(el);
-    const table = await productTable(el);
-    onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
-    table.chooseFilter("available", ["yes"]);
-    await table.updateComplete;
-    const root = table.shadowRoot!;
-    root.querySelector("wt-switch")!.focus();
-    await userEvent.keyboard(" ");
-    await vi.waitFor(() => expect(root.querySelector("wt-switch")).toBeNull());
-    expect(root.activeElement).toBe(root.querySelector(".filters-trigger"));
-  });
+  it.each([false, true])(
+    "keeps focus near a switched dish that leaves the filter (%s)",
+    async (hasNeighbors) => {
+      const product = { ...products[0]!, primaryCategoryId: null };
+      const before = { ...product, id: "bread", name: "Bread" };
+      const after = { ...product, id: "toast", name: "Toast" };
+      const rows = hasNeighbors ? [before, product, after] : [product];
+      const api = stubApi({
+        listProducts: vi
+          .fn()
+          .mockResolvedValueOnce(rows)
+          .mockResolvedValue(
+            rows.map((row) => (row.id === product.id ? { ...row, available: false } : row)),
+          ),
+        setProductAvailability: vi.fn().mockResolvedValue(undefined),
+      });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const table = await productTable(el);
+      onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
+      table.chooseFilter("available", ["yes"]);
+      await table.updateComplete;
+      const root = table.shadowRoot!;
+      const current = () => root.querySelector<HTMLElement>('tr[data-row-key="p1"] wt-switch');
+      current()!.focus();
+      await userEvent.keyboard(" ");
+      await vi.waitFor(() => expect(current()).toBeNull());
+      expect(root.activeElement).toBe(
+        root.querySelector(
+          hasNeighbors ? 'tr[data-row-key="toast"] wt-switch' : ".filters-trigger",
+        ),
+      );
+    },
+  );
 
   it("keeps the scroll position after a pointer changes the availability sort", async () => {
     const many = Array.from({ length: 40 }, (_, index) => ({
@@ -1394,31 +1407,52 @@ describe("menu-screen", () => {
     );
   });
 
-  it("keeps the category a new matching product was saved into open after clearing the filter", async () => {
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
-      api: stubApi({
-        listProducts: vi
-          .fn()
-          .mockResolvedValueOnce(products)
-          .mockResolvedValue([...products, { ...products[0]!, id: "new", name: "Toast" }]),
-      }),
-    });
-    await flush(el);
-    const table = await productTable(el);
-    expect(table.isExpanded("folder:c1")).toBe(false);
-    onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
-    table.chooseFilter("available", ["yes"]);
-    await table.updateComplete;
-    emit(list(el), "add-product", { categoryId: "c1" });
-    await el.updateComplete;
-    emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
-    await vi.waitFor(() =>
-      expect(table.shadowRoot!.querySelector('tr[data-row-key="new"]')).not.toBeNull(),
-    );
-    table.chooseFilter("available", []);
-    await table.updateComplete;
-    expect(table.shadowRoot!.querySelector('tr[data-row-key="new"]')).not.toBeNull();
-  });
+  it.each([true, false])(
+    "opens the saved dish's category once the new dish matches (%s)",
+    async (matches) => {
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
+        api: stubApi({
+          listProducts: vi
+            .fn()
+            .mockResolvedValueOnce(products)
+            .mockResolvedValue([
+              ...products,
+              { ...products[0]!, id: "new", name: "Toast", available: matches },
+            ]),
+        }),
+      });
+      await flush(el);
+      const table = await productTable(el);
+      const search = list(el).shadowRoot!.querySelector('[name="menu-search"]')!;
+      expect(table.isExpanded("folder:c1")).toBe(false);
+      onTestFinished(() => sessionStorage.removeItem("waitron.products.table"));
+      table.chooseFilter("available", ["yes"]);
+      await table.updateComplete;
+      table
+        .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:c1"] .row-activate')!
+        .click();
+      await table.updateComplete;
+      if (matches) emit(search, "wt-change", { value: "Toast" });
+      emit(list(el), "add-product", { categoryId: "c1" });
+      await el.updateComplete;
+      emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
+      const shown = () => table.shadowRoot!.querySelector('tr[data-row-key="new"]');
+      if (matches) {
+        await vi.waitFor(() => expect(shown()).not.toBeNull());
+        emit(search, "wt-change", { value: "" });
+        await productTable(el);
+        expect(shown()).not.toBeNull();
+        table.chooseFilter("available", []);
+      } else {
+        const notice = () =>
+          list(el).shadowRoot!.querySelector('[data-test="product-saved-hidden"]');
+        await vi.waitFor(() => expect(notice()?.textContent).toContain("Toast"));
+        expect(table.isExpanded("folder:c1")).toBe(false);
+        notice()!.querySelector<HTMLElement>("wt-button")!.click();
+      }
+      await vi.waitFor(() => expect(shown()).not.toBeNull());
+    },
+  );
 
   it.each(["Clear", "refresh"])(
     "dismisses a hidden save and shows the product after %s",
@@ -1458,7 +1492,7 @@ describe("menu-screen", () => {
         vi.mocked(api.listProducts).mockResolvedValue([{ ...products[0]!, name: "Toast plate" }]);
         liveData.invalidate([{ type: "products" }]);
         await vi.waitFor(() => expect(list(el).products[0]?.name).toBe("Toast plate"));
-        expect(notice()).not.toBeNull();
+        await vi.waitFor(() => expect(notice()?.textContent).toContain("Toast plate"));
         vi.mocked(api.listProducts).mockResolvedValue(products);
         liveData.invalidate([{ type: "products" }]);
         await vi.waitFor(() =>
