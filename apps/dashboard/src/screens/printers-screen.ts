@@ -64,6 +64,16 @@ import { jobStatusName, transportName } from "../i18n/domain.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
+import {
+  printerEditForm,
+  printerEditStyles,
+  printerPickupRolesField,
+  receiptPrinterSettings,
+  receiptPrinterSettingsPatch,
+  samePickupRoles,
+  sameReceiptPrinterSettings,
+  type ReceiptPrinterSettings,
+} from "./printer-edit-form.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
@@ -133,10 +143,9 @@ export const printerSettingFields = [
   },
   {
     id: "paper-width",
-    name: "printer-ruler-number",
+    name: "printer-paper-width",
     labelKey: "printers.paper_width",
-    editor: "calibrate",
-    step: 1,
+    editor: "edit",
     rows: "receipt",
   },
   {
@@ -149,53 +158,52 @@ export const printerSettingFields = [
   },
   {
     id: "resolution",
-    name: "printer-qr-square",
+    name: "printer-resolution",
     labelKey: "printers.resolution",
-    editor: "calibrate",
-    step: 1,
+    editor: "edit",
     rows: "receipt",
   },
   {
     id: "printer-cash-drawer",
     name: "printer-cash-drawer",
     labelKey: "printers.drawer_attached",
-    editor: "calibrate",
-    step: 3,
+    editor: "edit",
     rows: "receipt",
   },
   {
     id: "printer-portable",
     name: "printer-portable",
     labelKey: "printers.portable",
-    editor: "calibrate",
-    step: 3,
+    editor: "edit",
     rows: "receipt",
   },
   {
     id: "printer-pickup-roles",
     name: "printer-pickup-roles",
     labelKey: "printers.pickup_roles",
-    editor: "calibrate",
-    step: 3,
-    rows: "receipt",
+    editor: "edit",
+    rows: "portable",
   },
 ] as const satisfies readonly {
   id: string;
   name: string;
   labelKey: StringKey;
   editor: "edit" | "calibrate";
-  step?: 1 | 3;
-  rows: "all" | "network" | "receipt";
+  step?: 1;
+  rows: "all" | "network" | "receipt" | "portable";
 }[];
 
-/** The printer details form, as it would be saved. */
-interface DetailEditValues {
+interface DetailTextFields {
   name: string;
   host: string;
   port: string;
 }
 
-type DetailEditErrors = Record<keyof DetailEditValues, string>;
+interface DetailEditValues extends DetailTextFields {
+  settings?: ReceiptPrinterSettings;
+}
+
+type DetailEditErrors = Record<keyof DetailTextFields, string>;
 
 /** One row of the printers table: a receipt printer or an A4 printer, stored apart. */
 type PrinterTableRow = { kind: "receipt"; printer: Printer } | { kind: "a4"; row: PagePrinterRow };
@@ -426,10 +434,7 @@ interface EditablePrinter {
   active: boolean;
 }
 
-type CalibrationSettings = Pick<
-  EditablePrinter,
-  "paperWidth" | "resolution" | "hasCashDrawer" | "portable" | "pickupRoles"
->;
+type CalibrationSettings = ReceiptPrinterSettings;
 
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 30_000;
@@ -445,6 +450,7 @@ export class PrintersScreen extends LitElement {
     pageTitleStyles,
     holdNoticeStyles,
     settingsCardStyles,
+    printerEditStyles,
     css`
       :host {
         display: block;
@@ -1040,16 +1046,16 @@ export class PrintersScreen extends LitElement {
   }
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 1;
-  @state() private detailEdit: {
-    id: string;
-    name: string;
-    host: string;
-    port: string;
-    saving: boolean;
-    error: string | null;
-    /** A refusal the server tied to the name field, shown under it until the name changes. */
-    nameRefusal: string | null;
-  } | null = null;
+  @state() private detailEdit:
+    | (DetailEditValues & {
+        id: string;
+        saving: boolean;
+        error: string | null;
+        /** A refusal the server tied to the name field, shown under it until the name changes. */
+        nameRefusal: string | null;
+      })
+    | null = null;
+  readonly #detailEditFeedback = new FormFeedback(this);
   #detailEditScope?: DraftScope<DetailEditValues>;
   /** What the form opened with, or last saved. */
   #detailEditBaseline?: DetailEditValues;
@@ -3328,10 +3334,16 @@ export class PrintersScreen extends LitElement {
   #detailEditValues(): DetailEditValues {
     const draft = this.detailEdit!;
     const port = draft.port.trim();
+    const settings = draft.settings;
+    const openingSettings = this.#detailEditBaseline?.settings;
     return {
       name: draft.name.trim(),
       host: draft.host.trim(),
       port: /^\d+$/.test(port) ? String(Number(port)) : port,
+      settings:
+        settings && !settings.portable && openingSettings
+          ? { ...settings, pickupRoles: openingSettings.pickupRoles }
+          : settings,
     };
   }
 
@@ -3340,25 +3352,33 @@ export class PrintersScreen extends LitElement {
       name: printer.name,
       host: printer.host ?? "",
       port: printer.port === null ? "" : String(printer.port),
+      settings: receiptPrinterSettings(printer),
     };
   }
 
   #openDetailEdit(id: string, saved: DetailEditValues): void {
-    this.#detailEditScope?.dispose();
+    this.#disposeDetailDrafts();
     this.detailEdit = { id, ...saved, saving: false, error: null, nameRefusal: null };
     this.#detailEditBaseline = this.#detailEditValues();
     this.#detailEditScope = draftScopeFor<DetailEditValues>(this, {
       id: {},
       current: () => this.#detailEditValues(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) => a.name === b.name && a.host === b.host && a.port === b.port,
+      equal: (a, b) =>
+        a.name === b.name &&
+        a.host === b.host &&
+        a.port === b.port &&
+        sameReceiptPrinterSettings(a.settings, b.settings),
       restore: (value) => {
         this.detailEdit = { ...this.detailEdit!, ...value, error: null, nameRefusal: null };
       },
     }).scope;
     void this.updateComplete.then(() => {
-      if (this.detailEdit?.id === id)
-        this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
+      if (this.detailEdit?.id !== id) return;
+      const name = this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]');
+      if (this.#deleteDialog.target === id && !this.#deleteDialog.submitting)
+        this.#deleteDialog.close(name);
+      else name?.focus();
     });
   }
 
@@ -3408,10 +3428,13 @@ export class PrintersScreen extends LitElement {
     const saved = this.#savedEditValues(printer);
     // The name, or the address and port as a pair, is sent only when this person changed it, so
     // something they left alone cannot undo another session's change to it.
-    const sends = (fields: (keyof DetailEditValues)[]) =>
+    const sends = (fields: (keyof DetailTextFields)[]) =>
       fields.some((field) => values[field] !== baseline[field]) &&
       fields.some((field) => values[field] !== saved[field]);
-    const patch: { name?: string; host?: string; port?: number | null } = {};
+    const patch: PrinterPatch =
+      values.settings && baseline.settings && saved.settings
+        ? receiptPrinterSettingsPatch(values.settings, baseline.settings, saved.settings)
+        : {};
     if (sends(["name"])) patch.name = values.name;
     if (printer.transport === "network_tcp" && sends(["host", "port"])) {
       patch.host = values.host;
@@ -3495,9 +3518,9 @@ export class PrintersScreen extends LitElement {
         ? this.#detailEditErrors(a4.id, false)
         : undefined;
     return html`<wt-modal
-      size="standard"
+      size=${editing ? "compact" : "standard"}
       data-test="printer-details-modal"
-      heading=${p?.name ?? a4?.name ?? nothing}
+      heading=${editing ? t("printers.edit_printer") : (p?.name ?? a4?.name ?? nothing)}
       aria-label=${p || a4 ? nothing : t("printers.list_title")}
       .open=${this.selectedPrinterId !== null}
       .opener=${this.#detailsOpener}
@@ -3695,7 +3718,7 @@ export class PrintersScreen extends LitElement {
 
   #renderDetailEditForm(id: string, network: boolean, errors: DetailEditErrors): TemplateResult {
     const draft = this.detailEdit!;
-    const change = (field: keyof DetailEditValues) => (event: CustomEvent<{ value: string }>) => {
+    const change = (field: keyof DetailTextFields) => (event: CustomEvent<{ value: string }>) => {
       if (!(event.currentTarget as HTMLElement).isConnected) return;
       event.stopPropagation();
       if (this.detailEdit?.id !== id) return;
@@ -3750,6 +3773,26 @@ export class PrintersScreen extends LitElement {
               ></wt-input>`
           : nothing
       }
+      ${
+        draft.settings
+          ? printerEditForm({
+              id,
+              settings: draft.settings,
+              saving: draft.saving,
+              change: (patch) => {
+                const current = this.detailEdit;
+                if (current?.id !== id || !current.settings) return;
+                this.detailEdit = {
+                  ...current,
+                  settings: { ...current.settings, ...patch },
+                  error: null,
+                };
+                this.#detailEditScope?.changed();
+              },
+              calibrate: () => void this.#url.write({ editor: "calibrate", step: "1" }),
+            })
+          : nothing
+      }
     </div>`;
   }
 
@@ -3759,7 +3802,11 @@ export class PrintersScreen extends LitElement {
     const action = saveActionState(this.#detailEditScope);
     return html`<wt-form-actions
       slot="footer"
-      .error=${bottomMessage(draft.error, invalid ? t("form.fix_fields") : null)}
+      .error=${this.#detailEditFeedback.message(
+        { ...errors, request: draft.error ?? undefined },
+        new Set(Object.keys(errors).filter((field) => errors[field as keyof DetailEditErrors])),
+        t("form.fix_fields"),
+      )}
     >
       <wt-button
         slot="cancel"
@@ -4874,25 +4921,9 @@ export class PrintersScreen extends LitElement {
             ></wt-switch>
             <p class="hint" aria-hidden="true">${t("printers.portable_hint")}</p>
           </div>
-          <wt-combobox
-            name="printer-pickup-roles"
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            label=${t("printers.pickup_roles")}
-            multiple
-            show-empty-option
-            .values=${p.pickupRoles}
-            .countLabel=${() => t("printers.pickup_both")}
-            .options=${[
-              { value: "", label: t("printers.pickup_none") },
-              { value: "receipt", label: t("devices.receipt_printer_now") },
-              { value: "payment_slip", label: t("devices.slip_printer_now") },
-            ]}
-            @wt-change=${(e: CustomEvent<{ values: Printer["pickupRoles"] }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, { pickupRoles: e.detail.values });
-            }}
-          ></wt-combobox>
+          ${printerPickupRolesField(p.pickupRoles, false, (pickupRoles) =>
+            this.#editPrinter(p.id, { pickupRoles }),
+          )}
         </div>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}>
@@ -5645,10 +5676,4 @@ declare global {
   interface HTMLElementTagNameMap {
     "dashboard-printers-screen": PrintersScreen;
   }
-}
-
-function samePickupRoles(a: Printer["pickupRoles"], b: Printer["pickupRoles"]): boolean {
-  const left = new Set(a);
-  const right = new Set(b);
-  return left.size === right.size && [...left].every((role) => right.has(role));
 }

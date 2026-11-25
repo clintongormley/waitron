@@ -47,13 +47,15 @@ impresora** en los detalles de la impresora la repite.
 ## Detalles de la impresora {#printer-details}
 
 Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de impresión** para
-abrir sus detalles. **Editar** cambia su nombre y, si
-es una impresora de recibos de red, su dirección. **Calibrar impresora** repite la calibración.
+abrir sus detalles. En una impresora de recibos, elige **Editar** para cambiar el nombre,
+el ancho del papel, la resolución de impresión, el cajón o la portabilidad. Si es de red,
+también puedes cambiar la dirección y el puerto. Activa **Impresora portátil** para elegir
+qué imprime **Al recogerla**. Elige **Calibrar impresora** para medir el papel o probar el cajón.
 En el menú de la fila de una impresora de recibos, **Imprimir página de prueba** imprime un recibo
 de muestra con la cabecera del local pero con un nombre de empresa y un NIF inventados, en el
 idioma del ticket del local, marcado como prueba y no como factura.
-Los detalles de una impresora A4 no tienen calibración;
-**Imprimir página de prueba** la comprueba. Para quitarla, elige **Eliminar** en su menú. La
+En una impresora A4, usa **Editar** para cambiarle el nombre o **Imprimir página de prueba** para
+comprobarla. Para quitarla, elige **Eliminar** en su menú. La
 confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
 usarla, elige **Añadir impresora**, después **Añadir** junto a ella y otra vez **Añadir**.
 Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perfiles de dispositivo.
@@ -75,8 +77,8 @@ nuevo** si aparece en sus detalles.
 
 Si **Eliminar** avisa de que el cajón tiene saldo o un recuento pendiente, sigue las instrucciones
 de **Cerrar primero**. Elige **Cerrar cajón** en el terminal indicado y deja el cajón vacío. Si no
-aparece un terminal, asigna el cajón en **Dispositivos**. Si el ajuste del cajón está desactivado,
-actívalo en la calibración. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
+aparece un terminal, asigna el cajón en **Dispositivos**. Si **Cajón portamonedas conectado**
+está desactivado, actívalo en **Editar**. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
 Si **Impresora portátil** está activada, elige **Etiqueta QR…** en el menú de su fila y pega la

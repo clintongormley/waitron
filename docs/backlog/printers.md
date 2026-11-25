@@ -169,7 +169,8 @@ both when the connection was closed at once and five seconds later. The connecti
 long as the printer stays switched on: 0.2–1.4 s, sometimes about 2 s, after some switch-ons and 2.7–4.3 s after others, with no
 known cause, and a Bluetooth scan just before did not cure it. The helper's 20-second connect and
 send timeouts and the agent's five-second grace have not been tried at their limits.
-[A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
+The Bluetooth print channels decision records the timed runs.
+[A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md), [decision and timings](#decisions-and-deliberate-limits).
 
 ## The virtual PDF printer
 
@@ -276,18 +277,6 @@ Reprint for A4 rows), A1584 (a shorter Delete printer window), A1585 (dragging b
   resumed with the owner. On 25 November 2026 one Android phone reached a printer over a Wi-Fi without internet and
   the internet over mobile data at once. [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
 
-## A1580. Edit printer holds the settings calibration hides
-
-Owner, 2026-11-25: "i can't edit a printer to make it portable, i have to calibrate it. also the cash
-register setting. maybe also expose the width and resolution (without the calibration)", then "Build
-it" of a picture (`mock-edit-printer.png` in `.impeccable/shots/` on the owner's Mac, not in the
-repository). Edit holds, top to bottom: the name (and a network printer's address, as today), Paper
-width and Print resolution side by side, "Calibrate printer if you are not sure of these." with the
-first two words a link, Cash drawer attached, Portable printer with its hint, and "When picked up" only
-while Portable is on. Calibration stays for measuring paper, and the drawer test it holds must stay
-reachable. An A4 printer's Edit is unchanged. It follows #4336 and #4342, which change the same screen;
-an unfinished start is on the local branch `fix/edit-printer-settings`.
-
 ## Decisions and deliberate limits
 
 - **The print agent's setup page has no TLS certificate, on purpose (owner, 2026-09-27).** It asks
@@ -306,6 +295,15 @@ an unfinished start is on the local branch `fix/edit-printer-settings`.
   and remembers the channel after a successful send, including channel 1 after a failed lookup.
   Success means the kernel accepted the bytes. If paper never comes out, the agent still keeps the
   channel until a send fails or the agent restarts.
+  On the spare before the printer restarted, the old agent took 3.24–3.92 s for slips and
+  7.60 s for a receipt whose lookup reached its deadline. Immediately repeating that receipt took
+  3.81 s. After the owner restarted the printer, the agent with the channel change delivered four
+  slips in 0.74, 0.53, 2.10 and 0.29 s, and bare connects took 0.26–1.40 s. The printer restart
+  changed between the two rounds, so those figures do not isolate the build's effect.
+  The owner confirmed both 60-line strips reached line 60, with immediate close and with
+  close after five seconds. When the battery died and the printer was switched back on, connects
+  took 3.0–3.5 s and channel lookups 3.1–3.6 s. Restarting again brought connects to 0.24–2.15 s.
+  The watcher reopened part 2 on 25 November at 20:17. Part 3 waits for part 2's measurements.
   [Plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**

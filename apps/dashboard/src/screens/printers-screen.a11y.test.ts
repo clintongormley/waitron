@@ -660,6 +660,10 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     openDetailsEdit(el);
     await flush(el);
     await expectNoA11yViolations(host);
+    const portable = q(el, "[name=printer-portable]")!.shadowRoot!.querySelector("input")!;
+    await userEvent.click(portable);
+    await vi.waitFor(() => expect(q(el, "[name=printer-pickup-roles]")).not.toBeNull());
+    await expectNoA11yViolations(host);
   });
   it("renders the Used by group, its links and its empty state accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(

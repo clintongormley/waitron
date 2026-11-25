@@ -8,7 +8,7 @@ it("resolves only offered controls through passive lists, including switched-off
   const printers = [
     { ...receiptPrinter, id: "p/+", name: "Network", active: false },
     { ...receiptPrinter, id: "usb", name: "USB", transport: "usb" },
-    { ...receiptPrinter, id: "bt", name: "Bluetooth", transport: "bluetooth" },
+    { ...receiptPrinter, id: "bt", name: "Bluetooth", transport: "bluetooth", portable: true },
     { ...receiptPrinter, id: "cloud", name: "Cloud", transport: "cloud_poll" },
   ];
   const fetchImpl = vi.fn(
@@ -53,24 +53,27 @@ it("resolves only offered controls through passive lists, including switched-off
     {
       id: "p/+",
       label: "Network",
-      path: "/printers/view/printers/printer/p%2F%2B/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/p%2F%2B/editor/edit",
     },
     {
       id: "usb",
       label: "USB",
-      path: "/printers/view/printers/printer/usb/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/usb/editor/edit",
     },
     {
       id: "bt",
       label: "Bluetooth",
-      path: "/printers/view/printers/printer/bt/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/bt/editor/edit",
     },
     {
       id: "cloud",
       label: "Cloud",
-      path: "/printers/view/printers/printer/cloud/editor/calibrate/step/3",
+      path: "/printers/view/printers/printer/cloud/editor/edit",
     },
   ]);
-  expect(background).toHaveBeenCalledTimes(3);
+  expect(await resolve("printer-pickup-roles")).toEqual([
+    { id: "bt", label: "Bluetooth", path: "/printers/view/printers/printer/bt/editor/edit" },
+  ]);
+  expect(background).toHaveBeenCalledTimes(4);
   expect(pages).toHaveBeenCalledTimes(1);
 });

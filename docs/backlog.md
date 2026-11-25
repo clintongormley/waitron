@@ -762,7 +762,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 ### Printers, the print agent and receipts
 
-- **A1580. Edit printer holds the settings calibration hides** (owner, 2026-11-25; important, size M). [Detail](backlog/printers.md#a1580-edit-printer-holds-the-settings-calibration-hides)
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
@@ -772,7 +771,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
-- **A1578. Measure the remaining Bluetooth print delay on the spare.** Compare both builds, including cold connects with and without a channel lookup. Use the timings and paper checks to decide whether to keep connections open or connect early when a device picks up a Bluetooth printer or opens Pay. [Plan](superpowers/plans/2026-11-25-a1578-bluetooth-printing.md)
+- **A1578 part 2. Keep the Bluetooth connection open for about a minute after a print.** Check how this affects another box or phone that needs the printer and its battery. A stale connection needs to fall back without losing or doubling a print. Connect early (part 3) waits for the part 2 measurements. [Detail](backlog/printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
+
 
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)

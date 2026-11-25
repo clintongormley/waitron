@@ -4479,12 +4479,13 @@ reuse their label keys and tab mapping; a mounted EN/ES check compares them with
 in both directions. Zone settings use **Edit zone** as their location. Their chooser labels pair the
 department and zone names; the selected zone opens its existing editor, keeping an edited draft
 when it is already open. Zone declarations have the same mounted EN/ES label/control check.
-Printer settings use **Edit** or **Calibrate printer** as their location. Name offers receipt and A4
-printers; address and port offer network receipt printers; calibration offers receipt printers,
-including switched-off ones. Calibration opens the step holding the setting. Its Continue and Back
-buttons retain the draft and replace the address; searching another step uses Keep editing/Discard.
+Search opens saved printer settings in **Edit**. Name offers receipt and A4 printers. Address and
+port offer network receipt printers, and pick-up roles offer portable printers. The ruler number
+and QR square open the first step of **Calibrate printer**. Continue and Back retain the calibration
+draft and replace the address. Changing to another search target uses Keep editing/Discard.
 The chooser shows saved printer names, including identical names across receipt and A4 printers.
-Mounted EN/ES checks compare the Edit and calibration controls and result labels with declarations.
+Mounted EN/ES checks compare the controls with their declarations. Each setting offered in both
+Edit and calibration appears once in search, under Edit.
 Device settings use **Edit** as their location and require permission to manage hardware, matching
 the device-list read. Kitchen-setting candidates follow the current profile and fitted station/zone
 lists. A refused reader read in the editor still hides its field. The chooser shows device names
@@ -4796,11 +4797,13 @@ beside its value, the label muted and the value in normal weight, and stacks the
 Printer details open in a modal over the tab they were opened from (A405). Each fact is one row,
 in groups under Status, Connection, Paper and drawer, and Used by (`settingsRows`); Used by shows
 only outside Edit. The view footer reads Close and Delete at the start,
-Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
-network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
-with the one bottom message, Cancel returns to the details, and Escape closes the window. The
-list's Edit opens the details in edit mode with the name focused. Cancel discards edits without
-asking. Escape and leaving the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
+Calibrate printer and Edit at the end. A receipt printer's Edit form holds the name, host and
+port for network printers, paper width and resolution side by side, cash drawer attachment,
+and portability. Pick-up roles appear when Portable printer is on. The Calibrate printer link
+below the paper fields asks before leaving a changed form and opens the first calibration step.
+The footer holds Cancel, Save and one bottom message. The list's Edit opens the details in edit
+mode with the name focused. Cancel discards edits and returns to the details. Escape and leaving
+the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
 Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
 is set. Its Edit form holds the name alone.
 A disabled Bluetooth printer that no agent reports paired offers Pair again in its row's actions

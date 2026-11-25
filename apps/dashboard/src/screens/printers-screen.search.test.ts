@@ -35,6 +35,7 @@ it.each(["en-GB", "es-ES"])(
           {
             ...receiptPrinter,
             hasCashDrawer: true,
+            portable: true,
             transport: transport === "a4" ? "network_tcp" : transport,
           },
         ],
@@ -55,6 +56,13 @@ it.each(["en-GB", "es-ES"])(
         )) {
           const name = field.getAttribute("name")!;
           if (!name.startsWith("printer-") || name === "printer-drawer-result") continue;
+          const editField = JSON.stringify([name, field.label, "edit", undefined]);
+          if (
+            editor === "calibrate" &&
+            field.closest("[data-test=calibration-step-3]") &&
+            actual.has(editField)
+          )
+            continue;
           const step = field
             .closest("[data-test^=calibration-step-]")
             ?.getAttribute("data-test")
@@ -76,15 +84,6 @@ it.each(["en-GB", "es-ES"])(
           .poll(() => screen.shadowRoot!.querySelector("[name=printer-drawer-result]"))
           .toBeTruthy();
         collect("calibrate");
-        for (const [answer, name] of [
-          ["paper", "printer-ruler-number"],
-          ["resolution", "printer-qr-square"],
-        ]) {
-          const label = screen
-            .shadowRoot!.querySelector(`[data-test=calibration-result-${answer}]`)!
-            .previousElementSibling!.textContent!.trim();
-          actual.add(JSON.stringify([name, label, "calibrate", 1]));
-        }
       }
       const fields = printerSettingFields;
       const declared = fields
@@ -271,4 +270,44 @@ it("a missing saved printer keeps the not-found refusal", async () => {
     .poll(() => root.querySelector("[data-test=printer-details-body]")?.textContent)
     .toContain(codeMessage("printer.not_found"));
   expect(root.querySelector("[data-test=printer-setting-unavailable]")).toBeNull();
+});
+
+it("the drawer guidance opens an operable Edit from Delete in printer details", async () => {
+  const { app, fetchImpl } = await mountPrinterApp({
+    path: "/printers/view/printers/printer/p1",
+    respond: (url) =>
+      url === "/management-api/printers/p1/delete-impact"
+        ? Promise.resolve(
+            new Response(
+              JSON.stringify({
+                target: { id: "p1", name: "Kitchen" },
+                refusals: [],
+                ends: [],
+                removes: [],
+                drawerClose: { devices: [], needsDrawerSetting: true },
+              }),
+            ),
+          )
+        : undefined,
+  });
+  const root = printerScreen(app).shadowRoot!;
+  const remove = () => root.querySelector<HTMLElement>("[data-test=delete-printer-detail]");
+  await expect.poll(remove).toBeTruthy();
+  await userEvent.click(remove()!);
+  const deletion = root.querySelector<HTMLElementTagNameMap["wt-delete-dialog"]>(
+    "[data-test=delete-printer-dialog]",
+  )!;
+  const link = () =>
+    deletion.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=delete-guidance] a");
+  await expect.poll(link).toBeTruthy();
+  await userEvent.click(link()!);
+  await expect.poll(() => location.pathname).toBe(path("p1"));
+  await expect.poll(() => deletion.open).toBe(false);
+  await expect.poll(() => root.activeElement?.getAttribute("name")).toBe("printer-detail-name");
+  const drawer = root.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=printer-cash-drawer]",
+  )!;
+  await userEvent.click(drawer.shadowRoot!.querySelector("input")!);
+  expect(drawer.checked).toBe(true);
+  expect(fetchImpl.mock.calls.filter(([, init]) => init.method !== "GET")).toEqual([]);
 });

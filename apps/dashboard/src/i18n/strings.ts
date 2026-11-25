@@ -1107,6 +1107,7 @@ export const en = {
   "action.add": "Add",
   "printers.add_agent": "Add an agent",
   "printers.edit_agent": "Edit print agent",
+  "printers.edit_printer": "Edit printer",
   "printers.agent_host": "Host",
   "printers.status": "Status",
   "printers.last_seen": "Last seen",
@@ -1140,7 +1141,8 @@ export const en = {
   "printers.connection": "Connection",
   "printers.connected_through": "Connected through",
   "printers.details_paper": "Paper and drawer",
-  "printers.details_help": "Edit changes its name and, for a network printer, its address.",
+  "printers.details_help":
+    "Choose Edit to change the printer’s name, paper settings, cash drawer or portability. For a network printer, you can also change its address. Use Calibrate printer to measure the paper or test the drawer.",
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
@@ -2110,7 +2112,7 @@ export const en = {
   "printers.drawer_delete_assign":
     "Assign the drawer to a till whose profile allows {capability}. Then use Close drawer on that till.",
   "printers.drawer_delete_attach":
-    "Turn on {setting}, then close the drawer from a till that can open it.",
+    "In Edit, turn on {setting}, then close the drawer from a till that can open it.",
   "printers.drawer_delete_devices": "Open Devices",
   "printers.drawer_delete_anyway": "Delete anyway",
   "printers.drawer_delete_stop": "Stop",
@@ -2197,6 +2199,7 @@ export const en = {
   "printers.resolution_203": "203 dpi",
   "printers.agent_setup": "Open print agent",
   "printers.calibrate": "Calibrate printer",
+  "printers.edit_calibrate_hint": "if you are not sure of these.",
   "printers.setting_unavailable":
     "This setting is not available for this printer. Close closes this window.",
   "printers.calibration_progress": "Step {step} of 3",
@@ -5920,6 +5923,7 @@ export const es: Record<StringKey, string> = {
   "action.add": "Añadir",
   "printers.add_agent": "Añadir un agente",
   "printers.edit_agent": "Editar agente de impresión",
+  "printers.edit_printer": "Editar impresora",
   "printers.agent_host": "Equipo",
   "printers.status": "Estado",
   "printers.last_seen": "Último contacto",
@@ -5954,7 +5958,8 @@ export const es: Record<StringKey, string> = {
   "printers.connection": "Conexión",
   "printers.connected_through": "Conectada a través de",
   "printers.details_paper": "Papel y cajón",
-  "printers.details_help": "Editar cambia su nombre y, si es de red, su dirección.",
+  "printers.details_help":
+    "Elige Editar para cambiar el nombre, el papel, el cajón o la portabilidad de la impresora. Si es de red, también puedes cambiar su dirección. Elige Calibrar impresora para medir el papel o probar el cajón.",
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":
@@ -6944,7 +6949,7 @@ export const es: Record<StringKey, string> = {
   "printers.drawer_delete_assign":
     "Asigna el cajón a un terminal cuyo perfil permita {capability}. Después, elige Cerrar cajón en ese terminal.",
   "printers.drawer_delete_attach":
-    "Activa {setting} y cierra el cajón desde un terminal que pueda abrirlo.",
+    "En Editar, activa {setting} y cierra el cajón desde un terminal que pueda abrirlo.",
   "printers.drawer_delete_devices": "Abrir Dispositivos",
   "printers.drawer_delete_anyway": "Eliminar de todos modos",
   "printers.drawer_delete_stop": "Detener",
@@ -7032,6 +7037,7 @@ export const es: Record<StringKey, string> = {
   "printers.resolution_203": "203 ppp",
   "printers.agent_setup": "Abrir agente de impresión",
   "printers.calibrate": "Calibrar impresora",
+  "printers.edit_calibrate_hint": "si tienes dudas sobre estos ajustes.",
   "printers.setting_unavailable":
     "Este ajuste no está disponible para esta impresora. Cerrar cierra esta ventana.",
   "printers.calibration_progress": "Paso {step} de 3",

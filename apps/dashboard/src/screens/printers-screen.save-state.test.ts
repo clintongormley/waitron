@@ -2,6 +2,7 @@ import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
+import { LiveData } from "@waitron/dashboard-kit";
 import { chooseOptions, chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
 import {
   cleanupWidgets,
@@ -432,6 +433,129 @@ function pending() {
   });
   return { answer, finish: () => finish() };
 }
+
+describe("the Edit printer settings form", () => {
+  it.each([true, false])("keeps live changes when roles edited=%s", async (editRoles) => {
+    const liveData = new LiveData();
+    let current = printer;
+    const { el, api } = await openDetail(
+      stubApi({
+        liveData,
+        listPrinters: vi.fn(async () => [current]),
+      }),
+    );
+    expect(q(el, "[data-test=printer-details-modal]")?.getAttribute("heading")).toBe(
+      "Edit printer",
+    );
+    const width = () => q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=printer-paper-width]");
+    const resolution = q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=printer-resolution]");
+    expect(width()?.value).toBe("80mm");
+    expect(resolution?.value).toBe("180dpi");
+    expect(checkedOf(el, "printer-cash-drawer")).toBe(false);
+    expect(checkedOf(el, "printer-portable")).toBe(false);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
+    await choose(el, "printer-paper-width", "58mm");
+    await choose(el, "printer-resolution", "203dpi");
+    await toggle(el, "printer-portable", true);
+    if (editRoles) await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["receipt"]);
+
+    current = {
+      ...printer,
+      name: "Remote name",
+      hasCashDrawer: true,
+      resolution: "203dpi",
+      pickupRoles: ["receipt"],
+    };
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await expect
+      .poll(() => q(el, "[data-test=printer-row-p1]")?.textContent?.trim())
+      .toBe("Remote name");
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+      paperWidth: "58mm",
+      portable: true,
+    });
+  });
+
+  it.each([true, false])("saves roles with portability initially %s", async (portable) => {
+    const { el, api } = await openDetail(
+      stubApi({ listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable }]) }),
+    );
+    if (!portable) await toggle(el, "printer-portable", true);
+    await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["payment_slip"]);
+    expect(await state(el, detailsEditTest("save"))).toEqual(ready);
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+      pickupRoles: ["payment_slip"],
+      ...(portable ? {} : { portable: true }),
+    });
+  });
+
+  it("hides staged roles when portability is off and saves a drawer change by itself", async () => {
+    const { el, api } = await openDetail();
+    const roles = () => q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=printer-pickup-roles]");
+    expect(roles()).toBeNull();
+    expect(q(el, "[name=printer-portable]")).not.toBeNull();
+    await toggle(el, "printer-portable", true);
+    expect(roles()?.values).toEqual(["receipt", "payment_slip"]);
+    await chooseOptions(roles()!, ["payment_slip"]);
+    await toggle(el, "printer-portable", false);
+    expect(roles()).toBeNull();
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
+    await toggle(el, "printer-cash-drawer", true);
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { hasCashDrawer: true });
+  });
+
+  it("saves resolution and turning portability off without sending a staged role change", async () => {
+    const { el, api } = await openDetail(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable: true }]),
+      }),
+    );
+    const roles = q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=printer-pickup-roles]");
+    expect(roles?.values).toEqual(["receipt", "payment_slip"]);
+    await chooseOptions(roles!, ["payment_slip", "receipt"]);
+    expect(await state(el, detailsEditTest("save"))).toEqual(quiet);
+    await chooseOptions(roles!, ["payment_slip"]);
+    await choose(el, "printer-resolution", "203dpi");
+    await toggle(el, "printer-portable", false);
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+      resolution: "203dpi",
+      portable: false,
+    });
+  });
+
+  it("holds the settings and calibration link until Save answers", async () => {
+    const sent = pending();
+    const { el, api } = await openDetail(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable: true }]),
+        updatePrinter: vi.fn(() => sent.answer),
+      }),
+    );
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { name: "Kitchen 2" });
+    for (const name of ["paper-width", "resolution", "cash-drawer", "portable", "pickup-roles"]) {
+      expect(
+        q<HTMLElementTagNameMap["wt-combobox"] | HTMLElementTagNameMap["wt-switch"]>(
+          el,
+          `[name=printer-${name}]`,
+        )?.disabled,
+        name,
+      ).toBe(true);
+    }
+    const link = q(el, "[data-test=edit-printer-calibrate]")!;
+    expect(link.getAttribute("aria-disabled")).toBe("true");
+    const address = location.href;
+    await userEvent.click(page.elementLocator(link), { force: true });
+    expect(location.href).toBe(address);
+    sent.finish();
+    await expect.poll(() => detailsEditButton(el, "save")).toBeNull();
+  });
+});
 
 describe("the calibration wizard's Save, for a printer already set up", () => {
   const api = () => stubApi({ listPrinters: vi.fn().mockResolvedValue([calibrated]) });
