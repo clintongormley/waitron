@@ -71,6 +71,7 @@ import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { republishMenus } from "./testing/publish-menu.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState } from "./working-order-table-state.js";
 import { markGroupServed, markServed } from "./working-order-serving.js";
@@ -1327,10 +1328,12 @@ describe("readCurrentOrders (spec §4)", () => {
     await suite.db.execute(
       sql`update products set allergens = ${JSON.stringify({ milk: {} })}, dietary_declarations = ${JSON.stringify(["vegetarian"])} where name = 'steak'`,
     );
+    await inTx(republishMenus);
     await group(v, s.partyId, "fire", [line(v, "steak")]);
     await suite.db.execute(
       sql`update products set allergens = ${JSON.stringify({ gluten: { kinds: ["barley"] } })}, dietary_declarations = ${JSON.stringify(["halal"])} where name = 'steak'`,
     );
+    await inTx(republishMenus);
     const read = await currentOrders(s.partyId);
     expect(read.groups[0]!.rows[0]).toMatchObject({
       nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["vegetarian"] },

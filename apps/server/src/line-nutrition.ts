@@ -1,12 +1,7 @@
 import { VENUE_SERVICE } from "./modules.js";
-import { inArray, eq } from "drizzle-orm";
-import { workingOrderLines, products, type Transaction } from "@waitron/db";
-import {
-  effectiveProductColumns,
-  parentJoin,
-  parentProducts,
-  type ProductAllergens,
-} from "@waitron/menu";
+import { inArray } from "drizzle-orm";
+import { workingOrderLines, type Transaction } from "@waitron/db";
+import { readPublishedDeclarations, type ProductAllergens } from "@waitron/menu";
 
 export interface LineNutrition {
   allergens: ProductAllergens | null;
@@ -53,28 +48,30 @@ export async function captureSentLineNutrition(
   );
 }
 
+/** The published declarations of each line; a line no menu version holds is not reviewed. */
 async function currentLineDeclarations(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Map<string, LineNutrition>> {
   if (lineIds.length === 0) return new Map();
-  const rows = await tx
+  const lines = await tx
     .select({
-      lineId: workingOrderLines.id,
-      allergens: effectiveProductColumns.allergens,
-      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
+      id: workingOrderLines.id,
+      menuVersionId: workingOrderLines.menuVersionId,
+      menuItemId: workingOrderLines.menuItemId,
+      productId: workingOrderLines.productId,
+      extraListId: workingOrderLines.extraListId,
     })
     .from(workingOrderLines)
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
     .where(inArray(workingOrderLines.id, [...lineIds]));
+  const published = await readPublishedDeclarations(tx, lines);
   return new Map(
-    rows.map((row) => [
-      row.lineId,
-      {
-        allergens: row.allergens as ProductAllergens | null,
-        dietaryDeclarations: (row.dietaryDeclarations as string[] | null) ?? [],
-      },
-    ]),
+    lines.map(({ id }) => {
+      const { allergens, dietaryDeclarations } = published.get(id) ?? {
+        allergens: null,
+        dietaryDeclarations: [],
+      };
+      return [id, { allergens, dietaryDeclarations }];
+    }),
   );
 }

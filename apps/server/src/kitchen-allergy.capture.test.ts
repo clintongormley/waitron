@@ -64,11 +64,12 @@ beforeEach(async () => {
     .from(kitchenStations)
     .where(and(eq(kitchenStations.isDefault, true)));
   stationId = station!.id;
-  await inTx(v, (tx) =>
-    updateProduct(tx, v.productId("Burger"), {
+  await inTx(v, async (tx) => {
+    await updateProduct(tx, v.productId("Burger"), {
       allergens: { milk: {}, gluten: { kinds: ["wheat", "rye"] } },
-    }),
-  );
+    });
+    await republishMenus(tx);
+  });
 });
 
 const guest = {
@@ -623,7 +624,10 @@ describe("A669 capture", () => {
     await inTx(v, (tx) =>
       VENUE_SERVICE.writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, OPERATOR),
     );
-    await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: {} }));
+    await inTx(v, async (tx) => {
+      await updateProduct(tx, v.productId("Burger"), { allergens: {} });
+      await republishMenus(tx);
+    });
     const { enqueueKitchenTickets } = await import("./kitchen-ticket-enqueue.js");
     await inTx(v, (tx) =>
       enqueueKitchenTickets(tx, v.cfg, p.tabId, [{ workingOrderLineId: old.lineId, stationId }]),

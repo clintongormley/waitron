@@ -87,7 +87,10 @@ beforeEach(async () => {
     .from(kitchenStations)
     .where(and(eq(kitchenStations.isDefault, true)));
   stationId = station!.id;
-  await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } }));
+  await inTx(v, async (tx) => {
+    await updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } });
+    await republishMenus(tx);
+  });
   app = new Hono();
   mountTillApi(
     app,

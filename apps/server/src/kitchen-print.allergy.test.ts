@@ -33,7 +33,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
-import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireNewOrder,
@@ -181,7 +181,7 @@ async function papersOn(printerId: string): Promise<string[][]> {
   return jobs.map((job) => printedLines(job.payload).map((line) => line.trim()));
 }
 
-function setAllergens(
+function editAllergens(
   productId: string,
   allergens: ProductAllergens | null,
   dietaryDeclarations?: DietaryLabel[],
@@ -194,6 +194,11 @@ function setAllergens(
   );
 }
 
+async function setAllergens(...edit: Parameters<typeof editAllergens>) {
+  await editAllergens(...edit);
+  await withTransaction(suite.db, republishMenus);
+}
+
 describe("A1517-3 a dish's own allergens on English station paper", () => {
   let s: Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
   beforeEach(async () => {
@@ -201,6 +206,34 @@ describe("A1517-3 a dish's own allergens on English station paper", () => {
   });
   const fire = (lines: ProductLine[]) =>
     withTransaction(suite.db, (tx) => fireNewOrder(tx, s.cfg, lines));
+
+  it("prints the published allergens after an unpublished product edit", async () => {
+    await setAllergens(s.products.burger, { milk: {} });
+    const id = await fire([{ productId: s.products.burger, quantity: "1" }]);
+    await editAllergens(s.products.burger, { fish: {} });
+    await withTransaction(suite.db, (tx) => reprintOrderTickets(tx, s.cfg, id));
+    const papers = await papersOn(s.printers.grill);
+    expect(papers.map((paper) => paper.filter((line) => line.startsWith("Contains")))).toEqual([
+      ["Contains: Milk"],
+      ["Contains: Milk"],
+    ]);
+  });
+
+  it("prints no Contains line for a line no menu version holds, whatever its product declares", async () => {
+    await setAllergens(s.products.burger, { milk: {} });
+    const id = await fire([{ productId: s.products.burger, quantity: "1" }]);
+    await suite.db
+      .update(workingOrderLines)
+      .set({ menuVersionId: null })
+      .where(eq(workingOrderLines.workingOrderId, id));
+    await withTransaction(suite.db, (tx) => reprintOrderTickets(tx, s.cfg, id));
+    const papers = await papersOn(s.printers.grill);
+    expect(papers.map((paper) => paper.includes("1 x BURG"))).toEqual([true, true]);
+    expect(papers.map((paper) => paper.filter((line) => line.startsWith("Contains")))).toEqual([
+      ["Contains: Milk"],
+      [],
+    ]);
+  });
 
   it("prints a dish's declared allergens with no guest allergy, and no allergy heading", async () => {
     await setAllergens(s.products.burger, { milk: {} });

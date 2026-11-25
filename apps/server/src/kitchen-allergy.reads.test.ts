@@ -31,6 +31,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { createStation } from "./kitchen.js";
+import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
+import { readLineNutrition } from "./line-nutrition.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { mergeBills } from "./testing/bill-action-fixture.js";
@@ -65,7 +67,10 @@ beforeEach(async () => {
     .from(kitchenStations)
     .where(sql`true`);
   stationId = station!.id;
-  await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } }));
+  await inTx(v, async (tx) => {
+    await updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } });
+    await republishMenus(tx);
+  });
 });
 
 async function sent(
@@ -153,6 +158,39 @@ const routedExtra = () =>
   });
 
 describe("A669 reads", () => {
+  it("an unpublished product edit does not reach the allergy check", async () => {
+    await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { fish: {} } }));
+    const { tickets } = await sent();
+    const items = (await inTx(v, (tx) => listStationQueue(tx, stationId))).flatMap(
+      (order) => order.items,
+    );
+    expect(items.map((item) => ({ id: item.id, allergy: item.allergy }))).toEqual(
+      tickets.map((ticket, n) => ({ id: ticket.id, allergy: n === 0 ? original : null })),
+    );
+  });
+
+  it("clashes nothing for a line no menu version holds, whatever its product declares", async () => {
+    const { tickets, tabId } = await sent();
+    await v.db
+      .update(workingOrderLines)
+      .set({ menuVersionId: null })
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const lineIds = tickets.map((ticket) => ticket.workingOrderLineId);
+    const { blocks, nutrition } = await inTx(v, async (tx) => ({
+      blocks: await resolveKitchenAllergyBlocks(tx, [tickets[0]!.id]),
+      nutrition: await readLineNutrition(tx, lineIds),
+    }));
+    expect(blocks.get(tickets[0]!.id)).toEqual({
+      ...original,
+      clashes: {},
+      labels: {
+        en: { ...original.labels.en, clashes: [] },
+        es: { ...original.labels.es, clashes: [] },
+      },
+    });
+    expect([...nutrition]).toEqual([]);
+  });
+
   it("keeps kitchen declarations live after a sent dish's product changes", async () => {
     await sent();
     await inTx(v, (tx) =>
@@ -245,6 +283,7 @@ describe("A669 reads", () => {
           OPERATOR,
         );
         await updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } });
+        await republishMenus(tx);
       });
       const oldName = ALLERGEN_NAMES.milk.en;
       ALLERGEN_NAMES.milk.en = "Future dictionary label";
