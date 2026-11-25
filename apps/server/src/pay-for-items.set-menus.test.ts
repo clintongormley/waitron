@@ -10,10 +10,11 @@ import {
   setDepartmentSalePolicyField,
 } from "@waitron/venue-service";
 import { insertPartyBill } from "./parties.js";
-import { payForItems, previewPayForItems, priceItemPicks, type ItemPick } from "./pay-for-items.js";
+import { payForItems, previewPayForItems, type ItemPick } from "./pay-for-items.js";
 import { readGroupingCopies } from "./set-menu-regroup.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
 import { parkOrder } from "./working-order-open.js";
+import { markServed } from "./working-order-serving.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
@@ -468,17 +469,6 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
     expect(await totalOf(tabId)).toBe("6.00");
   });
 
-  it("prices a dish of a Daily on a printed bill as a new bill would charge it", async () => {
-    const bill = await seatedBill("Soup", "Hake");
-    const hake = await specLineId(spec, bill.tabId, "Hake");
-    await serveSpecBill(spec, bill.partyId, bill.tabId);
-    await printSpecBill(spec, bill.partyId, bill.tabId);
-
-    expect(await inTx(venue, (tx) => priceItemPicks(tx, bill.tabId, [{ lineId: hake }]))).toBe(
-      "14.00",
-    );
-  });
-
   it("answers the stored prices of a bill that takes no set menus", async () => {
     const tabId = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {
@@ -530,6 +520,83 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
 
     expect(await totalOf(newBill)).toBe("22.00");
     expect(await totalOf(tabId)).toBe("6.00");
+  });
+});
+
+describe("Pay for items of set menus on a printed bill, whose dishes the payment copies to a reopened bill", () => {
+  async function printed(...dishes: SpecDish[]): Promise<SeatedBill> {
+    const bill = await seatedBill(...dishes);
+    await serveSpecBill(spec, bill.partyId, bill.tabId);
+    await printSpecBill(spec, bill.partyId, bill.tabId);
+    return bill;
+  }
+
+  async function reopenedFrom(billId: string): Promise<string[]> {
+    const rows = await venue.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.reopenedFrom, billId));
+    return rows.map(({ id }) => id);
+  }
+
+  it("prices Sirloin alone from a Daily at the 19.00 it is paid at, and Soup returns to 6.00", async () => {
+    const bill = await printed("Soup", "Sirloin");
+    const picks = [{ lineId: await specLineId(spec, bill.tabId, "Sirloin") }];
+
+    expect(await preview(bill, picks)).toBe("19.00");
+    const newBill = await pay(bill, picks, "19.00");
+
+    expect(await totalOf(newBill)).toBe("19.00");
+    const [reopened] = await reopenedFrom(bill.tabId);
+    expect(await totalOf(reopened!)).toBe("6.00");
+  });
+
+  it("refuses a comped dish chosen without its set menu, and reopens nothing", async () => {
+    const bill = await seatedBill("Soup", "Sirloin");
+    const sirloin = await specLineId(spec, bill.tabId, "Sirloin");
+    await compSpecLine(spec, bill.tabId, sirloin);
+    await serveSpecBill(spec, bill.partyId, bill.tabId);
+    await printSpecBill(spec, bill.partyId, bill.tabId);
+
+    await refusesBoth(bill, [{ lineId: sirloin }], {
+      code: "set_menu.move_adjusted",
+      params: { dishNames: ["Sirloin"] },
+    });
+    expect(await reopenedFrom(bill.tabId)).toEqual([]);
+  });
+
+  it("refuses a dish whose cancel kept its charge, without its set menu, and reopens nothing", async () => {
+    const bill = await seatedBill("Soup", "Hake");
+    const hake = await specLineId(spec, bill.tabId, "Hake");
+    await cancelSpecLineKeepingCharge(spec, bill.tabId, hake);
+    const command = await commandFor(venue, bill.partyId);
+    await inTx(venue, async (tx) =>
+      markServed(
+        tx,
+        venue.cfg,
+        bill.partyId,
+        [{ lineId: await specLineId(spec, bill.tabId, "Soup"), quantity: "1" }],
+        { ...command, submissionId: randomUUID() },
+      ),
+    );
+    await printSpecBill(spec, bill.partyId, bill.tabId);
+
+    await refusesBoth(bill, [{ lineId: hake }], {
+      code: "set_menu.moves_with_set_menu",
+      params: { dishName: "Hake" },
+    });
+    expect(await reopenedFrom(bill.tabId)).toEqual([]);
+  });
+
+  it("refuses every dish chosen one by one, and reopens nothing", async () => {
+    const bill = await printed("Soup", "Hake");
+    const picks = [
+      { lineId: await specLineId(spec, bill.tabId, "Soup") },
+      { lineId: await specLineId(spec, bill.tabId, "Hake") },
+    ];
+
+    await refusesBoth(bill, picks, { code: "bill.all_items_chosen" });
+    expect(await reopenedFrom(bill.tabId)).toEqual([]);
   });
 });
 
