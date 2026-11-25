@@ -3958,23 +3958,27 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     );
   });
 
-  it("on a printed bill, the confirm step is no wider than the step that chooses the items", async () => {
-    await page.viewport(1280, 800);
-    onTestFinished(() => page.viewport(414, 896));
-    const balance = balanceOf({ status: "placed", outstanding: "120.00" });
-    const width = (el: TillBillPayDialog) =>
-      root(el)
-        .querySelector("wt-dialog")!
-        .shadowRoot!.querySelector("dialog")!
-        .getBoundingClientRect().width;
-    const choosing = width(await mount({ balance }));
-    cleanupWidgets();
-    const confirming = width(
-      await mount({ balance, asked: itemsAsked, preview: ownBill("35.00") }),
-    );
+  // The printed bill's sentence is too short for a line that does not wrap to show clearly.
+  it.each(["placed", "open"] as const)(
+    "on a bill that is %s, the confirm step is no wider than the step that chooses the items",
+    async (status) => {
+      await page.viewport(1280, 800);
+      onTestFinished(() => page.viewport(414, 896));
+      const balance = balanceOf({ status, outstanding: "120.00" });
+      const width = (el: TillBillPayDialog) =>
+        root(el)
+          .querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect().width;
+      const choosing = width(await mount({ balance }));
+      cleanupWidgets();
+      const confirming = width(
+        await mount({ balance, asked: itemsAsked, preview: ownBill("35.00") }),
+      );
 
-    expect(confirming).toBeLessThanOrEqual(choosing);
-  });
+      expect(confirming).toBeLessThanOrEqual(choosing);
+    },
+  );
 
   it("after a declined card on a printed bill, the credited line wraps rather than widening the window", async () => {
     await page.viewport(1280, 800);

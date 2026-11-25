@@ -714,7 +714,7 @@ it("leaves a not-cheapest Special row for row when a held row splits into units 
   expect(await specialRows(bill.tabId)).toEqual(before);
 });
 
-it("copies a not-cheapest Special row for row when a printed bill is reopened to split (D17)", async () => {
+it("copies a not-cheapest Special row for row when a printed bill is reopened (D17)", async () => {
   const bill = await seated();
   await send(bill, ["Soup", "Hake"]);
   await seedSpecial(bill.tabId);

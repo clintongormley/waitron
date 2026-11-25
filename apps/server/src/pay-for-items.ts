@@ -372,7 +372,7 @@ interface ItemsSource {
 }
 
 /**
- * A printed bill reopened to split (PR4-D7), its party read and edit state checked first against
+ * A printed bill reopened (PR4-D7), its party read and edit state checked first against
  * what the till read: the items then move from the reopened bill, each pick naming its line's copy,
  * under the party's revision and the edit state as the reopen left them. Any other bill is answered
  * as sent. Runs in the item payment's issuance transaction, as the reopen files a credit note.
@@ -421,7 +421,7 @@ async function reopenIfPrinted(
  * ticket in that transaction; a reader card is collected after it commits, and one that charges
  * nothing puts the items back (`failBillPayment`). A resend of the same submission answers as the
  * first did. On a printed bill the device's profile must allow `take-orders`, and the bill is reopened
- * to split first, in the same transaction ({@link reopenIfPrinted}).
+ * first, in the same transaction ({@link reopenIfPrinted}).
  */
 export async function payForItems(
   deps: BillPaymentDeps | ReaderBillPaymentDeps,

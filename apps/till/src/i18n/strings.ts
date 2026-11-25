@@ -2256,7 +2256,7 @@ export const en = {
   "split.scope": "This cancels the existing receipt and reopens the bill.",
   "split.confirm": "Reopen bill",
   "split.unserved":
-    "Some dishes on this bill are not marked served, so it cannot be reopened yet. If the guests have had them, choose Mark served.",
+    "Some dishes on this bill are not marked served, so it cannot be reopened yet. If the guests have had them, choose Mark served to reopen it.",
   "split.unserved_held":
     "Some dishes on this bill are not marked served, so it cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen bill again.",
   "split.unserved_no_mark":
@@ -4709,7 +4709,7 @@ export const es: Record<StringKey, string> = {
   "split.scope": "Esto anula el ticket y reabre la cuenta.",
   "split.confirm": "Reabrir cuenta",
   "split.unserved":
-    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Si los clientes ya los han tomado, pulsa Marcar como servidos.",
+    "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Si los clientes ya los han tomado, pulsa Marcar como servidos para reabrirla.",
   "split.unserved_held":
     "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir cuenta.",
   "split.unserved_no_mark":

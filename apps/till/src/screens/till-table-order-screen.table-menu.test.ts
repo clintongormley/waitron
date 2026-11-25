@@ -262,7 +262,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-cancel-credit]")).not.toBeNull();
   });
 
-  it("a presented bill with a receipt and no payments offers Reopen bill, which asks to split that bill", async () => {
+  it("a presented bill with a receipt and no payments offers Reopen bill, which asks to reopen that bill", async () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [presented] });
 

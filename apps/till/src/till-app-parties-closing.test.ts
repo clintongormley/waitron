@@ -670,7 +670,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
   });
 });
 
-describe("till-app: reopening a printed bill to split it", () => {
+describe("till-app: reopening a printed bill", () => {
   const invoiced: PartyBill = {
     ...checkBill,
     status: "placed",

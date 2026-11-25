@@ -953,6 +953,8 @@ now needs its set menu chosen too (PR2-D12's words).
 
 ## PR 4 — Printed bills (`feat/a1515-1-printed-bills`)
 
+_2026-11-25: the owner renamed Reopen to split to **Reopen bill** / **Reabrir cuenta**; the old name below is as written then._
+
 Branch `feat/a1515-1-printed-bills`, on top of PR 2 (#4280) until that lands, then rebased onto
 `main`. Every line count and `file:line` below was read on PR 2's tip (`78ec159ea0`). Tasks 1–6
 change the server and the packages under it (Task 4 in two parts, 4a and 4b); Tasks 6–8 change the

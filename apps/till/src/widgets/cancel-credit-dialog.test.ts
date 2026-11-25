@@ -349,7 +349,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     const asked = capture(el, "split-mark-served");
 
     expect(text(unservedBox(el)!.querySelector("span"))).toBe(
-      "Some dishes on this bill are not marked served, so it cannot be reopened yet. If the guests have had them, choose Mark served.",
+      "Some dishes on this bill are not marked served, so it cannot be reopened yet. If the guests have had them, choose Mark served to reopen it.",
     );
     expect([...root(el).querySelectorAll("[data-unserved-dish]")].map(text)).toEqual([
       "Steak",
@@ -505,7 +505,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     });
 
     expect(text(unservedBox(el)!.querySelector("span"))).toBe(
-      "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Si los clientes ya los han tomado, pulsa Marcar como servidos.",
+      "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Si los clientes ya los han tomado, pulsa Marcar como servidos para reabrirla.",
     );
     expect(text(confirm(el))).toBe("Reabrir cuenta");
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(

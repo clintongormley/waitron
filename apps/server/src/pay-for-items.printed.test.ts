@@ -21,7 +21,7 @@ import { placeGrouped } from "./testing/adjustment-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Pay for items on a printed bill (A1515-1 PR4-D7): the bill is reopened to split, the chosen
+// Pay for items on a printed bill (A1515-1 PR4-D7): the bill is reopened, the chosen
 // dishes move to a bill of their own and the payment is taken there, in one step.
 let venue: OrderVenue;
 let offers: ZoneOffers;
