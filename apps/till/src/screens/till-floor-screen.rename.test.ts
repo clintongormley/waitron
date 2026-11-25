@@ -233,19 +233,19 @@ describe("till-floor-screen: Rename", () => {
 
   it("on a member of an unnamed group heads the window with the group's name and shows it as inherited", async () => {
     const api = stubApi();
-    const el = await mount(group(), api);
+    const el = await mount(barJoined(), api);
 
-    const opened = await pressRename(el, "c4");
+    const opened = await pressRename(el, "c3");
     expect(shown(opened)).toEqual({
-      heading: "Rename Bar+Counter 3+Counter 4+Counter 5",
+      heading: "Rename Bar+Counter 3",
       value: "",
-      inherited: "Bar+Counter 3+Counter 4+Counter 5",
+      inherited: "Bar+Counter 3",
       hint: "",
     });
 
     send(opened, "today-name-confirm", { name: "García birthday" });
     await settle(el);
-    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c4", "García birthday", 7);
+    expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c3", "García birthday", 7);
   });
 
   it("shows a group's normal name from its tables' names for today as inherited", async () => {
@@ -748,6 +748,9 @@ describe("till-floor-screen: Rename", () => {
     const opened = await pressRename(el, "c4");
     send(opened, "today-name-confirm", { name: "García birthday" });
     await settle(el);
+    await opened.updateComplete;
+    const inheritedAtSave = shown(opened).inherited;
+    expect(inheritedAtSave).toBeTruthy();
 
     el.tables = group({ c3: { name: "Corner" } });
     await settle(el);
@@ -757,9 +760,10 @@ describe("till-floor-screen: Rename", () => {
     expect(opened.busy).toBe(true);
     expect(shown(opened)).toMatchObject({
       heading: "Rename Bar+Counter 3+Counter 4+Counter 5",
-      inherited: "Bar+Counter 3+Counter 4+Counter 5",
+      inherited: inheritedAtSave,
       hint: "",
     });
+    expect(opened.normalName).toBe("Bar+Counter 3+Counter 4+Counter 5");
   });
 
   it("a refusal under the field after a floor read that keeps the group shows over the new read", async () => {
