@@ -3,6 +3,7 @@ import { billOf } from "../../test/bill-pay-app.js";
 import type { BillBalance, BillEditExpected } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import {
+  billAfterDocument,
   billAfterItems,
   billNoticeText,
   creditedNotice,
@@ -145,5 +146,18 @@ describe("reopenedTo and noticeAfterGone", () => {
       goneNotice(other, reopened),
     );
     expect(noticeAfterGone(undefined, "wo-6", [reopened], other, undefined)).toBeNull();
+  });
+});
+
+describe("the bill shown on closing a settlement document", () => {
+  const others = [{ workingOrderId: "wo-6" }, { workingOrderId: "wo-7" }];
+
+  it.each([
+    ["the first bill still to pay when the document names none", undefined, others, "wo-6"],
+    ["no other bill when none is left to pay", undefined, [], undefined],
+    ["the bill the document names", "wo-5", others, "wo-5"],
+    ["no other bill when the one it names is on screen", "wo-4", others, undefined],
+  ] as const)("is %s", (_, returnTo, left, next) => {
+    expect(billAfterDocument(returnTo, "wo-4", left)).toBe(next);
   });
 });

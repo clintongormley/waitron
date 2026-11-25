@@ -105,3 +105,14 @@ export function billNoticeText(notice: BillNotice | null | undefined): string | 
       : fill(t("table.bill_gone"), { gone: billLabel(notice.gone), shown });
   return fill(t("table.bill_credited"), { shown });
 }
+
+/** The bill to switch to on closing a settlement document: `returnTo` unless it is already shown, or
+ * the first of `others` still to pay when the document names none. */
+export function billAfterDocument(
+  returnTo: string | undefined,
+  shownId: string | undefined,
+  others: readonly Pick<PartyBill, "workingOrderId">[],
+): string | undefined {
+  if (returnTo === undefined) return others[0]?.workingOrderId;
+  return returnTo === shownId ? undefined : returnTo;
+}

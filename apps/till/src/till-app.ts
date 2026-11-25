@@ -340,6 +340,7 @@ import {
   withItems,
 } from "./state/pay-for-items.js";
 import {
+  billAfterDocument,
   billAfterItems,
   billNoticeText,
   creditedNotice,
@@ -562,8 +563,7 @@ type SettlementDocument = {
   surface: "counter" | "table";
   cashChange: string | null;
   slipPaymentId?: string;
-  /** The document is a bill of items paid from a table bill: the bill shown at close, the reopened
-   * bill when the items were paid from a printed one. */
+  /** Set when the document is a bill of items paid from a table bill: the bill shown at close. */
   returnTo?: string;
 };
 
@@ -21672,8 +21672,7 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, offered on an invoiced bill nothing is paid on, or Reopen bill, also
-   * offered on one part paid: its dialog opens. */
+  /** Cancel and credit, or Reopen bill, chosen on an invoiced bill: its dialog opens. */
   #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
@@ -23768,9 +23767,8 @@ export class TillApp extends LitElement {
     await reread();
   }
 
-  /** The order read again after an answer, on `balance` when it is the bill's own; else on
-   * `answered`, the table's bill as Pay for items answered it, shown as a read of it would be;
-   * otherwise the dialog's bill is read first. */
+  /** The order read again after an answer, on `balance` when it is the bill's own; else on `answered`,
+   * the table's bill as Pay for items answered it; otherwise the dialog's bill is read first. */
   async #rereadAfterPaid(
     open: BillPaying,
     balance?: BillBalance,
@@ -24416,12 +24414,7 @@ export class TillApp extends LitElement {
     if (this.settlementDocument?.surface !== "table") return;
     const { returnTo } = this.settlementDocument;
     this.settlementDocument = null;
-    const next =
-      returnTo === undefined
-        ? this.#otherBillsToPay()[0]?.workingOrderId
-        : returnTo === this.activeTabId
-          ? undefined
-          : returnTo;
+    const next = billAfterDocument(returnTo, this.activeTabId, this.#otherBillsToPay());
     const visit = this.#orderVisit;
     if (
       !this.#draftSync?.ownEditWaiting ||
