@@ -14,15 +14,13 @@ import {
   type TaxTableRow,
 } from "@waitron/shared";
 import { codeMessage } from "../i18n/codes.js";
-import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
-import { officePrinterHoldText } from "../i18n/staff-notices.js";
+import { deliveryWords, invoicePrintDestination } from "./ticket-delivery.js";
 import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { InvoiceEmailRefusal } from "../widgets/invoice-email-dialog.js";
 import {
-  a4HoldCodes,
   type EquipmentItem,
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
@@ -155,54 +153,6 @@ function renderReceipt(result: TillSaleResult, language: string) {
     }
   });
   return html`<article class="ticket" lang=${language}>${lines}</article>`;
-}
-
-function printLabel(
-  print: NonNullable<InvoiceDeliveryStatus["actions"]["print"]>,
-  againOnA4: boolean,
-): string {
-  const printer = print.printers[0]!;
-  const copy = print.designation === "duplicate";
-  return t(
-    againOnA4 ? "invoice.send_on_again" : copy ? "invoice.print_on_copy" : "invoice.print_on",
-  ).replace("{printer}", () => printer.name);
-}
-
-/** A receipt attempt is worded by the original's print status. */
-function deliveryWords(
-  attempt: InvoiceDeliveryAttempt,
-  mayHaveArrived: boolean,
-): string | undefined {
-  if (attempt.medium === "receipt") return undefined;
-  const hold = attempt.printerHold;
-  if (
-    attempt.printerName !== undefined &&
-    hold !== null &&
-    (attempt.status === "queued" || attempt.status === "sending")
-  )
-    return officePrinterHoldText(attempt.printerName, hold);
-  switch (attempt.status) {
-    case "queued":
-      return t(
-        attempt.medium === "a4" ? "invoice.delivery_waiting_office" : "invoice.delivery_sending",
-      );
-    case "sending":
-      if (hold === null) return t("invoice.delivery_sending");
-      // A code this till has no words for must not leave `{reason}` on screen.
-      return (a4HoldCodes as readonly string[]).includes(hold)
-        ? t("invoice.delivery_held").replace("{reason}", () =>
-            t(`invoice.delivery_hold_${hold}` as StringKey),
-          )
-        : t("invoice.delivery_held_no_reason");
-    case "sent":
-      return t(
-        attempt.medium === "a4" ? "invoice.delivery_sent_a4" : "invoice.delivery_sent_email",
-      );
-    case "failed":
-      return t(mayHaveArrived ? "invoice.delivery_unknown" : "invoice.delivery_failed");
-    case "unknown":
-      return t(hold === null ? "invoice.delivery_unknown" : "invoice.delivery_unknown_held");
-  }
 }
 
 /** Invoice facts use the filed locale; only operator actions use the UI locale. */
@@ -600,18 +550,45 @@ export class TillTicketView extends LitElement {
     </p>`;
   }
 
+  protected get autoRefreshDelivery(): boolean {
+    return false;
+  }
+
+  protected get prefersInvoiceDeliveryPrinter(): boolean {
+    return false;
+  }
+
+  protected get savedA4Retry() {
+    return this.prefersInvoiceDeliveryPrinter ? this.deliveries?.actions.retryA4 : undefined;
+  }
+
   protected renderInvoicePrint() {
     const status = this.deliveries;
-    const print = this.canPrintReceipt ? status?.actions.print : null;
-    return print
-      ? html`<wt-button
-          variant="secondary"
-          data-test="print-invoice"
-          ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked}
-          @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
-          >${printLabel(print, status?.actions.retryOriginal?.medium === "a4" && status.originalPrinterId === print.printers[0]?.id)}</wt-button
-        >`
-      : nothing;
+    const saved = this.savedA4Retry;
+    const printer = this.canPrintReceipt
+      ? invoicePrintDestination(status, saved !== undefined)
+      : undefined;
+    if (!printer) return nothing;
+    const label = saved
+      ? t("invoice.print_it_again")
+      : fill(
+          t(
+            status?.actions.print?.designation === "duplicate"
+              ? "invoice.print_on_copy"
+              : status?.actions.retryOriginal?.medium === "a4" &&
+                  status.originalPrinterId === printer.id
+                ? "invoice.send_on_again"
+                : "invoice.print_on",
+          ),
+          { printer: printer.name },
+        );
+    return html`<wt-button
+      variant="secondary"
+      data-test="print-invoice"
+      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked}
+      @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
+      >${label}</wt-button
+    >`;
   }
 
   protected readInvoicePrinters(): void {
@@ -638,7 +615,16 @@ export class TillTicketView extends LitElement {
       value: item.id,
       label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
     });
+    const attempt = this.deliveries?.actions.print ? undefined : this.deliveries?.current;
+    const usedA4 =
+      this.prefersInvoiceDeliveryPrinter &&
+      attempt?.medium === "a4" &&
+      attempt.printerName !== undefined
+        ? { name: attempt.printerName, kind: "a4" as const }
+        : undefined;
+    const saved = this.savedA4Retry ?? usedA4;
     const printer =
+      saved ??
       role?.choices.find((item) => item.id === role.resolved?.id) ??
       role?.chosen ??
       role?.default ??
@@ -655,7 +641,7 @@ export class TillTicketView extends LitElement {
           if (this.invoicePrinterOpen) this.readInvoicePrinters();
         }}
         >${t(receipt ? "equipment.receipt" : "equipment.invoice")}:
-        ${role?.resolved?.name ?? (!receipt ? this.deliveries?.actions.print?.printers[0]?.name : undefined) ?? t("equipment.none")}${paper ? ` · ${paper}` : ""}</wt-button
+        ${saved?.name ?? role?.resolved?.name ?? (!receipt ? this.deliveries?.actions.print?.printers[0]?.name : undefined) ?? t("equipment.none")}${paper ? ` · ${paper}` : ""}</wt-button
       >
       ${
         this.invoicePrinterOpen
@@ -820,7 +806,9 @@ export class TillTicketView extends LitElement {
   protected renderDelivery() {
     const status = this.deliveries;
     const mayHaveArrived = this.#mayHaveArrived;
-    const words = status?.current ? deliveryWords(status.current, mayHaveArrived) : undefined;
+    const words = status?.current
+      ? deliveryWords(status.current, mayHaveArrived, this.autoRefreshDelivery)
+      : undefined;
     const lateAttempt = status?.history.some((attempt) => attempt.lateSuccess) === true;
     const currentStatus = status?.current?.status;
     // The receipt and the delivery status are read separately, so a confirmed handover can sit
@@ -876,7 +864,7 @@ export class TillTicketView extends LitElement {
       ${
         this.deliveriesReadFailed
           ? html`<p role="status" data-test="delivery-read-failed">
-              ${t("invoice.delivery_read_failed")}
+              ${t(this.autoRefreshDelivery ? "invoice.delivery_rechecking" : "invoice.delivery_read_failed")}
             </p>`
           : nothing
       }
@@ -887,7 +875,7 @@ export class TillTicketView extends LitElement {
             </p>`
           : nothing
       }
-      ${this.invoicePrintersEnabled ? nothing : this.renderInvoicePrint()}
+      ${this.invoicePrintersEnabled && this.savedA4Retry === undefined ? nothing : this.renderInvoicePrint()}
       ${
         emailAgainId
           ? html`<wt-button
@@ -979,6 +967,11 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    const uncertain =
+      this.#mayHaveArrived ||
+      (this.autoRefreshDelivery &&
+        attempt?.designation === "original" &&
+        attempt.status === "unknown");
     const closingPrints =
       notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
     if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();
@@ -996,7 +989,7 @@ export class TillTicketView extends LitElement {
                 this.result.invoiceType === "F1"
                   ? html`<p role="status">
                       <strong
-                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : this.#mayHaveArrived ? "invoice.may_not_be_delivered" : "invoice.not_delivered")}</strong
+                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : uncertain ? "invoice.may_not_be_delivered" : "invoice.not_delivered")}</strong
                       >
                     </p>`
                   : nothing
@@ -1011,7 +1004,7 @@ export class TillTicketView extends LitElement {
                     failedButSuperseded))
                   ? nothing
                   : html`<p>
-                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "failed" && this.#mayHaveArrived ? "invoice.print_failed_check" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+                      ${this.originalReceiptReadFailed ? t(this.autoRefreshDelivery ? "invoice.print_rechecking" : "invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "failed" && this.#mayHaveArrived ? "invoice.print_failed_check" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
                     </p>`
               }
               ${this.renderDelivery()}
@@ -1029,7 +1022,7 @@ export class TillTicketView extends LitElement {
                   : nothing
               }
               ${
-                closingPrints
+                closingPrints || this.autoRefreshDelivery
                   ? nothing
                   : html`<wt-button
                       variant="secondary"

@@ -3,7 +3,7 @@ import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import { decimal, jobOrigin, seriesId, toScale } from "@waitron/shared";
+import { decimal, jobOrigin, seriesId, toScale, workingOrderId } from "@waitron/shared";
 import { ALL_MODULES } from "../modules.js";
 import { venueModuleConfig } from "../provision.js";
 
@@ -36,7 +36,13 @@ const clock: TrustedClock = {
 export async function recordSyntheticInvoice(
   db: Database,
   nodeId: string,
-  options: { full?: boolean; seriesCode?: string; operationDescription: string; quantity?: string },
+  options: {
+    full?: boolean;
+    seriesCode?: string;
+    operationDescription: string;
+    quantity?: string;
+    orderId?: string;
+  },
 ): Promise<{ saleId: string; number: string }> {
   const full = options.full ?? true;
   const quantity = options.quantity ?? "1";
@@ -59,6 +65,7 @@ export async function recordSyntheticInvoice(
       origin: jobOrigin("operator_script"),
       nodeId: nodeId as Parameters<typeof recordSale>[2]["nodeId"],
       seriesId: seriesId(series!.id),
+      ...(options.orderId === undefined ? {} : { workingOrderId: workingOrderId(options.orderId) }),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       total,

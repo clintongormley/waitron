@@ -143,7 +143,7 @@ it.each([
   expect(button).not.toBeNull();
   button!.click();
   expect(heard).toHaveBeenCalledOnce();
-  expect(el.shadowRoot!.querySelector('[data-test="refresh-receipt"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="refresh-receipt"]')).toBeNull();
 });
 
 it("keeps the final cash change beside the document choice", async () => {
@@ -520,7 +520,7 @@ for (const invoiceType of ["F2", "F1"] as const)
         el.shadowRoot!.textContent?.includes("The original has not been sent to a printer."),
       ).toBe(!promisesPrint);
       expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]") !== null).toBe(
-        !promisesPrint,
+        !promisesPrint && invoiceType === "F2",
       );
       // A full invoice's box still says it is undelivered; a receipt's box would hold nothing.
       expect(delivery !== null).toBe(!promisesPrint || invoiceType === "F1");
@@ -687,7 +687,8 @@ describe("an original emailed or sent on A4 that may have arrived", () => {
     medium,
     designation: "original" as const,
     status,
-    failureCode: null,
+    failureCode: medium === "a4" ? "restart" : null,
+    printerName: medium === "a4" ? "Office" : undefined,
     requestedAt: "2026-11-11T12:00:00.000Z",
     at: null,
     personId: "p1",
@@ -708,10 +709,38 @@ describe("an original emailed or sent on A4 that may have arrived", () => {
     },
   });
 
+  it("keeps the receipt handover heading when only an emailed copy is uncertain", async () => {
+    const copy = {
+      ...attempt("email-copy", "email", "unknown"),
+      designation: "duplicate" as const,
+    };
+    const props = withAttempts("prints", "F1", []);
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        ...props,
+        originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+        deliveries: {
+          ...props.deliveries,
+          originalCompleted: true,
+          current: copy,
+          history: [copy],
+        },
+      },
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery] strong")?.textContent).toBe(
+      "Full invoice not delivered",
+    );
+  });
+
   for (const invoiceType of ["F2", "F1"] as const)
     it.each([
       ["emailed", [attempt("email-1", "email", "unknown")], "May not have been delivered."],
-      ["sent on A4", [attempt("a4-1", "a4", "unknown")], "May not have been delivered."],
+      [
+        "sent on A4",
+        [attempt("a4-1", "a4", "unknown")],
+        invoiceType === "F1" ? "Check whether it printed." : "May not have been delivered.",
+      ],
       [
         "held at the office printer",
         [attempt("a4-1", "a4", "unknown", "printer.offline")],

@@ -15,6 +15,8 @@ import {
   goToLabel,
   incidentIdOf,
   screenTargetOf,
+  alertDestination,
+  type AlertDestination,
   severityLabel,
   wholeTimes,
   wholeTimesStyles,
@@ -123,10 +125,10 @@ export class AlertsBell extends LitElement {
     this.#emit("wt-alert-handle", { incidentId, key: alert.key });
   }
 
-  #onGoTo(event: MouseEvent, screen: string): void {
+  #onGoTo(event: MouseEvent, destination: AlertDestination): void {
     event.stopPropagation();
     this.#menu()?.hide();
-    this.#emit("wt-alert-go-to", { screen });
+    this.#emit("wt-alert-go-to", destination);
   }
 
   #onSeeAll(event: MouseEvent): void {
@@ -166,7 +168,7 @@ export class AlertsBell extends LitElement {
               size="sm"
               variant="secondary"
               data-test="alert-go-to"
-              @click=${(e: MouseEvent) => this.#onGoTo(e, screen)}
+              @click=${(e: MouseEvent) => this.#onGoTo(e, alertDestination(alert, screen))}
               >${goToLabel(screen)}</wt-button
             >`
       }

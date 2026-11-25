@@ -204,7 +204,7 @@ export function mountTillSaleReceiptRoutes(
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const receiptEmail = c.req.query("medium") === "email";
-      const includeInvoiceRecipientEmail =
+      const canDeliverInvoice =
         !receiptEmail &&
         profileAllows(session.device, "print-receipt") &&
         (await assertRequestDevice(deps, c, session).then(
@@ -224,7 +224,8 @@ export function mountTillSaleReceiptRoutes(
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) =>
             canEmailInvoice(tx, { kind: "sale", saleId: sale.id }, transport),
-          includeInvoiceRecipientEmail,
+          includeInvoiceRecipientEmail: canDeliverInvoice,
+          offerA4Retry: canDeliverInvoice,
           printers: () => tillInvoicePrinters(tx, session),
           testPages: deps.testPages,
         });
@@ -270,7 +271,7 @@ export function mountTillSaleReceiptRoutes(
             { backend: deps.backend, cfg: requestCfg(deps.cfg, session) },
             { id: await zonedSale(tx, session, id), workingOrderId: id },
             () => tillInvoicePrinters(tx, session),
-            { ...request, printerId },
+            { ...request, printerId, offerA4Retry: true },
           ),
         );
         return c.json(attempt);

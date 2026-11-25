@@ -213,9 +213,10 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
 
 Hardware checks to complete with the owner. The owner walked most of the list on 20 and 25 November 2026;
 what is left is below. The 25 November session queued A1578 (slow Bluetooth prints), A1579 (Add a printer after an office printer), A1581
-(looks around A4 printing), A1582 (print an invoice again from the till) and A1584 (a shorter Delete printer window).
+(looks around A4 printing) and A1584 (a shorter Delete printer window).
 
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
+- Show the owner how Orders could close **Print / Reprint** after accepting the print and confirm where it queued. The owner mentioned the window staying open on 25 November and has a choice to make about the proposed change.
 - **A739, two looks at paper.** The payment slip's new lines (#4337) after the box's next update, and, for a new
   reader payment whose first receipt has no card details, a receipt copy after the background lookup
   fills them in.
@@ -540,7 +541,7 @@ A1566's layout (#4163), and the same invoice as Apple Raster at 600 dpi.
 On 2026-11-25 (build `c8feeb29c9`) a test page printed. With no paper, the till, the alert and Print Queue said so within
 about 20 seconds and the invoice printed by itself once paper was back. With the power cut mid-print, the
 delivery became `unknown` after two minutes and nothing was sent again; the printer printed nothing when it came back, and Orders printed the
-invoice unmarked, as the original. What the till lacks there is A1582.
+invoice unmarked, as the original.
 
 How long the box takes to draw a page (A553, measured 2026-11-20 on the Lenovo M710q, i7-7700T):
 the server's `renderInvoicePage` from main `58508d7fe8`, bundled as the server is and run on the

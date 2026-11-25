@@ -106,7 +106,7 @@ describe("the running server's undelivered invoice alert", () => {
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.failed",
-          params: { invoice: "FB/1" },
+          params: { invoice: "FB/1", orderId: saleId },
           severity: "error",
           since: instant.toISOString(),
           screen: "orders",
@@ -179,7 +179,7 @@ describe("the running server's undelivered invoice alert", () => {
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.queued_behind_hold",
-          params: { invoice: "FB/1", printer: "Back office", hold: "paper_out" },
+          params: { invoice: "FB/1", orderId: saleId, printer: "Back office", hold: "paper_out" },
           severity: "error",
           since: due,
           screen: "orders",

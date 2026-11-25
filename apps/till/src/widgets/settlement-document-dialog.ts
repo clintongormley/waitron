@@ -20,6 +20,16 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     `,
   ];
 
+  @property({ type: Boolean }) useDeviceInvoicePrinter = false;
+
+  protected override get autoRefreshDelivery(): boolean {
+    return this.result.invoiceType === "F1";
+  }
+
+  protected override get prefersInvoiceDeliveryPrinter(): boolean {
+    return this.printDocument === "invoice" && !this.useDeviceInvoicePrinter;
+  }
+
   @property({ attribute: false }) paymentSlip?: PaymentSlipAction;
 
   @property({ attribute: false }) cashChange: string | null = null;
@@ -185,7 +195,9 @@ export class TillSettlementDocumentDialog extends TillTicketView {
                   @click=${() => this.dispatchEvent(new CustomEvent(designation === "original" ? "print-receipt" : "reprint", { bubbles: true, composed: true }))}
                   >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => printer?.name ?? t("equipment.none"))}</wt-button
                 >${this.renderReceiptPrinterNote(designation)}`
-          : this.renderInvoicePrint()
+          : this.savedA4Retry === undefined
+            ? this.renderInvoicePrint()
+            : nothing
       }
       ${this.renderOriginalDelivery(true)}
       ${

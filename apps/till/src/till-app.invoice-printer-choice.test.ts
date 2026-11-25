@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
   DeviceEquipment,
   EquipmentItem,
+  InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
+  OriginalReceiptPrint,
   TillApi,
   TillProduct,
 } from "./api/client.js";
@@ -25,11 +27,13 @@ import {
   till,
 } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
+import { liveReadFixture } from "../test/live-connection.js";
+import { deferred as pending } from "../test/clock-app.js";
 
 const office = equipmentItem("office", "Office", { kind: "a4" });
 const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
-const equipment = (item: EquipmentItem): DeviceEquipment => ({
-  roles: [roleOf("invoice", item, [office, bar])],
+const equipment = (item: EquipmentItem | null, choices = [office, bar]): DeviceEquipment => ({
+  roles: [roleOf("invoice", item, choices)],
 });
 const delivery = (item: EquipmentItem): InvoiceDeliveryStatus => ({
   current: null,
@@ -66,13 +70,6 @@ const ticket = (el: TillApp) =>
 const part = (el: TillApp, name: string) =>
   ticket(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
 const initialUrl = location.href;
-function pending<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 beforeEach(() => {
   resetBillPayDrafts();
@@ -84,8 +81,10 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
 });
 
-async function sold(overrides: Record<string, unknown> = {}) {
+async function sold(overrides: Record<string, unknown> = {}, live = true) {
+  const stream = liveReadFixture();
   const api = stubApi({
+    readLiveEvents: stream.read,
     getTill: vi.fn().mockResolvedValue({
       ...till,
       deviceId: "dev-1",
@@ -102,6 +101,8 @@ async function sold(overrides: Record<string, unknown> = {}) {
   await flush(el);
   emit(lock(el), "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
   await flush(el);
+  if (live) stream.event("ready");
+  await flush(el);
   const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
   expect(counter).not.toBeNull();
   counter.store.addProduct(product, "1");
@@ -112,7 +113,12 @@ async function sold(overrides: Record<string, unknown> = {}) {
   await openInvoice(el);
   await userEvent.click(part(el, "invoice-printer-toggle")!);
   await flush(el);
-  return { el, api, id };
+  return {
+    el,
+    api,
+    id,
+    deliveryChanged: () => stream.event("change", '[{"type":"invoice_deliveries"}]'),
+  };
 }
 
 async function openInvoice(el: TillApp) {
@@ -152,6 +158,200 @@ async function choose(el: TillApp, value: string) {
   await flush(el);
 }
 
+const endedA4: InvoiceDeliveryAttempt = {
+  id: "a4-original",
+  medium: "a4",
+  designation: "original",
+  status: "unknown",
+  failureCode: "timeout",
+  requestedAt: "2026-11-25T18:22:00.000Z",
+  at: null,
+  personId: null,
+  printerHold: null,
+  printerName: "Office",
+  lateSuccess: false,
+};
+const printedA4: InvoiceDeliveryAttempt = { ...endedA4, status: "sent", failureCode: null };
+
+function uncertainA4(selected: EquipmentItem | null): InvoiceDeliveryStatus {
+  const status = delivery(selected ?? office);
+  return {
+    ...status,
+    current: endedA4,
+    history: [endedA4],
+    originalPrinterId: "office",
+    actions: {
+      ...status.actions,
+      print: selected === null ? null : status.actions.print,
+      retryOriginal: { medium: "a4" },
+      retryA4: { id: "office", name: "Office", kind: "a4" },
+    },
+  };
+}
+
+it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (selected) => {
+  const before = uncertainA4(selected);
+  const reads = vi.fn().mockResolvedValue(before);
+  const { el, api, id } = await sold({
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipment(selected, [bar])),
+    getInvoiceDeliveries: reads,
+    requestPrintDelivery: vi.fn(async () => {
+      const current = { ...endedA4, id: "retry", status: "queued", failureCode: null };
+      reads.mockResolvedValue({
+        ...before,
+        current,
+        history: [current, endedA4],
+        actions: { ...before.actions, print: null, retryOriginal: null, retryA4: undefined },
+      });
+      return {};
+    }),
+  });
+  expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+  expect(part(el, "original-delivery")!.textContent).toContain(
+    "Full invoice may not have been delivered",
+  );
+  expect(part(el, "delivery-status")!.textContent).toBe(
+    "Office stopped answering. Check whether it printed.",
+  );
+  expect(part(el, "refresh-receipt")).toBeNull();
+  const print = part(el, "print-invoice")!;
+  expect(print.textContent?.trim()).toBe("Print it again");
+  await userEvent.click(print);
+  expect(api.requestPrintDelivery).toHaveBeenCalledExactlyOnceWith(
+    id,
+    "office",
+    expect.any(String),
+  );
+  await vi.waitFor(() =>
+    expect(part(el, "delivery-status")?.textContent).toBe("Waiting for the office printer."),
+  );
+  expect(part(el, "print-invoice")).toBeNull();
+  expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+});
+
+function fastDeliveryRereads() {
+  const setTimeout = globalThis.setTimeout;
+  const timers = vi
+    .spyOn(globalThis, "setTimeout")
+    .mockImplementation((run, delay, ...args) =>
+      setTimeout(run, delay === 5_000 ? 100 : delay, ...args),
+    );
+  onTestFinished(() => void timers.mockRestore());
+}
+
+it.each([null, bar])(
+  "recovers a failed read and follows A4 and email with equipment %j",
+  async (selected) => {
+    const a4 = uncertainA4(selected);
+    const email: InvoiceDeliveryAttempt = {
+      ...endedA4,
+      id: "email-copy",
+      designation: "duplicate",
+      medium: "email",
+      printerName: undefined,
+      status: "sending",
+      failureCode: null,
+    };
+    fastDeliveryRereads();
+    const getInvoiceDeliveries = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("read failed"))
+      .mockResolvedValue(a4);
+    const { el, deliveryChanged } = await sold({
+      getInvoiceDeliveries,
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipment(selected, [bar])),
+    });
+    await vi.waitFor(() =>
+      expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering"),
+    );
+    expect(part(el, "delivery-read-failed")).toBeNull();
+    const ordinary = a4.actions.print;
+    const completed = {
+      ...a4,
+      current: printedA4,
+      history: [printedA4],
+      originalCompleted: true,
+      actions: {
+        ...a4.actions,
+        retryOriginal: null,
+        retryA4: undefined,
+        print: ordinary === null ? null : { ...ordinary, designation: "duplicate" },
+      },
+    };
+    getInvoiceDeliveries.mockResolvedValue(completed);
+    await vi.waitFor(() => expect(part(el, "delivery-status")?.textContent).toBe("Printed on A4."));
+    expect(part(el, "invoice-printer-toggle")?.textContent).toContain(
+      selected === null ? "Office · A4" : "Bar · receipt paper",
+    );
+    expect(part(el, "print-invoice")?.textContent?.trim()).toBe(
+      selected === null ? undefined : "Print a copy on Bar",
+    );
+    const sending = { ...completed, current: email, history: [email, printedA4] };
+    getInvoiceDeliveries.mockResolvedValue(sending);
+    deliveryChanged();
+    await vi.waitFor(() =>
+      expect(part(el, "delivery-status")?.textContent ?? "").toContain("Sending the invoice"),
+    );
+    getInvoiceDeliveries.mockResolvedValue({
+      ...sending,
+      current: { ...email, status: "sent" },
+    });
+    await vi.waitFor(() =>
+      expect(part(el, "delivery-status")?.textContent ?? "").toContain("Sent by email"),
+    );
+    expect(part(el, "refresh-receipt")).toBeNull();
+  },
+);
+
+it("follows a later delivery after failure without a live connection", async () => {
+  const state = uncertainA4(null);
+  const first = { ...endedA4, status: "failed", failureCode: "printer_unreachable" };
+  const getInvoiceDeliveries = vi
+    .fn()
+    .mockResolvedValue({ ...state, current: first, history: [first] });
+  fastDeliveryRereads();
+  const { el } = await sold(
+    {
+      getInvoiceDeliveries,
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipment(null, [bar])),
+    },
+    false,
+  );
+  expect(part(el, "delivery-status")?.textContent).toBe("Not delivered.");
+  getInvoiceDeliveries.mockResolvedValue({
+    ...state,
+    current: { ...endedA4, id: "new-attempt" },
+  });
+  await vi.waitFor(() =>
+    expect(part(el, "delivery-status")?.textContent).toContain("Office stopped answering"),
+  );
+});
+
+it("retries a failed original print read beside a completed email", async () => {
+  const original = { ...printedA4, id: "emailed", medium: "email", printerName: undefined };
+  const firstRead = pending<OriginalReceiptPrint>();
+  const getReceiptPrintStatus = vi
+    .fn()
+    .mockReturnValueOnce(firstRead.promise)
+    .mockResolvedValue({ status: "not_queued" });
+  fastDeliveryRereads();
+  const { el } = await sold({
+    getReceiptPrintStatus,
+    getInvoiceDeliveries: vi.fn().mockResolvedValue({
+      ...delivery(office),
+      current: original,
+      history: [original],
+      originalCompleted: true,
+    }),
+  });
+  expect(part(el, "delivery-status")?.textContent).toBe("Sent by email.");
+  firstRead.reject(new Error("read failed"));
+  await vi.waitFor(() =>
+    expect(part(el, "original-delivery")?.textContent).toContain("Full invoice delivered"),
+  );
+  expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
+});
+
 it("saves a printer selection, waits for its fresh offer, and prints once to that printer", async () => {
   let selected = office;
   let saved!: () => void;
@@ -164,9 +364,9 @@ it("saves a printer selection, waits for its fresh offer, and prints once to tha
         };
       }),
   );
-  const { el, api, id } = await sold({
+  const { deliveryChanged, el, api, id } = await sold({
     setDeviceEquipment,
-    getInvoiceDeliveries: vi.fn(async () => delivery(selected)),
+    getInvoiceDeliveries: vi.fn(async () => uncertainA4(selected)),
   });
   await choose(el, bar.id);
   expect(setDeviceEquipment).toHaveBeenCalledOnce();
@@ -175,7 +375,7 @@ it("saves a printer selection, waits for its fresh offer, and prints once to tha
     selection: { id: "bar" },
     via: "list",
   });
-  emit(ticket(el), "refresh-receipt");
+  deliveryChanged();
   await flush(el);
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
   emit(ticket(el), "print-invoice");
@@ -193,6 +393,23 @@ it("saves a printer selection, waits for its fresh offer, and prints once to tha
     expect.any(String),
   ]);
   expect(api.recordSale).toHaveBeenCalledOnce();
+});
+
+it("returns to the invoice's printer when the till choice resolves to None", async () => {
+  let selected: EquipmentItem | null = office;
+  const { el } = await sold({
+    getDeviceEquipment: vi.fn(async () => equipment(selected)),
+    getInvoiceDeliveries: vi.fn(async () => uncertainA4(selected)),
+    setDeviceEquipment: vi.fn(async (change) => {
+      selected = change.selection === "default" ? null : bar;
+      return equipment(selected);
+    }),
+  });
+  await choose(el, bar.id);
+  expect(part(el, "print-invoice")!.textContent?.trim()).toBe("Print on Bar");
+  await choose(el, "");
+  expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+  expect(part(el, "print-invoice")!.textContent?.trim()).toBe("Print it again");
 });
 
 it("retries a refused preference without printing and then enables the saved destination", async () => {
@@ -274,11 +491,11 @@ it("keeps the new printer when a delivery read started before the save answers l
     .mockResolvedValueOnce(delivery(office))
     .mockReturnValueOnce(old.promise)
     .mockResolvedValue(delivery(bar));
-  const { el } = await sold({
+  const { deliveryChanged, el } = await sold({
     getInvoiceDeliveries,
     setDeviceEquipment: vi.fn().mockResolvedValue(equipment(bar)),
   });
-  emit(ticket(el), "refresh-receipt");
+  deliveryChanged();
   await flush(el);
   await choose(el, bar.id);
   expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Print on Bar");
@@ -296,14 +513,14 @@ it("accepts a saved preference while an existing delivery is busy without a fals
     .mockResolvedValueOnce(delivery(office))
     .mockResolvedValueOnce(busy)
     .mockResolvedValue(delivery(bar));
-  const { el } = await sold({
+  const { deliveryChanged, el } = await sold({
     getInvoiceDeliveries,
     setDeviceEquipment: vi.fn().mockResolvedValue(equipment(bar)),
   });
   await choose(el, bar.id);
   expect(part(el, "print-invoice")).toBeNull();
   expect(part(el, "invoice-printer-save-retry")).toBeNull();
-  emit(ticket(el), "refresh-receipt");
+  deliveryChanged();
   await flush(el);
   expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Print on Bar");
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
@@ -329,19 +546,19 @@ it.each(["Done", "logout"])(
 );
 
 it.each(["overtaken", "failed"])(
-  "Check print recovers a %s post-save read without saving again",
+  "a live delivery change recovers a %s post-save read without saving again",
   async (outcome) => {
     const postSave = pending<InvoiceDeliveryStatus>();
     const reads = vi.fn().mockResolvedValueOnce(delivery(office));
     if (outcome === "failed") reads.mockRejectedValueOnce(new Error("read failed"));
     else reads.mockReturnValueOnce(postSave.promise);
     reads.mockResolvedValue(delivery(bar));
-    const { el, api } = await sold({
+    const { deliveryChanged, el, api } = await sold({
       getInvoiceDeliveries: reads,
       setDeviceEquipment: vi.fn().mockResolvedValue(equipment(bar)),
     });
     await choose(el, bar.id);
-    emit(ticket(el), "refresh-receipt");
+    deliveryChanged();
     await flush(el);
     postSave.resolve(delivery(bar));
     await flush(el);
@@ -422,19 +639,19 @@ it("an Equipment dialog choice updates the invoice row and its Print destination
 });
 
 it("a delivery read failure without a new choice keeps the last Print available", async () => {
-  const { el } = await sold({
+  const { deliveryChanged, el } = await sold({
     getInvoiceDeliveries: vi
       .fn()
       .mockResolvedValueOnce(delivery(office))
       .mockRejectedValue(new Error("read failed")),
   });
-  emit(ticket(el), "refresh-receipt");
+  deliveryChanged();
   await flush(el);
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
 });
 
-it("holds Print when the offer differs from the saved printer, then recovers on Check print", async () => {
-  const { el } = await sold({
+it("holds Print when the offer differs from the saved printer, then recovers on a live delivery change", async () => {
+  const { deliveryChanged, el } = await sold({
     setDeviceEquipment: vi.fn().mockResolvedValue(equipment(bar)),
     getInvoiceDeliveries: vi
       .fn()
@@ -444,7 +661,7 @@ it("holds Print when the offer differs from the saved printer, then recovers on 
   });
   await choose(el, bar.id);
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
-  emit(ticket(el), "refresh-receipt");
+  deliveryChanged();
   await flush(el);
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
 });

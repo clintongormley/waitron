@@ -2606,6 +2606,7 @@ export interface InvoiceDeliveryStatus {
   originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: InvoiceDeliveryMedium } | null;
+    retryA4?: InvoiceOfferedPrinter;
     print: {
       printers: InvoiceOfferedPrinter[];
       designation: "original" | "duplicate";

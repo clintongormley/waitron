@@ -15,7 +15,13 @@ import {
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seedPerson,
+  seedTaxpayer,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { claimInvoiceReceipt } from "./invoice-print.js";
 import {
@@ -249,12 +255,23 @@ describe("invoiceDeliveryAlertSource", () => {
       {
         key: `invoice_delivery.undelivered:${sale.saleId}`,
         code: "invoice_delivery.failed",
-        params: { invoice: sale.number },
+        params: { invoice: sale.number, orderId: sale.saleId },
         severity: "error",
         since: since.toISOString(),
         screen: "orders",
       },
     ]);
+  });
+
+  it("links the alert to the bill containing the full invoice", async () => {
+    const v = await venue();
+    const { id } = await seedWorkingOrder(suite.db);
+    const sale = await recordSyntheticInvoice(suite.db, v.nodeId, {
+      orderId: id,
+      operationDescription: "Restaurant",
+    });
+    await attempt(v, sale.saleId, "a4", "unknown");
+    expect(await alerts()).toMatchObject([{ params: { invoice: sale.number, orderId: id } }]);
   });
 
   it("raises the failed alert for an A4 the agent could not get the pages of", async () => {
@@ -281,7 +298,7 @@ describe("invoiceDeliveryAlertSource", () => {
         {
           key: `invoice_delivery.undelivered:${sale.saleId}`,
           code: "invoice_delivery.uncertain",
-          params: { invoice: sale.number },
+          params: { invoice: sale.number, orderId: sale.saleId },
           severity: "error",
           since: EXPIRED.toISOString(),
           screen: "orders",
@@ -300,7 +317,7 @@ describe("invoiceDeliveryAlertSource", () => {
       {
         key: `invoice_delivery.undelivered:${sale.saleId}`,
         code: "invoice_delivery.office_printer_unclaimed",
-        params: { invoice: sale.number, printer: "Back office" },
+        params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office" },
         severity: "error",
         since: START.toISOString(),
         screen: "orders",
@@ -323,7 +340,7 @@ describe("invoiceDeliveryAlertSource", () => {
         {
           key: `invoice_delivery.undelivered:${sale.saleId}`,
           code: "invoice_delivery.office_printer_unclaimed",
-          params: { invoice: sale.number, printer: "Back office" },
+          params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office" },
           severity: "error",
           since: now.toISOString(),
           screen: "orders",
@@ -497,7 +514,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
   const alertFor = (saleId: string, number: string, code: string, since: Date) => ({
     key: `invoice_delivery.undelivered:${saleId}`,
     code,
-    params: { invoice: number },
+    params: { invoice: number, orderId: saleId },
     severity: "error",
     since: since.toISOString(),
     screen: "orders",
@@ -640,7 +657,7 @@ describe("invoiceDeliveryAlertSource, after a success reported too late to count
     expect(await alerts()).toEqual([
       expect.objectContaining({
         code: "invoice_delivery.uncertain_held",
-        params: { invoice: sale.number, printer: "Back office" },
+        params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office" },
       }),
     ]);
   });
@@ -717,7 +734,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
         {
           key: `invoice_delivery.undelivered:${sale.saleId}`,
           code: "invoice_delivery.held",
-          params: { invoice: sale.number, printer: "Back office", hold },
+          params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office", hold },
           severity: "error",
           since: START.toISOString(),
           screen: "orders",
@@ -758,7 +775,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
       {
         key: `invoice_delivery.undelivered:${sale.saleId}`,
         code: "invoice_delivery.uncertain_held",
-        params: { invoice: sale.number, printer: "Back office" },
+        params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office" },
         severity: "error",
         since: EXPIRED.toISOString(),
         screen: "orders",
@@ -781,7 +798,12 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
       {
         key: `invoice_delivery.undelivered:${queued.saleId}`,
         code: "invoice_delivery.queued_behind_hold",
-        params: { invoice: queued.number, printer: "Back office", hold: "paper_out" },
+        params: {
+          invoice: queued.number,
+          orderId: queued.saleId,
+          printer: "Back office",
+          hold: "paper_out",
+        },
         severity: "error",
         since: START.toISOString(),
         screen: "orders",
@@ -800,7 +822,12 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
       {
         key: `invoice_delivery.undelivered:${queued.saleId}`,
         code: "invoice_delivery.queued_behind_hold",
-        params: { invoice: queued.number, printer: "Back office", hold: "cover_open" },
+        params: {
+          invoice: queued.number,
+          orderId: queued.saleId,
+          printer: "Back office",
+          hold: "cover_open",
+        },
         severity: "error",
         since: START.toISOString(),
         screen: "orders",
@@ -822,7 +849,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
         {
           key: `invoice_delivery.undelivered:${queued.saleId}`,
           code: "invoice_delivery.office_printer_unclaimed",
-          params: { invoice: queued.number, printer: "Back office" },
+          params: { invoice: queued.number, orderId: queued.saleId, printer: "Back office" },
           severity: "error",
           since: START.toISOString(),
           screen: "orders",
@@ -856,7 +883,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
       {
         key: `invoice_delivery.undelivered:${queued.saleId}`,
         code: "invoice_delivery.office_printer_unclaimed",
-        params: { invoice: queued.number, printer: "Back office" },
+        params: { invoice: queued.number, orderId: queued.saleId, printer: "Back office" },
         severity: "error",
         since: START.toISOString(),
         screen: "orders",
@@ -902,7 +929,7 @@ describe("invoiceDeliveryAlertSource, while an office printer holds a job", () =
       {
         key: `invoice_delivery.undelivered:${sale.saleId}`,
         code: "invoice_delivery.uncertain_held",
-        params: { invoice: sale.number, printer: "Back office" },
+        params: { invoice: sale.number, orderId: sale.saleId, printer: "Back office" },
         severity: "error",
         since: lapsed.toISOString(),
         screen: "orders",

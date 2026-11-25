@@ -19,6 +19,8 @@ import {
   incidentIdOf,
   markAlertHandled,
   screenTargetOf,
+  alertDestination,
+  type AlertDestination,
   severityLabel,
   sourceLabel,
   wholeTimes,
@@ -142,10 +144,10 @@ export class AlertsScreen extends LitElement {
     }
   }
 
-  #goTo(event: MouseEvent, screen: string): void {
+  #goTo(event: MouseEvent, destination: AlertDestination): void {
     event.stopPropagation();
     this.dispatchEvent(
-      new CustomEvent("wt-alert-go-to", { bubbles: true, composed: true, detail: { screen } }),
+      new CustomEvent("wt-alert-go-to", { bubbles: true, composed: true, detail: destination }),
     );
   }
 
@@ -234,7 +236,7 @@ export class AlertsScreen extends LitElement {
                     size="sm"
                     variant="secondary"
                     data-test="alert-go-to"
-                    @click=${(e: MouseEvent) => this.#goTo(e, screen)}
+                    @click=${(e: MouseEvent) => this.#goTo(e, alertDestination(a, screen))}
                     >${goToLabel(screen)}</wt-button
                   >`
             }</span

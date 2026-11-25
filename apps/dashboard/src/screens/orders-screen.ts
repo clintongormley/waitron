@@ -113,6 +113,7 @@ export class OrdersScreen extends LitElement {
   @state() private staff: { id: string; name: string | null }[] = [];
   @state() private refusal: { field: string | null; message: string } | null = null;
   @state() private loading = true;
+  @state() private linkedOrder: string | null = null;
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
   @state() private reprintMode: "receipt" | "choose" = "receipt";
@@ -164,6 +165,7 @@ export class OrdersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
+      this.linkedOrder = this.#url.read("order");
       clearTimeout(this.#textTimer);
       const address = readOrdersFilter((key) => this.#url.read(key));
       // The address this screen just wrote leaves the Table field's own spelling, such as a space
@@ -487,7 +489,7 @@ export class OrdersScreen extends LitElement {
       ></wt-data-table>
       <dashboard-order-detail-dialog
         .api=${this.api}
-        .orderId=${this.openId}
+        .orderId=${this.linkedOrder ?? this.openId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ row: OrderRowDto }>) => {
@@ -498,6 +500,7 @@ export class OrdersScreen extends LitElement {
         }}
         @wt-close=${() => {
           this.openId = null;
+          if (this.linkedOrder !== null) this.#url.write({ order: null }, true);
         }}
       ></dashboard-order-detail-dialog>
       <dashboard-order-reprint-dialog

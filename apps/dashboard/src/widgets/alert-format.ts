@@ -47,6 +47,15 @@ export function screenTargetOf(
   return alert.screen !== undefined && canOpen(alert.screen) ? alert.screen : null;
 }
 
+export type AlertDestination = { screen: string; orderId?: string };
+
+export function alertDestination(alert: AlertView, screen: string): AlertDestination {
+  const orderId = alert.params.orderId;
+  return screen === "orders" && alert.area === "invoice_delivery" && typeof orderId === "string"
+    ? { screen, orderId }
+    : { screen };
+}
+
 /** Invalidates rather than re-watching: while another observer (the bell or the Alerts screen) holds
  * the same query, its shared entry survives a release un-dirtied, so a re-watch is handed the cached
  * value. */

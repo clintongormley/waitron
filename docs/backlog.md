@@ -769,7 +769,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A print agent somewhere other than the box** (bundle of 3, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
-- **One session at the real box: printers, paper, tax QR, the drawer** (size S, needs the real hardware). Holds the remaining A739, A773 and A552 checks. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
+- **One session at the real box: printers, paper, tax QR, the drawer** (size S, needs the real hardware). Holds the remaining A739, A773 and A552 checks and the Orders print confirmation decision. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
