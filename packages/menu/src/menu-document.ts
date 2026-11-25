@@ -1335,11 +1335,14 @@ export function diffEntries(
       fields.push("vat");
     if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
     if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
-    const declarations = setMenuDeclarations(was.offers, copy.offers);
-    for (const field of ["allergens", "diet"] as const)
-      if (declarations.has(field)) fields.push(field);
+    const offersChanged = !same(was.offers, copy.offers);
+    if (offersChanged) {
+      const declarations = setMenuDeclarations(was.offers, copy.offers);
+      for (const field of ["allergens", "diet"] as const)
+        if (declarations.has(field)) fields.push(field);
+    }
     if (
-      !same(withoutDeclarations(was.offers), withoutDeclarations(copy.offers)) ||
+      (offersChanged && !same(withoutDeclarations(was.offers), withoutDeclarations(copy.offers))) ||
       !same(was.root, copy.root)
     )
       fields.push("dishes");
