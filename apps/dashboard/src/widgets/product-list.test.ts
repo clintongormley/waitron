@@ -5484,6 +5484,9 @@ it.each([390, 1280])(
       } else {
         expect(gripBounds.left).toBeGreaterThanOrEqual(boxBounds.right);
         expect(gripBounds.top).toBeLessThan(boxBounds.bottom);
+        const gripMiddle = gripBounds.top + gripBounds.height / 2;
+        const boxMiddle = boxBounds.top + boxBounds.height / 2;
+        expect(Math.abs(gripMiddle - boxMiddle)).toBeLessThanOrEqual(1);
       }
     }
   },

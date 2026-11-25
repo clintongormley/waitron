@@ -196,7 +196,6 @@ export const fullRowProductsMediaStyles = css`
     display: inline-block;
   }
   wt-data-table::part(row-checkbox) {
-    align-self: center;
     margin-block: calc((var(--wt-tap-min) - var(--wt-space-4)) / 2);
   }
   wt-data-table[narrow]::part(naming) {
